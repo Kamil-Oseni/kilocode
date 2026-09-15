@@ -668,6 +668,28 @@ export namespace RayaTaskInbox {
         .pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
+    const movable = Effect.fn("RayaTaskInbox.movable")(function* (
+      agentID: string,
+      source: string,
+      expected: SessionID,
+      sessionID: SessionID,
+    ) {
+      const row = yield* db
+        .select({
+          kind: Message.kind,
+          sessionID: Message.session_id,
+          deliveryID: Message.delivery_id,
+          at: Message.delivered_at,
+        })
+        .from(Message)
+        .where(and(eq(Message.agent_id, agentID), eq(Message.source, source)))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row || row.kind !== "user" || row.deliveryID !== null || row.at !== null) return undefined
+      if (row.sessionID === expected) return "source" as const
+      if (row.sessionID === sessionID) return "target" as const
+      return undefined
+    })
     const move = Effect.fn("RayaTaskInbox.move")(function* (
       agentID: string,
       source: string,
@@ -922,6 +944,7 @@ export namespace RayaTaskInbox {
       content,
       pending,
       stranded,
+      movable,
       move,
       page,
       read,

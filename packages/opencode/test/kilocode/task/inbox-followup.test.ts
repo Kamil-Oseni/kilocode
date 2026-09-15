@@ -1,14 +1,18 @@
 import { expect, test } from "bun:test"
-import { Effect } from "effect"
+import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
+import { Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
+import { owner, stopped } from "@/kilocode/task/owner"
 import type { MessageV2 } from "@/session/message-v2"
 import { MessageID } from "@/session/schema"
 
@@ -433,6 +437,94 @@ test("delivery ownership prevents terminal-session message reassignment", async 
       expect(created).toEqual([])
       expect((yield* inbox.page(agent.id)).messages[0]?.sessionID).toBe(old)
       expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("restart completes the exact inbox move retained by a stopped startup claim", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const agentID = "11111111-1111-4111-8111-111111111111"
+      const old = SessionID.make("ses_recovery_old")
+      const next = SessionID.make("ses_recovery_next")
+      const runID = "run_recovery_next"
+      const trigger = { kind: "manual" as const }
+      const opened = {
+        ...session(next),
+        metadata: { rayaRoutine: { version: 1, agentID, runID, scheduleVersion: 1, trigger } },
+      }
+      const sessions = {
+        create: () => Effect.die("must recover the saved session"),
+        get: (id: SessionID) => (id === next ? Effect.succeed(opened) : Effect.die("unexpected session")),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+      })
+      const agent = yield* runner.tasks.provision(
+        {
+          name: "Accounts",
+          objective: "Review accounts",
+          access: "full",
+          enabled: true,
+          schedule: { kind: "manual" },
+        },
+        agentID,
+      )
+      expect(agent.id).toBe(agentID)
+      const prior = yield* runner.tasks.record({
+        id: "run_recovery_old",
+        agentID,
+        sessionID: old,
+        at: Date.now() - 1,
+        status: "running",
+      })
+      yield* runner.tasks.transition(prior, { ...prior, status: "error", blockedReason: "Settled" })
+      const inbox = RayaTaskInbox.make(database)
+      yield* inbox.publish({ agentID, source: "user_recovery_move", kind: "user", body: "Continue safely" })
+      yield* inbox.attach(agentID, "user_recovery_move", old)
+      const at = Date.now()
+      const child = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+        encoding: "utf8",
+        windowsHide: true,
+      })
+      if (child.status !== 0) throw new Error("Could not create a stopped process identity")
+      yield* RayaGoal.make({ storage, sessions }).create(next, "Continue safely")
+      yield* runner.tasks.record({ id: runID, agentID, sessionID: next, at, status: "running", trigger })
+      const key = ["raya", "agent-claims", createHash("sha256").update(agentID).digest("hex")]
+      const dead = { ...owner(), pid: Number(child.stdout) }
+      expect(stopped(dead)).toBe(true)
+      yield* storage.write(key, {
+        version: 1,
+        agentID,
+        id: runID,
+        at,
+        phase: "session-created",
+        messageSource: "user_recovery_move",
+        messageSessionID: old,
+        owner: dead,
+        sessionID: next,
+        trigger,
+      })
+      expect(yield* inbox.movable(agentID, "user_recovery_move", old, next)).toBe("source")
+      expect((yield* runner.tasks.list()).some((item) => item.id === agentID)).toBe(true)
+      expect((yield* RayaGoal.make({ storage, sessions }).get(next))?.status).toBe("active")
+      expect((yield* runner.tasks.runsFor(agentID)).find((run) => run.id === runID)).toMatchObject({
+        sessionID: next,
+        at,
+        scheduleVersion: 1,
+        trigger,
+        status: "running",
+      })
+      yield* runner.revive()
+      expect((yield* inbox.page(agentID)).messages[0]?.sessionID).toBe(next)
+      expect(Exit.isFailure(yield* storage.read(key).pipe(Effect.exit))).toBe(true)
+      expect((yield* runner.tasks.runsFor(agentID)).filter(RayaTask.pending)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

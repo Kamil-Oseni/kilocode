@@ -411,7 +411,11 @@ export namespace RayaTaskRunner {
               (selected) => selected.trigger,
               undefined,
               undefined,
-              opts?.runID && opts.delegationID ? { runID: opts.runID, delegationID: opts.delegationID } : undefined,
+              opts?.runID && opts.delegationID
+                ? { runID: opts.runID, delegationID: opts.delegationID }
+                : opts?.bind
+                  ? { source: opts.bind.source, sessionID: opts.bind.sessionID }
+                  : undefined,
             ),
           ),
         ),

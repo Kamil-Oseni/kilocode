@@ -7,6 +7,7 @@ import { RayaGoal } from "@/kilocode/goal"
 import { RayaTask } from "."
 import { RayaTaskQueue } from "./queue"
 import { RayaTaskDelegation } from "./delegation"
+import { RayaTaskInbox } from "./inbox"
 import { record } from "./continuation"
 import { recover } from "./recovery"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -23,10 +24,54 @@ export function reconcile(input: {
   const goals = RayaGoal.make(input)
   const queue = RayaTaskQueue.make(input.database)
   const errands = RayaTaskDelegation.make(input.database)
+  const inbox = RayaTaskInbox.make(input.database)
   const inspect = Effect.fn("RayaTaskRecovery.inspect")(function* (
     claim: Parameters<Parameters<typeof recover>[2]>[0],
   ) {
     if (claim.phase === "session-created" && !claim.sessionID) return undefined
+    if (claim.messageSource || claim.messageSessionID) {
+      if (!claim.messageSource || !claim.messageSessionID || !claim.sessionID) return undefined
+      const session = yield* input.sessions.get(claim.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+      if (!session || session.id !== claim.sessionID) return undefined
+      const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (
+        !identity ||
+        identity.trigger.kind === "timer" ||
+        identity.agentID !== claim.agentID ||
+        identity.runID !== claim.id ||
+        claim.trigger === undefined ||
+        !isDeepStrictEqual(claim.trigger, identity.trigger)
+      )
+        return undefined
+      if (!(yield* tasks.list()).some((item) => item.id === claim.agentID)) return undefined
+      const goal = yield* goals.get(claim.sessionID)
+      if (!goal || goal.status !== "active") return undefined
+      const history = yield* tasks.runsFor(claim.agentID)
+      const prior = history.find((run) => run.id === claim.id)
+      const run: RayaTask.Run = {
+        id: claim.id,
+        agentID: claim.agentID,
+        sessionID: claim.sessionID,
+        at: claim.at,
+        scheduleVersion: identity.scheduleVersion,
+        trigger: identity.trigger,
+        status: "running",
+      }
+      if (
+        prior &&
+        (prior.sessionID !== run.sessionID ||
+          prior.at !== run.at ||
+          prior.scheduleVersion !== run.scheduleVersion ||
+          !isDeepStrictEqual(prior.trigger, run.trigger) ||
+          !RayaTask.pending(prior))
+      )
+        return undefined
+      const state = yield* inbox.movable(claim.agentID, claim.messageSource, claim.messageSessionID, claim.sessionID)
+      if (!state) return undefined
+      return { kind: "message" as const, run, source: claim.messageSource, prior: claim.messageSessionID }
+    }
     if (claim.delegationID) {
       const errand = yield* errands.get(claim.delegationID).pipe(Effect.orElseSucceed(() => undefined))
       if (
@@ -187,6 +232,20 @@ export function reconcile(input: {
           const found = yield* inspect(claim)
           if (!found) return false
           if (found.kind === "delegation-empty") return true
+          if (found.kind === "message") {
+            const saved = yield* tasks.restore(found.run)
+            if (
+              saved.id !== found.run.id ||
+              saved.sessionID !== found.run.sessionID ||
+              saved.at !== found.run.at ||
+              saved.scheduleVersion !== found.run.scheduleVersion ||
+              !isDeepStrictEqual(saved.trigger, found.run.trigger) ||
+              !RayaTask.pending(saved)
+            )
+              return false
+            yield* inbox.move(claim.agentID, found.source, found.prior, found.run.sessionID)
+            return (yield* inbox.movable(claim.agentID, found.source, found.prior, found.run.sessionID)) === "target"
+          }
           if (found.kind === "delegation") {
             const attached = yield* errands.attach(found.errand.id, found.run.id, found.run.sessionID)
             if (

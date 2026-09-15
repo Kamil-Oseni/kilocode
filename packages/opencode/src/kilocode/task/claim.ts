@@ -10,7 +10,7 @@ type Store = Pick<Storage.Interface, "create" | "replace" | "remove"> & {
   read: (key: string[]) => ReturnType<Storage.Interface["read"]>
 }
 type Claim = { id: string; at: number; link: (sessionID: SessionID) => Effect.Effect<void> }
-type Context = { runID: string; delegationID: string }
+type Context = { runID: string; delegationID: string } | { source: string; sessionID: SessionID }
 const active = new Set<string>()
 
 export function starting(id: string) {
@@ -34,12 +34,15 @@ export function claim<A, E, R, B, F, S>(
       const record = {
         version: 1,
         agentID: id,
-        id: context?.runID ?? crypto.randomUUID(),
+        id: context && "runID" in context ? context.runID : crypto.randomUUID(),
         at: Date.now(),
         phase: "claimed",
         ...(operation ? { operation } : {}),
         ...(intent ? { intent } : {}),
-        ...(context ? { delegationID: context.delegationID } : {}),
+        ...(context && "delegationID" in context ? { delegationID: context.delegationID } : {}),
+        ...(context && "source" in context
+          ? { messageSource: context.source, messageSessionID: context.sessionID }
+          : {}),
         owner: identity(),
       }
       const acquired = yield* storage.create(key, record).pipe(Effect.orDie)

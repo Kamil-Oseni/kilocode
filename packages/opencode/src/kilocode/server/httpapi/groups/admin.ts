@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { RayaAdmin } from "@/kilocode/admin/registry"
 import { RayaAdminLog } from "@/kilocode/admin/log"
+import { RayaMigrationLedger } from "@/kilocode/migration/compatibility"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
 import {
@@ -16,6 +17,7 @@ const root = "/raya/admin"
 export const AdminPaths = {
   health: `${root}/health`,
   logs: `${root}/logs`,
+  migration: `${root}/migration`,
 } as const
 
 export const AdminLogQuery = Schema.Struct({
@@ -54,6 +56,17 @@ export const AdminApi = HttpApi.make("raya-admin").add(
           summary: "List diagnostic entries",
           description:
             "Read the newest retained redacted diagnostic entries, or page forward in sequence order after an explicit cursor.",
+        }),
+      ),
+      HttpApiEndpoint.get("adminMigration", AdminPaths.migration, {
+        query: WorkspaceRoutingQuery,
+        success: described(RayaMigrationLedger.Snapshot, "Redacted Kilo-to-Raya compatibility ledger"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.admin.migration",
+          summary: "Get migration compatibility status",
+          description:
+            "Read the versioned identity ledger and evidence gates that must pass before a Kilo compatibility contract can be cut over.",
         }),
       ),
     )

@@ -29629,6 +29629,104 @@ export type RayaAdminLogsResponses = {
 
 export type RayaAdminLogsResponse = RayaAdminLogsResponses[keyof RayaAdminLogsResponses]
 
+export type RayaAdminMigrationData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/admin/migration"
+}
+
+export type RayaAdminMigrationErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type RayaAdminMigrationError = RayaAdminMigrationErrors[keyof RayaAdminMigrationErrors]
+
+export type RayaAdminMigrationResponses = {
+  /**
+   * Redacted Kilo-to-Raya compatibility ledger
+   */
+  200: {
+    format: "raya.compatibility-ledger"
+    version: 1
+    policy: ["additive-first", "no-in-place-rename", "verified-copy-before-cutover"]
+    baseline: {
+      source: "script/raya-brand-inventory.json"
+      category: "compatibility-key"
+      count: number
+      digest: string
+    }
+    entries: Array<{
+      id: string
+      area:
+        | "command"
+        | "environment"
+        | "configuration"
+        | "executable"
+        | "package"
+        | "provider"
+        | "protocol"
+        | "event"
+        | "storage"
+        | "database"
+        | "credential"
+        | "telemetry"
+        | "editor"
+      phase: "alias-active" | "legacy-canonical" | "deferred-version-3"
+      identities: Array<{
+        kind: string
+        raya?: string
+        legacy?: string
+        policy:
+          | "raya-preferred"
+          | "raya-wins-legacy-write"
+          | "legacy-canonical"
+          | "raya-new-only"
+          | "deferred-version-3"
+      }>
+      required: Array<
+        | "additive-alias"
+        | "dual-read"
+        | "dual-write"
+        | "conflict-precedence"
+        | "journaled-copy"
+        | "exact-verification"
+        | "restart"
+        | "crash-recovery"
+        | "rollback"
+        | "legacy-upgrade"
+        | "version-negotiation"
+        | "compatibility-window"
+        | "owner-approval"
+      >
+      evidence: Array<
+        | "additive-alias"
+        | "dual-read"
+        | "dual-write"
+        | "conflict-precedence"
+        | "journaled-copy"
+        | "exact-verification"
+        | "restart"
+        | "crash-recovery"
+        | "rollback"
+        | "legacy-upgrade"
+        | "version-negotiation"
+        | "compatibility-window"
+        | "owner-approval"
+      >
+      cutoverReady: false
+    }>
+  }
+}
+
+export type RayaAdminMigrationResponse = RayaAdminMigrationResponses[keyof RayaAdminMigrationResponses]
+
 export type V2HealthGetData = {
   body?: never
   path?: never

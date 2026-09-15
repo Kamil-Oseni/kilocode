@@ -532,6 +532,8 @@ import type {
   RayaAdminHealthResponses,
   RayaAdminLogsErrors,
   RayaAdminLogsResponses,
+  RayaAdminMigrationErrors,
+  RayaAdminMigrationResponses,
   RayaFocusTimerGetErrors,
   RayaFocusTimerGetResponses,
   RayaFocusTimerPauseErrors,
@@ -14213,6 +14215,36 @@ export class Admin extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<RayaAdminLogsResponses, RayaAdminLogsErrors, ThrowOnError>({
       url: "/raya/admin/logs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get migration compatibility status
+   *
+   * Read the versioned identity ledger and evidence gates that must pass before a Kilo compatibility contract can be cut over.
+   */
+  public migration<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RayaAdminMigrationResponses, RayaAdminMigrationErrors, ThrowOnError>({
+      url: "/raya/admin/migration",
       ...options,
       ...params,
     })

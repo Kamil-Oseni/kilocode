@@ -3,6 +3,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaAdminLog } from "@/kilocode/admin/log"
 import { RayaAdminService } from "@/kilocode/admin/service"
+import { RayaMigrationLedger } from "@/kilocode/migration/compatibility"
 import { RayaTask } from "@/kilocode/task"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceState } from "@/effect/instance-state"
@@ -35,5 +36,6 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
     return handlers
       .handle("adminHealth", health)
       .handle("adminLogs", (ctx) => logs.list({ after: ctx.query.after, limit: ctx.query.limit }))
+      .handle("adminMigration", () => Effect.succeed(RayaMigrationLedger.snapshot))
   }),
 )

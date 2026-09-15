@@ -166,6 +166,16 @@ export const kiloScenarios: Scenario[] = [
     check(value.items.length === 6, "admin health should report every registered subsystem")
   }),
   http.protected.get("/raya/admin/logs?limit=2", "raya.admin.logs").json(200, array),
+  http.protected.get("/raya/admin/migration", "raya.admin.migration").json(200, (value) => {
+    object(value)
+    check(value.format === "raya.compatibility-ledger", "migration status should use the versioned format")
+    array(value.entries)
+    check(value.entries.length > 0, "migration status should report governed identities")
+    check(
+      value.entries.every((entry) => entry.cutoverReady === false),
+      "migration status should fail closed before a verified cutover",
+    )
+  }),
   http.protected.get("/background-process", "backgroundProcess.list").json(200, array),
   http.protected
     .get("/background-process/{processID}", "backgroundProcess.get")

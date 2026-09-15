@@ -35154,6 +35154,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
           }
         },
         "description": "Create a versioned organization graph with existing persistent workers and explicit directional delegation permissions.",
@@ -42530,6 +42540,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
                 }
               }
             }
@@ -54904,6 +54924,225 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.admin.logs({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/admin/migration": {
+      "get": {
+        "tags": ["raya-admin"],
+        "operationId": "raya.admin.migration",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redacted Kilo-to-Raya compatibility ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "enum": ["raya.compatibility-ledger"]
+                    },
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "policy": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "string",
+                          "enum": ["additive-first"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["no-in-place-rename"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["verified-copy-before-cutover"]
+                        }
+                      ],
+                      "maxItems": 3,
+                      "minItems": 3
+                    },
+                    "baseline": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "string",
+                          "enum": ["script/raya-brand-inventory.json"]
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": ["compatibility-key"]
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": ["source", "category", "count", "digest"],
+                      "additionalProperties": false
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "area": {
+                            "type": "string",
+                            "enum": [
+                              "command",
+                              "environment",
+                              "configuration",
+                              "executable",
+                              "package",
+                              "provider",
+                              "protocol",
+                              "event",
+                              "storage",
+                              "database",
+                              "credential",
+                              "telemetry",
+                              "editor"
+                            ]
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": ["alias-active", "legacy-canonical", "deferred-version-3"]
+                          },
+                          "identities": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string"
+                                },
+                                "raya": {
+                                  "type": "string"
+                                },
+                                "legacy": {
+                                  "type": "string"
+                                },
+                                "policy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "raya-preferred",
+                                    "raya-wins-legacy-write",
+                                    "legacy-canonical",
+                                    "raya-new-only",
+                                    "deferred-version-3"
+                                  ]
+                                }
+                              },
+                              "required": ["kind", "policy"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "additive-alias",
+                                "dual-read",
+                                "dual-write",
+                                "conflict-precedence",
+                                "journaled-copy",
+                                "exact-verification",
+                                "restart",
+                                "crash-recovery",
+                                "rollback",
+                                "legacy-upgrade",
+                                "version-negotiation",
+                                "compatibility-window",
+                                "owner-approval"
+                              ]
+                            }
+                          },
+                          "evidence": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "additive-alias",
+                                "dual-read",
+                                "dual-write",
+                                "conflict-precedence",
+                                "journaled-copy",
+                                "exact-verification",
+                                "restart",
+                                "crash-recovery",
+                                "rollback",
+                                "legacy-upgrade",
+                                "version-negotiation",
+                                "compatibility-window",
+                                "owner-approval"
+                              ]
+                            }
+                          },
+                          "cutoverReady": {
+                            "type": "boolean",
+                            "enum": [false]
+                          }
+                        },
+                        "required": ["id", "area", "phase", "identities", "required", "evidence", "cutoverReady"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["format", "version", "policy", "baseline", "entries"],
+                  "additionalProperties": false,
+                  "description": "Redacted Kilo-to-Raya compatibility ledger"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the versioned identity ledger and evidence gates that must pass before a Kilo compatibility contract can be cut over.",
+        "summary": "Get migration compatibility status",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.admin.migration({\n  ...\n})"
           }
         ]
       }
@@ -78966,6 +79205,23 @@
           }
         ]
       },
+      "UnknownError1": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["UnknownError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
       "AnacondaDesktopStatus": {
         "anyOf": [
           {
@@ -79951,23 +80207,6 @@
           }
         },
         "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "UnknownError1": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["UnknownError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "ref": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "FocusTimerStaleRevisionError": {

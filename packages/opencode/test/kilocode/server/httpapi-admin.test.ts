@@ -6,6 +6,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Schema } from "effect"
 import { RayaAdminLog } from "@/kilocode/admin/log"
 import { RayaAdmin } from "@/kilocode/admin/registry"
+import { RayaMigrationLedger } from "@/kilocode/migration/compatibility"
 import { Server } from "@/server/server"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 
@@ -35,6 +36,13 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
       ["voice", "unknown", "not-checked"],
     ])
     expect(JSON.stringify(snapshot)).not.toContain(first.path)
+
+    const migration = await request("/raya/admin/migration")
+    expect(migration.status).toBe(200)
+    const ledger = Schema.decodeUnknownSync(RayaMigrationLedger.Snapshot)(await migration.json())
+    expect(ledger.entries.every((item) => item.cutoverReady === false)).toBe(true)
+    expect(ledger.entries.find((item) => item.id === "editor-distribution")?.phase).toBe("deferred-version-3")
+    expect(JSON.stringify(ledger)).not.toContain(first.path)
 
     const recent = await request("/raya/admin/logs?limit=2")
     expect(recent.status).toBe(200)

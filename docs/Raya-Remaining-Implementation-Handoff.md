@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 22:15 America/Toronto - Band 1 checkpoint installed
+
+Snapshot `7.4.23-snapshot+4c5f5fdea8.kamil-oseni.1789438283214` is installed. It contains `FUT-CHAT-01` and the durable identity portion of `FUT-AGENT-01/02`. Retained VSIX: 519,377,848 bytes, SHA-256 `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`; bundled CLI: 230,681,600 bytes, SHA-256 `38f13b3238d1ed3cbbc9cc5541b33a8874ce956b6ba062ad5d4319da23e2e36d`. The installed directory matches the version. Reload VS Code to activate it; the package vault still identifies the previous host digest until reload. No build process remains.
+
 ## ChatGPT 2026-09-14 22:08 America/Toronto - FUT-AGENT-01 implemented; FUT-AGENT-02 identity projection started
 
 Product commit `3516e20fb6` is on `origin/main`. Preserve `packages/opencode/src/kilocode/tool/task-name.ts` as the single identity allocator. New children save versioned `raya.task.identity` atomically with session creation under a per-parent `KeyedMutex`; allocation scans durable siblings and uses `Name`, `Name (2)`, and so on. Do not move the identity into the process-local background-job registry. Do not regenerate or rename resumed children: use the saved identity when valid and the exact existing session title for legacy or malformed metadata.

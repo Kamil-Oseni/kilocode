@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 22:15 America/Toronto - Timestamp and delegated-agent checkpoint installed
+
+**Status: the production snapshot built from source/docs commit `4c5f5fdea8` is installed.** The authorized sequential `RAYA_LOW_MEMORY=1` workflow regenerated the SDK with no retained generated diff, rebuilt the Windows x64 CLI and Kilo Console, passed CLI version, model-snapshot and sandbox-worker smoke checks, then passed extension-host typecheck, webview typecheck, cached ESLint, production bundling, packaging, retention and VS Code installation. Installed version: `eden.raya@7.4.23-snapshot+4c5f5fdea8.kamil-oseni.1789438283214`.
+
+The retained VSIX is **519,377,848 bytes**, SHA-256 `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`; its bundled CLI is **230,681,600 bytes**, SHA-256 `38f13b3238d1ed3cbbc9cc5541b33a8874ce956b6ba062ad5d4319da23e2e36d`. The exact installed extension directory exists. The package vault still records active-host digest `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`, so reload the open VS Code window before claiming runtime activation. Drive C has **93,986,037,760 bytes** free. No Bun or tsgo process remains.
+
 ## ChatGPT 2026-09-14 22:08 America/Toronto - Delegated agents have durable names across Raya
 
 **Status: `FUT-AGENT-01` product commit `3516e20fb6` is implemented, scoped-verified and pushed; the complete TaskTool integration fixture is blocked by its unrelated model catalog baseline.** Every newly created task child now receives a versioned `raya.task.identity` in the same atomic session create as its title. The identity records the bounded human display name, base name, sibling ordinal, actual specialist, auto/explicit selection and parent message/call provenance. The model-facing `description` contract now asks for an outcome-specific 3-7 word display name; malformed controls and markup are cleaned, generic one-word labels fall through to the structured objective, and the selected specialist is appended. Per-parent Effect locking makes simultaneous sibling allocation deterministic and releases its in-memory entry afterward.

@@ -27,6 +27,13 @@ const message = {
 } satisfies Message
 
 describe("Kilo sidebar footer", () => {
+  test("uses Raya branding in the getting started card", async () => {
+    const src = await Bun.file(new URL("../../src/kilocode/plugins/sidebar-footer.tsx", import.meta.url)).text()
+
+    expect(src).toContain("Raya includes free models so you can start immediately.")
+    expect(src).not.toContain("Kilo includes free models")
+  })
+
   test("formats money", () => {
     expect(format(12.345)).toBe("$12.35")
     expect(format(0)).toBe("$0.00")

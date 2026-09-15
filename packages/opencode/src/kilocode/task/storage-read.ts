@@ -18,7 +18,7 @@ export function read(
   attempt = 0,
 ): Effect.Effect<unknown, Storage.Error> {
   return storage
-    .read<T>(key)
+    .read(key)
     .pipe(
       Effect.catchIf(locked, (err) =>
         attempt >= 7

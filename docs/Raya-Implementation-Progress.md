@@ -6,15 +6,27 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:29 America/Toronto - Plugin configuration and model preferences follow the active profile
+
+**Status: implemented and verified locally; commit and push remain, installation is batched.** Global plugin installation no longer freezes `Global.Path.config` when the plug-command module loads. Its unchanged default dependency object now exposes a lazy getter, so the existing command and injected-test contract remain compatible while the config root is read only when the patch operation needs it. The fail-closed AST inventory proves this source remains visible as a runtime consumer and is no longer a module capture without exercising or risking the user's real global config.
+
+Saved run-command model variants now resolve `Global.Path.state/model.json` when each operation starts. A read resolves once. A save resolves once and passes the same target through its read-modify-write sequence, so a profile-generation switch cannot split one save between roots. The long-lived module runtime remains safe because it no longer closes over a startup file path.
+
+The focused plugin and variant suites pass **28 tests / 80 assertions**. The new variant case creates the runtime before switching the active root, records the real service-layer read and write requests, redirects physical I/O to a temporary directory, and proves both requests use the new `model.json`. The exact path inventory remains at **205 consumers** while module captures fall from six to **four**, with digest `05ad537e4725954d9195803fb0907d69d1bdb0751848c8bb6427508cd42c7e0a`. The remaining captures are the two truncation paths and the two sandbox roots. No file was moved, copied, renamed, deleted or redirected in production.
+
+The refreshed repository inventory is **69,073** total: public 1,693; compatibility 35,165; provenance 5,686; internal 26,529. The Version 1 compatibility ledger is pinned to the refreshed compatibility digest and still reports every entry as not ready for cutover.
+
 ## ChatGPT 2026-09-15 17:17 America/Toronto - Auth files no longer capture the startup data root
 
-**Status: implemented and verified locally; commit and push remain, installation is batched.** The CLI provider credential service and MCP OAuth credential service now resolve `Global.Path.data` when an operation starts instead of freezing the path when their modules load. Auth `set` and `remove` resolve one target and use it for both read and write. MCP `all` resolves one target for its lock/read, while every mutation resolves one target for the lock/read/write transaction. A root change therefore cannot split one operation between generations.
+**Status: implemented, verified and pushed in `2316379485`; installation is batched.** The CLI provider credential service and MCP OAuth credential service now resolve `Global.Path.data` when an operation starts instead of freezing the path when their modules load. Auth `set` and `remove` resolve one target and use it for both read and write. MCP `all` resolves one target for its lock/read, while every mutation resolves one target for the lock/read/write transaction. A root change therefore cannot split one operation between generations.
 
 A focused service test imports both modules first, redirects the active data root, then proves both readers and writers use `auth.json` and `mcp-auth.json` beneath the new root. Existing Auth normalization/removal and concurrent MCP transaction tests continue to pass. Combined evidence is **6 tests / 15 assertions**, and the bounded one-checker CLI typecheck passes.
 
 The exact path inventory remains at **205 consumers**, but module-scope captures fall from eight to **six** and `data` captures fall from four to **two**. Its new digest is `62c13e2054eff368f471228ea108aec1f70f23c0799eda417863aa85d49d57ec`. The remaining captures are agent truncation permissions, the plug command's global directory, run-command model state, two sandbox roots and the exported tool truncation directory. No credential file was moved or copied and no compatibility name changed.
 
 The refreshed repository inventory is 69,060 total: public 1,693; compatibility 35,162; provenance 5,686; internal 26,519.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `2316379485`.
 
 ## ChatGPT 2026-09-15 17:10 America/Toronto - Canonical storage migration now has a fail-closed consumer inventory
 

@@ -15,6 +15,7 @@ import {
 import type { SessionMessages } from "@/cli/cmd/run/session.shared"
 import type { RunProvider } from "@/cli/cmd/run/types"
 import { testEffect } from "../../lib/effect"
+import { tmpdir } from "../../fixture/fixture" // kilocode_change
 
 const model = {
   providerID: "openai",
@@ -127,6 +128,28 @@ function remappedFs(root: string) {
   ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 }
 
+// kilocode_change start
+function capturedFs(root: string, seen: string[]) {
+  return Layer.effect(
+    FSUtil.Service,
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      return FSUtil.Service.of({
+        ...fs,
+        readJson: (file) => {
+          seen.push(file)
+          return fs.readJson(path.join(root, path.basename(file)))
+        },
+        writeJson: (file, data, mode) => {
+          seen.push(file)
+          return fs.writeJson(path.join(root, path.basename(file)), data, mode)
+        },
+      })
+    }),
+  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+}
+// kilocode_change end
+
 describe("run variant shared", () => {
   test("prefers cli then session then saved variants", () => {
     expect(resolveVariant("max", "high", "low", ["low", "high"])).toBe("max")
@@ -215,4 +238,28 @@ describe("run variant shared", () => {
       })
     }),
   )
+
+  // kilocode_change start
+  test("resolves the model preference root when each operation starts", async () => {
+    await using tmp = await tmpdir()
+    const original = Global.Path.state
+    const current = path.join(tmp.path, "current")
+    const seen: string[] = []
+
+    try {
+      const svc = createVariantRuntime(capturedFs(tmp.path, seen))
+      Global.Path.state = current
+
+      await svc.saveVariant(model, "high")
+      expect(await Bun.file(path.join(tmp.path, "model.json")).json()).toEqual({
+        variant: {
+          "openai/gpt-5": "high",
+        },
+      })
+      expect(seen).toEqual([path.join(current, "model.json"), path.join(current, "model.json")])
+    } finally {
+      Global.Path.state = original
+    }
+  })
+  // kilocode_change end
 })

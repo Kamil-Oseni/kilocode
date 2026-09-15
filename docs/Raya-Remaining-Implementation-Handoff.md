@@ -6,15 +6,25 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:29 America/Toronto - Preserve late-bound plugin and model-state paths
+
+The plug command's default dependency object must keep `global` as a lazy getter over `Global.Path.config`. Preserve the `PlugDeps.global: string` contract: changing it to a callback would create needless production and fixture churn. Read the getter only when passing the target into `patchPluginConfig`. The path inventory is the safe regression proof because deliberately running a regressed default command could write to the user's real global configuration.
+
+`packages/opencode/src/cli/cmd/run/variant.shared.ts` must keep `modelFile()` late-bound. A read may use its default target once; a save must first bind `const target = modelFile()`, then pass that same target into both `read(target)` and `writeJson(target, ...)`. Do not independently resolve between the read and write. The focused test intentionally constructs the runtime before changing `Global.Path.state`, records requested service paths, and redirects physical I/O into a temporary directory so even a regression cannot touch real model preferences.
+
+The plugin and variant suites pass 28 tests / 80 assertions. The reviewed inventory remains 205 consumers and now has four module captures, with digest `05ad537e4725954d9195803fb0907d69d1bdb0751848c8bb6427508cd42c7e0a`. The remaining eager captures are `packages/core/src/plugin/agent.ts`, `packages/opencode/src/kilocode/sandbox/preference.ts`, `packages/opencode/src/kilocode/sandbox/store.ts` and `packages/opencode/src/tool/truncation-dir.ts`. Treat the paired truncation paths as one slice. Treat the paired sandbox roots as a separate, higher-risk slice because both derive a shared parent from the state directory and participate in persisted policy/preference behavior.
+
+The refreshed repository inventory is 69,073 total: public 1,693; compatibility 35,165; provenance 5,686; internal 26,529. The compatibility ledger baseline must remain count 35,165 with digest `e180c64b9e84dc22f273d2a023b8b887c9cf7c55029ec7e0aa856285c8e08c59` until another reviewed inventory refresh changes it.
+
 ## ChatGPT 2026-09-15 17:17 America/Toronto - Preserve operation-bound Auth and MCP paths
 
 `packages/opencode/src/auth/index.ts` and `packages/opencode/src/mcp/auth.ts` must resolve the active data root at the beginning of each operation. Auth `set`/`remove` pass the same resolved target to load and write. MCP `all` binds one target to its lock/read; `mutate` binds one target to its lock/read/write. Do not replace these with module constants, and do not independently resolve the path between the read and write steps because a generation change could split a transaction.
 
 The focused late-binding test imports both services before redirecting the active root and proves both read and write beneath the redirected root. Together with the existing Auth and MCP suites, evidence is 6 tests / 15 assertions; bounded CLI typecheck passes. The path baseline remains 205 total consumers but now has six module captures, including only two `data` captures, with digest `62c13e2054eff368f471228ea108aec1f70f23c0799eda417863aa85d49d57ec`.
 
-The refreshed repository inventory is 69,060 total: public 1,693; compatibility 35,162; provenance 5,686; internal 26,519.
+The refreshed repository inventory is 69,060 total: public 1,693; compatibility 35,162; provenance 5,686; internal 26,519. This slice was pushed in `2316379485`; its normal protected hook passed all 29 JavaScript/TypeScript packages plus JetBrains.
 
-Continue by late-binding the remaining six captures individually with focused behavior tests. The two sandbox roots intentionally use the parent of the state directory and require compatibility tests before changing their lifetime. The plug command global directory and run-command model state are lower-risk next candidates. Keep credential files at their current physical paths until the future journaled copy and rollback workflow exists.
+Continue from the four captures listed in the newer section above. Keep credential files at their current physical paths until the future journaled copy and rollback workflow exists.
 
 ## ChatGPT 2026-09-15 17:10 America/Toronto - Preserve the Global.Path migration ratchet
 

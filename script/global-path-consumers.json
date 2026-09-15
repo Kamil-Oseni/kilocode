@@ -5,7 +5,7 @@
   "policy": "inventory-only-no-cutover-evidence",
   "total": {
     "count": 205,
-    "digest": "62c13e2054eff368f471228ea108aec1f70f23c0799eda417863aa85d49d57ec"
+    "digest": "05ad537e4725954d9195803fb0907d69d1bdb0751848c8bb6427508cd42c7e0a"
   },
   "members": {
     "bin": {
@@ -20,7 +20,7 @@
     },
     "config": {
       "count": 50,
-      "module": 1,
+      "module": 0,
       "writes": 0
     },
     "data": {
@@ -45,7 +45,7 @@
     },
     "state": {
       "count": 18,
-      "module": 3,
+      "module": 2,
       "writes": 0
     },
     "tmp": {
@@ -379,22 +379,6 @@
       "ordinal": 1
     },
     {
-      "file": "packages/opencode/src/cli/cmd/plug.ts",
-      "member": "config",
-      "phase": "module",
-      "access": "read",
-      "context": "global: Global.Path.config,",
-      "ordinal": 1
-    },
-    {
-      "file": "packages/opencode/src/cli/cmd/run/variant.shared.ts",
-      "member": "state",
-      "phase": "module",
-      "access": "read",
-      "context": "const MODEL_FILE = path.join(Global.Path.state, \"model.json\")",
-      "ordinal": 1
-    },
-    {
       "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
       "member": "state",
       "phase": "module",
@@ -631,9 +615,9 @@
     {
       "file": "packages/opencode/src/cli/cmd/plug.ts",
       "member": "config",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "global: Global.Path.config,",
+      "context": "return Global.Path.config",
       "ordinal": 1
     },
     {
@@ -687,9 +671,9 @@
     {
       "file": "packages/opencode/src/cli/cmd/run/variant.shared.ts",
       "member": "state",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "const MODEL_FILE = path.join(Global.Path.state, \"model.json\")",
+      "context": "return path.join(Global.Path.state, \"model.json\")",
       "ordinal": 1
     },
     {

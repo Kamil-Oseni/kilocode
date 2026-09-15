@@ -58,7 +58,11 @@ const defaultPlugDeps: PlugDeps = {
   },
   exists: (file) => Filesystem.exists(file),
   files: (dir, name) => ConfigPaths.fileInDirectory(dir, name),
-  global: Global.Path.config,
+  // kilocode_change start - resolve the compatibility profile when the command uses it
+  get global() {
+    return Global.Path.config
+  },
+  // kilocode_change end
 }
 
 function cause(err: unknown) {

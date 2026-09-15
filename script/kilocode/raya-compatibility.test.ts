@@ -48,7 +48,7 @@ test("package, command, baseline and editor drift fail closed", () => {
       brand: inventory,
       vscode: extension,
     },
-    { list: manifests, brand: inventory.replace('"count": 35162', '"count": 35163'), vscode: extension },
+    { list: manifests, brand: inventory.replace('"count": 35165', '"count": 35166'), vscode: extension },
     { list: manifests, brand: inventory, vscode: extension.replace('"publisher": "eden"', '"publisher": "other"') },
   ]
   for (const item of cases)

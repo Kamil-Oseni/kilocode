@@ -16,7 +16,11 @@ import { isRecord } from "@/util/record"
 import { createSession, sessionVariant, type RunSession, type SessionMessages } from "./session.shared"
 import type { RunInput, RunProvider } from "./types"
 
-const MODEL_FILE = path.join(Global.Path.state, "model.json")
+// kilocode_change start - keep the model preference path late-bound during profile migration
+function modelFile() {
+  return path.join(Global.Path.state, "model.json")
+}
+// kilocode_change end
 
 type ModelState = Record<string, unknown> & {
   variant?: Record<string, string | undefined>
@@ -143,8 +147,9 @@ function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
       Effect.gen(function* () {
         const file = yield* FSUtil.Service
 
-        const read = Effect.fn("RunVariant.read")(function* () {
-          return yield* file.readJson(MODEL_FILE).pipe(
+        // kilocode_change start - pin every read/write operation to one resolved file
+        const read = Effect.fn("RunVariant.read")(function* (target = modelFile()) {
+          return yield* file.readJson(target).pipe(
             Effect.map(state),
             Effect.catchCause(() => Effect.succeed(state(undefined))),
           )
@@ -166,7 +171,8 @@ function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
             return
           }
 
-          const current = yield* read()
+          const target = modelFile()
+          const current = yield* read(target)
           const next = {
             ...current.variant,
           }
@@ -180,12 +186,13 @@ function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
           }
 
           yield* file
-            .writeJson(MODEL_FILE, {
+            .writeJson(target, {
               ...current,
               variant: next,
             })
             .pipe(Effect.orElseSucceed(() => undefined))
         })
+        // kilocode_change end
 
         return Service.of({
           resolveSavedVariant,

@@ -99,14 +99,12 @@ export function recovery(services: Services) {
     if (proof.patches.length && !(yield* services.snap.matches(proof.patches))) return false
     const normalize = (file: string) => canonical(file, session.directory)
     const gone = new Set(proof.files.map(normalize))
-    const raw = yield* services.storage
-      .read<Snapshot.FileDiff[]>(["session_diff", sessionID])
-      .pipe(
-        Effect.catchTag("NotFoundError", () => Effect.succeed([] as Snapshot.FileDiff[])),
-        Effect.orDie,
-      )
+    const raw = yield* services.storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID]).pipe(
+      Effect.catchTag("NotFoundError", () => Effect.succeed([] as Snapshot.FileDiff[])),
+      Effect.orDie,
+    )
     if (raw.some((diff) => !!diff.file && gone.has(normalize(diff.file)))) return false
-    RayaRevertNote.record(sessionID, proof.files)
+    yield* Effect.promise(() => RayaRevertNote.record(sessionID, proof.files))
     return true
   })
 

@@ -8,8 +8,8 @@ const sid = () => {
   return id
 }
 
-afterEach(() => {
-  for (const id of ids) RayaRevertNote.take(id)
+afterEach(async () => {
+  for (const id of ids) await RayaRevertNote.take(id)
   ids.length = 0
 })
 
@@ -27,18 +27,18 @@ describe("RayaRevertNote", () => {
     expect(RayaRevertNote.reminder([])).toBeUndefined()
   })
 
-  test("record then take returns the files once", () => {
+  test("record then take returns the files once", async () => {
     const id = sid()
-    RayaRevertNote.record(id, ["C:/tmp/a.txt", "C:/tmp/b.txt"])
-    expect(RayaRevertNote.take(id)).toEqual(["C:/tmp/a.txt", "C:/tmp/b.txt"])
-    expect(RayaRevertNote.take(id)).toBeUndefined()
+    await RayaRevertNote.record(id, ["C:/tmp/a.txt", "C:/tmp/b.txt"])
+    expect(await RayaRevertNote.take(id)).toEqual(["C:/tmp/a.txt", "C:/tmp/b.txt"])
+    expect(await RayaRevertNote.take(id)).toBeUndefined()
   })
 
-  test("survives an in-process cache drop the way a backend restart would", () => {
+  test("survives an in-process cache drop the way a backend restart would", async () => {
     const id = sid()
-    RayaRevertNote.record(id, ["/Users/User/Desktop/dummy/drawing-canvas.html"])
+    await RayaRevertNote.record(id, ["/Users/User/Desktop/dummy/drawing-canvas.html"])
     RayaRevertNote.dropCache()
-    const noted = RayaRevertNote.take(id)
+    const noted = await RayaRevertNote.take(id)
     expect(noted?.some((file) => file.endsWith("drawing-canvas.html"))).toBe(true)
     expect(RayaRevertNote.reminder(noted)).toContain("restored to their state before your edits")
   })

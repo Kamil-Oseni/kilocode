@@ -1178,11 +1178,11 @@ describe("files-only discard (Undo all)", () => {
           const after = yield* item.sessions.messages({ sessionID: item.session.id })
           expect(after.length).toBe(before.length)
           // The discard records a one-shot note so the model learns its edits were undone.
-          const noted = RayaRevertNote.take(item.session.id)
+          const noted = yield* Effect.promise(() => RayaRevertNote.take(item.session.id))
           expect(noted?.some((file) => file.endsWith("writable.txt"))).toBe(true)
           expect(RayaRevertNote.reminder(noted)).toContain("restored to their state before your edits")
           // The note is consumed exactly once.
-          expect(RayaRevertNote.take(item.session.id)).toBeUndefined()
+          expect(yield* Effect.promise(() => RayaRevertNote.take(item.session.id))).toBeUndefined()
         }),
       { git: true },
     ),

@@ -3,8 +3,10 @@
 // history still shows the edits it made and it will otherwise trust that stale context — e.g.
 // claim a change is still present, or refuse to redo it. This note nudges it to re-read.
 import { Global } from "@opencode-ai/core/global"
+import { Effect } from "effect"
 import fs from "fs"
 import path from "path"
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live"
 
 export namespace RayaRevertNote {
   // In-process cache plus a small JSON file so the note survives a backend restart
@@ -15,8 +17,7 @@ export namespace RayaRevertNote {
 
   const merge = (a: readonly string[], b: readonly string[]) => [...new Set([...a, ...b])]
 
-  const readDisk = (sessionID: string): string[] => {
-    const file = dest(sessionID)
+  const readDisk = (file: string): string[] => {
     if (!fs.existsSync(file)) return []
     try {
       const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as unknown
@@ -26,32 +27,51 @@ export namespace RayaRevertNote {
     }
   }
 
-  const writeDisk = (sessionID: string, files: readonly string[]) => {
-    const file = dest(sessionID)
+  const writeDisk = (file: string, files: readonly string[]) => {
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, JSON.stringify([...files]))
   }
 
-  const dropDisk = (sessionID: string) => {
-    const file = dest(sessionID)
+  const dropDisk = (file: string) => {
     if (fs.existsSync(file)) fs.unlinkSync(file)
   }
 
   // Record the files a user-initiated discard just restored, to surface on the next turn.
-  export function record(sessionID: string, files: readonly string[]): void {
+  export async function record(
+    sessionID: string,
+    files: readonly string[],
+    admission: ProfileWriterLive.Admission = ProfileWriterLive.revertNote,
+  ): Promise<void> {
     if (files.length === 0) return
-    const next = merge(pending.get(sessionID) ?? readDisk(sessionID), files)
-    pending.set(sessionID, next)
-    writeDisk(sessionID, next)
+    await Effect.runPromise(
+      admission.run(
+        Effect.sync(() => {
+          const file = dest(sessionID)
+          const next = merge(pending.get(file) ?? readDisk(file), files)
+          pending.set(file, next)
+          writeDisk(file, next)
+        }),
+      ),
+    )
   }
 
   // Read and clear the pending note for a session. Returns undefined when there is none.
-  export function take(sessionID: string): string[] | undefined {
-    const files = merge(pending.get(sessionID) ?? [], readDisk(sessionID))
-    pending.delete(sessionID)
-    dropDisk(sessionID)
-    if (files.length === 0) return undefined
-    return files
+  export async function take(
+    sessionID: string,
+    admission: ProfileWriterLive.Admission = ProfileWriterLive.revertNote,
+  ): Promise<string[] | undefined> {
+    return Effect.runPromise(
+      admission.run(
+        Effect.sync(() => {
+          const file = dest(sessionID)
+          const files = merge(pending.get(file) ?? [], readDisk(file))
+          pending.delete(file)
+          dropDisk(file)
+          if (files.length === 0) return undefined
+          return files
+        }),
+      ),
+    )
   }
 
   // Test-only: drop the in-process cache so the next take() must read the persisted file.

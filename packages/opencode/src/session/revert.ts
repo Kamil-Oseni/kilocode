@@ -280,7 +280,7 @@ const layer = Layer.effect(
       if (result.files.length === 0) return session
       // kilocode_change - surface the undo to the model on its next turn so it re-reads
       // instead of trusting the now-stale edits still shown in the conversation history.
-      RayaRevertNote.record(input.sessionID, result.files)
+      yield* Effect.promise(() => RayaRevertNote.record(input.sessionID, result.files)) // kilocode_change
       // Discarding everything clears the review UI outright; a per-file undo leaves
       // other edits intact, so let the client re-poll the remaining diff instead.
       if (!input.files || input.files.length === 0) {

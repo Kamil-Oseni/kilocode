@@ -180,10 +180,10 @@ export namespace ProfileWriterManifest {
         id: "profile.data.revert-note",
         roots: ["data"],
         sources: ["packages/opencode/src/kilocode/session/revert-note.ts"],
-        methods: ["write", "unlink"],
+        methods: ["record", "take"],
         lifecycle: "Pin data/raya/revert-note through directory creation, write or unlink.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.data.self-heal",

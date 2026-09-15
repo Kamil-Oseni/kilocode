@@ -30,6 +30,7 @@ export namespace ProfileWriterLive {
   export const auth = admission("profile.credentials.auth")
   export const mcp = admission("profile.credentials.mcp")
   export const output = admission("profile.data.tool-output")
+  export const revertNote = admission("profile.data.revert-note")
   export const policy = admission("profile.state.sandbox-policy")
   export const preference = admission("profile.state.sandbox-preference")
   export const pluginMeta = admission("profile.state.plugin-meta")

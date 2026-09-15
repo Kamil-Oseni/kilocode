@@ -13,6 +13,7 @@ describe("profile writer manifest", () => {
     expect(manifest.writers.filter((writer) => writer.coverage === "integrated").map((writer) => writer.id)).toEqual([
       "profile.credentials.auth",
       "profile.credentials.mcp",
+      "profile.data.revert-note",
       "profile.data.tool-output",
       "profile.state.plugin-meta",
       "profile.state.sandbox-policy",

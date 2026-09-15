@@ -1,4 +1,3 @@
-
 import { Effect } from "effect"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt" // kilocode_change
 import { Agent } from "@/agent/agent"
@@ -61,7 +60,9 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   // A user "Undo all" / per-file discard restores files but keeps the conversation, so the
   // model's history still shows edits that no longer exist. Inject a one-shot note (read and
   // cleared from a process cache set by discardChanges) so it re-reads instead of trusting them.
-  const revertNote = RayaRevertNote.reminder(RayaRevertNote.take(input.session.id))
+  const revertNote = RayaRevertNote.reminder(
+    yield* Effect.promise(() => RayaRevertNote.take(input.session.id)), // kilocode_change
+  )
   if (revertNote)
     userMessage.parts.push(
       yield* sessions.updatePart({

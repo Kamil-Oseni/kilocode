@@ -273,17 +273,20 @@ it.live("rejects invalid input and duplicate identities without overwriting dura
 
       expect((yield* todos.create({ title: "Overwrite" }).pipe(Effect.flip))._tag).toBe("PersonalTodoConflictError")
       expect((yield* todos.create({ title: "   " }).pipe(Effect.flip))._tag).toBe("PersonalTodoInputError")
-      expect((yield* todos.update(first, { revision: item.revision, dueAt: Number.NaN }).pipe(Effect.flip)).field).toBe(
-        "dueAt",
+      expect(yield* todos.update(first, { revision: item.revision, dueAt: Number.NaN }).pipe(Effect.flip)).toMatchObject(
+        { _tag: "PersonalTodoInputError", field: "dueAt" },
       )
-      expect((yield* todos.update(first, { revision: 0, title: "Invalid" }).pipe(Effect.flip)).field).toBe("revision")
+      expect(yield* todos.update(first, { revision: 0, title: "Invalid" }).pipe(Effect.flip)).toMatchObject({
+        _tag: "PersonalTodoInputError",
+        field: "revision",
+      })
       expect(
-        (yield* todos
+        yield* todos
           .update(first, { revision: item.revision, estimateMinutes: PersonalTodo.MAX_ESTIMATE_MINUTES + 1 })
-          .pipe(Effect.flip)).field,
-      ).toBe("estimateMinutes")
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "PersonalTodoInputError", field: "estimateMinutes" })
       expect(
-        (yield* todos
+        yield* todos
           .update(first, {
             revision: item.revision,
             links: [
@@ -291,28 +294,31 @@ it.live("rejects invalid input and duplicate identities without overwriting dura
               { kind: "goal", id: "goal_one" },
             ],
           })
-          .pipe(Effect.flip)).field,
-      ).toBe("links")
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "PersonalTodoInputError", field: "links" })
       expect(
-        (yield* todos
+        yield* todos
           .replaceSubtasks(first, {
             revision: item.revision,
             subtasks: Array.from({ length: PersonalTodo.MAX_SUBTASKS + 1 }, (_, index) => ({
               title: `Subtask ${index}`,
             })),
           })
-          .pipe(Effect.flip)).field,
-      ).toBe("subtasks")
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "PersonalTodoInputError", field: "subtasks" })
       const collisions = PersonalTodo.make({ storage, subtaskID: () => child, now: () => 100 })
       expect(
-        (yield* collisions
+        yield* collisions
           .replaceSubtasks(first, {
             revision: item.revision,
             subtasks: [{ title: "One" }, { title: "Two" }],
           })
-          .pipe(Effect.flip)).field,
-      ).toBe("subtasks")
-      expect((yield* todos.get("../session").pipe(Effect.flip)).field).toBe("id")
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "PersonalTodoInputError", field: "subtasks" })
+      expect(yield* todos.get("../session").pipe(Effect.flip)).toMatchObject({
+        _tag: "PersonalTodoInputError",
+        field: "id",
+      })
       expect(yield* todos.get(first)).toEqual(item)
     }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
   }),

@@ -1134,7 +1134,7 @@ it.live(
           { agentID: agent.id, patch: { tools: ["bash"] } },
           {
             ...context("stale-tool-update"),
-            ask: () => tasks.update(agent.id, { tools: ["read", "webfetch"] }).pipe(Effect.asVoid),
+            ask: () => tasks.update(agent.id, { tools: ["read", "webfetch"] }).pipe(Effect.asVoid, Effect.orDie),
           },
         )
         expect(stale.title).toBe("Routine update needs review")

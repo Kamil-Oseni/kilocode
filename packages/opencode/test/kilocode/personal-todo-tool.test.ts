@@ -29,8 +29,12 @@ const it = testEffect(
   ),
 )
 
-const agent = (name: string, mode: "primary" | "subagent") =>
-  Schema.decodeUnknownSync(Agent.Info)({ name, mode, options: {}, permission: [] })
+const agent = (name: string, mode: "primary" | "subagent"): Agent.Info => ({
+  name,
+  mode,
+  options: {},
+  permission: [],
+})
 const ItemResult = Schema.Struct({ status: Schema.String, item: PersonalTodo.Info })
 const ProposalResult = Schema.Struct({ status: Schema.String, proposal: PersonalTodoProposal.Info })
 
@@ -305,11 +309,11 @@ it.live(
         expect(body.proposal.source).toEqual({
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
-          callID: ctx.callID,
+          callID: "proposal-call",
         })
         expect(body.proposal.id).toMatch(/^proposal_/)
         expect(body.proposal.target.todoID).toMatch(/^todo_/)
-        expect(body.proposal.changes.subtasks.map((item) => item.id)).toEqual([
+        expect(body.proposal.changes.subtasks?.map((item) => item.id)).toEqual([
           expect.stringMatching(/^subtodo_/),
           expect.stringMatching(/^subtodo_/),
         ])

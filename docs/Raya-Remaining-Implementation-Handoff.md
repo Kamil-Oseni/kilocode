@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 20:48 America/Toronto - Installed checkpoint and activation boundary
+
+Snapshot `7.4.23-snapshot+0d0a6b69ed.kamil-oseni.1789432984441` completed the repository's low-memory build, typecheck, lint, production bundle, package and installation workflow. Retained artifact: 519,357,406 bytes with SHA-256 `cc4335ed1fc5e570f124eae70af896337fd308587a9b9fdadcd9408f28636dd7`. Bundled CLI: 230,668,800 bytes with SHA-256 `56720120a5032b66aaf8bd18d5f6d769a34624a78ff395e84980002f1e425e9d`.
+
+The open VS Code host remains on package-vault active digest `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`. Reload VS Code before any human acceptance and then verify the active digest changes to the new artifact. Drive C had 94,314,950,656 bytes available after packaging; no Bun or tsgo process remained. Preserve the owner's two untracked documents. Continue EN-02 with the real child-process inbox-bind interruption matrix described below, then implement the ambiguous-delivery review disposition.
+
 ## ChatGPT 2026-09-14 20:41 America/Toronto - EN-02 claimed inbox-bind restart recovery
 
 Product commit `7a34f27f53` is verified and pushed. Preserve the bind context added to `claim.ts`: a non-delegated follow-up startup stores `messageSource` and `messageSessionID` in the same durable claim that later links the replacement session. `reconcile.ts` must require both fields, the linked session, exact non-timer `rayaRoutine` metadata, the same worker/run/trigger, an active goal, exact pending history and an inbox row that is still either at the recorded prior session or already at the exact replacement session. Recovery restores that one run, performs the compare-and-set move, verifies the target state and only then permits claim removal.

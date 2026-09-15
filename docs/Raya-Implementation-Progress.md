@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 20:48 America/Toronto - Verified Routine reliability batch installed
+
+**Status: snapshot `7.4.23-snapshot+0d0a6b69ed.kamil-oseni.1789432984441` is installed.** The low-memory workflow rebuilt the SDK and CLI, ran the extension and webview typechecks, ESLint and production bundle, packaged the VSIX, installed it and pruned one older staged package, vault package and extension. The retained VSIX is **519,357,406 bytes**, SHA-256 `cc4335ed1fc5e570f124eae70af896337fd308587a9b9fdadcd9408f28636dd7`; its CLI is **230,668,800 bytes**, SHA-256 `56720120a5032b66aaf8bd18d5f6d769a34624a78ff395e84980002f1e425e9d`.
+
+The package vault still reports active host digest `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`, so the installed files are current but the open VS Code window has not yet proved activation of this package. Reload the window before human verification. Drive C has **94,314,950,656 bytes** available and no Bun or tsgo process remains. The only untracked files are the owner's preserved `docs/Raya-Codex-Research-Deferred.md` and `docs/Raya-Features.md`.
+
 ## ChatGPT 2026-09-14 20:41 America/Toronto - Restart completes claimed Routine follow-up binding
 
 **Status: product commit `7a34f27f53` is verified and pushed to `origin/main`; packaging remains.** A replacement Routine run now records the exact inbox message source and prior session in its durable per-worker startup claim. If the backend stops after the replacement session and run history exist but before the inbox move finishes, restart validates the claim, session metadata, active goal, worker, exact pending run, immutable trigger and unowned user message before moving that message to the saved session. If the move committed before the stop, the same recovery accepts only the exact target state and removes the stale claim without creating or moving anything again.

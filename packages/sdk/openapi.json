@@ -34138,7 +34138,7 @@
                   "properties": {
                     "version": {
                       "type": "number",
-                      "enum": [1]
+                      "enum": [1, 2]
                     },
                     "runID": {
                       "type": "string",
@@ -34535,6 +34535,26 @@
                     },
                     "objective": {
                       "type": "string"
+                    },
+                    "organizationPolicy": {
+                      "type": "object",
+                      "properties": {
+                        "organizationID": {
+                          "type": "string",
+                          "pattern": "^org_[a-f0-9]{32}$"
+                        },
+                        "organizationRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": ["organizationID", "organizationRevision", "sha256"],
+                      "additionalProperties": false
                     }
                   },
                   "required": ["version", "runID", "agentID", "at", "definition", "objective"],
@@ -34826,6 +34846,11 @@
                             "pattern": "\\S",
                             "maxLength": 4000
                           },
+                          "policy": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 12000
+                          },
                           "revision": {
                             "type": "integer",
                             "minimum": 1,
@@ -35009,6 +35034,11 @@
                       "pattern": "\\S",
                       "maxLength": 4000
                     },
+                    "policy": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 12000
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 1,
@@ -35144,6 +35174,11 @@
                     "pattern": "\\S",
                     "maxLength": 4000
                   },
+                  "policy": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "maxLength": 12000
+                  },
                   "members": {
                     "type": "array",
                     "items": {
@@ -35263,6 +35298,11 @@
                       "type": "string",
                       "pattern": "\\S",
                       "maxLength": 4000
+                    },
+                    "policy": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 12000
                     },
                     "revision": {
                       "type": "integer",
@@ -35448,6 +35488,11 @@
                       "pattern": "\\S",
                       "maxLength": 4000
                     },
+                    "policy": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 12000
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 1,
@@ -35608,6 +35653,11 @@
                     "pattern": "\\S",
                     "maxLength": 4000
                   },
+                  "policy": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "maxLength": 12000
+                  },
                   "members": {
                     "type": "array",
                     "items": {
@@ -35725,6 +35775,11 @@
                       "type": "string",
                       "pattern": "\\S",
                       "maxLength": 4000
+                    },
+                    "policy": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 12000
                     },
                     "revision": {
                       "type": "integer",

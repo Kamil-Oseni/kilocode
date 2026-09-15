@@ -9086,6 +9086,7 @@ export class Organization2 extends HeyApiClient {
       workspace?: string
       name?: string
       purpose?: string
+      policy?: string
       members?: Array<{
         agentID: string
         role: string
@@ -9107,6 +9108,7 @@ export class Organization2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
+            { in: "body", key: "policy" },
             { in: "body", key: "members" },
             { in: "body", key: "delegations" },
           ],
@@ -9219,6 +9221,7 @@ export class Organization2 extends HeyApiClient {
       expectedRevision?: number
       name?: string
       purpose?: string
+      policy?: string
       members?: Array<{
         agentID: string
         role: string
@@ -9242,6 +9245,7 @@ export class Organization2 extends HeyApiClient {
             { in: "body", key: "expectedRevision" },
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
+            { in: "body", key: "policy" },
             { in: "body", key: "members" },
             { in: "body", key: "delegations" },
           ],

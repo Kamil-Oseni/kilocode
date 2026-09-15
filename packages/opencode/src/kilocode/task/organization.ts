@@ -16,6 +16,7 @@ const MAX = 50
 const EDGES = 500
 const Name = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const Purpose = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
+const Policy = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(12_000))
 const Role = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const AgentID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))
 const Revision = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER))
@@ -42,6 +43,7 @@ export const Organization = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/)),
   name: Name,
   purpose: Schema.optional(Purpose),
+  policy: Schema.optional(Policy),
   revision: Revision,
   archived: Schema.Boolean,
   archivedAt: Schema.optional(Stamp),
@@ -53,6 +55,7 @@ export const Organization = Schema.Struct({
 export const Create = Schema.Struct({
   name: Name,
   purpose: Schema.optional(Purpose),
+  policy: Schema.optional(Policy),
   members: Members,
   delegations: Schema.optional(Delegations),
 })
@@ -60,16 +63,18 @@ export const Update = Schema.Struct({
   expectedRevision: Revision,
   name: Schema.optional(Name),
   purpose: Schema.optional(Schema.Union([Purpose, Schema.Null])),
+  policy: Schema.optional(Schema.Union([Policy, Schema.Null])),
   members: Schema.optional(Members),
   delegations: Schema.optional(Delegations),
 }).check(
   Schema.makeFilter((value) =>
     value.name !== undefined ||
     value.purpose !== undefined ||
+    value.policy !== undefined ||
     value.members !== undefined ||
     value.delegations !== undefined
       ? undefined
-      : "Change the organization name, purpose, membership, or delegation graph.",
+      : "Change the organization name, purpose, policy, membership, or delegation graph.",
   ),
 )
 export const Archive = Schema.Struct({ expectedRevision: Revision })
@@ -90,7 +95,8 @@ export type Archive = typeof Archive.Type
 export type Query = typeof Query.Type
 
 export function matchesDefinition(item: Organization, input: Create) {
-  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim()) return false
+  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim() || item.policy !== input.policy?.trim())
+    return false
   if (!isDeepStrictEqual(item.members, normalize(input.members))) return false
   return isDeepStrictEqual(
     item.delegations,
@@ -182,6 +188,7 @@ function decoded(
     id: row.id,
     name: row.name,
     ...(row.purpose ? { purpose: row.purpose } : {}),
+    ...(row.policy ? { policy: row.policy } : {}),
     revision: row.revision,
     archived: row.archived_at !== null,
     ...(row.archived_at !== null ? { archivedAt: row.archived_at } : {}),
@@ -271,6 +278,7 @@ export namespace RayaTaskOrganization {
             id,
             name: value.name.trim(),
             ...(value.purpose ? { purpose: value.purpose.trim() } : {}),
+            ...(value.policy ? { policy: value.policy.trim() } : {}),
             revision: 1,
             archived: false,
             createdAt: existing.createdAt,
@@ -291,6 +299,7 @@ export namespace RayaTaskOrganization {
         id,
         name: value.name.trim(),
         ...(value.purpose ? { purpose: value.purpose.trim() } : {}),
+        ...(value.policy ? { policy: value.policy.trim() } : {}),
         revision: 1,
         archived: false,
         createdAt: now,
@@ -308,6 +317,7 @@ export namespace RayaTaskOrganization {
                   id: item.id,
                   name: item.name,
                   purpose: item.purpose ?? null,
+                  policy: item.policy ?? null,
                   revision: item.revision,
                   archived_at: null,
                   time_created: now,
@@ -401,6 +411,7 @@ export namespace RayaTaskOrganization {
                 ...prior,
                 name: value.name?.trim() ?? prior.name,
                 purpose: value.purpose === null ? undefined : (value.purpose?.trim() ?? prior.purpose),
+                policy: value.policy === null ? undefined : (value.policy?.trim() ?? prior.policy),
                 revision: row.revision + 1,
                 updatedAt: now,
                 members: graph?.members ?? prior.members,
@@ -408,7 +419,13 @@ export namespace RayaTaskOrganization {
               }
               yield* tx
                 .update(OrganizationRow)
-                .set({ name: next.name, purpose: next.purpose ?? null, revision: next.revision, time_updated: now })
+                .set({
+                  name: next.name,
+                  purpose: next.purpose ?? null,
+                  policy: next.policy ?? null,
+                  revision: next.revision,
+                  time_updated: now,
+                })
                 .where(and(eq(OrganizationRow.id, id), eq(OrganizationRow.revision, value.expectedRevision)))
                 .run()
                 .pipe(Effect.orDie)
@@ -691,7 +708,7 @@ export namespace RayaTaskOrganization {
         return yield* new Invalid({ message: "Both workers must be active members of this organization." })
       if (!item.delegations.some((edge) => edge.senderID === input.senderID && edge.recipientID === input.recipientID))
         return yield* new Invalid({ message: "This organization does not permit that worker-to-worker delegation." })
-      return { id: item.id, name: item.name, revision: item.revision }
+      return { id: item.id, name: item.name, revision: item.revision, ...(item.policy ? { policy: item.policy } : {}) }
     })
 
     return {

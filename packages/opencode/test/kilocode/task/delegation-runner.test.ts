@@ -8,7 +8,7 @@ import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
-import { RayaTaskDelegation } from "@/kilocode/task/delegation"
+import { RayaTaskDelegation, ceiling } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -325,6 +325,86 @@ test("organization authority is rechecked after the worker startup claim is acqu
       expect(yield* RayaTaskSnapshot.make({ storage }).find(stopped.childRunID ?? "missing")).toBeUndefined()
       expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.status === "running")).toEqual([])
       expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization policy is pinned at authorization and cannot widen delegated permissions", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const calls: Array<{ permission: unknown }> = []
+      const state = { id: "", updated: false }
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: (input) =>
+            Effect.gen(function* () {
+              if (!state.updated) {
+                state.updated = true
+                yield* organizations.update(state.id, {
+                  expectedRevision: 1,
+                  policy: "Use the later policy.",
+                })
+              }
+              calls.push({ permission: input.permission })
+              return session("ses_policy")
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "full",
+        tools: ["read", "bash"],
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "full",
+        tools: ["read", "write"],
+        schedule: { kind: "manual" },
+      })
+      const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
+      const text = "Cite café receipts exactly.\nNever infer a missing total."
+      const organization = yield* organizations.create({
+        name: "Company",
+        policy: text,
+        members: [
+          { agentID: chief.id, role: "Chief" },
+          { agentID: books.id, role: "Books" },
+        ],
+        delegations: [{ senderID: chief.id, recipientID: books.id }],
+      })
+      state.id = organization.id
+      const row = yield* runner.delegate({
+        source: "dlg_policy",
+        senderID: chief.id,
+        recipientID: books.id,
+        organizationID: organization.id,
+        organizationRevision: organization.revision,
+        objective: "Review the close.",
+      })
+      expect(row.state).toBe("running")
+      expect((yield* organizations.get(organization.id)).revision).toBe(2)
+      const saved = yield* RayaTaskSnapshot.make({ storage }).get(row.childRunID!)
+      expect(saved.version).toBe(2)
+      if (saved.version !== 2) return yield* Effect.die("Expected a current startup snapshot")
+      expect(saved.objective.split(text)).toHaveLength(2)
+      expect(saved.objective).not.toContain("Use the later policy.")
+      expect(saved.organizationPolicy).toEqual({
+        organizationID: organization.id,
+        organizationRevision: 1,
+        sha256: createHash("sha256").update(text, "utf8").digest("hex"),
+      })
+      expect(calls[0]?.permission).toEqual(RayaTask.rules(ceiling(chief, books)))
+      expect(calls[0]?.permission).not.toEqual(RayaTask.rules(books))
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

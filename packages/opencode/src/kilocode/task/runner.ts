@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import { Cause, Effect, Option, Schema } from "effect"
 import type { Bus } from "@/bus"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
@@ -40,6 +41,18 @@ import * as Log from "@opencode-ai/core/util/log"
 const WAIT = "waiting on you"
 
 const log = Log.create({ service: "raya-task-runner" })
+
+type Organization = { id: string; name: string; revision: number; policy?: string }
+
+function policy(objective: string, organization?: Organization) {
+  if (!organization?.policy) return objective
+  return [
+    `Organization policy for ${organization.name} (${organization.id}, revision ${organization.revision}):`,
+    organization.policy,
+    "This policy constrains this delegated request. It does not grant tools, filesystem access, network access, or approval authority.",
+    objective,
+  ].join("\n\n")
+}
 
 function kick(input: {
   database?: Database.Interface
@@ -317,7 +330,7 @@ export namespace RayaTaskRunner {
           follow?: boolean
           view?: Pick<RayaTask.Agent, "role" | "access" | "tools">
           defer?: boolean
-          guard?: Effect.Effect<void, RayaTask.GuardError>
+          guard?: Effect.Effect<Organization | undefined, RayaTask.GuardError>
           runID?: string
           delegationID?: string
           bind?: { source: string; sessionID: SessionID }
@@ -329,25 +342,40 @@ export namespace RayaTaskRunner {
             claim(
               input.storage,
               id,
-              check(id, trigger, opts?.follow ?? !!note).pipe(Effect.tap(() => opts?.guard ?? Effect.void)),
-              (selected, owner) =>
+              check(id, trigger, opts?.follow ?? !!note).pipe(
+                Effect.flatMap((selected) =>
+                  (opts?.guard ?? Effect.succeed(undefined)).pipe(
+                    Effect.map((organization) => ({ selected, organization })),
+                  ),
+                ),
+              ),
+              (admitted, owner) =>
                 Effect.gen(function* () {
-                  const item = selected.item
-                  if (selected.trigger.kind === "timer") {
+                  const item = admitted.selected.item
+                  if (admitted.selected.trigger.kind === "timer") {
                     if (!schedule)
                       return yield* new RayaTask.GuardError({
                         message: "The routine occurrence database is unavailable.",
                       })
-                    yield* schedule.reserve(selected.trigger, owner.id)
+                    yield* schedule.reserve(admitted.selected.trigger, owner.id)
                   }
-                  const objective = note ?? (yield* seed(item))
+                  const objective = policy(note ?? (yield* seed(item)), admitted.organization)
                   yield* snapshots.save({
-                    version: 1,
+                    version: 2,
                     runID: owner.id,
                     agentID: item.id,
                     at: owner.at,
                     definition: item,
                     objective,
+                    ...(admitted.organization?.policy
+                      ? {
+                          organizationPolicy: {
+                            organizationID: admitted.organization.id,
+                            organizationRevision: admitted.organization.revision,
+                            sha256: createHash("sha256").update(admitted.organization.policy, "utf8").digest("hex"),
+                          },
+                        }
+                      : {}),
                   })
                   const created = yield* open(
                     item.dir,
@@ -358,11 +386,11 @@ export namespace RayaTaskRunner {
                         agent: specialist(item),
                         metadata: {
                           rayaRoutine: {
-                            version: selected.trigger.kind === "timer" ? 2 : 1,
+                            version: admitted.selected.trigger.kind === "timer" ? 2 : 1,
                             agentID: item.id,
                             runID: owner.id,
                             scheduleVersion: item.scheduleVersion ?? 1,
-                            trigger: selected.trigger,
+                            trigger: admitted.selected.trigger,
                             ...(opts?.delegationID ? { delegationID: opts.delegationID } : {}),
                           },
                         },
@@ -378,8 +406,8 @@ export namespace RayaTaskRunner {
                     }),
                   )
                   yield* owner.link(created.id)
-                  if (selected.trigger.kind === "timer" && schedule)
-                    yield* schedule.link(selected.trigger, owner.id, created.id)
+                  if (admitted.selected.trigger.kind === "timer" && schedule)
+                    yield* schedule.link(admitted.selected.trigger, owner.id, created.id)
                   yield* goals.create(
                     created.id,
                     objective,
@@ -395,7 +423,7 @@ export namespace RayaTaskRunner {
                     sessionID: created.id,
                     status: "running",
                     scheduleVersion: item.scheduleVersion ?? 1,
-                    trigger: selected.trigger,
+                    trigger: admitted.selected.trigger,
                   }
                   const stored = yield* tasks.record(run)
                   if (opts?.bind && inbox) yield* inbox.move(item.id, opts.bind.source, opts.bind.sessionID, created.id)
@@ -408,7 +436,7 @@ export namespace RayaTaskRunner {
                     }).pipe(Effect.forkDetach)
                   return stored
                 }),
-              (selected) => selected.trigger,
+              (admitted) => admitted.selected.trigger,
               undefined,
               undefined,
               opts?.runID && opts.delegationID
@@ -572,13 +600,32 @@ export namespace RayaTaskRunner {
         runID: taken.childRunID,
         delegationID: taken.id,
         guard: Effect.gen(function* () {
-          if (!(yield* errands.authorize(taken)))
-            return yield* new RayaTask.GuardError({
-              message: "The organization no longer authorizes this delegation.",
-            })
+          const organization = taken.organizationID
+            ? organizations
+              ? yield* organizations
+                  .authorize({
+                    id: taken.organizationID,
+                    revision: taken.organizationRevision,
+                    senderID: taken.senderID,
+                    recipientID: taken.recipientID,
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      () =>
+                        new RayaTask.GuardError({
+                          message: "The organization no longer authorizes this delegation.",
+                        }),
+                    ),
+                  )
+              : yield* new RayaTask.GuardError({
+                  message: "The organization no longer authorizes this delegation.",
+                })
+            : undefined
+          if (!taken.organizationID && !(yield* errands.authorize(taken)))
+            return yield* new RayaTask.GuardError({ message: "This delegation is no longer authorized." })
           if (taken.deadline !== undefined && taken.deadline <= Date.now())
             return yield* new RayaTask.GuardError({ message: LATE })
-          return yield* Effect.void
+          return organization
         }),
       }).pipe(
         Effect.catch((err) =>

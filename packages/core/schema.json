@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "d1040d32-02e8-46f3-9a67-bb7fa4352555",
+  "id": "d38f6f98-afbd-4b6c-a794-5ff83995e2da",
   "prevIds": [
-    "dac6c5b7-5e01-416b-b668-e2c58036cbc6"
+    "d1040d32-02e8-46f3-9a67-bb7fa4352555"
   ],
   "ddl": [
     {
@@ -1161,6 +1161,16 @@
       "default": null,
       "generated": null,
       "name": "purpose",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "policy",
       "entityType": "columns",
       "table": "raya_routine_organization"
     },

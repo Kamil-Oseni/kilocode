@@ -77,6 +77,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       const created = yield* organizations.create({
         name: "Website Builders",
         purpose: "Build and operate client websites.",
+        policy: "Cite the source for every client claim.",
         members: [
           { agentID: chief.id, role: "CEO" },
           { agentID: books.id, role: "Accounting", supervisorID: chief.id },
@@ -98,7 +99,12 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
           senderID: chief.id,
           recipientID: books.id,
         }),
-      ).toEqual({ id: created.id, name: "Website Builders", revision: 1 })
+      ).toEqual({
+        id: created.id,
+        name: "Website Builders",
+        revision: 1,
+        policy: "Cite the source for every client claim.",
+      })
       expect(
         Exit.isFailure(
           yield* organizations
@@ -116,6 +122,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       const updated = yield* organizations.update(created.id, {
         expectedRevision: 1,
         purpose: null,
+        policy: null,
         members: [
           { agentID: chief.id, role: "CEO" },
           { agentID: design.id, role: "Design", supervisorID: chief.id },
@@ -125,6 +132,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       })
       expect(updated.revision).toBe(2)
       expect(updated.purpose).toBeUndefined()
+      expect(updated.policy).toBeUndefined()
       expect(updated.members.map((member) => member.agentID)).toEqual([chief.id, design.id, books.id])
       expect(updated.delegations).toEqual([{ senderID: chief.id, recipientID: design.id, position: 0 }])
       expect(
@@ -142,6 +150,10 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       const revisions = yield* database.db.select().from(Revision).where(eq(Revision.organization_id, created.id)).all()
       expect(revisions.map((row) => row.revision)).toEqual([1, 2])
       expect(JSON.parse(revisions[0]!.definition).members[1].role).toBe("Accounting")
+      expect(JSON.parse(revisions[0]!.definition).policy).toBe("Cite the source for every client claim.")
+
+      const restarted = RayaTaskOrganization.make(database, tasks, storage)
+      expect((yield* restarted.get(created.id)).policy).toBeUndefined()
 
       const archived = yield* organizations.archive(created.id, { expectedRevision: 2 })
       expect(archived).toMatchObject({ archived: true, revision: 3 })
@@ -155,6 +167,40 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       expect(yield* database.db.get(sql`SELECT count(*) AS count FROM raya_routine_organization_revision`)).toEqual({
         count: 3,
       })
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization policy is bounded and clearing it is an explicit revisioned change", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const tasks = RayaTask.make({ storage, database })
+      const organizations = RayaTaskOrganization.make(database, tasks, storage)
+      const worker = yield* tasks.create({ name: "Worker", objective: "Work", schedule: { kind: "manual" } })
+      expect(
+        Exit.isFailure(
+          yield* organizations
+            .create({ name: "Oversize", policy: "x".repeat(12_001), members: [{ agentID: worker.id, role: "Owner" }] })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      const item = yield* organizations.create({
+        name: "Bounded",
+        policy: "x".repeat(12_000),
+        members: [{ agentID: worker.id, role: "Owner" }],
+      })
+      expect(item.policy?.length).toBe(12_000)
+      expect(
+        Exit.isFailure(
+          yield* organizations.update(item.id, { expectedRevision: 1, policy: "x".repeat(12_001) }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      const cleared = yield* organizations.update(item.id, { expectedRevision: 1, policy: null })
+      expect(cleared).toMatchObject({ revision: 2 })
+      expect(cleared.policy).toBeUndefined()
+      expect((yield* RayaTaskOrganization.make(database, tasks, storage).get(item.id)).policy).toBeUndefined()
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

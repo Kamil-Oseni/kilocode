@@ -8,13 +8,30 @@ export namespace RayaTaskSnapshot {
   export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RayaTaskSnapshot.Invalid", {
     message: Schema.String,
   }) {}
-  export const Info = Schema.Struct({
-    version: Schema.Literal(1),
+  const Base = {
     runID: Schema.String.check(Schema.isMinLength(1)),
     agentID: Schema.String.check(Schema.isMinLength(1)),
     at: Schema.Finite,
     definition: RayaTask.Agent,
     objective: Schema.String,
+  }
+  const Policy = Schema.Struct({
+    organizationID: Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/)),
+    organizationRevision: Schema.Int.check(
+      Schema.isGreaterThanOrEqualTo(1),
+      Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
+    ),
+    sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  })
+  export const Current = Schema.Struct({
+    version: Schema.Literal(2),
+    ...Base,
+    organizationPolicy: Schema.optional(Policy),
+  })
+  export const Info = Schema.Struct({
+    version: Schema.Literals([1, 2]),
+    ...Base,
+    organizationPolicy: Schema.optional(Policy),
   })
   const key = (id: string) => ["raya", "agent-starts", createHash("sha256").update(id).digest("hex")]
 
@@ -48,8 +65,17 @@ export namespace RayaTaskSnapshot {
       const definition = { ...parsed.definition }
       delete definition.nextRun
       delete definition.execution
-      const snapshot = yield* Schema.decodeUnknownEffect(Info)(
-        JSON.parse(JSON.stringify({ ...parsed, definition })),
+      const snapshot = yield* Schema.decodeUnknownEffect(Current)(
+        JSON.parse(
+          JSON.stringify({
+            ...parsed,
+            version: 2,
+            definition,
+            ...(parsed.version === 2 && parsed.organizationPolicy
+              ? { organizationPolicy: parsed.organizationPolicy }
+              : {}),
+          }),
+        ),
       ).pipe(Effect.orDie)
       if (yield* input.storage.create(key(parsed.runID), snapshot).pipe(Effect.orDie)) return snapshot
       const previous = yield* get(parsed.runID)

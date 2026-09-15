@@ -23316,7 +23316,7 @@ export type KilocodeRoutineSnapshotResponses = {
    * Original startup instructions
    */
   200: {
-    version: 1
+    version: 1 | 2
     runID: string
     agentID: string
     at: number
@@ -23393,6 +23393,11 @@ export type KilocodeRoutineSnapshotResponses = {
       }
     }
     objective: string
+    organizationPolicy?: {
+      organizationID: string
+      organizationRevision: number
+      sha256: string
+    }
   }
 }
 
@@ -23484,6 +23489,7 @@ export type KilocodeRoutineOrganizationListResponses = {
       id: string
       name: string
       purpose?: string
+      policy?: string
       revision: number
       archived: boolean
       archivedAt?: number
@@ -23512,6 +23518,7 @@ export type KilocodeRoutineOrganizationCreateData = {
   body?: {
     name: string
     purpose?: string
+    policy?: string
     members: Array<{
       agentID: string
       role: string
@@ -23549,6 +23556,7 @@ export type KilocodeRoutineOrganizationCreateResponses = {
     id: string
     name: string
     purpose?: string
+    policy?: string
     revision: number
     archived: boolean
     archivedAt?: number
@@ -23612,6 +23620,7 @@ export type KilocodeRoutineOrganizationArchiveResponses = {
     id: string
     name: string
     purpose?: string
+    policy?: string
     revision: number
     archived: boolean
     archivedAt?: number
@@ -23669,6 +23678,7 @@ export type KilocodeRoutineOrganizationGetResponses = {
     id: string
     name: string
     purpose?: string
+    policy?: string
     revision: number
     archived: boolean
     archivedAt?: number
@@ -23696,6 +23706,7 @@ export type KilocodeRoutineOrganizationUpdateData = {
     expectedRevision: number
     name?: string
     purpose?: string
+    policy?: string
     members?: Array<{
       agentID: string
       role: string
@@ -23743,6 +23754,7 @@ export type KilocodeRoutineOrganizationUpdateResponses = {
     id: string
     name: string
     purpose?: string
+    policy?: string
     revision: number
     archived: boolean
     archivedAt?: number

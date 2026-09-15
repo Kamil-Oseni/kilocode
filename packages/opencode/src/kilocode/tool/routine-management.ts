@@ -23,6 +23,7 @@ import { workflow } from "./workflow-request"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
+const Policy = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(12_000))
 const Label = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const ToolName = Schema.String.check(Schema.isPattern(/^\S+$/), Schema.isMaxLength(128))
 const Tools = Schema.Array(ToolName).check(
@@ -65,6 +66,7 @@ const New = Schema.Struct({
 const CreateOrganization = Schema.Struct({
   name: Label,
   purpose: Text,
+  policy: Schema.optional(Policy),
   workers: Schema.Array(Schema.Union([Existing, New])).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
 })
 const RoutinePatch = Schema.Struct({
@@ -86,6 +88,7 @@ const UpdateOrganization = Schema.Struct({
   expectedRevision: Schema.Int,
   name: Schema.optional(Label),
   purpose: Schema.optional(Schema.Union([Text, Schema.Null])),
+  policy: Schema.optional(Schema.Union([Policy, Schema.Null])),
   members: Schema.optional(
     Schema.Array(Schema.Struct({ agentID: Schema.String, role: Label, supervisorID: Schema.optional(Schema.String) })),
   ),
@@ -241,6 +244,7 @@ function matches(agent: RayaTask.Agent, patch: typeof RoutineMutation.Type) {
 function matchesOrganization(item: typeof Organization.Type, patch: typeof OrganizationUpdate.Type) {
   if (patch.name !== undefined && item.name !== patch.name) return false
   if (patch.purpose !== undefined && (item.purpose ?? null) !== patch.purpose) return false
+  if (patch.policy !== undefined && (item.policy ?? null) !== patch.policy) return false
   if (
     patch.members !== undefined &&
     !isDeepStrictEqual(
@@ -266,7 +270,8 @@ function matchesOrganization(item: typeof Organization.Type, patch: typeof Organ
 
 function matchesCreation(item: typeof Organization.Type, input: typeof OrganizationCreate.Type) {
   if (item.revision !== 1 || item.archived) return false
-  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim()) return false
+  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim() || item.policy !== input.policy?.trim())
+    return false
   if (
     !isDeepStrictEqual(
       item.members,
@@ -379,6 +384,7 @@ export function routineManagementTools(input: {
                 id: item.id,
                 name: item.name,
                 purpose: item.purpose,
+                policy: item.policy,
                 revision: item.revision,
                 members: item.members,
                 delegations: item.delegations,
@@ -401,7 +407,7 @@ export function routineManagementTools(input: {
     "create_organization",
     Effect.succeed({
       description:
-        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, worker role/job, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
+        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, optional organization policy, worker role/job, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Organization policy constrains delegated work but cannot grant tools or permissions. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
       parameters: CreateOrganization,
       execute: (params: typeof CreateOrganization.Type, ctx: Tool.Context) => {
         const patterns = [
@@ -488,6 +494,7 @@ export function routineManagementTools(input: {
               create: {
                 name: params.name,
                 purpose: params.purpose,
+                policy: params.policy,
                 members: params.workers.map((item) => ({
                   agentID: ids.get(item.key)!,
                   role: item.role,
@@ -1074,7 +1081,7 @@ export function routineManagementTools(input: {
     "update_organization",
     Effect.succeed({
       description:
-        "Update an active organization's name, purpose, membership, reporting lines, or directional delegation permissions. Use its ID and current revision from inspect_routines. Ask with ask_options whenever membership, roles, supervisor relationships, or delegation authority is ambiguous. Reporting lines never imply delegation permission.",
+        "Update an active organization's name, purpose, policy, membership, reporting lines, or directional delegation permissions. Use its ID and current revision from inspect_routines. Ask with ask_options whenever policy, membership, roles, supervisor relationships, or delegation authority is ambiguous. Organization policy constrains delegated work but cannot grant tools or permissions. Reporting lines never imply delegation permission.",
       parameters: UpdateOrganization,
       execute: (params: typeof UpdateOrganization.Type, ctx: Tool.Context) =>
         workflow({
@@ -1091,6 +1098,7 @@ export function routineManagementTools(input: {
                       expectedRevision: params.expectedRevision,
                       name: params.name,
                       purpose: params.purpose,
+                      policy: params.policy,
                       members: params.members,
                       delegations: params.delegations,
                     },

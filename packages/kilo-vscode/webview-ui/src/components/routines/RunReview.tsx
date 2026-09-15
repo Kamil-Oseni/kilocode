@@ -14,7 +14,7 @@ export function RunReview(props: {
   onOpenSession?: (id: string) => void
   agentID: string
   selected?: string
-  recovery?: boolean
+  recovery?: "start" | "followup"
   runs: {
     id: string
     at: number
@@ -34,6 +34,7 @@ export function RunReview(props: {
   const [closed, setClosed] = createSignal(false)
   const [failure, setFailure] = createSignal("")
   const run = createMemo(() => props.runs.find((run) => run.id === selected()))
+  const followup = () => props.recovery === "followup"
   let timer: ReturnType<typeof setTimeout> | undefined
   let panel: HTMLElement | undefined
   onMount(() => panel?.focus())
@@ -189,33 +190,48 @@ export function RunReview(props: {
       </Show>
       <Show when={props.recovery || closed()}>
         <section class="routines-recovery" aria-labelledby={`${props.id}-recovery`}>
-          <h3 id={`${props.id}-recovery`}>Interrupted start</h3>
+          <h3 id={`${props.id}-recovery`}>{followup() ? "Follow-up delivery" : "Interrupted start"}</h3>
           <Show
             when={!closed()}
-            fallback={<p role="status">This interrupted start is closed. Saved history remains available.</p>}
+            fallback={
+              <p role="status">
+                {followup()
+                  ? "This follow-up review is closed. The message was not resent, and saved history remains available."
+                  : "This interrupted start is closed. Saved history remains available."}
+              </p>
+            }
           >
             <p class="routines-note">
-              Raya couldn't prove whether this start reached the model. Review the saved run and conversation before
-              closing it.
+              {followup()
+                ? "Raya couldn't prove whether this follow-up reached the worker. Review the saved run and conversation before deciding."
+                : "Raya couldn't prove whether this start reached the model. Review the saved run and conversation before closing it."}
             </p>
             <Show
               when={confirm()}
               fallback={
                 <Button size="small" variant="secondary" onClick={() => setConfirm(true)}>
-                  Close interrupted start
+                  {followup() ? "Resolve follow-up" : "Close interrupted start"}
                 </Button>
               }
             >
-              <div class="routines-review-actions" role="group" aria-label="Confirm closing interrupted start">
+              <div
+                class="routines-review-actions"
+                role="group"
+                aria-label={
+                  followup() ? "Confirm closing follow-up without resending" : "Confirm closing interrupted start"
+                }
+              >
                 <Button size="small" variant="ghost" disabled={!!closing()} onClick={() => setConfirm(false)}>
                   Keep reviewing
                 </Button>
                 <Button size="small" variant="destructive" disabled={!!closing()} onClick={closeRecovery}>
-                  {closing() ? "Closing" : "Close start"}
+                  {closing() ? "Closing" : followup() ? "Close without resending" : "Close start"}
                 </Button>
               </div>
               <p class="routines-hint">
-                This accepts no result and won't replay work. You can start fresh after the recovery record closes.
+                {followup()
+                  ? "This won't resend the follow-up or accept an unverified result. Saved history stays available."
+                  : "This accepts no result and won't replay work. You can start fresh after the recovery record closes."}
               </p>
             </Show>
             <Show when={failure()}>

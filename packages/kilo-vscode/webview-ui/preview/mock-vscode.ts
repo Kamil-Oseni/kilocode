@@ -72,6 +72,22 @@ const report = {
 }
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
+const agents =
+  scene === "followup-recovery"
+    ? [
+        {
+          ...books,
+          execution: {
+            state: "recovery" as const,
+            runID: "run_followup_recovery",
+            sessionID: "ses_followup_recovery",
+            recovery: "followup" as const,
+          },
+        },
+        legal,
+        design,
+      ]
+    : [books, legal, design]
 const workload = Array.from({ length: 39 }, (_, index) => {
   const count = index + 1
   return {
@@ -461,7 +477,45 @@ const stress = (message: WebviewMessage) => {
   return true
 }
 
+const recovery = (message: WebviewMessage) => {
+  if (message.type === "routineSnapshot") {
+    emit({
+      type: "routineSnapshot",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      runID: message.runID,
+      snapshot: {
+        version: 1,
+        runID: message.runID,
+        agentID: message.agentID,
+        at: 3,
+        objective: "Continue the Friday account review safely.",
+        definition: books,
+      },
+    })
+    return true
+  }
+  if (message.type === "routineRecoveryClose") {
+    emit({
+      type: "routineRecoveryClosed",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      runID: message.runID,
+      receipt: {
+        agentID: message.agentID,
+        runID: message.runID,
+        sessionID: "ses_followup_recovery",
+        closedAt: Date.now(),
+        reason: "Closed after reviewing an uncertain follow-up delivery. The follow-up was not resent.",
+      },
+    })
+    return true
+  }
+  return false
+}
+
 const initial = (message: WebviewMessage) => {
+  if (recovery(message)) return true
   if (message.type !== "webviewReady") return stress(message)
   emit({
     type: "ready",
@@ -471,8 +525,7 @@ const initial = (message: WebviewMessage) => {
   return true
 }
 
-const reply = (message: WebviewMessage) => {
-  if (initial(message)) return
+const respond = (message: WebviewMessage) => {
   if (message.type === "requestProjectUsage") {
     emit({
       type: "projectUsageLoaded",
@@ -552,7 +605,7 @@ const reply = (message: WebviewMessage) => {
       requestID: id,
       viewID: view,
       refreshID: 1,
-      agents: [books, legal, design],
+      agents,
       templates: [],
       organizations: [
         {
@@ -588,6 +641,23 @@ const reply = (message: WebviewMessage) => {
         },
       ],
     })
+    if (scene === "followup-recovery") {
+      emit({
+        type: "routineRuns",
+        requestID: id,
+        agentID: books.id,
+        runs: [
+          {
+            id: "run_followup_recovery",
+            agentID: books.id,
+            sessionID: "ses_followup_recovery",
+            at: 3,
+            status: "running",
+            trigger: { kind: "manual" },
+          },
+        ],
+      })
+    }
     emit({
       type: "routineInbox",
       requestID: id,
@@ -788,6 +858,8 @@ const reply = (message: WebviewMessage) => {
     })
   }
 }
+
+const reply = (message: WebviewMessage) => initial(message) || respond(message)
 
 export function installMockVsCode() {
   const scope = globalThis as unknown as { acquireVsCodeApi?: () => VSCodeAPI; rayaPreviewMocked?: boolean }

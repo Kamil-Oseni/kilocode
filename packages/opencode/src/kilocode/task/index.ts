@@ -167,6 +167,7 @@ export namespace RayaTask {
         state: Schema.Literals(["starting", "active", "recovery"]),
         runID: Schema.optional(Schema.String),
         sessionID: Schema.optional(SessionID),
+        recovery: Schema.optional(Schema.Literal("followup")),
       }),
     ),
   })

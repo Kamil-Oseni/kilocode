@@ -454,12 +454,34 @@ function tone(on: boolean) {
 function caption(command: ReturnType<typeof action>, item: Agent) {
   if (command === "review") return "Needs review"
   if (command === "running") return item.execution?.state === "starting" ? "Starting" : "Running"
-  if (command === "open") return item.execution?.state === "recovery" ? "Review run" : "Open run"
+  if (command === "open")
+    return item.execution?.state === "recovery"
+      ? item.execution.recovery === "followup"
+        ? "Review follow-up"
+        : "Review run"
+      : "Open run"
   return "Run now"
+}
+
+function recovery(item: { agentID: string; runID?: string }, agents: Agent[]) {
+  if (!item.runID) return
+  const execution = agents.find((agent) => agent.id === item.agentID)?.execution
+  if (execution?.state !== "recovery" || execution.runID !== item.runID) return
+  return execution.recovery === "followup" ? ("followup" as const) : ("start" as const)
+}
+
+function recoveryNote(item: Agent) {
+  if (item.execution?.recovery === "followup")
+    return "A follow-up may have reached this worker. Review it before more work starts."
+  return "Recovery review required before another run can start."
 }
 
 function flag(on: boolean) {
   return on ? "true" : undefined
+}
+
+function overlay(reviewed: unknown, inspection: unknown) {
+  return reviewed || inspection ? "true" : undefined
 }
 
 function initials(name: string) {
@@ -576,7 +598,7 @@ const Person: Component<{
         </Show>
         <Show when={props.run}>{(run) => <span class="routines-note">{reason(run())}</span>}</Show>
         <Show when={props.item.execution?.state === "recovery"}>
-          <span class="routines-note">Recovery review required before another run can start.</span>
+          <span class="routines-note">{recoveryNote(props.item)}</span>
         </Show>
         <Show when={props.run?.blockedReason}>
           <span class="routines-note">{props.run?.blockedReason}</span>
@@ -1644,7 +1666,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               </div>
             </div>
           </Show>
-          <div class="routines-inbox" data-open={chosen() || currentOrganization() ? "true" : undefined}>
+          <div
+            class="routines-inbox"
+            data-open={chosen() || currentOrganization() ? "true" : undefined}
+            data-review={overlay(reviewed(), inspection())}
+          >
             <div class="routines-people">
               <Show when={!vacant()}>
                 <div class="routines-toolbar">
@@ -1899,12 +1925,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 onOpenSession={props.onOpenSession}
                 agentID={item.agentID}
                 selected={item.runID}
-                recovery={agents().some(
-                  (agent) =>
-                    agent.id === item.agentID &&
-                    agent.execution?.state === "recovery" &&
-                    agent.execution.runID === item.runID,
-                )}
+                recovery={recovery(item, agents())}
                 runs={runs()[item.agentID] ?? []}
               />
             )}

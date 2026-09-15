@@ -44,6 +44,7 @@ export const inspect = Effect.fn("RayaTaskClaim.inspect")(function* (storage: St
   return {
     state: local ? ("starting" as const) : ("recovery" as const),
     runID: record.id,
+    ...(record.messageSource && record.messageSessionID ? { recovery: "followup" as const } : {}),
     ...(record.operation ? { operation: record.operation } : {}),
     ...(record.phase === "session-created" && record.sessionID ? { sessionID: record.sessionID } : {}),
   }

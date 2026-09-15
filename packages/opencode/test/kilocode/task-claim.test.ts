@@ -61,6 +61,18 @@ describe("routine startup claims", () => {
         runID: "run",
         sessionID: SessionID.make("ses_saved"),
       })
+      yield* storage.replace(key, {
+        ...record,
+        agentID: "routine",
+        messageSource: "user_followup",
+        messageSessionID: SessionID.make("ses_prior"),
+      })
+      expect(yield* inspect(storage, "routine")).toEqual({
+        state: "recovery",
+        runID: "run",
+        sessionID: SessionID.make("ses_saved"),
+        recovery: "followup",
+      })
       expect(yield* inspect({ ...storage, read: () => Effect.die("unreadable") }, "routine")).toEqual({
         state: "recovery",
       })

@@ -22306,6 +22306,7 @@ export type KilocodeRoutineListResponses = {
       state: "starting" | "active" | "recovery"
       runID?: string
       sessionID?: string
+      recovery?: "followup"
     }
   }>
 }
@@ -22456,6 +22457,7 @@ export type KilocodeRoutineCreateResponses = {
       state: "starting" | "active" | "recovery"
       runID?: string
       sessionID?: string
+      recovery?: "followup"
     }
   }
 }
@@ -22596,6 +22598,7 @@ export type KilocodeRoutineArchiveResponses = {
           state: "starting" | "active" | "recovery"
           runID?: string
           sessionID?: string
+          recovery?: "followup"
         }
       }
     }>
@@ -22830,6 +22833,7 @@ export type KilocodeRoutineUpdateResponses = {
       state: "starting" | "active" | "recovery"
       runID?: string
       sessionID?: string
+      recovery?: "followup"
     }
   }
 }
@@ -22937,6 +22941,7 @@ export type KilocodeRoutineAuthorityResponses = {
       state: "starting" | "active" | "recovery"
       runID?: string
       sessionID?: string
+      recovery?: "followup"
     }
   }
 }
@@ -23319,6 +23324,7 @@ export type KilocodeRoutineSnapshotResponses = {
         state: "starting" | "active" | "recovery"
         runID?: string
         sessionID?: string
+        recovery?: "followup"
       }
     }
     objective: string

@@ -3,7 +3,12 @@ type Run = {
   blockedReason?: string
 }
 
-export type Execution = { state: "starting" | "active" | "recovery"; sessionID?: string; runID?: string }
+export type Execution = {
+  state: "starting" | "active" | "recovery"
+  sessionID?: string
+  runID?: string
+  recovery?: "followup"
+}
 
 type Evidence = {
   at: number

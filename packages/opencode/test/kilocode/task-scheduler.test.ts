@@ -1792,6 +1792,12 @@ for (const stage of ["before", "after", "owned"] as const) {
           if (stage === "owned") {
             expect(message?.sessionID).toBe(prior)
             expect((yield* inspect(storage, agent.id))?.state).toBe("recovery")
+            const closed = yield* runner.resolve(agent.id, runID)
+            expect(closed.reason).toBe(
+              "Closed after reviewing an uncertain follow-up delivery. The follow-up was not resent.",
+            )
+            expect(yield* runner.resolve(agent.id, runID)).toEqual(closed)
+            expect(yield* inspect(storage, agent.id)).toBeUndefined()
             return
           }
           expect(message?.sessionID).toBe(next)

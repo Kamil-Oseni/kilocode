@@ -1060,6 +1060,10 @@
   gap: 0;
 }
 
+.routines-inbox[data-review="true"] {
+  display: none;
+}
+
 .routines-people {
   min-height: 0;
   overflow: auto;

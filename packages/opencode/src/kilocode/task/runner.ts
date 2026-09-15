@@ -830,7 +830,11 @@ export namespace RayaTaskRunner {
 
     const resolve = Effect.fn("RayaTaskRunner.resolve")(function* (id: string, runID: string) {
       yield* tasks.get(id)
-      const reason = "Closed after reviewing an interrupted start. No unverified result was accepted."
+      const execution = yield* inspect(input.storage, id)
+      const reason =
+        execution?.runID === runID && execution.recovery === "followup"
+          ? "Closed after reviewing an uncertain follow-up delivery. The follow-up was not resent."
+          : "Closed after reviewing an interrupted start. No unverified result was accepted."
       const source = `recovery:${runID}`
       const now = Date.now()
       const history = yield* tasks.runsFor(id)
@@ -843,11 +847,10 @@ export namespace RayaTaskRunner {
           runID,
           ...(receipt.sessionID ? { sessionID: receipt.sessionID } : {}),
           closedAt: receipt.time,
-          reason,
+          reason: receipt.body,
         }
       const rows = schedule ? yield* schedule.active(id) : []
       const row = rows.find((item) => item.claim_id === runID)
-      const execution = yield* inspect(input.storage, id)
       if (!row && execution?.runID !== runID)
         return yield* new RayaTask.GuardError({
           kind: "conflict",

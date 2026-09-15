@@ -193,6 +193,22 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
                   },
                 )
             }
+            if (
+              params.changes.subtasks?.some(
+                (task) =>
+                  task.kind === "new" &&
+                  (task.notes === null ||
+                    task.priority === null ||
+                    task.estimateMinutes === null ||
+                    task.dueAt === null ||
+                    task.links === null),
+              )
+            )
+              return result(
+                "Personal Todo proposal needs review",
+                { status: "invalid", message: "Use a valid Todo proposal." },
+                { action: params.action, status: "invalid", view: "personal-todo-proposal" },
+              )
             const seed = JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID])
             const target =
               params.target.kind === "new"
@@ -203,13 +219,27 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
                     baseRevision: params.target.revision,
                   }
             const subtasks = params.changes.subtasks?.map((task, index) =>
-              task.kind === "new" ? { ...task, id: `subtodo_${uuid(`${seed}:subtask:${index}`)}` } : task,
+              task.kind === "new"
+                ? {
+                    kind: task.kind,
+                    id: `subtodo_${uuid(`${seed}:subtask:${index}`)}`,
+                    title: task.title,
+                    ...(task.notes === undefined || task.notes === null ? {} : { notes: task.notes }),
+                    ...(task.status === undefined ? {} : { status: task.status }),
+                    ...(task.priority === undefined || task.priority === null ? {} : { priority: task.priority }),
+                    ...(task.estimateMinutes === undefined || task.estimateMinutes === null
+                      ? {}
+                      : { estimateMinutes: task.estimateMinutes }),
+                    ...(task.dueAt === undefined || task.dueAt === null ? {} : { dueAt: task.dueAt }),
+                    ...(task.links === undefined || task.links === null ? {} : { links: task.links }),
+                  }
+                : task,
             )
             const item = yield* proposals.propose({
               id: `proposal_${uuid(`${seed}:proposal`)}`,
               source: { sessionID: ctx.sessionID, messageID: ctx.messageID, callID: ctx.callID },
               target,
-              changes: { ...params.changes, ...(subtasks === undefined ? {} : { subtasks }) },
+              changes: { ...params.changes, subtasks },
             })
             const proposal = Schema.decodeUnknownSync(PersonalTodoProposal.Info)(item)
             return result(
@@ -293,6 +323,25 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
                       { action: params.action, status: "complete", id: item.id, revision: item.revision },
                     ),
                   ),
+                  Effect.catchTags({
+                    PersonalTodoInputError: (err) =>
+                      Effect.succeed(
+                        result(
+                          "Personal todo needs review",
+                          { status: "invalid", message: err.message },
+                          { action: params.action, status: "invalid" },
+                        ),
+                      ),
+                    PersonalTodoConflictError: (err) =>
+                      Effect.succeed(
+                        result(
+                          "Personal todo needs review",
+                          { status: "invalid", message: err.message },
+                          { action: params.action, status: "invalid", id: err.id },
+                        ),
+                      ),
+                  }),
+                  Effect.orDie,
                 ),
               {
                 title: "Personal Todo request needs review",
@@ -357,6 +406,7 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
           Effect.catch((err) => {
             if (err._tag === "PersonalTodoStaleRevisionError")
               return todos.get(err.id).pipe(
+                Effect.orDie,
                 Effect.map((latest) =>
                   result(
                     "Personal todo changed",
@@ -442,15 +492,7 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
                   },
                 ),
               )
-            if (err._tag === "PersonalTodoInputError" || err._tag === "PersonalTodoConflictError")
-              return Effect.succeed(
-                result(
-                  "Personal todo needs review",
-                  { status: "invalid", message: err.message },
-                  { action: params.action, status: "invalid", ...("id" in err ? { id: err.id } : {}) },
-                ),
-              )
-            return Effect.fail(err)
+            return Effect.die(err)
           }),
         ),
     }),

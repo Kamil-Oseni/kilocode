@@ -45,56 +45,56 @@ function api<A, R>(
   )
 }
 
-function proposalApi<A, R>(
-  self: Effect.Effect<
-    A,
-    | PersonalTodoProposal.InputError
-    | PersonalTodoProposal.ConflictError
-    | PersonalTodoProposal.CorruptError
-    | PersonalTodoApplication.InputError
-    | PersonalTodoApplication.NotFoundError
-    | PersonalTodoApplication.ConflictError
-    | PersonalTodoApplication.StaleRevisionError
-    | PersonalTodoApplication.CorruptError
-    | ApiNotFoundError,
-    R
-  >,
-  proposalID?: string,
-) {
-  return self.pipe(
-    Effect.catchTags({
-      PersonalTodoProposalInputError: (err) =>
-        Effect.fail(
-          new InvalidRequestError({ message: err.message, kind: "personal-todo-proposal", field: err.field }),
-        ),
-      PersonalTodoApplicationInputError: (err) =>
-        Effect.fail(
-          new InvalidRequestError({ message: err.message, kind: "personal-todo-proposal", field: err.field }),
-        ),
-      PersonalTodoProposalConflictError: (err) =>
-        Effect.fail(new ConflictError({ message: err.message, resource: err.id })),
-      PersonalTodoApplicationConflictError: (err) =>
-        Effect.fail(new ConflictError({ message: err.message, resource: err.id })),
-      PersonalTodoApplicationNotFoundError: (err) => Effect.fail(notFound(err.message)),
-      PersonalTodoApplicationStaleRevisionError: (err) =>
-        Effect.fail(
-          new PersonalTodoProposalStaleRevisionError({
-            name: "PersonalTodoProposalStaleRevisionError",
-            data: {
-              proposalID: proposalID ?? err.id,
-              todoID: err.id,
-              expected: err.expected,
-              ...(err.actual === undefined ? {} : { actual: err.actual }),
-              message: err.message,
-            },
-          }),
-        ),
-      PersonalTodoProposalCorruptError: (err) =>
-        Effect.fail(new UnknownError({ message: "The saved personal Todo proposal is corrupt.", ref: err.id })),
-      PersonalTodoApplicationCorruptError: (err) =>
-        Effect.fail(new UnknownError({ message: "The saved personal Todo application is corrupt.", ref: err.id })),
-    }),
-  )
+type ProposalError =
+  | PersonalTodoProposal.InputError
+  | PersonalTodoProposal.ConflictError
+  | PersonalTodoProposal.CorruptError
+  | PersonalTodoApplication.InputError
+  | PersonalTodoApplication.NotFoundError
+  | PersonalTodoApplication.ConflictError
+  | PersonalTodoApplication.StaleRevisionError
+  | PersonalTodoApplication.CorruptError
+  | ApiNotFoundError
+  | Storage.Error
+
+type ProposalApiError =
+  | ApiNotFoundError
+  | ConflictError
+  | InvalidRequestError
+  | PersonalTodoProposalStaleRevisionError
+  | UnknownError
+
+function proposalError(err: ProposalError, proposalID?: string): Effect.Effect<never, ProposalApiError> {
+  if (PersonalTodoProposal.InputError.isInstance(err) || PersonalTodoApplication.InputError.isInstance(err))
+    return Effect.fail(
+      new InvalidRequestError({ message: err.message, kind: "personal-todo-proposal", field: err.field }),
+    )
+  if (PersonalTodoProposal.ConflictError.isInstance(err) || PersonalTodoApplication.ConflictError.isInstance(err))
+    return Effect.fail(new ConflictError({ message: err.message, resource: err.id }))
+  if (PersonalTodoApplication.NotFoundError.isInstance(err)) return Effect.fail(notFound(err.message))
+  if (PersonalTodoApplication.StaleRevisionError.isInstance(err))
+    return Effect.fail(
+      new PersonalTodoProposalStaleRevisionError({
+        name: "PersonalTodoProposalStaleRevisionError",
+        data: {
+          proposalID: proposalID ?? err.id,
+          todoID: err.id,
+          expected: err.expected,
+          ...(err.actual === undefined ? {} : { actual: err.actual }),
+          message: err.message,
+        },
+      }),
+    )
+  if (PersonalTodoProposal.CorruptError.isInstance(err))
+    return Effect.fail(new UnknownError({ message: "The saved personal Todo proposal is corrupt.", ref: err.id }))
+  if (PersonalTodoApplication.CorruptError.isInstance(err))
+    return Effect.fail(new UnknownError({ message: "The saved personal Todo application is corrupt.", ref: err.id }))
+  if (ApiNotFoundError.isInstance(err)) return Effect.fail(err)
+  return Effect.fail(new UnknownError({ message: "Personal Todo storage is unavailable." }))
+}
+
+function proposalApi<A, E extends ProposalError, R>(self: Effect.Effect<A, E, R>, proposalID?: string) {
+  return self.pipe(Effect.catch((err) => proposalError(err, proposalID)))
 }
 
 export const personalTodoHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-personal-todo", (handlers) =>
@@ -128,30 +128,32 @@ export const personalTodoHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-
       )
       .handle("personalTodoProposalGet", (ctx) =>
         proposalApi(
-          proposals
-            .get(ctx.params.proposalID)
-            .pipe(
-              Effect.flatMap((item) =>
-                item ? view(item) : Effect.fail(notFound("Personal Todo proposal not found.")),
-              ),
-            ),
+          Effect.gen(function* () {
+            const item = yield* proposals.get(ctx.params.proposalID)
+            if (!item) return yield* notFound("Personal Todo proposal not found.")
+            return yield* view(item)
+          }),
         ),
       )
       .handle("personalTodoProposalApply", (ctx) =>
         proposalApi(
-          applications.apply(ctx.params.proposalID, ctx.payload.digest).pipe(
-            Effect.andThen(proposals.get(ctx.params.proposalID)),
-            Effect.flatMap((item) => (item ? view(item) : Effect.fail(notFound("Personal Todo proposal not found.")))),
-          ),
+          Effect.gen(function* () {
+            yield* applications.apply(ctx.params.proposalID, ctx.payload.digest)
+            const item = yield* proposals.get(ctx.params.proposalID)
+            if (!item) return yield* notFound("Personal Todo proposal not found.")
+            return yield* view(item)
+          }),
           ctx.params.proposalID,
         ),
       )
       .handle("personalTodoProposalReject", (ctx) =>
         proposalApi(
-          applications.reject(ctx.params.proposalID, ctx.payload.digest).pipe(
-            Effect.andThen(proposals.get(ctx.params.proposalID)),
-            Effect.flatMap((item) => (item ? view(item) : Effect.fail(notFound("Personal Todo proposal not found.")))),
-          ),
+          Effect.gen(function* () {
+            yield* applications.reject(ctx.params.proposalID, ctx.payload.digest)
+            const item = yield* proposals.get(ctx.params.proposalID)
+            if (!item) return yield* notFound("Personal Todo proposal not found.")
+            return yield* view(item)
+          }),
           ctx.params.proposalID,
         ),
       )

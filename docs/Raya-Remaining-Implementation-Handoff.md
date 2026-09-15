@@ -1,6 +1,10 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `62f95aa7c1`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `afc8101bfe`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 10:56 America/Toronto - Preserve exact absent-policy replay
+
+Preserve `afc8101bfe`. Provisioning plans must omit an absent optional organization policy rather than publish `policy: undefined`; JSON storage drops undefined fields, so retaining that key only in memory breaks exact recovery equality. The fix restores lost-result, activation, revision-change, concurrent-create and restart fencing. Delegation tests must attach the exact `childRunID` returned by `errands.take()`; a different ID is correctly rejected. The full Routine-management suite passes 10 / 150 under the 1 GB cap. The six-case warning in the next chronological entry is superseded.
 
 ## ChatGPT 2026-09-15 10:48 America/Toronto - Continue the active merged implementation
 
@@ -10,7 +14,7 @@ Preserve `533b1ec662`: configured Admin probes emit closed start and terminal li
 
 Preserve `62f95aa7c1`: organizations have an optional nonblank 12,000-character policy stored in the graph and immutable revisions. Update accepts `null` only with the exact current revision. Organization-bound delegation receives the policy from the same fenced authorization result, performs no second lookup, composes it into the saved objective and records organization ID, revision and exact UTF-8 SHA-256 in a v2 startup snapshot. V1 snapshots remain readable. The policy cannot grant tools, filesystem/network access or approvals; delegated permissions still use the sender/recipient ceiling. Migration passes 10 / 43; organization/snapshot/delegation passes 25 / 217; SDK typecheck and guards pass.
 
-Before advancing the main-chat organization path, investigate `routine-management-tool.test.ts`, which currently reports 4 pass / 6 fail in older recovery/concurrency scenarios. The new policy-specific cases are green, but several failure-injection expectations no longer trigger and two retained identity conflicts remain. Establish the baseline cause and repair the production boundary or stale tests without weakening adverse coverage. Then return to the merged order: finish the smallest automated Admin/branding/typecheck slices, update both documents and canonical rows, and batch the next low-memory install only after a coherent checkpoint.
+The initial broader `routine-management-tool.test.ts` run reported 4 pass / 6 fail. Follow-up `afc8101bfe` traced five cases to absent `policy: undefined` surviving only in memory and one case to an outdated hardcoded child run ID. The complete suite now passes 10 / 150. Return to the merged order: finish the smallest automated Admin/branding/typecheck slices, update both documents and canonical rows, and batch the next low-memory install only after a coherent checkpoint.
 
 ## ChatGPT 2026-09-15 10:24 America/Toronto - Continue public-brand migration after direct-mode splash
 

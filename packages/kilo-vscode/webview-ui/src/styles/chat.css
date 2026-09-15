@@ -439,6 +439,21 @@
   gap: var(--raya-space-4);
 }
 
+@media (forced-colors: active) {
+  [data-component="personal-todo"] {
+    --text-base: CanvasText;
+    --text-weak: CanvasText;
+    --surface-raised-base: Canvas;
+    --border-weak-base: ButtonText;
+    --raya-primary: Highlight;
+    --raya-primary-soft: Canvas;
+  }
+
+  [data-component="personal-todo"] [data-component="icon-button"] {
+    color: ButtonText;
+  }
+}
+
 @media (max-width: 360px) {
   [data-component="personal-todo"] {
     padding: var(--raya-space-12);

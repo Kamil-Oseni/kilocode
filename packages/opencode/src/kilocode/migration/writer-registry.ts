@@ -34,6 +34,22 @@ export namespace ProfileWriterRegistry {
     readonly snapshot: Effect.Effect<Snapshot>
   }
 
+  export type Manifest = {
+    complete: boolean
+    gaps: readonly string[]
+    writers: readonly {
+      id: string
+      coverage: "integrated" | "declared-unintegrated" | "uncertain"
+    }[]
+  }
+
+  export function fromManifest(manifest: Manifest): Registry {
+    const pending = manifest.writers.filter((writer) => writer.coverage !== "integrated").map((writer) => writer.id)
+    if (!manifest.complete || manifest.gaps.length || pending.length)
+      throw new Error("Profile writer manifest is not complete and integrated.")
+    return make(manifest.writers.map((writer) => writer.id))
+  }
+
   export function make(input: readonly string[]): Registry {
     const ids = input.map((id) => id.trim()).toSorted()
     if (!ids.length) throw new Error("Profile writer manifest is empty.")

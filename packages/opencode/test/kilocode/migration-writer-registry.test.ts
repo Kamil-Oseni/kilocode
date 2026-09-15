@@ -35,6 +35,31 @@ describe("profile writer registry", () => {
     })
   })
 
+  test("accepts only a complete fully integrated manifest", async () => {
+    expect(() =>
+      ProfileWriterRegistry.fromManifest({
+        complete: false,
+        gaps: [],
+        writers: [{ id: "storage", coverage: "integrated" }],
+      }),
+    ).toThrow("not complete and integrated")
+    expect(() =>
+      ProfileWriterRegistry.fromManifest({
+        complete: true,
+        gaps: ["unknown writer"],
+        writers: [{ id: "storage", coverage: "integrated" }],
+      }),
+    ).toThrow("not complete and integrated")
+
+    const registry = ProfileWriterRegistry.fromManifest({
+      complete: true,
+      gaps: [],
+      writers: [{ id: "storage", coverage: "integrated" }],
+    })
+    await run(registry.register("storage"))
+    expect(await run(registry.run("storage", Effect.succeed("ok")))).toBe("ok")
+  })
+
   test("drains every writer and rejects late admission before entering quiescence", async () => {
     await run(
       Effect.gen(function* () {

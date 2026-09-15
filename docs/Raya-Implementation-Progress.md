@@ -1,10 +1,22 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current product and installed package source is `66631de1db`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `33d8c5f9f4`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 18:19 America/Toronto - Fail-closed profile writer registry foundation
+
+**Status: implemented, verified and pushed in `33d8c5f9f4`; installation is batched.** A new Kilo-owned `ProfileWriterRegistry` provides the first quiescence primitive required for a safe profile-root migration. Construction requires a non-empty, unique declared writer manifest. Every real writer must then register its exact ID before use. Unknown, duplicate and unregistered writers fail with typed errors, and quiescence refuses to enter its body while even one declared writer is missing. This prevents a partial integration from being mistaken for complete storage coverage.
+
+Writer admission and release are serialized through one in-process gate. An admitted Effect increments its domain count before the body starts and uses `acquireUseRelease`, so success, typed failure, defect interruption and fiber cancellation all release the count. Quiescence closes admission atomically, waits for every admitted domain to drain without holding the registry mutex, executes the protected body only after the phase is closed, and reopens through a finalizer if that body succeeds, fails or is interrupted. Deterministic snapshots expose the declared IDs, registered IDs and sorted active counts for later System Health and migration diagnostics.
+
+The adverse suite passes **4 tests** within a combined **7 tests / 39 assertions**. It proves an incomplete registry never enters the migration body; two active domains delay quiescence; late work is refused; failed and interrupted writers release their leases; and failed or interrupted quiescence reopens normal admission. The bounded single-thread CLI typecheck passes. Brand, global-path, OpenCode annotation, Effect Promise-facade, workflow, Markdown-table, formatting and diff guards pass. The checked brand inventory is now **69,117** total: public 1,693; compatibility 35,186; provenance 5,686; internal 26,552. The compatibility digest is `b8c9a19f2827eb982be56a841b2533f5b06371f4d08ad53b9a00f8f3c8caf20`.
+
+The normal protected push also passed all 29 JavaScript/TypeScript package checks plus JetBrains and advanced `origin/main` to `33d8c5f9f4`.
+
+This is deliberately an isolated primitive. It is not wired to a default empty or partial production registry, does not mutate `Global.Path`, and does not add migration evidence to the compatibility ledger. It coordinates one process only. A safe cutover still needs a reviewed writer manifest, every write boundary admitted with one root generation pinned before its first await, outer-process ownership that survives application-runtime disposal, both SQLite clients closed, cross-process exclusion, reader generation leases, online SQLite backup, verified copy, immutable journal revisions, restart/crash recovery and rollback. Never copy SQLite WAL/SHM files directly. Zero eager path captures plus this registry still does not authorize a hot root switch.
 
 ## ChatGPT 2026-09-15 18:06 America/Toronto - Sandbox policy caches are profile-generation aware
 

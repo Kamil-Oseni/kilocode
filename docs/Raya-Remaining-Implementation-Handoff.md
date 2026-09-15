@@ -1,10 +1,30 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from product and installed package source `66631de1db`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `33d8c5f9f4`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 18:19 America/Toronto - Continue from the fail-closed writer registry
+
+Product commit `33d8c5f9f4` adds `packages/opencode/src/kilocode/migration/writer-registry.ts` and its real Effect concurrency suite. Preserve these contracts:
+
+- `ProfileWriterRegistry.make()` must receive a reviewed non-empty manifest with unique IDs. Do not derive it from `script/global-path-consumers.json`; that inventory identifies path references and its write counters do not enumerate actual mutation boundaries.
+- Each declared writer must explicitly register. Quiescence must fail with the sorted missing IDs before running its body when registration is incomplete. Never install an empty or partially declared global registry and call its successful drain migration evidence.
+- Admission increments under the registry semaphore before the operation starts. Release stays in `Effect.acquireUseRelease` so failure, interruption and cancellation cannot leak an active lease. Each admitted operation must also resolve and retain one profile generation/root before its first await.
+- Quiescence sets `draining` atomically, refuses new admission and registration, releases the mutex while awaiting active work, enters its body only in `closed`, and reopens through a finalizer on every exit. Do not hold the registry semaphore while awaiting a writer or migration body.
+- The deterministic snapshot remains sorted and contains only phase, declared IDs, registered IDs and active counts. It is suitable for later System Health diagnostics and contains no path or capability secret.
+
+Focused evidence is 4 registry tests within 7 tests / 39 assertions, including two-domain drain ordering, incomplete-manifest refusal, late-admission refusal, writer failure/interruption cleanup and quiescence failure/interruption reopening. The bounded single-thread CLI typecheck and all affected repository guards pass. The checked inventory is 69,117 total with 35,186 compatibility references and digest `b8c9a19f2827eb982be56a841b2533f5b06371f4d08ad53b9a00f8f3c8caf20`.
+
+The product commit is on `origin/main`; its protected push passed all 29 JavaScript/TypeScript package checks plus JetBrains.
+
+The next migration agent must build a separate reviewed writer manifest before production integration. Start with `packages/opencode/src/storage/storage.ts`, including its lazy legacy migrations and migration-marker write, then `src/auth/index.ts`, `src/mcp/auth.ts`, sandbox preference/store, truncation output, plugin/model state, configuration/TUI files and both database clients. Inventory direct config writes and installers/caches/logging separately. Treat uninstall as mutually exclusive destructive maintenance rather than an ordinary writer. Integrate one coherent boundary at a time and retain focused failure/interruption tests.
+
+Keep the registry outside the disposable `AppRuntime` lifecycle, because admission must remain closed while application disposal closes the Effect SQLite client. A complete coordinator must stop HTTP/session admission, drain the reviewed writer set, dispose application services, call the legacy synchronous `Database.close()`, acquire cross-process ownership, perform SQLite online backup plus verified non-database copy, publish an immutable journal decision, restart against the selected generation and retain rollback. Add reader generation leases before any live pointer switch. Another CLI/backend process currently remains outside this in-process gate, so this checkpoint is not cutover evidence and must not change the ledger's empty `profile-roots` evidence.
+
+Repository source advances with this product commit, while the installed extension remains source `66631de1db` and the open host remains on its prior active pointer until normal reload. Batch this infrastructure slice with a later coherent product snapshot rather than immediately rebuilding another roughly 496 MB package.
 
 ## ChatGPT 2026-09-15 18:06 America/Toronto - Preserve profile-generation sandbox cache keys
 

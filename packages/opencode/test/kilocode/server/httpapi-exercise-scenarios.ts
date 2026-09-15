@@ -172,7 +172,7 @@ export const kiloScenarios: Scenario[] = [
     array(value.entries)
     check(value.entries.length > 0, "migration status should report governed identities")
     check(
-      value.entries.every((entry) => entry.cutoverReady === false),
+      value.entries.every((entry) => isRecord(entry) && entry.cutoverReady === false),
       "migration status should fail closed before a verified cutover",
     )
   }),

@@ -109,6 +109,92 @@ test("light slash, transcript, and conversation", async ({ page }, info) => {
   await page.screenshot({ path: info.outputPath("chrome.png"), fullPage: true })
 })
 
+for (const width of [320, 760]) {
+  test(`background agents remain usable at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-background-agents")
+    const fixture = page.locator("[data-fixture]")
+    const agents = page.locator('[data-component="task-header-agents"]')
+    const trigger = agents.locator('[data-slot="task-header-todos-trigger"]')
+    await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
+    await expect(trigger).toContainText("7 of 12 background agents running")
+    await trigger.focus()
+    await page.keyboard.press("Enter")
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(agents.locator('[data-slot="task-header-agent"]')).toHaveCount(12)
+    await expect(page.getByText("The delegated check failed. Review its saved output before retrying.")).toBeVisible()
+    await page.getByRole("button", { name: "Open background agent: Review authentication boundaries" }).focus()
+    await page.keyboard.press("Enter")
+    await expect(page.locator("html")).toHaveAttribute("data-preview-message", /openSubAgentViewer.*child-1/)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+    expect(
+      (await new AxeBuilder({ page }).include('[data-component="task-header-agents"]').analyze()).violations,
+    ).toEqual([])
+    await page.screenshot({ path: info.outputPath("background-agents.png"), fullPage: true })
+  })
+}
+
+test("background agent disclosure and dismissal survive reload without hiding a restarted job", async ({ page }) => {
+  await page.setViewportSize({ width: 760, height: 900 })
+  await page.goto("/?state=light-background-agents")
+  const agents = page.locator('[data-component="task-header-agents"]')
+  const trigger = agents.locator('[data-slot="task-header-todos-trigger"]')
+  await trigger.click()
+  await page.getByRole("button", { name: "Dismiss: Worker 10" }).click()
+  await expect(page.getByText("Worker 10", { exact: true })).toHaveCount(0)
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("raya-preview-webview-state")))
+    .toContain("job-child-10")
+
+  await page.reload()
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
+  await expect(page.getByText("Worker 10", { exact: true })).toHaveCount(0)
+
+  await page.goto("/?state=light-background-agents&scene=restart-running")
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
+  await expect(page.getByText("Worker 10", { exact: true })).toBeVisible()
+})
+
+for (const width of [320, 760]) {
+  test(`standalone child steering remains usable at ${width}px`, async ({ page }, info) => {
+    page.on("pageerror", (error) => console.error(error))
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-child-viewer")
+    const input = page.getByPlaceholder("Send an instruction to this sub-agent")
+    await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+    await expect(page.getByRole("navigation", { name: "Conversation path" })).toContainText(
+      "Ship delegated-agent monitoring",
+    )
+    await expect(page.getByRole("navigation", { name: "Conversation path" })).toContainText(
+      "Review authentication boundaries",
+    )
+    await input.fill("Check the saved boundary before continuing.")
+    await input.press("Enter")
+    await expect(page.getByText("Instruction sent.")).toBeVisible()
+    await expect(input).toHaveValue("")
+    await expect(input).toBeFocused()
+    await page.getByRole("button", { name: "Ship delegated-agent monitoring" }).click()
+    await expect(page.locator("html")).toHaveAttribute("data-preview-message", /closePanel/)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+    expect((await new AxeBuilder({ page }).include('[data-component="subagent-viewer"]').analyze()).violations).toEqual(
+      [],
+    )
+    await page.screenshot({ path: info.outputPath("child-viewer.png"), fullPage: true })
+  })
+}
+
+test("failed child steering keeps the exact draft and explains recovery", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-child-viewer&scene=steer-failure")
+  const input = page.getByPlaceholder("Send an instruction to this sub-agent")
+  const text = "Keep the current draft and inspect the failed request."
+  await input.fill(text)
+  await page.getByRole("button", { name: "Send instruction" }).click()
+  await expect(page.getByRole("alert")).toHaveText("The child connection was interrupted. Try again.")
+  await expect(input).toHaveValue(text)
+  await expect(page.getByRole("button", { name: "Send instruction" })).toBeEnabled()
+})
+
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {
     test(`${theme} result package at ${width}px`, async ({ page }, info) => {

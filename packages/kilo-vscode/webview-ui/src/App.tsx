@@ -1,6 +1,5 @@
 import { Component, createSignal, createMemo, Switch, Match, Show, onMount, onCleanup } from "solid-js"
 import { DataProvider } from "@kilocode/kilo-ui/context/data"
-import { Icon } from "@kilocode/kilo-ui/icon"
 import Settings from "./components/settings/Settings"
 import ProfileView from "./components/profile/ProfileView"
 import { useVSCode } from "./context/vscode"
@@ -11,7 +10,7 @@ import { useSession } from "./context/session"
 import { LocalTabsProvider, useLocalTabs } from "./context/local-tabs"
 import { VoiceProvider } from "./context/voice" // raya_change - Milestone H spoken round trips
 import { ProviderShell } from "./context/provider-shell"
-import { ChatView, ChildSteerComposer } from "./components/chat"
+import { ChatView, SubagentViewer, type SubagentTarget } from "./components/chat"
 import { SidebarEmptyState } from "./components/chat/SidebarEmptyState"
 import { SidebarTopBar } from "./components/chat/SidebarTopBar"
 import { registerExpandedTaskTool } from "./components/chat/TaskToolExpanded"
@@ -35,12 +34,6 @@ import "./styles/chat.css"
 
 type ViewType = "newTask" | "history" | "routines" | "profile" | "settings" | "subAgentViewer"
 type RoutineTarget = { nonce: string; organizationID?: string; agentID?: string }
-type SubagentTarget = {
-  sessionID: string
-  title?: string
-  parentSessionID?: string
-  parentTitle?: string
-}
 const VALID_VIEWS = new Set<string>(["newTask", "history", "routines", "profile", "settings", "subAgentViewer"])
 
 const subagentTarget = (value: unknown): SubagentTarget | undefined => {
@@ -469,22 +462,11 @@ const AppContent: Component = () => {
               />
             </Match>
             <Match when={currentView() === "subAgentViewer"}>
-              <div data-component="subagent-viewer">
-                <Show when={subagent()?.parentSessionID}>
-                  <nav data-slot="subagent-breadcrumb" aria-label="Conversation path">
-                    <button type="button" onClick={() => vscode.postMessage({ type: "closePanel" })}>
-                      {subagent()?.parentTitle?.trim() || "Parent conversation"}
-                    </button>
-                    <Icon name="chevron-right" size="small" />
-                    <span>{subagent()?.title?.trim() || session.currentSession()?.title || "Sub-agent"}</span>
-                  </nav>
-                </Show>
-                <ChatView readonly />
-                <ChildSteerComposer
-                  parentSessionID={subagent()?.parentSessionID}
-                  childSessionID={subagent()?.sessionID}
-                />
-              </div>
+              <SubagentViewer
+                target={subagent()}
+                sessionTitle={session.currentSession()?.title}
+                onParentClick={() => vscode.postMessage({ type: "closePanel" })}
+              />
             </Match>
           </Switch>
         }

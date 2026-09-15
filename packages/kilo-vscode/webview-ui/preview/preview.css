@@ -65,6 +65,8 @@ body {
 .pv-page--focused:has([data-fixture$="-slash"]),
 .pv-page--focused:has([data-fixture$="-transcript"]),
 .pv-page--focused:has([data-fixture$="-conversation"]),
+.pv-page--focused:has([data-fixture$="-background-agents"]),
+.pv-page--focused:has([data-fixture$="-child-viewer"]),
 .pv-page--focused:has([data-fixture$="-result"]),
 .pv-page--focused:has([data-fixture$="-editing"]) {
   max-width: none;

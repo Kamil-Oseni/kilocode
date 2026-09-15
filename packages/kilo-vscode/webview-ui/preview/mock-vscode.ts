@@ -72,6 +72,36 @@ const report = {
 }
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
+const children = Array.from({ length: 12 }, (_, index) => {
+  const count = index + 1
+  const status =
+    scene === "restart-running" && count === 10
+      ? "running"
+      : count <= 7
+        ? "running"
+        : count <= 9
+          ? "completed"
+          : count === 10
+            ? "error"
+            : "cancelled"
+  return {
+    id: `job-child-${count}`,
+    type: "task",
+    title: `Delegated worker ${count}`,
+    status,
+    started_at: Date.now() - count * 61_000,
+    ...(status === "running" ? {} : { completed_at: Date.now() - count * 3_000 }),
+    ...(status === "error" ? { error: "The delegated check failed. Review its saved output before retrying." } : {}),
+    metadata: {
+      parentSessionId: "parent",
+      sessionId: `child-${count}`,
+      background: true,
+      displayName: count === 1 ? "Review authentication boundaries" : `Worker ${count}`,
+      selectedAgent: count % 3 === 0 ? "designer" : count % 2 === 0 ? "explore" : "general",
+      selection: count % 2 === 0 ? ("auto" as const) : ("explicit" as const),
+    },
+  }
+})
 const agents =
   scene === "followup-recovery"
     ? [
@@ -316,27 +346,54 @@ const accessReview = (message: WebviewMessage) => {
   return true
 }
 
-const preview = (message: WebviewMessage) => {
-  if (message.type === "routineAuthorityServices") return services(message)
-  if (accessReview(message)) return true
-  if (message.type === "routineInboxAttachmentPreview") {
-    const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
+const delegates = (message: WebviewMessage) => {
+  if (message.type === "requestBackgroundJobs") {
     emit({
-      type: "routineInboxAttachmentPreviewed",
+      type: "backgroundJobsLoaded",
+      sessionID: message.sessionID,
       requestID: message.requestID,
-      agentID: message.agentID,
-      file: {
-        id: message.attachmentID,
-        name: sound ? "finance-update.wav" : "travel-receipt.png",
-        mime: sound ? "audio/wav" : "image/png",
-        size: sound ? 44 : 68,
-        data: sound
-          ? "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
-          : "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      },
+      jobs: children,
     })
     return true
   }
+  if (message.type !== "steerChildSession") return false
+  emit({
+    type: "childSteerResult",
+    parentSessionID: message.parentSessionID,
+    childSessionID: message.childSessionID,
+    messageID: message.messageID,
+    ...(scene === "steer-failure"
+      ? { accepted: false, code: "unavailable", error: "The child connection was interrupted. Try again." }
+      : { accepted: true, replayed: false }),
+  })
+  return true
+}
+
+const attachment = (message: WebviewMessage) => {
+  if (message.type !== "routineInboxAttachmentPreview") return false
+  const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
+  emit({
+    type: "routineInboxAttachmentPreviewed",
+    requestID: message.requestID,
+    agentID: message.agentID,
+    file: {
+      id: message.attachmentID,
+      name: sound ? "finance-update.wav" : "travel-receipt.png",
+      mime: sound ? "audio/wav" : "image/png",
+      size: sound ? 44 : 68,
+      data: sound
+        ? "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+        : "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    },
+  })
+  return true
+}
+
+const preview = (message: WebviewMessage) => {
+  if (delegates(message)) return true
+  if (message.type === "routineAuthorityServices") return services(message)
+  if (accessReview(message)) return true
+  if (attachment(message)) return true
   if (message.type === "routineOrganizationActivity") {
     emit({
       type: "routineOrganizationActivity",
@@ -868,6 +925,7 @@ export function installMockVsCode() {
   const key = "raya-preview-webview-state"
   scope.acquireVsCodeApi = () => ({
     postMessage: (message) => {
+      document.documentElement.dataset.previewMessage = JSON.stringify(message)
       console.info("[raya preview] mock postMessage", message)
       queueMicrotask(() => reply(message))
     },

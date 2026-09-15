@@ -9,6 +9,9 @@ import { editReview } from "../src/components/chat/edit-review"
 import { StoryProviders } from "../src/stories/StoryProviders"
 import { SessionContext, useSession } from "../src/context/session"
 import { VoiceProvider } from "../src/context/voice"
+import { BackgroundAgents } from "../src/components/chat/BackgroundAgents"
+import { SubagentViewer } from "../src/components/chat/SubagentViewer"
+import { useVSCode } from "../src/context/vscode"
 import type { SessionInfo } from "../src/types/messages"
 
 const now = Date.now()
@@ -95,6 +98,63 @@ export const HistoryPreview: Component = () =>
       },
     }),
   )
+
+const AgentSession: Component<{ children: JSX.Element }> = (props) => {
+  const session = useSession()
+  const status = Object.fromEntries(
+    Array.from({ length: 12 }, (_, index) => [`child-${index + 1}`, { type: "busy" as const }]),
+  )
+  const usage = Array.from({ length: 12 }, (_, index) => ({
+    sessionID: `child-${index + 1}`,
+    steps: index + 1,
+    cost: (index + 1) / 100,
+    accounting: { amount: (index + 1) / 100, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 },
+  }))
+  const value = {
+    ...session,
+    allStatusMap: () => status,
+    modelUsage: () => ({
+      totals: { steps: 0, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+      models: [],
+      sessionUsage: usage,
+    }),
+  }
+  return <SessionContext.Provider value={value as never}>{props.children}</SessionContext.Provider>
+}
+
+export const BackgroundAgentsPreview: Component = () =>
+  wrap("parent", () => (
+    <AgentSession>
+      <div class="chat-view" style={{ width: "100%" }}>
+        <BackgroundAgents />
+      </div>
+    </AgentSession>
+  ))
+
+const ChildViewer: Component = () => {
+  const vscode = useVSCode()
+  return (
+    <SubagentViewer
+      target={{
+        sessionID: "child-1",
+        title: "Review authentication boundaries",
+        parentSessionID: "parent",
+        parentTitle: "Ship delegated-agent monitoring",
+      }}
+      sessionTitle="Review authentication boundaries"
+      onParentClick={() => vscode.postMessage({ type: "closePanel" })}
+    />
+  )
+}
+
+export const ChildViewerPreview: Component = () =>
+  wrap("parent", () => (
+    <AgentSession>
+      <div style={{ height: "32rem", width: "100%" }}>
+        <ChildViewer />
+      </div>
+    </AgentSession>
+  ))
 
 export const ReviewPreview: Component<{ confirming?: boolean }> = (props) => (
   <div class="session-actions-row">

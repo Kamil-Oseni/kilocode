@@ -12,9 +12,17 @@ import "../src/styles/tool-overrides.css" // raya_change - preview the bundled t
 import "../src/styles/chat-layout.css" // raya_change - preview conversation lane + turn rhythm (#12)
 import "../src/styles/memory-provenance.css"
 import "../src/styles/routines.css"
+import "../src/styles/chat.css"
 import "./preview.css"
 import { RoutinesPreview } from "./routines"
-import { ComposerPreview, HistoryPreview, ReviewPreview, EditReviewPreview } from "./surfaces"
+import {
+  BackgroundAgentsPreview,
+  ChildViewerPreview,
+  ComposerPreview,
+  HistoryPreview,
+  ReviewPreview,
+  EditReviewPreview,
+} from "./surfaces"
 import { ConversationPreview, SlashPreview, TopNavPreview, TranscriptPreview } from "./chrome"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
@@ -56,6 +64,8 @@ type PvState =
   | "edit-review"
   | "history"
   | "conversation"
+  | "background-agents"
+  | "child-viewer"
   | "routines"
   | "result"
 type Theme = "light" | "dark"
@@ -87,6 +97,8 @@ const states: PvState[] = [
   "edit-review",
   "history",
   "conversation",
+  "background-agents",
+  "child-viewer",
   "routines",
   "result",
 ]
@@ -361,6 +373,12 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       <Show when={props.state === "conversation"}>
         <ConversationPreview />
       </Show>
+      <Show when={props.state === "background-agents"}>
+        <BackgroundAgentsPreview />
+      </Show>
+      <Show when={props.state === "child-viewer"}>
+        <ChildViewerPreview />
+      </Show>
       <Show when={props.state === "routines"}>
         <RoutinesPreview />
       </Show>
@@ -386,8 +404,8 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal, usage, memory, routines, composer, history, review, slash, topnav, transcript, conversation, and result
-          fixtures render production views with sample data.
+          Goal, usage, memory, routines, agents, composer, history, review, slash, topnav, transcript, conversation, and
+          result fixtures render production views with sample data.
         </p>
       </header>
       <For each={fixtures}>

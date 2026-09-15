@@ -42,7 +42,14 @@ export const Flag = {
 
   KILO_AUTO_SHARE: truthy("KILO_AUTO_SHARE"), // kilocode_change
   KILO_AUTO_HEAP_SNAPSHOT: truthy("KILO_AUTO_HEAP_SNAPSHOT"),
-  KILO_GIT_BASH_PATH: process.env["KILO_GIT_BASH_PATH"],
+  // kilocode_change start - Raya input alias with mutable compatibility access
+  get KILO_GIT_BASH_PATH() {
+    return EnvAlias.read("RAYA_GIT_BASH_PATH", "KILO_GIT_BASH_PATH")
+  },
+  set KILO_GIT_BASH_PATH(value: string | undefined) {
+    EnvAlias.write("RAYA_GIT_BASH_PATH", "KILO_GIT_BASH_PATH", value)
+  },
+  // kilocode_change end
   // kilocode_change start - Raya input aliases preserve Kilo compatibility names and runtime reads for callers
   get KILO_CONFIG() {
     return EnvAlias.read("RAYA_CONFIG", "KILO_CONFIG")
@@ -117,7 +124,14 @@ export const Flag = {
 
   KILO_MODELS_URL: process.env["KILO_MODELS_URL"],
 
-  KILO_MODELS_PATH: process.env["KILO_MODELS_PATH"],
+  // kilocode_change start - Raya input alias with mutable compatibility access
+  get KILO_MODELS_PATH() {
+    return EnvAlias.read("RAYA_MODELS_PATH", "KILO_MODELS_PATH")
+  },
+  set KILO_MODELS_PATH(value: string | undefined) {
+    EnvAlias.write("RAYA_MODELS_PATH", "KILO_MODELS_PATH", value)
+  },
+  // kilocode_change end
 
   KILO_DISABLE_EMBEDDED_WEB_UI: truthy("KILO_DISABLE_EMBEDDED_WEB_UI"), // kilocode_change
 

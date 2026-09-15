@@ -103,12 +103,14 @@ export namespace RayaMigrationLedger {
     "owner-approval",
   ]
 
-  const env = ["CONFIG", "CONFIG_CONTENT", "CONFIG_DIR", "AUTH_CONTENT", "DB"].map((name) => ({
-    kind: `environment:${name.toLowerCase()}`,
-    raya: `RAYA_${name}`,
-    legacy: `KILO_${name}`,
-    policy: "raya-wins-legacy-write" as const,
-  }))
+  const env = ["CONFIG", "CONFIG_CONTENT", "CONFIG_DIR", "AUTH_CONTENT", "DB", "GIT_BASH_PATH", "MODELS_PATH"].map(
+    (name) => ({
+      kind: `environment:${name.toLowerCase()}`,
+      raya: `RAYA_${name}`,
+      legacy: `KILO_${name}`,
+      policy: "raya-wins-legacy-write" as const,
+    }),
+  )
 
   const configs = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"].map((name) => ({
     kind: "configuration:file",
@@ -350,8 +352,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_088,
-        digest: "9c7728bab1b40e74117868a0259448c4dedf33c7865f03ca72f494d6eb2ce0d3",
+        count: 35_108,
+        digest: "30d6c72b9c9147f88a5ace19ba8c74f94fe03b286f3191a070f40d90da1a7810",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

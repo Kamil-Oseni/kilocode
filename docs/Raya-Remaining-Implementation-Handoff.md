@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 16:04 America/Toronto - Preserve the new operator path aliases
+
+`packages/core/src/flag/flag.ts` now resolves `RAYA_GIT_BASH_PATH` over `KILO_GIT_BASH_PATH` and `RAYA_MODELS_PATH` over `KILO_MODELS_PATH` through `EnvAlias`. Preserve the legacy `Flag.KILO_*` property names because current callers and tests use them. Each remains mutable: setters write both environment names and clearing deletes both. Do not turn this compatibility slice into a catalog move, Git Bash discovery change or legacy-variable removal.
+
+The focused suite passes 12 tests / 21 assertions and Core typecheck passes. The new child case proves conflicting Raya values win and later legacy-property writes synchronize both names. The fail-closed migration ledger/checker must list these pairs after `DB`, retain `raya-wins-legacy-write`, bind the reviewed inventory below and keep Version 1 `cutoverReady: false`. Commit and push this small slice normally; batch it into a later snapshot instead of immediately rebuilding another roughly 520 MB package.
+
+The reviewed inventory is 68,972 total: public 1,693; compatibility 35,108; provenance 5,686; internal 26,485.
+
 ## ChatGPT 2026-09-15 15:58 America/Toronto - Continue after the reconciled delegation/vault snapshot
 
 Product commits `31e60286f8` and `18e8e12f51` are on `origin/main`; the normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains. The low-memory production workflow installed `eden.raya@7.4.23-snapshot+18e8e12f51.kamil-oseni.1789501895328`. Retained VSIX: `raya.1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da.vsix`, 520,076,255 bytes, SHA-256 `1FC4FFD93D9C1C784C308C8F2C23D58E3BA08DCB4C1D5F620C22DD959736D1DA`. Installed CLI: 231,122,432 bytes, SHA-256 `9CC57A705AC84B776446863D6C758022D45B9EEDD255953FBC8AD3CB59083E72`. Independent hashes match the manifest.

@@ -51,11 +51,9 @@ export function check(
     throw new Error("CLI aliases differ from the compatibility ledger.")
 
   const env = entry(snapshot, "environment-inputs").identities.map((item) => [item.raya, item.legacy, item.policy])
-  const expected = ["CONFIG", "CONFIG_CONTENT", "CONFIG_DIR", "AUTH_CONTENT", "DB"].map((name) => [
-    `RAYA_${name}`,
-    `KILO_${name}`,
-    "raya-wins-legacy-write",
-  ])
+  const expected = ["CONFIG", "CONFIG_CONTENT", "CONFIG_DIR", "AUTH_CONTENT", "DB", "GIT_BASH_PATH", "MODELS_PATH"].map(
+    (name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"],
+  )
   if (JSON.stringify(env) !== JSON.stringify(expected))
     throw new Error("Environment aliases or precedence differ from the compatibility ledger.")
 

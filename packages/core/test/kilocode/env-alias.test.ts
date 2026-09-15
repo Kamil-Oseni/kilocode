@@ -86,6 +86,34 @@ describe("Raya environment aliases", () => {
     ])
   })
 
+  test("aliases operator path overrides without removing mutable Kilo access", () => {
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; const initial = [Flag.KILO_GIT_BASH_PATH, Flag.KILO_MODELS_PATH]; Flag.KILO_GIT_BASH_PATH = "written-bash"; Flag.KILO_MODELS_PATH = "written-models"; console.log(JSON.stringify([...initial, process.env.RAYA_GIT_BASH_PATH, process.env.KILO_GIT_BASH_PATH, process.env.RAYA_MODELS_PATH, process.env.KILO_MODELS_PATH]))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env: {
+        ...process.env,
+        RAYA_GIT_BASH_PATH: "raya-bash",
+        KILO_GIT_BASH_PATH: "legacy-bash",
+        RAYA_MODELS_PATH: "raya-models",
+        KILO_MODELS_PATH: "legacy-models",
+      },
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual([
+      "raya-bash",
+      "raya-models",
+      "written-bash",
+      "written-bash",
+      "written-models",
+      "written-models",
+    ])
+  })
+
   for (const item of [
     {
       name: "legacy inputs",

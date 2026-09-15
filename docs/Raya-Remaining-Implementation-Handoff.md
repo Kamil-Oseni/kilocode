@@ -1,6 +1,10 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from committed, remote and installed package source `0f691c6928`; the open extension host's active-vault pointer remains `bfd53bdb3e` until VS Code reloads. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work. Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from committed, remote and installed package source `116db5d430`; the open extension host's active-vault pointer remains `bfd53bdb3e` until VS Code reloads.
+>
+> Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+>
+> Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
 ## ChatGPT 2026-09-15 14:12 America/Toronto - Continue from the fail-closed compatibility ledger
 
@@ -8,7 +12,9 @@ Preserve product commit `1d0927f146`. It adds the pure `RayaMigrationLedger` con
 
 Version 1 intentionally defines `cutoverReady` as the schema literal `false`. Do not weaken it to a computed boolean or claim that the migration is complete. The physical executable, package/provider identities, legacy HTTP/event namespaces, profile/database/auth roots and stored identities are unchanged. Before any canonical storage cutover, centralize the 207 direct `Global.Path` consumers behind a generation-aware resolver; inventory resolved roots and external overrides; quiesce both SQLite clients and all JSON/routine/repair/browser writers; use coordinated SQLite backup rather than copying WAL files; append immutable hash-chained journal revisions with explicit unknown-outcome recovery; verify sorted file hashes, database integrity/foreign keys/table counts and mixed SQL/JSON Routine identity; then prove restart, crash recovery and rollback while the legacy source remains intact. The Raya-owned VS Code editor distribution remains a distinct Version 3 project.
 
-Local evidence for `1d0927f146`: ledger 3/3, cross-repository checker 3/3, real Admin HTTP 1/1 with 31 assertions, SDK typecheck, bounded full CLI typecheck, workflow/brand/annotation/Promise-facade/Markdown-table/diff guards. The inventory is 68,925 total: public 1,693; compatibility 35,069; provenance 5,686; internal 26,477. Push through the normal one-package hook and run the authorized low-memory snapshot installation before advancing the installed-source claim.
+Local evidence for `1d0927f146`: ledger 3/3, cross-repository checker 3/3, real Admin HTTP 1/1 with 31 assertions, SDK typecheck, bounded full CLI typecheck, workflow/brand/annotation/Promise-facade/Markdown-table/diff guards. The inventory is 68,925 total: public 1,693; compatibility 35,069; provenance 5,686; internal 26,477.
+
+The normal hook passed 29 JavaScript/TypeScript packages plus JetBrains and pushed through `116db5d430`. The authorized low-memory workflow installed `eden.raya@7.4.23-snapshot+116db5d430.kamil-oseni.1789496539811`. Its retained VSIX SHA-256 is `3393f9d1d565c84a438de662d80af6b6359e5c2411353c513f2c685661057a25` at 520,070,922 bytes. The bundled CLI SHA-256 is `60774bb61d3fae6cad74ea99c6851fea4ea123358b701921a82c8ca958997711` at 231,120,384 bytes. VS Code lists the exact installed identity, while the open host's active pointer remains the earlier package until reload.
 
 ## ChatGPT 2026-09-15 13:47 America/Toronto - Continue after synchronized push and install
 

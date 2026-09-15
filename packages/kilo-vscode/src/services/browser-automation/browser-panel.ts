@@ -372,6 +372,7 @@ export class BrowserPanel implements vscode.Disposable {
     const empty = document.getElementById("empty");
     const url = document.getElementById("url");
     const status = document.getElementById("status");
+    const statusbar = document.getElementById("statusbar");
     const resume = document.getElementById("resume");
     const shield = document.getElementById("shield");
     const go = document.getElementById("go");
@@ -453,7 +454,7 @@ export class BrowserPanel implements vscode.Disposable {
       if (event.data.type === "startup") {
         const ready = event.data.status === "ready";
         retry.hidden = ready;
-        document.getElementById("statusbar").hidden = ready;
+        statusbar.hidden = ready;
         if (!ready) {
           displayed = undefined;
           screen.hidden = true;
@@ -597,7 +598,7 @@ export class BrowserPanel implements vscode.Disposable {
         : state.busy
           ? "Agent action in progress" + (state.attempts ? " (attempt " + state.attempts + " of 3)" : "")
           : "";
-      document.getElementById("statusbar").hidden = !manual && retry.hidden;
+      statusbar.hidden = !manual && retry.hidden;
       resume.hidden = !manual;
       resume.disabled = manual && state.busy;
       shield.hidden = manual || !state.busy;

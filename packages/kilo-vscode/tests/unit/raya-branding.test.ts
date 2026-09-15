@@ -1,6 +1,7 @@
 // raya_change - keep inherited product copy out of Raya's customer-facing boundaries
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
+import { SETUP_SCRIPT_TEMPLATE, SETUP_SCRIPT_TEMPLATE_POWERSHELL } from "../../src/agent-manager/setup-script-template"
 import { createKiloFallbackProvider } from "../../src/shared/provider-model"
 
 const root = path.join(import.meta.dir, "../..")
@@ -121,5 +122,17 @@ describe("Raya branding boundary", () => {
 
     expect(source).toContain("Raya Pass")
     expect(source).not.toContain(["Ki", "lo Pass"].join(""))
+  })
+
+  test("brands generated worktree setup scripts as Raya", () => {
+    const scripts = [SETUP_SCRIPT_TEMPLATE, SETUP_SCRIPT_TEMPLATE_POWERSHELL]
+
+    for (const script of scripts) {
+      expect(script).toContain("# Raya Worktree Setup Script")
+      expect(script).toContain("# Raya already copies root-level .env and .env.* files")
+      expect(script).not.toContain(["Ki", "lo"].join(""))
+      expect(script).toContain("WORKTREE_PATH")
+      expect(script).toContain("REPO_PATH")
+    }
   })
 })

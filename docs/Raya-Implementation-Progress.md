@@ -1,6 +1,14 @@
 # Raya implementation progress
 
-> **Goal status: active.** Current local product source is `d4b7aa120f`; installed snapshot source is `7b3796f2bf`; `origin/main` remains at `d894fc0eb9` because the normal pre-push hook is blocked by existing cross-package `@opencode-ai/tui` type failures. The 16 added future requirements are literal `FUT-*` rows in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
+> **Goal status: active.** Current local and installed snapshot product source is `539a967263`; `origin/main` remains at `d894fc0eb9` because the normal pre-push hook is blocked by existing cross-package `@opencode-ai/tui` type failures. The 16 added future requirements are literal `FUT-*` rows in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
+
+## ChatGPT 2026-09-15 03:53 America/Toronto - Todo, focus and System Health batch installed
+
+**Status: installed; implementation remains active.** The authorized sequential low-memory workflow installed `eden.raya@7.4.23-snapshot+539a967263.kamil-oseni.1789458636619`. The first attempt stopped before packaging when the full webview typecheck found two nullable Select callbacks in the new focus timer and an older SidebarTopBar story missing its Todo/Admin callbacks. Product fix `539a967263` resolves those exact errors; the focused 2 GB-capped webview typecheck, ESLint and Prettier pass. The successful retry passed SDK preparation, both sequential extension/webview typechecks, ESLint, the production bundle, VSIX packaging and VS Code installation.
+
+The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.4b6eb2d8c06708ddf279606f14fe7722babbe9f0c7708ca0ce0d57746b7f337b.vsix`, **519,708,021 bytes**, SHA-256 `4b6eb2d8c06708ddf279606f14fe7722babbe9f0c7708ca0ce0d57746b7f337b`. The installed CLI is **230,860,800 bytes**, SHA-256 `9d95eaafd96cb7de9c73f1560dd01de93b64048f60994a151bafc1e6a8abb53e`. The workflow removed one older vault package, one staged package and one old installed extension; staging contains zero files and the bounded vault/installed sets each contain three snapshots. No Bun or tsgo process remains, and C: has **132,323,287,040 bytes free**.
+
+The open extension host still records active vault digest `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`. Reload VS Code and require the new digest `4b6eb2d8c06708ddf279606f14fe7722babbe9f0c7708ca0ce0d57746b7f337b` before installed-host acceptance. Package installation is not treated as host activation.
 
 ## ChatGPT 2026-09-15 03:42 America/Toronto - Focus timer is user-reachable; System Health browser gate complete
 

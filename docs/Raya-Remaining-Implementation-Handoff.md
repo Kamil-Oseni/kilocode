@@ -1,6 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `d4b7aa120f`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are literal `FUT-*` rows in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local and installed snapshot product source `539a967263`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are literal `FUT-*` rows in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 03:53 America/Toronto - Installed focus/System Health checkpoint
+
+Installed extension: `eden.raya@7.4.23-snapshot+539a967263.kamil-oseni.1789458636619`. The first low-memory attempt correctly failed before packaging on three webview type errors. Commit `539a967263` makes both Select callbacks handle an undefined selection and supplies the Todo/Admin callbacks required by the real SidebarTopBar story. The focused webview typecheck passes after that fix. The successful retry passed SDK preparation, sequential extension and webview typechecks, ESLint, production bundling, packaging and installation.
+
+Retained VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.4b6eb2d8c06708ddf279606f14fe7722babbe9f0c7708ca0ce0d57746b7f337b.vsix`; 519,708,021 bytes; SHA-256 `4b6eb2d8c06708ddf279606f14fe7722babbe9f0c7708ca0ce0d57746b7f337b`. Installed CLI: 230,860,800 bytes; SHA-256 `9d95eaafd96cb7de9c73f1560dd01de93b64048f60994a151bafc1e6a8abb53e`. The installer removed one old vault package, one staged package and one installed snapshot. Staging has zero files; the vault and installed extension sets retain three snapshots each. No Bun/tsgo process remains; C: free space is 132,323,287,040 bytes.
+
+The active-host pointer remains the old digest `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`. After VS Code reload, require `4b6eb2d8c06708ddf279606f14fe7722babbe9f0c7708ca0ce0d57746b7f337b` before claiming installed-host behavior. Continue deterministic work without waiting for reload: implement revision-safe Todo title/detail/due-date editing next, then reviewed AI clarification/planning/reminders.
 
 ## ChatGPT 2026-09-15 03:42 America/Toronto - Focus and System Health UI gates complete
 

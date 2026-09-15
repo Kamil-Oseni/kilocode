@@ -51,6 +51,8 @@ const forbidden: { pattern: string; reason: string; allow?: string[] }[] = [
     reason: "marketplace panel must use Raya branding",
     allow: [
       "README.md",
+      "docs/Raya-Implementation-Progress.md",
+      "docs/Raya-Remaining-Implementation-Handoff.md",
       "docs/Raya-Supported-Clients.md",
       "packages/kilo-console/src/routes/config/McpRoute.tsx",
       "packages/kilo-docs/",

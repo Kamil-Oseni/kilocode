@@ -1,6 +1,26 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local source `8d54ddff1e`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `50baf38759`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 00:48 America/Toronto - First display-only branding migration batch
+
+Product commit `50baf38759` changes only confirmed rendered copy:
+
+- `MarketplacePanelProvider.ts` uses `Raya Marketplace` for both the VS Code editor title and webview document title. Keep `raya.marketplacePanel`, message names, bundle names and service/class identities stable.
+- Next Edit's output channel is `Raya · Next Edit`; both `docs/nes-examples/INSTRUCTIONS.md` and `docs/mercury-next-edit-testing.html` use the exact same label. Keep `KILO_NES_DEBUG`, NES internals and all configuration identities stable.
+- The shared ACP service fallback is `Raya prompt failed`. Its `kilocode_change` annotation remains on the exact line. Keep ACP transport, provider IDs and SDK type identities stable.
+
+`check-forbidden-strings.ts` prevents all three retired literals from returning. Its `Kilo Marketplace` exception is deliberately limited to `README.md`, `docs/Raya-Supported-Clients.md`, inherited `packages/kilo-docs/` content and the known `packages/kilo-console/src/routes/config/McpRoute.tsx` surface. The latter console text is still a public defect and should be removed in a later console-focused batch; the documentation entries must be evaluated as provenance or migrated with their actual product scope.
+
+The staged changeset and these implementation records were included before the inventory baseline was finalized. Current committed counts are 68,510 total: 1,719 potential user-visible defects, 34,599 compatibility identities, 5,685 provenance references and 26,507 internal migration sites. Focused verification passes 2 GB-capped extension host typecheck, Raya-branding/Marketplace suites **8 / 28**, ESLint, brand inventory, forbidden strings, workflow allowlist, OpenCode annotations, extension forbidden-marker check, formatting and whitespace. Scoped Oxlint has zero errors and only existing warnings in untouched portions of the two broad production files.
+
+Continue with one display boundary at a time. The next safe candidates are:
+
+1. Rename visible KiloClaw chrome to the chosen Raya Messenger name across package command titles, panel/document titles, main-sidebar text and all twenty dedicated locale **values**, while preserving keys, class/file names, command IDs, `raya.KiloClawPanel`, message types, telemetry tokens and backend routes.
+2. Project provider ID `kilo` as `Raya Gateway` in every rendered gateway path, including the pinned Providers card and disabled-provider selector. Do not mutate provider catalog objects or IDs. Add a pure display projection and narrow/wide settings acceptance before expanding across usage/model surfaces.
+3. Remove the known Kilo Marketplace label from the console UI while preserving its catalog/repository identity where required.
+
+Update the brand baseline only after reviewing the exact category delta. Do not mass-replace text. This runtime batch is not installed; combine it with the next coherent runtime slice. The installed delegated-agent checkpoint remains `0d545aa678`.
 
 ## ChatGPT 2026-09-15 00:42 America/Toronto - Checked brand inventory delivered; public migration is next
 

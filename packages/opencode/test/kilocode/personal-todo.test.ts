@@ -3,7 +3,7 @@ import { expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { Git } from "@/git"
 import { PersonalTodo } from "@/kilocode/personal-todo"
 import { Storage } from "@/storage/storage"
@@ -14,6 +14,8 @@ const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, 
 
 const first = "todo_11111111-1111-4111-8111-111111111111"
 const second = "todo_22222222-2222-4222-8222-222222222222"
+const child = "subtodo_33333333-3333-4333-8333-333333333333"
+const other = "subtodo_44444444-4444-4444-8444-444444444444"
 
 it.live("persists personal todos across store reconstruction and keeps them outside session todo state", () =>
   Effect.gen(function* () {
@@ -23,6 +25,9 @@ it.live("persists personal todos across store reconstruction and keeps them outs
       const storage = yield* Storage.Service
       const todos = PersonalTodo.make({ storage, id: () => first, now: () => 100 })
       const item = yield* todos.create({ title: "  Rent a house  ", detail: "Start locally", dueAt: 500 })
+      const raw = yield* storage.read<Record<string, unknown>>(["raya", "personal-todos", "v1", first])
+      expect(raw).toMatchObject({ version: 1, done: false })
+      expect(raw).not.toHaveProperty("status")
       yield* storage.write(["todo", "ses_test"], [{ content: "execution todo" }])
       return item
     }).pipe(Effect.provide(Storage.layerFromDir(dir)))
@@ -32,6 +37,7 @@ it.live("persists personal todos across store reconstruction and keeps them outs
       id: first,
       title: "Rent a house",
       detail: "Start locally",
+      status: "open",
       done: false,
       dueAt: 500,
       createdAt: 100,
@@ -44,6 +50,9 @@ it.live("persists personal todos across store reconstruction and keeps them outs
       const todos = PersonalTodo.make({ storage, now: () => 200 })
       expect(yield* todos.get(first)).toEqual(create)
       expect(yield* todos.list()).toEqual([create])
+      const raw = yield* storage.read<Record<string, unknown>>(["raya", "personal-todos", "v1", first])
+      expect(raw).toMatchObject({ version: 1, done: false })
+      expect(raw).not.toHaveProperty("status")
       expect(yield* storage.read(["todo", "ses_test"])).toEqual([{ content: "execution todo" }])
     }).pipe(Effect.provide(Storage.layerFromDir(dir)))
   }),
@@ -75,11 +84,12 @@ it.live("supports manual create, list, update, completion, reopening, and deleti
           ),
         )
       expect(done).toEqual({
-        ...one,
+        version: 1,
+        id: first,
         title: "Updated",
-        detail: undefined,
-        dueAt: undefined,
+        status: "completed",
         done: true,
+        createdAt: 100,
         completedAt: 300,
         updatedAt: 300,
         revision: 2,
@@ -93,7 +103,16 @@ it.live("supports manual create, list, update, completion, reopening, and deleti
             item ? Effect.succeed(item) : Effect.die("Expected the completed personal todo to reopen."),
           ),
         )
-      expect(open).toEqual({ ...done, done: false, completedAt: undefined, updatedAt: 400, revision: 3 })
+      expect(open).toEqual({
+        version: 1,
+        id: first,
+        title: "Updated",
+        status: "open",
+        done: false,
+        createdAt: 100,
+        updatedAt: 400,
+        revision: 3,
+      })
       expect((yield* todos.update(first, { revision: one.revision, title: "Stale" }).pipe(Effect.flip))._tag).toBe(
         "PersonalTodoStaleRevisionError",
       )
@@ -115,6 +134,135 @@ it.live("supports manual create, list, update, completion, reopening, and deleti
   }),
 )
 
+it.live("promotes only extended writes and replaces ordered stable subtasks under one parent revision", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const times = [100, 200, 300, 400, 500, 50]
+    const ids = [child, other]
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const todos = PersonalTodo.make({
+        storage,
+        id: () => first,
+        subtaskID: () => ids.shift()!,
+        now: () => times.shift()!,
+      })
+      const created = yield* todos.create({ title: "Move house" })
+      expect(created).toMatchObject({ version: 1, status: "open", done: false, revision: 1 })
+
+      const renamed = yield* todos.update(first, { revision: 1, title: "Move to Toronto" })
+      expect(renamed).toMatchObject({ version: 1, status: "open", revision: 2 })
+      const legacy = yield* storage.read<Record<string, unknown>>(["raya", "personal-todos", "v1", first])
+      expect(legacy).toMatchObject({ version: 1, revision: 2 })
+      expect(legacy).not.toHaveProperty("status")
+
+      const promoted = yield* todos.update(first, {
+        revision: 2,
+        priority: "high",
+        estimateMinutes: 240,
+        links: [{ kind: "goal", id: "goal_move" }],
+      })
+      expect(promoted).toMatchObject({
+        version: 2,
+        status: "open",
+        done: false,
+        priority: "high",
+        estimateMinutes: 240,
+        links: [{ kind: "goal", id: "goal_move" }],
+        revision: 3,
+      })
+
+      const planned = yield* todos.replaceSubtasks(first, {
+        revision: 3,
+        subtasks: [
+          {
+            title: "Set a budget",
+            priority: "urgent",
+            estimateMinutes: 30,
+            reminderAt: 900,
+            links: [{ kind: "chat", id: "ses_move" }],
+          },
+          { title: "Research areas", notes: "Compare transit", dueAt: 800 },
+        ],
+      })
+      expect(planned).toMatchObject({
+        version: 2,
+        revision: 4,
+        subtasks: [
+          {
+            id: child,
+            title: "Set a budget",
+            status: "open",
+            done: false,
+            revision: 1,
+            reminderAt: 900,
+            reminderRevision: 1,
+          },
+          { id: other, title: "Research areas", status: "open", done: false, revision: 1 },
+        ],
+      })
+      expect(planned?.subtasks?.map((task) => task.id)).toEqual([child, other])
+
+      const reordered = yield* todos.replaceSubtasks(first, {
+        revision: 4,
+        subtasks: [
+          {
+            id: other,
+            revision: 1,
+            title: "Research neighbourhoods",
+            notes: "Compare transit",
+            dueAt: 800,
+          },
+          {
+            id: child,
+            revision: 1,
+            title: "Set a budget",
+            priority: "urgent",
+            estimateMinutes: 30,
+            reminderAt: 900,
+            links: [{ kind: "chat", id: "ses_move" }],
+          },
+        ],
+      })
+      expect(reordered).toMatchObject({ revision: 5 })
+      expect(reordered?.subtasks?.map((task) => [task.id, task.revision])).toEqual([
+        [other, 2],
+        [child, 1],
+      ])
+
+      const completed = yield* todos.completeSubtask(first, {
+        revision: 5,
+        subtaskID: child,
+        subtaskRevision: 1,
+      })
+      expect(completed).toMatchObject({
+        revision: 6,
+        status: "open",
+        done: false,
+        subtasks: [
+          { id: other, status: "open", revision: 2 },
+          { id: child, status: "completed", done: true, revision: 2, updatedAt: 400, completedAt: 400 },
+        ],
+      })
+      const stale = yield* todos
+        .reopenSubtask(first, { revision: 6, subtaskID: child, subtaskRevision: 1 })
+        .pipe(Effect.flip)
+      expect(stale).toMatchObject({
+        _tag: "PersonalTodoSubtaskStaleRevisionError",
+        subtaskID: child,
+        expected: 1,
+        actual: 2,
+      })
+      const raw = yield* storage.read<Record<string, unknown>>(["raya", "personal-todos", "v1", first])
+      const corrupt = { ...raw, status: "completed", done: false }
+      yield* storage.write(["raya", "personal-todos", "v1", first], corrupt)
+      const exit = yield* todos.update(first, { revision: 6, title: "Must not repair" }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(yield* storage.read(["raya", "personal-todos", "v1", first])).toEqual(corrupt)
+    }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+  }),
+)
+
 it.live("rejects invalid input and duplicate identities without overwriting durable data", () =>
   Effect.gen(function* () {
     const root = yield* tmpdirScoped()
@@ -129,6 +277,41 @@ it.live("rejects invalid input and duplicate identities without overwriting dura
         "dueAt",
       )
       expect((yield* todos.update(first, { revision: 0, title: "Invalid" }).pipe(Effect.flip)).field).toBe("revision")
+      expect(
+        (yield* todos
+          .update(first, { revision: item.revision, estimateMinutes: PersonalTodo.MAX_ESTIMATE_MINUTES + 1 })
+          .pipe(Effect.flip)).field,
+      ).toBe("estimateMinutes")
+      expect(
+        (yield* todos
+          .update(first, {
+            revision: item.revision,
+            links: [
+              { kind: "goal", id: "goal_one" },
+              { kind: "goal", id: "goal_one" },
+            ],
+          })
+          .pipe(Effect.flip)).field,
+      ).toBe("links")
+      expect(
+        (yield* todos
+          .replaceSubtasks(first, {
+            revision: item.revision,
+            subtasks: Array.from({ length: PersonalTodo.MAX_SUBTASKS + 1 }, (_, index) => ({
+              title: `Subtask ${index}`,
+            })),
+          })
+          .pipe(Effect.flip)).field,
+      ).toBe("subtasks")
+      const collisions = PersonalTodo.make({ storage, subtaskID: () => child, now: () => 100 })
+      expect(
+        (yield* collisions
+          .replaceSubtasks(first, {
+            revision: item.revision,
+            subtasks: [{ title: "One" }, { title: "Two" }],
+          })
+          .pipe(Effect.flip)).field,
+      ).toBe("subtasks")
       expect((yield* todos.get("../session").pipe(Effect.flip)).field).toBe("id")
       expect(yield* todos.get(first)).toEqual(item)
     }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))

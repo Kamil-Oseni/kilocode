@@ -120,6 +120,7 @@ import * as McpOAuth from "./kilo-provider/mcp-oauth"
 import { retryable, backoff, MAX_RETRIES } from "./util/retry"
 import { hasGit } from "./kilo-provider/git-status"
 import { handlePersonalTodoMessage } from "./kilo-provider/personal-todos"
+import { handleAdminMessage } from "./kilo-provider/admin"
 // legacy-migration start
 import {
   checkAndShowMigrationWizard,
@@ -1203,15 +1204,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (this.handleChildSyncMessage(message)) return
       if (await this.handleMemoryMessage(message)) return
       if (await this.handleProfileDataMessage(message)) return
-      if (
-        await handlePersonalTodoMessage({
-          client: this.client,
-          directory: this.getWorkspaceDirectory(),
-          message: message as { type: string } & Record<string, unknown>,
-          post: (reply) => this.postMessage(reply),
-        })
-      )
-        return
+      if (await this.handleProductMessage(message)) return
       if (await this.handleRoutineMessage(message)) return
       if (this.handleLegacyMigrationMessage(message)) return
       if (this.handleUsageMessage(message)) return
@@ -1662,6 +1655,17 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
     this.webviewMessageDisposable = watchFontSizeConfig((msg) => this.postMessage(msg), this.webviewMessageDisposable)
     this.webviewMessageDisposable = watchWorkStyleConfig((msg) => this.postMessage(msg), this.webviewMessageDisposable)
+  }
+
+  private async handleProductMessage(message: TypedWebviewMessage): Promise<boolean> {
+    const input = {
+      client: this.client,
+      directory: this.getWorkspaceDirectory(),
+      message: message as { type: string } & Record<string, unknown>,
+      post: (reply: unknown) => this.postMessage(reply),
+    }
+    if (await handlePersonalTodoMessage(input)) return true
+    return handleAdminMessage(input)
   }
 
   private async handleProfileDataMessage(message: TypedWebviewMessage): Promise<boolean> {

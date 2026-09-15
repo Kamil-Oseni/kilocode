@@ -28,14 +28,24 @@ registerVscodeToolOverrides()
 import HistoryView from "./components/history/HistoryView"
 import RoutinesView from "./components/routines/RoutinesView"
 import { TodoView } from "./components/todo/TodoView"
+import { AdminView } from "./components/admin/AdminView"
 import { MigrationWizard } from "./components/migration" // legacy-migration
 import type { Message as SDKMessage, Part as SDKPart } from "@kilocode/sdk/v2"
 import { cycleAgent as cycle } from "./context/session-agent"
 import "./styles/chat.css"
 
-type ViewType = "newTask" | "history" | "routines" | "todo" | "profile" | "settings" | "subAgentViewer"
+type ViewType = "newTask" | "history" | "routines" | "todo" | "admin" | "profile" | "settings" | "subAgentViewer"
 type RoutineTarget = { nonce: string; organizationID?: string; agentID?: string }
-const VALID_VIEWS = new Set<string>(["newTask", "history", "routines", "todo", "profile", "settings", "subAgentViewer"])
+const VALID_VIEWS = new Set<string>([
+  "newTask",
+  "history",
+  "routines",
+  "todo",
+  "admin",
+  "profile",
+  "settings",
+  "subAgentViewer",
+])
 
 const subagentTarget = (value: unknown): SubagentTarget | undefined => {
   if (!value || typeof value !== "object") return
@@ -282,6 +292,9 @@ const AppContent: Component = () => {
       case "todoButtonClicked":
         setCurrentView("todo")
         break
+      case "adminButtonClicked":
+        setCurrentView("admin")
+        break
       case "profileButtonClicked":
         setCurrentView("profile")
         break
@@ -400,6 +413,7 @@ const AppContent: Component = () => {
           onHistory={() => handleViewAction("historyButtonClicked")}
           onRoutines={() => handleViewAction("routinesButtonClicked")}
           onTodo={() => handleViewAction("todoButtonClicked")}
+          onAdmin={() => handleViewAction("adminButtonClicked")}
           surface={topBarSurface}
         />
       </Show>
@@ -444,6 +458,9 @@ const AppContent: Component = () => {
             </Match>
             <Match when={currentView() === "todo"}>
               <TodoView onBack={() => setCurrentView("newTask")} />
+            </Match>
+            <Match when={currentView() === "admin"}>
+              <AdminView onBack={() => setCurrentView("newTask")} />
             </Match>
             <Match when={currentView() === "profile"}>
               <ProfileView

@@ -195,6 +195,12 @@
         "icon": "$(checklist)"
       },
       {
+        "command": "raya.adminButtonClicked",
+        "title": "System Health",
+        "category": "Raya",
+        "icon": "$(pulse)"
+      },
+      {
         "command": "raya.profileButtonClicked",
         "title": "Profile",
         "category": "Raya",
@@ -240,6 +246,11 @@
         "command": "raya.sidebarTitle.todosButtonClicked",
         "title": "Todo",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "raya.sidebarTitle.adminButtonClicked",
+        "title": "System Health",
+        "icon": "$(pulse)"
       },
       {
         "command": "raya.sidebarTitle.profileButtonClicked",
@@ -573,6 +584,10 @@
           "when": "false"
         },
         {
+          "command": "raya.sidebarTitle.adminButtonClicked",
+          "when": "false"
+        },
+        {
           "command": "raya.sidebarTitle.agentManagerOpen",
           "when": "false"
         },
@@ -616,6 +631,11 @@
         {
           "command": "raya.sidebarTitle.todosButtonClicked",
           "group": "navigation@3",
+          "when": "view == raya.SidebarProvider && !raya.isCursor"
+        },
+        {
+          "command": "raya.sidebarTitle.adminButtonClicked",
+          "group": "navigation@3.5",
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         },
         {
@@ -688,6 +708,11 @@
         {
           "command": "raya.todosButtonClicked",
           "group": "navigation@3",
+          "when": "activeWebviewPanelId == raya.TabPanel && !raya.isCursor"
+        },
+        {
+          "command": "raya.adminButtonClicked",
+          "group": "navigation@3.5",
           "when": "activeWebviewPanelId == raya.TabPanel && !raya.isCursor"
         },
         {

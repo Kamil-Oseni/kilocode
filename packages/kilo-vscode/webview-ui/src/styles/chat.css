@@ -42,6 +42,171 @@
   height: 100%;
 }
 
+/* AdminView */
+.admin-view {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--raya-space-12);
+  color: var(--text-base);
+  font-family: var(--raya-font-body);
+}
+
+.admin-header,
+.admin-section-heading,
+.admin-row,
+.admin-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+}
+
+.admin-intro {
+  padding: var(--raya-space-16) 0 var(--raya-space-24);
+}
+
+.admin-eyebrow,
+.admin-intro p,
+.admin-row span,
+.admin-log span,
+.admin-log p,
+.admin-log time,
+.admin-empty {
+  color: var(--text-weak);
+}
+
+.admin-eyebrow {
+  margin: 0 0 var(--raya-space-4);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.admin-intro h1 {
+  margin: 0;
+  font: 600 22px / var(--raya-leading-tight) var(--raya-font-display);
+}
+
+.admin-intro p {
+  margin: var(--raya-space-6) 0 var(--raya-space-12);
+}
+
+.admin-intro strong {
+  color: var(--raya-primary);
+}
+
+.admin-notice {
+  margin-bottom: var(--raya-space-16);
+  padding: var(--raya-space-8) 0;
+  border-block: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+.admin-notice[data-kind="error"] > span {
+  color: var(--vscode-errorForeground);
+}
+
+.admin-section-heading {
+  min-height: 32px;
+  border-bottom: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+.admin-section-heading h2 {
+  margin: 0;
+  font: 600 13px/1.4 var(--raya-font-body);
+}
+
+.admin-view section + section {
+  margin-top: var(--raya-space-24);
+}
+
+.admin-row {
+  min-height: 50px;
+  border-bottom: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+.admin-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.admin-row strong,
+.admin-row span {
+  overflow-wrap: anywhere;
+}
+
+.admin-row span,
+.admin-status,
+.admin-log {
+  font-size: var(--font-size-small);
+}
+
+.admin-status {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.admin-status[data-status="healthy"] {
+  color: var(--vscode-testing-iconPassed, var(--text-base));
+}
+
+.admin-status[data-status="degraded"],
+.admin-status[data-status="blocked"],
+.admin-status[data-status="unknown"] {
+  color: var(--vscode-editorWarning-foreground, var(--text-weak));
+}
+
+.admin-status[data-status="offline"] {
+  color: var(--vscode-errorForeground);
+}
+
+.admin-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-log li {
+  position: relative;
+  padding: var(--raya-space-8) 52px var(--raya-space-8) 0;
+  border-bottom: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+.admin-log li > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-6);
+}
+
+.admin-log p {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-log time {
+  position: absolute;
+  top: var(--raya-space-8);
+  right: 0;
+}
+
+.admin-empty {
+  margin: var(--raya-space-12) 0;
+}
+
+@media (max-width: 360px) {
+  .admin-view {
+    padding: var(--raya-space-8);
+  }
+
+  .admin-row {
+    align-items: flex-start;
+    padding-block: var(--raya-space-8);
+  }
+}
+
 [data-component="subagent-viewer"] > .chat-view {
   flex: 1;
   min-height: 0;

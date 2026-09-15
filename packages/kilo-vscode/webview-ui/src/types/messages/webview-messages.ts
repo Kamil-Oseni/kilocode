@@ -1964,6 +1964,11 @@ export interface PersonalTodoListMessage {
   requestID: string
 }
 
+export interface RequestAdminMessage {
+  type: "requestAdmin"
+  requestID: string
+}
+
 export interface PersonalTodoCreateMessage {
   type: "personalTodoCreate"
   requestID: string
@@ -1987,6 +1992,7 @@ export interface PersonalTodoDeleteMessage {
 
 export type WebviewMessage =
   | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }
+  | RequestAdminMessage
   | PersonalTodoListMessage
   | PersonalTodoCreateMessage
   | PersonalTodoUpdateMessage

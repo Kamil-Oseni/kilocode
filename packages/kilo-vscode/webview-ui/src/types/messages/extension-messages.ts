@@ -763,7 +763,7 @@ export interface DeviceAuthCancelledMessage {
 
 export interface NavigateMessage {
   type: "navigate"
-  view: "newTask" | "marketplace" | "history" | "profile" | "settings" | "subAgentViewer"
+  view: "newTask" | "marketplace" | "history" | "admin" | "profile" | "settings" | "subAgentViewer"
   tab?: string
   projectId?: string
 }
@@ -1895,6 +1895,7 @@ export interface AgentManagerFocusContextRequestedMessage {
 }
 
 export type PersonalTodoItem = import("@kilocode/sdk/v2/client").RayaPersonalTodoListResponse[number]
+export type AdminResultMessage = import("../../../../src/shared/admin").AdminResult
 
 export interface PersonalTodoResultMessage {
   type: "personalTodoResult"
@@ -1915,6 +1916,7 @@ export interface PersonalTodoResultMessage {
 
 export type ExtensionMessage =
   | { type: "speechLiveStarted"; requestId: string }
+  | AdminResultMessage
   | PersonalTodoResultMessage
   | { type: "speechLiveMicReady"; requestId: string }
   | { type: "speechLiveMicChunk"; requestId: string; data: string }

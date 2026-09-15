@@ -449,6 +449,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("raya.sidebarTitle.todosButtonClicked", () => {
       track("todo", "raya.todosButtonClicked")
     }),
+    vscode.commands.registerCommand("raya.sidebarTitle.adminButtonClicked", () => {
+      track("admin", "raya.adminButtonClicked")
+    }),
     vscode.commands.registerCommand("raya.sidebarTitle.agentManagerOpen", () => {
       track("agent_manager", "raya.agentManagerOpen")
     }),
@@ -499,6 +502,11 @@ export function activate(context: vscode.ExtensionContext) {
       const tab = activeTabProvider()
       if (tab) tab.postMessage({ type: "action", action: "todoButtonClicked" })
       else provider.postMessage({ type: "action", action: "todoButtonClicked" })
+    }),
+    vscode.commands.registerCommand("raya.adminButtonClicked", () => {
+      const tab = activeTabProvider()
+      if (tab) tab.postMessage({ type: "action", action: "adminButtonClicked" })
+      else provider.postMessage({ type: "action", action: "adminButtonClicked" })
     }),
     vscode.commands.registerCommand("raya.cycleAgentMode", () => {
       const tab = activeTabProvider()

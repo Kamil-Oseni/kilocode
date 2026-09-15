@@ -19,6 +19,7 @@ export interface SidebarTopBarProps {
   onHistory: () => void
   onRoutines: () => void
   onTodo: () => void
+  onAdmin: () => void
   /** Telemetry surface — distinguishes the sidebar from the "Open in Tab" panel, which shares this component. */
   surface: string
 }
@@ -34,6 +35,7 @@ type Codicon =
   | "settings-gear"
   | "sync"
   | "checklist"
+  | "pulse"
 
 interface Action {
   key: string
@@ -63,6 +65,7 @@ export const SidebarTopBar: Component<SidebarTopBarProps> = (props) => {
     { key: "history", codicon: "history", button: "history", run: () => props.onHistory() },
     { key: "routines", codicon: "sync", button: "routines", run: () => props.onRoutines() },
     { key: "todo", codicon: "checklist", button: "todo", run: () => props.onTodo() },
+    { key: "admin", codicon: "pulse", button: "admin", run: () => props.onAdmin() },
     { key: "agentManager", codicon: "organization", button: "agent_manager", run: () => open("openAgentManager") },
     { key: "kiloClaw", codicon: "comment-discussion", button: "kiloclaw", run: () => open("openKiloClaw") },
     { key: "marketplace", codicon: "extensions", button: "marketplace", run: () => open("openMarketplacePanel") },

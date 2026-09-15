@@ -184,7 +184,7 @@ describe("project usage", () => {
       })
       yield* storage.replace(["raya", "goal", malformed.id], { broken: true })
       const orphan = ["raya", "goal", "ses_unlinked_project_charge"]
-      yield* Effect.addFinalizer(() => storage.remove(orphan))
+      yield* Effect.addFinalizer(() => storage.remove(orphan).pipe(Effect.orDie))
       yield* storage.replace(orphan, {
         ...state,
         charges: [{ ...zero, id: "unlinked-charge", amount: 999 }],

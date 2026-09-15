@@ -33,6 +33,7 @@ import { EditTool } from "@/tool/edit"
 import type * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import { WriteTool } from "@/tool/write"
+import { Storage } from "@/storage/storage"
 import { disposeAllInstances, provideTmpdirInstance } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
 
@@ -55,6 +56,7 @@ const it = testEffect(
     AppNodeBuilder.build(Format.node),
     AppNodeBuilder.build(Truncate.node),
     AppNodeBuilder.build(EventV2Bridge.node),
+    AppNodeBuilder.build(Storage.node),
   ),
 )
 

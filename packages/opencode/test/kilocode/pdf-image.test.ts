@@ -15,8 +15,8 @@ describe("PDF images", () => {
   test("converts a transparent PNG into bounded color and soft-mask streams", () => {
     const image = parsePdfImage(png, ".png")
     expect(image).toMatchObject({ width: 1, height: 1, color: "DeviceRGB", filter: "FlateDecode" })
-    expect(inflateSync(image.bytes)).toEqual(Uint8Array.from([69, 85, 122]))
-    expect(inflateSync(image.alpha!)).toEqual(Uint8Array.from([128]))
+    expect(inflateSync(Buffer.from(image.bytes))).toEqual(Uint8Array.from([69, 85, 122]))
+    expect(inflateSync(Buffer.from(image.alpha!))).toEqual(Uint8Array.from([128]))
   })
 
   test("preserves a valid RGB JPEG stream for native PDF decoding", () => {

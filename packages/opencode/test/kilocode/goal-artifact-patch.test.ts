@@ -62,9 +62,10 @@ describe("goal patch artifact revisions", () => {
             ask: () => Effect.void,
           },
         )
-        const revision = result.metadata.rayaRevision
-        expect(revision.status).toBe("bundle")
-        expect(revision.revisions).toHaveLength(5)
+        const entries = Artifact.entries(result.metadata.rayaRevision)
+        const revision = { version: 1 as const, status: "bundle" as const, revisions: entries }
+        expect(result.metadata.rayaRevision).toMatchObject({ status: "bundle" })
+        expect(entries).toHaveLength(5)
         expect(yield* Artifact.current(revision)).toBe(true)
         yield* fs.writeFileString(path.join(instance.directory, "unrelated.txt"), "independent")
         expect(yield* Artifact.current(revision)).toBe(true)

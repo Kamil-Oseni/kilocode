@@ -8,13 +8,15 @@
 
 ## ChatGPT 2026-09-15 18:06 America/Toronto - Sandbox policy caches are profile-generation aware
 
-**Status: implemented and verified locally; commit and push remain, installation is batched.** `SandboxPolicy` now keys every cached snapshot and synchronization revision by the canonical sandbox policy root in addition to project directory and session. Selecting a different profile between policy operations therefore causes a storage read for that generation instead of returning a snapshot cached under the previous root. Cache identifiers are bound before matching persistence writes and removals, so the in-memory record corresponds to the operation's selected generation.
+**Status: implemented, verified and pushed in `719144de05`; installation is batched.** `SandboxPolicy` now keys every cached snapshot and synchronization revision by the canonical sandbox policy root in addition to project directory and session. Selecting a different profile between policy operations therefore causes a storage read for that generation instead of returning a snapshot cached under the previous root. Cache identifiers are bound before matching persistence writes and removals, so the in-memory record corresponds to the operation's selected generation.
 
 The real-filesystem generation test now primes the policy cache under the first root, switches to the second root and proves `peek` returns no stale first-generation state. After distinct second-generation persistence, repeated switches prove each root returns its own cached value. The existing removal canary still proves a root change across an await does not remove the other generation. The complete sandbox policy/state group passes **36 tests / 77 assertions** with three expected platform skips; bounded CLI typecheck passes.
 
 This closes the sandbox cache blocker recorded in the preceding checkpoint. It still does not authorize mutating profile roots during an active policy operation: a cross-service writer registry and quiescence barrier must stop new work and drain current operations before any live cutover. Version 1 remains fail closed.
 
 The reviewed repository inventory is **69,116** total: public 1,693; compatibility 35,185; provenance 5,686; internal 26,552. The ledger is pinned to compatibility digest `0fc667bd88455b7ad9adfb28b8d518b1e3eab36cdbd53fa94bbc8a25f9242d54`.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `719144de05`. The installed extension remains source `66631de1db`; this small follow-up is queued for a later coherent snapshot.
 
 ## ChatGPT 2026-09-15 18:02 America/Toronto - Accumulated migration slices are installed
 

@@ -16,6 +16,8 @@ This removes the cache-specific reason that root selection had to precede the fi
 
 The reviewed repository inventory is 69,116 total: public 1,693; compatibility 35,185; provenance 5,686; internal 26,552. Keep the ledger baseline at count 35,185 and digest `0fc667bd88455b7ad9adfb28b8d518b1e3eab36cdbd53fa94bbc8a25f9242d54` until the next reviewed refresh.
 
+This slice was pushed in `719144de05`; its normal protected hook passed all 29 JavaScript/TypeScript packages plus JetBrains. The installed extension remains source `66631de1db`, so batch this follow-up with later product work before another low-memory snapshot.
+
 ## ChatGPT 2026-09-15 18:02 America/Toronto - Installed checkpoint and rollback package
 
 The low-memory snapshot workflow installed `7.4.23-snapshot+66631de1db.kamil-oseni.1789509508005` from source `66631de1db`. It passed production SDK generation, the one-platform CLI build and smoke checks, sequential extension validation, production bundling, packaging and installation. The rollback VSIX is retained at `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.453d4b7cad27c1084c5a2ed630257a6692d13c911ac772828d689d9f5f5550c3.vsix`.

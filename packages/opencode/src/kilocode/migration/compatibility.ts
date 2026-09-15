@@ -272,11 +272,17 @@ export namespace RayaMigrationLedger {
       id: "profile-roots",
       area: "storage",
       phase: "legacy-canonical",
-      identities: ["data", "cache", "config", "state", "temp"].map((name) => ({
-        kind: `profile:${name}`,
-        legacy: `${name}:kilo`,
-        policy: "legacy-canonical" as const,
-      })),
+      identities: ["data", "cache", "config", "state", "temp"]
+        .map((name) => ({
+          kind: `profile:${name}`,
+          legacy: `${name}:kilo`,
+          policy: "legacy-canonical" as const,
+        }))
+        .concat({
+          kind: "inventory:global-path-consumers",
+          legacy: "script/global-path-consumers.json",
+          policy: "legacy-canonical" as const,
+        }),
       required: future,
       evidence: [],
     },
@@ -360,8 +366,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_157,
-        digest: "94a3a8d7bd49ddd6ef59cf35aa45db2fae0901db32448d6cc614b3182262ff07",
+        count: 35_162,
+        digest: "7dcdaab0249c21998a7a9b4481199a26f313552289a7b9901c8ad514ba6590f8",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

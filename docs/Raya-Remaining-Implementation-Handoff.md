@@ -6,6 +6,18 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:10 America/Toronto - Preserve the Global.Path migration ratchet
+
+`script/kilocode/global-path-consumers.ts` is the mandatory pre-cutover inventory. It scans tracked and untracked package runtime source with the TypeScript AST, validates the producer and public interface against the nine reviewed fields, and compares every normalized consumer against `script/global-path-consumers.json`. Do not replace it with a grep count or per-file total: the current full baseline distinguishes 205 exact accesses across 78 files, eight module captures, one bounded enumeration and zero production assignments.
+
+The eight eager captures are `packages/core/src/plugin/agent.ts`, `packages/opencode/src/auth/index.ts`, `packages/opencode/src/cli/cmd/plug.ts`, `packages/opencode/src/cli/cmd/run/variant.shared.ts`, `packages/opencode/src/kilocode/sandbox/preference.ts`, `packages/opencode/src/kilocode/sandbox/store.ts`, `packages/opencode/src/mcp/auth.ts` and `packages/opencode/src/tool/truncation-dir.ts`. Before changing canonical roots, remove or generation-bind every capture and prove that long-lived services reopen against the selected generation. Do not interpret the absence of direct `Global.Path` assignments as proof that downstream file/database writers are quiesced.
+
+The scanner supports named aliases, direct `Path` imports, namespace imports and dynamic import destructuring. It rejects dynamic/unknown members, bare object escape and unbounded enumeration. Only `Object.entries`, `Object.keys` and `Object.values` are allowed as bounded whole-object diagnostics. CI runs `bun run check:global-path-consumers` plus the five-case/20-assertion suite. The migration compatibility checker binds the inventory to `profile-roots` and rejects a missing inventory or any policy other than `inventory-only-no-cutover-evidence`.
+
+Next, classify the 205 entries by owning service and actual downstream behavior, then convert the eight module captures to late-bound roots. After that, introduce a coordinated writer registry and quiescence barrier covering both SQLite clients plus JSON, Routine, repair, browser, auth, MCP, logging, snapshot and background-process state. Do not copy WAL files directly; a later cutover needs SQLite backup, immutable journal revisions, sorted file hashes, database integrity/foreign-key/table-count checks, restart, interrupted recovery and rollback while the legacy root remains intact.
+
+The refreshed repository inventory is 69,042 total: public 1,693; compatibility 35,162; provenance 5,686; internal 26,501.
+
 ## ChatGPT 2026-09-15 16:52 America/Toronto - Preserve all model-catalog URL readers
 
 The runtime flag, UI provider-icon build and generated catalog script now resolve `RAYA_MODELS_URL ?? KILO_MODELS_URL ?? "https://models.dev"`. Preserve this precedence across all three readers. `Flag.KILO_MODELS_URL` remains the mutable compatibility API and its setter synchronizes both names. `packages/opencode/script/build.ts` clears both variables for isolated smoke validation, while `packages/kilo-vscode/script/local-bin.ts` fingerprints both so changing either invalidates the cached CLI build.

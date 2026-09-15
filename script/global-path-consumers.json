@@ -1,0 +1,2080 @@
+{
+  "format": "raya.global-path-consumers",
+  "version": 1,
+  "scope": "tracked-package-runtime-source",
+  "policy": "inventory-only-no-cutover-evidence",
+  "total": {
+    "count": 205,
+    "digest": "301d1199254266c87cc3dba6ab8638f40e3226d5e8c1c0a3253d89a605954a0f"
+  },
+  "members": {
+    "bin": {
+      "count": 51,
+      "module": 0,
+      "writes": 0
+    },
+    "cache": {
+      "count": 8,
+      "module": 0,
+      "writes": 0
+    },
+    "config": {
+      "count": 50,
+      "module": 1,
+      "writes": 0
+    },
+    "data": {
+      "count": 33,
+      "module": 4,
+      "writes": 0
+    },
+    "home": {
+      "count": 20,
+      "module": 0,
+      "writes": 0
+    },
+    "log": {
+      "count": 11,
+      "module": 0,
+      "writes": 0
+    },
+    "repos": {
+      "count": 4,
+      "module": 0,
+      "writes": 0
+    },
+    "state": {
+      "count": 18,
+      "module": 3,
+      "writes": 0
+    },
+    "tmp": {
+      "count": 9,
+      "module": 0,
+      "writes": 0
+    }
+  },
+  "enumerations": 1,
+  "files": [
+    {
+      "file": "packages/core/src/database/database.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/kilocode/db-preflight.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/models-dev.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/observability/logging.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/plugin/agent.ts",
+      "count": 4
+    },
+    {
+      "file": "packages/core/src/ripgrep/binary.ts",
+      "count": 4
+    },
+    {
+      "file": "packages/core/src/util/log.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/util/which.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "count": 5
+    },
+    {
+      "file": "packages/opencode/src/auth/index.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/agent.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/debug/index.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/mcp.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/plug.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/providers.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/runtime.lifecycle.ts",
+      "count": 3
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/trace.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/variant.shared.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/uninstall.ts",
+      "count": 4
+    },
+    {
+      "file": "packages/opencode/src/cli/heap.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "count": 18
+    },
+    {
+      "file": "packages/opencode/src/config/paths.ts",
+      "count": 3
+    },
+    {
+      "file": "packages/opencode/src/config/tui-migrate.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/config/tui.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/agent/builder.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/agent/index.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "count": 6
+    },
+    {
+      "file": "packages/opencode/src/kilocode/bootstrap.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/kilocode/browser/upload-stage.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/cli/cmd/tui/component/dialog-memory.tsx",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/cli/heap-snapshot.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/cli/setup.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/command-files.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "count": 6
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/model-state.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "count": 6
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/sources.ts",
+      "count": 4
+    },
+    {
+      "file": "packages/opencode/src/kilocode/daemon/daemon.ts",
+      "count": 4
+    },
+    {
+      "file": "packages/opencode/src/kilocode/indexing.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/memory/runtime.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/permission/config-paths.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/kilocode/plugins/home-footer.tsx",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/plugins/sidebar-footer.tsx",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/reference.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/remote-attachments.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "count": 13
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/store.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/self-heal/repair.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/self-heal/verification.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/session/retention.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/session/revert-note.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/skill-remove.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/storage/json-migration.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/system-prompt.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/tool/task.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/tui/config.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/kilocode/voice/openai-retention.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "count": 44
+    },
+    {
+      "file": "packages/opencode/src/mcp/auth.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/plugin/install.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/plugin/meta.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/plugin/tui/runtime.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/provider/provider.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/instance.ts",
+      "count": 3
+    },
+    {
+      "file": "packages/opencode/src/session/session.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/skill/discovery.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/snapshot/index.ts",
+      "count": 5
+    },
+    {
+      "file": "packages/opencode/src/storage/db.ts",
+      "count": 2
+    },
+    {
+      "file": "packages/opencode/src/storage/storage.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/repo_clone.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/shell/prompt.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/truncation-dir.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/util/repository.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/worktree/index.ts",
+      "count": 1
+    },
+    {
+      "file": "packages/tui/src/component/dialog-status.tsx",
+      "count": 3
+    },
+    {
+      "file": "packages/tui/src/context/kv.tsx",
+      "count": 1
+    },
+    {
+      "file": "packages/tui/src/context/theme.tsx",
+      "count": 1
+    }
+  ],
+  "moduleCaptures": [
+    {
+      "file": "packages/core/src/plugin/agent.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "const TRUNCATION_GLOB = path.join(Global.Path.data, \"tool-output\", \"*\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/auth/index.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "const file = path.join(Global.Path.data, \"auth.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/plug.ts",
+      "member": "config",
+      "phase": "module",
+      "access": "read",
+      "context": "global: Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/variant.shared.ts",
+      "member": "state",
+      "phase": "module",
+      "access": "read",
+      "context": "const MODEL_FILE = path.join(Global.Path.state, \"model.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
+      "member": "state",
+      "phase": "module",
+      "access": "read",
+      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-preference\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/store.ts",
+      "member": "state",
+      "phase": "module",
+      "access": "read",
+      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/mcp/auth.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "const filepath = path.join(Global.Path.data, \"mcp-auth.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/truncation-dir.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "export const TRUNCATION_DIR = path.join(Global.Path.data, \"tool-output\")",
+      "ordinal": 1
+    }
+  ],
+  "consumers": [
+    {
+      "file": "packages/core/src/database/database.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "data: Global.Path.data,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/kilocode/db-preflight.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "export function assertWritable(filename: string, trusted: string = Global.Path.data) {",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/models-dev.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.cache,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/observability/logging.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "export function fileLogger(file = path.join(Global.Path.log, \"opencode.log\"), id: string = runID) {",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/plugin/agent.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "const TRUNCATION_GLOB = path.join(Global.Path.data, \"tool-output\", \"*\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/plugin/agent.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{ action: \"external_directory\", resource: path.join(Global.Path.data, \"plans\", \"*\"), effect: \"allow\" },",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/plugin/agent.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "resource: path.relative(worktree, path.join(Global.Path.data, \"plans\", \"*.md\")),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/plugin/agent.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, \"*\")]",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/ripgrep/binary.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const archive = path.join(Global.Path.bin, filename)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/ripgrep/binary.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: \"ripgrep-\" })",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/ripgrep/binary.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const target = path.join(Global.Path.bin, `rg${process.platform === \"win32\" ? \".exe\" : \"\"}`)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/ripgrep/binary.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/util/log.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.log,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/util/log.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "void cleanup(Global.Path.log)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/util/which.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const full = base ? base + path.delimiter + Global.Path.bin : Global.Path.bin",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/util/which.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const full = base ? base + path.delimiter + Global.Path.bin : Global.Path.bin",
+      "ordinal": 2
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.config, \"*\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "[path.join(Global.Path.data, \"plans\", \"*\")]: \"allow\",",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "[path.relative(ctx.worktree, path.join(Global.Path.data, path.join(\"plans\", \"*.md\")))]: \"allow\",",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "member": "repos",
+      "phase": "runtime",
+      "access": "read",
+      "context": "[path.join(Global.Path.repos, \"*\")]: \"allow\",",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.tmp, \"*\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/auth/index.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "const file = path.join(Global.Path.data, \"auth.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/agent.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "hint: Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/agent.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "scope === \"global\" ? Global.Path.config : path.join(ctx.worktree, \".kilo\"), // kilocode_change",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/debug/index.ts",
+      "member": "*",
+      "phase": "runtime",
+      "access": "read",
+      "context": "for (const [key, value] of Object.entries(Global.Path)) {",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/mcp.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const global = Flag.KILO_CONFIG_DIR ?? Global.Path.config // kilocode_change - honor the active Kilo config profile",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/plug.ts",
+      "member": "config",
+      "phase": "module",
+      "access": "read",
+      "context": "global: Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/providers.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const authPath = path.join(Global.Path.data, \"auth.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/runtime.lifecycle.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": ": resolved.startsWith(`${Global.Path.home}${path.sep}`)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/runtime.lifecycle.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "? resolved.replace(Global.Path.home, \"~\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/runtime.lifecycle.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "resolved === Global.Path.home",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/trace.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.log, \"direct\", \"latest.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/trace.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.log, \"direct\", `${stamp()}-${process.pid}.jsonl`)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/variant.shared.ts",
+      "member": "state",
+      "phase": "module",
+      "access": "read",
+      "context": "const MODEL_FILE = path.join(Global.Path.state, \"model.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/uninstall.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{ path: Global.Path.cache, label: \"Cache\", keep: false },",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/uninstall.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{ path: Global.Path.config, label: \"Config\", keep: args.keepConfig },",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/uninstall.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{ path: Global.Path.data, label: \"Data\", keep: args.keepData },",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/uninstall.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{ path: Global.Path.state, label: \"State\", keep: false },",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/cli/heap.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.log,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "(dir === Global.Path.config &&",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "`config:global:${path.resolve(Global.Path.config)}`,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await fsNode.writeFile(path.join(Global.Path.config, \"config.json\"), JSON.stringify(result, null, 2))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const legacy = path.join(Global.Path.config, \"config\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const stamp = yield* KilocodeGlobalConfigStamp.read(fs, Global.Path.config)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "existsSync(path.join(Global.Path.config, name)),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "files: KilocodeConfig.GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name)),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "globalStamp = yield* KilocodeGlobalConfigStamp.read(fs, Global.Path.config) // kilocode_change",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "globalStamp = yield* KilocodeGlobalConfigStamp.read(fs, Global.Path.config)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.config, file),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, \"config.json\"), env, true))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, \"kilo.json\"), env, true))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, \"kilo.jsonc\"), env, true))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, \"opencode.json\"), env, true)) // kilocode_change",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, \"opencode.jsonc\"), env, true)) // kilocode_change",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "yield* loadFile(path.join(Global.Path.config, \"raya.json\"), env, true, undefined, undefined, false),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "yield* loadFile(path.join(Global.Path.config, \"raya.jsonc\"), env, true, undefined, undefined, false),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "yield* merge(Global.Path.config, global, \"global\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/paths.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/paths.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "start: Global.Path.home,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/paths.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "stop: Global.Path.home,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/tui-migrate.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const files = [...project, ...ConfigPaths.fileInDirectory(Global.Path.config, \"kilo\")]",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/config/tui.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "for (const file of ConfigPaths.fileInDirectory(Global.Path.config, \"tui\")) {",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/agent/builder.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "scope === \"global\" ? Global.Path.config : ctx.worktree && ctx.worktree !== \"/\" ? ctx.worktree : ctx.directory",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/agent/index.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "[path.join(Global.Path.data, \"plans\", \"*\")]: \"allow\",",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/agent/index.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "[path.relative(worktree, path.join(Global.Path.data, path.join(\"plans\", \"*.md\")))]: \"allow\" as const,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.log, \"background-process\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.log, \"background-process\", shared.dir)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.state, \"background-process\", \"locks\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.state, \"background-process\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.state, \"background-process\", \"locks\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/background-process/index.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.state, \"background-process\", shared.dir)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/bootstrap.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "dbPath: path.join(Global.Path.data, \"session-export.db\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/bootstrap.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "statePath: path.join(Global.Path.data, \"session-export-workspace.json\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/browser/upload-stage.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "constructor(private readonly root: string = path.join(Global.Path.cache, \"browser-uploads\")) {}",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/cli/cmd/tui/component/dialog-memory.tsx",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{props.root.replace(Global.Path.home, \"~\")}",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/cli/heap-snapshot.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.log,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/cli/setup.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "dataPath: Global.Path.data,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/command-files.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const cache = path.join(Global.Path.cache, \"commands\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "`Move it into a .kilo directory (project) or ${Global.Path.config} (global).`,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const files = READ_GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const globalDir = path.join(path.dirname(Global.Path.config), \"opencode\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const legacy = path.join(Global.Path.config, \"config\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const target = writable.length > 0 ? writable[writable.length - 1] : path.join(Global.Path.config, \"config.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const writable = GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f)).filter((f) => existsSync(f))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/model-state.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.state, \"model.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "? Global.Path.config",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.config, file),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.home, \".kilo\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.home, \".kilocode\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/overlay.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.home, \".raya\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/sources.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const dirs = unique([Global.Path.config, ...project, ...home, ...env]).filter((dir) =>",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/sources.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const file = path.join(Global.Path.config, name)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/sources.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const home = await Filesystem.findUp([...roots], Global.Path.home, Global.Path.home)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/config/sources.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const home = await Filesystem.findUp([...roots], Global.Path.home, Global.Path.home)",
+      "ordinal": 2
+    },
+    {
+      "file": "packages/opencode/src/kilocode/daemon/daemon.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "if (!script) return Global.Path.home",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/daemon/daemon.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return packageRoot(path.dirname(script)) ?? Global.Path.home",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/daemon/daemon.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return process.env.KILO_TEST_DAEMON_LOG_DIR ?? Global.Path.log",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/daemon/daemon.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return process.env.KILO_TEST_DAEMON_STATE_DIR ?? Global.Path.state",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/indexing.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const root = path.join(Global.Path.state, \"indexing\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/memory/runtime.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "MemoryPaths.configure(() => ({ data: Global.Path.data }))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/permission/config-paths.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "new Set([Global.Path.config, process.env.XDG_CONFIG_HOME ? path.join(process.env.XDG_CONFIG_HOME, \"kilo\") : \"\"]),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/permission/config-paths.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const raya = path.join(Global.Path.home, \".raya\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/plugins/home-footer.tsx",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const out = d.replace(Global.Path.home, \"~\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/plugins/sidebar-footer.tsx",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const out = dir.replace(Global.Path.home, \"~\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/reference.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "if (input.value.startsWith(\"~/\")) return path.join(Global.Path.home, input.value.slice(2))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/remote-attachments.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const root = deps.tmpRoot ?? Global.Path.tmp",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.bin,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.cache,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "denyWrite: [root(SandboxStore.root), root(SandboxPreference.root), root(Global.Path.config)],",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.data,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "log",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.log,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "repos",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.repos,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.state,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.tmp,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "TEMP: Global.Path.tmp,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "temporaryDirectory: Global.Path.tmp,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "TMP: Global.Path.tmp,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/policy.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "TMPDIR: Global.Path.tmp,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
+      "member": "state",
+      "phase": "module",
+      "access": "read",
+      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-preference\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/sandbox/store.ts",
+      "member": "state",
+      "phase": "module",
+      "access": "read",
+      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/self-heal/repair.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "root = path.join(Global.Path.data, \"raya\", \"repair-worktrees\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/self-heal/verification.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "root = path.join(Global.Path.data, \"raya\", \"verification\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/session/retention.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "root = path.join(Global.Path.data, \"storage\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/session/revert-note.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const dest = (sessionID: string) => path.join(Global.Path.data, \"raya\", \"revert-note\", `${sessionID}.json`)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/skill-remove.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const cache = path.join(Global.Path.cache, \"skills\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/storage/json-migration.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const storageDir = path.join(Global.Path.data, \"storage\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/system-prompt.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "` Global config: ${Global.Path.config}/ (same structure)`,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/tool/task.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const file = path.join(Global.Path.state, \"model.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/tui/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const file = path.join(Global.Path.config, name)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/tui/config.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.config, \"tui.jsonc\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/kilocode/voice/openai-retention.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "export const make = (fs: FSUtil.Interface, root = path.join(Global.Path.data, \"storage\")) => ({",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await fs.symlink(bin, path.join(Global.Path.bin, \"clangd\")).catch(() => {})",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await fs.unlink(path.join(Global.Path.bin, \"clangd\")).catch(() => {})",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await run([\"tar\", \"-xf\", archive], { cwd: Global.Path.bin })",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await run([\"tar\", \"-xf\", tempPath], { cwd: Global.Path.bin })",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await run([\"tar\", \"-xzf\", tempPath, \"--strip-components=1\"], { cwd: Global.Path.bin })",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "await run([\"tar\", \"-xzf\", tempPath], { cwd: Global.Path.bin })",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"fsautocomplete\" + (process.platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"gopls\" + (process.platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"rubocop\" + (process.platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"terraform-ls\" + (platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"texlab\" + (platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"tinymist\" + (platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "bin = path.join(Global.Path.bin, \"zls\" + (platform === \"win32\" ? \".exe\" : \"\"))",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const archive = path.join(Global.Path.bin, name.endsWith(\".zip\") ? \"clangd.zip\" : \"clangd.tar.xz\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const bin = path.join(Global.Path.bin, \"clangd_\" + tag, \"bin\", \"clangd\" + ext)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const candidate = path.join(Global.Path.bin, entry.name, \"bin\", \"clangd\" + ext)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const cwd = path.join(Global.Path.bin, \"elixir-ls-master\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const direct = path.join(Global.Path.bin, \"clangd\" + ext)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const distPath = path.join(Global.Path.bin, \"jdtls\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const distPath = path.join(Global.Path.bin, \"kotlin-ls\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const elixirLsPath = path.join(Global.Path.bin, \"elixir-ls\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const entries = await fs.readdir(Global.Path.bin, { withFileTypes: true }).catch(() => [])",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const extractedPath = path.join(Global.Path.bin, \"vscode-eslint-main\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const finalPath = path.join(Global.Path.bin, \"vscode-eslint\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const installDir = path.join(Global.Path.bin, `lua-language-server-${lualsArch}-${lualsPlatform}`)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(archive, Global.Path.bin)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(tempPath, Global.Path.bin)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(tempPath, Global.Path.bin)",
+      "ordinal": 2
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(tempPath, Global.Path.bin)",
+      "ordinal": 3
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(tempPath, Global.Path.bin)",
+      "ordinal": 4
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(zipPath, Global.Path.bin)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const ok = await Archive.extractZip(zipPath, Global.Path.bin)",
+      "ordinal": 2
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const proc = Process.spawn([\"dotnet\", \"tool\", \"install\", \"fsautocomplete\", \"--tool-path\", Global.Path.bin], {",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const proc = Process.spawn([\"gem\", \"install\", \"rubocop\", \"--bindir\", Global.Path.bin], {",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const serverPath = path.join(Global.Path.bin, \"vscode-eslint\", \"server\", \"out\", \"eslintServer.js\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const tempPath = path.join(Global.Path.bin, \"terraform-ls.zip\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const tempPath = path.join(Global.Path.bin, `lua-language-server.${ext}`)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const tempPath = path.join(Global.Path.bin, assetName)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const tempPath = path.join(Global.Path.bin, assetName)",
+      "ordinal": 2
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const tempPath = path.join(Global.Path.bin, assetName)",
+      "ordinal": 3
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const zipPath = path.join(Global.Path.bin, \"elixir-ls.zip\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const zipPath = path.join(Global.Path.bin, \"vscode-eslint.zip\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "env: { ...process.env, GOBIN: Global.Path.bin },",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/lsp/server.ts",
+      "member": "bin",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.bin,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/mcp/auth.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "const filepath = path.join(Global.Path.data, \"mcp-auth.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/plugin/install.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "if (input.global) return input.config ?? Global.Path.config",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/plugin/meta.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return Flag.KILO_PLUGIN_META_FILE ?? path.join(Global.Path.state, \"plugin-meta.json\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/plugin/tui/runtime.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const dest_dir = meta.scope === \"local\" ? local_dir : path.join(Global.Path.config, \"themes\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/provider/provider.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const recent = yield* fs.readJson(path.join(Global.Path.state, \"model.json\")).pipe(",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/instance.ts",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "config: Global.Path.config,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/instance.ts",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "home: Global.Path.home,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/instance.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "state: Global.Path.state,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/session/session.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": ": path.join(Global.Path.data, \"plans\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/skill/discovery.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const cache = path.join(Global.Path.cache, \"skills\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/snapshot/index.ts",
+      "member": "cache",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.cache,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/snapshot/index.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "gitdir: path.join(Global.Path.data, \"snapshot\", ctx.project.id, Hash.fast(worktree)),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/snapshot/index.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.data,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/snapshot/index.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "path.join(Global.Path.data, \"snapshot\"),",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/snapshot/index.ts",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "Global.Path.state,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/storage/db.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "data: Global.Path.data,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/storage/db.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "data: Global.Path.data,",
+      "ordinal": 2
+    },
+    {
+      "file": "packages/opencode/src/storage/storage.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const dir = root ?? path.join(Global.Path.data, \"storage\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/repo_clone.ts",
+      "member": "repos",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const localPath = Repository.cachePath(Global.Path.repos, reference)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/shell/prompt.ts",
+      "member": "tmp",
+      "phase": "runtime",
+      "access": "read",
+      "context": "tmp: Global.Path.tmp,",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/tool/truncation-dir.ts",
+      "member": "data",
+      "phase": "module",
+      "access": "read",
+      "context": "export const TRUNCATION_DIR = path.join(Global.Path.data, \"tool-output\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/util/repository.ts",
+      "member": "repos",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.repos, ...input.host.split(\":\"), ...input.segments)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/opencode/src/worktree/index.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const root = pathSvc.join(Global.Path.data, \"worktree\", ctx.project.id)",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/tui/src/component/dialog-status.tsx",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{Global.Path.config.replace(Global.Path.home, \"~\")}",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/tui/src/component/dialog-status.tsx",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{Global.Path.config.replace(Global.Path.home, \"~\")}",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/tui/src/component/dialog-status.tsx",
+      "member": "home",
+      "phase": "runtime",
+      "access": "read",
+      "context": "{project.instance.path().directory.replace(Global.Path.home, \"~\")}",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/tui/src/context/kv.tsx",
+      "member": "state",
+      "phase": "runtime",
+      "access": "read",
+      "context": "void Global.Path.state",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/tui/src/context/theme.tsx",
+      "member": "config",
+      "phase": "runtime",
+      "access": "read",
+      "context": "const directories = [Global.Path.config]",
+      "ordinal": 1
+    }
+  ]
+}

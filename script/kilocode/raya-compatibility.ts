@@ -20,6 +20,7 @@ export function check(
   inventory: string,
   manifests: readonly Manifest[],
   extension: string,
+  paths: string,
 ) {
   if (snapshot.format !== "raya.compatibility-ledger" || snapshot.version !== 1)
     throw new Error("Unsupported compatibility ledger.")
@@ -96,6 +97,33 @@ export function check(
   )
     throw new Error("Database filename grammar differs from the compatibility ledger.")
 
+  const roots = entry(snapshot, "profile-roots")
+  if (
+    !roots.identities.some(
+      (item) =>
+        item.kind === "inventory:global-path-consumers" &&
+        item.legacy === "script/global-path-consumers.json" &&
+        item.policy === "legacy-canonical",
+    )
+  )
+    throw new Error("Global.Path consumer inventory is not bound to the profile-root migration.")
+  const consumers = JSON.parse(paths) as {
+    format?: unknown
+    version?: unknown
+    policy?: unknown
+    total?: { count?: unknown }
+    consumers?: unknown[]
+  }
+  if (
+    consumers.format !== "raya.global-path-consumers" ||
+    consumers.version !== 1 ||
+    consumers.policy !== "inventory-only-no-cutover-evidence" ||
+    typeof consumers.total?.count !== "number" ||
+    consumers.total.count === 0 ||
+    consumers.consumers?.length !== consumers.total.count
+  )
+    throw new Error("Global.Path consumer inventory is invalid or incorrectly claims cutover evidence.")
+
   const pkg = JSON.parse(extension) as { publisher?: string; name?: string }
   const editor = entry(snapshot, "editor-distribution")
   if (
@@ -127,11 +155,12 @@ if (import.meta.main) {
   )
   if (list.exitCode !== 0) throw new Error("Cannot enumerate tracked package manifests.")
   const files = list.stdout.toString().replaceAll("\r\n", "\n").trim().split("\n").filter(Boolean)
-  const [inventory, extension, manifests] = await Promise.all([
+  const [inventory, extension, paths, manifests] = await Promise.all([
     Bun.file(path.join(root, "script/raya-brand-inventory.json")).text(),
     Bun.file(path.join(root, "packages/kilo-vscode/package.json")).text(),
+    Bun.file(path.join(root, "script/global-path-consumers.json")).text(),
     Promise.all(files.map(async (file) => ({ file, text: await Bun.file(path.join(root, file)).text() }))),
   ])
-  check(RayaMigrationLedger.snapshot, inventory, manifests, extension)
+  check(RayaMigrationLedger.snapshot, inventory, manifests, extension, paths)
   console.log("Raya compatibility ledger verified.")
 }

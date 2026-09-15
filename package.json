@@ -13,6 +13,7 @@
     "lint": "oxlint",
     "check:architecture": "bun run script/check-architecture.ts",
     "check:brand-inventory": "bun run script/check-raya-brand-inventory.ts",
+    "check:global-path-consumers": "bun run script/kilocode/global-path-consumers.ts",
     "typecheck": "bun turbo typecheck",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty && bun run script/setup-git.ts",

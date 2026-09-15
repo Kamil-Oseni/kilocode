@@ -22,14 +22,15 @@ const files = [
   "packages/sdk/js/package.json",
   "script/upstream/package.json",
 ]
-const [inventory, extension, manifests] = await Promise.all([
+const [inventory, extension, paths, manifests] = await Promise.all([
   Bun.file(new URL("script/raya-brand-inventory.json", root)).text(),
   Bun.file(new URL("packages/kilo-vscode/package.json", root)).text(),
+  Bun.file(new URL("script/global-path-consumers.json", root)).text(),
   Promise.all(files.map(async (file) => ({ file, text: await Bun.file(new URL(file, root)).text() }))),
 ])
 
 test("the real tree agrees with the fail-closed compatibility ledger", () => {
-  expect(() => check(RayaMigrationLedger.snapshot, inventory, manifests, extension)).not.toThrow()
+  expect(() => check(RayaMigrationLedger.snapshot, inventory, manifests, extension, paths)).not.toThrow()
 })
 
 test("package, command, baseline and editor drift fail closed", () => {
@@ -47,15 +48,34 @@ test("package, command, baseline and editor drift fail closed", () => {
       brand: inventory,
       vscode: extension,
     },
-    { list: manifests, brand: inventory.replace('"count": 35157', '"count": 35158'), vscode: extension },
+    { list: manifests, brand: inventory.replace('"count": 35162', '"count": 35163'), vscode: extension },
     { list: manifests, brand: inventory, vscode: extension.replace('"publisher": "eden"', '"publisher": "other"') },
   ]
   for (const item of cases)
-    expect(() => check(RayaMigrationLedger.snapshot, item.brand, item.list, item.vscode)).toThrow()
+    expect(() => check(RayaMigrationLedger.snapshot, item.brand, item.list, item.vscode, paths)).toThrow()
+})
+
+test("profile-root inventory cannot disappear or claim cutover evidence", () => {
+  const missing = structuredClone(RayaMigrationLedger.snapshot) as unknown as RayaMigrationLedger.Snapshot
+  const roots = missing.entries.find((item) => item.id === "profile-roots")!
+  ;(roots.identities as Array<{ kind: string }>).splice(
+    roots.identities.findIndex((item) => item.kind === "inventory:global-path-consumers"),
+    1,
+  )
+  expect(() => check(missing, inventory, manifests, extension, paths)).toThrow()
+  expect(() =>
+    check(
+      RayaMigrationLedger.snapshot,
+      inventory,
+      manifests,
+      extension,
+      paths.replace("inventory-only-no-cutover-evidence", "cutover-ready"),
+    ),
+  ).toThrow()
 })
 
 test("version 1 cannot declare a cutover ready", () => {
   const snapshot = structuredClone(RayaMigrationLedger.snapshot) as unknown as RayaMigrationLedger.Snapshot
   ;(snapshot.entries[0] as { cutoverReady: boolean }).cutoverReady = true
-  expect(() => check(snapshot, inventory, manifests, extension)).toThrow()
+  expect(() => check(snapshot, inventory, manifests, extension, paths)).toThrow()
 })

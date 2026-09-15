@@ -6,6 +6,18 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:10 America/Toronto - Canonical storage migration now has a fail-closed consumer inventory
+
+**Status: implemented and verified locally; commit and push remain, installation is not required.** A TypeScript-AST guard now inventories every tracked or untracked production source access to the canonical `Global.Path` object. The reviewed baseline contains **205 accesses across 78 files**, split across all nine supported roots, with **zero production assignments**, **one bounded diagnostic enumeration**, and **eight module-scope captures**. CI runs both the real-tree guard and its focused test suite.
+
+The eight eager captures are now explicit: the shared agent truncation glob, CLI auth file, global plug command directory, run-command model state, sandbox preference root, sandbox policy root, MCP auth file and tool truncation directory. These are the exact locations that must become generation-aware before any live profile-root cutover. The guard also binds the producer object and exported interface to the reviewed nine-field set, so adding a root cannot silently bypass the inventory.
+
+The scanner follows normal, aliased, direct-`Path`, namespace and dynamic-import bindings. It accepts static property and bracket access, distinguishes runtime from module scope and reads from assignments, ignores comments/strings and unrelated local objects, and rejects dynamic members, unknown roots, bare object escape and unbounded enumeration. A future source addition, removal, context change, module-capture change, file change, count change or policy change fails until the baseline is reviewed. The inventory includes normalized source context and no line-number identity, so line movement does not create false drift.
+
+The focused suite passes **5 tests / 20 assertions** and the real-tree check reports 205 consumers, eight module captures and no drift. The compatibility checker passes **4 tests / 8 assertions** and now requires `script/global-path-consumers.json` under the `profile-roots` entry while rejecting any claim that this inventory is cutover evidence. The bounded CLI typecheck passes. This slice does not copy, open, rename, delete or redirect any user file; Version 1 remains unable to declare cutover ready.
+
+The refreshed repository inventory classifies **69,042** references: **1,693** potential public defects, **35,162** compatibility identities, **5,686** provenance references and **26,501** internal migration references.
+
 ## ChatGPT 2026-09-15 16:52 America/Toronto - Every model-catalog reader now accepts the Raya URL
 
 **Status: implemented, verified and pushed in `75436a8cdb`; installation is batched.** `RAYA_MODELS_URL` now takes precedence over the unchanged `KILO_MODELS_URL` fallback in the shared runtime flag, UI provider-icon build, generated catalog script and extension CLI-cache fingerprint. CLI smoke tests clear both names so a developer override cannot contaminate packaged-binary validation. The existing mutable `Flag.KILO_MODELS_URL` API remains available and writes both names.

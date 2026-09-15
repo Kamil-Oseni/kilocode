@@ -72,4 +72,6 @@ jobs:
       - run: bun test ./script/kilocode/raya-support.test.ts
       - run: bun run script/kilocode/raya-compatibility.ts
       - run: bun test ./script/kilocode/raya-compatibility.test.ts
+      - run: bun run check:global-path-consumers
+      - run: bun test ./script/kilocode/global-path-consumers.test.ts
   # kilocode_change end

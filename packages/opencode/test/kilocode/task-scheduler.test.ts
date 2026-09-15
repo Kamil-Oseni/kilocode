@@ -1028,6 +1028,15 @@ for (const trigger of [{ kind: "manual" as const }, { kind: "event" as const, so
         expect(yield* continuation({ ...input, session })).toBe(false)
         yield* input.storage.remove(key)
         expect(yield* continuation({ ...input, session })).toBe(true)
+        const run = (yield* tasks.runsFor(agent.id))[0]!
+        expect(yield* tasks.transition(run, { ...run, status: "error", blockedReason: "Stopped" })).toBe(true)
+        expect(yield* continuation({ ...input, session })).toBe(false)
+        expect(
+          yield* continuation({
+            ...input,
+            session: { ...session, metadata: { rayaRoutine: { ...identity, runID: "missing" } } },
+          }),
+        ).toBe(false)
       }).pipe(Effect.provide(state(directory)))
     }),
   )
@@ -1178,7 +1187,7 @@ it.live("automatic resume requires matching linked history and live local queue 
           ...input,
           session: { ...session, metadata: { rayaRoutine: { ...identity, trigger: { kind: "manual" } } } },
         }),
-      ).toBe(true)
+      ).toBe(false)
     }).pipe(Effect.provide(state(directory)))
   }),
 )

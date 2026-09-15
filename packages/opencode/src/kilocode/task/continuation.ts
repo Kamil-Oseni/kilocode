@@ -28,6 +28,15 @@ export function continuation(input: {
     const identity = yield* Schema.decodeUnknownEffect(record)(raw).pipe(Effect.orElseSucceed(() => undefined))
     if (!identity) return false
     if (identity.trigger.kind !== "timer") {
+      const history = yield* RayaTask.make(input).runsFor(identity.agentID)
+      const run = history.find(
+        (run) =>
+          run.id === identity.runID &&
+          run.sessionID === input.session.id &&
+          run.scheduleVersion === identity.scheduleVersion &&
+          isDeepStrictEqual(run.trigger, identity.trigger),
+      )
+      if (!run || !RayaTask.pending(run)) return false
       const claim = yield* inspect(input.storage, identity.agentID)
       if (!claim) return true
       if (
@@ -37,15 +46,7 @@ export function continuation(input: {
         claim.sessionID !== input.session.id
       )
         return false
-      const history = yield* RayaTask.make(input).runsFor(identity.agentID)
-      return history.some(
-        (run) =>
-          run.id === identity.runID &&
-          run.sessionID === input.session.id &&
-          run.scheduleVersion === identity.scheduleVersion &&
-          isDeepStrictEqual(run.trigger, identity.trigger) &&
-          RayaTask.pending(run),
-      )
+      return true
     }
     if (!input.database) return false
     const row = yield* RayaTaskQueue.make(input.database).get(identity.trigger.id).pipe(Effect.orDie)

@@ -95,11 +95,20 @@ it.live("supports manual create, list, update, completion, reopening, and deleti
         )
       expect(open).toEqual({ ...done, done: false, completedAt: undefined, updatedAt: 400, revision: 3 })
       expect((yield* todos.update(first, { revision: one.revision, title: "Stale" }).pipe(Effect.flip))._tag).toBe(
-        "PersonalTodoConflictError",
+        "PersonalTodoStaleRevisionError",
       )
+      const stale = yield* todos.remove(first, one.revision).pipe(Effect.flip)
+      expect(stale).toMatchObject({
+        _tag: "PersonalTodoStaleRevisionError",
+        id: first,
+        operation: "delete",
+        expected: 1,
+        actual: 3,
+      })
       expect(yield* todos.remove(second, two.revision)).toBe(true)
       expect(yield* todos.remove(second, two.revision)).toBe(false)
       expect(yield* todos.get(second)).toBeUndefined()
+      expect(yield* todos.update(second, { revision: two.revision, title: "Already deleted" })).toBeUndefined()
       expect(yield* todos.list()).toEqual([open])
       expect(two.version).toBe(1)
     }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))

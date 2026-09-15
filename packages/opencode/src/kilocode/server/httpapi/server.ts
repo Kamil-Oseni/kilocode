@@ -33,6 +33,7 @@ import { suggestionHandlers } from "./handlers/suggestion"
 import { capabilitiesHandlers } from "./handlers/capabilities"
 import { telemetryHandlers } from "./handlers/telemetry"
 import { voiceHandlers } from "./handlers/voice" // raya_change - realtime voice async plane
+import { personalTodoHandlers } from "./handlers/personal-todo"
 
 export const provide = Layer.provide([
   agentBuilderHandlers,
@@ -57,6 +58,7 @@ export const provide = Layer.provide([
   capabilitiesHandlers,
   telemetryHandlers,
   voiceHandlers, // raya_change - realtime voice async plane
+  personalTodoHandlers,
 ])
 
 export function provideListener(opts?: CorsOptions) {

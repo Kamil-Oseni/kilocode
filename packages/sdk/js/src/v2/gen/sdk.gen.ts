@@ -528,6 +528,16 @@ import type {
   QuestionReplyErrors,
   QuestionReplyResponses,
   QuestionV2Reply,
+  RayaPersonalTodoCreateErrors,
+  RayaPersonalTodoCreateResponses,
+  RayaPersonalTodoDeleteErrors,
+  RayaPersonalTodoDeleteResponses,
+  RayaPersonalTodoGetErrors,
+  RayaPersonalTodoGetResponses,
+  RayaPersonalTodoListErrors,
+  RayaPersonalTodoListResponses,
+  RayaPersonalTodoUpdateErrors,
+  RayaPersonalTodoUpdateResponses,
   RemoteDisableErrors,
   RemoteDisableResponses,
   RemoteEnableErrors,
@@ -13490,6 +13500,213 @@ export class Memory extends HeyApiClient {
   }
 }
 
+export class PersonalTodo extends HeyApiClient {
+  /**
+   * List personal todos
+   *
+   * List durable personal todos, with open items first.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaPersonalTodoListResponses,
+      RayaPersonalTodoListErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a personal todo
+   *
+   * Create one durable personal todo without starting agent work.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      title?: string
+      detail?: string
+      dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "title" },
+            { in: "body", key: "detail" },
+            { in: "body", key: "dueAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoCreateResponses,
+      RayaPersonalTodoCreateErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a personal todo
+   *
+   * Delete the exact retained revision of a personal todo.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      todoID: string
+      directory?: string
+      workspace?: string
+      revision: string | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "todoID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      RayaPersonalTodoDeleteResponses,
+      RayaPersonalTodoDeleteErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/{todoID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a personal todo
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      todoID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "todoID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RayaPersonalTodoGetResponses, RayaPersonalTodoGetErrors, ThrowOnError>({
+      url: "/raya/personal-todos/{todoID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update a personal todo
+   *
+   * Update the exact retained revision of a personal todo.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      todoID: string
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      title?: string
+      detail?: string
+      done?: boolean
+      dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "todoID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "title" },
+            { in: "body", key: "detail" },
+            { in: "body", key: "done" },
+            { in: "body", key: "dueAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      RayaPersonalTodoUpdateResponses,
+      RayaPersonalTodoUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/{todoID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Raya extends HeyApiClient {
+  private _personalTodo?: PersonalTodo
+  get personalTodo(): PersonalTodo {
+    return (this._personalTodo ??= new PersonalTodo({ client: this.client }))
+  }
+}
+
 export class Health extends HeyApiClient {
   /**
    * Check server health
@@ -15782,6 +15999,11 @@ export class KiloClient extends HeyApiClient {
   private _memory?: Memory
   get memory(): Memory {
     return (this._memory ??= new Memory({ client: this.client }))
+  }
+
+  private _raya?: Raya
+  get raya(): Raya {
+    return (this._raya ??= new Raya({ client: this.client }))
   }
 
   private _v2?: V2

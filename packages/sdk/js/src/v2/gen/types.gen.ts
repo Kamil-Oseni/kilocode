@@ -6035,6 +6035,17 @@ export type OpenAiVoiceCallInput = {
   itemID?: string
 }
 
+export type PersonalTodoStaleRevisionError = {
+  name: "PersonalTodoStaleRevisionError"
+  data: {
+    id: string
+    operation: "update" | "delete"
+    expected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    actual: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    message: string
+  }
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -27913,6 +27924,247 @@ export type KilocodeVoiceEventResponses = {
 }
 
 export type KilocodeVoiceEventResponse = KilocodeVoiceEventResponses[keyof KilocodeVoiceEventResponses]
+
+export type RayaPersonalTodoListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos"
+}
+
+export type RayaPersonalTodoListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoListError = RayaPersonalTodoListErrors[keyof RayaPersonalTodoListErrors]
+
+export type RayaPersonalTodoListResponses = {
+  /**
+   * Personal todos
+   */
+  200: Array<{
+    version: 1
+    id: string
+    title: string
+    detail?: string
+    done: boolean
+    dueAt?: number
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+  }>
+}
+
+export type RayaPersonalTodoListResponse = RayaPersonalTodoListResponses[keyof RayaPersonalTodoListResponses]
+
+export type RayaPersonalTodoCreateData = {
+  body?: {
+    title: string
+    detail?: string
+    dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos"
+}
+
+export type RayaPersonalTodoCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoCreateError = RayaPersonalTodoCreateErrors[keyof RayaPersonalTodoCreateErrors]
+
+export type RayaPersonalTodoCreateResponses = {
+  /**
+   * Created personal todo
+   */
+  200: {
+    version: 1
+    id: string
+    title: string
+    detail?: string
+    done: boolean
+    dueAt?: number
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+  }
+}
+
+export type RayaPersonalTodoCreateResponse = RayaPersonalTodoCreateResponses[keyof RayaPersonalTodoCreateResponses]
+
+export type RayaPersonalTodoDeleteData = {
+  body?: never
+  path: {
+    todoID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    revision: string | "Infinity" | "-Infinity" | "NaN"
+  }
+  url: "/raya/personal-todos/{todoID}"
+}
+
+export type RayaPersonalTodoDeleteErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoDeleteError = RayaPersonalTodoDeleteErrors[keyof RayaPersonalTodoDeleteErrors]
+
+export type RayaPersonalTodoDeleteResponses = {
+  /**
+   * Deleted personal todo
+   */
+  200: boolean
+}
+
+export type RayaPersonalTodoDeleteResponse = RayaPersonalTodoDeleteResponses[keyof RayaPersonalTodoDeleteResponses]
+
+export type RayaPersonalTodoGetData = {
+  body?: never
+  path: {
+    todoID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/{todoID}"
+}
+
+export type RayaPersonalTodoGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoGetError = RayaPersonalTodoGetErrors[keyof RayaPersonalTodoGetErrors]
+
+export type RayaPersonalTodoGetResponses = {
+  /**
+   * Personal todo
+   */
+  200: {
+    version: 1
+    id: string
+    title: string
+    detail?: string
+    done: boolean
+    dueAt?: number
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+  }
+}
+
+export type RayaPersonalTodoGetResponse = RayaPersonalTodoGetResponses[keyof RayaPersonalTodoGetResponses]
+
+export type RayaPersonalTodoUpdateData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    title?: string
+    detail?: string
+    done?: boolean
+    dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    todoID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/{todoID}"
+}
+
+export type RayaPersonalTodoUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoUpdateError = RayaPersonalTodoUpdateErrors[keyof RayaPersonalTodoUpdateErrors]
+
+export type RayaPersonalTodoUpdateResponses = {
+  /**
+   * Updated personal todo
+   */
+  200: {
+    version: 1
+    id: string
+    title: string
+    detail?: string
+    done: boolean
+    dueAt?: number
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+  }
+}
+
+export type RayaPersonalTodoUpdateResponse = RayaPersonalTodoUpdateResponses[keyof RayaPersonalTodoUpdateResponses]
 
 export type V2HealthGetData = {
   body?: never

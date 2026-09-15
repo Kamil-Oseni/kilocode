@@ -25,6 +25,15 @@ export namespace PersonalTodo {
   })
   export type Info = typeof Info.Type
 
+  const Tombstone = Schema.Struct({
+    version: Schema.Literal(1),
+    id: Schema.String,
+    deleted: Schema.Literal(true),
+    deletedAt: Time,
+    revision: Revision,
+  })
+  const Stored = Schema.Union([Info, Tombstone])
+
   export type Create = {
     title: string
     detail?: string
@@ -49,7 +58,18 @@ export namespace PersonalTodo {
     message: Schema.String,
   }) {}
 
-  type Store = Pick<Storage.Interface, "create" | "list" | "read" | "remove" | "update">
+  export class StaleRevisionError extends Schema.TaggedErrorClass<StaleRevisionError>()(
+    "PersonalTodoStaleRevisionError",
+    {
+      id: Schema.String,
+      operation: Schema.Literals(["update", "delete"]),
+      expected: Revision,
+      actual: Revision,
+      message: Schema.String,
+    },
+  ) {}
+
+  type Store = Pick<Storage.Interface, "create" | "list" | "read" | "update">
   type Deps = {
     storage: Store
     now?: () => number
@@ -60,6 +80,7 @@ export namespace PersonalTodo {
   const pattern = /^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   const key = (id: string) => [...prefix, id]
   const decode = Schema.decodeUnknownEffect(Info)
+  const stored = Schema.decodeUnknownEffect(Stored)
 
   const valid = (value: number) => Number.isFinite(value) && Math.abs(value) <= 8.64e15
 
@@ -98,12 +119,11 @@ export namespace PersonalTodo {
     }
     const read = (id: string) =>
       deps.storage.read<unknown>(key(id)).pipe(
-        Effect.flatMap(decode),
-        Effect.flatMap((item) =>
-          item.id === id
-            ? Effect.succeed(item)
-            : Effect.die(new Error("Personal todo identity does not match its storage key.")),
-        ),
+        Effect.flatMap(stored),
+        Effect.flatMap((item) => {
+          if (item.id !== id) return Effect.die(new Error("Personal todo identity does not match its storage key."))
+          return "deleted" in item ? Effect.succeed(undefined) : Effect.succeed(item)
+        }),
         Effect.catchIf(
           (err) => Storage.NotFoundError.isInstance(err),
           () => Effect.succeed(undefined),
@@ -156,12 +176,16 @@ export namespace PersonalTodo {
       const name = input.title === undefined ? undefined : yield* title(input.title)
       const notes = input.detail === undefined ? undefined : yield* detail(input.detail)
       const date = input.dueAt === undefined ? undefined : yield* due(input.dueAt)
-      const state = { conflict: false }
+      const state: { actual?: number; missing?: boolean } = {}
       const raw = yield* deps.storage
         .update<Record<string, unknown>>(key(id), (draft) => {
-          const prior = Schema.decodeUnknownSync(Info)(draft)
+          const prior = Schema.decodeUnknownSync(Stored)(draft)
+          if ("deleted" in prior) {
+            state.missing = true
+            return
+          }
           if (prior.revision !== expected || prior.revision === Number.MAX_SAFE_INTEGER) {
-            state.conflict = true
+            state.actual = prior.revision
             return
           }
           const done = input.done ?? prior.done
@@ -185,19 +209,59 @@ export namespace PersonalTodo {
           ),
           Effect.orDie,
         )
-      if (state.conflict)
-        return yield* new ConflictError({ id, message: "The personal todo changed before this update." })
+      if (state.actual !== undefined)
+        return yield* new StaleRevisionError({
+          id,
+          operation: "update",
+          expected,
+          actual: state.actual,
+          message: "The personal todo changed before this update.",
+        })
+      if (state.missing) return undefined
       return raw === undefined ? undefined : yield* decode(raw).pipe(Effect.orDie)
     })
 
     const remove = Effect.fn("PersonalTodo.remove")(function* (id: string, expected: number) {
       yield* identity(id)
       yield* revision(expected)
-      const item = yield* read(id)
-      if (!item) return false
-      if (item.revision !== expected)
-        return yield* new ConflictError({ id, message: "The personal todo changed before this deletion." })
-      yield* deps.storage.remove(key(id)).pipe(Effect.orDie)
+      const at = yield* clock()
+      const state: { actual?: number; missing?: boolean } = {}
+      const raw = yield* deps.storage
+        .update<Record<string, unknown>>(key(id), (draft) => {
+          const prior = Schema.decodeUnknownSync(Stored)(draft)
+          if ("deleted" in prior) {
+            state.missing = true
+            return
+          }
+          if (prior.revision !== expected || prior.revision === Number.MAX_SAFE_INTEGER) {
+            state.actual = prior.revision
+            return
+          }
+          for (const field of Object.keys(draft)) delete draft[field]
+          Object.assign(draft, {
+            version: 1,
+            id,
+            deleted: true,
+            deletedAt: Math.max(at, prior.updatedAt),
+            revision: prior.revision + 1,
+          } satisfies typeof Tombstone.Type)
+        })
+        .pipe(
+          Effect.catchIf(
+            (err) => Storage.NotFoundError.isInstance(err),
+            () => Effect.succeed(undefined),
+          ),
+          Effect.orDie,
+        )
+      if (state.actual !== undefined)
+        return yield* new StaleRevisionError({
+          id,
+          operation: "delete",
+          expected,
+          actual: state.actual,
+          message: "The personal todo changed before this deletion.",
+        })
+      if (raw === undefined || state.missing) return false
       return true
     })
 

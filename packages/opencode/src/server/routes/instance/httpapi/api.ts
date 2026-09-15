@@ -47,6 +47,7 @@ import { CapabilitiesApi } from "@/kilocode/server/httpapi/groups/capabilities"
 import { TelemetryApi } from "@/kilocode/server/httpapi/groups/telemetry"
 import { MemoryApi } from "@/kilocode/server/httpapi/groups/memory" // kilocode_change
 import { VoiceApi } from "@/kilocode/server/httpapi/groups/voice" // kilocode_change // raya_change - realtime voice async plane
+import { PersonalTodoApi } from "@/kilocode/server/httpapi/groups/personal-todo"
 // kilocode_change end
 import { makeApi } from "@opencode-ai/protocol/api"
 import { LocationMiddleware } from "@opencode-ai/server/location"
@@ -119,6 +120,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(TelemetryApi)
   .addHttpApi(MemoryApi)
   .addHttpApi(VoiceApi) // kilocode_change // raya_change - realtime voice async plane
+  .addHttpApi(PersonalTodoApi)
   // kilocode_change end
   .middleware(SchemaErrorMiddleware)
 

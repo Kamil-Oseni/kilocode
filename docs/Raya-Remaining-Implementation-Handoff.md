@@ -1,6 +1,12 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `919d9e77ab`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `d6cdee2f0a`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The former cross-package `@opencode-ai/tui` typecheck blocker is repaired locally; push and snapshot receipts remain pending. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 11:56 America/Toronto - Normal push gate is locally green
+
+Preserve commits `5b16f516c0`, `b2a69fb304`, `8066768d99`, `98e16d4e69`, `37cf77484e`, `ca697f7eaa` and `d6cdee2f0a`. They close the remaining Voice/Search admission, session usage/retention, HTTP error-mapping, Routine recovery, document rendering and image billing type clusters without weakening runtime ownership or billing ambiguity. Focused evidence passes 50 Voice/Search tests, 8 session tests, 18 HTTP tests, 14 Routine claim/mutation tests, two selected recovery scenarios with 41 assertions, 23 follow-up Voice/Search tests and 31 document/image tests with 130 assertions.
+
+The bounded one-worker `@opencode-ai/tui` gate now passes 13/13 tasks in 34 seconds. The normal pre-push blocker described in older entries is closed. Run the normal hook-driven push with `TURBO_CONCURRENCY=1`, `GOMAXPROCS=1` and a capped heap; do not bypass hooks. If it passes, run the already-authorized sequential `RAYA_LOW_MEMORY=1` snapshot install, record artifact hashes, cleanup, free disk and active-host pointer, then continue the merged implementation order. Keep both Version 3 migrations deferred.
 
 ## ChatGPT 2026-09-15 11:39 America/Toronto - Continue the reduced stability gate
 

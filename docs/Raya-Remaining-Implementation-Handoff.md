@@ -1,6 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `29ce096d08`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `ca9e3f48f6`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 10:10 America/Toronto - Continue after isolated Admin probes and truthful recent logs
+
+Preserve `3589bd0dcf`. Agent-list and Routine-history promises are independent but begin after one shared runtime-state read. Agents depends only on the list; Routines depends on both. Do not recombine them: history-only failure must leave the exact Agents row available, while list failure still fails both dependent rows. The new failure case also proves one read per source and no raw path/token/error disclosure. Focused service evidence is 4 / 12.
+
+Preserve `ca9e3f48f6`. `RayaAdminLog.list({ limit })` returns the newest retained page in ascending sequence order. Supplying `after`, including `after: 0`, switches to forward cursor pagination. The extension's no-cursor request therefore matches its Recent diagnostics label, while API consumers can still enumerate from the start. Focused log plus real-HTTP evidence is 6 / 37; generated OpenAPI/SDK copy documents the contract and capped SDK typecheck passes.
+
+The smallest next Admin slice is in `packages/kilo-vscode/src/kilo-provider/admin.ts`: if health succeeds and the subsequent logs call throws, post the fresh health with an explicit log error instead of discarding both. Test thrown logs, ordinary non-2xx logs, thrown health, mismatched request IDs and retained redaction. After that, connect closed diagnostic codes to real lifecycle boundaries. Browser/voice host probes and installed acceptance remain separate cross-process work. The repository's current Oxlint configuration is independently rejected because `options.typeAware` is not accepted at that config position; do not alter unrelated lint settings merely to make these checkpoints green.
 
 ## ChatGPT 2026-09-15 09:58 America/Toronto - Continue the active goal after reviewed Todo UI
 

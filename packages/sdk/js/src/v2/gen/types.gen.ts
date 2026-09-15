@@ -6046,6 +6046,23 @@ export type PersonalTodoStaleRevisionError = {
   }
 }
 
+export type PersonalTodoProposalStaleRevisionError = {
+  name: "PersonalTodoProposalStaleRevisionError"
+  data: {
+    proposalID: string
+    todoID: string
+    expected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    actual?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    message: string
+  }
+}
+
+export type UnknownError1 = {
+  _tag: "UnknownError"
+  message: string
+  ref?: string
+}
+
 export type FocusTimerStaleRevisionError = {
   name: "FocusTimerStaleRevisionError"
   data: {
@@ -6103,7 +6120,7 @@ export type MessageNotFoundError = {
   message: string
 }
 
-export type UnknownError1 = {
+export type UnknownError2 = {
   _tag: "UnknownError"
   message: string
   ref?: string
@@ -27967,14 +27984,42 @@ export type RayaPersonalTodoListResponses = {
    * Personal todos
    */
   200: Array<{
-    version: 1
+    version: 1 | 2
     id: string
     title: string
     detail?: string
+    status: "open" | "completed"
     done: boolean
+    priority?: "low" | "medium" | "high" | "urgent"
+    estimateMinutes?: number
     dueAt?: number
     reminderAt?: number
     reminderRevision?: number
+    links?: Array<{
+      kind: "chat" | "routine" | "goal" | "session"
+      id: string
+    }>
+    subtasks?: Array<{
+      version: 1
+      id: string
+      title: string
+      notes?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }>
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -28021,14 +28066,42 @@ export type RayaPersonalTodoCreateResponses = {
    * Created personal todo
    */
   200: {
-    version: 1
+    version: 1 | 2
     id: string
     title: string
     detail?: string
+    status: "open" | "completed"
     done: boolean
+    priority?: "low" | "medium" | "high" | "urgent"
+    estimateMinutes?: number
     dueAt?: number
     reminderAt?: number
     reminderRevision?: number
+    links?: Array<{
+      kind: "chat" | "routine" | "goal" | "session"
+      id: string
+    }>
+    subtasks?: Array<{
+      version: 1
+      id: string
+      title: string
+      notes?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }>
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -28137,6 +28210,620 @@ export type RayaPersonalTodoAcknowledgeReminderResponses = {
 export type RayaPersonalTodoAcknowledgeReminderResponse =
   RayaPersonalTodoAcknowledgeReminderResponses[keyof RayaPersonalTodoAcknowledgeReminderResponses]
 
+export type RayaPersonalTodoListProposalsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/proposals"
+}
+
+export type RayaPersonalTodoListProposalsErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoProposalStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoProposalStaleRevisionError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type RayaPersonalTodoListProposalsError =
+  RayaPersonalTodoListProposalsErrors[keyof RayaPersonalTodoListProposalsErrors]
+
+export type RayaPersonalTodoListProposalsResponses = {
+  /**
+   * Personal Todo proposals
+   */
+  200: Array<{
+    proposal: {
+      version: 1
+      id: string
+      digest: string
+      createdAt: number
+      source: {
+        sessionID: string
+        messageID: string
+        callID: string
+      }
+      target:
+        | {
+            kind: "existing"
+            todoID: string
+            baseRevision: number
+          }
+        | {
+            kind: "new"
+            todoID: string
+            baseRevision: 0
+          }
+      changes: {
+        title?: string
+        detail?: string | null
+        dueAt?: number | null
+        reminderAt?: number | null
+        priority?: "low" | "medium" | "high" | "urgent" | null
+        estimateMinutes?: number | null
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }> | null
+        subtasks?: Array<
+          | {
+              kind: "new"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              priority?: "low" | "medium" | "high" | "urgent"
+              estimateMinutes?: number
+              dueAt?: number
+              notes?: string
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }>
+            }
+          | {
+              kind: "existing"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              revision: number
+              priority?: "low" | "medium" | "high" | "urgent" | null
+              estimateMinutes?: number | null
+              dueAt?: number | null
+              notes?: string | null
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }> | null
+            }
+        >
+      }
+    }
+    state: "open" | "pending" | "applied" | "rejected"
+    todo?: {
+      version: 1 | 2
+      id: string
+      title: string
+      detail?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      subtasks?: Array<{
+        version: 1
+        id: string
+        title: string
+        notes?: string
+        status: "open" | "completed"
+        done: boolean
+        priority?: "low" | "medium" | "high" | "urgent"
+        estimateMinutes?: number
+        dueAt?: number
+        reminderAt?: number
+        reminderRevision?: number
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }>
+        createdAt: number
+        updatedAt: number
+        completedAt?: number
+        revision: number
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }
+  }>
+}
+
+export type RayaPersonalTodoListProposalsResponse =
+  RayaPersonalTodoListProposalsResponses[keyof RayaPersonalTodoListProposalsResponses]
+
+export type RayaPersonalTodoGetProposalData = {
+  body?: never
+  path: {
+    proposalID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/proposals/{proposalID}"
+}
+
+export type RayaPersonalTodoGetProposalErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoProposalStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoProposalStaleRevisionError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type RayaPersonalTodoGetProposalError =
+  RayaPersonalTodoGetProposalErrors[keyof RayaPersonalTodoGetProposalErrors]
+
+export type RayaPersonalTodoGetProposalResponses = {
+  /**
+   * Personal Todo proposal
+   */
+  200: {
+    proposal: {
+      version: 1
+      id: string
+      digest: string
+      createdAt: number
+      source: {
+        sessionID: string
+        messageID: string
+        callID: string
+      }
+      target:
+        | {
+            kind: "existing"
+            todoID: string
+            baseRevision: number
+          }
+        | {
+            kind: "new"
+            todoID: string
+            baseRevision: 0
+          }
+      changes: {
+        title?: string
+        detail?: string | null
+        dueAt?: number | null
+        reminderAt?: number | null
+        priority?: "low" | "medium" | "high" | "urgent" | null
+        estimateMinutes?: number | null
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }> | null
+        subtasks?: Array<
+          | {
+              kind: "new"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              priority?: "low" | "medium" | "high" | "urgent"
+              estimateMinutes?: number
+              dueAt?: number
+              notes?: string
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }>
+            }
+          | {
+              kind: "existing"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              revision: number
+              priority?: "low" | "medium" | "high" | "urgent" | null
+              estimateMinutes?: number | null
+              dueAt?: number | null
+              notes?: string | null
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }> | null
+            }
+        >
+      }
+    }
+    state: "open" | "pending" | "applied" | "rejected"
+    todo?: {
+      version: 1 | 2
+      id: string
+      title: string
+      detail?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      subtasks?: Array<{
+        version: 1
+        id: string
+        title: string
+        notes?: string
+        status: "open" | "completed"
+        done: boolean
+        priority?: "low" | "medium" | "high" | "urgent"
+        estimateMinutes?: number
+        dueAt?: number
+        reminderAt?: number
+        reminderRevision?: number
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }>
+        createdAt: number
+        updatedAt: number
+        completedAt?: number
+        revision: number
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }
+  }
+}
+
+export type RayaPersonalTodoGetProposalResponse =
+  RayaPersonalTodoGetProposalResponses[keyof RayaPersonalTodoGetProposalResponses]
+
+export type RayaPersonalTodoApplyProposalData = {
+  body?: {
+    digest: string
+  }
+  path: {
+    proposalID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/proposals/{proposalID}/apply"
+}
+
+export type RayaPersonalTodoApplyProposalErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoProposalStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoProposalStaleRevisionError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type RayaPersonalTodoApplyProposalError =
+  RayaPersonalTodoApplyProposalErrors[keyof RayaPersonalTodoApplyProposalErrors]
+
+export type RayaPersonalTodoApplyProposalResponses = {
+  /**
+   * Applied personal Todo proposal
+   */
+  200: {
+    proposal: {
+      version: 1
+      id: string
+      digest: string
+      createdAt: number
+      source: {
+        sessionID: string
+        messageID: string
+        callID: string
+      }
+      target:
+        | {
+            kind: "existing"
+            todoID: string
+            baseRevision: number
+          }
+        | {
+            kind: "new"
+            todoID: string
+            baseRevision: 0
+          }
+      changes: {
+        title?: string
+        detail?: string | null
+        dueAt?: number | null
+        reminderAt?: number | null
+        priority?: "low" | "medium" | "high" | "urgent" | null
+        estimateMinutes?: number | null
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }> | null
+        subtasks?: Array<
+          | {
+              kind: "new"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              priority?: "low" | "medium" | "high" | "urgent"
+              estimateMinutes?: number
+              dueAt?: number
+              notes?: string
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }>
+            }
+          | {
+              kind: "existing"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              revision: number
+              priority?: "low" | "medium" | "high" | "urgent" | null
+              estimateMinutes?: number | null
+              dueAt?: number | null
+              notes?: string | null
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }> | null
+            }
+        >
+      }
+    }
+    state: "open" | "pending" | "applied" | "rejected"
+    todo?: {
+      version: 1 | 2
+      id: string
+      title: string
+      detail?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      subtasks?: Array<{
+        version: 1
+        id: string
+        title: string
+        notes?: string
+        status: "open" | "completed"
+        done: boolean
+        priority?: "low" | "medium" | "high" | "urgent"
+        estimateMinutes?: number
+        dueAt?: number
+        reminderAt?: number
+        reminderRevision?: number
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }>
+        createdAt: number
+        updatedAt: number
+        completedAt?: number
+        revision: number
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }
+  }
+}
+
+export type RayaPersonalTodoApplyProposalResponse =
+  RayaPersonalTodoApplyProposalResponses[keyof RayaPersonalTodoApplyProposalResponses]
+
+export type RayaPersonalTodoRejectProposalData = {
+  body?: {
+    digest: string
+  }
+  path: {
+    proposalID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/proposals/{proposalID}/reject"
+}
+
+export type RayaPersonalTodoRejectProposalErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoProposalStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoProposalStaleRevisionError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type RayaPersonalTodoRejectProposalError =
+  RayaPersonalTodoRejectProposalErrors[keyof RayaPersonalTodoRejectProposalErrors]
+
+export type RayaPersonalTodoRejectProposalResponses = {
+  /**
+   * Rejected personal Todo proposal
+   */
+  200: {
+    proposal: {
+      version: 1
+      id: string
+      digest: string
+      createdAt: number
+      source: {
+        sessionID: string
+        messageID: string
+        callID: string
+      }
+      target:
+        | {
+            kind: "existing"
+            todoID: string
+            baseRevision: number
+          }
+        | {
+            kind: "new"
+            todoID: string
+            baseRevision: 0
+          }
+      changes: {
+        title?: string
+        detail?: string | null
+        dueAt?: number | null
+        reminderAt?: number | null
+        priority?: "low" | "medium" | "high" | "urgent" | null
+        estimateMinutes?: number | null
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }> | null
+        subtasks?: Array<
+          | {
+              kind: "new"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              priority?: "low" | "medium" | "high" | "urgent"
+              estimateMinutes?: number
+              dueAt?: number
+              notes?: string
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }>
+            }
+          | {
+              kind: "existing"
+              id: string
+              title: string
+              status?: "open" | "completed"
+              revision: number
+              priority?: "low" | "medium" | "high" | "urgent" | null
+              estimateMinutes?: number | null
+              dueAt?: number | null
+              notes?: string | null
+              links?: Array<{
+                kind: "chat" | "routine" | "goal" | "session"
+                id: string
+              }> | null
+            }
+        >
+      }
+    }
+    state: "open" | "pending" | "applied" | "rejected"
+    todo?: {
+      version: 1 | 2
+      id: string
+      title: string
+      detail?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      subtasks?: Array<{
+        version: 1
+        id: string
+        title: string
+        notes?: string
+        status: "open" | "completed"
+        done: boolean
+        priority?: "low" | "medium" | "high" | "urgent"
+        estimateMinutes?: number
+        dueAt?: number
+        reminderAt?: number
+        reminderRevision?: number
+        links?: Array<{
+          kind: "chat" | "routine" | "goal" | "session"
+          id: string
+        }>
+        createdAt: number
+        updatedAt: number
+        completedAt?: number
+        revision: number
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }
+  }
+}
+
+export type RayaPersonalTodoRejectProposalResponse =
+  RayaPersonalTodoRejectProposalResponses[keyof RayaPersonalTodoRejectProposalResponses]
+
 export type RayaPersonalTodoDeleteData = {
   body?: never
   path: {
@@ -28210,14 +28897,42 @@ export type RayaPersonalTodoGetResponses = {
    * Personal todo
    */
   200: {
-    version: 1
+    version: 1 | 2
     id: string
     title: string
     detail?: string
+    status: "open" | "completed"
     done: boolean
+    priority?: "low" | "medium" | "high" | "urgent"
+    estimateMinutes?: number
     dueAt?: number
     reminderAt?: number
     reminderRevision?: number
+    links?: Array<{
+      kind: "chat" | "routine" | "goal" | "session"
+      id: string
+    }>
+    subtasks?: Array<{
+      version: 1
+      id: string
+      title: string
+      notes?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }>
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -28268,14 +28983,42 @@ export type RayaPersonalTodoUpdateResponses = {
    * Updated personal todo
    */
   200: {
-    version: 1
+    version: 1 | 2
     id: string
     title: string
     detail?: string
+    status: "open" | "completed"
     done: boolean
+    priority?: "low" | "medium" | "high" | "urgent"
+    estimateMinutes?: number
     dueAt?: number
     reminderAt?: number
     reminderRevision?: number
+    links?: Array<{
+      kind: "chat" | "routine" | "goal" | "session"
+      id: string
+    }>
+    subtasks?: Array<{
+      version: 1
+      id: string
+      title: string
+      notes?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }>
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -29341,7 +30084,7 @@ export type V2SessionRevertStageErrors = {
   /**
    * UnknownError
    */
-  500: UnknownError1
+  500: UnknownError2
 }
 
 export type V2SessionRevertStageError = V2SessionRevertStageErrors[keyof V2SessionRevertStageErrors]
@@ -29382,7 +30125,7 @@ export type V2SessionRevertClearErrors = {
   /**
    * UnknownError
    */
-  500: UnknownError1
+  500: UnknownError2
 }
 
 export type V2SessionRevertClearError = V2SessionRevertClearErrors[keyof V2SessionRevertClearErrors]
@@ -29456,7 +30199,7 @@ export type V2SessionContextErrors = {
   /**
    * UnknownError
    */
-  500: UnknownError1
+  500: UnknownError2
 }
 
 export type V2SessionContextError = V2SessionContextErrors[keyof V2SessionContextErrors]
@@ -29656,7 +30399,7 @@ export type V2SessionMessagesErrors = {
   /**
    * UnknownError
    */
-  500: UnknownError1
+  500: UnknownError2
 }
 
 export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]

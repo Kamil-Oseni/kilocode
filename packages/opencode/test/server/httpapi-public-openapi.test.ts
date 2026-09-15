@@ -6,6 +6,7 @@ type Method = "get" | "post" | "put" | "delete" | "patch"
 type OpenApiSchema = {
   readonly $ref?: string
   readonly anyOf?: ReadonlyArray<OpenApiSchema>
+  readonly items?: OpenApiSchema // kilocode_change
   readonly type?: string
   readonly enum?: readonly unknown[]
   readonly properties?: Record<string, OpenApiSchema>
@@ -70,6 +71,33 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  // kilocode_change start
+  test("documents nullable personal Todo proposal clears", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const nullable = (schema: OpenApiSchema | undefined) => schema?.anyOf?.some((item) => item.type === "null")
+
+    for (const [path, method] of [
+      ["/raya/personal-todos/proposals", "get"],
+      ["/raya/personal-todos/proposals/{proposalID}", "get"],
+      ["/raya/personal-todos/proposals/{proposalID}/apply", "post"],
+      ["/raya/personal-todos/proposals/{proposalID}/reject", "post"],
+    ] as const) {
+      const schema = spec.paths[path]?.[method]?.responses?.["200"]?.content?.["application/json"]?.schema
+      const view = schema?.items ?? schema
+      const changes = view?.properties?.proposal?.properties?.changes
+      for (const field of ["detail", "dueAt", "reminderAt", "priority", "estimateMinutes", "links"]) {
+        expect(nullable(changes?.properties?.[field]), `${method} ${path} ${field}`).toBe(true)
+      }
+      const child = changes?.properties?.subtasks?.items?.anyOf?.find(
+        (item) => item.properties?.kind?.enum?.[0] === "existing",
+      )
+      for (const field of ["priority", "estimateMinutes", "dueAt", "notes", "links"]) {
+        expect(nullable(child?.properties?.[field]), `${method} ${path} subtask.${field}`).toBe(true)
+      }
+    }
+  }, 15_000)
+  // kilocode_change end
+
   test("includes plugin-facing core schemas", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 

@@ -49241,7 +49241,7 @@
                     "properties": {
                       "version": {
                         "type": "number",
-                        "enum": [1]
+                        "enum": [1, 2]
                       },
                       "id": {
                         "type": "string"
@@ -49255,8 +49255,21 @@
                         "type": "string",
                         "maxLength": 10000
                       },
+                      "status": {
+                        "type": "string",
+                        "enum": ["open", "completed"]
+                      },
                       "done": {
                         "type": "boolean"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "urgent"]
+                      },
+                      "estimateMinutes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 525600
                       },
                       "dueAt": {
                         "type": "number",
@@ -49272,6 +49285,130 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 9007199254740991
+                      },
+                      "links": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["chat", "routine", "goal", "session"]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 500
+                            }
+                          },
+                          "required": ["kind", "id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "subtasks": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 500
+                            },
+                            "notes": {
+                              "type": "string",
+                              "maxLength": 10000
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "completed"]
+                            },
+                            "done": {
+                              "type": "boolean"
+                            },
+                            "priority": {
+                              "type": "string",
+                              "enum": ["low", "medium", "high", "urgent"]
+                            },
+                            "estimateMinutes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 525600
+                            },
+                            "dueAt": {
+                              "type": "number",
+                              "minimum": -8640000000000000,
+                              "maximum": 8640000000000000
+                            },
+                            "reminderAt": {
+                              "type": "number",
+                              "minimum": -8640000000000000,
+                              "maximum": 8640000000000000
+                            },
+                            "reminderRevision": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "links": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["chat", "routine", "goal", "session"]
+                                  },
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "\\S",
+                                    "maxLength": 500
+                                  }
+                                },
+                                "required": ["kind", "id"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "createdAt": {
+                              "type": "number",
+                              "minimum": -8640000000000000,
+                              "maximum": 8640000000000000
+                            },
+                            "updatedAt": {
+                              "type": "number",
+                              "minimum": -8640000000000000,
+                              "maximum": 8640000000000000
+                            },
+                            "completedAt": {
+                              "type": "number",
+                              "minimum": -8640000000000000,
+                              "maximum": 8640000000000000
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "id",
+                            "title",
+                            "status",
+                            "done",
+                            "createdAt",
+                            "updatedAt",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
                       "createdAt": {
                         "type": "number",
@@ -49294,7 +49431,7 @@
                         "maximum": 9007199254740991
                       }
                     },
-                    "required": ["version", "id", "title", "done", "createdAt", "updatedAt", "revision"],
+                    "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
                     "additionalProperties": false
                   },
                   "description": "Personal todos"
@@ -49387,7 +49524,7 @@
                   "properties": {
                     "version": {
                       "type": "number",
-                      "enum": [1]
+                      "enum": [1, 2]
                     },
                     "id": {
                       "type": "string"
@@ -49401,8 +49538,21 @@
                       "type": "string",
                       "maxLength": 10000
                     },
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "completed"]
+                    },
                     "done": {
                       "type": "boolean"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": ["low", "medium", "high", "urgent"]
+                    },
+                    "estimateMinutes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 525600
                     },
                     "dueAt": {
                       "type": "number",
@@ -49418,6 +49568,121 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 9007199254740991
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["chat", "routine", "goal", "session"]
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          }
+                        },
+                        "required": ["kind", "id"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "subtasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          },
+                          "notes": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["open", "completed"]
+                          },
+                          "done": {
+                            "type": "boolean"
+                          },
+                          "priority": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "urgent"]
+                          },
+                          "estimateMinutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 525600
+                          },
+                          "dueAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "links": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["chat", "routine", "goal", "session"]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 500
+                                }
+                              },
+                              "required": ["kind", "id"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "updatedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "completedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                        "additionalProperties": false
+                      }
                     },
                     "createdAt": {
                       "type": "number",
@@ -49440,7 +49705,7 @@
                       "maximum": 9007199254740991
                     }
                   },
-                  "required": ["version", "id", "title", "done", "createdAt", "updatedAt", "revision"],
+                  "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
                   "additionalProperties": false,
                   "description": "Created personal todo"
                 }
@@ -49875,6 +50140,2714 @@
         ]
       }
     },
+    "/raya/personal-todos/proposals": {
+      "get": {
+        "tags": ["raya-personal-todo"],
+        "operationId": "raya.personalTodo.listProposals",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Personal Todo proposals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "proposal": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          },
+                          "digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "sessionID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "callID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": ["sessionID", "messageID", "callID"],
+                            "additionalProperties": false
+                          },
+                          "target": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["existing"]
+                                  },
+                                  "todoID": {
+                                    "type": "string",
+                                    "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "baseRevision": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": ["kind", "todoID", "baseRevision"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["new"]
+                                  },
+                                  "todoID": {
+                                    "type": "string",
+                                    "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "baseRevision": {
+                                    "type": "number",
+                                    "enum": [0]
+                                  }
+                                },
+                                "required": ["kind", "todoID", "baseRevision"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "changes": {
+                            "type": "object",
+                            "properties": {
+                              "title": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              },
+                              "detail": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 10000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "dueAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "minimum": -8640000000000000,
+                                    "maximum": 8640000000000000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reminderAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "minimum": -8640000000000000,
+                                    "maximum": 8640000000000000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "priority": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["low", "medium", "high", "urgent"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "estimateMinutes": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 525600
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "links": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["chat", "routine", "goal", "session"]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 500
+                                        }
+                                      },
+                                      "required": ["kind", "id"],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 50
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "subtasks": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["new"]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                        },
+                                        "title": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 500
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": ["open", "completed"]
+                                        },
+                                        "priority": {
+                                          "type": "string",
+                                          "enum": ["low", "medium", "high", "urgent"]
+                                        },
+                                        "estimateMinutes": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 525600
+                                        },
+                                        "dueAt": {
+                                          "type": "number",
+                                          "minimum": -8640000000000000,
+                                          "maximum": 8640000000000000
+                                        },
+                                        "notes": {
+                                          "type": "string",
+                                          "maxLength": 10000
+                                        },
+                                        "links": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["chat", "routine", "goal", "session"]
+                                              },
+                                              "id": {
+                                                "type": "string",
+                                                "pattern": "\\S",
+                                                "maxLength": 500
+                                              }
+                                            },
+                                            "required": ["kind", "id"],
+                                            "additionalProperties": false
+                                          },
+                                          "maxItems": 50
+                                        }
+                                      },
+                                      "required": ["kind", "id", "title"],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["existing"]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                        },
+                                        "title": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 500
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": ["open", "completed"]
+                                        },
+                                        "revision": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "priority": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "enum": ["low", "medium", "high", "urgent"]
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "estimateMinutes": {
+                                          "anyOf": [
+                                            {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 525600
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "dueAt": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number",
+                                              "minimum": -8640000000000000,
+                                              "maximum": 8640000000000000
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "notes": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 10000
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "links": {
+                                          "anyOf": [
+                                            {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "kind": {
+                                                    "type": "string",
+                                                    "enum": ["chat", "routine", "goal", "session"]
+                                                  },
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "\\S",
+                                                    "maxLength": 500
+                                                  }
+                                                },
+                                                "required": ["kind", "id"],
+                                                "additionalProperties": false
+                                              },
+                                              "maxItems": 50
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": ["kind", "id", "title", "revision"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 100
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["version", "id", "digest", "createdAt", "source", "target", "changes"],
+                        "additionalProperties": false
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": ["open", "pending", "applied", "rejected"]
+                      },
+                      "todo": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1, 2]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          },
+                          "detail": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["open", "completed"]
+                          },
+                          "done": {
+                            "type": "boolean"
+                          },
+                          "priority": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "urgent"]
+                          },
+                          "estimateMinutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 525600
+                          },
+                          "dueAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "links": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["chat", "routine", "goal", "session"]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 500
+                                }
+                              },
+                              "required": ["kind", "id"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "subtasks": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "number",
+                                  "enum": [1]
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 500
+                                },
+                                "notes": {
+                                  "type": "string",
+                                  "maxLength": 10000
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": ["open", "completed"]
+                                },
+                                "done": {
+                                  "type": "boolean"
+                                },
+                                "priority": {
+                                  "type": "string",
+                                  "enum": ["low", "medium", "high", "urgent"]
+                                },
+                                "estimateMinutes": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 525600
+                                },
+                                "dueAt": {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                "reminderAt": {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                "reminderRevision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "links": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["chat", "routine", "goal", "session"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      }
+                                    },
+                                    "required": ["kind", "id"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "createdAt": {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                "updatedAt": {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                "completedAt": {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                "revision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "id",
+                                "title",
+                                "status",
+                                "done",
+                                "createdAt",
+                                "updatedAt",
+                                "revision"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "updatedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "completedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["proposal", "state"],
+                    "additionalProperties": false
+                  },
+                  "description": "Personal Todo proposals"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError | PersonalTodoProposalStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PersonalTodoProposalStaleRevisionError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
+                }
+              }
+            }
+          }
+        },
+        "description": "List immutable personal Todo proposals with their durable application state.",
+        "summary": "List personal Todo proposals",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.listProposals({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/personal-todos/proposals/{proposalID}": {
+      "get": {
+        "tags": ["raya-personal-todo"],
+        "operationId": "raya.personalTodo.getProposal",
+        "parameters": [
+          {
+            "name": "proposalID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Personal Todo proposal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "proposal": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "callID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            }
+                          },
+                          "required": ["sessionID", "messageID", "callID"],
+                          "additionalProperties": false
+                        },
+                        "target": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["existing"]
+                                },
+                                "todoID": {
+                                  "type": "string",
+                                  "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                },
+                                "baseRevision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": ["kind", "todoID", "baseRevision"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["new"]
+                                },
+                                "todoID": {
+                                  "type": "string",
+                                  "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                },
+                                "baseRevision": {
+                                  "type": "number",
+                                  "enum": [0]
+                                }
+                              },
+                              "required": ["kind", "todoID", "baseRevision"],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "changes": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 500
+                            },
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "dueAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reminderAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "priority": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["low", "medium", "high", "urgent"]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "estimateMinutes": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 525600
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "links": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["chat", "routine", "goal", "session"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      }
+                                    },
+                                    "required": ["kind", "id"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 50
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "subtasks": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["new"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": ["open", "completed"]
+                                      },
+                                      "priority": {
+                                        "type": "string",
+                                        "enum": ["low", "medium", "high", "urgent"]
+                                      },
+                                      "estimateMinutes": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 525600
+                                      },
+                                      "dueAt": {
+                                        "type": "number",
+                                        "minimum": -8640000000000000,
+                                        "maximum": 8640000000000000
+                                      },
+                                      "notes": {
+                                        "type": "string",
+                                        "maxLength": 10000
+                                      },
+                                      "links": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": ["chat", "routine", "goal", "session"]
+                                            },
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "\\S",
+                                              "maxLength": 500
+                                            }
+                                          },
+                                          "required": ["kind", "id"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 50
+                                      }
+                                    },
+                                    "required": ["kind", "id", "title"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["existing"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": ["open", "completed"]
+                                      },
+                                      "revision": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "priority": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": ["low", "medium", "high", "urgent"]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "estimateMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 525600
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "dueAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number",
+                                            "minimum": -8640000000000000,
+                                            "maximum": 8640000000000000
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "notes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 10000
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "links": {
+                                        "anyOf": [
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "kind": {
+                                                  "type": "string",
+                                                  "enum": ["chat", "routine", "goal", "session"]
+                                                },
+                                                "id": {
+                                                  "type": "string",
+                                                  "pattern": "\\S",
+                                                  "maxLength": 500
+                                                }
+                                              },
+                                              "required": ["kind", "id"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 50
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["kind", "id", "title", "revision"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "maxItems": 100
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["version", "id", "digest", "createdAt", "source", "target", "changes"],
+                      "additionalProperties": false
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["open", "pending", "applied", "rejected"]
+                    },
+                    "todo": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1, 2]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 500
+                        },
+                        "detail": {
+                          "type": "string",
+                          "maxLength": 10000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["open", "completed"]
+                        },
+                        "done": {
+                          "type": "boolean"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high", "urgent"]
+                        },
+                        "estimateMinutes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 525600
+                        },
+                        "dueAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "reminderAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "reminderRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "links": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["chat", "routine", "goal", "session"]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              }
+                            },
+                            "required": ["kind", "id"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "subtasks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              },
+                              "notes": {
+                                "type": "string",
+                                "maxLength": 10000
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": ["open", "completed"]
+                              },
+                              "done": {
+                                "type": "boolean"
+                              },
+                              "priority": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high", "urgent"]
+                              },
+                              "estimateMinutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 525600
+                              },
+                              "dueAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "reminderAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "reminderRevision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "links": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["chat", "routine", "goal", "session"]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 500
+                                    }
+                                  },
+                                  "required": ["kind", "id"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "createdAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "updatedAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "completedAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "id",
+                              "title",
+                              "status",
+                              "done",
+                              "createdAt",
+                              "updatedAt",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "updatedAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "completedAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["proposal", "state"],
+                  "additionalProperties": false,
+                  "description": "Personal Todo proposal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError | PersonalTodoProposalStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PersonalTodoProposalStaleRevisionError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a personal Todo proposal",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.getProposal({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/personal-todos/proposals/{proposalID}/apply": {
+      "post": {
+        "tags": ["raya-personal-todo"],
+        "operationId": "raya.personalTodo.applyProposal",
+        "parameters": [
+          {
+            "name": "proposalID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Applied personal Todo proposal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "proposal": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "callID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            }
+                          },
+                          "required": ["sessionID", "messageID", "callID"],
+                          "additionalProperties": false
+                        },
+                        "target": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["existing"]
+                                },
+                                "todoID": {
+                                  "type": "string",
+                                  "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                },
+                                "baseRevision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": ["kind", "todoID", "baseRevision"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["new"]
+                                },
+                                "todoID": {
+                                  "type": "string",
+                                  "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                },
+                                "baseRevision": {
+                                  "type": "number",
+                                  "enum": [0]
+                                }
+                              },
+                              "required": ["kind", "todoID", "baseRevision"],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "changes": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 500
+                            },
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "dueAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reminderAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "priority": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["low", "medium", "high", "urgent"]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "estimateMinutes": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 525600
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "links": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["chat", "routine", "goal", "session"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      }
+                                    },
+                                    "required": ["kind", "id"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 50
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "subtasks": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["new"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": ["open", "completed"]
+                                      },
+                                      "priority": {
+                                        "type": "string",
+                                        "enum": ["low", "medium", "high", "urgent"]
+                                      },
+                                      "estimateMinutes": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 525600
+                                      },
+                                      "dueAt": {
+                                        "type": "number",
+                                        "minimum": -8640000000000000,
+                                        "maximum": 8640000000000000
+                                      },
+                                      "notes": {
+                                        "type": "string",
+                                        "maxLength": 10000
+                                      },
+                                      "links": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": ["chat", "routine", "goal", "session"]
+                                            },
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "\\S",
+                                              "maxLength": 500
+                                            }
+                                          },
+                                          "required": ["kind", "id"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 50
+                                      }
+                                    },
+                                    "required": ["kind", "id", "title"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["existing"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": ["open", "completed"]
+                                      },
+                                      "revision": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "priority": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": ["low", "medium", "high", "urgent"]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "estimateMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 525600
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "dueAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number",
+                                            "minimum": -8640000000000000,
+                                            "maximum": 8640000000000000
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "notes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 10000
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "links": {
+                                        "anyOf": [
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "kind": {
+                                                  "type": "string",
+                                                  "enum": ["chat", "routine", "goal", "session"]
+                                                },
+                                                "id": {
+                                                  "type": "string",
+                                                  "pattern": "\\S",
+                                                  "maxLength": 500
+                                                }
+                                              },
+                                              "required": ["kind", "id"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 50
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["kind", "id", "title", "revision"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "maxItems": 100
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["version", "id", "digest", "createdAt", "source", "target", "changes"],
+                      "additionalProperties": false
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["open", "pending", "applied", "rejected"]
+                    },
+                    "todo": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1, 2]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 500
+                        },
+                        "detail": {
+                          "type": "string",
+                          "maxLength": 10000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["open", "completed"]
+                        },
+                        "done": {
+                          "type": "boolean"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high", "urgent"]
+                        },
+                        "estimateMinutes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 525600
+                        },
+                        "dueAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "reminderAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "reminderRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "links": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["chat", "routine", "goal", "session"]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              }
+                            },
+                            "required": ["kind", "id"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "subtasks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              },
+                              "notes": {
+                                "type": "string",
+                                "maxLength": 10000
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": ["open", "completed"]
+                              },
+                              "done": {
+                                "type": "boolean"
+                              },
+                              "priority": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high", "urgent"]
+                              },
+                              "estimateMinutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 525600
+                              },
+                              "dueAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "reminderAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "reminderRevision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "links": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["chat", "routine", "goal", "session"]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 500
+                                    }
+                                  },
+                                  "required": ["kind", "id"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "createdAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "updatedAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "completedAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "id",
+                              "title",
+                              "status",
+                              "done",
+                              "createdAt",
+                              "updatedAt",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "updatedAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "completedAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["proposal", "state"],
+                  "additionalProperties": false,
+                  "description": "Applied personal Todo proposal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError | PersonalTodoProposalStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PersonalTodoProposalStaleRevisionError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
+                }
+              }
+            }
+          }
+        },
+        "description": "Apply the exact immutable proposal identified by its digest.",
+        "summary": "Apply a personal Todo proposal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": ["digest"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.applyProposal({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/personal-todos/proposals/{proposalID}/reject": {
+      "post": {
+        "tags": ["raya-personal-todo"],
+        "operationId": "raya.personalTodo.rejectProposal",
+        "parameters": [
+          {
+            "name": "proposalID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rejected personal Todo proposal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "proposal": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "callID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            }
+                          },
+                          "required": ["sessionID", "messageID", "callID"],
+                          "additionalProperties": false
+                        },
+                        "target": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["existing"]
+                                },
+                                "todoID": {
+                                  "type": "string",
+                                  "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                },
+                                "baseRevision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": ["kind", "todoID", "baseRevision"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["new"]
+                                },
+                                "todoID": {
+                                  "type": "string",
+                                  "pattern": "^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                },
+                                "baseRevision": {
+                                  "type": "number",
+                                  "enum": [0]
+                                }
+                              },
+                              "required": ["kind", "todoID", "baseRevision"],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "changes": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 500
+                            },
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "dueAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reminderAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": -8640000000000000,
+                                  "maximum": 8640000000000000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "priority": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["low", "medium", "high", "urgent"]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "estimateMinutes": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 525600
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "links": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["chat", "routine", "goal", "session"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      }
+                                    },
+                                    "required": ["kind", "id"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 50
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "subtasks": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["new"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": ["open", "completed"]
+                                      },
+                                      "priority": {
+                                        "type": "string",
+                                        "enum": ["low", "medium", "high", "urgent"]
+                                      },
+                                      "estimateMinutes": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 525600
+                                      },
+                                      "dueAt": {
+                                        "type": "number",
+                                        "minimum": -8640000000000000,
+                                        "maximum": 8640000000000000
+                                      },
+                                      "notes": {
+                                        "type": "string",
+                                        "maxLength": 10000
+                                      },
+                                      "links": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": ["chat", "routine", "goal", "session"]
+                                            },
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "\\S",
+                                              "maxLength": 500
+                                            }
+                                          },
+                                          "required": ["kind", "id"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 50
+                                      }
+                                    },
+                                    "required": ["kind", "id", "title"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["existing"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "pattern": "\\S",
+                                        "maxLength": 500
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": ["open", "completed"]
+                                      },
+                                      "revision": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "priority": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": ["low", "medium", "high", "urgent"]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "estimateMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 525600
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "dueAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number",
+                                            "minimum": -8640000000000000,
+                                            "maximum": 8640000000000000
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "notes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 10000
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "links": {
+                                        "anyOf": [
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "kind": {
+                                                  "type": "string",
+                                                  "enum": ["chat", "routine", "goal", "session"]
+                                                },
+                                                "id": {
+                                                  "type": "string",
+                                                  "pattern": "\\S",
+                                                  "maxLength": 500
+                                                }
+                                              },
+                                              "required": ["kind", "id"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 50
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["kind", "id", "title", "revision"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "maxItems": 100
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["version", "id", "digest", "createdAt", "source", "target", "changes"],
+                      "additionalProperties": false
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["open", "pending", "applied", "rejected"]
+                    },
+                    "todo": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1, 2]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 500
+                        },
+                        "detail": {
+                          "type": "string",
+                          "maxLength": 10000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["open", "completed"]
+                        },
+                        "done": {
+                          "type": "boolean"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high", "urgent"]
+                        },
+                        "estimateMinutes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 525600
+                        },
+                        "dueAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "reminderAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "reminderRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "links": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["chat", "routine", "goal", "session"]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              }
+                            },
+                            "required": ["kind", "id"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "subtasks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 500
+                              },
+                              "notes": {
+                                "type": "string",
+                                "maxLength": 10000
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": ["open", "completed"]
+                              },
+                              "done": {
+                                "type": "boolean"
+                              },
+                              "priority": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high", "urgent"]
+                              },
+                              "estimateMinutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 525600
+                              },
+                              "dueAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "reminderAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "reminderRevision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "links": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["chat", "routine", "goal", "session"]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 500
+                                    }
+                                  },
+                                  "required": ["kind", "id"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "createdAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "updatedAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "completedAt": {
+                                "type": "number",
+                                "minimum": -8640000000000000,
+                                "maximum": 8640000000000000
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "id",
+                              "title",
+                              "status",
+                              "done",
+                              "createdAt",
+                              "updatedAt",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "updatedAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "completedAt": {
+                          "type": "number",
+                          "minimum": -8640000000000000,
+                          "maximum": 8640000000000000
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["proposal", "state"],
+                  "additionalProperties": false,
+                  "description": "Rejected personal Todo proposal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError | PersonalTodoProposalStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PersonalTodoProposalStaleRevisionError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
+                }
+              }
+            }
+          }
+        },
+        "description": "Reject the exact immutable proposal identified by its digest.",
+        "summary": "Reject a personal Todo proposal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": ["digest"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.rejectProposal({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/raya/personal-todos/{todoID}": {
       "get": {
         "tags": ["raya-personal-todo"],
@@ -49915,7 +52888,7 @@
                   "properties": {
                     "version": {
                       "type": "number",
-                      "enum": [1]
+                      "enum": [1, 2]
                     },
                     "id": {
                       "type": "string"
@@ -49929,8 +52902,21 @@
                       "type": "string",
                       "maxLength": 10000
                     },
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "completed"]
+                    },
                     "done": {
                       "type": "boolean"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": ["low", "medium", "high", "urgent"]
+                    },
+                    "estimateMinutes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 525600
                     },
                     "dueAt": {
                       "type": "number",
@@ -49946,6 +52932,121 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 9007199254740991
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["chat", "routine", "goal", "session"]
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          }
+                        },
+                        "required": ["kind", "id"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "subtasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          },
+                          "notes": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["open", "completed"]
+                          },
+                          "done": {
+                            "type": "boolean"
+                          },
+                          "priority": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "urgent"]
+                          },
+                          "estimateMinutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 525600
+                          },
+                          "dueAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "links": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["chat", "routine", "goal", "session"]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 500
+                                }
+                              },
+                              "required": ["kind", "id"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "updatedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "completedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                        "additionalProperties": false
+                      }
                     },
                     "createdAt": {
                       "type": "number",
@@ -49968,7 +53069,7 @@
                       "maximum": 9007199254740991
                     }
                   },
-                  "required": ["version", "id", "title", "done", "createdAt", "updatedAt", "revision"],
+                  "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
                   "additionalProperties": false,
                   "description": "Personal todo"
                 }
@@ -50067,7 +53168,7 @@
                   "properties": {
                     "version": {
                       "type": "number",
-                      "enum": [1]
+                      "enum": [1, 2]
                     },
                     "id": {
                       "type": "string"
@@ -50081,8 +53182,21 @@
                       "type": "string",
                       "maxLength": 10000
                     },
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "completed"]
+                    },
                     "done": {
                       "type": "boolean"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": ["low", "medium", "high", "urgent"]
+                    },
+                    "estimateMinutes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 525600
                     },
                     "dueAt": {
                       "type": "number",
@@ -50098,6 +53212,121 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 9007199254740991
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["chat", "routine", "goal", "session"]
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          }
+                        },
+                        "required": ["kind", "id"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "subtasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 500
+                          },
+                          "notes": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["open", "completed"]
+                          },
+                          "done": {
+                            "type": "boolean"
+                          },
+                          "priority": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "urgent"]
+                          },
+                          "estimateMinutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 525600
+                          },
+                          "dueAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "reminderRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "links": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["chat", "routine", "goal", "session"]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 500
+                                }
+                              },
+                              "required": ["kind", "id"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "updatedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "completedAt": {
+                            "type": "number",
+                            "minimum": -8640000000000000,
+                            "maximum": 8640000000000000
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
+                        "additionalProperties": false
+                      }
                     },
                     "createdAt": {
                       "type": "number",
@@ -50120,7 +53349,7 @@
                       "maximum": 9007199254740991
                     }
                   },
-                  "required": ["version", "id", "title", "done", "createdAt", "updatedAt", "revision"],
+                  "required": ["version", "id", "title", "status", "done", "createdAt", "updatedAt", "revision"],
                   "additionalProperties": false,
                   "description": "Updated personal todo"
                 }
@@ -52701,7 +55930,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnknownError1"
+                  "$ref": "#/components/schemas/UnknownError2"
                 }
               }
             }
@@ -52800,7 +56029,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnknownError1"
+                  "$ref": "#/components/schemas/UnknownError2"
                 }
               }
             }
@@ -52961,7 +56190,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnknownError1"
+                  "$ref": "#/components/schemas/UnknownError2"
                 }
               }
             }
@@ -53489,7 +56718,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnknownError1"
+                  "$ref": "#/components/schemas/UnknownError2"
                 }
               }
             }
@@ -76596,6 +79825,96 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "PersonalTodoProposalStaleRevisionError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["PersonalTodoProposalStaleRevisionError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "proposalID": {
+                "type": "string"
+              },
+              "todoID": {
+                "type": "string"
+              },
+              "expected": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "actual": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["proposalID", "todoID", "expected", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "UnknownError1": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["UnknownError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
       "FocusTimerStaleRevisionError": {
         "type": "object",
         "properties": {
@@ -76807,7 +80126,7 @@
         "required": ["_tag", "sessionID", "messageID", "message"],
         "additionalProperties": false
       },
-      "UnknownError1": {
+      "UnknownError2": {
         "type": "object",
         "properties": {
           "_tag": {

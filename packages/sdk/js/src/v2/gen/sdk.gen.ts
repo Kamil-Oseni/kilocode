@@ -544,14 +544,22 @@ import type {
   RayaFocusTimerStartResponses,
   RayaPersonalTodoAcknowledgeReminderErrors,
   RayaPersonalTodoAcknowledgeReminderResponses,
+  RayaPersonalTodoApplyProposalErrors,
+  RayaPersonalTodoApplyProposalResponses,
   RayaPersonalTodoCreateErrors,
   RayaPersonalTodoCreateResponses,
   RayaPersonalTodoDeleteErrors,
   RayaPersonalTodoDeleteResponses,
   RayaPersonalTodoGetErrors,
+  RayaPersonalTodoGetProposalErrors,
+  RayaPersonalTodoGetProposalResponses,
   RayaPersonalTodoGetResponses,
   RayaPersonalTodoListErrors,
+  RayaPersonalTodoListProposalsErrors,
+  RayaPersonalTodoListProposalsResponses,
   RayaPersonalTodoListResponses,
+  RayaPersonalTodoRejectProposalErrors,
+  RayaPersonalTodoRejectProposalResponses,
   RayaPersonalTodoRemindersErrors,
   RayaPersonalTodoRemindersResponses,
   RayaPersonalTodoUpdateErrors,
@@ -13667,6 +13675,160 @@ export class PersonalTodo extends HeyApiClient {
       ThrowOnError
     >({
       url: "/raya/personal-todos/reminders/acknowledge",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List personal Todo proposals
+   *
+   * List immutable personal Todo proposals with their durable application state.
+   */
+  public listProposals<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaPersonalTodoListProposalsResponses,
+      RayaPersonalTodoListProposalsErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/proposals",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a personal Todo proposal
+   */
+  public getProposal<ThrowOnError extends boolean = false>(
+    parameters: {
+      proposalID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "proposalID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaPersonalTodoGetProposalResponses,
+      RayaPersonalTodoGetProposalErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/proposals/{proposalID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Apply a personal Todo proposal
+   *
+   * Apply the exact immutable proposal identified by its digest.
+   */
+  public applyProposal<ThrowOnError extends boolean = false>(
+    parameters: {
+      proposalID: string
+      directory?: string
+      workspace?: string
+      digest?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "proposalID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "digest" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoApplyProposalResponses,
+      RayaPersonalTodoApplyProposalErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/proposals/{proposalID}/apply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject a personal Todo proposal
+   *
+   * Reject the exact immutable proposal identified by its digest.
+   */
+  public rejectProposal<ThrowOnError extends boolean = false>(
+    parameters: {
+      proposalID: string
+      directory?: string
+      workspace?: string
+      digest?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "proposalID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "digest" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoRejectProposalResponses,
+      RayaPersonalTodoRejectProposalErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/proposals/{proposalID}/reject",
       ...options,
       ...params,
       headers: {

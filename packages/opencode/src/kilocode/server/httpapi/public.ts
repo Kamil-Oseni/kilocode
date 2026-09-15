@@ -96,6 +96,26 @@ export function matchLegacyKiloOpenApi(input: Record<string, unknown>) {
   if (todoFields?.dueAt) todoFields.dueAt = nullable(todoFields.dueAt)
   if (todoFields?.reminderAt) todoFields.reminderAt = nullable(todoFields.reminderAt)
 
+  for (const [path, method] of [
+    ["/raya/personal-todos/proposals", "get"],
+    ["/raya/personal-todos/proposals/{proposalID}", "get"],
+    ["/raya/personal-todos/proposals/{proposalID}/apply", "post"],
+    ["/raya/personal-todos/proposals/{proposalID}/reject", "post"],
+  ] as const) {
+    const schema = spec.paths?.[path]?.[method]?.responses?.["200"]?.content?.["application/json"]?.schema
+    const view = schema?.items ?? schema
+    const changes = view?.properties?.proposal?.properties?.changes
+    for (const field of ["detail", "dueAt", "reminderAt", "priority", "estimateMinutes", "links"]) {
+      if (changes?.properties?.[field]) changes.properties[field] = nullable(changes.properties[field])
+    }
+    const child = changes?.properties?.subtasks?.items?.anyOf?.find(
+      (item) => item.properties?.kind?.enum?.[0] === "existing",
+    )
+    for (const field of ["priority", "estimateMinutes", "dueAt", "notes", "links"]) {
+      if (child?.properties?.[field]) child.properties[field] = nullable(child.properties[field])
+    }
+  }
+
   const fim = spec.paths?.["/kilo/fim"]?.post?.responses
   if (!fim) return
   fim["200"] = {

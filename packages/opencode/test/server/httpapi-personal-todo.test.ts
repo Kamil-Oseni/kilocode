@@ -1,13 +1,18 @@
 // kilocode_change - new file
 import { afterAll, afterEach, expect, setDefaultTimeout } from "bun:test"
+import path from "node:path"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { cleanup } from "./personal-todo-environment"
 import { Effect, Schema } from "effect"
+import { Git } from "@/git"
 import { PersonalTodo } from "@/kilocode/personal-todo"
 import { PersonalTodoProposal } from "@/kilocode/personal-todo/proposal"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Storage } from "@/storage/storage"
+import { Global } from "@opencode-ai/core/global"
 import { Server } from "@/server/server"
-import { disposeAllInstances, tmpdir, withTestInstance } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { it } from "../lib/effect"
 
@@ -219,17 +224,14 @@ it.live("lists, gets, and idempotently applies durable personal Todo proposals",
       Effect.gen(function* () {
         const proposalID = "proposal_11111111-1111-4111-8111-111111111111"
         const staleID = "proposal_22222222-2222-4222-8222-222222222222"
+        const rejectedID = "proposal_55555555-5555-4555-8555-555555555555"
         const todoID = "todo_33333333-3333-4333-8333-333333333333"
+        const rejectedTodoID = "todo_66666666-6666-4666-8666-666666666666"
         const source = { sessionID: "ses_http", messageID: "msg_http", callID: "call_http" }
         const propose = (input: PersonalTodoProposal.Input) =>
-          Effect.promise(() =>
-            withTestInstance({
-              directory: tmp.path,
-              fn: () =>
-                AppRuntime.runPromise(
-                  Storage.Service.use((storage) => PersonalTodoProposal.make({ storage }).propose(input)),
-                ),
-            }),
+          Storage.Service.use((storage) => PersonalTodoProposal.make({ storage }).propose(input)).pipe(
+            Effect.provide(Storage.layerFromDir(path.join(Global.Path.data, "storage"))),
+            Effect.provide(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))),
           )
         const saved = yield* propose({
           id: proposalID,
@@ -289,6 +291,41 @@ it.live("lists, gets, and idempotently applies durable personal Todo proposals",
         expect(replayed.status).toBe(200)
         expect(yield* json(replayed)).toEqual(view)
 
+        const rejected = yield* propose({
+          id: rejectedID,
+          source: { ...source, callID: "call_reject" },
+          target: { kind: "new", todoID: rejectedTodoID, baseRevision: 0 },
+          changes: { title: "Declined plan", detail: "Keep this proposal for review history" },
+        })
+        const reject = (id: string, digest: string) =>
+          request(tmp.path, `/raya/personal-todos/proposals/${id}/reject`, {
+            method: "POST",
+            body: JSON.stringify({ digest }),
+          })
+        const rejectedResponse = yield* reject(rejected.id, rejected.digest)
+        expect(rejectedResponse.status).toBe(200)
+        const rejectedView = yield* json(rejectedResponse)
+        expect(rejectedView).toMatchObject({
+          proposal: { id: rejectedID, digest: rejected.digest },
+          state: "rejected",
+        })
+        expect(rejectedView).not.toHaveProperty("todo")
+        const repeatedReject = yield* reject(rejected.id, rejected.digest)
+        expect(repeatedReject.status).toBe(200)
+        expect(yield* json(repeatedReject)).toEqual(rejectedView)
+
+        const applyRejected = yield* request(tmp.path, `/raya/personal-todos/proposals/${rejected.id}/apply`, {
+          method: "POST",
+          body: JSON.stringify({ digest: rejected.digest }),
+        })
+        expect(applyRejected.status).toBe(409)
+        const rejectApplied = yield* reject(saved.id, saved.digest)
+        expect(rejectApplied.status).toBe(409)
+
+        const fetchedRejected = yield* request(tmp.path, `/raya/personal-todos/proposals/${rejected.id}`)
+        expect(fetchedRejected.status).toBe(200)
+        expect(yield* json(fetchedRejected)).toEqual(rejectedView)
+
         const stale = yield* propose({
           id: staleID,
           source: { ...source, callID: "call_stale" },
@@ -320,6 +357,15 @@ it.live("lists, gets, and idempotently applies durable personal Todo proposals",
           (yield* request(tmp.path, "/raya/personal-todos/proposals/proposal_99999999-9999-4999-8999-999999999999"))
             .status,
         ).toBe(404)
+
+        const final = yield* json(yield* request(tmp.path, "/raya/personal-todos/proposals"))
+        expect(final).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ proposal: expect.objectContaining({ id: saved.id }), state: "applied" }),
+            expect.objectContaining({ proposal: expect.objectContaining({ id: rejected.id }), state: "rejected" }),
+            expect.objectContaining({ proposal: expect.objectContaining({ id: stale.id }), state: "open" }),
+          ]),
+        )
       }),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ),

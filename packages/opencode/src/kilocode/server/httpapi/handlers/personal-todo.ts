@@ -146,6 +146,15 @@ export const personalTodoHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-
           ctx.params.proposalID,
         ),
       )
+      .handle("personalTodoProposalReject", (ctx) =>
+        proposalApi(
+          applications.reject(ctx.params.proposalID, ctx.payload.digest).pipe(
+            Effect.andThen(proposals.get(ctx.params.proposalID)),
+            Effect.flatMap((item) => (item ? view(item) : Effect.fail(notFound("Personal Todo proposal not found.")))),
+          ),
+          ctx.params.proposalID,
+        ),
+      )
       .handle("personalTodoGet", (ctx) =>
         api(todos.get(ctx.params.todoID)).pipe(
           Effect.flatMap((item) => (item ? Effect.succeed(item) : Effect.fail(notFound("Personal todo not found.")))),

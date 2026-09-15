@@ -205,6 +205,7 @@ describe("Kilo PublicApi OpenAPI contract", () => {
       { method: "get", path: PersonalTodoPaths.proposals },
       { method: "get", path: PersonalTodoPaths.proposal },
       { method: "post", path: PersonalTodoPaths.applyProposal },
+      { method: "post", path: PersonalTodoPaths.rejectProposal },
     ] satisfies Array<{ method: Method; path: string }>
 
     for (const route of routes) {
@@ -214,16 +215,19 @@ describe("Kilo PublicApi OpenAPI contract", () => {
       expect(query, `${route.method.toUpperCase()} ${route.path}`).toEqual(["directory", "workspace"])
     }
 
-    const apply = PersonalTodoPaths.applyProposal.replace(/:([A-Za-z0-9_]+)/g, "{$1}")
-    const body = spec.paths[apply]?.post?.requestBody as Body | undefined
-    const digest = body?.content?.["application/json"]?.schema?.properties?.digest
-    expect(digest).toEqual({ type: "string", pattern: "^[a-f0-9]{64}$" })
+    for (const route of [PersonalTodoPaths.applyProposal, PersonalTodoPaths.rejectProposal]) {
+      const path = route.replace(/:([A-Za-z0-9_]+)/g, "{$1}")
+      const body = spec.paths[path]?.post?.requestBody as Body | undefined
+      const digest = body?.content?.["application/json"]?.schema?.properties?.digest
+      expect(digest).toEqual({ type: "string", pattern: "^[a-f0-9]{64}$" })
+    }
 
     const list = spec.paths[PersonalTodoPaths.proposals]?.get?.responses?.["200"] as Body | undefined
     expect(list?.content?.["application/json"]?.schema?.items?.properties?.state?.enum).toEqual([
       "open",
       "pending",
       "applied",
+      "rejected",
     ])
   })
 

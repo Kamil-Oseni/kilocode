@@ -27,15 +27,20 @@ export const PersonalTodoPaths = {
   proposals: `${root}/proposals`,
   proposal: `${root}/proposals/:proposalID`,
   applyProposal: `${root}/proposals/:proposalID/apply`,
+  rejectProposal: `${root}/proposals/:proposalID/reject`,
 } as const
 
 export const PersonalTodoProposalApplyPayload = Schema.Struct({
   digest: PersonalTodoProposal.Info.fields.digest,
 })
 
+export const PersonalTodoProposalRejectPayload = Schema.Struct({
+  digest: PersonalTodoProposal.Info.fields.digest,
+})
+
 export const PersonalTodoProposalView = Schema.Struct({
   proposal: PersonalTodoProposal.Info,
-  state: Schema.Literals(["open", "pending", "applied"]),
+  state: Schema.Literals(["open", "pending", "applied", "rejected"]),
   todo: Schema.optional(PersonalTodo.Info),
 })
 
@@ -185,6 +190,19 @@ export const PersonalTodoApi = HttpApi.make("raya-personal-todo").add(
           identifier: "raya.personalTodo.applyProposal",
           summary: "Apply a personal Todo proposal",
           description: "Apply the exact immutable proposal identified by its digest.",
+        }),
+      ),
+      HttpApiEndpoint.post("personalTodoProposalReject", PersonalTodoPaths.rejectProposal, {
+        params: { proposalID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: PersonalTodoProposalRejectPayload,
+        success: described(PersonalTodoProposalView, "Rejected personal Todo proposal"),
+        error: proposalErrors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.rejectProposal",
+          summary: "Reject a personal Todo proposal",
+          description: "Reject the exact immutable proposal identified by its digest.",
         }),
       ),
       HttpApiEndpoint.get("personalTodoGet", PersonalTodoPaths.item, {

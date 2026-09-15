@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
@@ -23,7 +23,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
-import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
+import { InvalidRequestError, UnknownError } from "@/server/routes/instance/httpapi/errors"
 import { Skill } from "@/skill"
 import { BackgroundJob } from "@/background/job"
 import { SessionRunState } from "@/session/run-state"
@@ -53,6 +53,7 @@ import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named wo
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog
+import { Conflict as PublicationConflict } from "@/kilocode/self-heal/publication"
 import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
 import type { RequestID as CanvasRequestID } from "@/kilocode/canvas/protocol" // raya_change - Milestone E
@@ -655,6 +656,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
             Effect.fail(new InvalidRequestError({ message: err.message })),
           ),
+          Effect.catchTag("RayaTaskOrganization.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
         )
     })
     const organizationGet = Effect.fn("KilocodeHttpApi.organizationGet")(function* (ctx: {
@@ -1016,7 +1018,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       if (!(yield* healing.get(ctx.params.itemID))) return yield* new HttpApiError.NotFound({})
       return yield* healing
         .publish(ctx.params.itemID, ctx.payload)
-        .pipe(Effect.catchTag("SelfHeal.PublicationConflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+        .pipe(
+          Effect.catch((err) => {
+            if (Schema.is(PublicationConflict)(err)) return Effect.fail(new HttpApiError.Conflict({}))
+            return Effect.fail(
+              new UnknownError({ message: "Self-heal verification storage is unavailable.", ref: ctx.params.itemID }),
+            )
+          }),
+        )
     })
 
     const selfHealUpdate = Effect.fn("KilocodeHttpApi.selfHealUpdate")(function* (ctx: {

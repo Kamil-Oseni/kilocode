@@ -9,7 +9,7 @@ import {
   WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
-import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
+import { InvalidRequestError, UnknownError } from "@/server/routes/instance/httpapi/errors"
 import { ProviderUsage } from "@opencode-ai/schema/kilocode/provider-usage"
 import { AnacondaDesktopApi } from "./anaconda-desktop"
 import { ChildSteerApi } from "./child-steer"
@@ -880,7 +880,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: OrganizationCreate,
           success: described(Organization, "Created routine organization"),
-          error: InvalidRequestError,
+          error: [InvalidRequestError, HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.organization.create",
@@ -1235,7 +1235,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: SelfHealVerificationPublishPayload,
           success: described(RayaSelfHeal.VerificationPublication, "Published self-heal verification evidence"),
-          error: [HttpApiError.NotFound, HttpApiError.Conflict],
+          error: [HttpApiError.NotFound, HttpApiError.Conflict, UnknownError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.selfHeal.verificationPublish",

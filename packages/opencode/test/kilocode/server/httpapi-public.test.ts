@@ -188,6 +188,16 @@ describe("Kilo PublicApi OpenAPI contract", () => {
     expect(props?.organizationId).toEqual({ anyOf: [{ type: "string" }, { type: "null" }] })
   })
 
+  test("publishes routine organization and self-heal error responses", () => {
+    const spec = OpenApi.fromApi(PublicApi)
+    const organization = spec.paths[KilocodePaths.organizations]?.post?.responses
+    const verification = spec.paths[KilocodePaths.selfHealItem.replace(":itemID", "{itemID}") + "/verification"]?.post
+      ?.responses
+
+    expect(Object.keys(organization ?? {}).toSorted()).toEqual(["200", "400", "409"])
+    expect(Object.keys(verification ?? {}).toSorted()).toEqual(["200", "400", "404", "409", "500"])
+  })
+
   test("keeps personal Todo clear operations nullable", () => {
     const spec = OpenApi.fromApi(PublicApi)
     const path = PersonalTodoPaths.item.replace(/:([A-Za-z0-9_]+)/g, "{$1}")

@@ -1,6 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `50baf38759`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `b139fab81b`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 00:58 America/Toronto - Raya Messenger display migration complete
+
+Product commit `b139fab81b` retires KiloClaw as a user-facing extension name and uses **Raya Messenger** consistently in both package command contributions, the editor and webview document titles, the slash-command description, all main-sidebar locale values and all twenty dedicated Messenger locale catalogs. The brand change was applied to locale **values** only. Preserve the existing lower-camel translation keys and every routing/compatibility identity.
+
+The compatibility boundary is enforced by `raya-branding.test.ts`: `raya.KiloClawPanel`, `raya.kiloClawOpen`, `raya.sidebarTitle.kiloClawOpen`, `openKiloClaw`, KiloClaw provider/type names, telemetry tokens and backend names remain valid internal contracts. The test rejects standalone old display literals in the provider and every main/dedicated locale source. Do not use a blind repository rename; those retained identities need versioned dual-read migration later.
+
+Verification completed sequentially under the machine's memory limit: branding and font-size architecture **9 / 22**, 2 GB-capped extension and webview typechecks, focused ESLint, inventory, forbidden strings, workflow allowlist, OpenCode annotations, extension marker guard, Prettier and whitespace. Scoped Oxlint reports only existing warnings in untouched provider code; the new test is warning-free. The documented inventory is 68,313 total, with 1,696 potential public defects, 34,601 compatibility identities, 5,685 provenance references and 26,331 internal migration sites. The same patch changeset covers this user-facing batch.
+
+Continue with provider display projection next if staying in the branding lane. Use `Raya Gateway` only at rendered boundaries, including the pinned provider card and disabled-provider list, while keeping provider ID `kilo`, models such as `kilo-auto/free`, auth/config keys and provider objects unchanged. A pure display helper should map by ID rather than rewriting catalog data. Then address the console Marketplace text. The universal design-skill foundation remains the next independent non-branding slice. Batch these runtime copy changes into the next low-memory snapshot; installed source remains `0d545aa678` until then.
 
 ## ChatGPT 2026-09-15 00:48 America/Toronto - First display-only branding migration batch
 

@@ -1,9 +1,15 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { PersonalTodo } from "@/kilocode/personal-todo"
+import { PersonalTodoProposal } from "@/kilocode/personal-todo/proposal"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
-import { InvalidRequestError, ApiNotFoundError, ConflictError } from "@/server/routes/instance/httpapi/errors"
+import {
+  InvalidRequestError,
+  ApiNotFoundError,
+  ConflictError,
+  UnknownError,
+} from "@/server/routes/instance/httpapi/errors"
 import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
 import {
   WorkspaceRoutingMiddleware,
@@ -18,7 +24,20 @@ export const PersonalTodoPaths = {
   item: `${root}/:todoID`,
   reminders: `${root}/reminders/claim`,
   acknowledge: `${root}/reminders/acknowledge`,
+  proposals: `${root}/proposals`,
+  proposal: `${root}/proposals/:proposalID`,
+  applyProposal: `${root}/proposals/:proposalID/apply`,
 } as const
+
+export const PersonalTodoProposalApplyPayload = Schema.Struct({
+  digest: PersonalTodoProposal.Info.fields.digest,
+})
+
+export const PersonalTodoProposalView = Schema.Struct({
+  proposal: PersonalTodoProposal.Info,
+  state: Schema.Literals(["open", "pending", "applied"]),
+  todo: Schema.optional(PersonalTodo.Info),
+})
 
 export const PersonalTodoCreatePayload = Schema.Struct({
   title: Schema.String,
@@ -59,7 +78,30 @@ export class PersonalTodoStaleRevisionError extends Schema.ErrorClass<PersonalTo
   { httpApiStatus: 409 },
 ) {}
 
+export class PersonalTodoProposalStaleRevisionError extends Schema.ErrorClass<PersonalTodoProposalStaleRevisionError>(
+  "PersonalTodoProposalStaleRevisionError",
+)(
+  {
+    name: Schema.Literal("PersonalTodoProposalStaleRevisionError"),
+    data: Schema.Struct({
+      proposalID: Schema.String,
+      todoID: Schema.String,
+      expected: Schema.Number,
+      actual: Schema.optional(Schema.Number),
+      message: Schema.String,
+    }),
+  },
+  { httpApiStatus: 409 },
+) {}
+
 const errors = [InvalidRequestError, ApiNotFoundError, ConflictError, PersonalTodoStaleRevisionError] as const
+const proposalErrors = [
+  InvalidRequestError,
+  ApiNotFoundError,
+  ConflictError,
+  PersonalTodoProposalStaleRevisionError,
+  UnknownError,
+] as const
 
 export const PersonalTodoApi = HttpApi.make("raya-personal-todo").add(
   HttpApiGroup.make("raya-personal-todo")
@@ -108,6 +150,41 @@ export const PersonalTodoApi = HttpApi.make("raya-personal-todo").add(
           identifier: "raya.personalTodo.acknowledgeReminder",
           summary: "Acknowledge a personal todo reminder",
           description: "Durably suppress an exact reminder delivery after local presentation.",
+        }),
+      ),
+      HttpApiEndpoint.get("personalTodoProposalList", PersonalTodoPaths.proposals, {
+        query: WorkspaceRoutingQuery,
+        success: described(Schema.Array(PersonalTodoProposalView), "Personal Todo proposals"),
+        error: proposalErrors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.listProposals",
+          summary: "List personal Todo proposals",
+          description: "List immutable personal Todo proposals with their durable application state.",
+        }),
+      ),
+      HttpApiEndpoint.get("personalTodoProposalGet", PersonalTodoPaths.proposal, {
+        params: { proposalID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        success: described(PersonalTodoProposalView, "Personal Todo proposal"),
+        error: proposalErrors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.getProposal",
+          summary: "Get a personal Todo proposal",
+        }),
+      ),
+      HttpApiEndpoint.post("personalTodoProposalApply", PersonalTodoPaths.applyProposal, {
+        params: { proposalID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: PersonalTodoProposalApplyPayload,
+        success: described(PersonalTodoProposalView, "Applied personal Todo proposal"),
+        error: proposalErrors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.applyProposal",
+          summary: "Apply a personal Todo proposal",
+          description: "Apply the exact immutable proposal identified by its digest.",
         }),
       ),
       HttpApiEndpoint.get("personalTodoGet", PersonalTodoPaths.item, {

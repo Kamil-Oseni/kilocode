@@ -211,6 +211,12 @@ export namespace PersonalTodoApplication {
       return receipt
     })
 
+    const receipt = Effect.fn("PersonalTodoApplication.receipt")(function* (proposal: PersonalTodoProposal.Info) {
+      const saved = yield* read(proposal.id)
+      if (!saved) return undefined
+      return yield* verify(proposal, saved)
+    })
+
     const apply = Effect.fn("PersonalTodoApplication.apply")(function* (id: string, digest: string) {
       const proposalID = yield* Schema.decodeUnknownEffect(ID)(id).pipe(
         Effect.mapError(() => new InputError({ field: "id", message: "Use a valid Todo proposal ID." })),
@@ -276,6 +282,6 @@ export namespace PersonalTodoApplication {
       return applied.postimage
     })
 
-    return { apply }
+    return { apply, receipt }
   }
 }

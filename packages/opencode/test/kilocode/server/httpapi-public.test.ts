@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { Result, Schema as EffectSchema } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
 import { AgentBuilderPaths } from "../../../src/kilocode/server/httpapi/groups/agent-builder"
@@ -15,6 +15,8 @@ import { TelemetryPaths } from "../../../src/kilocode/server/httpapi/groups/tele
 import { ExperimentalPaths } from "../../../src/server/routes/instance/httpapi/groups/experimental"
 import { SessionPaths } from "../../../src/server/routes/instance/httpapi/groups/session"
 import { PublicApi } from "../../../src/server/routes/instance/httpapi/public"
+
+setDefaultTimeout(10_000)
 
 type Schema = {
   anyOf?: Schema[]
@@ -195,6 +197,34 @@ describe("Kilo PublicApi OpenAPI contract", () => {
     expect(schema?.properties?.detail).toEqual({ anyOf: [{ type: "string" }, { type: "null" }] })
     expect(schema?.properties?.dueAt?.anyOf).toContainEqual({ type: "null" })
     expect(schema?.properties?.reminderAt?.anyOf).toContainEqual({ type: "null" })
+  })
+
+  test("publishes durable personal Todo proposal review routes", () => {
+    const spec = OpenApi.fromApi(PublicApi)
+    const routes = [
+      { method: "get", path: PersonalTodoPaths.proposals },
+      { method: "get", path: PersonalTodoPaths.proposal },
+      { method: "post", path: PersonalTodoPaths.applyProposal },
+    ] satisfies Array<{ method: Method; path: string }>
+
+    for (const route of routes) {
+      const path = route.path.replace(/:([A-Za-z0-9_]+)/g, "{$1}")
+      const params = spec.paths[path]?.[route.method]?.parameters as Parameter[] | undefined
+      const query = params?.filter((param) => param.in === "query").map((param) => param.name)
+      expect(query, `${route.method.toUpperCase()} ${route.path}`).toEqual(["directory", "workspace"])
+    }
+
+    const apply = PersonalTodoPaths.applyProposal.replace(/:([A-Za-z0-9_]+)/g, "{$1}")
+    const body = spec.paths[apply]?.post?.requestBody as Body | undefined
+    const digest = body?.content?.["application/json"]?.schema?.properties?.digest
+    expect(digest).toEqual({ type: "string", pattern: "^[a-f0-9]{64}$" })
+
+    const list = spec.paths[PersonalTodoPaths.proposals]?.get?.responses?.["200"] as Body | undefined
+    expect(list?.content?.["application/json"]?.schema?.items?.properties?.state?.enum).toEqual([
+      "open",
+      "pending",
+      "applied",
+    ])
   })
 
   test("keeps branch-name responses nullable", () => {

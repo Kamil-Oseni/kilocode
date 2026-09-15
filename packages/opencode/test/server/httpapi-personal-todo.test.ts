@@ -3,8 +3,11 @@ import { afterAll, afterEach, expect, setDefaultTimeout } from "bun:test"
 import { cleanup } from "./personal-todo-environment"
 import { Effect, Schema } from "effect"
 import { PersonalTodo } from "@/kilocode/personal-todo"
+import { PersonalTodoProposal } from "@/kilocode/personal-todo/proposal"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Storage } from "@/storage/storage"
 import { Server } from "@/server/server"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir, withTestInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { it } from "../lib/effect"
 
@@ -203,6 +206,119 @@ it.live("serves typed personal todo CRUD and exact stale revision conflicts", ()
             method: "PATCH",
             body: JSON.stringify({ revision: 2, title: "Already deleted" }),
           })).status,
+        ).toBe(404)
+      }),
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  ),
+)
+
+it.live("lists, gets, and idempotently applies durable personal Todo proposals", () =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => tmpdir({ config: { formatter: false, lsp: false } })),
+    (tmp) =>
+      Effect.gen(function* () {
+        const proposalID = "proposal_11111111-1111-4111-8111-111111111111"
+        const staleID = "proposal_22222222-2222-4222-8222-222222222222"
+        const todoID = "todo_33333333-3333-4333-8333-333333333333"
+        const source = { sessionID: "ses_http", messageID: "msg_http", callID: "call_http" }
+        const propose = (input: PersonalTodoProposal.Input) =>
+          Effect.promise(() =>
+            withTestInstance({
+              directory: tmp.path,
+              fn: () =>
+                AppRuntime.runPromise(
+                  Storage.Service.use((storage) => PersonalTodoProposal.make({ storage }).propose(input)),
+                ),
+            }),
+          )
+        const saved = yield* propose({
+          id: proposalID,
+          source,
+          target: { kind: "new", todoID, baseRevision: 0 },
+          changes: {
+            title: "Plan the move",
+            subtasks: [
+              {
+                kind: "new",
+                id: "subtodo_44444444-4444-4444-8444-444444444444",
+                title: "Book viewings",
+              },
+            ],
+          },
+        })
+
+        const listed = yield* request(tmp.path, "/raya/personal-todos/proposals")
+        expect(listed.status).toBe(200)
+        expect(yield* json(listed)).toEqual([
+          expect.objectContaining({ proposal: expect.objectContaining({ id: proposalID }), state: "open" }),
+        ])
+
+        const fetched = yield* request(tmp.path, `/raya/personal-todos/proposals/${proposalID}`)
+        expect(fetched.status).toBe(200)
+        expect(yield* json(fetched)).toMatchObject({
+          proposal: { id: proposalID, digest: saved.digest },
+          state: "open",
+        })
+
+        const invalid = yield* request(tmp.path, `/raya/personal-todos/proposals/${proposalID}/apply`, {
+          method: "POST",
+          body: JSON.stringify({ digest: "invalid" }),
+        })
+        expect(invalid.status).toBe(400)
+
+        const conflict = yield* request(tmp.path, `/raya/personal-todos/proposals/${proposalID}/apply`, {
+          method: "POST",
+          body: JSON.stringify({ digest: "0".repeat(64) }),
+        })
+        expect(conflict.status).toBe(409)
+
+        const apply = () =>
+          request(tmp.path, `/raya/personal-todos/proposals/${proposalID}/apply`, {
+            method: "POST",
+            body: JSON.stringify({ digest: saved.digest }),
+          })
+        const applied = yield* apply()
+        expect(applied.status).toBe(200)
+        const view = yield* json(applied)
+        expect(view).toMatchObject({
+          proposal: { id: proposalID, digest: saved.digest },
+          state: "applied",
+          todo: { id: todoID, title: "Plan the move", revision: 1 },
+        })
+        const replayed = yield* apply()
+        expect(replayed.status).toBe(200)
+        expect(yield* json(replayed)).toEqual(view)
+
+        const stale = yield* propose({
+          id: staleID,
+          source: { ...source, callID: "call_stale" },
+          target: { kind: "existing", todoID, baseRevision: 1 },
+          changes: { title: "Stale proposal" },
+        })
+        const updated = yield* request(tmp.path, `/raya/personal-todos/${todoID}`, {
+          method: "PATCH",
+          body: JSON.stringify({ revision: 1, title: "Manual edit" }),
+        })
+        expect(updated.status).toBe(200)
+        const staleResponse = yield* request(tmp.path, `/raya/personal-todos/proposals/${staleID}/apply`, {
+          method: "POST",
+          body: JSON.stringify({ digest: stale.digest }),
+        })
+        expect(staleResponse.status).toBe(409)
+        expect(yield* json(staleResponse)).toEqual({
+          name: "PersonalTodoProposalStaleRevisionError",
+          data: {
+            proposalID: staleID,
+            todoID,
+            expected: 1,
+            actual: 2,
+            message: "The personal Todo changed before this proposal was applied.",
+          },
+        })
+
+        expect(
+          (yield* request(tmp.path, "/raya/personal-todos/proposals/proposal_99999999-9999-4999-8999-999999999999"))
+            .status,
         ).toBe(404)
       }),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),

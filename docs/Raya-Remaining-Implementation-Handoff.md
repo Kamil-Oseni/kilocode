@@ -1,6 +1,12 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from committed source `491b85515d`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The filtered `@opencode-ai/tui` graph passes; the complete CLI package hook remains the next release boundary, so push and snapshot receipts are pending. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work. Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from committed source `ccfb0dc350`; installed snapshot source is `bfd53bdb3e`; remote source remains `d894fc0eb9`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The filtered `@opencode-ai/tui` graph passes; the complete CLI package hook remains the next release boundary, so push and snapshot receipts are pending. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work. Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 12:58 America/Toronto - Do not repeat the monolithic CLI compiler on this machine
+
+The first normal push hook found one real remaining compiler defect in `kilocode/task/storage-read.ts`: its public boundary correctly returned raw `unknown`, but the implementation retained `.read<T>` after `T` was removed. Preserve `ccfb0dc350`; the real claim suite passes 9/61. The second hook passed Core and TUI and reached the full CLI package without emitting another diagnostic.
+
+Stop there for memory safety. Even with one worker, `GOMAXPROCS=1` and `GOMEMLIMIT=2500MiB`, the full CLI `tsgo` reached about 4,992 MB RSS; after interrupt, its surviving child briefly reached about 7,318 MB before exact-PID termination. No process remains, nothing was pushed, and `origin/main` is still `d894fc0eb9`. Treat the full hook as interrupted, not green. Do not retry it unchanged or bypass it. Split the compiler graph or continue narrow gates until a bounded full validation path exists, then push and install.
 
 ## ChatGPT 2026-09-15 12:50 America/Toronto - Continue from three safe migration slices
 

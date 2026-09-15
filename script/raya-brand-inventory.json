@@ -8,8 +8,8 @@
       "reason": "Potential user-facing Kilo names in extension manifests or rendered webview sources."
     },
     "compatibility-key": {
-      "count": 34943,
-      "digest": "5bbdb6b950d95cb3e43563a6dd4f61f5b09558fbb4fece06b4cc595e0682d989",
+      "count": 34965,
+      "digest": "2faad2ce327a94c979175886e4db246bfe1c951216f4090a8c52d41be3c10ee7",
       "reason": "Persisted, protocol, package, command, path, provider, environment or API identity requiring a dual-read migration."
     },
     "upstream-provenance": {
@@ -18,13 +18,13 @@
       "reason": "Legal, attribution, fork documentation, translation process or upstream merge material."
     },
     "internal-migration": {
-      "count": 26446,
-      "digest": "54bc2358ec84ece22df7ccca008faf3c63b230cfb0d79bc8e7fd0661ff7bbd9f",
+      "count": 26457,
+      "digest": "c20e4cd7a8b25a972dedb4d5085b7f406606fe1c8c2d8e500d447f841bd705d2",
       "reason": "Internal source identity that can migrate after public and stored compatibility contracts stabilize."
     }
   },
   "total": {
-    "count": 68768,
-    "digest": "928149fa0e2198e05df097c4c6eaa15ed51ab57db7dc4c386cf7fb1e940313da"
+    "count": 68801,
+    "digest": "63b669ee3e52fa3b188c0fb4896f070de1a0fd8303b8eb5e997c4121114626a2"
   }
 }

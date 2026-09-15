@@ -53,6 +53,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
       name: pkg.name, // kilocode_change
       bin: {
         // kilocode_change start
+        raya: `./bin/kilo`,
         kilo: `./bin/kilo`,
         kilocode: `./bin/kilo`,
         // kilocode_change end

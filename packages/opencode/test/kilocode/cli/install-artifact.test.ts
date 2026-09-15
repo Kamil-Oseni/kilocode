@@ -87,6 +87,7 @@ describe("npm install artifact behavior", () => {
             name: "kilo-install-artifact-repro",
             version: "1.0.0",
             bin: {
+              raya: "./bin/kilo",
               kilo: "./bin/kilo",
               kilocode: "./bin/kilo",
             },
@@ -98,7 +99,7 @@ describe("npm install artifact behavior", () => {
 
       await $`npm install --prefix ${prefix} ${pkg} --no-package-lock --ignore-scripts --no-audit --no-fund`.quiet()
 
-      const commands = ["kilo", "kilocode"]
+      const commands = ["raya", "kilo", "kilocode"]
       for (const name of commands) {
         const link = path.join(prefix, "node_modules", ".bin", name)
         const stat = await fs.lstat(link)

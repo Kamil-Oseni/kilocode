@@ -4,13 +4,13 @@ This is the single, prioritized source of truth for what to build into Raya next
 
 The order is deliberate. Features are ranked by what is most important to have first, weighing three things at once: how much it changes what Raya can do for you day to day, whether it makes an already-shipped feature actually reliable, and whether other features on the list depend on it. Reliability of things you already touch beats breadth of things you don't, and foundations that unlock several later goals are pulled forward even when they are less glamorous than the ambitious cloud work near the bottom.
 
-## Release staging decision — Version 3 migrations
+## Release staging decision — active Kilo compatibility migration; VS Code distribution in Version 3
 
-The compatibility-breaking Kilo-to-Raya identity migration and a Raya-owned VS Code distribution are deferred to **Version 3**, after the current extension and backend are stable. They have **no Version 1 or Version 2 implementation scope** and are not part of the active numbered build order. Version 3 begins only when the owner explicitly opens it.
+Kilo-to-Raya migration is active wherever it can preserve existing installations through additive aliases, dual reads, explicit conflict precedence, journaled copy, exact verification and rollback. Begin with the `raya` CLI alias, `RAYA_*` user-input aliases, `.raya`/`raya.json` config reads and proven rendered branding. Do not rename or delete live Kilo identities in place.
 
-Current releases continue improving visible Raya branding while retaining the existing package IDs, `kilo` command/executable, provider IDs, API/event paths, storage/config/environment keys, profile folders, telemetry/auth identities, marketplace/update identities and the `eden.raya` extension architecture. Keep the classified brand inventory active; do not begin dual-read/write identity migration, remove legacy aliases or create the VS Code fork yet.
+Existing package IDs, the `kilo` and `kilocode` commands, physical executable, provider IDs, API/event paths, storage/config/environment keys, profile folders, telemetry/auth identities, marketplace/update identities and the `eden.raya` extension architecture remain compatible throughout migration. Change a canonical identity only after its consumers have an additive alias or versioned protocol, a real legacy profile migrates without loss, restart and rollback pass, and its compatibility window is approved.
 
-Version 3 opens only after feature contracts, restart/rebuild persistence, install/rollback, security boundaries and the supported extension UX have sustained acceptance evidence. Its first deliverables are reviewed migration/editor ADRs, a lossless legacy-profile upgrade proof, a published compatibility window, reproducible signed editor artifacts and one complete upgrade/rollback cycle with the extension still supported.
+The Raya-owned VS Code distribution remains deferred to **Version 3**. Version 3 opens only after feature contracts, restart/rebuild persistence, install/rollback, security boundaries and the supported extension UX have sustained acceptance evidence. Its first editor deliverables are a reviewed distribution ADR, reproducible signed artifacts, an upstream security cadence and one complete upgrade/rollback cycle with the extension still supported.
 
 ## Completed (as of 6 September 2026)
 

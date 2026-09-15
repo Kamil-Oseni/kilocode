@@ -265,6 +265,7 @@ const KILO_DEPENDENCIES: Record<string, Record<string, string>> = {
 // Kilo-specific bin entries to set on specific packages
 const KILO_BIN: Record<string, Record<string, string>> = {
   "packages/opencode/package.json": {
+    raya: "./bin/kilo",
     kilo: "./bin/kilo",
     kilocode: "./bin/kilo",
   },

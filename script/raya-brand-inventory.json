@@ -3,28 +3,28 @@
   "description": "Checked Raya migration baseline. Public defects are fixed in small batches; compatibility keys require dual-read migration; provenance stays attributed; internal names migrate after public contracts stabilize.",
   "categories": {
     "user-visible-defect": {
-      "count": 1692,
-      "digest": "fb10bc4e06813221166703f16299292a54f0e051b2952a5f702c5a25a020c869",
+      "count": 1693,
+      "digest": "309cc96e525c363a472c36eaac147c5df6d0bf6ba42b3d760b48e38b84aea0c5",
       "reason": "Potential user-facing Kilo names in extension manifests or rendered webview sources."
     },
     "compatibility-key": {
-      "count": 34827,
-      "digest": "a714d2f01df3a19da61a50b39315cf49394d4f0016f0bda593cc7b69bf0daada",
+      "count": 34886,
+      "digest": "e1c827dbf30e281da9ca325fa64dc70a72c8061668cf729d4fca48f284c0b512",
       "reason": "Persisted, protocol, package, command, path, provider, environment or API identity requiring a dual-read migration."
     },
     "upstream-provenance": {
-      "count": 5685,
-      "digest": "ad6e70dadce60c38c3a088f75533233cfc1b6838b883ad12eb55d2d2ea6780ed",
+      "count": 5686,
+      "digest": "cbf762b319fab787689cce9205a5b8f88533be9aae6d7e2ae8d70522db93f921",
       "reason": "Legal, attribution, fork documentation, translation process or upstream merge material."
     },
     "internal-migration": {
-      "count": 26390,
-      "digest": "979d795d6811fb52813da883a84ef380cecdee871bfa0145455dd89f01d7f7f2",
+      "count": 26421,
+      "digest": "1552e796fee9dbbfdbbdb28aedbe6a0c12022ac1c15877e56843511f50f9e0f1",
       "reason": "Internal source identity that can migrate after public and stored compatibility contracts stabilize."
     }
   },
   "total": {
-    "count": 68594,
-    "digest": "4eed890f39a855ea9e2cffe96b3671053b1cdc7a48c3a8a6a4a1ffd84a83dcd2"
+    "count": 68686,
+    "digest": "76c81d08f4fee860b0687b38cfa7f15986a867391142d091ae3b93673b10ba3e"
   }
 }

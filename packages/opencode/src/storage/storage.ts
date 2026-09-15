@@ -2,10 +2,11 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
+import { Duration, Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Git } from "@/git"
 import { publish } from "@/kilocode/session/review-publish" // kilocode_change - atomic review receipt persistence
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -220,7 +221,7 @@ const MIGRATIONS: Migration[] = [
 // default (production) root is unchanged and resolved lazily on first use. Note for
 // callers of layerFromDir: migration 1 walks `../project` relative to this directory,
 // so inject `<root>/storage` when legacy layouts must be reachable from the parent.
-const make = (root?: string) =>
+const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWriterLive.storage) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -230,28 +231,32 @@ const make = (root?: string) =>
         lookup: () => TxReentrantLock.make(),
         idleTimeToLive: 0,
       })
-      const state = yield* Effect.cached(
-        Effect.gen(function* () {
-          const dir = root ?? path.join(Global.Path.data, "storage")
-          const marker = path.join(dir, "migration")
-          const migration = yield* fs.readFileString(marker).pipe(
-            Effect.map(parseMigration),
-            Effect.catchIf(missing, () => Effect.succeed(0)),
-            Effect.orElseSucceed(() => 0),
-          )
-          for (let i = migration; i < MIGRATIONS.length; i++) {
-            yield* Effect.logInfo("running migration", { index: i })
-            const step = MIGRATIONS[i]!
-            const exit = yield* Effect.exit(step(dir, fs, git))
-            if (Exit.isFailure(exit)) {
-              yield* Effect.logError("failed to run migration", { index: i, cause: exit.cause })
-              break
+      const [cached, invalidate] = yield* Effect.cachedInvalidateWithTTL(
+        admission.run(
+          Effect.gen(function* () {
+            const dir = root ?? path.join(Global.Path.data, "storage")
+            const marker = path.join(dir, "migration")
+            const migration = yield* fs.readFileString(marker).pipe(
+              Effect.map(parseMigration),
+              Effect.catchIf(missing, () => Effect.succeed(0)),
+              Effect.orElseSucceed(() => 0),
+            )
+            for (let i = migration; i < MIGRATIONS.length; i++) {
+              yield* Effect.logInfo("running migration", { index: i })
+              const step = MIGRATIONS[i]!
+              const exit = yield* Effect.exit(step(dir, fs, git))
+              if (Exit.isFailure(exit)) {
+                yield* Effect.logError("failed to run migration", { index: i, cause: exit.cause })
+                break
+              }
+              yield* fs.writeWithDirs(marker, String(i + 1))
             }
-            yield* fs.writeWithDirs(marker, String(i + 1))
-          }
-          return { dir }
-        }),
+            return { dir }
+          }),
+        ),
+        Duration.infinity,
       )
+      const state = cached.pipe(Effect.tapCause(() => invalidate))
 
       const fail = (target: string): Effect.Effect<never, NotFoundError> =>
         Effect.fail(new NotFoundError({ message: `Resource not found: ${target}` }))
@@ -274,8 +279,24 @@ const make = (root?: string) =>
           }),
         )
 
+      const mutate = <A, E>(
+        key: string[],
+        fn: (target: string, rw: TxReentrantLock.TxReentrantLock) => Effect.Effect<A, E>,
+      ): Effect.Effect<A, E | FSUtil.Error> =>
+        Effect.gen(function* () {
+          const dir = (yield* state).dir
+          return yield* admission.run(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const target = file(dir, key)
+                return yield* fn(target, yield* RcMap.get(locks, target))
+              }),
+            ),
+          )
+        })
+
       const remove: Interface["remove"] = Effect.fn("Storage.remove")(function* (key: string[]) {
-        yield* withResolved(key, (target, rw) =>
+        yield* mutate(key, (target, rw) =>
           TxReentrantLock.withWriteLock(rw, fs.remove(target).pipe(Effect.catchIf(missing, () => Effect.void))),
         )
       })
@@ -289,27 +310,22 @@ const make = (root?: string) =>
         })
 
       const update: Interface["update"] = <T>(key: string[], fn: (draft: T) => void) =>
-        Effect.gen(function* () {
-          const value = yield* withResolved(key, (target, rw) =>
-            TxReentrantLock.withWriteLock(
-              rw,
-              Effect.gen(function* () {
-                const content = yield* wrap(target, fs.readJson(target))
-                fn(content as T)
-                // kilocode_change start - publish updates atomically so failed replacements retain prior JSON
-                yield* publish(fs, target, content, true).pipe(Effect.asVoid)
-                // kilocode_change end
-                return content
-              }),
-            ),
-          )
-          return value as T
-        })
+        mutate(key, (target, rw) =>
+          TxReentrantLock.withWriteLock(
+            rw,
+            Effect.gen(function* () {
+              const content = yield* wrap(target, fs.readJson(target))
+              fn(content as T)
+              // kilocode_change start - publish updates atomically so failed replacements retain prior JSON
+              yield* publish(fs, target, content, true).pipe(Effect.asVoid)
+              // kilocode_change end
+              return content as T
+            }),
+          ),
+        )
 
       const write: Interface["write"] = (key: string[], content: unknown) =>
-        Effect.gen(function* () {
-          yield* withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, writeJson(target, content)))
-        })
+        mutate(key, (target, rw) => TxReentrantLock.withWriteLock(rw, writeJson(target, content)))
 
       const list: Interface["list"] = Effect.fn("Storage.list")(function* (prefix: string[]) {
         const dir = (yield* state).dir
@@ -328,9 +344,9 @@ const make = (root?: string) =>
       return Service.of({
         // kilocode_change start - keep receipt publication separate from legacy JSON write behavior
         create: (key, content) =>
-          withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
+          mutate(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
         replace: (key, content) =>
-          withResolved(key, (target, rw) =>
+          mutate(key, (target, rw) =>
             TxReentrantLock.withWriteLock(rw, publish(fs, target, content, true).pipe(Effect.asVoid)),
           ),
         // kilocode_change end
@@ -347,7 +363,7 @@ const layer = make()
 
 // kilocode_change start
 /** Storage rooted at an explicit directory — for tests and multi-instance isolation. */
-export const layerFromDir = (dir: string) => make(dir)
+export const layerFromDir = (dir: string, admission?: ProfileWriterLive.Admission) => make(dir, admission)
 // kilocode_change end
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, Git.node] })

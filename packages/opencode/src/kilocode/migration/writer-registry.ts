@@ -30,6 +30,7 @@ export namespace ProfileWriterRegistry {
   export type Registry = {
     register(id: string): Effect.Effect<void, RegistryError>
     run<A, E, R>(id: string, body: Effect.Effect<A, E, R>): Effect.Effect<A, E | RegistryError, R>
+    runOrDie<A, E, R>(id: string, body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>
     quiesce<A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A, E | RegistryError, R>
     readonly snapshot: Effect.Effect<Snapshot>
   }
@@ -114,6 +115,13 @@ export namespace ProfileWriterRegistry {
         () => release(id),
       )
 
+    const runOrDie: Registry["runOrDie"] = (id, body) =>
+      Effect.acquireUseRelease(
+        acquire(id).pipe(Effect.orDie),
+        () => body,
+        () => release(id),
+      )
+
     const quiesce: Registry["quiesce"] = (body) =>
       Effect.acquireUseRelease(
         Effect.gen(function* () {
@@ -152,6 +160,6 @@ export namespace ProfileWriterRegistry {
       ),
     )
 
-    return { register, run, quiesce, snapshot }
+    return { register, run, runOrDie, quiesce, snapshot }
   }
 }

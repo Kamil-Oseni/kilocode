@@ -358,7 +358,7 @@ export namespace ProfileWriterManifest {
         methods: ["initialize", "migrate", "create", "replace", "write", "update", "remove"],
         lifecycle: "Admit lazy migrations and marker writes as well as every public mutation method.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.tmp.attachments",

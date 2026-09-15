@@ -10,7 +10,10 @@ describe("profile writer manifest", () => {
     const manifest = ProfileWriterManifest.manifest
     expect(manifest.complete).toBe(false)
     expect(manifest.gaps.length).toBeGreaterThan(0)
-    expect(manifest.writers.map((writer) => writer.coverage)).not.toContain("integrated")
+    expect(manifest.writers.filter((writer) => writer.coverage === "integrated").map((writer) => writer.id)).toEqual([
+      "profile.storage.json",
+    ])
+    expect(manifest.writers.filter((writer) => writer.coverage !== "integrated").length).toBeGreaterThan(0)
     expect(() => ProfileWriterRegistry.fromManifest(manifest)).toThrow("not complete and integrated")
   })
 

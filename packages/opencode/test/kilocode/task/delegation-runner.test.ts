@@ -342,6 +342,7 @@ test("organization policy is pinned at authorization and cannot widen delegated 
         sessions: {
           create: (input) =>
             Effect.gen(function* () {
+              if (!input) return yield* Effect.die(new Error("Expected delegated session input"))
               if (!state.updated) {
                 state.updated = true
                 yield* organizations.update(state.id, {
@@ -351,7 +352,7 @@ test("organization policy is pinned at authorization and cannot widen delegated 
               }
               calls.push({ permission: input.permission })
               return session("ses_policy")
-            }),
+            }).pipe(Effect.orDie),
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
@@ -939,9 +940,11 @@ test("waiting for the user survives restart and holds the next delegation", asyn
       })
       expect(first.state).toBe("running")
       expect(second.state).toBe("queued")
+      if (!first.sessionID) throw new Error("Expected first delegated session")
+      const firstSessionID = first.sessionID
 
-      yield* runner.park(first.sessionID!, true)
-      yield* runner.settle(first.sessionID!)
+      yield* runner.park(firstSessionID, true)
+      yield* runner.settle(firstSessionID)
       const store = RayaTaskDelegation.make(database)
       expect(yield* store.get(first.id)).toMatchObject({ state: "needs_input", sessionID: first.sessionID })
       expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === first.childRunID)).toMatchObject({
@@ -970,7 +973,7 @@ test("waiting for the user survives restart and holds the next delegation", asyn
       const running = yield* store.get(second.id)
       expect(running.state).toBe("running")
       expect(starts).toEqual(["ses_wait_restart_1", "ses_wait_restart_2"])
-      expect(halted).toEqual([first.sessionID])
+      expect(halted).toEqual([firstSessionID])
       expect((yield* reopened.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )

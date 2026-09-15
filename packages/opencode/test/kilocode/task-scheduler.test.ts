@@ -428,7 +428,7 @@ it.live("event startup failure exposes saved instructions without queue or histo
       expect(yield* runner.tasks.runsFor(agent.id)).toEqual([])
       const execution = (yield* runner.preview(Date.now()))[0]?.execution
       expect(execution?.state).toBe("recovery")
-      if (!execution?.runID) throw new Error("Expected retained event identity")
+      if (!execution || !("runID" in execution) || !execution.runID) throw new Error("Expected retained event identity")
       expect((yield* RayaTaskSnapshot.make({ storage }).get(execution.runID)).definition.schedule).toEqual({
         kind: "event",
         source: "ci",
@@ -1744,9 +1744,10 @@ for (const stage of ["before", "after", "owned"] as const) {
           expect(Number(code)).toBe(21)
           const held = yield* inspect(storage, agent.id)
           expect(held?.state).toBe("recovery")
-          expect(held?.sessionID).toBe(next)
-          expect(held?.runID).toBeString()
-          const runID = held!.runID!
+          if (!held || !("runID" in held)) throw new Error("Expected retained follow-up identity")
+          expect(held.sessionID).toBe(next)
+          expect(held.runID).toBeString()
+          const runID = held.runID
           const metadata = {
             rayaRoutine: {
               version: 1 as const,

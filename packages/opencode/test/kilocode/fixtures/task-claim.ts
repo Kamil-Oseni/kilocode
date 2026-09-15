@@ -16,12 +16,12 @@ process.exitCode = await Effect.runPromise(
     const file = (key: string[]) => path.join(directory, ...key) + ".json"
     const storage = {
       create: (key: string[], value: unknown) => publish(fs, file(key), value),
-      read: (key: string[]) =>
+      read: <T>(key: string[]) =>
         fs.readFileString(file(key)).pipe(
           Effect.mapError((error) =>
             error.reason._tag === "NotFound" ? new Storage.NotFoundError({ message: "missing" }) : error,
           ),
-          Effect.map((value): unknown => JSON.parse(value)),
+          Effect.map((value) => JSON.parse(value) as T),
         ),
       replace: (key: string[], value: unknown) => publish(fs, file(key), value, true).pipe(Effect.asVoid),
       remove: (key: string[]) => fs.remove(file(key)),

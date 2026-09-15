@@ -1697,8 +1697,8 @@ describe("RayaTask store", () => {
     expect(agent.paths).toEqual({
       version: 1,
       grants: [
-        { path: write, access: "write" },
-        { path: read, access: "read" },
+        { path: write, access: "write" as const },
+        { path: read, access: "read" as const },
       ].sort((a, b) => a.path.length - b.path.length || a.path.localeCompare(b.path)),
     })
     expect((await Effect.runPromise(RayaTask.make({ storage }).get(agent.id))).paths).toEqual(agent.paths)

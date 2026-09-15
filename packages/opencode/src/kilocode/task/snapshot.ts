@@ -35,7 +35,7 @@ export namespace RayaTaskSnapshot {
   })
   const key = (id: string) => ["raya", "agent-starts", createHash("sha256").update(id).digest("hex")]
 
-  export function make(input: { storage: Storage.Interface }) {
+  export function make(input: { storage: Pick<Storage.Interface, "create" | "read"> }) {
     const find = Effect.fn("RayaTaskSnapshot.find")(function* (id: string) {
       const raw = yield* input.storage.read(key(id)).pipe(
         Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),

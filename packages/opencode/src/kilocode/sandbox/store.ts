@@ -5,6 +5,8 @@ import path from "node:path"
 import { Global } from "@opencode-ai/core/global"
 import type { Profile } from "@kilocode/sandbox"
 import type { SessionID } from "@/session/schema"
+import { Effect } from "effect"
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live"
 
 export namespace SandboxStore {
   /** Persisted session confinement authority, refreshed from trusted settings between tool executions. */
@@ -69,29 +71,59 @@ export namespace SandboxStore {
     } satisfies Snapshot
   }
 
-  export async function write(directory: string, sessionID: SessionID, snapshot: Snapshot) {
-    const base = root()
-    const folder = dir(sessionID, base)
-    const target = file(directory, sessionID, base)
-    const temp = path.join(folder, `.${randomUUID()}.tmp`)
-    await fs.mkdir(folder, { recursive: true, mode: 0o700 })
-    await fs.writeFile(temp, JSON.stringify(snapshot), { encoding: "utf8", flag: "wx", mode: 0o600 })
-    await fs.rename(temp, target).catch(async (err) => {
-      await fs.rm(temp, { force: true })
-      throw err
-    })
+  export async function write(
+    directory: string,
+    sessionID: SessionID,
+    snapshot: Snapshot,
+    admission: ProfileWriterLive.Admission = ProfileWriterLive.policy,
+  ) {
+    return Effect.runPromise(
+      admission.run(
+        Effect.promise(async () => {
+          const base = root()
+          const folder = dir(sessionID, base)
+          const target = file(directory, sessionID, base)
+          const temp = path.join(folder, `.${randomUUID()}.tmp`)
+          await fs.mkdir(folder, { recursive: true, mode: 0o700 })
+          await fs.writeFile(temp, JSON.stringify(snapshot), { encoding: "utf8", flag: "wx", mode: 0o600 })
+          await fs.rename(temp, target).catch(async (err) => {
+            await fs.rm(temp, { force: true })
+            throw err
+          })
+        }),
+      ),
+    )
   }
 
-  export async function remove(directory: string, sessionID: SessionID) {
-    const base = root()
-    await fs.rm(file(directory, sessionID, base), { force: true })
-    await fs.rmdir(dir(sessionID, base)).catch((err: NodeJS.ErrnoException) => {
-      if (err.code === "ENOENT" || err.code === "ENOTEMPTY") return
-      throw err
-    })
+  export async function remove(
+    directory: string,
+    sessionID: SessionID,
+    admission: ProfileWriterLive.Admission = ProfileWriterLive.policy,
+  ) {
+    return Effect.runPromise(
+      admission.run(
+        Effect.promise(async () => {
+          const base = root()
+          await fs.rm(file(directory, sessionID, base), { force: true })
+          await fs.rmdir(dir(sessionID, base)).catch((err: NodeJS.ErrnoException) => {
+            if (err.code === "ENOENT" || err.code === "ENOTEMPTY") return
+            throw err
+          })
+        }),
+      ),
+    )
   }
 
-  export async function dispose(sessionID: SessionID) {
-    await fs.rm(dir(sessionID, root()), { recursive: true, force: true })
+  export async function dispose(
+    sessionID: SessionID,
+    admission: ProfileWriterLive.Admission = ProfileWriterLive.policy,
+  ) {
+    return Effect.runPromise(
+      admission.run(
+        Effect.promise(async () => {
+          await fs.rm(dir(sessionID, root()), { recursive: true, force: true })
+        }),
+      ),
+    )
   }
 }

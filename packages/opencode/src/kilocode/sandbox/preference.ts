@@ -3,6 +3,8 @@ import fs from "node:fs/promises"
 import { realpathSync } from "node:fs"
 import path from "node:path"
 import { Global } from "@opencode-ai/core/global"
+import { Effect } from "effect"
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live"
 
 export namespace SandboxPreference {
   export function root() {
@@ -24,15 +26,25 @@ export namespace SandboxPreference {
     return typeof value === "boolean" ? value : undefined
   }
 
-  export async function write(directory: string, enabled: boolean) {
-    const base = root()
-    const target = file(directory, base)
-    const temp = path.join(base, `.${randomUUID()}.tmp`)
-    await fs.mkdir(base, { recursive: true, mode: 0o700 })
-    await fs.writeFile(temp, JSON.stringify(enabled), { encoding: "utf8", flag: "wx", mode: 0o600 })
-    await fs.rename(temp, target).catch(async (err) => {
-      await fs.rm(temp, { force: true })
-      throw err
-    })
+  export async function write(
+    directory: string,
+    enabled: boolean,
+    admission: ProfileWriterLive.Admission = ProfileWriterLive.preference,
+  ) {
+    return Effect.runPromise(
+      admission.run(
+        Effect.promise(async () => {
+          const base = root()
+          const target = file(directory, base)
+          const temp = path.join(base, `.${randomUUID()}.tmp`)
+          await fs.mkdir(base, { recursive: true, mode: 0o700 })
+          await fs.writeFile(temp, JSON.stringify(enabled), { encoding: "utf8", flag: "wx", mode: 0o600 })
+          await fs.rename(temp, target).catch(async (err) => {
+            await fs.rm(temp, { force: true })
+            throw err
+          })
+        }),
+      ),
+    )
   }
 }

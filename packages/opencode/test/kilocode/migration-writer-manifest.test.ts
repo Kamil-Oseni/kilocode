@@ -14,6 +14,8 @@ describe("profile writer manifest", () => {
       "profile.credentials.auth",
       "profile.credentials.mcp",
       "profile.data.tool-output",
+      "profile.state.sandbox-policy",
+      "profile.state.sandbox-preference",
       "profile.storage.json",
     ])
     expect(manifest.writers.filter((writer) => writer.coverage !== "integrated").length).toBeGreaterThan(0)

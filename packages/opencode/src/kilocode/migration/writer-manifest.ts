@@ -340,7 +340,7 @@ export namespace ProfileWriterManifest {
         methods: ["write", "remove", "dispose"],
         lifecycle: "Pin the kilo-sandbox-policy compatibility root for the complete operation.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.state.sandbox-preference",
@@ -349,7 +349,7 @@ export namespace ProfileWriterManifest {
         methods: ["write"],
         lifecycle: "Pin the kilo-sandbox-preference compatibility root for the complete operation.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.state.tui-kv",

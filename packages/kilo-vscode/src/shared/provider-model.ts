@@ -41,7 +41,7 @@ export function providerDisplayName(providerID: string, name?: string) {
 export function createKiloFallbackProvider() {
   return {
     id: KILO_PROVIDER_ID,
-    name: "Kilo Gateway",
+    name: RAYA_GATEWAY_NAME,
     source: "custom" as const,
     env: ["KILO_API_KEY"],
     metadata: {

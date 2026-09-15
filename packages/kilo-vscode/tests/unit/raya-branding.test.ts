@@ -1,6 +1,7 @@
 // raya_change - keep inherited product copy out of Raya's customer-facing boundaries
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
+import { createKiloFallbackProvider } from "../../src/shared/provider-model"
 
 const root = path.join(import.meta.dir, "../..")
 const read = (file: string) => Bun.file(path.join(root, file)).text()
@@ -108,6 +109,10 @@ describe("Raya branding boundary", () => {
 
     expect(visible).not.toContain('"Kilo Gateway"')
     expect(visible).toContain("RAYA_GATEWAY_NAME")
-    expect(await read("src/shared/provider-model.ts")).toContain('KILO_PROVIDER_ID = "kilo"')
+    const model = await read("src/shared/provider-model.ts")
+    expect(createKiloFallbackProvider().name).toBe("Raya Gateway")
+    expect(model).toContain('KILO_PROVIDER_ID = "kilo"')
+    expect(model).toContain("name: RAYA_GATEWAY_NAME")
+    expect(model).not.toContain('name: "Kilo Gateway"')
   })
 })

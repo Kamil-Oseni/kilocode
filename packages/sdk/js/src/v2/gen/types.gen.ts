@@ -5836,6 +5836,12 @@ export type RayaGoalDeliverable =
       }
     }
 
+export type UnknownError1 = {
+  _tag: "UnknownError"
+  message: string
+  ref?: string
+}
+
 export type AnacondaDesktopStatus =
   | {
       type: "unsupported-platform"
@@ -6055,12 +6061,6 @@ export type PersonalTodoProposalStaleRevisionError = {
     actual?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     message: string
   }
-}
-
-export type UnknownError1 = {
-  _tag: "UnknownError"
-  message: string
-  ref?: string
 }
 
 export type FocusTimerStaleRevisionError = {
@@ -23542,6 +23542,10 @@ export type KilocodeRoutineOrganizationCreateErrors = {
    * InvalidRequestError
    */
   400: InvalidRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeRoutineOrganizationCreateError =
@@ -25533,6 +25537,10 @@ export type KilocodeSelfHealVerificationPublishErrors = {
    * Conflict
    */
   409: EffectHttpApiErrorConflict
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
 }
 
 export type KilocodeSelfHealVerificationPublishError =

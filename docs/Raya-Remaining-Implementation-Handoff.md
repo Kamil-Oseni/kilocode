@@ -1,6 +1,37 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from product source `87f2a90ffb`; do not pause it. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local and installed product source `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 00:21 America/Toronto - Delegated-agent acceptance checkpoint and exact continuation
+
+Product commit `0d545aa678` extracts the standalone child overlay into `webview-ui/src/components/chat/SubagentViewer.tsx`, exported through the chat component index and consumed by `App.tsx`. Preserve this as the one standalone composition of the exact parent-to-child breadcrumb, read-only production `ChatView` and shared `ChildSteerComposer`. Do not reintroduce an illustrative child viewer or duplicate steering implementation.
+
+The existing low-memory preview now has `background-agents` and `child-viewer` scenes. Its responder supplies twelve child jobs with durable names, roles, timestamps, status, cost and activity; records the exact posted route in `html[data-preview-message]`; supports a `restart-running` scene in which a previously dismissed job is running again; and returns correlated steer success/failure. `StoryProviders.mockSessionValue` includes the production `reviewStats()` and `queuedMessages()` dependencies needed by the real read-only transcript.
+
+`tests/surfaces-preview.browser.ts` is the authoritative repository-level acceptance for this slice. Its six one-worker Chromium cases cover:
+
+1. twelve-child Background Agents layout at 320 and 760 pixels, row count, no horizontal overflow and scoped axe;
+2. keyboard Enter expansion and exact child-open route;
+3. a visible failed child and complete actionable error text;
+4. persisted disclosure/dismissal after reload and reappearance when the same job is running again;
+5. the real standalone child viewer at 320 and 760 pixels with exact parent/child breadcrumb and close route;
+6. Enter steering success with exact parent/child payload, draft clear/refocus, plus failed steering at 320 pixels with exact draft retention and a specific alert.
+
+Keep the production fixes in `webview-ui/src/styles/task-header.css`: focused child rows need a visible outline; hover/focus must promote secondary metadata to `--text-base` to maintain at least 4.5:1 contrast; and error activity occupies its own wrapping line on narrow screens. These were failures found by real Chromium/axe and visual inspection, not fixture-only styling.
+
+Verification completed before commit: Chromium **6 / 6** in 46.1 seconds with one worker; delegated-agent unit/host suites **45 / 96**; 2 GB-capped `check-types:webview`; `preview:check`; focused ESLint; one-thread Oxlint with zero errors; Knip; Prettier; `check-kilocode-change`; and `git diff --check`. The normal pre-push hook was run with `TURBO_CONCURRENCY=1` to protect memory. It completed 25 of 26 tasks, then failed in `@opencode-ai/tui` on the existing broad CLI type baseline across unrelated Kilo goal, self-heal, server and tool files. The VS Code `raya:typecheck` task itself passed from cache. Treat the product commit as scoped-verified and locally committed, but **not pushed** until that hook baseline is repaired or an explicitly approved policy-compliant push path exists.
+
+The installed package is `eden.raya@7.4.23-snapshot+0d545aa678.kamil-oseni.1789446132415`. Retained rollback VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.d6afcb377754813020dd51a9f25d908b1a88f244e615d033602b97cdc89b033b.vsix`, **519,447,591 bytes**, SHA-256 `d6afcb377754813020dd51a9f25d908b1a88f244e615d033602b97cdc89b033b`. Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+0d545aa678.kamil-oseni.1789446132415`. Installed `bin\kilo.exe`: **230,706,176 bytes**, SHA-256 `1f7618e8c7254c8879610d25509e08ebb684b9af648a544b3d2f6c2fe69ccf80`. The installer removed one older vault package, staged package and extension. The package vault still reports active digest `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`; require `d6afcb377754813020dd51a9f25d908b1a88f244e615d033602b97cdc89b033b` after reload before active-host acceptance. Drive C had 133,885,243,392 bytes free and no Bun/Turbo/tsgo process remained.
+
+`FUT-AGENT-02` stays **In progress**. Repository-level standalone monitor/viewer acceptance is complete. Remaining controlled checks are:
+
+1. reload the real installed VS Code host and prove the package-vault active pointer changes to the new digest;
+2. create or use one parent with at least ten children in the installed host and inspect Background Agents plus Agent Manager child tabs/panels with keyboard-only navigation;
+3. steer one exact active child, prove the instruction appears once only in that selected child, then restart the extension host and prove it remains visible without creating a new child or duplicate instruction;
+4. verify completed, failed, cancelled, waiting and running states plus disclosure/dismissal across the real restart;
+5. record exact screenshots/receipts and update both documents before marking the requirement Verified.
+
+Do not wait for these human gates before doing independent work. Continue the easiest roadmap slice that has deterministic local acceptance, while preserving the original PR/EN/UI/OVR priorities. Update this handoff and the findings row after every implementation checkpoint so the next reviewer can compare code, evidence, installed source and remaining work.
 
 ## ChatGPT 2026-09-14 23:42 America/Toronto - Child steering installed; future table rendering repaired
 

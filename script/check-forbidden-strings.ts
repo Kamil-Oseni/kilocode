@@ -46,6 +46,18 @@ const forbidden: { pattern: string; reason: string; allow?: string[] }[] = [
   { pattern: "Tell OpenCode what to do differently", reason: "direct-mode permission UI uses upstream branding" },
   { pattern: "until OpenCode is restarted", reason: "permission copy uses upstream branding" },
   { pattern: "OpenCode's managed cache", reason: "Scout tool description uses upstream branding" },
+  {
+    pattern: "Kilo Marketplace",
+    reason: "marketplace panel must use Raya branding",
+    allow: [
+      "README.md",
+      "docs/Raya-Supported-Clients.md",
+      "packages/kilo-console/src/routes/config/McpRoute.tsx",
+      "packages/kilo-docs/",
+    ],
+  },
+  { pattern: "Kilo Code · Next Edit", reason: "Next Edit output channel must use Raya branding" },
+  { pattern: "Kilo prompt failed", reason: "ACP fallback must use Raya branding" },
 
   // Candidates -- enable once the underlying call sites have been rebranded.
   // Each one currently fires on real leaks; uncomment after fixing the listed

@@ -32,6 +32,7 @@ import { visibleError } from "../../context/session-errors"
 import { coalesceToolRows } from "../../utils/transcript-parts"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
 import type { Message as WebMessage } from "../../types/messages"
+import { MessageTime } from "./MessageTime"
 
 export interface VscodeTurn {
   id: string
@@ -159,6 +160,7 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
                     : undefined
                 }
               />
+              <MessageTime value={msg() as unknown as WebMessage} side="user" />
             </div>
           </Show>
 
@@ -167,25 +169,28 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
             <div class="vscode-session-turn-assistant">
               <For each={rows()}>
                 {(row) => (
-                  <AssistantMessage
-                    message={row.message}
-                    parts={row.parts}
-                    showAssistantCopyPartID={showAssistantCopyPartID()}
-                    feedback={{
-                      enabled: feedback.telemetryEnabled(),
-                      rating: feedback.getRating(row.message.id),
-                      onRate: (next) =>
-                        feedback.rate({
-                          messageID: row.message.id,
-                          sessionID: row.message.sessionID,
-                          parentMessageID: row.message.parentID,
-                          providerID: row.message.providerID,
-                          modelID: row.message.modelID,
-                          variant: (row.message as SDKAssistantMessage & { variant?: string }).variant,
-                          next,
-                        }),
-                    }}
-                  />
+                  <>
+                    <AssistantMessage
+                      message={row.message}
+                      parts={row.parts}
+                      showAssistantCopyPartID={showAssistantCopyPartID()}
+                      feedback={{
+                        enabled: feedback.telemetryEnabled(),
+                        rating: feedback.getRating(row.message.id),
+                        onRate: (next) =>
+                          feedback.rate({
+                            messageID: row.message.id,
+                            sessionID: row.message.sessionID,
+                            parentMessageID: row.message.parentID,
+                            providerID: row.message.providerID,
+                            modelID: row.message.modelID,
+                            variant: (row.message as SDKAssistantMessage & { variant?: string }).variant,
+                            next,
+                          }),
+                      }}
+                    />
+                    <MessageTime value={row.message as unknown as WebMessage} side="assistant" />
+                  </>
                 )}
               </For>
             </div>

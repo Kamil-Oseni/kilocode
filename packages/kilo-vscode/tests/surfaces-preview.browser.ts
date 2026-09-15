@@ -95,6 +95,17 @@ test("light slash, transcript, and conversation", async ({ page }, info) => {
   await expect(page.locator('[data-highlight="slash"][data-command="goal"]')).toBeVisible()
   await expect(page.locator(".tool-group__count").first()).toContainText("steps")
   await expect(page.getByText("Here's the change to the composer stylesheet.")).toBeVisible()
+  const times = page.locator('[data-fixture] [data-component="message-time"]')
+  await expect(times).toHaveCount(2)
+  await expect(times.nth(0)).toHaveAttribute("data-side", "user")
+  await expect(times.nth(1)).toHaveAttribute("data-side", "assistant")
+  for (const time of await times.all()) {
+    await expect(time).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}T/)
+    await expect(time).toHaveAttribute("aria-label", /\d/)
+    await expect(time).toBeVisible()
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  expect((await new AxeBuilder({ page }).include('[data-component="message-time"]').analyze()).violations).toEqual([])
   await page.screenshot({ path: info.outputPath("chrome.png"), fullPage: true })
 })
 

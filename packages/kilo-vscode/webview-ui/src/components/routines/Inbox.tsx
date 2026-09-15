@@ -4,6 +4,7 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import { ChatInfo } from "./ChatInfo"
 import { MediaAttachment, previewable } from "./MediaAttachment"
+import { MessageTime } from "../chat/MessageTime"
 
 const RESTORE_PAGE_LIMIT = 20
 
@@ -136,10 +137,6 @@ function caption(item: Peer, phase: "idle" | "sending" | "failed", workspace?: s
   return `Ask ${item.name}`
 }
 
-function stamp(at: number) {
-  return new Date(at).toLocaleString()
-}
-
 function kind(value: Note["kind"], source?: string) {
   if (value === "system") return "Update"
   if (value === "report") return "Report"
@@ -269,7 +266,7 @@ const Line: Component<{
       data-routine-message={props.item.id}
     >
       <span class="routines-line-meta">
-        {kind(props.item.kind, props.item.source)} · {stamp(props.item.time)}
+        {kind(props.item.kind, props.item.source)} · <MessageTime value={props.item.time} side="routine" />
       </span>
       <p class="routines-line-body">{props.item.body}</p>
       <Files items={props.item.files} session={props.item.sessionID} />
@@ -983,7 +980,14 @@ export const Inbox: Component<{
             {props.role}
             <Show when={props.workspace}> · {props.workspace}</Show>
             {` · ${status(props.box?.state ?? "scheduled")}`}
-            <Show when={props.box?.nextRun}>{(at) => <> · Next {stamp(at())}</>}</Show>
+            <Show when={props.box?.nextRun}>
+              {(at) => (
+                <>
+                  {" · Next "}
+                  <MessageTime value={at()} side="routine" detail="date-time" />
+                </>
+              )}
+            </Show>
           </span>
         </div>
         <Show when={!info() && props.workers && props.workers.length > 0}>

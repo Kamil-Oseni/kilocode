@@ -127,7 +127,7 @@ export const MediaAttachment: Component<{ agentID: string; file: DraftFile; deta
       <Show
         when={phase() === "ready"}
         fallback={
-          <div class="routines-media routines-media-placeholder">
+          <div class="routines-media routines-media-placeholder" role="group" aria-label={props.file.name}>
             <span class="routines-image-state" role={phase() === "loading" ? "status" : undefined}>
               {phase() === "failed" ? "Preview unavailable" : "Loading preview…"}
             </span>

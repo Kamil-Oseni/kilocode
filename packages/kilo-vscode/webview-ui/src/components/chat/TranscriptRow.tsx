@@ -12,6 +12,7 @@ import { useVSCode } from "../../context/vscode"
 import { useFeedback } from "../../context/feedback"
 import { AssistantMessage } from "./AssistantMessage"
 import { ErrorDisplay, type ErrorDisplayProps } from "./ErrorDisplay"
+import { MessageTime } from "./MessageTime"
 import { VscodeUserMessage } from "./VscodeUserMessage"
 
 interface TranscriptRowViewProps {
@@ -112,6 +113,7 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
                   }),
               }}
             />
+            <MessageTime value={row().message} side="assistant" />
           </div>
         )}
       </Show>

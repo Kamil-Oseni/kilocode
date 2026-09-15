@@ -118,6 +118,10 @@ for (const theme of ["light", "dark"]) {
       if (width === 320) await expect(page.getByRole("button", { name: "Back to Books" })).toBeVisible()
       else await expect(page.getByRole("button", { name: "Back to Books" })).toBeHidden()
       await expect(thread.getByText("Friday expenses increased in travel.")).toBeVisible()
+      const time = thread.locator('[data-routine-message] [data-component="message-time"]').first()
+      await expect(time).toBeVisible()
+      await expect(time).toHaveAttribute("data-side", "routine")
+      await expect(time).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}T/)
       const people = page.locator(".routines-people")
       if (width === 320) {
         await expect(people).toBeHidden()

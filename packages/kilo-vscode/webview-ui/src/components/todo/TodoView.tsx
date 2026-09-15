@@ -264,7 +264,9 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
               current={duration()}
               value={(item) => String(item.value)}
               label={(item) => item.label}
-              onSelect={(item) => setDuration(item)}
+              onSelect={(item) => {
+                if (item) setDuration(item)
+              }}
               aria-label="Focus duration"
               disabled={timerPending()}
             />
@@ -276,7 +278,7 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
               current={todoOption()}
               value={(item) => item.id}
               label={(item) => item.label}
-              onSelect={(item) => setTodo(item.id || undefined)}
+              onSelect={(item) => setTodo(item?.id || undefined)}
               aria-label="Linked todo"
               disabled={timerPending()}
             />

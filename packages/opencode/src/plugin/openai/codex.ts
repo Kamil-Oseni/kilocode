@@ -1,7 +1,7 @@
 import type { Hooks, PluginInput } from "@kilocode/plugin"
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
-import { escapeHtml } from "@/util/html"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { KiloOauthCallbackPage } from "@opencode-ai/core/kilocode/oauth/page" // kilocode_change - Raya display wrapper
 import { OAUTH_DUMMY_KEY } from "../../auth"
 import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -158,102 +158,9 @@ async function refreshAccessToken(refreshToken: string, issuer = ISSUER, signal?
   return response.json()
 }
 
-// kilocode_change start - retain Kilo-branded OAuth callback until the shared page supports Kilo branding
-const HTML_SUCCESS = `<!doctype html>
-<html>
-  <head>
-    <!-- kilocode_change start -->
-    <title>Kilo - Codex Authorization Successful</title>
-    <!-- kilocode_change end -->
-    <style>
-      body {
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
-        background: #131010;
-        color: #f1ecec;
-      }
-      .container {
-        text-align: center;
-        padding: 2rem;
-      }
-      h1 {
-        color: #f1ecec;
-        margin-bottom: 1rem;
-      }
-      p {
-        color: #b7b1b1;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Authorization Successful</h1>
-      <!-- kilocode_change start -->
-      <p>You can close this window and return to Kilo.</p>
-      <!-- kilocode_change end -->
-    </div>
-    <script>
-      setTimeout(() => window.close(), 2000)
-    </script>
-  </body>
-</html>`
-
-export const renderOAuthError = (error: string) => `<!doctype html>
-<html>
-  <head>
-    <!-- kilocode_change start -->
-    <title>Kilo - Codex Authorization Failed</title>
-    <!-- kilocode_change end -->
-    <style>
-      body {
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
-        background: #131010;
-        color: #f1ecec;
-      }
-      .container {
-        text-align: center;
-        padding: 2rem;
-      }
-      h1 {
-        color: #fc533a;
-        margin-bottom: 1rem;
-      }
-      p {
-        color: #b7b1b1;
-      }
-      .error {
-        color: #ff917b;
-        font-family: monospace;
-        margin-top: 1rem;
-        padding: 1rem;
-        background: #3c140d;
-        border-radius: 0.5rem;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Authorization Failed</h1>
-      <p>An error occurred during authorization.</p>
-      <div class="error">${escapeHtml(error)}</div>
-    </div>
-  </body>
-</html>`
+// kilocode_change start - reuse the shared Raya callback page instead of a divergent branded duplicate
+const HTML_SUCCESS = KiloOauthCallbackPage.success({ provider: "ChatGPT" })
+export const renderOAuthError = (error: string) => KiloOauthCallbackPage.error(error, { provider: "ChatGPT" })
 // kilocode_change end
 
 interface PendingOAuth {

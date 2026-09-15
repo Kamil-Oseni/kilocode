@@ -11,26 +11,38 @@ const log = Log.create({ service: "mcp.oauth-callback" }) // kilocode_change
 let currentPort = OAUTH_CALLBACK_PORT
 let currentPath = OAUTH_CALLBACK_PATH
 
+// kilocode_change start - Raya OAuth completion uses one restrained, responsive surface for every outcome
+const CALLBACK_STYLE = `<style>
+  :root { color-scheme: light dark; --surface: #f7f7f5; --text: #202124; --muted: #666a70; --border: #d7d9dc; --success: #2f6b4f; --danger: #a13d3d; --detail: #f0f0ee; }
+  @media (prefers-color-scheme: dark) { :root { --surface: #171819; --text: #f1f1ef; --muted: #a5a8ad; --border: #3c3e42; --success: #7fc49d; --danger: #ee9292; --detail: #222426; } }
+  * { box-sizing: border-box; }
+  body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: var(--surface); color: var(--text); font-family: "Outfit", system-ui, -apple-system, sans-serif; }
+  main { width: min(32rem, 100%); padding: 2rem 1.5rem; }
+  h1 { margin: 0 0 0.75rem; color: var(--status); font-family: "Instrument Serif", Georgia, serif; font-size: clamp(2rem, 8vw, 2.75rem); font-weight: 400; line-height: 1.05; }
+  p { margin: 0; color: var(--muted); font-size: 1rem; line-height: 1.55; }
+  .detail { margin: 1.25rem 0 0; padding: 1rem; overflow-wrap: anywhere; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--detail); color: var(--text); font: 0.875rem/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+  .success { --status: var(--success); }
+  .error { --status: var(--danger); }
+</style>`
+// kilocode_change end
+
+// kilocode_change start - Raya result copy, layout, and accessible status semantics
 const HTML_SUCCESS = `<!DOCTYPE html>
 <html>
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- kilocode_change start -->
-  <title>Kilo - Authorization Successful</title>
+  <title>Raya - Authorization Successful</title>
   <!-- kilocode_change end -->
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-    .container { text-align: center; padding: 2rem; }
-    h1 { color: #4ade80; margin-bottom: 1rem; }
-    p { color: #aaa; }
-  </style>
+  ${CALLBACK_STYLE}
 </head>
 <body>
-  <div class="container">
-    <h1>Authorization Successful</h1>
+  <main class="success" role="status">
+    <h1>Authorization complete</h1>
     <!-- kilocode_change start -->
-    <p>You can close this window and return to Kilo.</p>
+    <p>You can close this window and return to Raya.</p>
     <!-- kilocode_change end -->
-  </div>
+  </main>
   <script>setTimeout(() => window.close(), 2000);</script>
 </body>
 </html>`
@@ -38,25 +50,21 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- kilocode_change start -->
-  <title>Kilo - Authorization Failed</title>
+  <title>Raya - Authorization Failed</title>
   <!-- kilocode_change end -->
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-    .container { text-align: center; padding: 2rem; }
-    h1 { color: #f87171; margin-bottom: 1rem; }
-    p { color: #aaa; }
-    .detail { color: #fca5a5; font-family: monospace; margin-top: 1rem; padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 0.5rem; white-space: pre-wrap; }
-  </style>
+  ${CALLBACK_STYLE}
 </head>
 <body>
-  <div class="container">
-    <h1>Authorization Failed</h1>
-    <p>An error occurred during authorization.</p>
+  <main class="error" role="alert">
+    <h1>Authorization failed</h1>
+    <p>Raya couldn't finish connecting this service. Review the detail below, then try connecting again.</p>
     <pre class="detail" id="oc-detail">${escapeHtml(error)}</pre>
-  </div>
+  </main>
 </body>
 </html>`
+// kilocode_change end
 
 interface PendingAuth {
   resolve: (code: string) => void

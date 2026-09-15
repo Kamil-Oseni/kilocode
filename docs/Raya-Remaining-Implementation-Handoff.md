@@ -1,5 +1,12 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 20:00 America/Toronto - EN-02 removal/delegation ownership fence
+
+Product commit `8087eea4b0` is verified and pushed. Claim inspection now projects a valid claim's optional operation without changing malformed/startup output. `RayaTaskRunner.removing` treats malformed claim evidence as unsafe, identifies exact removal claims, and ignores ordinary startup/cleanup claims. `delegate` checks before admission and again after the row is durable. Preserve both checks: admission before the removal check causes removal to see a held request and refuse; removal first causes the precheck to refuse; removal between the precheck and insert is caught after admission and leaves a terminal failed request instead of a dangling live row.
+
+Preserve `a durable removal owner refuses concurrent delegation admission`: it blocks the removal claim's storage-create acknowledgement, requires delegation refusal with no row/session, then releases and completes removal. Evidence is 26 delegation tests / 439 assertions and 9 claim tests / 60 assertions. The existing changeset now covers removal admission as well as waiting-state resume. Next audit organization archive/update races against outstanding delegated chains and then perform representative organization execution through real integration boundaries. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:55 America/Toronto - EN-02 waiting-user ownership and resume
 
 Product commit `475fa4402c` is verified and pushed. `RayaTaskDelegation.resume(id, runID, sessionID)` conditionally changes only an exact `needs_input` attachment to `running`, accepts an exact running replay and rejects mismatched or terminal ownership. `RayaTaskRunner.ask` invokes it only after steering the same pending run; this ordering avoids presenting a delegation as running when goal steering failed. If the later delegation transition fails, another reply can safely replay steering and the exact transition.

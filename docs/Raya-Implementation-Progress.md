@@ -1,5 +1,12 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 20:00 America/Toronto - Delegation admission fenced during worker removal
+
+**Status: product commit `8087eea4b0` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Delegation admission now recognizes the recipient's durable `operation: remove` ownership record. A removal already in progress rejects new work before creating a request. Admission also rereads the worker and removal claim after its durable database insert; if removal won the intervening race, the request becomes a durable failed result rather than leaving queued work addressed to an archived worker. Normal startup claims remain distinguishable and do not prevent a busy worker from receiving queued work.
+
+The adverse test pauses removal immediately after its per-worker claim is persisted, attempts a delegation, and proves a typed refusal, no delegation row, no session and successful worker removal after release. The combined delegation suites pass **26 / 439**; the claim suite passes **9 / 60**, including real competing processes. Scoped one-thread lint has zero errors and only existing wider-file warnings; formatting, changeset assembly, whitespace, annotation and Effect Promise-facade guards pass. EN-02/OVR-05 remain **In progress** for organization/archive races beyond worker removal, representative company execution and broader lifecycle acceptance. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:55 America/Toronto - Waiting delegations retain and resume ownership
 
 **Status: product commit `475fa4402c` is verified and pushed to `origin/main`; it is intentionally not installed alone.** A delegated worker waiting for user input now survives backend restart as the recipient's sole pending owner, so later queued requests cannot start. When the user replies, Raya steers the same saved run and conditionally changes the exact attached delegation from `needs_input` back to `running`. Replayed replies accept the already-running identity; another run/session or a terminal state fails with a conflict instead of rewriting ownership.

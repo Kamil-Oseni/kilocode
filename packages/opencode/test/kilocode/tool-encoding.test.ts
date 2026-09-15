@@ -5,7 +5,7 @@
 
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit, Layer, Schema } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import iconv from "iconv-lite"
@@ -28,6 +28,7 @@ import { WriteTool } from "../../src/tool/write"
 import * as EncodedIO from "../../src/kilocode/tool/encoded-io"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Storage } from "@/storage/storage"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-encoding"),
@@ -55,8 +56,19 @@ const it = testEffect(
     AppNodeBuilder.build(Format.node),
     AppNodeBuilder.build(Truncate.node),
     AppNodeBuilder.build(EventV2Bridge.node),
+    AppNodeBuilder.build(Storage.node),
   ),
 )
+
+const Metadata = Schema.Struct({
+  diff: Schema.String,
+  files: Schema.Array(
+    Schema.Struct({
+      additions: Schema.Number,
+      deletions: Schema.Number,
+    }),
+  ),
+})
 
 const runRead = (args: Tool.InferParameters<typeof ReadTool>, next: Tool.Context = ctx) =>
   Effect.gen(function* () {
@@ -461,24 +473,20 @@ describe("tool encoding preservation", () => {
             "*** End Patch",
           ].join("\n")
 
-          const result = (yield* runPatch({ patchText: patch })) as {
-            metadata: {
-              diff: string
-              files: Array<{ additions: number; deletions: number }>
-            }
-          }
+          const result = yield* runPatch({ patchText: patch })
+          const metadata = yield* Schema.decodeUnknownEffect(Metadata)(result.metadata).pipe(Effect.orDie)
 
           // The diff must contain the real decoded old/new lines, not a UTF-8
           // misread of the Shift_JIS bytes (which would surface as U+FFFD).
-          expect(result.metadata.diff).toContain(samples.shiftJis)
-          expect(result.metadata.diff).toContain(replacement)
-          expect(result.metadata.diff).not.toContain("\uFFFD")
+          expect(metadata.diff).toContain(samples.shiftJis)
+          expect(metadata.diff).toContain(replacement)
+          expect(metadata.diff).not.toContain("\uFFFD")
 
           // Per-file stats are derived from the same diff, so a mojibake read
           // would inflate both additions and deletions.
-          expect(result.metadata.files).toHaveLength(1)
-          expect(result.metadata.files[0].additions).toBe(1)
-          expect(result.metadata.files[0].deletions).toBe(1)
+          expect(metadata.files).toHaveLength(1)
+          expect(metadata.files[0].additions).toBe(1)
+          expect(metadata.files[0].deletions).toBe(1)
         }),
       ),
     )

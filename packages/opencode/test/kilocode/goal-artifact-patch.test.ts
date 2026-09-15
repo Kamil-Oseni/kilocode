@@ -13,10 +13,11 @@ import { MessageID, SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Storage } from "@/storage/storage"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
+    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node, Storage.node]),
   ),
 )
 

@@ -10,6 +10,7 @@ import { SystemPrompt } from "../../src/session/system"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "../lib/effect"
 import { Config } from "../../src/config/config" // kilocode_change
+import { resolve } from "@/kilocode/skills/resolution" // kilocode_change
 
 const skills: Skill.Info[] = [
   {
@@ -37,6 +38,17 @@ const skills: Skill.Info[] = [
   },
 ]
 
+// kilocode_change start - Skill services retain provenance for the selected source
+const resolved: Skill.ResolvedInfo[] = skills.map((skill, order) => ({
+  ...skill,
+  provenance: resolve({
+    source: { kind: "path", locator: skill.location, trusted: true },
+    content: skill.content,
+    order,
+  }),
+}))
+// kilocode_change end
+
 const build: Agent.Info = {
   name: "build",
   mode: "primary",
@@ -51,15 +63,17 @@ const it = testEffect(
       Layer.succeed(
         Skill.Service,
         Skill.Service.of({
-          get: (name) => Effect.succeed(skills.find((skill) => skill.name === name)),
+          // kilocode_change start - fixture service returns selected-source receipts
+          get: (name) => Effect.succeed(resolved.find((skill) => skill.name === name)),
           require: (name) => {
-            const info = skills.find((skill) => skill.name === name)
+            const info = resolved.find((skill) => skill.name === name)
             if (info) return Effect.succeed(info)
-            return Effect.fail(new Skill.NotFoundError({ name, available: skills.map((skill) => skill.name) }))
+            return Effect.fail(new Skill.NotFoundError({ name, available: resolved.map((skill) => skill.name) }))
           },
-          all: () => Effect.succeed(skills),
+          all: () => Effect.succeed(resolved),
           dirs: () => Effect.succeed([]),
-          available: () => Effect.succeed(skills),
+          available: () => Effect.succeed(resolved),
+          // kilocode_change end
         }),
       ),
     ],

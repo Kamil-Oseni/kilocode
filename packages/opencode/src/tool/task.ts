@@ -519,7 +519,7 @@ export const TaskTool = Tool.define(
             }),
         )
 
-      const work = () => runTask().pipe(Effect.ensuring(lease.release))
+      const work = () => runTask().pipe(Effect.ensuring(lease.release.pipe(Effect.orDie)))
       const backgroundRun = withCostPropagation(
         work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))),
       ) // kilocode_change
@@ -665,7 +665,7 @@ export const TaskTool = Tool.define(
                 )
               }),
             ),
-            Effect.ensuring(lease.release), // raya_change - release even when a raced registry entry owns the work
+            Effect.ensuring(lease.release.pipe(Effect.orDie)), // raya_change - release even when a raced registry entry owns the work
           ),
         // kilocode_change end
       )
@@ -678,7 +678,7 @@ export const TaskTool = Tool.define(
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        run(params, ctx).pipe(Effect.scoped, Effect.orDie), // kilocode_change - close per-execution bridge resources
     }
   }),
 )

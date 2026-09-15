@@ -322,7 +322,7 @@ export const make = (deps: Deps) =>
       })
     const repairKey = ["raya", "voice", "usage-reconciliation", "v1"]
     const repairStore = {
-      read: (parts: string[]) => deps.storage.read(["raya", "voice-reconciliation", ...parts]),
+      read: <T>(parts: string[]) => deps.storage.read<T>(["raya", "voice-reconciliation", ...parts]),
       create: (parts: string[], value: unknown) =>
         deps.storage.create(["raya", "voice-reconciliation", ...parts], value),
       replace: (parts: string[], value: unknown) =>

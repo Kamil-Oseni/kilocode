@@ -1,6 +1,6 @@
 // raya_change - Realtime voice HTTP handlers backed by the existing Kilo session runtime.
 import { Database } from "@opencode-ai/core/database/database"
-import { Effect } from "effect"
+import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Session } from "@/session/session"
@@ -68,6 +68,7 @@ const receipt = (input: Usage): RayaGoal.Charge => {
 
 export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice", (handlers) =>
   Effect.gen(function* () {
+    const scope = yield* Scope.Scope
     const sessions = yield* Session.Service
     const prompts = yield* SessionPrompt.Service
     const storage = yield* Storage.Service
@@ -92,9 +93,10 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
             finish: lease.finish.pipe(
               Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
             ),
-            release: lease.release,
+            release: lease.release.pipe(Effect.orDie),
           })),
           Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+          Effect.provideService(Scope.Scope, scope),
         ),
       completions: (sessionID, identity) =>
         reservations

@@ -28,7 +28,7 @@ type Billing = { id?: string; amount?: number; reason?: string }
 
 type Lease = {
   dispatch: Effect.Effect<void, unknown>
-  release: Effect.Effect<void, unknown>
+  release: Effect.Effect<void>
   settle: (charge: RayaGoal.Charge) => Effect.Effect<void, unknown>
 }
 

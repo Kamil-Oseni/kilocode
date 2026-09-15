@@ -15,28 +15,36 @@ function missing(err: unknown): boolean {
   return "cause" in err && missing(err.cause)
 }
 
-export const make = (
-  fs: FSUtil.Interface,
-  voice: OpenAIRetention.Service,
-  storage: Storage.Interface,
-  root = path.join(Global.Path.data, "storage"),
-) => ({
-  before: voice.remove,
-  reviews: Effect.fn("SessionRetention.reviews")(function* (session: string) {
+const reviews = (fs: FSUtil.Interface, storage: Storage.Interface, root: string) =>
+  Effect.fn("SessionRetention.reviews")(function* (session: string) {
     yield* cleanup(storage, session)
     const dir = path.join(root, "review_receipt", session)
     yield* fs.remove(dir, { recursive: true }).pipe(Effect.catchIf(missing, () => Effect.void))
-  }),
+  })
+
+export interface Interface {
+  readonly before: ReturnType<typeof OpenAIRetention.make>["remove"]
+  readonly reviews: ReturnType<typeof reviews>
+}
+
+export const make = (
+  fs: FSUtil.Interface,
+  voice: ReturnType<typeof OpenAIRetention.make>,
+  storage: Storage.Interface,
+  root = path.join(Global.Path.data, "storage"),
+): Interface => ({
+  before: voice.remove,
+  reviews: reviews(fs, storage, root),
 })
 
-export class Service extends Context.Service<Service, ReturnType<typeof make>>()("@raya/SessionRetention") {}
+export class Service extends Context.Service<Service, Interface>()("@raya/SessionRetention") {}
 
 export const node = LayerNode.make({
   service: Service,
   layer: Layer.effect(
     Service,
     Effect.gen(function* () {
-      return make(yield* FSUtil.Service, yield* OpenAIRetention.Service, yield* Storage.Service)
+      return Service.of(make(yield* FSUtil.Service, yield* OpenAIRetention.Service, yield* Storage.Service))
     }),
   ),
   deps: [FSUtil.node, OpenAIRetention.node, Storage.node],

@@ -128,6 +128,10 @@ export namespace ModelUsage {
     },
   })
 
+  type Aggregate = ReturnType<typeof empty>
+  type ModelAggregate = Aggregate & Pick<Model, "providerID" | "modelID">
+  type SessionAggregate = Aggregate & Pick<SessionUsage, "sessionID">
+
   export const get = Effect.fn("ModelUsage.get")(function* (sessionID: SessionID) {
     const { db } = yield* Database.Service
     const anchor = yield* db
@@ -178,8 +182,8 @@ export namespace ModelUsage {
       .pipe(Effect.orDie)).map((item) => item.id)
     const rows = sessionIDs.length === 0 ? [] : yield* db.all<Row>(usageSql(sessionIDs)).pipe(Effect.orDie)
     const totals = empty()
-    const sessions = new Map<SessionID, SessionUsage>()
-    const grouped = new Map<string, Model>()
+    const sessions = new Map<SessionID, SessionAggregate>()
+    const grouped = new Map<string, ModelAggregate>()
     for (const row of rows) {
       totals.steps += row.steps
       totals.cost += row.cost

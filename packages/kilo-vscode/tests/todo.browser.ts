@@ -31,7 +31,7 @@ for (const theme of ["light", "dark", "contrast"])
 
 test("shows loading and empty states", async ({ page }) => {
   await page.goto("/?state=loading")
-  await expect(page.getByRole("status")).toContainText("Loading your todos")
+  await expect(page.locator('[data-slot="personal-todo-loading"]')).toContainText("Loading your todos")
   await page.goto("/?state=empty")
   await expect(page.getByRole("heading", { name: "Nothing waiting" })).toBeVisible()
   await expect(page.getByText("Add one clear next step above.", { exact: true })).toBeVisible()
@@ -94,4 +94,78 @@ test("recovers an exact stale completion intent without losing the draft", async
     { todoID: "todo-open", revision: 2, done: true },
   ])
   await audit(page)
+})
+
+for (const state of ["idle", "running", "paused", "completed"] as const) {
+  test(`renders the authoritative ${state} focus timer state`, async ({ page }) => {
+    await page.goto(`/?timer=${state}`)
+    await expect(page.getByRole("heading", { name: "Focus timer" })).toBeVisible()
+    const labels = {
+      idle: "Ready when you are",
+      running: "Focusing",
+      paused: "Paused",
+      completed: "Focus complete",
+    }
+    await expect(page.getByText(labels[state], { exact: true })).toBeVisible()
+    await expect(page.getByLabel("Focus time remaining")).toHaveText(state === "completed" ? "00:00" : /\d\d:\d\d/)
+    await audit(page)
+  })
+}
+
+test("recovers the timer after an offline authoritative read", async ({ page }) => {
+  await page.goto("/?timer=offline")
+  await expect(page.getByRole("alert")).toContainText("Raya is offline. The saved focus timer is unchanged.")
+  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Pause" })).toBeEnabled()
+})
+
+test("reconciles a stale timer action and reloads the persisted backend state", async ({ page }) => {
+  await page.goto("/?timer=stale")
+  const pause = page.getByRole("button", { name: "Pause" })
+  await pause.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("alert")).toContainText(
+    "The focus timer changed before this action. Saved version 3 replaced version 2.",
+  )
+  const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect((await sent()).filter((message) => message.type === "focusTimerPause")).toMatchObject([{ revision: 2 }])
+  await page.getByRole("button", { name: "Review and retry" }).click()
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible()
+  expect((await sent()).filter((message) => message.type === "focusTimerPause")).toMatchObject([
+    { revision: 2 },
+    { revision: 3 },
+  ])
+  await page.reload()
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible()
+  await expect(page.getByLabel("Focus time remaining")).toHaveText(/\d\d:\d\d/)
+  await audit(page)
+})
+
+test("starts, pauses, resumes and resets the timer from the keyboard", async ({ page }) => {
+  await page.goto("/?timer=idle")
+  const start = page.getByRole("button", { name: "Start focus" })
+  await start.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  const pause = page.getByRole("button", { name: "Pause" })
+  await pause.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible()
+  const resume = page.getByRole("button", { name: "Resume" })
+  await resume.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  const reset = page.getByRole("button", { name: "Reset" })
+  await reset.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Ready when you are", { exact: true })).toBeVisible()
+})
+
+test("keeps a pending timer action disabled", async ({ page }) => {
+  await page.goto("/?timer=idle&holdTimer=true")
+  const start = page.getByRole("button", { name: "Start focus" })
+  await start.click()
+  await expect(start).toBeDisabled()
+  await expect(page.getByText("Ready when you are", { exact: true })).toBeVisible()
 })

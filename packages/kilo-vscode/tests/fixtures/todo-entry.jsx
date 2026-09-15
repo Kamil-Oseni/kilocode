@@ -8,9 +8,13 @@ import { TodoView } from "../../webview-ui/src/components/todo/TodoView"
 
 const params = new URLSearchParams(location.search)
 const state = params.get("state") ?? "populated"
+const timerState = params.get("timer") ?? "idle"
+const holdTimer = params.get("holdTimer") === "true"
 const messages = []
 let offline = state === "offline"
 let stale = state === "stale"
+let timerOffline = timerState === "offline"
+let timerStale = timerState === "stale"
 let items =
   state === "empty" || state === "loading" || state === "offline"
     ? []
@@ -25,6 +29,26 @@ let items =
         },
         { id: "todo-done", title: "Confirm the release owner", done: true, revision: 1, createdAt: 5, updatedAt: 20 },
       ]
+const clock = Date.now()
+const initialTimer = {
+  version: 1,
+  state: ["idle", "running", "paused", "completed"].includes(timerState) ? timerState : "running",
+  durationMs: 1_500_000,
+  todoID: "todo-open",
+  todoExists: true,
+  elapsedMs: timerState === "completed" ? 1_500_000 : 300_000,
+  remainingMs: timerState === "completed" ? 0 : 1_200_000,
+  startedAt: clock - 300_000,
+  runStartedAt: timerState === "running" || timerState === "stale" || timerState === "offline" ? clock : undefined,
+  completedAt: timerState === "completed" ? clock : undefined,
+  updatedAt: clock,
+  revision: 2,
+}
+let timer = JSON.parse(localStorage.getItem("raya-todo-fixture-timer") ?? "null") ?? initialTimer
+const saveTimer = (next) => {
+  timer = next
+  localStorage.setItem("raya-todo-fixture-timer", JSON.stringify(next))
+}
 
 const emit = (message) => queueMicrotask(() => window.dispatchEvent(new MessageEvent("message", { data: message })))
 const record = (message) => {
@@ -38,6 +62,67 @@ window.acquireVsCodeApi = () => ({
   setState: () => {},
   postMessage: (message) => {
     record(message)
+    if (message.type === "focusTimerGet") {
+      if (timerState === "loading") return
+      if (timerOffline) {
+        timerOffline = false
+        emit({
+          type: "focusTimerResult",
+          requestID: message.requestID,
+          operation: "get",
+          error: { kind: "offline", message: "Raya is offline. The saved focus timer is unchanged." },
+        })
+        return
+      }
+      emit({ type: "focusTimerResult", requestID: message.requestID, operation: "get", timer })
+      return
+    }
+    if (message.type.startsWith("focusTimer") && message.type !== "focusTimerGet") {
+      if (holdTimer) return
+      const operation = message.type.replace("focusTimer", "").toLowerCase()
+      if (timerStale) {
+        timerStale = false
+        const latest = { ...timer, revision: timer.revision + 1 }
+        saveTimer(latest)
+        emit({
+          type: "focusTimerResult",
+          requestID: message.requestID,
+          operation,
+          error: {
+            kind: "stale",
+            message: "The focus timer changed before this action.",
+            expected: message.revision,
+            actual: latest.revision,
+            latest,
+          },
+        })
+        return
+      }
+      const next =
+        operation === "start"
+          ? {
+              ...timer,
+              state: "running",
+              durationMs: message.durationMs,
+              todoID: message.todoID,
+              todoExists: message.todoID ? true : undefined,
+              elapsedMs: 0,
+              remainingMs: message.durationMs,
+              startedAt: Date.now(),
+              runStartedAt: Date.now(),
+              completedAt: undefined,
+              updatedAt: Date.now(),
+              revision: timer.revision + 1,
+            }
+          : operation === "pause"
+            ? { ...timer, state: "paused", runStartedAt: undefined, revision: timer.revision + 1 }
+            : operation === "resume"
+              ? { ...timer, state: "running", runStartedAt: Date.now(), revision: timer.revision + 1 }
+              : { ...timer, state: "idle", elapsedMs: 0, remainingMs: timer.durationMs, revision: timer.revision + 1 }
+      saveTimer(next)
+      emit({ type: "focusTimerResult", requestID: message.requestID, operation, timer: next })
+      return
+    }
     if (message.type === "personalTodoList") {
       if (state === "loading") return
       if (offline) {

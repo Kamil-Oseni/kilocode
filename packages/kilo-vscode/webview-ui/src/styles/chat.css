@@ -150,7 +150,7 @@
 }
 
 .admin-status[data-status="healthy"] {
-  color: var(--vscode-testing-iconPassed, var(--text-base));
+  color: var(--raya-primary, var(--text-base));
 }
 
 .admin-status[data-status="degraded"],
@@ -346,6 +346,83 @@
   gap: var(--raya-space-8);
 }
 
+[data-slot="focus-timer"] {
+  display: grid;
+  gap: var(--raya-space-12);
+  padding: var(--raya-space-14, 14px);
+  border: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  border-radius: var(--raya-radius-lg);
+  background: var(--surface-raised-base, var(--vscode-editorWidget-background));
+}
+
+[data-slot="focus-timer"][data-state="running"] {
+  border-color: color-mix(in srgb, var(--raya-primary) 65%, transparent);
+}
+
+[data-slot="focus-timer-copy"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-12);
+}
+
+[data-slot="focus-timer-copy"] h2,
+[data-slot="focus-timer-copy"] p,
+[data-slot="focus-timer-link"] {
+  margin: 0;
+}
+
+[data-slot="focus-timer-copy"] h2 {
+  font-family: var(--raya-font-display);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+[data-slot="focus-timer-copy"] p,
+[data-slot="focus-timer-link"],
+[data-slot="focus-timer-fields"] label > span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+}
+
+[data-slot="focus-timer-copy"] output {
+  flex: none;
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+[data-slot="focus-timer-fields"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--raya-space-8);
+}
+
+[data-slot="focus-timer-fields"] label {
+  display: grid;
+  min-width: 0;
+  gap: var(--raya-space-4);
+}
+
+[data-slot="focus-timer-actions"],
+[data-slot="focus-timer-notice"] {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-8);
+}
+
+[data-slot="focus-timer-notice"] {
+  justify-content: space-between;
+  padding-top: var(--raya-space-8);
+  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+[data-slot="focus-timer-notice"][data-kind="stale"] {
+  border-color: var(--raya-primary);
+}
+
 [data-slot="personal-todo-notice"] {
   display: flex;
   align-items: center;
@@ -452,6 +529,10 @@
   [data-component="personal-todo"] [data-component="icon-button"] {
     color: ButtonText;
   }
+
+  [data-slot="focus-timer"][data-state="running"] {
+    border-color: Highlight;
+  }
 }
 
 @media (max-width: 360px) {
@@ -461,6 +542,18 @@
 
   [data-slot="personal-todo-compose"] {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-slot="focus-timer-copy"] {
+    align-items: flex-start;
+  }
+
+  [data-slot="focus-timer-fields"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-slot="focus-timer-actions"] [data-component="button"] {
+    flex: 1;
   }
 
   [data-slot="personal-todo-compose"] [data-component="button"] {

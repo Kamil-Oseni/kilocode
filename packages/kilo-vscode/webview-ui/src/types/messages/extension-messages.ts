@@ -1895,6 +1895,7 @@ export interface AgentManagerFocusContextRequestedMessage {
 }
 
 export type PersonalTodoItem = import("@kilocode/sdk/v2/client").RayaPersonalTodoListResponse[number]
+export type FocusTimerItem = import("@kilocode/sdk/v2/client").RayaFocusTimerGetResponse
 export type AdminResultMessage = import("../../../../src/shared/admin").AdminResult
 
 export interface PersonalTodoResultMessage {
@@ -1914,10 +1915,25 @@ export interface PersonalTodoResultMessage {
   }
 }
 
+export interface FocusTimerResultMessage {
+  type: "focusTimerResult"
+  requestID: string
+  operation: "get" | "start" | "pause" | "resume" | "reset"
+  timer?: FocusTimerItem
+  error?: {
+    kind: "offline" | "stale" | "error"
+    message: string
+    expected?: number
+    actual?: number
+    latest?: FocusTimerItem
+  }
+}
+
 export type ExtensionMessage =
   | { type: "speechLiveStarted"; requestId: string }
   | AdminResultMessage
   | PersonalTodoResultMessage
+  | FocusTimerResultMessage
   | { type: "speechLiveMicReady"; requestId: string }
   | { type: "speechLiveMicChunk"; requestId: string; data: string }
   | { type: "speechLiveMicError"; requestId: string; error: string }

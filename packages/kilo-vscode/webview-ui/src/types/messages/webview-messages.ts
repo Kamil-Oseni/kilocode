@@ -1990,6 +1990,25 @@ export interface PersonalTodoDeleteMessage {
   revision: number
 }
 
+export interface FocusTimerGetMessage {
+  type: "focusTimerGet"
+  requestID: string
+}
+
+export interface FocusTimerStartMessage {
+  type: "focusTimerStart"
+  requestID: string
+  revision: number
+  durationMs: number
+  todoID?: string
+}
+
+export interface FocusTimerActionMessage {
+  type: "focusTimerPause" | "focusTimerResume" | "focusTimerReset"
+  requestID: string
+  revision: number
+}
+
 export type WebviewMessage =
   | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }
   | RequestAdminMessage
@@ -1997,6 +2016,9 @@ export type WebviewMessage =
   | PersonalTodoCreateMessage
   | PersonalTodoUpdateMessage
   | PersonalTodoDeleteMessage
+  | FocusTimerGetMessage
+  | FocusTimerStartMessage
+  | FocusTimerActionMessage
   | DocumentRequestMessage
   | DocumentOpenFileMessage
   | DocumentCloseMessage

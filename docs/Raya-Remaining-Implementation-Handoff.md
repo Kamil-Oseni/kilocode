@@ -1,6 +1,12 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `a240ac658f`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `bfd53bdb3e`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 10:20 America/Toronto - Installed snapshot receipt through `bfd53bdb3e`
+
+Installed extension `eden.raya@7.4.23-snapshot+bfd53bdb3e.kamil-oseni.1789481798707`. Retained VSIX `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.a1c52974d2646b3b2630691adb58c64d1929490326d0e90a5786a92fed58fbb1.vsix`, 520,007,660 bytes, SHA-256 `a1c52974d2646b3b2630691adb58c64d1929490326d0e90a5786a92fed58fbb1`. Installed CLI 231,057,408 bytes, SHA-256 `1180479d065885fc4b19d35b5e703a6df184e4b6b58b886656dec5b551a01f36`. The sequential workflow passed SDK preparation, fresh CLI build and smokes, both typechecks, cached ESLint, production bundle, packaging and install.
+
+Staging is empty; vault and installed sets each retain two snapshots; no Bun or tsgo process remains; C: has 136,691,249,152 bytes free. The current host pointer is still `c448ec64fcf797550d75fdf2a6203deb5633b42d97f592f3cbeb5cc3ba156b62`. After **Developer: Reload Window**, require active digest `a1c52974d2646b3b2630691adb58c64d1929490326d0e90a5786a92fed58fbb1` before installed-host acceptance. Continue implementation without waiting for reload; do not build another roughly 520 MB snapshot until another coherent batch is ready.
 
 ## ChatGPT 2026-09-15 10:15 America/Toronto - Install the reviewed Todo and Admin failure batch
 

@@ -1,6 +1,14 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current local product source is `a240ac658f`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. `origin/main` remains at `d894fc0eb9` because the normal pre-push hook is blocked by existing cross-package `@opencode-ai/tui` type failures. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
+> **Goal status: ACTIVE — implementation is continuing.** Current local product source is `bfd53bdb3e`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. `origin/main` remains at `d894fc0eb9` because the normal pre-push hook is blocked by existing cross-package `@opencode-ai/tui` type failures. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
+
+## ChatGPT 2026-09-15 10:20 America/Toronto - Reviewed Todo and Admin checkpoint installed
+
+The authorized sequential low-memory workflow installed `eden.raya@7.4.23-snapshot+bfd53bdb3e.kamil-oseni.1789481798707`. It includes the reviewed Todo domain/API/SDK/host/chat/Todo UI chain and the System Health probe, recent-log and partial-result fixes through source/docs commit `bfd53bdb3e`. SDK preparation, a fresh Windows CLI build and its version/model/sandbox-worker smokes, sequential extension and webview typechecks, cached ESLint, production esbuild, VSIX packaging and VS Code installation passed.
+
+Retained package: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.a1c52974d2646b3b2630691adb58c64d1929490326d0e90a5786a92fed58fbb1.vsix`; **520,007,660 bytes**; SHA-256 `a1c52974d2646b3b2630691adb58c64d1929490326d0e90a5786a92fed58fbb1`. Installed CLI: **231,057,408 bytes**; SHA-256 `1180479d065885fc4b19d35b5e703a6df184e4b6b58b886656dec5b551a01f36`, matching the vault manifest. Staging contains zero files; the bounded vault and installed extension sets each contain two snapshots; no Bun or tsgo process remains; C: has **136,691,249,152 bytes free**.
+
+The running extension host still records active vault digest `c448ec64fcf797550d75fdf2a6203deb5633b42d97f592f3cbeb5cc3ba156b62`. Reload VS Code and require `a1c52974d2646b3b2630691adb58c64d1929490326d0e90a5786a92fed58fbb1` before treating Todo review or Admin behavior as installed-host acceptance. Package installation is complete; implementation remains active independently of that human gate.
 
 ## ChatGPT 2026-09-15 10:15 America/Toronto - Fresh System Health survives diagnostic interruption
 

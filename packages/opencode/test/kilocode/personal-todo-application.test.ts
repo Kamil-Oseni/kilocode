@@ -71,6 +71,9 @@ it.live("applies a new proposal once and replays its public result after reconst
       const storage = yield* Storage.Service
       const app = PersonalTodoApplication.make({ storage, now: () => 999 })
       expect(yield* app.apply(first.saved.id, first.saved.digest)).toEqual(first.item)
+      expect((yield* app.reject(first.saved.id, first.saved.digest).pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoApplicationConflictError",
+      )
       expect((yield* PersonalTodo.make({ storage }).get(todo))?.revision).toBe(1)
     }).pipe(Effect.provide(Storage.layerFromDir(dir)))
   }),
@@ -154,6 +157,137 @@ it.live("rejects a stale base and a changed digest without mutating the Todo", (
   }),
 )
 
+it.live("durably rejects a sealed proposal and replays the exact terminal receipt", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "storage")
+    const saved = yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const item = yield* PersonalTodoProposal.make({ storage, now: () => 100 }).propose({
+        id: proposal,
+        source,
+        target: { kind: "new", todoID: todo, baseRevision: 0 },
+        changes: { title: "Decline this" },
+      })
+      const rejected = yield* PersonalTodoApplication.make({ storage, now: () => 200 }).reject(item.id, item.digest)
+      expect(rejected).toEqual({
+        version: 1,
+        state: "rejected",
+        proposalID: proposal,
+        digest: item.digest,
+        rejectedAt: 200,
+      })
+      expect(rejected).not.toHaveProperty("base")
+      expect(rejected).not.toHaveProperty("postimage")
+      expect(yield* PersonalTodo.make({ storage }).get(todo)).toBeUndefined()
+      return { item, rejected }
+    }).pipe(Effect.provide(Storage.layerFromDir(dir)))
+
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const app = PersonalTodoApplication.make({ storage, now: () => 999 })
+      expect(yield* app.reject(saved.item.id, saved.item.digest)).toEqual(saved.rejected)
+      expect((yield* app.apply(saved.item.id, saved.item.digest).pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoApplicationConflictError",
+      )
+      expect(yield* PersonalTodo.make({ storage }).get(todo)).toBeUndefined()
+    }).pipe(Effect.provide(Storage.layerFromDir(dir)))
+  }),
+)
+
+it.live("lets exactly one of concurrent apply and reject claim the proposal", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const saved = yield* PersonalTodoProposal.make({ storage, now: () => 100 }).propose({
+        id: proposal,
+        source,
+        target: { kind: "new", todoID: todo, baseRevision: 0 },
+        changes: { title: "Race" },
+      })
+      const app = PersonalTodoApplication.make({ storage, now: () => 200 })
+      const results = yield* Effect.all(
+        [app.apply(saved.id, saved.digest).pipe(Effect.exit), app.reject(saved.id, saved.digest).pipe(Effect.exit)],
+        { concurrency: "unbounded" },
+      )
+      expect(results.filter(Exit.isSuccess)).toHaveLength(1)
+      const rows = yield* app.list()
+      expect(rows).toHaveLength(1)
+      expect(["applied", "rejected"]).toContain(rows[0].state)
+      expect(Boolean(yield* PersonalTodo.make({ storage }).get(todo))).toBe(rows[0].state === "applied")
+    }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+  }),
+)
+
+it.live("fails closed while listing malformed and orphan application receipts", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      yield* storage.write([...receipt, "bad"], {})
+      expect((yield* PersonalTodoApplication.make({ storage }).list().pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoApplicationCorruptError",
+      )
+      yield* storage.remove([...receipt, "bad"])
+      yield* storage.write([...receipt, second], {
+        version: 1,
+        state: "rejected",
+        proposalID: second,
+        digest: "0".repeat(64),
+        rejectedAt: 100,
+      })
+      expect((yield* PersonalTodoApplication.make({ storage }).list().pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoApplicationCorruptError",
+      )
+    }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+  }),
+)
+
+it.live("rejects receipts that mix terminal and application fields", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const proposals = PersonalTodoProposal.make({ storage, now: () => 100 })
+      const rejected = yield* proposals.propose({
+        id: proposal,
+        source,
+        target: { kind: "new", todoID: todo, baseRevision: 0 },
+        changes: { title: "Rejected" },
+      })
+      const app = PersonalTodoApplication.make({ storage, now: () => 200 })
+      const terminal = yield* app.reject(rejected.id, rejected.digest)
+      yield* storage.write([...receipt, proposal], { ...terminal, preparedAt: 200 })
+      expect((yield* app.reject(rejected.id, rejected.digest).pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoApplicationCorruptError",
+      )
+
+      const pending = yield* proposals.propose({
+        id: second,
+        source: { ...source, callID: "call_second" },
+        target: { kind: "new", todoID: "todo_77777777-7777-4777-8777-777777777777", baseRevision: 0 },
+        changes: { title: "Pending" },
+      })
+      const broken = {
+        ...storage,
+        create: (key: string[], value: unknown) =>
+          key.slice(0, 4).join("/") === [...receipt, second].join("/")
+            ? storage.create(key, value).pipe(Effect.andThen(Effect.die("stop after pending")))
+            : storage.create(key, value),
+      }
+      yield* PersonalTodoApplication.make({ storage: broken, now: () => 300 })
+        .apply(pending.id, pending.digest)
+        .pipe(Effect.exit)
+      const raw = yield* storage.read<Record<string, unknown>>([...receipt, second])
+      yield* storage.write([...receipt, second], { ...raw, rejectedAt: 300 })
+      expect((yield* app.apply(pending.id, pending.digest).pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoApplicationCorruptError",
+      )
+    }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+  }),
+)
+
 it.live("resumes after interruption immediately after the pending receipt", () =>
   Effect.gen(function* () {
     const root = yield* tmpdirScoped()
@@ -181,6 +315,11 @@ it.live("resumes after interruption immediately after the pending receipt", () =
         ),
       ).toBe(true)
       expect(yield* PersonalTodo.make({ storage }).get(todo)).toBeUndefined()
+      expect(
+        (yield* PersonalTodoApplication.make({ storage, now: () => 250 })
+          .reject(saved.id, saved.digest)
+          .pipe(Effect.flip))._tag,
+      ).toBe("PersonalTodoApplicationConflictError")
       expect(
         yield* PersonalTodoApplication.make({ storage, now: () => 300 }).apply(saved.id, saved.digest),
       ).toMatchObject({ revision: 1 })

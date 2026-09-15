@@ -19,6 +19,7 @@ import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Format } from "../../src/format"
 import { LSP } from "../../src/lsp/lsp"
 import { MessageID, SessionID } from "../../src/session/schema"
+import { Storage } from "../../src/storage/storage"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Tool } from "../../src/tool/tool"
 import { Truncate } from "../../src/tool/truncate"
@@ -31,6 +32,7 @@ const layer = Layer.mergeAll(
   Bus.layer,
   AppNodeBuilder.build(Format.node),
   AppNodeBuilder.build(LSP.node),
+  AppNodeBuilder.build(Storage.node),
   AppNodeBuilder.build(Truncate.node),
   testInstanceStoreLayer,
   AppNodeBuilder.build(EventV2Bridge.node),
@@ -46,7 +48,7 @@ const apply = (dir: string, patchText: string) =>
         {
           sessionID: SessionID.make("ses_patch"),
           messageID: MessageID.make("msg_patch"),
-          callID: "call_patch",
+          callID: `call_patch_${path.basename(dir)}`,
           agent: "code",
           abort: AbortSignal.any([]),
           messages: [],

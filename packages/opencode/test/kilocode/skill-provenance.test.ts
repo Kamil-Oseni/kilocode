@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SHADOW_LIMIT, digest, resolve, skillVersion } from "../../src/kilocode/skills/resolution"
+import type { Receipt } from "../../src/kilocode/skills/resolution"
 
 describe("skill resolution provenance", () => {
   test("hashes exact UTF-8 source content and normalizes bounded versions", () => {
@@ -16,7 +17,7 @@ describe("skill resolution provenance", () => {
       order: -1,
       version: "1",
     })
-    const receipt = Array.from({ length: SHADOW_LIMIT + 2 }).reduce(
+    const receipt = Array.from({ length: SHADOW_LIMIT + 2 }).reduce<Receipt>(
       (previous, _, order) =>
         resolve({
           source: { kind: "project", locator: `/project/${order}`, trusted: false },

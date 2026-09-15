@@ -47,7 +47,7 @@ describe("model usage", () => {
     expect(tokenSummary(usage)).toEqual({ input: 10, output: 2, cached: 20 })
     expect(cacheRate(models[0])).toBe("57.1%")
     expect(cacheRate({ ...models[0], tokens: { ...tokens, input: 0, cache: { read: 0, write: 0 } } })).toBe("-")
-    expect(groupModelUsage(models, providers).map((group) => group.providerName)).toEqual(["Kilo Gateway", "MiniMax"])
+    expect(groupModelUsage(models, providers).map((group) => group.providerName)).toEqual(["Raya Gateway", "MiniMax"])
     expect(modelUsageName(models[0], providers)).toBe("Qwen 3.7 Plus")
     expect(modelUsageName(models[1], providers)).toBe("MiniMax M3")
     expect(modelUsageName({ ...models[0], modelID: "moonshotai/kimi-k2.7-code-20260612" }, {})).toBe("kimi-k2.7-code")

@@ -1,4 +1,5 @@
 import type { Provider, ProviderModel, ModelSelection } from "../types/messages"
+import { providerDisplayName } from "../../../src/shared/provider-model"
 
 export type EnrichedModel = ProviderModel & { providerID: string; providerName: string }
 
@@ -14,7 +15,7 @@ export function flattenModels(providers: Record<string, Provider>): EnrichedMode
         ...provider.models[modelID]!,
         id: modelID,
         providerID,
-        providerName: provider.name,
+        providerName: providerDisplayName(providerID, provider.name),
       })
     }
   }

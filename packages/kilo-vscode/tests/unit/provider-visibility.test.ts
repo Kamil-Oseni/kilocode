@@ -39,7 +39,7 @@ describe("disabledProviderOptions", () => {
 
     expect(options).toEqual([
       { value: "anthropic", label: "Anthropic" },
-      { value: "kilo", label: "Kilo Gateway" },
+      { value: "kilo", label: "Raya Gateway" },
     ])
   })
 

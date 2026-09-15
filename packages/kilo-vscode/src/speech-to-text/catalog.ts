@@ -1,6 +1,7 @@
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 import { getErrorMessage } from "../kilo-provider-utils"
 import { type SpeechToTextModelDef } from "./models"
+import { providerDisplayName } from "../shared/provider-model"
 
 const PATH = "/kilo/models/transcriptions"
 
@@ -53,7 +54,8 @@ function isCatalogModel(value: unknown): value is CatalogModel {
 
 function toModel(model: CatalogModel): SpeechToTextModelDef {
   const index = model.name.indexOf(":")
-  const provider = index === -1 ? model.id.split("/", 1)[0] || "Kilo Gateway" : model.name.slice(0, index).trim()
+  const source = index === -1 ? model.id.split("/", 1)[0] || "kilo" : model.name.slice(0, index).trim()
+  const provider = providerDisplayName(source, source)
   return {
     id: model.id,
     label: index === -1 ? model.name : model.name.slice(index + 1).trim(),

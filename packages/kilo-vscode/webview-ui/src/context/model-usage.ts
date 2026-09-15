@@ -1,4 +1,5 @@
 import type { Provider, SessionModelUsage } from "../types/messages"
+import { providerDisplayName } from "../../../src/shared/provider-model"
 
 const DATE_SUFFIX = /(?:-(?:20\d{6}|20\d{2}-\d{2}-\d{2}))(?:-v\d+(?::\d+)?)?$/i
 
@@ -57,7 +58,7 @@ export function groupModelUsage(models: SessionModelUsage["models"], providers: 
   for (const model of models) {
     const group = groups.get(model.providerID) ?? {
       providerID: model.providerID,
-      providerName: providers[model.providerID]?.name ?? model.providerID,
+      providerName: providerDisplayName(model.providerID, providers[model.providerID]?.name),
       models: [],
     }
     group.models.push(model)

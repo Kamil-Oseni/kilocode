@@ -3,8 +3,9 @@ import * as vscode from "vscode"
 import { t } from "../i18n"
 import type { AutocompleteStatusBarStateProps } from "./types"
 import { humanFormatSessionCost, formatTime } from "./statusbar-utils"
+import { RAYA_GATEWAY_NAME } from "../../shared/provider-model"
 
-const SUPPORTED_PROVIDER_DISPLAY_NAME = "Kilo Gateway"
+const SUPPORTED_PROVIDER_DISPLAY_NAME = RAYA_GATEWAY_NAME
 const SETTINGS_COMMAND = `command:raya.settingsButtonClicked?${encodeURIComponent(JSON.stringify(["autocomplete"]))}`
 
 export class AutocompleteStatusBar {

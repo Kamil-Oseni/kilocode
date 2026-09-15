@@ -1,5 +1,6 @@
 import { Component, For, Show } from "solid-js"
 import type { KiloPassState, ProviderUsageData } from "../../types/messages"
+import { RAYA_GATEWAY_NAME } from "../../../../src/shared/provider-model"
 import type { ProviderUsageSnapshot } from "@kilocode/sdk/v2/client"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Card, CardActions, CardDescription, CardHeader, CardTitle } from "@kilocode/kilo-ui/card"
@@ -25,7 +26,7 @@ export interface ProviderUsageCardsProps {
 type Language = ReturnType<typeof useLanguage>
 
 const source = (item: ProviderUsageSnapshot, language: Language) => {
-  if (item.sourceKind === "kilo_managed") return "Kilo Gateway"
+  if (item.sourceKind === "kilo_managed") return RAYA_GATEWAY_NAME
   return language.t("profile.usage.source.direct")
 }
 
@@ -203,7 +204,7 @@ const KiloPassCard: Component<{
           </CardTitle>
           <CardDescription>Kilo Pass</CardDescription>
         </div>
-        <Tag>Kilo Gateway</Tag>
+        <Tag>{RAYA_GATEWAY_NAME}</Tag>
       </CardHeader>
       <Show
         when={props.pass}

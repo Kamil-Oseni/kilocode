@@ -24,6 +24,13 @@ describe("flattenModels", () => {
     expect(models[0]!.id).toBe("gpt-4")
   })
 
+  it("projects the managed provider through the Raya display name", () => {
+    const models = flattenModels({ kilo: makeProvider("kilo", "Kilo Gateway", ["kilo-auto/free"]) })
+
+    expect(models[0]?.providerID).toBe("kilo")
+    expect(models[0]?.providerName).toBe("Raya Gateway")
+  })
+
   it("flattens multiple providers", () => {
     const providers = {
       openai: makeProvider("openai", "OpenAI", ["gpt-4", "gpt-3.5"]),

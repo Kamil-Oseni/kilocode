@@ -91,4 +91,23 @@ describe("Raya branding boundary", () => {
     expect(locales.some((source) => source.includes("KiloClaw"))).toBe(false)
     expect(locales.some((source) => source.includes("Raya Messenger"))).toBe(true)
   })
+
+  test("projects the managed provider as Raya Gateway at rendered boundaries", async () => {
+    const files = [
+      "src/services/autocomplete/AutocompleteStatusBar.ts",
+      "src/speech-to-text/catalog.ts",
+      "webview-ui/src/components/profile/ProviderUsageCards.tsx",
+      "webview-ui/src/components/settings/ProviderSelectDialog.tsx",
+      "webview-ui/src/components/settings/ProvidersTab.tsx",
+      "webview-ui/src/components/settings/provider-visibility.ts",
+      "webview-ui/src/context/model-usage.ts",
+      "webview-ui/src/context/provider-utils.ts",
+    ]
+    const sources = await Promise.all(files.map(read))
+    const visible = sources.join("\n")
+
+    expect(visible).not.toContain('"Kilo Gateway"')
+    expect(visible).toContain("RAYA_GATEWAY_NAME")
+    expect(await read("src/shared/provider-model.ts")).toContain('KILO_PROVIDER_ID = "kilo"')
+  })
 })

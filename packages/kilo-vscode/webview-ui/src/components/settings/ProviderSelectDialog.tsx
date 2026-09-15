@@ -18,7 +18,7 @@ import {
   providerIcon,
 } from "./provider-catalog"
 import CustomProviderDialog from "./CustomProviderDialog"
-import { KILO_PROVIDER_ID } from "../../../../src/shared/provider-model"
+import { KILO_PROVIDER_ID, providerDisplayName } from "../../../../src/shared/provider-model"
 
 type ProviderItem = {
   id: string
@@ -49,7 +49,7 @@ const ProviderSelectDialog = () => {
       },
       ...available.map((item) => ({
         id: item.id,
-        name: item.name,
+        name: providerDisplayName(item.id, item.name),
         provider: item,
       })),
     ]

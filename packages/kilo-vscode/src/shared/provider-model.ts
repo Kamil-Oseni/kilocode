@@ -1,4 +1,5 @@
 export const KILO_PROVIDER_ID = "kilo"
+export const RAYA_GATEWAY_NAME = "Raya Gateway"
 export const KILO_AUTO = { providerID: KILO_PROVIDER_ID, modelID: "kilo-auto/free" } as const
 export const CUSTOM_PROVIDER_PACKAGES = ["@ai-sdk/openai-compatible", "@ai-sdk/openai", "@ai-sdk/anthropic"] as const
 export type CustomProviderPackage = (typeof CUSTOM_PROVIDER_PACKAGES)[number]
@@ -30,6 +31,11 @@ export function parseModelString(raw: string | undefined | null) {
 export function providerOrderIndex(providerID: string, order = PROVIDER_PRIORITY) {
   const index = order.indexOf(providerID.toLowerCase() as (typeof PROVIDER_PRIORITY)[number])
   return index >= 0 ? index : order.length
+}
+
+export function providerDisplayName(providerID: string, name?: string) {
+  if (providerID === KILO_PROVIDER_ID) return RAYA_GATEWAY_NAME
+  return name ?? providerID
 }
 
 export function createKiloFallbackProvider() {

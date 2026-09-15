@@ -17,6 +17,10 @@ describe("speech-to-text discovery", () => {
         id: "openai/whisper-1",
         name: "Whisper 1",
       },
+      {
+        id: "kilo/transcribe",
+        name: "Managed Transcribe",
+      },
     ])
 
     expect(models).toEqual([
@@ -27,6 +31,7 @@ describe("speech-to-text discovery", () => {
         provider: "OpenAI",
       },
       { id: "openai/whisper-1", label: "Whisper 1", provider: "openai" },
+      { id: "kilo/transcribe", label: "Managed Transcribe", provider: "Raya Gateway" },
     ])
   })
 

@@ -17,9 +17,14 @@ import type { Provider } from "../../types/messages"
 import CustomProviderDialog from "./CustomProviderDialog"
 import ProviderConnectDialog from "./ProviderConnectDialog"
 import ProviderSelectDialog from "./ProviderSelectDialog"
-import { CUSTOM_PROVIDER_ID, isPopularProvider, providerIcon, providerNoteKey, sortProviders } from "./provider-catalog"
+import { isPopularProvider, providerIcon, providerNoteKey, sortProviders } from "./provider-catalog"
 import { disabledProviderOptions, providersWithKiloFallback, visibleConnectedIds } from "./provider-visibility"
-import { isCustomProviderPackage, KILO_PROVIDER_ID } from "../../../../src/shared/provider-model"
+import {
+  isCustomProviderPackage,
+  KILO_PROVIDER_ID,
+  providerDisplayName,
+  RAYA_GATEWAY_NAME,
+} from "../../../../src/shared/provider-model"
 import { createProviderAction } from "../../utils/provider-action"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
@@ -135,7 +140,7 @@ const ProvidersTab: Component = () => {
 
   function disabledName(id: string) {
     const item = providers()[id]
-    return item?.name ?? id
+    return providerDisplayName(id, item?.name)
   }
 
   function connectProvider(item: Provider) {
@@ -182,7 +187,7 @@ const ProvidersTab: Component = () => {
                 color: "var(--vscode-foreground)",
               }}
             >
-              Kilo Gateway
+              {RAYA_GATEWAY_NAME}
             </span>
             <Show
               when={kiloLoggedIn()}
@@ -243,7 +248,7 @@ const ProvidersTab: Component = () => {
                       "white-space": "nowrap",
                     }}
                   >
-                    {item.name}
+                    {providerDisplayName(item.id, item.name)}
                   </span>
                   <Tag>{sourceTag(item)}</Tag>
                 </div>
@@ -275,7 +280,11 @@ const ProvidersTab: Component = () => {
                         {language.t("provider.custom.edit.title")}
                       </Button>
                     </Show>
-                    <Button size="large" variant="ghost" onClick={() => disconnect(item.id, item.name)}>
+                    <Button
+                      size="large"
+                      variant="ghost"
+                      onClick={() => disconnect(item.id, providerDisplayName(item.id, item.name))}
+                    >
                       {language.t(isCustom(item) ? "common.delete" : "common.disconnect")}
                     </Button>
                   </Show>
@@ -317,7 +326,7 @@ const ProvidersTab: Component = () => {
                         color: "var(--vscode-foreground)",
                       }}
                     >
-                      {item.name}
+                      {providerDisplayName(item.id, item.name)}
                     </span>
                   </div>
                   <Show when={noteKey}>

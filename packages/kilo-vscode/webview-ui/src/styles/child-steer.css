@@ -1,0 +1,42 @@
+[data-component="child-steer"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 8px 12px 10px;
+  border-top: var(--raya-hairline, 1px) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+[data-component="child-steer"] [data-component="input"] {
+  min-width: 0;
+}
+
+[data-component="child-steer"] textarea {
+  width: 100%;
+  max-height: 120px;
+  resize: none;
+}
+
+[data-slot="child-steer-status"] {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+[data-component="child-steer"][data-state="failed"] [data-slot="child-steer-status"] {
+  color: var(--text-danger, var(--vscode-errorForeground));
+}
+
+@media (max-width: 340px) {
+  [data-component="child-steer"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-component="child-steer"] > button {
+    justify-self: end;
+  }
+}

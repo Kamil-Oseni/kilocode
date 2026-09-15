@@ -31,6 +31,7 @@
 @import "./provider-usage.css";
 @import "./memory-provenance.css";
 @import "./high-contrast.css";
+@import "./child-steer.css";
 
 /* Read-only delegated-agent conversation */
 [data-component="subagent-viewer"] {

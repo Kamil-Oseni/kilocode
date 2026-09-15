@@ -104,6 +104,7 @@ import {
   watchAutocompleteConfig,
 } from "./services/autocomplete/settings"
 import { routeEarlyMessage } from "./kilo-provider/early-message"
+import { childDirectory, steerChild, type ChildSteerMessage } from "./kilo-provider/child-steer"
 import * as ModelState from "./kilo-provider/model-state"
 import { handleModelUsageMessage } from "./kilo-provider/model-usage"
 import { handleForkSession } from "./kilo-provider/fork-session"
@@ -1139,6 +1140,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           backgroundJobs: (sessionID, requestID) => this.fetchAndSendBackgroundJobs(sessionID, requestID),
           cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
+          childSteer: (message) => this.steerChild(message),
           speech: this.speech, // raya_change - Milestone H
           voiceScope: (sid) => {
             if (!this.trackedSessionIds.has(sid) || this.routeSessionDirectory(sid) === null || !this.client) return
@@ -3574,6 +3576,27 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     } catch (error) {
       console.error("[Kilo New] KiloProvider: Failed to background subagents:", error)
     }
+  }
+
+  private async steerChild(message: ChildSteerMessage): Promise<void> {
+    const client = this.client
+    const routed = this.routeSessionDirectory(message.childSessionID)
+    const directory = childDirectory(routed, this.sessionDirectories.get(message.childSessionID))
+    if (!client || this.connectionState !== "connected" || !directory) {
+      this.postMessage({
+        type: "childSteerResult",
+        parentSessionID: message.parentSessionID,
+        childSessionID: message.childSessionID,
+        messageID: message.messageID,
+        accepted: false,
+        code: "unavailable",
+        error: directory
+          ? "Raya is offline. Your text is still here. Reconnect and try again."
+          : "This sub-agent's workspace is unavailable. Reopen it from its parent conversation.",
+      })
+      return
+    }
+    await steerChild({ client, directory, message, post: (value) => this.postMessage(value) })
   }
 
   /**

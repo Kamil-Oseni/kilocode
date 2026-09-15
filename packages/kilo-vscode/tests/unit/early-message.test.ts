@@ -77,3 +77,22 @@ describe("routeEarlyMessage background jobs", () => {
     expect(calls).toEqual([["ses_child", "ses_parent", "request-2"]])
   })
 })
+
+describe("routeEarlyMessage child steering", () => {
+  it("forwards only the dedicated correlated child request", async () => {
+    const calls: unknown[] = []
+    const ctx = {
+      childSteer: async (message: unknown) => calls.push(message),
+    } as Ctx
+    const message = {
+      type: "steerChildSession",
+      parentSessionID: "ses_parent",
+      childSessionID: "ses_child",
+      messageID: "msg_1",
+      text: "Keep the exact scope",
+    }
+
+    expect(await routeEarlyMessage(message, ctx)).toBe(true)
+    expect(calls).toEqual([message])
+  })
+})

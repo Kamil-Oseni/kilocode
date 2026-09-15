@@ -366,6 +366,14 @@ export interface BackgroundSubagentsMessage {
   sessionID: string
 }
 
+export interface SteerChildSessionRequest {
+  type: "steerChildSession"
+  parentSessionID: string
+  childSessionID: string
+  messageID: string
+  text: string
+}
+
 export interface RevertSessionRequest {
   type: "revertSession"
   sessionID: string
@@ -2204,6 +2212,7 @@ export type WebviewMessage =
   | ReloadRequest
   | OpenSubAgentViewerRequest
   | ClosePanelRequest
+  | SteerChildSessionRequest
   | PreviewImageRequest
   | SaveImageRequest
   | SetDefaultBaseBranchRequest

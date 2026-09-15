@@ -64,6 +64,10 @@ const testAllow: Record<string, { count: number; reason: string }> = {
   "server/experimental-session-list.test.ts": { count: 2, reason: "Kilo session list integration test" },
   "kilocode/server/cloud-session-import.test.ts": { count: 5, reason: "full app cloud import transaction integration" },
   "kilocode/server/listener-runtime.test.ts": { count: 4, reason: "listener and AppRuntime integration test" },
+  "kilocode/server/httpapi-child-steer.test.ts": {
+    count: 11,
+    reason: "real HTTP child steering test spans routed app instances, run ownership, and durable session messages",
+  },
   "kilocode/server/routine-forecast.test.ts": {
     count: 11,
     reason: "real HTTP routine tests seed legacy/corrupt storage and run history through the server's shared runtime",

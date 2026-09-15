@@ -7,8 +7,9 @@ import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { buildChatSettingsMessage } from "./chat-settings"
 import { buildThroughputSettingMessage } from "./throughput-settings"
 import { buildAutoApprovalReasonSettingMessage } from "./auto-approval-reason-settings"
-import { handleModelUsageMessage, type ModelUsageMessage } from "./model-usage"
+import type { ModelUsageMessage } from "./model-usage"
 import type { SpeechService } from "../speech/service" // raya_change - Milestone H
+import type { ChildSteerMessage } from "./child-steer"
 
 type Ctx = {
   question: SuggestionContext
@@ -25,6 +26,7 @@ type Ctx = {
   backgroundJobs: (sessionID: string, requestID: string) => Promise<void>
   cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
+  childSteer: (message: ChildSteerMessage) => Promise<void>
   speech?: SpeechService // raya_change - Milestone H configured speech bridge
   voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
 }
@@ -56,8 +58,43 @@ async function routeBackgroundMessage(
   return undefined
 }
 
+async function routeChildMessage(
+  message: {
+    type: string
+    text?: unknown
+    parentSessionID?: unknown
+    childSessionID?: unknown
+    messageID?: unknown
+  },
+  ctx: Ctx,
+): Promise<boolean | undefined> {
+  if (message.type !== "steerChildSession") return undefined
+  if (
+    typeof message.parentSessionID === "string" &&
+    typeof message.childSessionID === "string" &&
+    typeof message.messageID === "string" &&
+    typeof message.text === "string"
+  ) {
+    await ctx.childSteer({
+      type: "steerChildSession",
+      parentSessionID: message.parentSessionID,
+      childSessionID: message.childSessionID,
+      messageID: message.messageID,
+      text: message.text,
+    })
+  }
+  return true
+}
+
 export async function routeEarlyMessage(
-  message: { type: string; id?: unknown; text?: unknown },
+  message: {
+    type: string
+    id?: unknown
+    text?: unknown
+    parentSessionID?: unknown
+    childSessionID?: unknown
+    messageID?: unknown
+  },
   ctx: Ctx,
 ): Promise<boolean> {
   if (message.type === "copyToClipboard") {
@@ -117,6 +154,8 @@ export async function routeEarlyMessage(
     ctx.browserSettings()
     return true
   }
+  const child = await routeChildMessage(message, ctx)
+  if (child) return true
   const background = await routeBackgroundMessage(message, ctx)
   return (
     background ??

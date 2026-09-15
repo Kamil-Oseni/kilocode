@@ -9,7 +9,7 @@ import { Icon } from "@kilocode/kilo-ui/icon"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Show, createEffect, type Accessor, type Component } from "solid-js"
 import { DataBridge } from "../src/App"
-import { ChatView } from "../src/components/chat"
+import { ChatView, ChildSteerComposer } from "../src/components/chat"
 import { SessionProvider, useSession } from "../src/context/session"
 import { SortableClosableTab } from "./ClosableTab"
 import { InspectorTabStrip } from "./InspectorTabStrip"
@@ -132,6 +132,7 @@ const SubagentContent: Component<Props> = (props) => {
       />
       <div class="am-subagent-chat">
         <SubagentChat active={props.active} />
+        <ChildSteerComposer parentSessionID={active()?.parentID} childSessionID={active()?.id} />
       </div>
     </section>
   )

@@ -42868,6 +42868,141 @@
         ]
       }
     },
+    "/session/{parentSessionID}/child/{childSessionID}/steer": {
+      "post": {
+        "tags": ["child-steer"],
+        "operationId": "kilocode.session.childSteer",
+        "parameters": [
+          {
+            "name": "parentSessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "childSessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Child steering admission receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "parentSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "childSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "messageID": {
+                      "type": "string",
+                      "pattern": "^msg"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["parentSessionID", "childSessionID", "messageID", "replayed"],
+                  "additionalProperties": false,
+                  "description": "Child steering admission receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ChildSteerConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChildSteerConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Admit a correlated instruction only when the target is the named parent's direct, currently running child.",
+        "summary": "Steer a running child session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32000,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": ["messageID", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.session.childSteer({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/network": {
       "get": {
         "tags": ["network"],
@@ -73343,6 +73478,20 @@
         "required": ["operation", "message"],
         "additionalProperties": false
       },
+      "ChildSteerConflictError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["inactive", "stale-run", "changed-replay", "admission-failed"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
       "KilocodeSessionImportResult": {
         "type": "object",
         "properties": {
@@ -95888,6 +96037,10 @@
     {
       "name": "anaconda-desktop",
       "description": "Local Anaconda Desktop provider setup routes."
+    },
+    {
+      "name": "child-steer",
+      "description": "Kilo direct child-session steering routes."
     },
     {
       "name": "network",

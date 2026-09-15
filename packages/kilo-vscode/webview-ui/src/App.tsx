@@ -11,7 +11,7 @@ import { useSession } from "./context/session"
 import { LocalTabsProvider, useLocalTabs } from "./context/local-tabs"
 import { VoiceProvider } from "./context/voice" // raya_change - Milestone H spoken round trips
 import { ProviderShell } from "./context/provider-shell"
-import { ChatView } from "./components/chat"
+import { ChatView, ChildSteerComposer } from "./components/chat"
 import { SidebarEmptyState } from "./components/chat/SidebarEmptyState"
 import { SidebarTopBar } from "./components/chat/SidebarTopBar"
 import { registerExpandedTaskTool } from "./components/chat/TaskToolExpanded"
@@ -480,6 +480,10 @@ const AppContent: Component = () => {
                   </nav>
                 </Show>
                 <ChatView readonly />
+                <ChildSteerComposer
+                  parentSessionID={subagent()?.parentSessionID}
+                  childSessionID={subagent()?.sessionID}
+                />
               </div>
             </Match>
           </Switch>

@@ -341,6 +341,8 @@ import type {
   KilocodeSelfHealUpdateResponses,
   KilocodeSelfHealVerificationPublishErrors,
   KilocodeSelfHealVerificationPublishResponses,
+  KilocodeSessionChildSteerErrors,
+  KilocodeSessionChildSteerResponses,
   KilocodeSessionImportMessageErrors,
   KilocodeSessionImportMessageResponses,
   KilocodeSessionImportPartErrors,
@@ -11065,6 +11067,55 @@ export class SelfHeal extends HeyApiClient {
   }
 }
 
+export class Session4 extends HeyApiClient {
+  /**
+   * Steer a running child session
+   *
+   * Admit a correlated instruction only when the target is the named parent's direct, currently running child.
+   */
+  public childSteer<ThrowOnError extends boolean = false>(
+    parameters: {
+      parentSessionID: string
+      childSessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "parentSessionID" },
+            { in: "path", key: "childSessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSessionChildSteerResponses,
+      KilocodeSessionChildSteerErrors,
+      ThrowOnError
+    >({
+      url: "/session/{parentSessionID}/child/{childSessionID}/steer",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class SessionImport extends HeyApiClient {
   /**
    * Insert project for session import
@@ -12476,6 +12527,11 @@ export class Kilocode extends HeyApiClient {
     return (this._selfHeal ??= new SelfHeal({ client: this.client }))
   }
 
+  private _session?: Session4
+  get session(): Session4 {
+    return (this._session ??= new Session4({ client: this.client }))
+  }
+
   private _sessionImport?: SessionImport
   get sessionImport(): SessionImport {
     return (this._sessionImport ??= new SessionImport({ client: this.client }))
@@ -13836,7 +13892,7 @@ export class Question2 extends HeyApiClient {
   }
 }
 
-export class Session4 extends HeyApiClient {
+export class Session5 extends HeyApiClient {
   /**
    * List sessions
    *
@@ -15434,9 +15490,9 @@ export class V2 extends HeyApiClient {
     return (this._agent ??= new Agent({ client: this.client }))
   }
 
-  private _session?: Session4
-  get session(): Session4 {
-    return (this._session ??= new Session4({ client: this.client }))
+  private _session?: Session5
+  get session(): Session5 {
+    return (this._session ??= new Session5({ client: this.client }))
   }
 
   private _model?: Model

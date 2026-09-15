@@ -5896,6 +5896,11 @@ export type AnacondaDesktopOperationError = {
   message: string
 }
 
+export type ChildSteerConflictError = {
+  code: "inactive" | "stale-run" | "changed-replay" | "admission-failed"
+  message: string
+}
+
 export type KilocodeSessionImportResult = {
   ok: boolean
   id: string
@@ -25638,6 +25643,54 @@ export type AnacondaDesktopSyncResponses = {
 }
 
 export type AnacondaDesktopSyncResponse = AnacondaDesktopSyncResponses[keyof AnacondaDesktopSyncResponses]
+
+export type KilocodeSessionChildSteerData = {
+  body?: {
+    messageID: string
+    text: string
+  }
+  path: {
+    parentSessionID: string
+    childSessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{parentSessionID}/child/{childSessionID}/steer"
+}
+
+export type KilocodeSessionChildSteerErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ChildSteerConflictError
+   */
+  409: ChildSteerConflictError
+}
+
+export type KilocodeSessionChildSteerError = KilocodeSessionChildSteerErrors[keyof KilocodeSessionChildSteerErrors]
+
+export type KilocodeSessionChildSteerResponses = {
+  /**
+   * Child steering admission receipt
+   */
+  200: {
+    parentSessionID: string
+    childSessionID: string
+    messageID: string
+    replayed: boolean
+  }
+}
+
+export type KilocodeSessionChildSteerResponse =
+  KilocodeSessionChildSteerResponses[keyof KilocodeSessionChildSteerResponses]
 
 export type NetworkListData = {
   body?: never

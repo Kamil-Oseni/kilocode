@@ -46,6 +46,25 @@ export interface BackgroundJobInfo {
     selection?: "auto" | "explicit"
   }
 }
+
+export type ChildSteerResultMessage =
+  | {
+      type: "childSteerResult"
+      parentSessionID: string
+      childSessionID: string
+      messageID: string
+      accepted: true
+      replayed: boolean
+    }
+  | {
+      type: "childSteerResult"
+      parentSessionID: string
+      childSessionID: string
+      messageID: string
+      accepted: false
+      code?: "inactive" | "stale-run" | "changed-replay" | "not-found" | "unavailable"
+      error: string
+    }
 import type { QuestionRequest, SuggestionRequest, TodoItem } from "./questions"
 import type { ModelSelection, ModelUsageMap, Provider, ProviderAuthState } from "./providers"
 import type { SpeechToTextModelDef } from "../../../../src/speech-to-text/models"
@@ -2130,3 +2149,4 @@ export type ExtensionMessage =
   | MemoryEventMessage
   | MemoryOperationResultMessage
   | BackgroundJobsLoadedMessage
+  | ChildSteerResultMessage

@@ -12,6 +12,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
 import { ProviderUsage } from "@opencode-ai/schema/kilocode/provider-usage"
 import { AnacondaDesktopApi } from "./anaconda-desktop"
+import { ChildSteerApi } from "./child-steer"
 import {
   Failure as AgentManagerFailure,
   Request as AgentManagerRequest,
@@ -1270,6 +1271,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
       .middleware(Authorization),
   )
   .addHttpApi(AnacondaDesktopApi)
+  .addHttpApi(ChildSteerApi)
   .annotateMerge(
     OpenApi.annotations({
       title: "kilo HttpApi",

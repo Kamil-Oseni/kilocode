@@ -594,7 +594,10 @@ internal fun buildKiloCliEnv(
     log: KiloLog = KiloLog.create(KiloBackendCliManager::class.java),
 ): Map<String, String> = buildMap {
     putAll(base)
+    put("RAYA_SERVER_PASSWORD", pwd)
     put("KILO_SERVER_PASSWORD", pwd)
+    put("RAYA_SERVER_USERNAME", "kilo")
+    put("KILO_SERVER_USERNAME", "kilo")
     // The CLI watches this PID and exits if the IDE process is hard-killed without a chance
     // to signal or run the JVM shutdown hook, so it is never orphaned. See parent-watchdog.ts.
     put("KILO_PARENT_PID", ProcessHandle.current().pid().toString())

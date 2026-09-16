@@ -57,7 +57,12 @@ export namespace KiloTuiThreadDaemon {
     const password = Flag.KILO_SERVER_PASSWORD ?? randomUUID()
     const username = Flag.KILO_SERVER_USERNAME ?? "kilo"
     return {
-      env: { KILO_SERVER_USERNAME: username, KILO_SERVER_PASSWORD: password },
+      env: {
+        RAYA_SERVER_USERNAME: username,
+        KILO_SERVER_USERNAME: username,
+        RAYA_SERVER_PASSWORD: password,
+        KILO_SERVER_PASSWORD: password,
+      },
       headers: ServerAuth.headers({ password, username }),
     }
   }

@@ -215,6 +215,8 @@ describe("sandbox policy", () => {
       "RAYA_AUTH_CONTENT",
       "KILO_DB",
       "RAYA_DB",
+      "RAYA_SERVER_PASSWORD",
+      "RAYA_SERVER_USERNAME",
       "KILO_SERVER_PASSWORD",
       "KILO_SERVER_USERNAME",
     ])

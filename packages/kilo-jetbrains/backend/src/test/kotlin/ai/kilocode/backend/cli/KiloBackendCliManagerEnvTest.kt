@@ -42,7 +42,25 @@ class KiloBackendCliManagerEnvTest {
         assertEquals("all", env["KILO_TELEMETRY_LEVEL"])
         assertEquals("true", env["KILO_DISABLE_CLAUDE_CODE"])
         assertEquals("jetbrains-plugin", env["KILOCODE_FEATURE"])
+        assertEquals("pwd123", env["RAYA_SERVER_PASSWORD"])
         assertEquals("pwd123", env["KILO_SERVER_PASSWORD"])
+        assertEquals("kilo", env["RAYA_SERVER_USERNAME"])
+        assertEquals("kilo", env["KILO_SERVER_USERNAME"])
+    }
+
+    @Test
+    fun `managed credentials override hostile ambient aliases with one identity`() {
+        val env = manager.buildEnv("generated", mapOf(
+            "RAYA_SERVER_PASSWORD" to "hostile-raya-password",
+            "KILO_SERVER_PASSWORD" to "hostile-kilo-password",
+            "RAYA_SERVER_USERNAME" to "hostile-raya-user",
+            "KILO_SERVER_USERNAME" to "hostile-kilo-user",
+        ))
+
+        assertEquals("generated", env["RAYA_SERVER_PASSWORD"])
+        assertEquals(env["RAYA_SERVER_PASSWORD"], env["KILO_SERVER_PASSWORD"])
+        assertEquals("kilo", env["RAYA_SERVER_USERNAME"])
+        assertEquals(env["RAYA_SERVER_USERNAME"], env["KILO_SERVER_USERNAME"])
     }
 
     @Test
@@ -135,7 +153,10 @@ class KiloBackendCliManagerEnvTest {
         val env = manager.buildEnv("pwd123", emptyMap())
 
         assertEquals("jetbrains", env["KILO_CLIENT"])
+        assertEquals("pwd123", env["RAYA_SERVER_PASSWORD"])
         assertEquals("pwd123", env["KILO_SERVER_PASSWORD"])
+        assertEquals("kilo", env["RAYA_SERVER_USERNAME"])
+        assertEquals("kilo", env["KILO_SERVER_USERNAME"])
         assertEquals("jetbrains-plugin", env["KILOCODE_FEATURE"])
     }
 

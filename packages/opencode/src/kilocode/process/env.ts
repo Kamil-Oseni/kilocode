@@ -4,6 +4,8 @@ export function model(extra?: NodeJS.ProcessEnv | null): Record<string, string> 
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   )
+  delete env.RAYA_SERVER_PASSWORD
+  delete env.RAYA_SERVER_USERNAME
   delete env.KILO_SERVER_PASSWORD
   delete env.KILO_SERVER_USERNAME
   delete env.KILO_CONFIG

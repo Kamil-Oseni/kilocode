@@ -42,7 +42,7 @@ flowchart LR
 | Startup | Lazy on client demand; autocomplete prewarm can start server during activation |
 | Binary | Uses extension `bin/kilo`, or `bin/kilo.exe` on Windows |
 | Port | Starts `kilo serve --port 0`; CLI server prefers `4096`, then asks OS for free port |
-| Authentication | Generates random 32-byte hex password per spawn and passes it as `KILO_SERVER_PASSWORD`; username defaults to `kilo` |
+| Authentication | Generates one random 32-byte hex password per spawn and overwrites both `RAYA_SERVER_PASSWORD` and legacy `KILO_SERVER_PASSWORD`; writes username `kilo` through both aliases |
 | Reuse | Sidebar, editor tabs, panels, Agent Manager, and host services share active server |
 | Exit | `ServerManager` clears dead child; connection service clears SDK/SSE state and enters error state |
 | Replacement | Later retry or connection attempt starts replacement server |

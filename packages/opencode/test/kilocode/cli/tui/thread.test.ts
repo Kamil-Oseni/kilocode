@@ -4,6 +4,7 @@ import path from "path"
 import { fileURLToPath } from "node:url"
 import { spawn, type Exit } from "@opencode-ai/core/pty/driver"
 import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { tmpdir } from "../../../fixture/fixture"
 import {
   embeddedRemoteExitClient,
@@ -19,6 +20,29 @@ afterEach(() => {
 })
 
 describe("kilo tui thread", () => {
+  test("writes one worker credential through both Raya and Kilo names", () => {
+    const password = Flag.KILO_SERVER_PASSWORD
+    const username = Flag.KILO_SERVER_USERNAME
+    try {
+      Flag.KILO_SERVER_PASSWORD = "worker-secret"
+      Flag.KILO_SERVER_USERNAME = "worker-user"
+
+      const auth = KiloTuiThreadDaemon.workerAuth()
+      expect(auth.env).toEqual({
+        RAYA_SERVER_USERNAME: "worker-user",
+        KILO_SERVER_USERNAME: "worker-user",
+        RAYA_SERVER_PASSWORD: "worker-secret",
+        KILO_SERVER_PASSWORD: "worker-secret",
+      })
+      expect(auth.headers).toEqual({
+        Authorization: `Basic ${Buffer.from("worker-user:worker-secret").toString("base64")}`,
+      })
+    } finally {
+      Flag.KILO_SERVER_PASSWORD = password
+      Flag.KILO_SERVER_USERNAME = username
+    }
+  })
+
   test("skips preload resolver invocation in compiled mode", () => {
     let calls = 0
 

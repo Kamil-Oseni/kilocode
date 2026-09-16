@@ -347,18 +347,29 @@ describe("server workspace helpers", () => {
     expect(resolveIndexingEnv([{ uri: { fsPath: "/repo" } }])).toEqual({})
   })
 
-  it("disables unused services, strips the media key, and preserves the safe environment", () => {
+  it("disables unused services, strips the media key, and pins both auth aliases", () => {
     expect(
-      resolveManagedServerEnv({
-        PATH: "/usr/bin",
-        RAYA_MF_TOKEN: "media-service-key",
-        KILO_DISABLE_CHANNEL_DB: "false",
-        KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
-      }),
+      resolveManagedServerEnv(
+        {
+          PATH: "/usr/bin",
+          RAYA_MF_TOKEN: "media-service-key",
+          KILO_DISABLE_CHANNEL_DB: "false",
+          KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
+          RAYA_SERVER_PASSWORD: "hostile-raya-password",
+          KILO_SERVER_PASSWORD: "hostile-kilo-password",
+          RAYA_SERVER_USERNAME: "hostile-raya-user",
+          KILO_SERVER_USERNAME: "hostile-kilo-user",
+        },
+        "generated-password",
+      ),
     ).toEqual({
       PATH: "/usr/bin",
       KILO_DISABLE_CHANNEL_DB: "true",
       KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+      RAYA_SERVER_PASSWORD: "generated-password",
+      KILO_SERVER_PASSWORD: "generated-password",
+      RAYA_SERVER_USERNAME: "kilo",
+      KILO_SERVER_USERNAME: "kilo",
     })
   })
 })

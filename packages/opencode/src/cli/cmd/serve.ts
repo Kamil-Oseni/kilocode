@@ -13,7 +13,7 @@ export const ServeCommand = effectCmd({
   handler: Effect.fn("Cli.serve")(function* (args) {
     const { Server } = yield* Effect.promise(() => import("../../server/server"))
     if (!Flag.KILO_SERVER_PASSWORD) {
-      console.log("Warning: KILO_SERVER_PASSWORD is not set; server is unsecured.")
+      console.log("Warning: RAYA_SERVER_PASSWORD or KILO_SERVER_PASSWORD is not set; server is unsecured.") // kilocode_change
     }
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))

@@ -1,6 +1,7 @@
 export * as ServerAuth from "./auth"
 
-import { Config as EffectConfig, Context, Effect, Layer, Option, Redacted } from "effect"
+import { Config as EffectConfig, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect" // kilocode_change
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 
 export type Credentials = {
   password?: string
@@ -26,12 +27,32 @@ export class Config extends Context.Service<Config, Info>()("@opencode/ServerAut
     return Layer.effect(
       this,
       Effect.gen(function* () {
-        return Config.of(
-          yield* EffectConfig.all({
-            password: EffectConfig.string("KILO_SERVER_PASSWORD").pipe(EffectConfig.option),
-            username: EffectConfig.string("KILO_SERVER_USERNAME").pipe(EffectConfig.withDefault("opencode")),
-          }),
-        )
+        // kilocode_change start - resolve credential aliases strictly before the server layer is built
+        const values = yield* EffectConfig.all({
+          rayaPassword: EffectConfig.string("RAYA_SERVER_PASSWORD").pipe(EffectConfig.option),
+          kiloPassword: EffectConfig.string("KILO_SERVER_PASSWORD").pipe(EffectConfig.option),
+          rayaUsername: EffectConfig.string("RAYA_SERVER_USERNAME").pipe(EffectConfig.option),
+          kiloUsername: EffectConfig.string("KILO_SERVER_USERNAME").pipe(EffectConfig.option),
+        })
+        return yield* Effect.try({
+          try: () =>
+            Config.of(
+              resolve(undefined, {
+                RAYA_SERVER_PASSWORD: Option.getOrUndefined(values.rayaPassword),
+                KILO_SERVER_PASSWORD: Option.getOrUndefined(values.kiloPassword),
+                RAYA_SERVER_USERNAME: Option.getOrUndefined(values.rayaUsername),
+                KILO_SERVER_USERNAME: Option.getOrUndefined(values.kiloUsername),
+              }),
+            ),
+          catch: (cause) =>
+            new EffectConfig.ConfigError(
+              new ConfigProvider.SourceError({
+                message:
+                  cause instanceof EnvAlias.Conflict ? cause.message : "Failed to resolve server credential aliases",
+              }),
+            ),
+        })
+        // kilocode_change end
       }),
     )
   }
@@ -49,12 +70,24 @@ export function authorized(credentials: DecodedCredentials, config: Info) {
   )
 }
 
+// kilocode_change start - explicit credentials precede strict Raya/Kilo environment aliases
+export function resolve(credentials?: Credentials, env: NodeJS.ProcessEnv = process.env): Info {
+  const password = EnvAlias.credential(credentials?.password, "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", env)
+  const username = EnvAlias.credential(credentials?.username, "RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", env)
+  return {
+    password: password === undefined ? Option.none() : Option.some(password),
+    username: username ?? "opencode",
+  }
+}
+
 export function header(credentials?: Credentials) {
-  const password = credentials?.password ?? process.env.KILO_SERVER_PASSWORD
+  const config = resolve(credentials)
+  const password = Option.getOrUndefined(config.password)
   if (!password) return undefined
 
-  return `Basic ${Buffer.from(`${credentials?.username ?? process.env.KILO_SERVER_USERNAME ?? "opencode"}:${password}`).toString("base64")}`
+  return `Basic ${Buffer.from(`${config.username}:${password}`).toString("base64")}`
 }
+// kilocode_change end
 
 export function headers(credentials?: Credentials) {
   const authorization = header(credentials)

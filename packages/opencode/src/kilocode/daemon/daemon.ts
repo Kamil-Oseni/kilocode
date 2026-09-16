@@ -356,7 +356,9 @@ export namespace Daemon {
         env: {
           ...process.env,
           ...input.env,
+          RAYA_SERVER_USERNAME: username,
           KILO_SERVER_USERNAME: username,
+          RAYA_SERVER_PASSWORD: password,
           KILO_SERVER_PASSWORD: password,
           KILOCODE_FEATURE: "daemon",
         },

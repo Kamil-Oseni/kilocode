@@ -82,14 +82,19 @@ test("ignores commented-out references in untrusted config", async () => {
   expect(await ConfigVariable.substitute({ ...source, text })).toBe(text)
 })
 
-test("rejects server credential environment substitutions", async () => {
-  await expect(
-    ConfigVariable.substitute({
-      ...trusted,
-      text: "password={env:KILO_SERVER_PASSWORD}",
-      env: { KILO_SERVER_PASSWORD: "secret" },
-    }),
-  ).rejects.toBeInstanceOf(InvalidError)
+test("rejects Raya and legacy server credential environment substitutions", async () => {
+  const names = ["RAYA_SERVER_PASSWORD", "RAYA_SERVER_USERNAME", "KILO_SERVER_PASSWORD", "KILO_SERVER_USERNAME"]
+  await Promise.all(
+    names.map((name) =>
+      expect(
+        ConfigVariable.substitute({
+          ...trusted,
+          text: `credential={env:${name}}`,
+          env: { [name]: "secret" },
+        }),
+      ).rejects.toBeInstanceOf(InvalidError),
+    ),
+  )
 })
 
 test("continues to substitute ordinary environment variables when trusted", async () => {

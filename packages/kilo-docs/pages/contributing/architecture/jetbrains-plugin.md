@@ -73,7 +73,7 @@ It chooses platform resource by OS and CPU architecture, reuses extracted binary
 |---|---|
 | Spawn | Runs extracted binary as `kilo serve --port 0` |
 | Port | CLI server prefers `4096`, then asks OS for free port; backend reads listening line from stdout |
-| Authentication | Generates random 32-byte hex password and passes `KILO_SERVER_PASSWORD`; username defaults to `kilo` |
+| Authentication | Generates one random 32-byte hex password and overwrites both `RAYA_SERVER_PASSWORD` and legacy `KILO_SERVER_PASSWORD`; writes username `kilo` through both aliases |
 | Environment | Sets JetBrains client/platform metadata, question tool enablement, telemetry level, Claude Code disable flag, and default edit/bash ask permissions unless overridden |
 | Ownership | Backend app service owns CLI manager and connection lifecycle |
 | Shutdown | Kills process descendants, then process; uses forced termination after timeout when needed |

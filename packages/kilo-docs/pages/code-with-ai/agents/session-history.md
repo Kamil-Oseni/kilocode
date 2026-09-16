@@ -227,15 +227,17 @@ Run the SQL examples above without the surrounding `kilo db` command. Exit with 
 
 Run a local server with authentication before exposing its API:
 
+`KILO_SERVER_PASSWORD` remains a compatibility fallback. If both names are defined, they must contain the same value or startup fails before the server binds.
+
 ```bash
-export KILO_SERVER_PASSWORD='replace-with-a-strong-password'
+export RAYA_SERVER_PASSWORD='replace-with-a-strong-password'
 kilo serve --port 4096
 ```
 
 Search session titles in the current directory:
 
 ```bash
-curl -u "kilo:$KILO_SERVER_PASSWORD" \
+curl -u "kilo:$RAYA_SERVER_PASSWORD" \
   --get "http://127.0.0.1:4096/session" \
   --data-urlencode "directory=$PWD" \
   --data-urlencode "roots=true" \
@@ -246,7 +248,7 @@ curl -u "kilo:$KILO_SERVER_PASSWORD" \
 Read the complete chat history for one result:
 
 ```bash
-curl -u "kilo:$KILO_SERVER_PASSWORD" \
+curl -u "kilo:$RAYA_SERVER_PASSWORD" \
   --get "http://127.0.0.1:4096/session/ses_123/message" \
   --data-urlencode "directory=$PWD"
 ```
@@ -258,7 +260,7 @@ The JavaScript SDK exposes the same endpoints:
 ```ts
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 
-const auth = Buffer.from(`kilo:${process.env.KILO_SERVER_PASSWORD}`).toString("base64")
+const auth = Buffer.from(`kilo:${process.env.RAYA_SERVER_PASSWORD}`).toString("base64")
 const client = createKiloClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),

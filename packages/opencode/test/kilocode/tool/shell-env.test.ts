@@ -53,12 +53,16 @@ it.effect("does not expose backend credentials or config to model shell commands
   Effect.acquireUseRelease(
     Effect.sync(() => {
       const values = {
+        rpass: process.env.RAYA_SERVER_PASSWORD,
+        ruser: process.env.RAYA_SERVER_USERNAME,
         password: process.env.KILO_SERVER_PASSWORD,
         username: process.env.KILO_SERVER_USERNAME,
         config: process.env.KILO_CONFIG,
         content: process.env.KILO_CONFIG_CONTENT,
         directory: process.env.KILO_CONFIG_DIR,
       }
+      process.env.RAYA_SERVER_PASSWORD = "secret"
+      process.env.RAYA_SERVER_USERNAME = "kilo"
       process.env.KILO_SERVER_PASSWORD = "secret"
       process.env.KILO_SERVER_USERNAME = "kilo"
       process.env.KILO_CONFIG = "/secret/config.json"
@@ -73,8 +77,8 @@ it.effect("does not expose backend credentials or config to model shell commands
             run({
               command:
                 process.platform === "win32"
-                  ? "if ($env:KILO_SERVER_PASSWORD -or $env:KILO_SERVER_USERNAME -or $env:KILO_CONFIG -or $env:KILO_CONFIG_CONTENT -or $env:KILO_CONFIG_DIR) { 'set' } else { 'unset' }"
-                  : 'test -z "$KILO_SERVER_PASSWORD" && test -z "$KILO_SERVER_USERNAME" && test -z "$KILO_CONFIG" && test -z "$KILO_CONFIG_CONTENT" && test -z "$KILO_CONFIG_DIR" && printf unset',
+                  ? "if ($env:RAYA_SERVER_PASSWORD -or $env:RAYA_SERVER_USERNAME -or $env:KILO_SERVER_PASSWORD -or $env:KILO_SERVER_USERNAME -or $env:KILO_CONFIG -or $env:KILO_CONFIG_CONTENT -or $env:KILO_CONFIG_DIR) { 'set' } else { 'unset' }"
+                  : 'test -z "$RAYA_SERVER_PASSWORD" && test -z "$RAYA_SERVER_USERNAME" && test -z "$KILO_SERVER_PASSWORD" && test -z "$KILO_SERVER_USERNAME" && test -z "$KILO_CONFIG" && test -z "$KILO_CONFIG_CONTENT" && test -z "$KILO_CONFIG_DIR" && printf unset',
               description: "Check backend credential isolation",
             }),
           ),
@@ -83,6 +87,10 @@ it.effect("does not expose backend credentials or config to model shell commands
       ) as Effect.Effect<void, never, Services>,
     (values) =>
       Effect.sync(() => {
+        if (values.rpass === undefined) delete process.env.RAYA_SERVER_PASSWORD
+        else process.env.RAYA_SERVER_PASSWORD = values.rpass
+        if (values.ruser === undefined) delete process.env.RAYA_SERVER_USERNAME
+        else process.env.RAYA_SERVER_USERNAME = values.ruser
         if (values.password === undefined) delete process.env.KILO_SERVER_PASSWORD
         else process.env.KILO_SERVER_PASSWORD = values.password
         if (values.username === undefined) delete process.env.KILO_SERVER_USERNAME

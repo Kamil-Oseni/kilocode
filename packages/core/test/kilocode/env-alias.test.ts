@@ -40,6 +40,65 @@ describe("Raya environment aliases", () => {
     expect(EnvAlias.conflicts()).toEqual([])
   })
 
+  test("resolves credentials explicitly and fails closed on conflicting aliases", () => {
+    const conflict = { RAYA_SERVER_PASSWORD: "raya-secret", KILO_SERVER_PASSWORD: "legacy-secret" }
+
+    expect(EnvAlias.credential("explicit", "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", conflict)).toBe("explicit")
+    expect(EnvAlias.credential(undefined, "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", {})).toBeUndefined()
+    expect(
+      EnvAlias.credential(undefined, "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", {
+        RAYA_SERVER_PASSWORD: "same",
+        KILO_SERVER_PASSWORD: "same",
+      }),
+    ).toBe("same")
+    expect(() => EnvAlias.credential(undefined, "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", conflict)).toThrow(
+      "RAYA_SERVER_PASSWORD and KILO_SERVER_PASSWORD",
+    )
+
+    try {
+      EnvAlias.credential(undefined, "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", conflict)
+    } catch (cause) {
+      expect(cause).toBeInstanceOf(EnvAlias.Conflict)
+      expect(String(cause)).not.toContain("raya-secret")
+      expect(String(cause)).not.toContain("legacy-secret")
+    }
+  })
+
+  test("wires strict server credential aliases through mutable legacy Flag properties", () => {
+    const names = ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME"]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    Object.assign(env, { RAYA_SERVER_PASSWORD: "raya-secret", KILO_SERVER_USERNAME: "legacy-user" })
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; const initial = [Flag.KILO_SERVER_PASSWORD, Flag.KILO_SERVER_USERNAME]; Flag.KILO_SERVER_PASSWORD = "written"; console.log(JSON.stringify([...initial, process.env.RAYA_SERVER_PASSWORD, process.env.KILO_SERVER_PASSWORD]))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual(["raya-secret", "legacy-user", "written", "written"])
+
+    Object.assign(env, { RAYA_SERVER_PASSWORD: "raya-secret", KILO_SERVER_PASSWORD: "legacy-secret" })
+    const conflict = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; try { console.log(Flag.KILO_SERVER_PASSWORD) } catch (cause) { console.log(String(cause)) }',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+    const output = conflict.stdout.toString()
+    expect(conflict.exitCode).toBe(0)
+    expect(output).toContain("RAYA_SERVER_PASSWORD and KILO_SERVER_PASSWORD")
+    expect(output).not.toContain("raya-secret")
+    expect(output).not.toContain("legacy-secret")
+  })
+
   test("writes one effective value through both names", () => {
     const env: NodeJS.ProcessEnv = {
       RAYA_CONFIG: "raya.json",

@@ -29,12 +29,23 @@ export function resolveIndexingEnv(folders: readonly WorkspaceFolderLike[] | und
   return { KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" }
 }
 
-export function resolveManagedServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function resolveManagedServerEnv(
+  env: NodeJS.ProcessEnv,
+  password: string,
+  username = "kilo",
+): NodeJS.ProcessEnv {
   const resolved: NodeJS.ProcessEnv = {
     ...env,
     KILO_DISABLE_CHANNEL_DB: "true",
     // VS Code does not consume the backend's file.watcher.updated events.
     KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+    // Keep both names identical while managed clients migrate to Raya. Assign
+    // after the ambient environment so inherited credentials cannot select a
+    // different identity than the one retained by this connection service.
+    RAYA_SERVER_PASSWORD: password,
+    KILO_SERVER_PASSWORD: password,
+    RAYA_SERVER_USERNAME: username,
+    KILO_SERVER_USERNAME: username,
   }
   delete resolved.RAYA_MF_TOKEN
   return resolved
@@ -124,7 +135,7 @@ export class ServerManager {
           NODE_USE_SYSTEM_CA: "1",
           ...(extraCaCerts && { NODE_EXTRA_CA_CERTS: extraCaCerts }),
           ...(!proxyStrictSSL && { NODE_TLS_REJECT_UNAUTHORIZED: "0" }),
-          ...resolveManagedServerEnv(process.env),
+          ...resolveManagedServerEnv(process.env, password),
           // VS Code's http.proxy / http.noProxy settings are not reflected in
           // process.env, so spawned children bypass the user's configured proxy
           // and fail behind corporate firewalls. Forward them as the standard
@@ -138,7 +149,6 @@ export class ServerManager {
           // once per second per worktree) to reach multi-GB RSS in minutes.
           // See oven-sh/bun#18265 and Jarred's workaround note in #21560.
           MIMALLOC_PURGE_DELAY: "0",
-          KILO_SERVER_PASSWORD: password,
           // The CLI watches this PID and exits if the extension host is hard-killed without a
           // chance to run dispose(), so it is never orphaned. See parent-watchdog.ts.
           KILO_PARENT_PID: String(process.pid),

@@ -70,6 +70,10 @@ export function check(
     "PRINT_LOGS",
     "WEBSEARCH_PROVIDER",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
+  expected.push(
+    ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],
+    ["RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", "explicit-or-matching-aliases"],
+  )
   if (JSON.stringify(env) !== JSON.stringify(expected))
     throw new Error("Environment aliases or precedence differ from the compatibility ledger.")
 

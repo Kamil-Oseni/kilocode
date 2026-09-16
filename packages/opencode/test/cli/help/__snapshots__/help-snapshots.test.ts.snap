@@ -62,8 +62,10 @@ Options:
   -s, --session       session id to continue                                                [string]
       --fork          fork the session when continuing (use with --continue or --session)  [boolean]
       --cloud-fork    fetch session from cloud and continue locally (use with --session)   [boolean]
-  -p, --password      basic auth password (defaults to KILO_SERVER_PASSWORD)                [string]
-  -u, --username      basic auth username (defaults to KILO_SERVER_USERNAME or 'kilo')      [string]
+  -p, --password      basic auth password (defaults to RAYA_SERVER_PASSWORD or KILO_SERVER_PASSWORD)
+                                                                                            [string]
+  -u, --username      basic auth username (defaults to RAYA_SERVER_USERNAME, KILO_SERVER_USERNAME or
+                      'kilo')                                                               [string]
       --mini          start the minimal interactive interface             [boolean] [default: false]
       --no-replay     disable mini session history replay on resume and after resize       [boolean]
       --replay-limit  cap visible mini replay to the newest N messages                      [number]
@@ -97,8 +99,10 @@ Options:
   -f, --file         file(s) to attach to message                                            [array]
       --title        title for the session (uses truncated prompt if no value provided)     [string]
       --attach       attach to a running kilo server (e.g., http://localhost:4096)          [string]
-  -p, --password     basic auth password (defaults to KILO_SERVER_PASSWORD)                 [string]
-  -u, --username     basic auth username (defaults to KILO_SERVER_USERNAME or 'kilo')       [string]
+  -p, --password     basic auth password (defaults to RAYA_SERVER_PASSWORD or KILO_SERVER_PASSWORD)
+                                                                                            [string]
+  -u, --username     basic auth username (defaults to RAYA_SERVER_USERNAME, KILO_SERVER_USERNAME or
+                     'kilo')                                                                [string]
       --dir          directory to run in, path on remote server if attaching                [string]
       --port         port for the local server (defaults to random port if no value provided)
                                                                                             [number]
@@ -389,8 +393,9 @@ exports[`Kilo CLI help-text snapshots every documented command emits stable help
 database tools
 
 Commands:
-  kilo db [query]     open an interactive sqlite3 shell or run a query                     [default]
-  kilo db path        print the database path
+  kilo db [query]       open an interactive sqlite3 shell or run a query                   [default]
+  kilo db path          print the database path
+  kilo db backups [id]  list pre-migration recovery snapshots or export one to a new SQL file
 
 Positionals:
   query  SQL query to execute                                                               [string]

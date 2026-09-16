@@ -41,6 +41,7 @@ export namespace RayaMigrationLedger {
   export const Policy = Schema.Literals([
     "raya-preferred",
     "raya-wins-legacy-write",
+    "explicit-or-matching-aliases",
     "legacy-canonical",
     "raya-new-only",
     "deferred-version-3",
@@ -104,28 +105,36 @@ export namespace RayaMigrationLedger {
   ]
 
   const env = [
-    "CONFIG",
-    "CONFIG_CONTENT",
-    "CONFIG_DIR",
-    "AUTH_CONTENT",
-    "DB",
-    "GIT_BASH_PATH",
-    "MODELS_PATH",
-    "BIN_PATH",
-    "TUI_CONFIG",
-    "MODELS_URL",
-    "COMMAND_TIMEOUT_MAX_MS",
-    "COMMAND_TIMEOUT_MAX_MS_MESSAGE",
-    "NO_DAEMON",
-    "LOG_LEVEL",
-    "PRINT_LOGS",
-    "WEBSEARCH_PROVIDER",
-  ].map((name) => ({
-    kind: `environment:${name.toLowerCase()}`,
-    raya: `RAYA_${name}`,
-    legacy: `KILO_${name}`,
-    policy: "raya-wins-legacy-write" as const,
-  }))
+    ...[
+      "CONFIG",
+      "CONFIG_CONTENT",
+      "CONFIG_DIR",
+      "AUTH_CONTENT",
+      "DB",
+      "GIT_BASH_PATH",
+      "MODELS_PATH",
+      "BIN_PATH",
+      "TUI_CONFIG",
+      "MODELS_URL",
+      "COMMAND_TIMEOUT_MAX_MS",
+      "COMMAND_TIMEOUT_MAX_MS_MESSAGE",
+      "NO_DAEMON",
+      "LOG_LEVEL",
+      "PRINT_LOGS",
+      "WEBSEARCH_PROVIDER",
+    ].map((name) => ({
+      kind: `environment:${name.toLowerCase()}`,
+      raya: `RAYA_${name}`,
+      legacy: `KILO_${name}`,
+      policy: "raya-wins-legacy-write" as const,
+    })),
+    ...["SERVER_PASSWORD", "SERVER_USERNAME"].map((name) => ({
+      kind: `environment:${name.toLowerCase()}`,
+      raya: `RAYA_${name}`,
+      legacy: `KILO_${name}`,
+      policy: "explicit-or-matching-aliases" as const,
+    })),
+  ]
 
   const configs = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"].map((name) => ({
     kind: "configuration:file",

@@ -207,12 +207,12 @@ export const RunCommand = effectCmd({
       .option("password", {
         alias: ["p"],
         type: "string",
-        describe: "basic auth password (defaults to KILO_SERVER_PASSWORD)",
+        describe: "basic auth password (defaults to RAYA_SERVER_PASSWORD or KILO_SERVER_PASSWORD)", // kilocode_change
       })
       .option("username", {
         alias: ["u"],
         type: "string",
-        describe: "basic auth username (defaults to KILO_SERVER_USERNAME or 'kilo')", // kilocode_change
+        describe: "basic auth username (defaults to RAYA_SERVER_USERNAME, KILO_SERVER_USERNAME or 'kilo')", // kilocode_change
       })
       .option("dir", {
         type: "string",
@@ -1038,7 +1038,8 @@ export const RunCommand = effectCmd({
             console.error(e)
             process.exitCode = 1
           })
-          async function finish(failure?: unknown) { // kilocode_change
+          async function finish(failure?: unknown) {
+            // kilocode_change
             if (failure) process.exitCode = 1 // kilocode_change - use the terminal response for attached runs
             if (args.attach) return
             const error = await completed

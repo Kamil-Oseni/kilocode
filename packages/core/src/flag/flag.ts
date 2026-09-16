@@ -85,8 +85,20 @@ export const Flag = {
   KILO_EXPERIMENTAL_CUSTOMIZE_SKILL: unstableDefault("KILO_EXPERIMENTAL_CUSTOMIZE_SKILL"),
   // kilocode_change end
   KILO_FAKE_VCS: process.env["KILO_FAKE_VCS"],
-  KILO_SERVER_PASSWORD: process.env["KILO_SERVER_PASSWORD"],
-  KILO_SERVER_USERNAME: process.env["KILO_SERVER_USERNAME"],
+  // kilocode_change start - credential aliases fail closed instead of selecting a conflicting secret
+  get KILO_SERVER_PASSWORD() {
+    return EnvAlias.credential(undefined, "RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD")
+  },
+  set KILO_SERVER_PASSWORD(value: string | undefined) {
+    EnvAlias.write("RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", value)
+  },
+  get KILO_SERVER_USERNAME() {
+    return EnvAlias.credential(undefined, "RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME")
+  },
+  set KILO_SERVER_USERNAME(value: string | undefined) {
+    EnvAlias.write("RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", value)
+  },
+  // kilocode_change end
   KILO_ENABLE_QUESTION_TOOL: truthy("KILO_ENABLE_QUESTION_TOOL"), // kilocode_change
 
   KILO_EXPERIMENTAL, // kilocode_change

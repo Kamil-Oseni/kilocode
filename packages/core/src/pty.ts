@@ -182,6 +182,8 @@ const layer = Layer.effect(
       } as Record<string, string>
       // kilocode_change start - do not expose local server credentials to user terminals.
       // node-pty inherits parent values for omitted keys, so empty tombstones are required.
+      env.RAYA_SERVER_PASSWORD = ""
+      env.RAYA_SERVER_USERNAME = ""
       env.KILO_SERVER_PASSWORD = ""
       env.KILO_SERVER_USERNAME = ""
       // kilocode_change end

@@ -12,7 +12,6 @@ export const AttachCommand = cmd({
   command: "attach <url>",
   describe: "attach to a running kilo server", // kilocode_change
   builder: (yargs) =>
-
     yargs
       .positional("url", {
         type: "string",
@@ -44,12 +43,12 @@ export const AttachCommand = cmd({
       .option("password", {
         alias: ["p"],
         type: "string",
-        describe: "basic auth password (defaults to KILO_SERVER_PASSWORD)",
+        describe: "basic auth password (defaults to RAYA_SERVER_PASSWORD or KILO_SERVER_PASSWORD)", // kilocode_change
       })
       .option("username", {
         alias: ["u"],
         type: "string",
-        describe: "basic auth username (defaults to KILO_SERVER_USERNAME or 'kilo')", // kilocode_change
+        describe: "basic auth username (defaults to RAYA_SERVER_USERNAME, KILO_SERVER_USERNAME or 'kilo')", // kilocode_change
       })
       .option("mini", {
         type: "boolean",

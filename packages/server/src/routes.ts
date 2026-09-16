@@ -40,11 +40,13 @@ const applicationServices = LayerNode.group([
 ])
 
 export function createRoutes(password?: string) {
+  // kilocode_change start - an explicit empty password disables auth without falling through to ambient credentials
   return makeRoutes(
-    password
+    password !== undefined
       ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
       : ServerAuth.Config.layer,
   )
+  // kilocode_change end
 }
 
 export function createEmbeddedRoutes() {

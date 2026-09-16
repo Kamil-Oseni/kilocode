@@ -115,7 +115,7 @@ Three credential boundaries coexist. Keep them separate when tracing request pat
 
 ### Local `kilo serve` access
 
-Server Basic Auth is optional. It becomes required when `KILO_SERVER_PASSWORD` is non-empty. Default username is `kilo`; `KILO_SERVER_USERNAME` can override it.
+Server Basic Auth is optional. It becomes required when the effective `RAYA_SERVER_PASSWORD` or legacy `KILO_SERVER_PASSWORD` is non-empty. Default username is `kilo`; `RAYA_SERVER_USERNAME` or legacy `KILO_SERVER_USERNAME` can override it. A defined Raya/Kilo credential pair must contain identical values; a conflict fails closed before the server binds.
 
 | Path or mode | Authentication behavior |
 |---|---|
@@ -124,7 +124,7 @@ Server Basic Auth is optional. It becomes required when `KILO_SERVER_PASSWORD` i
 | Public UI assets | Selected manifest and icon GET paths bypass Basic Auth so browser metadata can load |
 | PTY ticket issue | Authenticated `POST /pty/{ptyID}/connect-token` requires expected ticket header and allowed origin |
 | PTY ticket connect | `GET /pty/{ptyID}/connect?ticket=...` bypasses Basic middleware, then consumes single-use, scope-bound ticket in PTY handler |
-| PTY shell child | Removes `KILO_SERVER_PASSWORD` and `KILO_SERVER_USERNAME` from spawned user-shell environment |
+| PTY shell child | Removes Raya and Kilo server password/username aliases from the spawned user-shell environment |
 
 PTY connect supports two browser-oriented modes: loopback query credential mode (`auth_token`) used by current Console and VS Code Agent Manager paths, and short-lived ticket mode exposed by server API.
 

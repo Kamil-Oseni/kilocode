@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `cd3c104921`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `d16e0d35c7`; the installed package source is `d16e0d35c7`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 03:29 America/Toronto - Continue from installed database and network checkpoint
+
+Repository and remote `main` reached `d16e0d35c7`. The low-memory workflow installed `eden.raya@7.4.23-snapshot+d16e0d35c7.kamil-oseni.1789543529722` after unchanged-result SDK generation, fresh Windows CLI build and smoke tests, host/webview typechecks, full lint, production bundle and packaging. The VSIX has 435 files and reports 496.12 MB.
+
+Preserve rollback package `raya.e816a5e20d304834cb1829217c0ee3e2fe3a60421fc1c3cd7eacbd92677ee770.vsix`: 520,224,318 bytes, SHA-256 `E816A5E20D304834CB1829217C0EE3E2FE3A60421FC1C3CD7EACBD92677EE770`. The installed binary is 231,269,888 bytes, SHA-256 `9259457626BFA4CF061C5072FB02817E5B00B068A81895B637F4DBBE0B93C086`. Both match the package-vault manifest. Retention removed one older vault package, one staged package and one installed snapshot. Free disk space is 116.10 GB. No build process remains.
+
+Do not claim active-host acceptance yet. The open host still points to digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`; a normal VS Code reload must move that pointer to `e816a5e20d304834cb1829217c0ee3e2fe3a60421fc1c3cd7eacbd92677ee770` before manual acceptance.
 
 ## ChatGPT 2026-09-16 03:17 America/Toronto - Preserve sharing and presence safety aliases
 

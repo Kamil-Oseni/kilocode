@@ -1,10 +1,18 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `cd3c104921`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `d16e0d35c7`; the installed package source is `d16e0d35c7`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 03:29 America/Toronto - Database and network safety checkpoint installed
+
+**Status: pushed and installed.** Local and remote `main` reached `d16e0d35c7`, then the low-memory workflow built and installed `eden.raya@7.4.23-snapshot+d16e0d35c7.kamil-oseni.1789543529722`. SDK preparation regenerated the v2 client without tracked drift. A fresh Windows CLI build passed version, model-catalog and sandbox-worker smoke checks; extension host/webview types, full lint, production bundling, VSIX packaging and installation also passed.
+
+The VSIX contains 435 files and reports 496.12 MB. Retained package `raya.e816a5e20d304834cb1829217c0ee3e2fe3a60421fc1c3cd7eacbd92677ee770.vsix` is 520,224,318 bytes with SHA-256 `E816A5E20D304834CB1829217C0EE3E2FE3A60421FC1C3CD7EACBD92677EE770`. The installed binary is 231,269,888 bytes with SHA-256 `9259457626BFA4CF061C5072FB02817E5B00B068A81895B637F4DBBE0B93C086`; both independently match the package-vault manifest. The installer removed one older vault package, one staged package and one installed snapshot. Free disk space is 116.10 GB, and no Bun, tsgo, tsgolint or Java process remains.
+
+The already-open VS Code host was not force-reloaded. Its package-vault pointer currently names digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, so installed-host acceptance for this checkpoint requires a normal reload.
 
 ## ChatGPT 2026-09-16 03:17 America/Toronto - Sharing and presence kill switches gain Raya aliases
 

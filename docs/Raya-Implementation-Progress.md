@@ -1,10 +1,20 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `df7b6c1541`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `cc4f1d2356`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 22:34 America/Toronto - Work Style onboarding names Raya in every locale
+
+**Status: implemented, verified and committed in `cc4f1d2356`; protected push follows this documentation checkpoint.** The two rendered Work Style onboarding strings that introduce the product now say Raya in all 21 application locales. The change replaces only the ASCII proper noun in 20 translated dictionaries; every surrounding translation remains byte-for-byte intact. English was already correct. Gateway labels, provider IDs, commands, paths, storage, packages and every compatibility identity are unchanged.
+
+One cross-locale regression test reads the actual exported dictionaries and proves both values contain `Raya` and do not contain `Kilo` for every locale: **1 test / 84 assertions**. VS Code and webview typechecks, extension lint, the Kilo-marker guard and whitespace checks pass. The complete pre-existing `i18n-keys` file still has one unrelated completeness failure reporting 420 missing translations for newer keys; the new branding assertion passes both alone and during that full run. This patch does not hide, waive or expand that backlog.
+
+The batch has a `raya` patch changeset and replaces 40 rendered public-defect hits; the checked public count falls by 39 because the regression assertion intentionally names the forbidden token once. It is a rendered-copy correction only, so it does not change the 15 environment pairs or **10 of 32** integrated writer boundaries. Include it with the already queued config-reader change in the next low-memory snapshot reinstall. The Raya-owned VS Code distribution remains Version 3 work.
+
+After this progress and handoff record is included, the checked inventory is **69,409** total: public 1,654; compatibility 35,436; provenance 5,686; internal 26,633. The pinned compatibility digest is `6f66660b122c4972c8e138c1ba9ce13e17119a4675b272b13846093b75ff19cc`.
 
 ## ChatGPT 2026-09-15 22:25 America/Toronto - Declared configuration aliases now reach every client boundary
 

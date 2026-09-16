@@ -146,6 +146,78 @@ describe("Raya environment aliases", () => {
     expect(output).not.toContain("legacy-secret")
   })
 
+  for (const item of [
+    { name: "neither name", env: {}, expected: false },
+    { name: "Raya input", env: { RAYA_DISABLE_MOUSE: "true" }, expected: true },
+    { name: "Kilo input", env: { KILO_DISABLE_MOUSE: "1" }, expected: true },
+    {
+      name: "both true",
+      env: { RAYA_DISABLE_MOUSE: "true", KILO_DISABLE_MOUSE: "1" },
+      expected: true,
+    },
+    {
+      name: "false Raya and true Kilo",
+      env: { RAYA_DISABLE_MOUSE: "false", KILO_DISABLE_MOUSE: "true" },
+      expected: true,
+    },
+    {
+      name: "true Raya and false Kilo",
+      env: { RAYA_DISABLE_MOUSE: "1", KILO_DISABLE_MOUSE: "0" },
+      expected: true,
+    },
+    {
+      name: "empty Raya and true Kilo",
+      env: { RAYA_DISABLE_MOUSE: "", KILO_DISABLE_MOUSE: "true" },
+      expected: true,
+    },
+    {
+      name: "invalid Raya and true Kilo",
+      env: { RAYA_DISABLE_MOUSE: "invalid", KILO_DISABLE_MOUSE: "true" },
+      expected: true,
+    },
+  ]) {
+    test(`wires the mouse-disable flag from ${item.name}`, () => {
+      const names = ["RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE"]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      Object.assign(env, item.env)
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_DISABLE_MOUSE))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toBe(item.expected)
+    })
+  }
+
+  test("reports mouse-disable alias conflicts without their values", () => {
+    const names = ["RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE"]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    Object.assign(env, { RAYA_DISABLE_MOUSE: "raya-secret", KILO_DISABLE_MOUSE: "legacy-secret" })
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ disabled: Flag.KILO_DISABLE_MOUSE, conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({ disabled: false, conflicts: ["RAYA_DISABLE_MOUSE/KILO_DISABLE_MOUSE"] })
+    expect(output).not.toContain("raya-secret")
+    expect(output).not.toContain("legacy-secret")
+  })
+
   test("resolves credentials explicitly and fails closed on conflicting aliases", () => {
     const conflict = { RAYA_SERVER_PASSWORD: "raya-secret", KILO_SERVER_PASSWORD: "legacy-secret" }
 

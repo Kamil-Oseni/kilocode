@@ -1,5 +1,6 @@
 import { Auth } from "@/auth"
 import { EventServiceClient } from "@/kilocode/event-service/client"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import { KILO_EVENT_SERVICE_URL } from "@kilocode/kilo-gateway"
 import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer } from "effect"
@@ -59,7 +60,7 @@ export namespace KiloViewers {
       const KiloSessions = (yield* Effect.promise(() => import("@/kilo-sessions/kilo-sessions"))).KiloSessions
 
       const platform = inferPlatform()
-      const killSwitch = process.env.KILO_DISABLE_PRESENCE === "1"
+      const killSwitch = EnvAlias.enabled("RAYA_DISABLE_PRESENCE", "KILO_DISABLE_PRESENCE")
       // Same endpoint the server envelope hands KiloClaw; KILO_EVENT_SERVICE_URL
       // is a presence-specific override on top of the gateway's EVENT_SERVICE_URL.
       const url = process.env.KILO_EVENT_SERVICE_URL || KILO_EVENT_SERVICE_URL

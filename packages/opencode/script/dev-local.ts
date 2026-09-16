@@ -12,6 +12,7 @@ import os from "node:os"
 import path from "node:path"
 import fs from "node:fs"
 import net from "node:net"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 
 const kilo = path.resolve(import.meta.dir, "../../..")
 const home = path.join(os.homedir(), ".kilo-dev")
@@ -79,9 +80,9 @@ async function main() {
   else env.KILO_DISABLE_SESSION_INGEST = "1"
   if (eventsPort) {
     env.EVENT_SERVICE_URL = `ws://localhost:${eventsPort}`
-    delete env.KILO_DISABLE_PRESENCE
+    EnvAlias.write("RAYA_DISABLE_PRESENCE", "KILO_DISABLE_PRESENCE", undefined, env)
     delete env.KILO_EVENT_SERVICE_URL
-  } else env.KILO_DISABLE_PRESENCE = "1"
+  } else EnvAlias.write("RAYA_DISABLE_PRESENCE", "KILO_DISABLE_PRESENCE", "1", env)
 
   const webUp = await alive(webPort)
   console.log(`${dim}project${rst}  ${project}`)

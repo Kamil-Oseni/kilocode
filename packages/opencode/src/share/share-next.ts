@@ -19,8 +19,9 @@ import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 
-const disabled = process.env["KILO_DISABLE_SHARE"] === "true" || process.env["KILO_DISABLE_SHARE"] === "1"
+const disabled = EnvAlias.enabled("RAYA_DISABLE_SHARE", "KILO_DISABLE_SHARE") // kilocode_change
 
 export type Api = {
   create: string

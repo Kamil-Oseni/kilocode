@@ -207,6 +207,8 @@ rm -f /tmp/kilo-serve.pid /tmp/kilo-serve.log
 | `RAYA_DISABLE_SKILL_SHELL=true` | Disable embedded shell commands in skills. `KILO_DISABLE_SKILL_SHELL` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `RAYA_DISABLE_CHANNEL_DB=true` | Use the shared compatibility database instead of a channel-specific database. `KILO_DISABLE_CHANNEL_DB` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `RAYA_SKIP_MIGRATIONS=true` | Record pending legacy-client migrations without executing their SQL. `KILO_SKIP_MIGRATIONS` is a compatibility alias; either name set to `true` or `1` enables the override. This does not disable Core database migrations. |
+| `RAYA_DISABLE_SHARE=true` | Block public session sharing and unsharing without disabling private session ingest. `KILO_DISABLE_SHARE` is a compatibility alias; either name set to `true` or `1` enables the override. |
+| `RAYA_DISABLE_PRESENCE=true` | Block Event Service presence sockets while retaining local attached-session tracking. `KILO_DISABLE_PRESENCE` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `KILO_WORKSPACE_ID=<id>` | Single-workspace mode; disables control-plane routes. |
 | `KILO_TELEMETRY_LEVEL=off` | Disable PostHog during tests. |
 | `KILO_CONFIG_CONTENT='{…}'` | Inline JSON config without writing a file. |

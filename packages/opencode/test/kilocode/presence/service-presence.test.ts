@@ -1,6 +1,7 @@
 import { describe, expect, mock, setSystemTime, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Auth } from "@/auth"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 
 // Each KiloViewers.layer construction reads these env vars (post-refactor), so
 // setting them here controls presence wiring per test.
@@ -93,14 +94,17 @@ const layer = KiloViewers.layer.pipe(Layer.provide(authLayer))
 
 const uid = "11111111-1111-4111-8111-111111111111"
 
-function run(body: (viewers: {
-  update: (s: {
-    viewer: { id: string; active: boolean }
-    attached: readonly string[]
-    visible: readonly string[]
-  }) => Effect.Effect<void>
-  invalidateAuth: () => Effect.Effect<void>
-}) => Effect.Effect<void>, l: typeof layer = layer) {
+function run(
+  body: (viewers: {
+    update: (s: {
+      viewer: { id: string; active: boolean }
+      attached: readonly string[]
+      visible: readonly string[]
+    }) => Effect.Effect<void>
+    invalidateAuth: () => Effect.Effect<void>
+  }) => Effect.Effect<void>,
+  l: typeof layer = layer,
+) {
   return Effect.gen(function* () {
     const v = yield* KiloViewers.Service
     yield* body(v)
@@ -119,9 +123,7 @@ describe("KiloViewers.Service presence contexts", () => {
   test("active viewer subscribes platform plus its visible session context", async () => {
     attachedCalls.length = 0
     current = new FakeClient()
-    await run((v) =>
-      v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }),
-    )
+    await run((v) => v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }))
     const subs = subscribeCalls()
     expect(subs.length).toBe(1)
     expect(subs[0]).toContain("/presence/cli")
@@ -132,9 +134,7 @@ describe("KiloViewers.Service presence contexts", () => {
   test("inactive viewer opens no presence socket but keeps attachment", async () => {
     attachedCalls.length = 0
     current = new FakeClient()
-    await run((v) =>
-      v.update({ viewer: { id: uid, active: false }, attached: ["ses_a"], visible: ["ses_a"] }),
-    )
+    await run((v) => v.update({ viewer: { id: uid, active: false }, attached: ["ses_a"], visible: ["ses_a"] }))
     expect(subscribeCalls().length).toBe(0)
     expect(current.calls.some((c) => c.type === "connect")).toBe(false)
     expect(attachedCalls).toEqual([["ses_a"], []])
@@ -164,23 +164,37 @@ describe("KiloViewers.Service presence contexts", () => {
     expect(unsub.every((c) => c.startsWith("/presence/cli-session/ses_old_"))).toBe(true)
   })
 
-  test("kill switch blocks the presence socket but attached union still reaches KiloSessions", async () => {
-    attachedCalls.length = 0
-    current = new FakeClient()
-    const prev = process.env.KILO_DISABLE_PRESENCE
-    process.env.KILO_DISABLE_PRESENCE = "1"
-    try {
-      await run((v) =>
-        v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }),
-      )
-      expect(subscribeCalls().length).toBe(0)
-      expect(current.calls.some((c) => c.type === "connect")).toBe(false)
-      expect(attachedCalls).toEqual([["ses_a"], []])
-    } finally {
-      if (prev === undefined) delete process.env.KILO_DISABLE_PRESENCE
-      else process.env.KILO_DISABLE_PRESENCE = prev
-    }
-  })
+  for (const item of [
+    { name: "Raya name", raya: "1", kilo: undefined, conflict: false },
+    { name: "Kilo name", raya: undefined, kilo: "true", conflict: false },
+    { name: "true Raya and false Kilo", raya: "1", kilo: "0", conflict: true },
+    { name: "false Raya and true Kilo", raya: "false", kilo: "true", conflict: true },
+  ]) {
+    test(`${item.name} kill switch blocks sockets while preserving attached sessions`, async () => {
+      attachedCalls.length = 0
+      current = new FakeClient()
+      const prev = {
+        raya: process.env.RAYA_DISABLE_PRESENCE,
+        kilo: process.env.KILO_DISABLE_PRESENCE,
+      }
+      EnvAlias.write("RAYA_DISABLE_PRESENCE", "KILO_DISABLE_PRESENCE", undefined)
+      if (item.raya !== undefined) process.env.RAYA_DISABLE_PRESENCE = item.raya
+      if (item.kilo !== undefined) process.env.KILO_DISABLE_PRESENCE = item.kilo
+      EnvAlias.conflicts()
+      try {
+        await run((v) => v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }))
+        expect(subscribeCalls()).toEqual([])
+        expect(current.calls.some((c) => c.type === "connect")).toBe(false)
+        expect(attachedCalls).toEqual([["ses_a"], []])
+        expect(EnvAlias.conflicts()).toEqual(item.conflict ? ["RAYA_DISABLE_PRESENCE/KILO_DISABLE_PRESENCE"] : [])
+      } finally {
+        EnvAlias.write("RAYA_DISABLE_PRESENCE", "KILO_DISABLE_PRESENCE", undefined)
+        if (prev.raya !== undefined) process.env.RAYA_DISABLE_PRESENCE = prev.raya
+        if (prev.kilo !== undefined) process.env.KILO_DISABLE_PRESENCE = prev.kilo
+        EnvAlias.conflicts()
+      }
+    })
+  }
 })
 
 const uidB = "22222222-2222-4222-8222-222222222222"
@@ -255,9 +269,7 @@ describe("KiloViewers.Service viewer lifecycle", () => {
   test("scope disposal runs the finalizer", async () => {
     attachedCalls.length = 0
     current = new FakeClient()
-    await run((v) =>
-      v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }),
-    )
+    await run((v) => v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }))
     const types = current.calls.map((c) => c.type)
     expect(types).toContain("connect")
     expect(types.at(-1)).toBe("disconnect")

@@ -446,6 +446,8 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `RAYA_DISABLE_SKILL_SHELL=1`: disable embedded shell commands in skills (`KILO_DISABLE_SKILL_SHELL` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_CHANNEL_DB=1`: use the shared compatibility database instead of a channel-specific database (`KILO_DISABLE_CHANNEL_DB` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_SKIP_MIGRATIONS=1`: record pending legacy-client migrations without executing their SQL (`KILO_SKIP_MIGRATIONS` remains a compatibility alias; either name set to `true` or `1` enables the safety override). This does not disable Core migrations.
+- `RAYA_DISABLE_SHARE=1`: block public session sharing and unsharing without disabling private session ingest (`KILO_DISABLE_SHARE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_PRESENCE=1`: block Event Service presence sockets while retaining local attached-session tracking (`KILO_DISABLE_PRESENCE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 
 ## When proposing edits
 

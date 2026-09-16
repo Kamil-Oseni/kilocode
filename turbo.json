@@ -1,7 +1,7 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-  "globalEnv": ["CI", "KILO_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "KILO_DISABLE_SHARE"],
+  "globalEnv": ["CI", "RAYA_DISABLE_SHARE", "KILO_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "RAYA_DISABLE_SHARE", "KILO_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {
       "dependsOn": ["^typecheck"]

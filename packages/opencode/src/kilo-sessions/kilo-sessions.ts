@@ -47,6 +47,7 @@ import { Snapshot } from "@/snapshot"
 import { cumulativeSessionDiff } from "@/kilocode/session-portability/cumulative-diff"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 
 async function provide<R>(input: { directory: string; fn: () => R }): Promise<R> {
   const { provide } = await import("@/kilocode/instance")
@@ -230,7 +231,7 @@ export namespace KiloSessions {
     })
   }
 
-  const shareDisabled = process.env["KILO_DISABLE_SHARE"] === "true" || process.env["KILO_DISABLE_SHARE"] === "1"
+  const shareDisabled = EnvAlias.enabled("RAYA_DISABLE_SHARE", "KILO_DISABLE_SHARE")
   const ingestDisabled =
     process.env["KILO_DISABLE_SESSION_INGEST"] === "true" || process.env["KILO_DISABLE_SESSION_INGEST"] === "1"
   const debugIngest =
@@ -1044,7 +1045,7 @@ export namespace KiloSessions {
     }
 
     if (shareDisabled) {
-      throw new Error("Sharing is disabled (KILO_DISABLE_SHARE=1)")
+      throw new Error("Sharing is disabled (RAYA_DISABLE_SHARE=1; legacy KILO_DISABLE_SHARE=1)")
     }
 
     const client = await getClient()
@@ -1089,7 +1090,7 @@ export namespace KiloSessions {
     }
 
     if (shareDisabled) {
-      throw new Error("Unshare is disabled (KILO_DISABLE_SHARE=1)")
+      throw new Error("Unshare is disabled (RAYA_DISABLE_SHARE=1; legacy KILO_DISABLE_SHARE=1)")
     }
 
     const client = await getClient()

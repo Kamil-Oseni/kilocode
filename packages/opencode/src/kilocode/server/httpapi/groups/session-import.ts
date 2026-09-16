@@ -275,7 +275,7 @@ export const SessionImportApi = HttpApi.make("session-import")
       .annotateMerge(
         OpenApi.annotations({
           title: "session-import",
-          description: "Kilo legacy session import routes.",
+          description: "Raya legacy session import routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -284,8 +284,8 @@ export const SessionImportApi = HttpApi.make("session-import")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

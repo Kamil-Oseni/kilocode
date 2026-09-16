@@ -65,12 +65,12 @@ export const IndexingApi = HttpApi.make("indexing")
       .add(
         HttpApiEndpoint.get("models", IndexingPaths.models, {
           query: WorkspaceRoutingQuery,
-          success: described(KiloEmbeddingModelCatalog, "Kilo embedding model catalog"),
+          success: described(KiloEmbeddingModelCatalog, "Raya embedding model catalog"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "indexing.models",
-            summary: "List Kilo embedding models",
-            description: "Retrieve the embedding models available through the active Kilo account.",
+            summary: "List Raya embedding models",
+            description: "Retrieve the embedding models available through the active Raya account.",
           }),
         ),
       )
@@ -90,7 +90,7 @@ export const IndexingApi = HttpApi.make("indexing")
       .annotateMerge(
         OpenApi.annotations({
           title: "indexing",
-          description: "Kilo indexing routes.",
+          description: "Raya indexing routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -99,8 +99,8 @@ export const IndexingApi = HttpApi.make("indexing")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

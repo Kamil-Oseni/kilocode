@@ -100,7 +100,7 @@ export const BackgroundProcessApi = HttpApi.make("background-process")
       .annotateMerge(
         OpenApi.annotations({
           title: "background-process",
-          description: "Kilo background process routes.",
+          description: "Raya background process routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -109,8 +109,8 @@ export const BackgroundProcessApi = HttpApi.make("background-process")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

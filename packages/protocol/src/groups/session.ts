@@ -161,7 +161,7 @@ export const makeSessionGroup = <
           identifier: "v2.session.active",
           summary: "List active sessions",
           description:
-            "Retrieve foreground Session drains currently owned by this Kilo process. Sessions absent from the result are inactive.",
+            "Retrieve foreground Session drains currently owned by this Raya process. Sessions absent from the result are inactive.", // kilocode_change
         }),
       ),
     )
@@ -363,7 +363,7 @@ export const makeSessionGroup = <
           OpenApi.annotations({
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
-            description: "Interrupt active execution owned by this Kilo process. Idle interruption is a no-op.",
+            description: "Interrupt active execution owned by this Raya process. Idle interruption is a no-op.", // kilocode_change
           }),
         ),
     )

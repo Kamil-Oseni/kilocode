@@ -168,6 +168,7 @@ function rebrand(value: unknown): void {
     }
     ;(value as Record<string, unknown>)[key] = item
       .replaceAll("OpenCode", "Kilo")
+      .replaceAll("Kilo HttpApi", "Raya API")
       .replaceAll("opencode.local", "kilo.local")
       .replaceAll("opencode serve", "kilo serve")
       .replaceAll("https://opencode.ai/", "https://kilo.ai/")

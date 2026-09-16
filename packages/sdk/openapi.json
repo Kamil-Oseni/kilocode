@@ -311,7 +311,7 @@
             }
           }
         },
-        "description": "Get health information about the Kilo server.",
+        "description": "Get health information about the Raya server.",
         "summary": "Get health",
         "x-codeSamples": [
           {
@@ -348,7 +348,7 @@
             }
           }
         },
-        "description": "Subscribe to global events from the Kilo system using server-sent events.",
+        "description": "Subscribe to global events from the Raya system using server-sent events.",
         "summary": "Get global events",
         "x-codeSamples": [
           {
@@ -385,7 +385,7 @@
             }
           }
         },
-        "description": "Retrieve the current global Kilo configuration settings and preferences.",
+        "description": "Retrieve the current global Raya configuration settings and preferences.",
         "summary": "Get global configuration",
         "x-codeSamples": [
           {
@@ -427,7 +427,7 @@
             }
           }
         },
-        "description": "Update global Kilo configuration settings and preferences.",
+        "description": "Update global Raya configuration settings and preferences.",
         "summary": "Update global configuration",
         "requestBody": {
           "content": {
@@ -474,7 +474,7 @@
             }
           }
         },
-        "description": "Clean up and dispose all Kilo instances, releasing all resources.",
+        "description": "Clean up and dispose all Raya instances, releasing all resources.",
         "summary": "Dispose instance",
         "x-codeSamples": [
           {
@@ -548,8 +548,8 @@
             }
           }
         },
-        "description": "Upgrade kilo to the specified version or latest if not specified.",
-        "summary": "Upgrade kilo",
+        "description": "Upgrade Raya to the specified version or latest if not specified.",
+        "summary": "Upgrade Raya",
         "requestBody": {
           "content": {
             "application/json": {
@@ -661,7 +661,7 @@
             }
           }
         },
-        "description": "Retrieve the current Kilo configuration settings and preferences.",
+        "description": "Retrieve the current Raya configuration settings and preferences.",
         "summary": "Get configuration",
         "x-codeSamples": [
           {
@@ -720,7 +720,7 @@
             }
           }
         },
-        "description": "Update Kilo configuration settings and preferences.",
+        "description": "Update Raya configuration settings and preferences.",
         "summary": "Update configuration",
         "requestBody": {
           "content": {
@@ -925,7 +925,7 @@
             }
           }
         },
-        "description": "Get experimental features enabled on the Kilo server.",
+        "description": "Get experimental features enabled on the Raya server.",
         "summary": "Get experimental capabilities",
         "x-codeSamples": [
           {
@@ -1131,7 +1131,7 @@
             }
           }
         },
-        "description": "Persist a new active Console account/org selection for the current local Kilo state.",
+        "description": "Persist a new active terminal account and organization selection for the current local Raya state.",
         "summary": "Switch active Console org",
         "requestBody": {
           "content": {
@@ -1353,7 +1353,7 @@
             }
           }
         },
-        "description": "List all git worktrees for the current project and whether Kilo manages them.",
+        "description": "List all git worktrees for the current project and whether Raya manages them.",
         "summary": "List worktrees",
         "x-codeSamples": [
           {
@@ -1940,7 +1940,7 @@
             }
           }
         },
-        "description": "Get a list of all Kilo sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+        "description": "Get a list of all Raya sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
         "summary": "List sessions",
         "x-codeSamples": [
           {
@@ -2596,7 +2596,7 @@
             }
           }
         },
-        "description": "Clean up and dispose the current Kilo instance, releasing all resources.",
+        "description": "Clean up and dispose the current Raya instance, releasing all resources.",
         "summary": "Dispose instance",
         "x-codeSamples": [
           {
@@ -2650,7 +2650,7 @@
             }
           }
         },
-        "description": "Retrieve the current working directory and related path information for the Kilo instance.",
+        "description": "Retrieve the current working directory and related path information for the Raya instance.",
         "summary": "Get paths",
         "x-codeSamples": [
           {
@@ -3035,7 +3035,7 @@
             }
           }
         },
-        "description": "Get a list of all available commands in the Kilo system.",
+        "description": "Get a list of all available commands in the Raya system.",
         "summary": "List commands",
         "x-codeSamples": [
           {
@@ -3093,7 +3093,7 @@
             }
           }
         },
-        "description": "Get a list of all available AI agents in the Kilo system.",
+        "description": "Get a list of all available AI agents in the Raya system.",
         "summary": "List agents",
         "x-codeSamples": [
           {
@@ -3170,7 +3170,7 @@
             }
           }
         },
-        "description": "Get a list of all available skills in the Kilo system.",
+        "description": "Get a list of all available skills in the Raya system.",
         "summary": "List skills",
         "x-codeSamples": [
           {
@@ -4192,7 +4192,7 @@
             }
           }
         },
-        "description": "Get a list of projects that have been opened with Kilo.",
+        "description": "Get a list of projects that have been opened with Raya.",
         "summary": "List all projects",
         "x-codeSamples": [
           {
@@ -4246,7 +4246,7 @@
             }
           }
         },
-        "description": "Retrieve the currently active project that Kilo is working with.",
+        "description": "Retrieve the currently active project that Raya is working with.",
         "summary": "Get current project",
         "x-codeSamples": [
           {
@@ -4675,7 +4675,7 @@
             }
           }
         },
-        "description": "Get a list of all active pseudo-terminal (PTY) sessions managed by Kilo.",
+        "description": "Get a list of all active pseudo-terminal (PTY) sessions managed by Raya.",
         "summary": "List PTY sessions",
         "x-codeSamples": [
           {
@@ -6173,7 +6173,7 @@
             }
           }
         },
-        "description": "Get ordinary Kilo sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.",
+        "description": "Get ordinary Raya sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.",
         "summary": "List sessions",
         "x-codeSamples": [
           {
@@ -6232,7 +6232,7 @@
             }
           }
         },
-        "description": "Create a new Kilo session for interacting with AI assistants and managing conversations.",
+        "description": "Create a new Raya session for interacting with AI assistants and managing conversations.",
         "summary": "Create session",
         "requestBody": {
           "content": {
@@ -6431,7 +6431,7 @@
             }
           }
         },
-        "description": "Retrieve detailed information about a specific Kilo session.",
+        "description": "Retrieve detailed information about a specific Raya session.",
         "summary": "Get session",
         "x-codeSamples": [
           {
@@ -12287,7 +12287,7 @@
             }
           }
         },
-        "description": "List project instruction files used by Kilo and return their current contents.",
+        "description": "List project instruction files used by Raya and return their current contents.",
         "summary": "Get project rules",
         "x-codeSamples": [
           {
@@ -12466,7 +12466,7 @@
             }
           }
         },
-        "description": "Patch TUI-compatible model selections shared with Kilo Console.",
+        "description": "Patch terminal-compatible model selections shared with Raya.",
         "summary": "Update model state",
         "requestBody": {
           "content": {
@@ -13040,7 +13040,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Kilo embedding model catalog",
+            "description": "Raya embedding model catalog",
             "content": {
               "application/json": {
                 "schema": {
@@ -13060,8 +13060,8 @@
             }
           }
         },
-        "description": "Retrieve the embedding models available through the active Kilo account.",
-        "summary": "List Kilo embedding models",
+        "description": "Retrieve the embedding models available through the active Raya account.",
+        "summary": "List Raya embedding models",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -13195,7 +13195,7 @@
             }
           }
         },
-        "description": "Atomically dispose and reboot the current Kilo instance, reloading config, skills, agents, commands, and MCP prompts from disk. Returns 409 if a session is actively running.",
+        "description": "Atomically dispose and reboot the current Raya instance, reloading config, skills, agents, commands, and MCP prompts from disk. Returns 409 if a session is actively running.",
         "summary": "Reload instance",
         "x-codeSamples": [
           {
@@ -42918,7 +42918,7 @@
             }
           }
         },
-        "description": "Discover the active local inference server and replace Kilo provider authentication metadata.",
+        "description": "Discover the active local inference server and replace Raya provider authentication metadata.",
         "summary": "Synchronize Anaconda Desktop provider",
         "requestBody": {
           "content": {
@@ -55152,7 +55152,7 @@
     },
     "/api/health": {
       "get": {
-        "tags": ["Kilo HttpApi"],
+        "tags": ["Raya API"],
         "operationId": "v2.health.get",
         "parameters": [],
         "security": [],
@@ -55208,7 +55208,7 @@
     },
     "/api/location": {
       "get": {
-        "tags": ["Kilo HttpApi"],
+        "tags": ["Raya API"],
         "operationId": "v2.location.get",
         "parameters": [
           {
@@ -55276,7 +55276,7 @@
     },
     "/api/agent": {
       "get": {
-        "tags": ["Kilo HttpApi"],
+        "tags": ["Raya API"],
         "operationId": "v2.agent.list",
         "parameters": [
           {
@@ -55610,7 +55610,7 @@
             }
           }
         },
-        "description": "Retrieve foreground Session drains currently owned by this Kilo process. Sessions absent from the result are inactive.",
+        "description": "Retrieve foreground Session drains currently owned by this Raya process. Sessions absent from the result are inactive.",
         "summary": "List active sessions",
         "x-codeSamples": [
           {
@@ -56809,7 +56809,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this Kilo process. Idle interruption is a no-op.",
+        "description": "Interrupt active execution owned by this Raya process. Idle interruption is a no-op.",
         "summary": "Interrupt session execution",
         "x-codeSamples": [
           {
@@ -57948,7 +57948,7 @@
     },
     "/api/credential/{credentialID}": {
       "patch": {
-        "tags": ["Kilo HttpApi"],
+        "tags": ["Raya API"],
         "operationId": "v2.credential.update",
         "parameters": [
           {
@@ -58032,7 +58032,7 @@
         ]
       },
       "delete": {
-        "tags": ["Kilo HttpApi"],
+        "tags": ["Raya API"],
         "operationId": "v2.credential.remove",
         "parameters": [
           {
@@ -102170,39 +102170,39 @@
     },
     {
       "name": "agent-builder",
-      "description": "Kilo agent builder routes."
+      "description": "Raya agent builder routes."
     },
     {
       "name": "background-process",
-      "description": "Kilo background process routes."
+      "description": "Raya background process routes."
     },
     {
       "name": "branch-name",
-      "description": "Kilo branch name routes."
+      "description": "Raya branch name routes."
     },
     {
       "name": "commit-message",
-      "description": "Kilo commit message routes."
+      "description": "Raya commit message routes."
     },
     {
       "name": "config-console",
-      "description": "Kilo Console config routes."
+      "description": "Raya terminal configuration routes."
     },
     {
       "name": "enhance-prompt",
-      "description": "Kilo enhance prompt routes."
+      "description": "Raya prompt enhancement routes."
     },
     {
       "name": "indexing",
-      "description": "Kilo indexing routes."
+      "description": "Raya indexing routes."
     },
     {
       "name": "instance-reload",
-      "description": "Kilo instance reload route."
+      "description": "Raya instance reload route."
     },
     {
       "name": "interactive-terminal",
-      "description": "Kilo human-driven interactive terminal routes."
+      "description": "Raya interactive terminal routes."
     },
     {
       "name": "Raya Gateway",
@@ -102210,7 +102210,7 @@
     },
     {
       "name": "kilocode",
-      "description": "Kilo-specific routes."
+      "description": "Raya routes."
     },
     {
       "name": "anaconda-desktop",
@@ -102218,38 +102218,38 @@
     },
     {
       "name": "child-steer",
-      "description": "Kilo direct child-session steering routes."
+      "description": "Raya direct child-session steering routes."
     },
     {
       "name": "network",
-      "description": "Kilo network routes."
+      "description": "Raya network routes."
     },
     {
       "name": "remote",
-      "description": "Kilo remote connection routes."
+      "description": "Raya remote connection routes."
     },
     {
       "name": "sandbox",
-      "description": "Kilo session sandbox routes."
+      "description": "Raya session sandbox routes."
     },
     {
       "name": "session-import",
-      "description": "Kilo legacy session import routes."
+      "description": "Raya legacy session import routes."
     },
     {
       "name": "suggestion",
-      "description": "Kilo suggestion routes."
+      "description": "Raya suggestion routes."
     },
     {
       "name": "capabilities"
     },
     {
       "name": "telemetry",
-      "description": "Kilo telemetry routes."
+      "description": "Raya telemetry routes."
     },
     {
       "name": "memory",
-      "description": "Kilo memory routes."
+      "description": "Raya memory routes."
     },
     {
       "name": "raya-voice"
@@ -102264,15 +102264,15 @@
       "name": "raya-admin"
     },
     {
-      "name": "Kilo HttpApi",
+      "name": "Raya API",
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
-      "name": "Kilo HttpApi",
+      "name": "Raya API",
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
-      "name": "Kilo HttpApi",
+      "name": "Raya API",
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
@@ -102296,7 +102296,7 @@
       "description": "Integration discovery and authentication routes."
     },
     {
-      "name": "Kilo HttpApi",
+      "name": "Raya API",
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {

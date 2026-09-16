@@ -77,7 +77,7 @@ export const AnacondaDesktopApi = HttpApi.make("anaconda-desktop")
             identifier: "anacondaDesktop.sync",
             summary: "Synchronize Anaconda Desktop provider",
             description:
-              "Discover the active local inference server and replace Kilo provider authentication metadata.",
+              "Discover the active local inference server and replace Raya provider authentication metadata.",
           }),
         ),
       )
@@ -93,8 +93,8 @@ export const AnacondaDesktopApi = HttpApi.make("anaconda-desktop")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

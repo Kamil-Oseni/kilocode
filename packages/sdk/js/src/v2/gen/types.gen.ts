@@ -18188,7 +18188,7 @@ export type IndexingModelsError = IndexingModelsErrors[keyof IndexingModelsError
 
 export type IndexingModelsResponses = {
   /**
-   * Kilo embedding model catalog
+   * Raya embedding model catalog
    */
   200: KiloEmbeddingModelCatalog
 }

@@ -65,7 +65,7 @@ export const TelemetryApi = HttpApi.make("telemetry")
       .annotateMerge(
         OpenApi.annotations({
           title: "telemetry",
-          description: "Kilo telemetry routes.",
+          description: "Raya telemetry routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -74,8 +74,8 @@ export const TelemetryApi = HttpApi.make("telemetry")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

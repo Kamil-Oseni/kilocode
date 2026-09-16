@@ -1263,7 +1263,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
       .annotateMerge(
         OpenApi.annotations({
           title: "kilocode",
-          description: "Kilo-specific routes.",
+          description: "Raya routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -1274,8 +1274,8 @@ export const KilocodeApi = HttpApi.make("kilocode")
   .addHttpApi(ChildSteerApi)
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

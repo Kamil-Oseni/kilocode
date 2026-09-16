@@ -64,15 +64,15 @@ export const SandboxApi = HttpApi.make("sandbox")
           }),
         ),
       )
-      .annotateMerge(OpenApi.annotations({ title: "sandbox", description: "Kilo session sandbox routes." }))
+      .annotateMerge(OpenApi.annotations({ title: "sandbox", description: "Raya session sandbox routes." }))
       .middleware(InstanceContextMiddleware)
       .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

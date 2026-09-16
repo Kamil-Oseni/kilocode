@@ -215,7 +215,7 @@ export const ConfigConsoleApi = HttpApi.make("config-console")
           OpenApi.annotations({
             identifier: "config.rules",
             summary: "Get project rules",
-            description: "List project instruction files used by Kilo and return their current contents.",
+            description: "List project instruction files used by Raya and return their current contents.",
           }),
         ),
         HttpApiEndpoint.put("rulesUpdate", ConfigConsolePaths.rules, {
@@ -247,7 +247,7 @@ export const ConfigConsoleApi = HttpApi.make("config-console")
           OpenApi.annotations({
             identifier: "config.modelStateUpdate",
             summary: "Update model state",
-            description: "Patch TUI-compatible model selections shared with Kilo Console.",
+            description: "Patch terminal-compatible model selections shared with Raya.",
           }),
         ),
         HttpApiEndpoint.get("tuiConfigGet", ConfigConsolePaths.tuiConfig, {
@@ -284,15 +284,17 @@ export const ConfigConsoleApi = HttpApi.make("config-console")
           }),
         ),
       )
-      .annotateMerge(OpenApi.annotations({ title: "config-console", description: "Kilo Console config routes." }))
+      .annotateMerge(
+        OpenApi.annotations({ title: "config-console", description: "Raya terminal configuration routes." }),
+      )
       .middleware(InstanceContextMiddleware)
       .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

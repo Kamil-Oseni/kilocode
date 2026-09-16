@@ -45,7 +45,7 @@ export const BranchNameApi = HttpApi.make("branch-name")
       .annotateMerge(
         OpenApi.annotations({
           title: "branch-name",
-          description: "Kilo branch name routes.",
+          description: "Raya branch name routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -54,8 +54,8 @@ export const BranchNameApi = HttpApi.make("branch-name")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

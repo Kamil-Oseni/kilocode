@@ -142,7 +142,7 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.list",
             summary: "List sessions",
             description:
-              "Get ordinary Kilo sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.", // kilocode_change
+              "Get ordinary Raya sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.", // kilocode_change
           }),
         ),
         HttpApiEndpoint.get("status", SessionPaths.status, {
@@ -165,7 +165,7 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "session.get",
             summary: "Get session",
-            description: "Retrieve detailed information about a specific Kilo session.", // kilocode_change
+            description: "Retrieve detailed information about a specific Raya session.", // kilocode_change
           }),
         ),
         HttpApiEndpoint.get("children", SessionPaths.children, {
@@ -236,7 +236,7 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "session.create",
             summary: "Create session",
-            description: "Create a new Kilo session for interacting with AI assistants and managing conversations.", // kilocode_change
+            description: "Create a new Raya session for interacting with AI assistants and managing conversations.", // kilocode_change
           }),
         ),
         HttpApiEndpoint.delete("remove", SessionPaths.remove, {

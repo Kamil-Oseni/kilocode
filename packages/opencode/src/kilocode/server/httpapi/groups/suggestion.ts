@@ -68,7 +68,7 @@ export const SuggestionApi = HttpApi.make("suggestion")
       .annotateMerge(
         OpenApi.annotations({
           title: "suggestion",
-          description: "Kilo suggestion routes.",
+          description: "Raya suggestion routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -77,8 +77,8 @@ export const SuggestionApi = HttpApi.make("suggestion")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

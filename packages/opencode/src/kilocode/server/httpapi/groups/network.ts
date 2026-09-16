@@ -60,7 +60,7 @@ export const NetworkApi = HttpApi.make("network")
       .annotateMerge(
         OpenApi.annotations({
           title: "network",
-          description: "Kilo network routes.",
+          description: "Raya network routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -69,8 +69,8 @@ export const NetworkApi = HttpApi.make("network")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

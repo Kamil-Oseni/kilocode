@@ -26,14 +26,14 @@ export const InstanceReloadApi = HttpApi.make("instance-reload")
             identifier: "instance.reload",
             summary: "Reload instance",
             description:
-              "Atomically dispose and reboot the current Kilo instance, reloading config, skills, agents, commands, and MCP prompts from disk. Returns 409 if a session is actively running.",
+              "Atomically dispose and reboot the current Raya instance, reloading config, skills, agents, commands, and MCP prompts from disk. Returns 409 if a session is actively running.",
           }),
         ),
       )
       .annotateMerge(
         OpenApi.annotations({
           title: "instance-reload",
-          description: "Kilo instance reload route.",
+          description: "Raya instance reload route.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -42,8 +42,8 @@ export const InstanceReloadApi = HttpApi.make("instance-reload")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

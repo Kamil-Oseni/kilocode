@@ -82,7 +82,7 @@ export const GlobalApi = HttpApi.make("global").add(
         OpenApi.annotations({
           identifier: "global.health",
           summary: "Get health",
-          description: "Get health information about the Kilo server.", // kilocode_change
+          description: "Get health information about the Raya server.", // kilocode_change
         }),
       ),
       HttpApiEndpoint.get("event", GlobalPaths.event, {
@@ -91,7 +91,7 @@ export const GlobalApi = HttpApi.make("global").add(
         OpenApi.annotations({
           identifier: "global.event",
           summary: "Get global events",
-          description: "Subscribe to global events from the Kilo system using server-sent events.", // kilocode_change
+          description: "Subscribe to global events from the Raya system using server-sent events.", // kilocode_change
         }),
       ),
       HttpApiEndpoint.get("configGet", GlobalPaths.config, {
@@ -100,7 +100,7 @@ export const GlobalApi = HttpApi.make("global").add(
         OpenApi.annotations({
           identifier: "global.config.get",
           summary: "Get global configuration",
-          description: "Retrieve the current global Kilo configuration settings and preferences.", // kilocode_change
+          description: "Retrieve the current global Raya configuration settings and preferences.", // kilocode_change
         }),
       ),
       HttpApiEndpoint.patch("configUpdate", GlobalPaths.config, {
@@ -111,7 +111,7 @@ export const GlobalApi = HttpApi.make("global").add(
         OpenApi.annotations({
           identifier: "global.config.update",
           summary: "Update global configuration",
-          description: "Update global Kilo configuration settings and preferences.", // kilocode_change
+          description: "Update global Raya configuration settings and preferences.", // kilocode_change
         }),
       ),
       HttpApiEndpoint.post("dispose", GlobalPaths.dispose, {
@@ -120,7 +120,7 @@ export const GlobalApi = HttpApi.make("global").add(
         OpenApi.annotations({
           identifier: "global.dispose",
           summary: "Dispose instance",
-          description: "Clean up and dispose all Kilo instances, releasing all resources.", // kilocode_change
+          description: "Clean up and dispose all Raya instances, releasing all resources.", // kilocode_change
         }),
       ),
       HttpApiEndpoint.post("upgrade", GlobalPaths.upgrade, {
@@ -130,8 +130,8 @@ export const GlobalApi = HttpApi.make("global").add(
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.upgrade",
-          summary: "Upgrade kilo", // kilocode_change
-          description: "Upgrade kilo to the specified version or latest if not specified.", // kilocode_change
+          summary: "Upgrade Raya", // kilocode_change
+          description: "Upgrade Raya to the specified version or latest if not specified.", // kilocode_change
         }),
       ),
     )

@@ -52,7 +52,7 @@ export const ChildSteerApi = HttpApi.make("child-steer")
         ),
       )
       .annotateMerge(
-        OpenApi.annotations({ title: "child-steer", description: "Kilo direct child-session steering routes." }),
+        OpenApi.annotations({ title: "child-steer", description: "Raya direct child-session steering routes." }),
       )
       .middleware(InstanceContextMiddleware)
       .middleware(WorkspaceRoutingMiddleware)
@@ -60,8 +60,8 @@ export const ChildSteerApi = HttpApi.make("child-steer")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya API surface.",
     }),
   )

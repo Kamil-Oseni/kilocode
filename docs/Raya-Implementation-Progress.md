@@ -16,7 +16,7 @@ Evidence is Core **67 tests / 140 assertions**, Effect runtime flags **58 / 125*
 
 The fail-closed ledger now declares **27 environment pairs**: 19 ordinary Raya-first pairs, six safety-monotonic disable pairs and two strict credentials. `cutoverReady` remains false. The installed snapshot remains source `4e5207a6ea`; this Core/CLI/docs slice is queued for a later coherent low-memory package.
 
-After this progress and handoff record, the checked inventory is **70,010** total: public 1,654; compatibility 35,851; provenance 5,686; internal 26,819. The pinned compatibility digest is `fc454c7b877d87fee83475f5e8e3e53da0446db89268da916b0c419cf2eb5aee`.
+After this progress and handoff record, the checked inventory is **70,012** total: public 1,654; compatibility 35,852; provenance 5,686; internal 26,820. The pinned compatibility digest is `a06aace087a425c6b65ccb837609437cc5c2b5d0a8596135953c935253151245`.
 
 ## ChatGPT 2026-09-16 01:09 America/Toronto - Compaction safety switches gain complete Raya aliases
 

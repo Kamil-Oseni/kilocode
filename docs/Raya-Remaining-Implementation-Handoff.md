@@ -14,7 +14,7 @@ Keep the Core fields static at module initialization because tests and callers m
 
 Evidence is Core **67 / 140**, Effect runtime flags **58 / 125**, real plugin loader **29 / 42**, real LSP boundary **1 / 2**, Core and bounded OpenCode typechecks, formatting, annotations, Effect Promise-facade, Markdown-table and whitespace guards. The ledger has **27 environment pairs**: 19 ordinary Raya-first, six safety-monotonic disable pairs and two strict credentials. `cutoverReady` remains false. Installed source remains `4e5207a6ea`; batch this slice into a later coherent low-memory snapshot.
 
-After this handoff and progress record, the checked inventory is **70,010** total: public 1,654; compatibility 35,851; provenance 5,686; internal 26,819. The pinned compatibility digest is `fc454c7b877d87fee83475f5e8e3e53da0446db89268da916b0c419cf2eb5aee`.
+After this handoff and progress record, the checked inventory is **70,012** total: public 1,654; compatibility 35,852; provenance 5,686; internal 26,820. The pinned compatibility digest is `a06aace087a425c6b65ccb837609437cc5c2b5d0a8596135953c935253151245`.
 
 ## ChatGPT 2026-09-16 01:09 America/Toronto - Preserve compaction kill-switch aliases
 

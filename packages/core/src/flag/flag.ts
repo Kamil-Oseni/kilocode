@@ -31,6 +31,7 @@ const KILO_DISABLE_CLAUDE_CODE_SKILLS = KILO_DISABLE_CLAUDE_CODE || truthy("KILO
 // kilocode_change end
 const copy = process.env["KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 const fff = process.env["KILO_DISABLE_FFF"]
+const ttfd = EnvAlias.read("RAYA_SHOW_TTFD", "KILO_SHOW_TTFD")?.toLowerCase() // kilocode_change
 
 function enabledByExperimental(key: string) {
   return process.env[key] === undefined ? truthy("KILO_EXPERIMENTAL") : truthy(key)
@@ -68,7 +69,7 @@ export const Flag = {
   KILO_ALWAYS_NOTIFY_UPDATE: truthy("KILO_ALWAYS_NOTIFY_UPDATE"),
   KILO_DISABLE_PRUNE: truthy("KILO_DISABLE_PRUNE"),
   KILO_DISABLE_TERMINAL_TITLE: truthy("KILO_DISABLE_TERMINAL_TITLE"),
-  KILO_SHOW_TTFD: truthy("KILO_SHOW_TTFD"),
+  KILO_SHOW_TTFD: ttfd === "true" || ttfd === "1", // kilocode_change
   // kilocode_change start
   KILO_DISABLE_DEFAULT_PLUGINS: truthy("KILO_DISABLE_DEFAULT_PLUGINS"),
   KILO_DISABLE_LSP_DOWNLOAD: truthy("KILO_DISABLE_LSP_DOWNLOAD"),

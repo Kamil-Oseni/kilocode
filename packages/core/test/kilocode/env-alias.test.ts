@@ -90,6 +90,62 @@ describe("Raya environment aliases", () => {
     expect(JSON.parse(child.stdout.toString())).toBe(true)
   })
 
+  for (const item of [
+    { name: "Raya input", env: { RAYA_SHOW_TTFD: "true" }, expected: true },
+    { name: "Kilo fallback", env: { KILO_SHOW_TTFD: "1" }, expected: true },
+    {
+      name: "false Raya precedence",
+      env: { RAYA_SHOW_TTFD: "false", KILO_SHOW_TTFD: "true" },
+      expected: false,
+    },
+    {
+      name: "empty Raya precedence",
+      env: { RAYA_SHOW_TTFD: "", KILO_SHOW_TTFD: "true" },
+      expected: false,
+    },
+  ]) {
+    test(`wires the time-to-first-draw flag from ${item.name}`, () => {
+      const names = ["RAYA_SHOW_TTFD", "KILO_SHOW_TTFD"]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      Object.assign(env, item.env)
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_SHOW_TTFD))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toBe(item.expected)
+    })
+  }
+
+  test("reports time-to-first-draw alias conflicts without their values", () => {
+    const names = ["RAYA_SHOW_TTFD", "KILO_SHOW_TTFD"]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    Object.assign(env, { RAYA_SHOW_TTFD: "raya-secret", KILO_SHOW_TTFD: "legacy-secret" })
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ enabled: Flag.KILO_SHOW_TTFD, conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({ enabled: false, conflicts: ["RAYA_SHOW_TTFD/KILO_SHOW_TTFD"] })
+    expect(output).not.toContain("raya-secret")
+    expect(output).not.toContain("legacy-secret")
+  })
+
   test("resolves credentials explicitly and fails closed on conflicting aliases", () => {
     const conflict = { RAYA_SERVER_PASSWORD: "raya-secret", KILO_SERVER_PASSWORD: "legacy-secret" }
 

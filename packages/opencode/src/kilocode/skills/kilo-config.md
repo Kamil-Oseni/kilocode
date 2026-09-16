@@ -376,4 +376,4 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `KILO_CONFIG` | Path to an additional config file (loaded after global) |
 | `KILO_CONFIG_DIR` | Path to an additional config directory (appended to search list) |
 | `KILO_CONFIG_CONTENT` | Inline JSON config string (high precedence, after project dirs) |
-| `KILO_DISABLE_PROJECT_CONFIG` | Skip all project-level config (files and directories) |
+| `RAYA_DISABLE_PROJECT_CONFIG` / `KILO_DISABLE_PROJECT_CONFIG` | Skip all project-level config (files and directories). The Raya name takes precedence when both are defined. |

@@ -2119,9 +2119,8 @@ describe("deduplicatePluginOrigins", () => {
 describe("KILO_DISABLE_PROJECT_CONFIG", () => {
   // kilocode_change start
   it.instance("skips project config files when flag is set", () =>
-    withProcessEnv(
-      "KILO_DISABLE_PROJECT_CONFIG",
-      "true",
+    withProcessEnvs(
+      { RAYA_DISABLE_PROJECT_CONFIG: undefined, KILO_DISABLE_PROJECT_CONFIG: "true" },
       Effect.gen(function* () {
         const test = yield* TestInstance
         yield* writeConfigEffect(test.directory, { model: "project/model", username: "project-user" })
@@ -2130,6 +2129,45 @@ describe("KILO_DISABLE_PROJECT_CONFIG", () => {
         expect(config.username).not.toBe("project-user")
       }),
     ),
+  )
+
+  it.instance("skips project config files with the Raya alias", () =>
+    withProcessEnvs(
+      { RAYA_DISABLE_PROJECT_CONFIG: "true", KILO_DISABLE_PROJECT_CONFIG: undefined },
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* writeConfigEffect(test.directory, { model: "project/model", username: "project-user" })
+        const config = yield* Config.use.get()
+        expect(config.model).not.toBe("project/model")
+        expect(config.username).not.toBe("project-user")
+      }),
+    ),
+  )
+
+  it.instance(
+    "uses the conflicting Raya value before the Kilo fallback",
+    () =>
+      withProcessEnvs(
+        { RAYA_DISABLE_PROJECT_CONFIG: "false", KILO_DISABLE_PROJECT_CONFIG: "true" },
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
+          expect(config.model).toBe("project/model")
+        }),
+      ),
+    { config: { model: "project/model" } },
+  )
+
+  it.instance(
+    "treats an empty Raya value as an explicit false value",
+    () =>
+      withProcessEnvs(
+        { RAYA_DISABLE_PROJECT_CONFIG: "", KILO_DISABLE_PROJECT_CONFIG: "true" },
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
+          expect(config.model).toBe("project/model")
+        }),
+      ),
+    { config: { model: "project/model" } },
   )
 
   it.instance("skips project .kilo directory when flag is set", () =>

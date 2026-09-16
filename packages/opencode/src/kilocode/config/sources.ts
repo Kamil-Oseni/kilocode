@@ -196,11 +196,15 @@ export namespace KilocodeConfigSources {
       })
     }
     if (Flag.KILO_DISABLE_PROJECT_CONFIG) {
+      const source =
+        process.env.RAYA_DISABLE_PROJECT_CONFIG !== undefined
+          ? "RAYA_DISABLE_PROJECT_CONFIG"
+          : "KILO_DISABLE_PROJECT_CONFIG"
       sources.push({
         kind: "runtime-env",
         scope: "env",
-        label: "KILO_DISABLE_PROJECT_CONFIG",
-        source: "KILO_DISABLE_PROJECT_CONFIG",
+        label: source,
+        source,
         exists: true,
         editable: false,
         reason: "Project-level config files and directories are disabled for this process.",

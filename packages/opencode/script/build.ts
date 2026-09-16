@@ -126,6 +126,7 @@ function smokeEnv(root: string) {
     XDG_CONFIG_HOME: path.join(root, "config"),
     XDG_STATE_HOME: path.join(root, "state"),
     KILO_DISABLE_MODELS_FETCH: "1",
+    RAYA_DISABLE_PROJECT_CONFIG: "1", // kilocode_change
     KILO_DISABLE_PROJECT_CONFIG: "1",
     KILO_CONFIG_CONTENT: JSON.stringify({ enabled_providers: ["anthropic"] }),
     ANTHROPIC_API_KEY: "dummy",

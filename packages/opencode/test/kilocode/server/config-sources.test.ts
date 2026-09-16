@@ -28,6 +28,7 @@ const env = {
   KILO_CONFIG: process.env.KILO_CONFIG,
   KILO_CONFIG_CONTENT: process.env.KILO_CONFIG_CONTENT,
   KILO_CONFIG_DIR: process.env.KILO_CONFIG_DIR,
+  RAYA_DISABLE_PROJECT_CONFIG: process.env.RAYA_DISABLE_PROJECT_CONFIG,
   KILO_DISABLE_PROJECT_CONFIG: process.env.KILO_DISABLE_PROJECT_CONFIG,
   KILO_TEST_MANAGED_CONFIG_DIR: process.env.KILO_TEST_MANAGED_CONFIG_DIR,
 }
@@ -42,6 +43,7 @@ function restore() {
   set("KILO_CONFIG", env.KILO_CONFIG)
   set("KILO_CONFIG_CONTENT", env.KILO_CONFIG_CONTENT)
   set("KILO_CONFIG_DIR", env.KILO_CONFIG_DIR)
+  set("RAYA_DISABLE_PROJECT_CONFIG", env.RAYA_DISABLE_PROJECT_CONFIG)
   set("KILO_DISABLE_PROJECT_CONFIG", env.KILO_DISABLE_PROJECT_CONFIG)
   set("KILO_TEST_MANAGED_CONFIG_DIR", env.KILO_TEST_MANAGED_CONFIG_DIR)
 }
@@ -132,7 +134,11 @@ describe("config source routes", () => {
     expect(JSON.stringify(body)).not.toContain("secret-inline-value")
   })
 
-  test("shows project config disabled by environment", async () => {
+  test.each([
+    ["1", undefined, "RAYA_DISABLE_PROJECT_CONFIG"],
+    [undefined, "1", "KILO_DISABLE_PROJECT_CONFIG"],
+    ["1", "false", "RAYA_DISABLE_PROJECT_CONFIG"],
+  ] as const)("reports the effective project-config opt-out variable", async (raya, kilo, source) => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, "kilo.json"), "{}")
@@ -141,15 +147,17 @@ describe("config source routes", () => {
       },
     })
 
-    process.env.KILO_DISABLE_PROJECT_CONFIG = "1"
+    set("RAYA_DISABLE_PROJECT_CONFIG", raya)
+    set("KILO_DISABLE_PROJECT_CONFIG", kilo)
 
     const body = await sources(tmp.path)
 
     expect(body.sources.some((source) => source.path === path.join(tmp.path, "kilo.json"))).toBe(false)
     expect(body.sources.some((source) => source.path === path.join(tmp.path, ".kilo", "kilo.json"))).toBe(false)
-    expect(body.sources.find((source) => source.source === "KILO_DISABLE_PROJECT_CONFIG")).toMatchObject({
+    expect(body.sources.find((item) => item.source === source)).toMatchObject({
       kind: "runtime-env",
       scope: "env",
+      label: source,
       exists: true,
       editable: false,
     })

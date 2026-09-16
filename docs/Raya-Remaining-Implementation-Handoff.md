@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `5b7299016f`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `cd3c104921`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 03:17 America/Toronto - Preserve sharing and presence safety aliases
+
+Preserve product commit `cd3c104921`. `RAYA_DISABLE_SHARE`/`KILO_DISABLE_SHARE` and `RAYA_DISABLE_PRESENCE`/`KILO_DISABLE_PRESENCE` are safety-monotonic pairs. A case-insensitive `true` or `1` under either name must keep the network restriction active; a false, empty or invalid sibling must never reactivate it. Retain process-start evaluation for both sharing implementations and layer-construction evaluation for presence unless a separately tested lifecycle change requires otherwise.
+
+Public sharing must remain independent from private session ingest. Keep both direct readers on `EnvAlias.enabled`; do not replace only one of them or route ingest through the share kill switch. When disabled, `ShareNext` must perform no create, synchronization, removal, persistence or HTTP side effect, while `KiloSessions.share` and `unshare` must reject before credential or network work. Presence must block Event Service subscription/connection while still forwarding the attached-session union and finalizer cleanup to local session state. Local development must set/delete both presence names atomically. Isolated HTTP fixtures must dual-write both safety pairs, and Turbo must retain `RAYA_DISABLE_SHARE` in both environment lists.
+
+Evidence passes: fresh-process share matrix **4 / 29**, ShareNext **7 / 34**, presence **10 / 44**, ledger **3 / 47**, combined service run **20 / 125**, single-threaded OpenCode typecheck, annotations, Promise-facade, Markdown-table, formatting, inventory, compatibility-ledger and diff guards. The ledger now has **40 environment pairs**: 19 ordinary Raya-first, 19 safety-monotonic and two strict credentials. `cutoverReady` remains false. Inventory is **70,327** total: public 1,654; compatibility 36,092; provenance 5,686; internal 26,895; compatibility digest `10c184e13b6d90db67f901e5a08855a264902891994ef9954311c7a7bcc75d17`.
+
+Installed source remains `c077d106e8`; batch this CLI checkpoint with the pending database launcher change in the next coherent low-memory snapshot. `RAYA_PERMISSION` remains a dedicated authority migration: accept one valid alias, require both aliases to normalize to the same ordered semantic rules when both exist, and fail startup with redacted typed errors on conflict or invalid input. Never use ordinary Raya precedence, deep-merge maps, concatenate wildcard rules or silently skip malformed policy.
 
 ## ChatGPT 2026-09-16 02:48 America/Toronto - Preserve database startup safety aliases
 

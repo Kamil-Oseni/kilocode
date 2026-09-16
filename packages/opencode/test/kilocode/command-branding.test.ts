@@ -47,6 +47,10 @@ describe("Kilo command branding", () => {
       "src/kilocode/components/dialog-kilo-profile.tsx",
       "src/kilocode/components/tips.tsx",
       "src/kilocode/config/sources.ts",
+      "src/kilocode/kilo-commands.tsx",
+      "src/kilocode/mcp-oauth-callback.ts",
+      "src/cli/cmd/run/footer.permission.tsx",
+      "src/mcp/oauth-provider.ts",
     ]
     const src = (await Promise.all(files.map((file) => Bun.file(path.join(root, file)).text()))).join("\n")
     const legacy = [
@@ -77,6 +81,12 @@ describe("Kilo command branding", () => {
       "Kilo Gateway gives you",
       "prevent Kilo from reading",
       "with Kilo Gateway for curated",
+      "Tell Kilo what to do differently",
+      'client_name: "Kilo"',
+      "other Kilo process",
+      "View your Kilo Gateway profile",
+      "Switch between Kilo Gateway teams",
+      "Open KiloClaw chat & dashboard",
     ]
 
     expect(legacy.filter((text) => src.includes(text))).toEqual([])
@@ -86,6 +96,15 @@ describe("Kilo command branding", () => {
     expect(src).toContain("Raya Gateway Profile")
     expect(src).toContain("Raya Embedding Model")
     expect(src).toContain("Raya Cloud organization config")
+    expect(src).toContain("Tell Raya what to do differently")
+    expect(src).toContain('client_name: "Raya"')
+    expect(src).toContain("other Raya process")
+    expect(src).toContain('title: "Raya Messenger"')
+    expect(src).toContain('category: "Raya"')
+    expect(src).toContain("Sign in to Raya Gateway, then try again")
+    expect(src).toContain('client_uri: "https://kilo.ai"')
+    expect(src).toContain('name: "kilo.profile"')
+    expect(src).toContain('slashName: "kiloclaw"')
     expect(src).toContain("{highlight}kilo serve{/highlight}")
     expect(src).toContain("https://kilo.ai/kiloclaw")
   })

@@ -38,7 +38,7 @@ export function listen(srv: Server, host: string, port: number): Promise<void> {
       if (err.code === "EADDRINUSE") {
         reject(
           new Error(
-            `OAuth callback port ${port} is already in use. Close the other Kilo process or configure a different MCP OAuth redirect URI, then retry.`,
+            `OAuth callback port ${port} is already in use. Close the other Raya process or configure a different MCP OAuth redirect URI, then retry.`,
           ),
         )
         return

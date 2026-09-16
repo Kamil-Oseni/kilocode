@@ -9,7 +9,7 @@
     },
     "compatibility-key": {
       "count": 34586,
-      "digest": "64b6abc734aaafc7d61e237df299f0e8860bdfaaec48f49c575c810c45d0fb3d",
+      "digest": "8a3eed4151ed5677b65e2481c5a16f6d0176a223b9ec6985085969298b0ea4d8",
       "reason": "Persisted, protocol, package, command, path, provider, environment or API identity requiring a dual-read migration."
     },
     "upstream-provenance": {
@@ -18,13 +18,13 @@
       "reason": "Legal, attribution, fork documentation, translation process or upstream merge material."
     },
     "internal-migration": {
-      "count": 26773,
-      "digest": "7e66021ea15f5ba4d92cdd202b54bb7807402464748880b817f18f7f38cb6006",
+      "count": 26772,
+      "digest": "c3665694740a75c6785dee1c8199f7af0298054453515cf8dbe7f4d30579f2c2",
       "reason": "Internal source identity that can migrate after public and stored compatibility contracts stabilize."
     }
   },
   "total": {
-    "count": 68699,
-    "digest": "97e595c6d8d6e2b060ca8c8285043f946559d4245b697b73ec0983285d0ad7ab"
+    "count": 68698,
+    "digest": "dac8f7ea836e202bede443353d257dd2ae841c7baadda9f377ba017405d2cf52"
   }
 }

@@ -35,6 +35,14 @@ describe("McpOAuthProvider.redirectUrl", () => {
 })
 
 describe("McpOAuthProvider.clientMetadata", () => {
+  // kilocode_change start
+  test("presents Raya while retaining the compatible service URI", () => {
+    const provider = makeProvider({})
+    expect(provider.clientMetadata.client_name).toBe("Raya")
+    expect(provider.clientMetadata.client_uri).toBe("https://kilo.ai")
+  })
+  // kilocode_change end
+
   test("includes redirect_uris from redirectUrl", () => {
     const provider = makeProvider({ callbackPort: 6620 })
     expect(provider.clientMetadata.redirect_uris).toEqual([`http://127.0.0.1:6620${OAUTH_CALLBACK_PATH}`])

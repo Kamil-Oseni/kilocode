@@ -2,7 +2,7 @@ import { describe, expect, test, afterEach } from "bun:test"
 import { createServer } from "http"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 
-describe("Kilo MCP OAuth callback", () => {
+describe("Raya MCP OAuth callback", () => {
   afterEach(async () => {
     await McpOAuthCallback.stop()
   })
@@ -24,7 +24,9 @@ describe("Kilo MCP OAuth callback", () => {
 
       await expect(
         McpOAuthCallback.ensureRunning(`http://127.0.0.1:${address.port}/mcp/oauth/callback`),
-      ).rejects.toThrow("already in use")
+      ).rejects.toThrow(
+        `OAuth callback port ${address.port} is already in use. Close the other Raya process or configure a different MCP OAuth redirect URI, then retry.`,
+      )
       expect(McpOAuthCallback.isRunning()).toBe(false)
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()))

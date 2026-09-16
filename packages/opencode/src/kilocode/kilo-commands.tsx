@@ -26,7 +26,8 @@ import { refreshBalance } from "./balance-refresh"
 
 // These types are OpenCode-internal and imported at runtime
 type UseSDK = any
-type SDK = any
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 /**
  * Register all Kilo Gateway commands
@@ -52,9 +53,9 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
       // /kiloclaw command
       {
         name: "kilo.claw",
-        title: "KiloClaw",
-        desc: "Open KiloClaw chat & dashboard",
-        category: "Kilo",
+        title: "Raya Messenger",
+        desc: "Open Raya Messenger",
+        category: "Raya",
         slashName: "kiloclaw",
         slashAliases: ["claw"],
         enabled: isKiloConnected(),
@@ -94,7 +95,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
         name: "remote.toggle",
         title: "Toggle remote",
         desc: "Enable or disable remote session relay",
-        category: "Kilo",
+        category: "Raya",
         slashName: "remote",
         enabled: isKiloConnected(),
         hidden: !isKiloConnected(),
@@ -123,7 +124,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
 
             dialog.clear()
           } catch (error) {
-            dialog.replace(() => <DialogAlert title="Error" message={`Failed to toggle remote: ${error}`} />)
+            dialog.replace(() => <DialogAlert title="Error" message={`Failed to toggle remote: ${message(error)}`} />)
           }
         },
       },
@@ -132,7 +133,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
         name: "kilo.usage",
         title: "Plans & usage",
         desc: "View provider plans and quota",
-        category: "Kilo",
+        category: "Raya",
         slashName: "usage",
         slashAliases: ["plans", "quota"],
         run: () => {
@@ -144,8 +145,8 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
       {
         name: "kilo.profile",
         title: "Profile",
-        desc: "View your Kilo Gateway profile",
-        category: "Kilo",
+        desc: "View your Raya Gateway profile",
+        category: "Raya",
         slashName: "profile",
         slashAliases: ["me", "whoami"],
         enabled: isKiloConnected(),
@@ -168,7 +169,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
               dialog.replace(() => (
                 <DialogAlert
                   title="Error"
-                  message="Failed to fetch profile. Please ensure you're authenticated with Kilo Gateway."
+                  message="Couldn't load your profile. Sign in to Raya Gateway, then try again."
                 />
               ))
               return
@@ -179,7 +180,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
             // Show profile dialog with clickable usage link
             dialog.replace(() => <DialogKiloProfile profile={profile} balance={balance} currentOrgId={currentOrgId} />)
           } catch (error) {
-            dialog.replace(() => <DialogAlert title="Error" message={`Failed to fetch profile: ${error}`} />)
+            dialog.replace(() => <DialogAlert title="Error" message={`Failed to fetch profile: ${message(error)}`} />)
           }
         },
       },
@@ -190,7 +191,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
               name: "kilo.indexing",
               title: "Indexing",
               desc: "Configure codebase indexing",
-              category: "Kilo",
+              category: "Raya",
               slashName: "indexing",
               slashAliases: ["index", "embedding"],
               run: () => {
@@ -208,7 +209,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
           return active ? "Disable privacy mode" : "Enable privacy mode"
         },
         desc: "Blur PII (balance, email, etc.) and confirm before showing profile",
-        category: "Kilo",
+        category: "Raya",
         slashName: "privacy",
         run: async () => {
           const active = sync.data.config.privacy_mode === true || sync.data.globalConfig.privacy_mode === true
@@ -234,10 +235,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
             toast.show({ message: `Failed to update privacy mode (${status})`, variant: "error" })
             return
           }
-          const [cfg, global] = await Promise.all([
-            sdk.client.config.get({}),
-            sdk.client.global.config.get({}),
-          ])
+          const [cfg, global] = await Promise.all([sdk.client.config.get({}), sdk.client.global.config.get({})])
           if (cfg.data) sync.set("config", reconcile(cfg.data))
           if (global.data) sync.set("globalConfig", reconcile(global.data))
           toast.show({
@@ -251,8 +249,8 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
       {
         name: "kilo.teams",
         title: "Teams",
-        desc: "Switch between Kilo Gateway teams",
-        category: "Kilo",
+        desc: "Switch between Raya Gateway teams",
+        category: "Raya",
         slashName: "teams",
         slashAliases: ["team", "org", "orgs"],
         enabled: isKiloConnected(),
@@ -266,7 +264,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
               dialog.replace(() => (
                 <DialogAlert
                   title="Error"
-                  message="Failed to fetch teams. Please ensure you're authenticated with Kilo Gateway."
+                  message="Couldn't load your teams. Sign in to Raya Gateway, then try again."
                 />
               ))
               return
@@ -336,7 +334,7 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
               />
             ))
           } catch (error) {
-            dialog.replace(() => <DialogAlert title="Error" message={`Failed to fetch teams: ${error}`} />)
+            dialog.replace(() => <DialogAlert title="Error" message={`Failed to fetch teams: ${message(error)}`} />)
           }
         },
       },

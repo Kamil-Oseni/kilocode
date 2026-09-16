@@ -84,7 +84,7 @@ describe("profile writer manifest", () => {
     ])
   })
 
-  test("names the audited cache, repository, self-heal and diagnostics mutation owners", () => {
+  test("names the audited repository, self-heal, diagnostics and unresolved command boundaries", () => {
     const find = (id: string) => ProfileWriterManifest.manifest.writers.find((writer) => writer.id === id)
 
     expect(find("profile.cache.skills")?.sources).toEqual([
@@ -92,6 +92,8 @@ describe("profile writer manifest", () => {
       "packages/opencode/src/skill/discovery.ts",
     ])
     expect(find("profile.cache.skills")?.sources).not.toContain("packages/opencode/src/kilocode/skill-remove.ts")
+
+    expect(find("profile.cache.commands")).toBeUndefined()
 
     expect(find("profile.bin.ripgrep")?.methods).toEqual([
       "ensure-directory",
@@ -112,9 +114,7 @@ describe("profile writer manifest", () => {
     ])
     expect(find("profile.data.repos")?.methods).toContain("reset-hard")
 
-    expect(find("profile.data.self-heal")?.sources).toContain(
-      "packages/opencode/src/kilocode/self-heal/worktree.ts",
-    )
+    expect(find("profile.data.self-heal")?.sources).toContain("packages/opencode/src/kilocode/self-heal/worktree.ts")
     expect(find("profile.data.self-heal")?.sources).toContain(
       "packages/opencode/src/kilocode/self-heal/verification.ts",
     )
@@ -141,6 +141,15 @@ describe("profile writer manifest", () => {
     )
     expect(ProfileWriterManifest.manifest.gaps).toContain(
       "independently compiled Core service graphs can bypass an OpenCode-only writer replacement",
+    )
+    expect(ProfileWriterManifest.manifest.gaps).toContain(
+      "no tracked producer owns the legacy or externally injected command cache",
+    )
+    expect(ProfileWriterManifest.manifest.gaps).toContain(
+      "command saves and removals can mutate project, home, editor or injected paths outside profile roots",
+    )
+    expect(ProfileWriterManifest.manifest.gaps).toContain(
+      "JetBrains writes command files directly and cannot join the process-local Node registry",
     )
   })
 })

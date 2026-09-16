@@ -86,15 +86,6 @@ export namespace ProfileWriterManifest {
         coverage: "integrated",
       }),
       writer({
-        id: "profile.cache.commands",
-        roots: ["cache", "config"],
-        sources: ["packages/opencode/src/kilocode/command-files.ts"],
-        methods: ["remove-config-command", "inspect-cache-command"],
-        lifecycle: "Identify the cache producer and separate it from mutable global configuration.",
-        copyPolicy: "copy-after-drain",
-        coverage: uncertain,
-      }),
-      writer({
         id: "profile.cache.models",
         roots: ["cache"],
         sources: ["packages/core/src/models-dev.ts"],
@@ -467,6 +458,9 @@ export namespace ProfileWriterManifest {
       "direct and parameter-injected SQL writers require coverage through both clients",
       "skill removal can unlink project or externally injected manifests outside profile roots",
       "independently compiled Core service graphs can bypass an OpenCode-only writer replacement",
+      "no tracked producer owns the legacy or externally injected command cache",
+      "command saves and removals can mutate project, home, editor or injected paths outside profile roots",
+      "JetBrains writes command files directly and cannot join the process-local Node registry",
       "a static mutation-candidate guard and cross-process ownership protocol are not implemented",
     ],
   } as const satisfies Manifest

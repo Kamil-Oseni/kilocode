@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "Utilgængelig",
   "provider.anaconda.state.unsupported": "Anaconda Desktop understøttes ikke på {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "Installer Anaconda Desktop på denne maskine, og vend derefter tilbage hertil. Kilo kører ikke installationsprogrammet for dig.",
+    "Installer Anaconda Desktop på denne maskine, og vend derefter tilbage hertil. Raya kører ikke installationsprogrammet for dig.",
   "provider.anaconda.state.notRunning":
     "Åbn Anaconda Desktop, færdiggør opsætningen og log ind, og vælg derefter Tjek igen.",
   "provider.anaconda.state.invalidConfig":
     "Opsætningen af Anaconda Desktop er ufuldstændig. Åbn Desktop, færdiggør opsætningen, og genstart den om nødvendigt.",
-  "provider.anaconda.state.signedOut": "Åbn Anaconda Desktop og log ind, før du forbinder Kilo.",
+  "provider.anaconda.state.signedOut": "Åbn Anaconda Desktop og log ind, før du forbinder Raya.",
   "provider.anaconda.state.unauthorized":
-    "Kilo kunne ikke få adgang til Anaconda Desktop. Åbn Desktop, log ind igen, og genstart den om nødvendigt.",
+    "Raya kunne ikke få adgang til Anaconda Desktop. Åbn Desktop, log ind igen, og genstart den om nødvendigt.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop svarer ikke endnu. Åbn den, og vent på, at applikationen er færdig med at starte.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "Den aktive inferensserver er ikke sund endnu. Tjek den i Anaconda Desktop, og genstart serveren om nødvendigt.",
   "provider.anaconda.state.ready":
-    "Kilo fandt en sund lokal tekstgenereringsserver og kan importere dens aktuelle forbindelsesindstillinger.",
+    "Raya fandt en sund lokal tekstgenereringsserver og kan importere dens aktuelle forbindelsesindstillinger.",
   "provider.anaconda.server": "Aktiv inferensserver",
   "provider.anaconda.context": "Kontekstvindue",
   "provider.anaconda.contextValue": "{{count}} tokens",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "Fortsæt alligevel",
   "provider.anaconda.action.manage": "Administrer / Opdater",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop opdateret",
-  "provider.anaconda.toast.refreshed.description": "Den aktive lokale server og modeller er opdaterede i Kilo.",
+  "provider.anaconda.toast.refreshed.description": "Den aktive lokale server og modeller er opdaterede i Raya.",
   "settings.providers.note.anacondaDesktop": "Kør en model, der serveres lokalt af Anaconda Desktop.",
   "settings.providers.tag.local": "Lokal",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "Venter på godkendelse...",
   "provider.connect.status.failed": "Godkendelse mislykkedes: {{error}}",
   "provider.connect.apiKey.description":
-    "Indtast din {{provider}} API-nøgle for at forbinde din konto og bruge {{provider}} modeller i Kilo.",
+    "Indtast din {{provider}} API-nøgle for at forbinde din konto og bruge {{provider}} modeller i Raya.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -123,14 +123,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Besøg ",
   "provider.connect.oauth.code.visit.link": "dette link",
   "provider.connect.oauth.code.visit.suffix":
-    " for at hente din godkendelseskode for at forbinde din konto og bruge {{provider}} modeller i Kilo.",
+    " for at hente din godkendelseskode for at forbinde din konto og bruge {{provider}} modeller i Raya.",
   "provider.connect.oauth.code.label": "{{method}} godkendelseskode",
   "provider.connect.oauth.code.placeholder": "Godkendelseskode",
   "provider.connect.oauth.code.required": "Godkendelseskode er påkrævet",
   "provider.connect.oauth.auto.visit.prefix": "Besøg ",
   "provider.connect.oauth.auto.visit.link": "dette link",
   "provider.connect.oauth.auto.visit.suffix":
-    " og indtast koden nedenfor for at forbinde din konto og bruge {{provider}} modeller i Kilo.",
+    " og indtast koden nedenfor for at forbinde din konto og bruge {{provider}} modeller i Raya.",
   "provider.connect.oauth.auto.confirmationCode": "Bekræftelseskode",
   "provider.connect.toast.connected.title": "{{provider}} forbundet",
   "provider.connect.toast.connected.description": "{{provider}} modeller er nu tilgængelige.",
@@ -194,9 +194,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "Aktivér sandbox",
   "prompt.action.sandbox.disable": "Deaktivér sandbox",
   "prompt.action.sandbox.enabled":
-    "Sandbox er aktiveret. Shell-kommandoer for agenten er begrænset til projekt- og Kilo-mapperne.",
+    "Sandbox er aktiveret. Shell-kommandoer for agenten er begrænset til projekt- og Raya-mapperne.",
   "prompt.action.sandbox.disabled":
-    "Sandbox er deaktiveret. Klik for at begrænse skrivning af shell-kommandoer for agenten til projekt- og Kilo-mapperne.",
+    "Sandbox er deaktiveret. Klik for at begrænse skrivning af shell-kommandoer for agenten til projekt- og Raya-mapperne.",
   "prompt.action.sandbox.status.enabled": "Sandbox aktiveret",
   "prompt.action.sandbox.status.disabled": "Sandbox deaktiveret",
   "prompt.action.sandbox.filesystem": "Filsystem",
@@ -205,7 +205,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Blokeret",
   "prompt.action.sandbox.network.allowed": "Tilladt",
   "prompt.action.sandbox.unrestricted": "Ubegrænset",
-  "prompt.action.sandbox.description.enabled": "Skrivning er begrænset til projekt- og Kilo-mapperne.",
+  "prompt.action.sandbox.description.enabled": "Skrivning er begrænset til projekt- og Raya-mapperne.",
   "prompt.action.sandbox.description.disabled": "Klik for at begrænse skriveadgang til filsystemet og netværksadgang.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Klik for at begrænse skriveadgang til filsystemet. Netværksadgang er fortsat tilladt ifølge dine sandboxindstillinger.",
@@ -218,7 +218,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Transskriberer... Klik for at annullere.",
   "speechToText.tooltip.error": "Stemmeinput mislykkedes. Klik for at rydde.",
   "speechToText.error.title": "Stemmeinput mislykkedes",
-  "speechToText.error.loginRequired": "Log ind på Kilo for at bruge stemmeinput.",
+  "speechToText.error.loginRequired": "Log ind på Raya for at bruge stemmeinput.",
   "speechToText.error.emptyTranscript": "Ingen tale blev registreret.",
 
   "prompt.toast.promptSendFailed.title": "Kunne ikke sende forespørgsel",
@@ -401,10 +401,10 @@ export const dict = {
   "settings.indexing.provider.title": "Embedding-udbyder",
   "settings.indexing.provider.description":
     "Vælg udbyderen, der bruges til at generere embeddings til semantisk søgning.",
-  "settings.indexing.kiloModel.title": "Kilo-modelpreset",
-  "settings.indexing.kiloModel.description": "Vælg en understøttet Kilo-hostet embedding-model.",
-  "settings.indexing.kiloSignIn.title": "Kilo-login kræves",
-  "settings.indexing.kiloSignIn.description": "Log ind på Kilo for at bruge hostede embeddings.",
+  "settings.indexing.kiloModel.title": "Raya-modelpreset",
+  "settings.indexing.kiloModel.description": "Vælg en understøttet Raya-hostet embedding-model.",
+  "settings.indexing.kiloSignIn.title": "Raya-login kræves",
+  "settings.indexing.kiloSignIn.description": "Log ind på Raya for at bruge hostede embeddings.",
   "settings.indexing.model.title": "Embedding-model",
   "settings.indexing.model.description": "Overskriv standard embedding-modellen for den valgte udbyder.",
   "settings.indexing.providerField.description": "Udbyderspecifik forbindelsesindstilling.",
@@ -514,11 +514,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "indlæst forældet konfiguration",
   "settings.config.status.notLoaded": "ikke indlæst",
   "settings.config.status.create": "ikke fundet - opret denne fil",
-  "settings.config.title": "Åbn {{scope}} Kilo konfigurationsfil",
+  "settings.config.title": "Åbn {{scope}} Raya konfigurationsfil",
   "settings.config.placeholder":
     "Konfigurationsfiler flettes i rækkefølge; filer markeret som indlæst påvirker i øjeblikket indstillingerne.",
-  "settings.config.noWorkspace": "Åbn en arbejdsområdemappe for at redigere den lokale Kilo konfigurationsfil.",
-  "settings.config.openFailed": "Kunne ikke åbne {{scope}} Kilo konfigurationsfil: {{message}}",
+  "settings.config.noWorkspace": "Åbn en arbejdsområdemappe for at redigere den lokale Raya konfigurationsfil.",
+  "settings.config.openFailed": "Kunne ikke åbne {{scope}} Raya konfigurationsfil: {{message}}",
   "settings.config.source.xdg": "XDG global konfiguration",
   "settings.config.source.homeKilo": "Home .kilo konfiguration",
   "settings.config.source.homeKilocode": "Home .kilocode konfiguration",
@@ -794,10 +794,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "Eksportér",
   "settings.aboutKiloCode.importSettings": "Importér",
   "settings.aboutKiloCode.importSettings.invalidJson": "Ugyldig JSON-fil. Vælg venligst en gyldig indstillingsfil.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "Filen indeholder ikke gyldige Kilo-indstillinger.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "Filen indeholder ikke gyldige Raya-indstillinger.",
   "settings.aboutKiloCode.importSettings.tooLarge": "Filen er for stor. Indstillingsfiler skal være under 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "Denne fil blev eksporteret fra en nyere version af Kilo. Nogle indstillinger kan blive ignoreret.",
+    "Denne fil blev eksporteret fra en nyere version af Raya. Nogle indstillinger kan blive ignoreret.",
   "settings.aboutKiloCode.importSettings.success":
     "Indstillinger importeret. Gennemgå ændringerne ovenfor, og klik derefter på Gem.",
 
@@ -863,7 +863,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Standard (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Aktivér og log ind på Kilo-udbyderen for at bruge Speech to Text. Speech to Text understøttes i øjeblikket kun med Raya Gateway.",
+    "Aktivér og log ind på Raya-udbyderen for at bruge Speech to Text. Speech to Text understøttes i øjeblikket kun med Raya Gateway.",
   "settings.models.speechToTextModel.title": "Model til tale til tekst",
   "settings.models.speechToTextModel.description": "Vælg Raya Gateway-transskriptionsmodellen til stemmeinput.",
   "settings.experimental.nativeNotebookTools.title": "Indbyggede notebook-værktøjer",
@@ -998,7 +998,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code-kompatibilitet",
   "settings.agentBehaviour.claudeCompat.title": "Indlæs Claude Code-filer",
   "settings.agentBehaviour.claudeCompat.description":
-    "Indlæs CLAUDE.md-instruktioner og -færdigheder fra din Claude Code-konfigurationsmappe i sessioner. Aktivér dette, hvis du vil have Kilo til at bruge dine Claude Code-instruktioner og -færdigheder. Kræver genstart.",
+    "Indlæs CLAUDE.md-instruktioner og -færdigheder fra din Claude Code-konfigurationsmappe i sessioner. Aktivér dette, hvis du vil have Raya til at bruge dine Claude Code-instruktioner og -færdigheder. Kræver genstart.",
   "settings.agentBehaviour.mcpDetail.command": "Kommando",
   "settings.agentBehaviour.mcpDetail.args": "Argumenter",
   "settings.agentBehaviour.mcpDetail.env": "Miljø",
@@ -1016,7 +1016,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "Global modeloverskrivelse",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "Kør shell-kommandoer for agenten i en sandbox på operativsystemniveau, der begrænser skrivning til projekt- og Kilo-tilstandsmapperne",
+    "Kør shell-kommandoer for agenten i en sandbox på operativsystemniveau, der begrænser skrivning til projekt- og Raya-tilstandsmapperne",
 
   "settings.autoApprove.description":
     "Definer, hvordan værktøjer må køre. De fleste værktøjer er som standard indstillet til Tillad. doom_loop og external_directory er som standard indstillet til Spørg.",
@@ -1104,7 +1104,7 @@ export const dict = {
   "settings.display.username.title": "Brugernavn",
   "settings.display.username.description": "Brugerdefineret brugernavn i samtaler",
   "settings.display.fontSize.title": "Skriftstørrelse",
-  "settings.display.fontSize.description": "Juster skriftstørrelsen for Kilo webview UI uafhængigt af VS Code.",
+  "settings.display.fontSize.description": "Juster skriftstørrelsen for Raya webview UI uafhængigt af VS Code.",
   "settings.display.reasoningAutoCollapse.title": "Skjul ræsonnement automatisk",
   "settings.display.reasoningAutoCollapse.description":
     "Skjuler ræsonnementsblokke, når agenten er færdig med at skrive dem. Lad den være slået fra for at holde ræsonnement udvidet, medmindre du skjuler det manuelt.",
@@ -1175,7 +1175,7 @@ export const dict = {
     "En samlet brugerflade til at køre flere agenter parallelt, hver på sit eget worktree — overvåg fremskridt, skift kontekst og gennemgå ændringer ét sted.",
   "migration.whatsNew.features.foundation.title": "Fælles fundament",
   "migration.whatsNew.features.foundation.detail":
-    "Én lille, effektiv kerne på tværs af alle Kilo-produkter. En velkendt oplevelse uanset hvordan du vælger at arbejde.",
+    "Én lille, effektiv kerne på tværs af alle Raya-produkter. En velkendt oplevelse uanset hvordan du vælger at arbejde.",
   "migration.whatsNew.blogLink": "Læs den fulde meddelelse",
   "migration.whatsNew.docsLink": "Nyheder og ofte stillede spørgsmål",
   "migration.whatsNew.continue": "Fortsæt",
@@ -1286,7 +1286,7 @@ export const dict = {
     "Filer ændret i dit arbejdsbibliotek, men ikke stagede endnu, samt ikke-sporede (nye) filer.",
   "diffViewer.source.session.label": "Session",
   "diffViewer.source.session.tooltip":
-    "Filer ændret af Kilo i den aktuelle session, baseret på snapshots pr. tur. Nulstilles, når du starter en ny session.",
+    "Filer ændret af Raya i den aktuelle session, baseret på snapshots pr. tur. Nulstilles, når du starter en ny session.",
   "diffViewer.group.session": "Session",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

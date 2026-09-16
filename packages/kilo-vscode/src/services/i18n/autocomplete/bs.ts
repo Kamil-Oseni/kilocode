@@ -17,8 +17,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Onemogući Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Onemogući automatsko dovršavanje",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya automatsko dovršavanje je pauzirano. Mogući uzroci: vaš Kilo račun nema preostalih kredita ili je vaš konfigurisani API ključ (BYOK) dostigao ograničenje kvote. Dodajte Kilo kredite ili provjerite konfiguraciju API ključa da nastavite automatsko dovršavanje.",
+    "Raya automatsko dovršavanje je pauzirano. Mogući uzroci: vaš Raya račun nema preostalih kredita ili je vaš konfigurisani API ključ (BYOK) dostigao ograničenje kvote. Dodajte Raya kredite ili provjerite konfiguraciju API ključa da nastavite automatsko dovršavanje.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Dodaj kredite",
   "kilocode:autocomplete.authError.message":
-    "Raya automatsko dovršavanje je pauzirano zbog problema s autentifikacijom. Mogući uzroci: niste prijavljeni u Kilo ili je vaš API ključ (BYOK) nevažeći ili nedostaje. Prijavite se ponovo ili provjerite postavke API ključa pružaoca.",
+    "Raya automatsko dovršavanje je pauzirano zbog problema s autentifikacijom. Mogući uzroci: niste prijavljeni u Raya ili je vaš API ključ (BYOK) nevažeći ili nedostaje. Prijavite se ponovo ili provjerite postavke API ključa pružaoca.",
 }

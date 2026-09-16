@@ -18,8 +18,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "تعطيل Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "تعطيل الإكمال التلقائي",
   "kilocode:autocomplete.creditsExhausted.message":
-    "تم إيقاف الإكمال التلقائي في Raya مؤقتا. الأسباب المحتملة: لا توجد أرصدة متبقية في حساب Kilo الخاص بك، أو أن مفتاح API المكون (BYOK) وصل إلى حد الحصة. أضف أرصدة Kilo أو تحقق من إعدادات مفتاح API لاستئناف الإكمال التلقائي.",
+    "تم إيقاف الإكمال التلقائي في Raya مؤقتا. الأسباب المحتملة: لا توجد أرصدة متبقية في حساب Raya الخاص بك، أو أن مفتاح API المكون (BYOK) وصل إلى حد الحصة. أضف أرصدة Raya أو تحقق من إعدادات مفتاح API لاستئناف الإكمال التلقائي.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "إضافة أرصدة",
   "kilocode:autocomplete.authError.message":
-    "تم إيقاف الإكمال التلقائي في Raya مؤقتا بسبب مشكلة مصادقة. الأسباب المحتملة: لم تسجل الدخول إلى Kilo، أو أن مفتاح API (BYOK) غير صالح أو مفقود. يرجى تسجيل الدخول مرة أخرى أو التحقق من إعدادات مفتاح API للمزود.",
+    "تم إيقاف الإكمال التلقائي في Raya مؤقتا بسبب مشكلة مصادقة. الأسباب المحتملة: لم تسجل الدخول إلى Raya، أو أن مفتاح API (BYOK) غير صالح أو مفقود. يرجى تسجيل الدخول مرة أخرى أو التحقق من إعدادات مفتاح API للمزود.",
 }

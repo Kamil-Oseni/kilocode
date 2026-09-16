@@ -17,8 +17,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "禁用 Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "禁用自动补全",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya 自动补全已暂停。可能原因：你的 Kilo 账户没有剩余额度，或你配置的 API 密钥（BYOK）已达到配额限制。请添加 Kilo 额度或检查 API 密钥配置以恢复自动补全。",
+    "Raya 自动补全已暂停。可能原因：你的 Raya 账户没有剩余额度，或你配置的 API 密钥（BYOK）已达到配额限制。请添加 Raya 额度或检查 API 密钥配置以恢复自动补全。",
   "kilocode:autocomplete.creditsExhausted.addCredits": "添加额度",
   "kilocode:autocomplete.authError.message":
-    "Raya 自动补全因身份验证问题已暂停。可能原因：你尚未登录 Kilo，或你的 API 密钥（BYOK）无效或缺失。请重新登录或检查提供商 API 密钥设置。",
+    "Raya 自动补全因身份验证问题已暂停。可能原因：你尚未登录 Raya，或你的 API 密钥（BYOK）无效或缺失。请重新登录或检查提供商 API 密钥设置。",
 }

@@ -18,8 +18,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Deshabilitar Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Deshabilitar autocompletado",
   "kilocode:autocomplete.creditsExhausted.message":
-    "El autocompletado de Raya se ha pausado. Posibles causas: tu cuenta de Kilo no tiene créditos restantes, o tu clave de API configurada (BYOK) alcanzó su límite de cuota. Agrega créditos de Kilo o revisa la configuración de tu clave de API para reanudar el autocompletado.",
+    "El autocompletado de Raya se ha pausado. Posibles causas: tu cuenta de Raya no tiene créditos restantes, o tu clave de API configurada (BYOK) alcanzó su límite de cuota. Agrega créditos de Raya o revisa la configuración de tu clave de API para reanudar el autocompletado.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Añadir créditos",
   "kilocode:autocomplete.authError.message":
-    "El autocompletado de Raya se ha pausado por un problema de autenticación. Posibles causas: no has iniciado sesión en Kilo, o tu clave de API (BYOK) no es válida o falta. Vuelve a iniciar sesión o revisa la configuración de la clave de API de tu proveedor.",
+    "El autocompletado de Raya se ha pausado por un problema de autenticación. Posibles causas: no has iniciado sesión en Raya, o tu clave de API (BYOK) no es válida o falta. Vuelve a iniciar sesión o revisa la configuración de la clave de API de tu proveedor.",
 }

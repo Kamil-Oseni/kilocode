@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "در دسترس نیست",
   "provider.anaconda.state.unsupported": "Anaconda Desktop در {{platform}} پشتیبانی نمی‌شود.",
   "provider.anaconda.state.notInstalled":
-    "Anaconda Desktop را روی این دستگاه نصب کنید، سپس به اینجا بازگردید. Kilo نصب‌کننده را برای شما اجرا نمی‌کند.",
+    "Anaconda Desktop را روی این دستگاه نصب کنید، سپس به اینجا بازگردید. Raya نصب‌کننده را برای شما اجرا نمی‌کند.",
   "provider.anaconda.state.notRunning":
     "Anaconda Desktop را باز کنید، راه‌اندازی را تکمیل کرده و وارد شوید، سپس «بررسی مجدد» را انتخاب کنید.",
   "provider.anaconda.state.invalidConfig":
     "راه‌اندازی Anaconda Desktop ناقص است. Desktop را باز کنید، راه‌اندازی را تکمیل کنید و در صورت نیاز آن را مجدداً راه‌اندازی کنید.",
-  "provider.anaconda.state.signedOut": "قبل از اتصال Kilo، Anaconda Desktop را باز کرده و وارد شوید.",
+  "provider.anaconda.state.signedOut": "قبل از اتصال Raya، Anaconda Desktop را باز کرده و وارد شوید.",
   "provider.anaconda.state.unauthorized":
-    "Kilo نتوانست به Anaconda Desktop دسترسی پیدا کند. Desktop را باز کنید، دوباره وارد شوید و در صورت نیاز آن را مجدداً راه‌اندازی کنید.",
+    "Raya نتوانست به Anaconda Desktop دسترسی پیدا کند. Desktop را باز کنید، دوباره وارد شوید و در صورت نیاز آن را مجدداً راه‌اندازی کنید.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop هنوز پاسخ نمی‌دهد. آن را باز کنید و منتظر بمانید تا برنامه کاملاً راه‌اندازی شود.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "سرور استنتاج فعال هنوز سالم نیست. آن را در Anaconda Desktop بررسی کنید و در صورت نیاز سرور را مجدداً راه‌اندازی کنید.",
   "provider.anaconda.state.ready":
-    "Kilo یک سرور تولید متن محلی سالم پیدا کرد و می‌تواند تنظیمات اتصال فعلی آن را وارد کند.",
+    "Raya یک سرور تولید متن محلی سالم پیدا کرد و می‌تواند تنظیمات اتصال فعلی آن را وارد کند.",
   "provider.anaconda.server": "سرور استنتاج فعال",
   "provider.anaconda.context": "پنجره زمینه",
   "provider.anaconda.contextValue": "{{count}} توکن",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "ادامه به هر حال",
   "provider.anaconda.action.manage": "مدیریت / بازنشانی",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop بازنشانی شد",
-  "provider.anaconda.toast.refreshed.description": "سرور محلی فعال و مدل‌ها در Kilo به‌روز هستند.",
+  "provider.anaconda.toast.refreshed.description": "سرور محلی فعال و مدل‌ها در Raya به‌روز هستند.",
   "settings.providers.note.anacondaDesktop": "یک مدل ارائه‌شده به‌صورت محلی توسط Anaconda Desktop را اجرا کنید.",
   "settings.providers.tag.local": "محلی",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "در انتظار احراز هویت...",
   "provider.connect.status.failed": "احراز هویت ناموفق بود: {{error}}",
   "provider.connect.apiKey.description":
-    "کلید API {{provider}} خود را وارد کنید تا حساب‌تان متصل شود و از مدل‌های {{provider}} در Kilo استفاده کنید.",
+    "کلید API {{provider}} خود را وارد کنید تا حساب‌تان متصل شود و از مدل‌های {{provider}} در Raya استفاده کنید.",
   "provider.connect.apiKey.description.local":
     "به سرور محلی {{provider}} خود متصل شوید. اگر سرور نیازی به کلید API ندارد، آن را خالی بگذارید (پیش‌فرض برای localhost).",
   "provider.connect.atomicChat.description":
@@ -123,14 +123,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "به ",
   "provider.connect.oauth.code.visit.link": "این لینک",
   "provider.connect.oauth.code.visit.suffix":
-    " مراجعه کنید تا کد مجوز خود را دریافت کرده، حساب خود را متصل کنید و از مدل‌های {{provider}} در Kilo استفاده کنید.",
+    " مراجعه کنید تا کد مجوز خود را دریافت کرده، حساب خود را متصل کنید و از مدل‌های {{provider}} در Raya استفاده کنید.",
   "provider.connect.oauth.code.label": "کد مجوز {{method}}",
   "provider.connect.oauth.code.placeholder": "کد مجوز",
   "provider.connect.oauth.code.required": "کد مجوز الزامی است",
   "provider.connect.oauth.auto.visit.prefix": "به ",
   "provider.connect.oauth.auto.visit.link": "این لینک",
   "provider.connect.oauth.auto.visit.suffix":
-    " مراجعه کنید و کد زیر را وارد کنید تا حساب خود را متصل کرده و از مدل‌های {{provider}} در Kilo استفاده کنید.",
+    " مراجعه کنید و کد زیر را وارد کنید تا حساب خود را متصل کرده و از مدل‌های {{provider}} در Raya استفاده کنید.",
   "provider.connect.oauth.auto.confirmationCode": "کد تأیید",
   "provider.connect.toast.connected.title": "{{provider}} متصل شد",
   "provider.connect.toast.connected.description": "مدل‌های {{provider}} اکنون در دسترس هستند.",
@@ -188,9 +188,9 @@ export const dict = {
   "prompt.action.autoApprove.disabled": "تأیید خودکار غیرفعال است. برای تأیید خودکار درخواست‌های مجوز کلیک کنید.",
   "prompt.action.sandbox.enable": "فعال‌سازی سندباکس",
   "prompt.action.sandbox.disable": "غیرفعال‌سازی سندباکس",
-  "prompt.action.sandbox.enabled": "سندباکس فعال است. دستورات شل عامل به پوشه‌های پروژه و Kilo محدود شده‌اند.",
+  "prompt.action.sandbox.enabled": "سندباکس فعال است. دستورات شل عامل به پوشه‌های پروژه و Raya محدود شده‌اند.",
   "prompt.action.sandbox.disabled":
-    "سندباکس غیرفعال است. برای محدود کردن نوشتن دستورات شل عامل به پوشه‌های پروژه و Kilo کلیک کنید.",
+    "سندباکس غیرفعال است. برای محدود کردن نوشتن دستورات شل عامل به پوشه‌های پروژه و Raya کلیک کنید.",
   "prompt.action.sandbox.status.enabled": "Sandbox فعال",
   "prompt.action.sandbox.status.disabled": "Sandbox غیرفعال",
   "prompt.action.sandbox.filesystem": "سیستم فایل",
@@ -199,7 +199,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "مسدود",
   "prompt.action.sandbox.network.allowed": "مجاز",
   "prompt.action.sandbox.unrestricted": "بدون محدودیت",
-  "prompt.action.sandbox.description.enabled": "نوشتن‌ها به پوشه‌های پروژه و Kilo محدود شده‌اند.",
+  "prompt.action.sandbox.description.enabled": "نوشتن‌ها به پوشه‌های پروژه و Raya محدود شده‌اند.",
   "prompt.action.sandbox.description.disabled": "برای محدود کردن نوشتن در سیستم فایل و دسترسی به شبکه کلیک کنید.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "برای محدود کردن نوشتن در سیستم فایل کلیک کنید. دسترسی به شبکه طبق تنظیمات sandbox شما مجاز است.",
@@ -215,7 +215,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "در حال رونویسی... برای لغو کلیک کنید.",
   "speechToText.tooltip.error": "ورودی صوتی ناموفق بود. برای پاک کردن کلیک کنید.",
   "speechToText.error.title": "ورودی صوتی ناموفق بود",
-  "speechToText.error.loginRequired": "برای استفاده از ورودی صوتی وارد Kilo شوید.",
+  "speechToText.error.loginRequired": "برای استفاده از ورودی صوتی وارد Raya شوید.",
   "speechToText.error.emptyTranscript": "هیچ گفتاری شناسایی نشد.",
 
   "prompt.toast.promptSendFailed.title": "ارسال پرامپت ناموفق بود",
@@ -429,11 +429,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "پیکربندی قدیمی بارگذاری شد",
   "settings.config.status.notLoaded": "بارگذاری نشد",
   "settings.config.status.create": "یافت نشد - این فایل را ایجاد کنید",
-  "settings.config.title": "باز کردن فایل پیکربندی {{scope}} Kilo",
+  "settings.config.title": "باز کردن فایل پیکربندی {{scope}} Raya",
   "settings.config.placeholder":
     "فایل‌های پیکربندی به ترتیب ادغام می‌شوند؛ فایل‌های علامت‌گذاری‌شده به‌عنوان بارگذاری‌شده در حال حاضر روی تنظیمات تأثیر می‌گذارند.",
-  "settings.config.noWorkspace": "یک پوشه کاری باز کنید تا فایل پیکربندی محلی Kilo را ویرایش کنید.",
-  "settings.config.openFailed": "باز کردن فایل پیکربندی {{scope}} Kilo با شکست مواجه شد: {{message}}",
+  "settings.config.noWorkspace": "یک پوشه کاری باز کنید تا فایل پیکربندی محلی Raya را ویرایش کنید.",
+  "settings.config.openFailed": "باز کردن فایل پیکربندی {{scope}} Raya با شکست مواجه شد: {{message}}",
   "settings.config.source.xdg": "پیکربندی سراسری XDG",
   "settings.config.source.homeKilo": "پیکربندی .kilo در پوشه خانگی",
   "settings.config.source.homeKilocode": "پیکربندی .kilocode در پوشه خانگی",
@@ -639,10 +639,10 @@ export const dict = {
   "settings.indexing.provider.title": "ارائه‌دهنده جاسازی",
   "settings.indexing.provider.description":
     "ارائه‌دهنده مورد استفاده برای تولید جاسازی‌ها در جستجوی معنایی را انتخاب کنید.",
-  "settings.indexing.kiloModel.title": "پیش‌تنظیم مدل Kilo",
-  "settings.indexing.kiloModel.description": "یک مدل جاسازی میزبانی‌شده توسط Kilo را انتخاب کنید.",
-  "settings.indexing.kiloSignIn.title": "ورود به Kilo الزامی است",
-  "settings.indexing.kiloSignIn.description": "برای استفاده از جاسازی‌های میزبانی‌شده، وارد Kilo شوید.",
+  "settings.indexing.kiloModel.title": "پیش‌تنظیم مدل Raya",
+  "settings.indexing.kiloModel.description": "یک مدل جاسازی میزبانی‌شده توسط Raya را انتخاب کنید.",
+  "settings.indexing.kiloSignIn.title": "ورود به Raya الزامی است",
+  "settings.indexing.kiloSignIn.description": "برای استفاده از جاسازی‌های میزبانی‌شده، وارد Raya شوید.",
   "settings.indexing.model.title": "مدل جاسازی",
   "settings.indexing.model.description": "مدل جاسازی پیش‌فرض برای ارائه‌دهنده انتخاب‌شده را بازنویسی کنید.",
   "settings.indexing.dimension.title": "بُعد برداری",
@@ -775,11 +775,11 @@ export const dict = {
   "settings.aboutKiloCode.importSettings": "وارد کردن",
   "settings.aboutKiloCode.importSettings.invalidJson":
     "فایل JSON نامعتبر است. لطفاً یک فایل تنظیمات معتبر انتخاب کنید.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "فایل حاوی تنظیمات معتبر Kilo نیست.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "فایل حاوی تنظیمات معتبر Raya نیست.",
   "settings.aboutKiloCode.importSettings.tooLarge":
     "فایل بیش از حد بزرگ است. فایل‌های تنظیمات باید کمتر از ۱ مگابایت باشند.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "این فایل از نسخه جدیدتری از Kilo صادر شده است. برخی تنظیمات ممکن است نادیده گرفته شوند.",
+    "این فایل از نسخه جدیدتری از Raya صادر شده است. برخی تنظیمات ممکن است نادیده گرفته شوند.",
   "settings.aboutKiloCode.importSettings.success":
     "تنظیمات وارد شد. تغییرات بالا را بررسی کنید، سپس روی ذخیره کلیک کنید.",
 
@@ -848,7 +848,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "پیش‌فرض (مسیریاب خودکار)",
 
   "settings.models.speechToText.disabledDescription":
-    "برای استفاده از تبدیل گفتار به متن، ارائه‌دهنده Kilo را فعال کرده و وارد شوید. تبدیل گفتار به متن در حال حاضر فقط از طریق Raya Gateway پشتیبانی می‌شود.",
+    "برای استفاده از تبدیل گفتار به متن، ارائه‌دهنده Raya را فعال کرده و وارد شوید. تبدیل گفتار به متن در حال حاضر فقط از طریق Raya Gateway پشتیبانی می‌شود.",
   "settings.models.speechToTextModel.title": "مدل تبدیل گفتار به متن",
   "settings.models.speechToTextModel.description": "مدل رونویسی Raya Gateway را برای ورودی صوتی انتخاب کنید.",
   "settings.experimental.nativeNotebookTools.title": "ابزارهای بومی Notebook",
@@ -858,7 +858,7 @@ export const dict = {
   "settings.experimental.continueOnDeny.description": "حلقه عامل را هنگام رد شدن یک مجوز ادامه دهید",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "اجرای دستورات شل عامل در یک Sandbox سطح سیستم‌عامل که نوشتن را به پوشه‌های پروژه و وضعیت Kilo محدود می‌کند",
+    "اجرای دستورات شل عامل در یک Sandbox سطح سیستم‌عامل که نوشتن را به پوشه‌های پروژه و وضعیت Raya محدود می‌کند",
   "settings.sandboxing.title": "Sandboxing",
   "settings.sandboxing.network.title": "محدود کردن دسترسی شبکه",
   "settings.sandboxing.network.description":
@@ -929,7 +929,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "سازگاری با Claude Code",
   "settings.agentBehaviour.claudeCompat.title": "بارگذاری فایل‌های Claude Code",
   "settings.agentBehaviour.claudeCompat.description":
-    "دستورالعمل‌ها و مهارت‌های CLAUDE.md را از پوشه پیکربندی Claude Code شما در جلسات بارگذاری می‌کند. اگر می‌خواهید Kilo از دستورالعمل‌ها و مهارت‌های Claude Code شما استفاده کند، این گزینه را فعال کنید. نیاز به راه‌اندازی مجدد دارد.",
+    "دستورالعمل‌ها و مهارت‌های CLAUDE.md را از پوشه پیکربندی Claude Code شما در جلسات بارگذاری می‌کند. اگر می‌خواهید Raya از دستورالعمل‌ها و مهارت‌های Claude Code شما استفاده کند، این گزینه را فعال کنید. نیاز به راه‌اندازی مجدد دارد.",
   "settings.agentBehaviour.removeMcp.title": "حذف سرور MCP",
   "settings.agentBehaviour.removeMcp.confirm": "سرور MCP «{{name}}» حذف شود؟ این کار آن را از پیکربندی شما حذف می‌کند.",
   "settings.agentBehaviour.removeMcp.button": "حذف",
@@ -1069,7 +1069,7 @@ export const dict = {
   "settings.context.memory.storage.enable": "حافظه را فعال کنید تا فایل‌های حافظه پروژه ایجاد شوند.",
   "settings.context.memory.inspect": "بررسی",
   "chat.memory.project.disabled": "حافظه پروژه غیرفعال است",
-  "chat.memory.project.empty": "این پروژه هنوز هیچ حافظه‌ای ندارد. پس از استفاده از Kilo نمایش داده خواهد شد.",
+  "chat.memory.project.empty": "این پروژه هنوز هیچ حافظه‌ای ندارد. پس از استفاده از Raya نمایش داده خواهد شد.",
   "chat.memory.command.failed": "دستور حافظه ناموفق بود",
   "chat.memory.updated": "حافظه به‌روزرسانی شد",
   "chat.memory.rebuild": "ایندکس حافظه بازسازی شد",
@@ -1091,7 +1091,7 @@ export const dict = {
   "settings.display.username.title": "نام کاربری",
   "settings.display.username.description": "نام کاربری سفارشی که در مکالمات نمایش داده می‌شود",
   "settings.display.fontSize.title": "اندازه قلم",
-  "settings.display.fontSize.description": "اندازه قلم رابط کاربری وب‌ویو Kilo را مستقل از VS Code تنظیم کنید.",
+  "settings.display.fontSize.description": "اندازه قلم رابط کاربری وب‌ویو Raya را مستقل از VS Code تنظیم کنید.",
   "settings.display.reasoningAutoCollapse.title": "جمع‌شدن خودکار استدلال",
   "settings.display.reasoningAutoCollapse.description":
     "بلوک‌های استدلال را پس از اتمام نوشتن توسط عامل جمع می‌کند. برای نگه داشتن استدلال در حالت باز، این گزینه را خاموش بگذارید مگر اینکه خودتان آن را جمع کنید.",
@@ -1174,7 +1174,7 @@ export const dict = {
     "یک رابط یکپارچه برای اجرای چندین عامل به‌صورت موازی، هر کدام در worktree مخصوص خود — پیشرفت را رصد کنید، بین زمینه‌ها جابه‌جا شوید و تغییرات را در یک مکان بررسی کنید.",
   "migration.whatsNew.features.foundation.title": "پایه مشترک",
   "migration.whatsNew.features.foundation.detail":
-    "یک هسته کوچک و کارآمد در تمام محصولات Kilo. تجربه‌ای آشنا، هر طور که انتخاب کنید کار کنید.",
+    "یک هسته کوچک و کارآمد در تمام محصولات Raya. تجربه‌ای آشنا، هر طور که انتخاب کنید کار کنید.",
   "migration.whatsNew.blogLink": "خواندن اعلامیه کامل",
   "migration.whatsNew.docsLink": "چه چیزی جدید است و سؤالات متداول",
   "migration.whatsNew.continue": "ادامه",
@@ -1286,7 +1286,7 @@ export const dict = {
     "فایل‌های تغییر یافته در working tree شما که هنوز stage نشده‌اند، به علاوه فایل‌های ردیابی‌نشده (جدید).",
   "diffViewer.source.session.label": "جلسه",
   "diffViewer.source.session.tooltip":
-    "فایل‌هایی که توسط Kilo در جلسه جاری تغییر کرده‌اند، بر اساس عکس‌های فوری هر نوبت. با شروع جلسه جدید بازنشانی می‌شود.",
+    "فایل‌هایی که توسط Raya در جلسه جاری تغییر کرده‌اند، بر اساس عکس‌های فوری هر نوبت. با شروع جلسه جدید بازنشانی می‌شود.",
   "diffViewer.group.session": "جلسه",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

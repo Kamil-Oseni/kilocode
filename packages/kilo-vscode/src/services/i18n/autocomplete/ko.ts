@@ -17,8 +17,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Copilot 비활성화",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "자동 완성 비활성화",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya 자동 완성이 일시 중지되었습니다. 가능한 원인: Kilo 계정에 남은 크레딧이 없거나 구성된 API 키(BYOK)가 할당량 한도에 도달했습니다. 자동 완성을 재개하려면 Kilo 크레딧을 추가하거나 API 키 구성을 확인하세요.",
+    "Raya 자동 완성이 일시 중지되었습니다. 가능한 원인: Raya 계정에 남은 크레딧이 없거나 구성된 API 키(BYOK)가 할당량 한도에 도달했습니다. 자동 완성을 재개하려면 Raya 크레딧을 추가하거나 API 키 구성을 확인하세요.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "크레딧 추가",
   "kilocode:autocomplete.authError.message":
-    "Raya 자동 완성이 인증 문제로 일시 중지되었습니다. 가능한 원인: Kilo에 로그인하지 않았거나 API 키(BYOK)가 유효하지 않거나 누락되었습니다. 다시 로그인하거나 제공자 API 키 설정을 확인하세요.",
+    "Raya 자동 완성이 인증 문제로 일시 중지되었습니다. 가능한 원인: Raya에 로그인하지 않았거나 API 키(BYOK)가 유효하지 않거나 누락되었습니다. 다시 로그인하거나 제공자 API 키 설정을 확인하세요.",
 }

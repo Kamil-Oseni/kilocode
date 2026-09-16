@@ -171,6 +171,27 @@ describe("Raya branding boundary", () => {
     expect(source).not.toContain("Kilo Pass")
   })
 
+  test("stores Raya identity in extension locale values without renaming compatibility keys", async () => {
+    const patterns = [
+      "webview-ui/src/i18n/*.ts",
+      "webview-ui/agent-manager/i18n/*.ts",
+      "webview-ui/kiloclaw/i18n/*.ts",
+      "src/services/i18n/autocomplete/*.ts",
+      "src/services/cli-backend/i18n/*.ts",
+    ]
+    const files = patterns.flatMap((pattern) => [...new Bun.Glob(pattern).scanSync({ cwd: root, absolute: true })])
+    const sources = await Promise.all(files.map((file) => Bun.file(file).text()))
+    const values = sources
+      .flatMap((source) => source.split(/\r?\n/))
+      .map((line) => (/^\s*"[^"]+"\s*:/.test(line) ? line.slice(line.indexOf(":") + 1) : line))
+      .join("\n")
+
+    expect(values).toContain("Raya")
+    expect(values).not.toMatch(/\bKilo(?: Code)?\b/)
+    expect(sources.some((source) => source.includes('"settings.aboutKiloCode.title"'))).toBe(true)
+    expect(sources.some((source) => source.includes("kilo.jsonc"))).toBe(true)
+  })
+
   test("uses Raya in remote status, memory, and MCP recovery copy", async () => {
     const remote = [...new Bun.Glob("src/services/cli-backend/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
     const locales = [...new Bun.Glob("webview-ui/src/i18n/*.ts").scanSync({ cwd: root, absolute: true })]

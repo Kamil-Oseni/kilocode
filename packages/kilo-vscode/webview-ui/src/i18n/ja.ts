@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "利用できません",
   "provider.anaconda.state.unsupported": "Anaconda Desktop は {{platform}} ではサポートされていません。",
   "provider.anaconda.state.notInstalled":
-    "このマシンに Anaconda Desktop をインストールしてから、ここに戻ってください。Kilo はインストーラーを実行しません。",
+    "このマシンに Anaconda Desktop をインストールしてから、ここに戻ってください。Raya はインストーラーを実行しません。",
   "provider.anaconda.state.notRunning":
     "Anaconda Desktop を開いてセットアップを完了しサインインしてから、再確認を選択してください。",
   "provider.anaconda.state.invalidConfig":
     "Anaconda Desktop のセットアップが完了していません。Desktop を開いてセットアップを完了し、必要に応じて再起動してください。",
-  "provider.anaconda.state.signedOut": "Kilo を接続する前に、Anaconda Desktop を開いてサインインしてください。",
+  "provider.anaconda.state.signedOut": "Raya を接続する前に、Anaconda Desktop を開いてサインインしてください。",
   "provider.anaconda.state.unauthorized":
-    "Kilo は Anaconda Desktop にアクセスできませんでした。Desktop を開いて再度サインインし、必要に応じて再起動してください。",
+    "Raya は Anaconda Desktop にアクセスできませんでした。Desktop を開いて再度サインインし、必要に応じて再起動してください。",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop はまだ応答していません。開いてアプリケーションの起動が完了するまでお待ちください。",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "アクティブな推論サーバーはまだ正常ではありません。Anaconda Desktop で確認し、必要に応じてサーバーを再起動してください。",
   "provider.anaconda.state.ready":
-    "Kilo は正常なローカルのテキスト生成サーバーを見つけ、現在の接続設定をインポートできます。",
+    "Raya は正常なローカルのテキスト生成サーバーを見つけ、現在の接続設定をインポートできます。",
   "provider.anaconda.server": "アクティブな推論サーバー",
   "provider.anaconda.context": "コンテキストウィンドウ",
   "provider.anaconda.contextValue": "{{count}} トークン",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "このまま続行",
   "provider.anaconda.action.manage": "管理 / 更新",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop を更新しました",
-  "provider.anaconda.toast.refreshed.description": "アクティブなローカルサーバーとモデルが Kilo で最新になりました。",
+  "provider.anaconda.toast.refreshed.description": "アクティブなローカルサーバーとモデルが Raya で最新になりました。",
   "settings.providers.note.anacondaDesktop": "Anaconda Desktop によってローカルで提供されるモデルを実行します。",
   "settings.providers.tag.local": "ローカル",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "認証を待機中...",
   "provider.connect.status.failed": "認証に失敗しました: {{error}}",
   "provider.connect.apiKey.description":
-    "{{provider}}のAPIキーを入力してアカウントを接続し、Kiloで{{provider}}モデルを使用します。",
+    "{{provider}}のAPIキーを入力してアカウントを接続し、Rayaで{{provider}}モデルを使用します。",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -123,14 +123,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": " ",
   "provider.connect.oauth.code.visit.link": "このリンク",
   "provider.connect.oauth.code.visit.suffix":
-    " にアクセスして認証コードを取得し、アカウントを接続してKiloで{{provider}}モデルを使用してください。",
+    " にアクセスして認証コードを取得し、アカウントを接続してRayaで{{provider}}モデルを使用してください。",
   "provider.connect.oauth.code.label": "{{method}} 認証コード",
   "provider.connect.oauth.code.placeholder": "認証コード",
   "provider.connect.oauth.code.required": "認証コードが必要です",
   "provider.connect.oauth.auto.visit.prefix": " ",
   "provider.connect.oauth.auto.visit.link": "このリンク",
   "provider.connect.oauth.auto.visit.suffix":
-    " にアクセスし、以下のコードを入力してアカウントを接続し、Kiloで{{provider}}モデルを使用してください。",
+    " にアクセスし、以下のコードを入力してアカウントを接続し、Rayaで{{provider}}モデルを使用してください。",
   "provider.connect.oauth.auto.confirmationCode": "確認コード",
   "provider.connect.toast.connected.title": "{{provider}}が接続されました",
   "provider.connect.toast.connected.description": "{{provider}}モデルが使用可能になりました。",
@@ -192,9 +192,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "サンドボックスを有効化",
   "prompt.action.sandbox.disable": "サンドボックスを無効化",
   "prompt.action.sandbox.enabled":
-    "サンドボックスが有効です。エージェントのシェルコマンドは、プロジェクトおよびKiloディレクトリに制限されています。",
+    "サンドボックスが有効です。エージェントのシェルコマンドは、プロジェクトおよびRayaディレクトリに制限されています。",
   "prompt.action.sandbox.disabled":
-    "サンドボックスが無効です。クリックしてエージェントのシェルコマンドの書き込みをプロジェクトおよびKiloディレクトリに制限します。",
+    "サンドボックスが無効です。クリックしてエージェントのシェルコマンドの書き込みをプロジェクトおよびRayaディレクトリに制限します。",
   "prompt.action.sandbox.status.enabled": "サンドボックス有効",
   "prompt.action.sandbox.status.disabled": "サンドボックス無効",
   "prompt.action.sandbox.filesystem": "ファイルシステム",
@@ -203,7 +203,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "ブロック",
   "prompt.action.sandbox.network.allowed": "許可",
   "prompt.action.sandbox.unrestricted": "制限なし",
-  "prompt.action.sandbox.description.enabled": "書き込みはプロジェクトおよびKiloディレクトリ内に制限されます。",
+  "prompt.action.sandbox.description.enabled": "書き込みはプロジェクトおよびRayaディレクトリ内に制限されます。",
   "prompt.action.sandbox.description.disabled":
     "クリックすると、ファイルシステムへの書き込みとネットワークアクセスを制限します。",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
@@ -217,7 +217,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "文字起こし中... クリックしてキャンセル。",
   "speechToText.tooltip.error": "音声入力に失敗しました。クリックしてクリア。",
   "speechToText.error.title": "音声入力に失敗しました",
-  "speechToText.error.loginRequired": "音声入力を使用するにはKiloにサインインしてください。",
+  "speechToText.error.loginRequired": "音声入力を使用するにはRayaにサインインしてください。",
   "speechToText.error.emptyTranscript": "音声が検出されませんでした。",
 
   "prompt.toast.promptSendFailed.title": "プロンプトの送信に失敗しました",
@@ -405,10 +405,10 @@ export const dict = {
   "settings.indexing.model.description": "選択したプロバイダーのデフォルト埋め込みモデルを上書きします。",
   "settings.indexing.model.title": "埋め込みモデル",
   "settings.indexing.provider.description": "セマンティック検索用の埋め込みを生成するプロバイダーを選択します。",
-  "settings.indexing.kiloModel.title": "Kiloモデルプリセット",
-  "settings.indexing.kiloModel.description": "サポートされているKiloホスト型埋め込みモデルを選択します。",
-  "settings.indexing.kiloSignIn.title": "Kiloへのサインインが必要です",
-  "settings.indexing.kiloSignIn.description": "ホスト型埋め込みを使用するにはKiloにサインインしてください。",
+  "settings.indexing.kiloModel.title": "Rayaモデルプリセット",
+  "settings.indexing.kiloModel.description": "サポートされているRayaホスト型埋め込みモデルを選択します。",
+  "settings.indexing.kiloSignIn.title": "Rayaへのサインインが必要です",
+  "settings.indexing.kiloSignIn.description": "ホスト型埋め込みを使用するにはRayaにサインインしてください。",
   "settings.indexing.provider.title": "埋め込みプロバイダー",
   "settings.indexing.providerField.description": "プロバイダー固有の接続設定。",
   "settings.indexing.qdrantApiKey.description": "QdrantインスタンスのオプションのAPIキー。",
@@ -511,11 +511,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "旧構成を読み込み済み",
   "settings.config.status.notLoaded": "読み込まれていません",
   "settings.config.status.create": "見つかりません - このファイルを作成する",
-  "settings.config.title": "{{scope}}のKilo構成ファイルを開く",
+  "settings.config.title": "{{scope}}のRaya構成ファイルを開く",
   "settings.config.placeholder":
     "構成ファイルは順番にマージされます。読み込み済みとしてマークされているファイルが現在設定に影響しています。",
-  "settings.config.noWorkspace": "ローカルのKilo構成ファイルを編集するには、ワークスペースフォルダーを開いてください。",
-  "settings.config.openFailed": "{{scope}}のKilo構成ファイルを開けませんでした: {{message}}",
+  "settings.config.noWorkspace": "ローカルのRaya構成ファイルを編集するには、ワークスペースフォルダーを開いてください。",
+  "settings.config.openFailed": "{{scope}}のRaya構成ファイルを開けませんでした: {{message}}",
   "settings.config.source.xdg": "XDGグローバル構成",
   "settings.config.source.homeKilo": "Homeの.kilo構成",
   "settings.config.source.homeKilocode": "Homeの.kilocode構成",
@@ -790,10 +790,10 @@ export const dict = {
   "settings.aboutKiloCode.importSettings": "インポート",
   "settings.aboutKiloCode.importSettings.invalidJson":
     "無効な JSON ファイルです。有効な設定ファイルを選択してください。",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "ファイルに有効な Kilo の設定が含まれていません。",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "ファイルに有効な Raya の設定が含まれていません。",
   "settings.aboutKiloCode.importSettings.tooLarge": "ファイルが大きすぎます。設定ファイルは 1 MB 以下にしてください。",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "このファイルはより新しいバージョンの Kilo からエクスポートされたものです。一部の設定が無視される場合があります。",
+    "このファイルはより新しいバージョンの Raya からエクスポートされたものです。一部の設定が無視される場合があります。",
   "settings.aboutKiloCode.importSettings.success":
     "設定をインポートしました。上記の変更内容を確認してから、保存をクリックしてください。",
 
@@ -858,7 +858,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "デフォルト (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Speech to Text を使用するには、Kilo プロバイダーを有効にしてサインインしてください。現在、Speech to Text は Raya Gateway でのみサポートされています。",
+    "Speech to Text を使用するには、Raya プロバイダーを有効にしてサインインしてください。現在、Speech to Text は Raya Gateway でのみサポートされています。",
   "settings.models.speechToTextModel.title": "音声認識モデル",
   "settings.models.speechToTextModel.description": "音声入力に使用するRaya Gateway文字起こしモデルを選択します。",
   "settings.experimental.nativeNotebookTools.title": "ネイティブノートブックツール",
@@ -994,7 +994,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code 互換性",
   "settings.agentBehaviour.claudeCompat.title": "Claude Code ファイルを読み込む",
   "settings.agentBehaviour.claudeCompat.description":
-    "Claude Code の設定ディレクトリから CLAUDE.md のインストラクションとスキルをセッションに読み込みます。Kilo に Claude Code のインストラクションとスキルを使用させる場合は、これを有効にしてください。再起動が必要です。",
+    "Claude Code の設定ディレクトリから CLAUDE.md のインストラクションとスキルをセッションに読み込みます。Raya に Claude Code のインストラクションとスキルを使用させる場合は、これを有効にしてください。再起動が必要です。",
   "settings.agentBehaviour.mcpDetail.command": "コマンド",
   "settings.agentBehaviour.mcpDetail.args": "引数",
   "settings.agentBehaviour.mcpDetail.env": "環境",
@@ -1012,7 +1012,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "グローバルモデルの上書き",
   "settings.sandboxing.enabled.title": "サンドボックス",
   "settings.sandboxing.enabled.description":
-    "エージェントのシェルコマンドを、プロジェクトおよびKiloの状態ディレクトリへの書き込みを制限するOSレベルのサンドボックス内で実行",
+    "エージェントのシェルコマンドを、プロジェクトおよびRayaの状態ディレクトリへの書き込みを制限するOSレベルのサンドボックス内で実行",
 
   "settings.autoApprove.description":
     "ツールの実行許可を定義します。ほとんどのツールはデフォルトで「許可」されます。doom_loop と external_directory はデフォルトで「確認」になります。",
@@ -1098,7 +1098,7 @@ export const dict = {
   "settings.display.username.title": "ユーザー名",
   "settings.display.username.description": "会話に表示されるカスタムユーザー名",
   "settings.display.fontSize.title": "フォントサイズ",
-  "settings.display.fontSize.description": "VS Code とは独立して Kilo webview UI のフォントサイズを調整します。",
+  "settings.display.fontSize.description": "VS Code とは独立して Raya webview UI のフォントサイズを調整します。",
   "settings.display.reasoningAutoCollapse.title": "推論を自動で折りたたむ",
   "settings.display.reasoningAutoCollapse.description":
     "エージェントが推論の書き込みを終えた後に推論ブロックを自動で折りたたみます。手動で折りたたむまでは推論を展開したままにするには、オフのままにしてください。",
@@ -1169,7 +1169,7 @@ export const dict = {
     "複数のエージェントを並列実行するための統合インターフェース。それぞれ独自のワークツリー上で動作し、進捗の確認、コンテキストの切り替え、変更のレビューを一箇所で行えます。",
   "migration.whatsNew.features.foundation.title": "共通基盤",
   "migration.whatsNew.features.foundation.detail":
-    "すべてのKilo製品で共有される小さく効率的なコア。どのような作業スタイルでも馴染みのある体験を提供します。",
+    "すべてのRaya製品で共有される小さく効率的なコア。どのような作業スタイルでも馴染みのある体験を提供します。",
   "migration.whatsNew.blogLink": "完全なアナウンスを読む",
   "migration.whatsNew.docsLink": "新機能とよくある質問",
   "migration.whatsNew.continue": "続行",
@@ -1279,7 +1279,7 @@ export const dict = {
     "作業ツリーで変更されたがまだステージングされていないファイルと、追跡されていない（新しい）ファイル。",
   "diffViewer.source.session.label": "セッション",
   "diffViewer.source.session.tooltip":
-    "現在のセッション中に Kilo が変更したファイル。ターンごとのスナップショットに基づきます。新しいセッションを開始するとリセットされます。",
+    "現在のセッション中に Raya が変更したファイル。ターンごとのスナップショットに基づきます。新しいセッションを開始するとリセットされます。",
   "diffViewer.group.session": "セッション",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

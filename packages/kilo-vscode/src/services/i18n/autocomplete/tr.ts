@@ -18,8 +18,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Copilot'u devre dışı bırak",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Otomatik tamamlamayı devre dışı bırak",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya otomatik tamamlama duraklatıldı. Olası nedenler: Kilo hesabınızda kalan kredi yok veya yapılandırılmış API anahtarınız (BYOK) kota sınırına ulaştı. Otomatik tamamlamayı sürdürmek için Kilo kredisi ekleyin veya API anahtarı yapılandırmanızı kontrol edin.",
+    "Raya otomatik tamamlama duraklatıldı. Olası nedenler: Raya hesabınızda kalan kredi yok veya yapılandırılmış API anahtarınız (BYOK) kota sınırına ulaştı. Otomatik tamamlamayı sürdürmek için Raya kredisi ekleyin veya API anahtarı yapılandırmanızı kontrol edin.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Kredi ekle",
   "kilocode:autocomplete.authError.message":
-    "Raya otomatik tamamlama bir kimlik doğrulama sorunu nedeniyle duraklatıldı. Olası nedenler: Kilo'da oturum açmadınız veya API anahtarınız (BYOK) geçersiz ya da eksik. Lütfen tekrar oturum açın veya sağlayıcı API anahtarı ayarlarınızı kontrol edin.",
+    "Raya otomatik tamamlama bir kimlik doğrulama sorunu nedeniyle duraklatıldı. Olası nedenler: Raya'da oturum açmadınız veya API anahtarınız (BYOK) geçersiz ya da eksik. Lütfen tekrar oturum açın veya sağlayıcı API anahtarı ayarlarınızı kontrol edin.",
 }

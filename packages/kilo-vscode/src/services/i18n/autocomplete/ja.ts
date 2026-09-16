@@ -18,8 +18,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Copilot を無効化",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "オートコンプリートを無効化",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya オートコンプリートは一時停止されました。考えられる原因: Kilo アカウントに残りクレジットがない、または設定済みの API キー (BYOK) がクォータ上限に達しています。オートコンプリートを再開するには、Kilo クレジットを追加するか API キー設定を確認してください。",
+    "Raya オートコンプリートは一時停止されました。考えられる原因: Raya アカウントに残りクレジットがない、または設定済みの API キー (BYOK) がクォータ上限に達しています。オートコンプリートを再開するには、Raya クレジットを追加するか API キー設定を確認してください。",
   "kilocode:autocomplete.creditsExhausted.addCredits": "クレジットを追加",
   "kilocode:autocomplete.authError.message":
-    "Raya オートコンプリートは認証の問題により一時停止されました。考えられる原因: Kilo にサインインしていない、または API キー (BYOK) が無効または不足しています。再度サインインするか、プロバイダーの API キー設定を確認してください。",
+    "Raya オートコンプリートは認証の問題により一時停止されました。考えられる原因: Raya にサインインしていない、または API キー (BYOK) が無効または不足しています。再度サインインするか、プロバイダーの API キー設定を確認してください。",
 }

@@ -18,8 +18,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Copilot uitschakelen",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Automatisch aanvullen uitschakelen",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya Autocomplete is gepauzeerd. Mogelijke oorzaken: je Kilo-account heeft geen credits meer, of je geconfigureerde API-sleutel (BYOK) heeft de quotumlimiet bereikt. Voeg Kilo-credits toe of controleer je API-sleutelconfiguratie om autocomplete te hervatten.",
+    "Raya Autocomplete is gepauzeerd. Mogelijke oorzaken: je Raya-account heeft geen credits meer, of je geconfigureerde API-sleutel (BYOK) heeft de quotumlimiet bereikt. Voeg Raya-credits toe of controleer je API-sleutelconfiguratie om autocomplete te hervatten.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Credits toevoegen",
   "kilocode:autocomplete.authError.message":
-    "Raya Autocomplete is gepauzeerd vanwege een authenticatieprobleem. Mogelijke oorzaken: je bent niet aangemeld bij Kilo, of je API-sleutel (BYOK) is ongeldig of ontbreekt. Meld je opnieuw aan of controleer de API-sleutelinstellingen van je provider.",
+    "Raya Autocomplete is gepauzeerd vanwege een authenticatieprobleem. Mogelijke oorzaken: je bent niet aangemeld bij Raya, of je API-sleutel (BYOK) is ongeldig of ontbreekt. Meld je opnieuw aan of controleer de API-sleutelinstellingen van je provider.",
 }

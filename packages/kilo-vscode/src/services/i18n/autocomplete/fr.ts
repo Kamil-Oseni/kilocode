@@ -18,8 +18,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Désactiver Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Désactiver la saisie automatique",
   "kilocode:autocomplete.creditsExhausted.message":
-    "La saisie semi-automatique de Raya a été mise en pause. Causes possibles : votre compte Kilo n’a plus de crédits, ou votre clé API configurée (BYOK) a atteint sa limite de quota. Ajoutez des crédits Kilo ou vérifiez la configuration de votre clé API pour reprendre la saisie semi-automatique.",
+    "La saisie semi-automatique de Raya a été mise en pause. Causes possibles : votre compte Raya n’a plus de crédits, ou votre clé API configurée (BYOK) a atteint sa limite de quota. Ajoutez des crédits Raya ou vérifiez la configuration de votre clé API pour reprendre la saisie semi-automatique.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Ajouter des crédits",
   "kilocode:autocomplete.authError.message":
-    "La saisie semi-automatique de Raya a été mise en pause en raison d’un problème d’authentification. Causes possibles : vous n’êtes pas connecté à Kilo, ou votre clé API (BYOK) est invalide ou manquante. Reconnectez-vous ou vérifiez les paramètres de clé API de votre fournisseur.",
+    "La saisie semi-automatique de Raya a été mise en pause en raison d’un problème d’authentification. Causes possibles : vous n’êtes pas connecté à Raya, ou votre clé API (BYOK) est invalide ou manquante. Reconnectez-vous ou vérifiez les paramètres de clé API de votre fournisseur.",
 }

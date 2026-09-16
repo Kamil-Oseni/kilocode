@@ -13,13 +13,13 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "غير متوفر",
   "provider.anaconda.state.unsupported": "Anaconda Desktop غير مدعوم على {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "ثبّت Anaconda Desktop على هذا الجهاز، ثم عُد إلى هنا. لا يقوم Kilo بتشغيل المثبّت نيابةً عنك.",
+    "ثبّت Anaconda Desktop على هذا الجهاز، ثم عُد إلى هنا. لا يقوم Raya بتشغيل المثبّت نيابةً عنك.",
   "provider.anaconda.state.notRunning": "افتح Anaconda Desktop، وأكمل الإعداد وسجّل الدخول، ثم اختر تحقق مرة أخرى.",
   "provider.anaconda.state.invalidConfig":
     "إعداد Anaconda Desktop غير مكتمل. افتح Desktop، وأكمل الإعداد، وأعد تشغيله إذا لزم الأمر.",
-  "provider.anaconda.state.signedOut": "افتح Anaconda Desktop وسجّل الدخول قبل توصيل Kilo.",
+  "provider.anaconda.state.signedOut": "افتح Anaconda Desktop وسجّل الدخول قبل توصيل Raya.",
   "provider.anaconda.state.unauthorized":
-    "تعذّر على Kilo الوصول إلى Anaconda Desktop. افتح Desktop، وسجّل الدخول مرة أخرى، وأعد تشغيله إذا لزم الأمر.",
+    "تعذّر على Raya الوصول إلى Anaconda Desktop. افتح Desktop، وسجّل الدخول مرة أخرى، وأعد تشغيله إذا لزم الأمر.",
   "provider.anaconda.state.unavailable":
     "لا يستجيب Anaconda Desktop بعد. افتحه وانتظر حتى ينتهي التطبيق من بدء التشغيل.",
   "provider.anaconda.state.noModel":
@@ -31,7 +31,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "خادم الاستدلال النشط ليس في حالة سليمة بعد. تحقق منه في Anaconda Desktop وأعد تشغيل الخادم إذا لزم الأمر.",
   "provider.anaconda.state.ready":
-    "عثر Kilo على خادم محلي سليم لتوليد النصوص ويمكنه استيراد إعدادات الاتصال الحالية الخاصة به.",
+    "عثر Raya على خادم محلي سليم لتوليد النصوص ويمكنه استيراد إعدادات الاتصال الحالية الخاصة به.",
   "provider.anaconda.server": "خادم الاستدلال النشط",
   "provider.anaconda.context": "نافذة السياق",
   "provider.anaconda.contextValue": "{{count}} رمز",
@@ -48,7 +48,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "تابع على أي حال",
   "provider.anaconda.action.manage": "إدارة / تحديث",
   "provider.anaconda.toast.refreshed.title": "تم تحديث Anaconda Desktop",
-  "provider.anaconda.toast.refreshed.description": "الخادم المحلي النشط والنماذج محدّثة في Kilo.",
+  "provider.anaconda.toast.refreshed.description": "الخادم المحلي النشط والنماذج محدّثة في Raya.",
   "settings.providers.note.anacondaDesktop": "شغّل نموذجًا يُقدّم محليًا بواسطة Anaconda Desktop.",
   "settings.providers.tag.local": "محلي",
 } as const
@@ -97,7 +97,7 @@ export const dict = {
   "provider.connect.status.waiting": "في انتظار التفويض...",
   "provider.connect.status.failed": "فشل التفويض: {{error}}",
   "provider.connect.apiKey.description":
-    "أدخل مفتاح واجهة برمجة تطبيقات {{provider}} الخاص بك لتوصيل حسابك واستخدام نماذج {{provider}} في Kilo.",
+    "أدخل مفتاح واجهة برمجة تطبيقات {{provider}} الخاص بك لتوصيل حسابك واستخدام نماذج {{provider}} في Raya.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -120,13 +120,13 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "قم بزيارة ",
   "provider.connect.oauth.code.visit.link": "هذا الرابط",
   "provider.connect.oauth.code.visit.suffix":
-    " للحصول على رمز التفويض الخاص بك لتوصيل حسابك واستخدام نماذج {{provider}} في Kilo.",
+    " للحصول على رمز التفويض الخاص بك لتوصيل حسابك واستخدام نماذج {{provider}} في Raya.",
   "provider.connect.oauth.code.label": "رمز تفويض {{method}}",
   "provider.connect.oauth.code.placeholder": "رمز التفويض",
   "provider.connect.oauth.code.required": "رمز التفويض مطلوب",
   "provider.connect.oauth.auto.visit.prefix": "قم بزيارة ",
   "provider.connect.oauth.auto.visit.link": "هذا الرابط",
-  "provider.connect.oauth.auto.visit.suffix": " وأدخل الرمز أدناه لتوصيل حسابك واستخدام نماذج {{provider}} في Kilo.",
+  "provider.connect.oauth.auto.visit.suffix": " وأدخل الرمز أدناه لتوصيل حسابك واستخدام نماذج {{provider}} في Raya.",
   "provider.connect.oauth.auto.confirmationCode": "رمز التأكيد",
   "provider.connect.toast.connected.title": "تم توصيل {{provider}}",
   "provider.connect.toast.connected.description": "نماذج {{provider}} متاحة الآن للاستخدام.",
@@ -187,9 +187,9 @@ export const dict = {
     "زر «حسّن الموجه» يطوّر موجهك بإضافة سياق أو توضيح أو إعادة صياغة. جرّب اكتب موجه هنا ثم اضغط الزر مرة ثانية وشوف النتيجة.",
   "prompt.action.sandbox.enable": "تفعيل sandbox",
   "prompt.action.sandbox.disable": "تعطيل sandbox",
-  "prompt.action.sandbox.enabled": "sandbox مُفعّل. أوامر shell الخاصة بالوكيل مقتصرة على مجلدات المشروع و Kilo.",
+  "prompt.action.sandbox.enabled": "sandbox مُفعّل. أوامر shell الخاصة بالوكيل مقتصرة على مجلدات المشروع و Raya.",
   "prompt.action.sandbox.disabled":
-    "sandbox مُعطّل. انقر لتقييد كتابة أوامر shell الخاصة بالوكيل على مجلدات المشروع و Kilo.",
+    "sandbox مُعطّل. انقر لتقييد كتابة أوامر shell الخاصة بالوكيل على مجلدات المشروع و Raya.",
   "prompt.action.sandbox.status.enabled": "العزل مُفعّل",
   "prompt.action.sandbox.status.disabled": "العزل مُعطّل",
   "prompt.action.sandbox.filesystem": "نظام الملفات",
@@ -198,7 +198,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "محظورة",
   "prompt.action.sandbox.network.allowed": "مسموح بها",
   "prompt.action.sandbox.unrestricted": "غير مقيّد",
-  "prompt.action.sandbox.description.enabled": "تقتصر عمليات الكتابة على مجلدات المشروع و Kilo.",
+  "prompt.action.sandbox.description.enabled": "تقتصر عمليات الكتابة على مجلدات المشروع و Raya.",
   "prompt.action.sandbox.description.disabled": "انقر لتقييد الكتابة في نظام الملفات والوصول إلى الشبكة.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "انقر لتقييد الكتابة في نظام الملفات. يظل الوصول إلى الشبكة مسموحًا وفق إعدادات sandbox.",
@@ -211,7 +211,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "جاري تحويل الصوت إلى نص... انقر للإلغاء.",
   "speechToText.tooltip.error": "فشل الإدخال الصوتي. انقر للمسح.",
   "speechToText.error.title": "فشل الإدخال الصوتي",
-  "speechToText.error.loginRequired": "قم بتسجيل الدخول إلى Kilo لاستخدام الإدخال الصوتي.",
+  "speechToText.error.loginRequired": "قم بتسجيل الدخول إلى Raya لاستخدام الإدخال الصوتي.",
   "speechToText.error.emptyTranscript": "لم يتم اكتشاف أي كلام.",
 
   "prompt.toast.promptSendFailed.title": "فشل إرسال الموجه",
@@ -465,10 +465,10 @@ export const dict = {
   "settings.config.status.loadedLegacy": "محمل تكوين قديم",
   "settings.config.status.notLoaded": "غير محمل",
   "settings.config.status.create": "غير موجود - قم بإنشاء هذا الملف",
-  "settings.config.title": "فتح ملف تكوين Kilo {{scope}}",
+  "settings.config.title": "فتح ملف تكوين Raya {{scope}}",
   "settings.config.placeholder": "يتم دمج ملفات التكوين بالترتيب؛ الملفات المحددة كمحملة تؤثر حاليًا على الإعدادات.",
-  "settings.config.noWorkspace": "افتح مجلد مساحة عمل لتحرير ملف تكوين Kilo المحلي.",
-  "settings.config.openFailed": "فشل فتح ملف تكوين Kilo {{scope}}: {{message}}",
+  "settings.config.noWorkspace": "افتح مجلد مساحة عمل لتحرير ملف تكوين Raya المحلي.",
+  "settings.config.openFailed": "فشل فتح ملف تكوين Raya {{scope}}: {{message}}",
   "settings.config.source.xdg": "تكوين XDG العالمي",
   "settings.config.source.homeKilo": "تكوين .kilo في Home",
   "settings.config.source.homeKilocode": "تكوين .kilocode في Home",
@@ -673,10 +673,10 @@ export const dict = {
   "settings.indexing.projectEnable.description": "تمكين الفهرسة لمساحة العمل هذه عندما تكون الفهرسة العامة متوقفة.",
   "settings.indexing.provider.title": "موفر التضمين",
   "settings.indexing.provider.description": "اختر الموفر المستخدم لإنشاء التضمينات للبحث الدلالي.",
-  "settings.indexing.kiloModel.title": "إعداد مسبق لنموذج Kilo",
-  "settings.indexing.kiloModel.description": "اختر نموذج تضمين مدعومًا ومستضافًا بواسطة Kilo.",
-  "settings.indexing.kiloSignIn.title": "تسجيل الدخول إلى Kilo مطلوب",
-  "settings.indexing.kiloSignIn.description": "سجّل الدخول إلى Kilo لاستخدام التضمينات المستضافة.",
+  "settings.indexing.kiloModel.title": "إعداد مسبق لنموذج Raya",
+  "settings.indexing.kiloModel.description": "اختر نموذج تضمين مدعومًا ومستضافًا بواسطة Raya.",
+  "settings.indexing.kiloSignIn.title": "تسجيل الدخول إلى Raya مطلوب",
+  "settings.indexing.kiloSignIn.description": "سجّل الدخول إلى Raya لاستخدام التضمينات المستضافة.",
   "settings.indexing.model.title": "نموذج التضمين",
   "settings.indexing.model.description": "تجاوز نموذج التضمين الافتراضي للموفر المحدد.",
   "settings.indexing.dimension.title": "بُعد المتجه",
@@ -777,10 +777,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "تصدير",
   "settings.aboutKiloCode.importSettings": "استيراد",
   "settings.aboutKiloCode.importSettings.invalidJson": "ملف JSON غير صالح. يرجى اختيار ملف إعدادات صالح.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "الملف لا يحتوي على إعدادات Kilo صالحة.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "الملف لا يحتوي على إعدادات Raya صالحة.",
   "settings.aboutKiloCode.importSettings.tooLarge": "الملف كبير جدًا. يجب أن تكون ملفات الإعدادات أقل من 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "تم تصدير هذا الملف من إصدار أحدث من Kilo. قد يتم تجاهل بعض الإعدادات.",
+    "تم تصدير هذا الملف من إصدار أحدث من Raya. قد يتم تجاهل بعض الإعدادات.",
   "settings.aboutKiloCode.importSettings.success": "تم استيراد الإعدادات. راجع التغييرات أعلاه، ثم انقر على حفظ.",
 
   "settings.aboutKiloCode.telemetry.title": "Telemetry",
@@ -842,7 +842,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "افتراضي (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "قم بتمكين وتسجيل الدخول إلى مزود Kilo لاستخدام Speech to Text. ميزة Speech to Text مدعومة حاليًا فقط مع Raya Gateway.",
+    "قم بتمكين وتسجيل الدخول إلى مزود Raya لاستخدام Speech to Text. ميزة Speech to Text مدعومة حاليًا فقط مع Raya Gateway.",
   "settings.models.speechToTextModel.title": "نموذج تحويل الصوت إلى نص",
   "settings.models.speechToTextModel.description": "اختر نموذج نسخ Raya Gateway للإدخال الصوتي.",
   "settings.experimental.nativeNotebookTools.title": "أدوات الدفاتر الأصلية",
@@ -977,7 +977,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "توافق Claude Code",
   "settings.agentBehaviour.claudeCompat.title": "تحميل ملفات Claude Code",
   "settings.agentBehaviour.claudeCompat.description":
-    "تحميل تعليمات ومهارات CLAUDE.md من مجلد إعدادات Claude Code إلى الجلسات. قم بتمكين هذا الخيار إذا كنت ترغب في أن يستخدم Kilo مهارات وتعليمات Claude Code الخاصة بك. يتطلب إعادة التشغيل.",
+    "تحميل تعليمات ومهارات CLAUDE.md من مجلد إعدادات Claude Code إلى الجلسات. قم بتمكين هذا الخيار إذا كنت ترغب في أن يستخدم Raya مهارات وتعليمات Claude Code الخاصة بك. يتطلب إعادة التشغيل.",
   "settings.agentBehaviour.mcpDetail.command": "الأمر",
   "settings.agentBehaviour.mcpDetail.args": "الوسائط",
   "settings.agentBehaviour.mcpDetail.env": "البيئة",
@@ -994,7 +994,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "تجاوز النموذج العام",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "تشغيل أوامر shell الخاصة بالوكيل داخل sandbox على مستوى نظام التشغيل يقيّد الكتابة على مجلدات حالة المشروع و Kilo",
+    "تشغيل أوامر shell الخاصة بالوكيل داخل sandbox على مستوى نظام التشغيل يقيّد الكتابة على مجلدات حالة المشروع و Raya",
 
   "settings.autoApprove.description":
     "تحديد كيفية السماح بتشغيل الأدوات. معظم الأدوات معينة افتراضياً على السماح. doom_loop و external_directory معينة افتراضياً على السؤال.",
@@ -1077,7 +1077,7 @@ export const dict = {
   "settings.display.username.title": "اسم المستخدم",
   "settings.display.username.description": "اسم مستخدم مخصص في المحادثات",
   "settings.display.fontSize.title": "حجم الخط",
-  "settings.display.fontSize.description": "اضبط حجم خط webview UI الخاص بـ Kilo بشكل مستقل عن VS Code.",
+  "settings.display.fontSize.description": "اضبط حجم خط webview UI الخاص بـ Raya بشكل مستقل عن VS Code.",
   "settings.display.reasoningAutoCollapse.title": "طي الاستدلال تلقائيًا",
   "settings.display.reasoningAutoCollapse.description":
     "يطوي كتل الاستدلال بعد أن ينتهي الوكيل من كتابتها. اتركه معطلاً لإبقاء الاستدلال موسعًا ما لم تطوه يدويًا.",
@@ -1148,7 +1148,7 @@ export const dict = {
     "واجهة موحدة لتشغيل عدة وكلاء بالتوازي، كل منهم في شجرة عمل خاصة — راقب التقدم، وبدّل السياق، وراجع التغييرات في مكان واحد.",
   "migration.whatsNew.features.foundation.title": "أساس مشترك",
   "migration.whatsNew.features.foundation.detail":
-    "نواة صغيرة وفعالة واحدة عبر كل منتجات Kilo. تجربة مألوفة بغض النظر عن طريقة عملك.",
+    "نواة صغيرة وفعالة واحدة عبر كل منتجات Raya. تجربة مألوفة بغض النظر عن طريقة عملك.",
   "migration.whatsNew.blogLink": "اقرأ الإعلان الكامل",
   "migration.whatsNew.docsLink": "الجديد والأسئلة الشائعة",
   "migration.whatsNew.continue": "متابعة",
@@ -1258,7 +1258,7 @@ export const dict = {
     "الملفات المعدّلة في شجرة العمل ولكن لم يتم تهيئتها بعد، بالإضافة إلى الملفات غير المتتبعة (الجديدة).",
   "diffViewer.source.session.label": "الجلسة",
   "diffViewer.source.session.tooltip":
-    "الملفات التي غيّرها Kilo خلال الجلسة الحالية، بناءً على لقطات لكل دور. يُعاد ضبطها عند بدء جلسة جديدة.",
+    "الملفات التي غيّرها Raya خلال الجلسة الحالية، بناءً على لقطات لكل دور. يُعاد ضبطها عند بدء جلسة جديدة.",
   "diffViewer.group.session": "الجلسة",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

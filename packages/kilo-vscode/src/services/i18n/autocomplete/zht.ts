@@ -17,8 +17,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "停用 Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "停用自動完成",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya 自動完成已暫停。可能原因：你的 Kilo 帳戶沒有剩餘額度，或你設定的 API 金鑰（BYOK）已達到配額限制。請新增 Kilo 額度或檢查 API 金鑰設定以恢復自動完成。",
+    "Raya 自動完成已暫停。可能原因：你的 Raya 帳戶沒有剩餘額度，或你設定的 API 金鑰（BYOK）已達到配額限制。請新增 Raya 額度或檢查 API 金鑰設定以恢復自動完成。",
   "kilocode:autocomplete.creditsExhausted.addCredits": "新增額度",
   "kilocode:autocomplete.authError.message":
-    "Raya 自動完成因驗證問題已暫停。可能原因：你尚未登入 Kilo，或你的 API 金鑰（BYOK）無效或遺失。請重新登入或檢查提供者 API 金鑰設定。",
+    "Raya 自動完成因驗證問題已暫停。可能原因：你尚未登入 Raya，或你的 API 金鑰（BYOK）無效或遺失。請重新登入或檢查提供者 API 金鑰設定。",
 }

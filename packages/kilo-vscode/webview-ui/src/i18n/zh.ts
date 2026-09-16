@@ -17,13 +17,13 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "不可用",
   "provider.anaconda.state.unsupported": "{{platform}} 不支持 Anaconda Desktop。",
   "provider.anaconda.state.notInstalled":
-    "请在此设备上安装 Anaconda Desktop，然后返回此处。Kilo 不会为你运行安装程序。",
+    "请在此设备上安装 Anaconda Desktop，然后返回此处。Raya 不会为你运行安装程序。",
   "provider.anaconda.state.notRunning": "请打开 Anaconda Desktop，完成设置并登录，然后选择“再次检查”。",
   "provider.anaconda.state.invalidConfig":
     "Anaconda Desktop 设置不完整。请打开 Desktop，完成设置，并在需要时重新启动它。",
-  "provider.anaconda.state.signedOut": "请打开 Anaconda Desktop 并登录，然后再连接 Kilo。",
+  "provider.anaconda.state.signedOut": "请打开 Anaconda Desktop 并登录，然后再连接 Raya。",
   "provider.anaconda.state.unauthorized":
-    "Kilo 无法访问 Anaconda Desktop。请打开 Desktop，重新登录，并在需要时重新启动它。",
+    "Raya 无法访问 Anaconda Desktop。请打开 Desktop，重新登录，并在需要时重新启动它。",
   "provider.anaconda.state.unavailable": "Anaconda Desktop 尚未响应。请打开它并等待应用程序完成启动。",
   "provider.anaconda.state.noModel":
     "请在 Anaconda Desktop 中下载一个文本生成模型。请尽可能选择支持工具调用的模型，然后启动其服务器。",
@@ -33,7 +33,7 @@ export const anacondaDesktopDict = {
     "有 {{count}} 个已下载的文本生成模型可用。请在 Anaconda Desktop 中启动一个模型服务器。强烈建议使用支持工具调用的模型。",
   "provider.anaconda.state.unhealthy":
     "当前推理服务器尚不健康。请在 Anaconda Desktop 中检查它，并在需要时重新启动服务器。",
-  "provider.anaconda.state.ready": "Kilo 找到了一个健康的本地文本生成服务器，可以导入其当前的连接设置。",
+  "provider.anaconda.state.ready": "Raya 找到了一个健康的本地文本生成服务器，可以导入其当前的连接设置。",
   "provider.anaconda.server": "当前推理服务器",
   "provider.anaconda.context": "上下文窗口",
   "provider.anaconda.contextValue": "{{count}} 个 token",
@@ -50,7 +50,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "仍然继续",
   "provider.anaconda.action.manage": "管理 / 刷新",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop 已刷新",
-  "provider.anaconda.toast.refreshed.description": "当前本地服务器和模型在 Kilo 中已是最新。",
+  "provider.anaconda.toast.refreshed.description": "当前本地服务器和模型在 Raya 中已是最新。",
   "settings.providers.note.anacondaDesktop": "运行由 Anaconda Desktop 在本地提供的模型。",
   "settings.providers.tag.local": "本地",
 } as const
@@ -98,7 +98,7 @@ export const dict = {
   "provider.connect.status.waiting": "等待授权...",
   "provider.connect.status.failed": "授权失败：{{error}}",
   "provider.connect.apiKey.description":
-    "输入你的 {{provider}} API 密钥以连接帐户，并在 Kilo 中使用 {{provider}} 模型。",
+    "输入你的 {{provider}} API 密钥以连接帐户，并在 Raya 中使用 {{provider}} 模型。",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -120,13 +120,13 @@ export const dict = {
   "provider.connect.azure.baseURL.placeholder": "例如：https://my-models.openai.azure.com/openai",
   "provider.connect.oauth.code.visit.prefix": "访问 ",
   "provider.connect.oauth.code.visit.link": "此链接",
-  "provider.connect.oauth.code.visit.suffix": " 获取授权码，以连接你的帐户并在 Kilo 中使用 {{provider}} 模型。",
+  "provider.connect.oauth.code.visit.suffix": " 获取授权码，以连接你的帐户并在 Raya 中使用 {{provider}} 模型。",
   "provider.connect.oauth.code.label": "{{method}} 授权码",
   "provider.connect.oauth.code.placeholder": "授权码",
   "provider.connect.oauth.code.required": "授权码为必填项",
   "provider.connect.oauth.auto.visit.prefix": "访问 ",
   "provider.connect.oauth.auto.visit.link": "此链接",
-  "provider.connect.oauth.auto.visit.suffix": " 并输入以下代码，以连接你的帐户并在 Kilo 中使用 {{provider}} 模型。",
+  "provider.connect.oauth.auto.visit.suffix": " 并输入以下代码，以连接你的帐户并在 Raya 中使用 {{provider}} 模型。",
   "provider.connect.oauth.auto.confirmationCode": "确认码",
   "provider.connect.toast.connected.title": "{{provider}} 已连接",
   "provider.connect.toast.connected.description": "现在可以使用 {{provider}} 模型了。",
@@ -186,8 +186,8 @@ export const dict = {
     "'增强提示'按钮通过提供额外上下文、澄清或重新表述来帮助改进您的请求。尝试在此处输入请求，然后再次点击按钮查看其工作原理。",
   "prompt.action.sandbox.enable": "启用沙盒",
   "prompt.action.sandbox.disable": "禁用沙盒",
-  "prompt.action.sandbox.enabled": "沙盒已启用。代理 shell 命令被限制在项目和 Kilo 目录内。",
-  "prompt.action.sandbox.disabled": "沙盒已禁用。点击以将代理 shell 命令的写入限制在项目和 Kilo 目录内。",
+  "prompt.action.sandbox.enabled": "沙盒已启用。代理 shell 命令被限制在项目和 Raya 目录内。",
+  "prompt.action.sandbox.disabled": "沙盒已禁用。点击以将代理 shell 命令的写入限制在项目和 Raya 目录内。",
   "prompt.action.sandbox.status.enabled": "沙盒已启用",
   "prompt.action.sandbox.status.disabled": "沙盒已禁用",
   "prompt.action.sandbox.filesystem": "文件系统",
@@ -196,7 +196,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "已阻止",
   "prompt.action.sandbox.network.allowed": "允许",
   "prompt.action.sandbox.unrestricted": "不受限",
-  "prompt.action.sandbox.description.enabled": "写入仅限项目和 Kilo 目录。",
+  "prompt.action.sandbox.description.enabled": "写入仅限项目和 Raya 目录。",
   "prompt.action.sandbox.description.disabled": "点击以限制文件系统写入和网络访问。",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "点击以限制文件系统写入。根据你的沙盒设置，网络访问仍然允许。",
@@ -208,7 +208,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "正在转录... 点击取消。",
   "speechToText.tooltip.error": "语音输入失败。点击清除。",
   "speechToText.error.title": "语音输入失败",
-  "speechToText.error.loginRequired": "登录 Kilo 以使用语音输入。",
+  "speechToText.error.loginRequired": "登录 Raya 以使用语音输入。",
   "speechToText.error.emptyTranscript": "未检测到语音。",
 
   "prompt.toast.promptSendFailed.title": "发送提示失败",
@@ -386,10 +386,10 @@ export const dict = {
   "settings.indexing.projectEnable.description": "当全局索引关闭时，为此工作区启用索引。",
   "settings.indexing.provider.title": "嵌入提供商",
   "settings.indexing.provider.description": "选择用于生成语义搜索嵌入的提供商。",
-  "settings.indexing.kiloModel.title": "Kilo 模型预设",
-  "settings.indexing.kiloModel.description": "选择受支持的 Kilo 托管嵌入模型。",
-  "settings.indexing.kiloSignIn.title": "需要登录 Kilo",
-  "settings.indexing.kiloSignIn.description": "登录 Kilo 以使用托管嵌入。",
+  "settings.indexing.kiloModel.title": "Raya 模型预设",
+  "settings.indexing.kiloModel.description": "选择受支持的 Raya 托管嵌入模型。",
+  "settings.indexing.kiloSignIn.title": "需要登录 Raya",
+  "settings.indexing.kiloSignIn.description": "登录 Raya 以使用托管嵌入。",
   "settings.indexing.model.title": "嵌入模型",
   "settings.indexing.model.description": "覆盖所选提供商的默认嵌入模型。",
   "settings.indexing.vectorStore.title": "向量存储",
@@ -494,10 +494,10 @@ export const dict = {
   "settings.config.status.loadedLegacy": "已加载旧版配置",
   "settings.config.status.notLoaded": "未加载",
   "settings.config.status.create": "未找到 - 创建此文件",
-  "settings.config.title": "打开 {{scope}} Kilo 配置文件",
+  "settings.config.title": "打开 {{scope}} Raya 配置文件",
   "settings.config.placeholder": "配置文件按顺序合并；标记为已加载的文件目前会影响设置。",
-  "settings.config.noWorkspace": "打开工作区文件夹以编辑本地 Kilo 配置文件。",
-  "settings.config.openFailed": "无法打开 {{scope}} Kilo 配置文件：{{message}}",
+  "settings.config.noWorkspace": "打开工作区文件夹以编辑本地 Raya 配置文件。",
+  "settings.config.openFailed": "无法打开 {{scope}} Raya 配置文件：{{message}}",
   "settings.config.source.xdg": "XDG 全局配置",
   "settings.config.source.homeKilo": "主目录 .kilo 配置",
   "settings.config.source.homeKilocode": "主目录 .kilocode 配置",
@@ -766,9 +766,9 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "导出",
   "settings.aboutKiloCode.importSettings": "导入",
   "settings.aboutKiloCode.importSettings.invalidJson": "无效的 JSON 文件。请选择有效的设置文件。",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "文件不包含有效的 Kilo 设置。",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "文件不包含有效的 Raya 设置。",
   "settings.aboutKiloCode.importSettings.tooLarge": "文件过大。设置文件必须小于 1 MB。",
-  "settings.aboutKiloCode.importSettings.newerVersion": "此文件由较新版本的 Kilo 导出。部分设置可能会被忽略。",
+  "settings.aboutKiloCode.importSettings.newerVersion": "此文件由较新版本的 Raya 导出。部分设置可能会被忽略。",
   "settings.aboutKiloCode.importSettings.success": "设置已导入。请查看上方的更改，然后点击保存。",
 
   "settings.aboutKiloCode.telemetry.title": "遥测",
@@ -830,7 +830,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "默认 (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "启用并登录 Kilo 提供商以使用 Speech to Text。Speech to Text 目前仅支持通过 Raya Gateway 使用。",
+    "启用并登录 Raya 提供商以使用 Speech to Text。Speech to Text 目前仅支持通过 Raya Gateway 使用。",
   "settings.models.speechToTextModel.title": "语音转文本模型",
   "settings.models.speechToTextModel.description": "选择用于语音输入的 Raya Gateway 转录模型。",
   "settings.experimental.nativeNotebookTools.title": "原生笔记本工具",
@@ -955,7 +955,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code 兼容性",
   "settings.agentBehaviour.claudeCompat.title": "加载 Claude Code 文件",
   "settings.agentBehaviour.claudeCompat.description":
-    "将 Claude Code 配置目录中的 CLAUDE.md 指令和技能加载到会话中。如果您希望 Kilo 使用您的 Claude Code 指令和技能，请启用此选项。需要重启。",
+    "将 Claude Code 配置目录中的 CLAUDE.md 指令和技能加载到会话中。如果您希望 Raya 使用您的 Claude Code 指令和技能，请启用此选项。需要重启。",
   "settings.agentBehaviour.mcpDetail.command": "命令",
   "settings.agentBehaviour.mcpDetail.args": "参数",
   "settings.agentBehaviour.mcpDetail.env": "环境",
@@ -971,7 +971,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "全局模型覆盖",
   "settings.sandboxing.enabled.title": "沙盒",
   "settings.sandboxing.enabled.description":
-    "在操作系统级沙盒中运行代理 shell 命令，将写入限制在项目和 Kilo 状态目录内",
+    "在操作系统级沙盒中运行代理 shell 命令，将写入限制在项目和 Raya 状态目录内",
 
   "settings.autoApprove.description":
     "定义工具的运行权限。大多数工具默认为「允许」。doom_loop 和 external_directory 默认为「询问」。",
@@ -1046,7 +1046,7 @@ export const dict = {
   "settings.display.username.title": "用户名",
   "settings.display.username.description": "对话中显示的自定义用户名",
   "settings.display.fontSize.title": "字体大小",
-  "settings.display.fontSize.description": "独立于 VS Code 调整 Kilo webview UI 的字体大小。",
+  "settings.display.fontSize.description": "独立于 VS Code 调整 Raya webview UI 的字体大小。",
   "settings.display.reasoningAutoCollapse.title": "自动折叠推理",
   "settings.display.reasoningAutoCollapse.description":
     "在智能体写完推理后折叠推理块。保持关闭可让推理保持展开，除非你手动折叠它。",
@@ -1113,7 +1113,7 @@ export const dict = {
     "一个统一的界面，可以并行运行多个智能体，每个智能体各自使用独立的 worktree——在同一个地方监控进度、切换上下文和审查变更。",
   "migration.whatsNew.features.foundation.title": "共享基础",
   "migration.whatsNew.features.foundation.detail":
-    "所有 Kilo 产品共享一个小巧高效的核心。无论你选择哪种方式工作，都能获得熟悉的体验。",
+    "所有 Raya 产品共享一个小巧高效的核心。无论你选择哪种方式工作，都能获得熟悉的体验。",
   "migration.whatsNew.blogLink": "阅读完整公告",
   "migration.whatsNew.docsLink": "新功能与常见问题",
   "migration.whatsNew.continue": "继续",
@@ -1218,7 +1218,7 @@ export const dict = {
   "diffViewer.source.unstaged.label": "未暂存",
   "diffViewer.source.unstaged.tooltip": "在工作树中已修改但尚未暂存的文件，以及未跟踪（新）的文件。",
   "diffViewer.source.session.label": "会话",
-  "diffViewer.source.session.tooltip": "Kilo 在当前会话中更改的文件，基于每轮快照。开始新会话时重置。",
+  "diffViewer.source.session.tooltip": "Raya 在当前会话中更改的文件，基于每轮快照。开始新会话时重置。",
   "diffViewer.group.session": "会话",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled": "此仓库的快照已禁用。请编辑配置文件以显示会话变更。",

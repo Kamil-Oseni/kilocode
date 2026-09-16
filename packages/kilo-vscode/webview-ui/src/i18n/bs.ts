@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "Nedostupno",
   "provider.anaconda.state.unsupported": "Anaconda Desktop nije podržan na {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "Instalirajte Anaconda Desktop na ovom računaru, zatim se vratite ovdje. Kilo ne pokreće instalacijski program umjesto vas.",
+    "Instalirajte Anaconda Desktop na ovom računaru, zatim se vratite ovdje. Raya ne pokreće instalacijski program umjesto vas.",
   "provider.anaconda.state.notRunning":
     "Otvorite Anaconda Desktop, dovršite postavljanje i prijavite se, zatim odaberite Provjeri ponovo.",
   "provider.anaconda.state.invalidConfig":
     "Postavljanje Anaconda Desktopa nije dovršeno. Otvorite Desktop, dovršite postavljanje i ponovo ga pokrenite ako je potrebno.",
   "provider.anaconda.state.signedOut": "Otvorite Anaconda Desktop i prijavite se prije povezivanja Kila.",
   "provider.anaconda.state.unauthorized":
-    "Kilo nije mogao pristupiti Anaconda Desktopu. Otvorite Desktop, ponovo se prijavite i ponovo ga pokrenite ako je potrebno.",
+    "Raya nije mogao pristupiti Anaconda Desktopu. Otvorite Desktop, ponovo se prijavite i ponovo ga pokrenite ako je potrebno.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop još ne odgovara. Otvorite ga i sačekajte da se aplikacija u potpunosti pokrene.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "Aktivni server za zaključivanje još nije ispravan. Provjerite ga u Anaconda Desktopu i ponovo pokrenite server ako je potrebno.",
   "provider.anaconda.state.ready":
-    "Kilo je pronašao ispravan lokalni server za generisanje teksta i može uvesti njegove trenutne postavke veze.",
+    "Raya je pronašao ispravan lokalni server za generisanje teksta i može uvesti njegove trenutne postavke veze.",
   "provider.anaconda.server": "Aktivni server za zaključivanje",
   "provider.anaconda.context": "Kontekstni prozor",
   "provider.anaconda.contextValue": "{{count}} tokena",
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "Čekanje na autorizaciju...",
   "provider.connect.status.failed": "Autorizacija nije uspjela: {{error}}",
   "provider.connect.apiKey.description":
-    "Unesi svoj {{provider}} API ključ da povežeš račun i koristiš {{provider}} modele u Kilo-u.",
+    "Unesi svoj {{provider}} API ključ da povežeš račun i koristiš {{provider}} modele u Raya-u.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -123,14 +123,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Posjeti ",
   "provider.connect.oauth.code.visit.link": "ovaj link",
   "provider.connect.oauth.code.visit.suffix":
-    " da preuzmeš autorizacijski kod i povežeš račun te koristiš {{provider}} modele u Kilo-u.",
+    " da preuzmeš autorizacijski kod i povežeš račun te koristiš {{provider}} modele u Raya-u.",
   "provider.connect.oauth.code.label": "{{method}} autorizacijski kod",
   "provider.connect.oauth.code.placeholder": "Autorizacijski kod",
   "provider.connect.oauth.code.required": "Autorizacijski kod je obavezan",
   "provider.connect.oauth.auto.visit.prefix": "Posjeti ",
   "provider.connect.oauth.auto.visit.link": "ovaj link",
   "provider.connect.oauth.auto.visit.suffix":
-    " i unesi kod ispod da povežeš račun i koristiš {{provider}} modele u Kilo-u.",
+    " i unesi kod ispod da povežeš račun i koristiš {{provider}} modele u Raya-u.",
   "provider.connect.oauth.auto.confirmationCode": "Kod za potvrdu",
   "provider.connect.toast.connected.title": "{{provider}} povezan",
   "provider.connect.toast.connected.description": "{{provider}} modeli su sada dostupni za korištenje.",
@@ -195,9 +195,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "Omogući sandbox",
   "prompt.action.sandbox.disable": "Onemogući sandbox",
   "prompt.action.sandbox.enabled":
-    "Sandbox je omogućen. Shell komande agenta su ograničene na direktorije projekta i Kilo.",
+    "Sandbox je omogućen. Shell komande agenta su ograničene na direktorije projekta i Raya.",
   "prompt.action.sandbox.disabled":
-    "Sandbox je onemogućen. Kliknite da ograničite pisanje shell komandi agenta na direktorije projekta i Kilo.",
+    "Sandbox je onemogućen. Kliknite da ograničite pisanje shell komandi agenta na direktorije projekta i Raya.",
   "prompt.action.sandbox.status.enabled": "Sandbox omogućen",
   "prompt.action.sandbox.status.disabled": "Sandbox onemogućen",
   "prompt.action.sandbox.filesystem": "Datotečni sistem",
@@ -206,7 +206,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Blokirana",
   "prompt.action.sandbox.network.allowed": "Dozvoljena",
   "prompt.action.sandbox.unrestricted": "Bez ograničenja",
-  "prompt.action.sandbox.description.enabled": "Pisanje je ograničeno na direktorije projekta i Kilo.",
+  "prompt.action.sandbox.description.enabled": "Pisanje je ograničeno na direktorije projekta i Raya.",
   "prompt.action.sandbox.description.disabled": "Kliknite da ograničite pisanje u datotečni sistem i pristup mreži.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Kliknite da ograničite pisanje u datotečni sistem. Pristup mreži ostaje dozvoljen prema vašim sandbox postavkama.",
@@ -219,7 +219,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Prepisivanje... Kliknite da otkažete.",
   "speechToText.tooltip.error": "Glasovni unos nije uspio. Kliknite da očistite.",
   "speechToText.error.title": "Glasovni unos nije uspio",
-  "speechToText.error.loginRequired": "Prijavite se na Kilo da koristite glasovni unos.",
+  "speechToText.error.loginRequired": "Prijavite se na Raya da koristite glasovni unos.",
   "speechToText.error.emptyTranscript": "Govor nije otkriven.",
 
   "prompt.toast.promptSendFailed.title": "Neuspješno slanje upita",
@@ -410,10 +410,10 @@ export const dict = {
   "settings.indexing.model.title": "Model embeddinga",
   "settings.indexing.provider.description":
     "Odaberite provajdera koji se koristi za generiranje embeddinga za semantičku pretragu.",
-  "settings.indexing.kiloModel.title": "Preset Kilo modela",
-  "settings.indexing.kiloModel.description": "Odaberite podržani model embeddinga hostovan na Kilo.",
-  "settings.indexing.kiloSignIn.title": "Potrebna je prijava na Kilo",
-  "settings.indexing.kiloSignIn.description": "Prijavite se na Kilo za korištenje hostovanih embeddinga.",
+  "settings.indexing.kiloModel.title": "Preset Raya modela",
+  "settings.indexing.kiloModel.description": "Odaberite podržani model embeddinga hostovan na Raya.",
+  "settings.indexing.kiloSignIn.title": "Potrebna je prijava na Raya",
+  "settings.indexing.kiloSignIn.description": "Prijavite se na Raya za korištenje hostovanih embeddinga.",
   "settings.indexing.provider.title": "Provajder embeddinga",
   "settings.indexing.providerField.description": "Postavka veze specifična za provajdera.",
   "settings.indexing.qdrantApiKey.description": "Opcionalni API ključ za Qdrant instancu.",
@@ -518,11 +518,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "učitana zastarjela konfiguracija",
   "settings.config.status.notLoaded": "nije učitano",
   "settings.config.status.create": "nije pronađeno - kreiraj ovu datoteku",
-  "settings.config.title": "Otvori {{scope}} Kilo konfiguracijsku datoteku",
+  "settings.config.title": "Otvori {{scope}} Raya konfiguracijsku datoteku",
   "settings.config.placeholder":
     "Konfiguracijske datoteke se spajaju po redu; datoteke označene kao učitane trenutno utiču na postavke.",
-  "settings.config.noWorkspace": "Otvorite fasciklu radnog prostora da uredite lokalnu Kilo konfiguracijsku datoteku.",
-  "settings.config.openFailed": "Nije uspjelo otvaranje {{scope}} Kilo konfiguracijske datoteke: {{message}}",
+  "settings.config.noWorkspace": "Otvorite fasciklu radnog prostora da uredite lokalnu Raya konfiguracijsku datoteku.",
+  "settings.config.openFailed": "Nije uspjelo otvaranje {{scope}} Raya konfiguracijske datoteke: {{message}}",
   "settings.config.source.xdg": "XDG globalna konfiguracija",
   "settings.config.source.homeKilo": "Home .kilo konfiguracija",
   "settings.config.source.homeKilocode": "Home .kilocode konfiguracija",
@@ -796,10 +796,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "Izvezi",
   "settings.aboutKiloCode.importSettings": "Uvezi",
   "settings.aboutKiloCode.importSettings.invalidJson": "Nevažeći JSON fajl. Odaberite važeći fajl s postavkama.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "Fajl ne sadrži važeće Kilo postavke.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "Fajl ne sadrži važeće Raya postavke.",
   "settings.aboutKiloCode.importSettings.tooLarge": "Fajl je prevelik. Fajlovi s postavkama moraju biti manji od 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "Ovaj fajl je izvezen iz novije verzije Kilo-a. Neke postavke mogu biti zanemarene.",
+    "Ovaj fajl je izvezen iz novije verzije Raya-a. Neke postavke mogu biti zanemarene.",
   "settings.aboutKiloCode.importSettings.success":
     "Postavke su uvezene. Pregledajte promjene iznad, a zatim kliknite Sačuvaj.",
 
@@ -865,7 +865,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Zadano (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Omogućite i prijavite se na Kilo provajder da biste koristili Speech to Text. Speech to Text je trenutno podržan samo uz Raya Gateway.",
+    "Omogućite i prijavite se na Raya provajder da biste koristili Speech to Text. Speech to Text je trenutno podržan samo uz Raya Gateway.",
   "settings.models.speechToTextModel.title": "Model govora u tekst",
   "settings.models.speechToTextModel.description": "Odaberite Raya Gateway model za transkripciju za glasovni unos.",
   "settings.experimental.nativeNotebookTools.title": "Izvorni alati za bilježnice",
@@ -1001,7 +1001,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code kompatibilnost",
   "settings.agentBehaviour.claudeCompat.title": "Učitaj Claude Code datoteke",
   "settings.agentBehaviour.claudeCompat.description":
-    "Učitajte CLAUDE.md instrukcije i vještine iz vašeg Claude Code konfiguracijskog direktorija u sesije. Omogućite ovo ako želite da Kilo koristi vaše Claude Code instrukcije i vještine. Zahtijeva ponovno pokretanje.",
+    "Učitajte CLAUDE.md instrukcije i vještine iz vašeg Claude Code konfiguracijskog direktorija u sesije. Omogućite ovo ako želite da Raya koristi vaše Claude Code instrukcije i vještine. Zahtijeva ponovno pokretanje.",
   "settings.agentBehaviour.mcpDetail.command": "Naredba",
   "settings.agentBehaviour.mcpDetail.args": "Argumenti",
   "settings.agentBehaviour.mcpDetail.env": "Okruženje",
@@ -1019,7 +1019,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "Globalno premošćivanje modela",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "Pokrenite shell komande agenta unutar sandboxa na nivou operativnog sistema koji ograničava pisanje na direktorije stanja projekta i Kilo",
+    "Pokrenite shell komande agenta unutar sandboxa na nivou operativnog sistema koji ograničava pisanje na direktorije stanja projekta i Raya",
 
   "settings.autoApprove.description":
     "Definišite kako je dozvoljeno pokretanje alata. Većina alata je podrazumijevano na Dozvoli. doom_loop i external_directory su podrazumijevano na Pitaj.",
@@ -1109,7 +1109,7 @@ export const dict = {
   "settings.display.username.title": "Korisničko ime",
   "settings.display.username.description": "Prilagođeno korisničko ime u razgovorima",
   "settings.display.fontSize.title": "Veličina fonta",
-  "settings.display.fontSize.description": "Prilagodite veličinu fonta za Kilo webview UI nezavisno od VS Code-a.",
+  "settings.display.fontSize.description": "Prilagodite veličinu fonta za Raya webview UI nezavisno od VS Code-a.",
   "settings.display.reasoningAutoCollapse.title": "Automatski sažmi razmišljanje",
   "settings.display.reasoningAutoCollapse.description":
     "Sažima blokove razmišljanja nakon što ih agent završi pisati. Ostavite isključeno da razmišljanje ostane prošireno, osim ako ga ručno sažmete.",
@@ -1182,7 +1182,7 @@ export const dict = {
     "Jedinstveni interfejs za pokretanje više agenata paralelno, svaki na svom worktree-u — pratite napredak, mijenjajte kontekst i pregledajte promjene na jednom mjestu.",
   "migration.whatsNew.features.foundation.title": "Zajednički temelj",
   "migration.whatsNew.features.foundation.detail":
-    "Jedno malo, efikasno jezgro kroz sve Kilo proizvode. Poznato iskustvo bez obzira na to kako odaberete raditi.",
+    "Jedno malo, efikasno jezgro kroz sve Raya proizvode. Poznato iskustvo bez obzira na to kako odaberete raditi.",
   "migration.whatsNew.blogLink": "Pročitajte cijeli oglas",
   "migration.whatsNew.docsLink": "Novosti i često postavljana pitanja",
   "migration.whatsNew.continue": "Nastavi",
@@ -1292,7 +1292,7 @@ export const dict = {
     "Datoteke izmijenjene u radnom stablu ali još nisu pripremljene, plus nepraćene (nove) datoteke.",
   "diffViewer.source.session.label": "Sesija",
   "diffViewer.source.session.tooltip":
-    "Datoteke koje je Kilo promijenio tokom trenutne sesije, na osnovu snapshota po koraku. Resetuje se kada pokrenete novu sesiju.",
+    "Datoteke koje je Raya promijenio tokom trenutne sesije, na osnovu snapshota po koraku. Resetuje se kada pokrenete novu sesiju.",
   "diffViewer.group.session": "Sesija",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

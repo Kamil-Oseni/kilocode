@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "Niet beschikbaar",
   "provider.anaconda.state.unsupported": "Anaconda Desktop wordt niet ondersteund op {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "Installeer Anaconda Desktop op deze machine en kom hier dan terug. Kilo voert het installatieprogramma niet voor je uit.",
+    "Installeer Anaconda Desktop op deze machine en kom hier dan terug. Raya voert het installatieprogramma niet voor je uit.",
   "provider.anaconda.state.notRunning":
     "Open Anaconda Desktop, voltooi de installatie en meld je aan, kies daarna Opnieuw controleren.",
   "provider.anaconda.state.invalidConfig":
     "De installatie van Anaconda Desktop is onvolledig. Open Desktop, voltooi de installatie en herstart het indien nodig.",
-  "provider.anaconda.state.signedOut": "Open Anaconda Desktop en meld je aan voordat je Kilo verbindt.",
+  "provider.anaconda.state.signedOut": "Open Anaconda Desktop en meld je aan voordat je Raya verbindt.",
   "provider.anaconda.state.unauthorized":
-    "Kilo kon geen toegang krijgen tot Anaconda Desktop. Open Desktop, meld je opnieuw aan en herstart het indien nodig.",
+    "Raya kon geen toegang krijgen tot Anaconda Desktop. Open Desktop, meld je opnieuw aan en herstart het indien nodig.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop reageert nog niet. Open het en wacht tot de applicatie volledig is opgestart.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "De actieve inferentieserver is nog niet gezond. Controleer deze in Anaconda Desktop en herstart de server indien nodig.",
   "provider.anaconda.state.ready":
-    "Kilo heeft een gezonde lokale tekstgeneratieserver gevonden en kan de huidige verbindingsinstellingen importeren.",
+    "Raya heeft een gezonde lokale tekstgeneratieserver gevonden en kan de huidige verbindingsinstellingen importeren.",
   "provider.anaconda.server": "Actieve inferentieserver",
   "provider.anaconda.context": "Contextvenster",
   "provider.anaconda.contextValue": "{{count}} tokens",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "Toch doorgaan",
   "provider.anaconda.action.manage": "Beheren / Vernieuwen",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop vernieuwd",
-  "provider.anaconda.toast.refreshed.description": "De actieve lokale server en modellen zijn up-to-date in Kilo.",
+  "provider.anaconda.toast.refreshed.description": "De actieve lokale server en modellen zijn up-to-date in Raya.",
   "settings.providers.note.anacondaDesktop": "Voer een model uit dat lokaal door Anaconda Desktop wordt aangeboden.",
   "settings.providers.tag.local": "Lokaal",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "Wachten op autorisatie...",
   "provider.connect.status.failed": "Autorisatie mislukt: {{error}}",
   "provider.connect.apiKey.description":
-    "Voer uw {{provider}} API-sleutel in om uw account te verbinden en {{provider}} modellen te gebruiken in Kilo.",
+    "Voer uw {{provider}} API-sleutel in om uw account te verbinden en {{provider}} modellen te gebruiken in Raya.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -123,14 +123,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Bezoek ",
   "provider.connect.oauth.code.visit.link": "deze link",
   "provider.connect.oauth.code.visit.suffix":
-    " om uw autorisatiecode op te halen waarmee u uw account kunt verbinden en {{provider}} modellen kunt gebruiken in Kilo.",
+    " om uw autorisatiecode op te halen waarmee u uw account kunt verbinden en {{provider}} modellen kunt gebruiken in Raya.",
   "provider.connect.oauth.code.label": "{{method}} autorisatiecode",
   "provider.connect.oauth.code.placeholder": "Autorisatiecode",
   "provider.connect.oauth.code.required": "Autorisatiecode is vereist",
   "provider.connect.oauth.auto.visit.prefix": "Bezoek ",
   "provider.connect.oauth.auto.visit.link": "deze link",
   "provider.connect.oauth.auto.visit.suffix":
-    " en voer de onderstaande code in om uw account te verbinden en {{provider}} modellen te gebruiken in Kilo.",
+    " en voer de onderstaande code in om uw account te verbinden en {{provider}} modellen te gebruiken in Raya.",
   "provider.connect.oauth.auto.confirmationCode": "Bevestigingscode",
   "provider.connect.toast.connected.title": "{{provider}} verbonden",
   "provider.connect.toast.connected.description": "{{provider}} modellen zijn nu beschikbaar voor gebruik.",
@@ -195,9 +195,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "Sandbox inschakelen",
   "prompt.action.sandbox.disable": "Sandbox uitschakelen",
   "prompt.action.sandbox.enabled":
-    "Sandbox is ingeschakeld. Shell-opdrachten van de agent zijn beperkt tot de project- en Kilo-mappen.",
+    "Sandbox is ingeschakeld. Shell-opdrachten van de agent zijn beperkt tot de project- en Raya-mappen.",
   "prompt.action.sandbox.disabled":
-    "Sandbox is uitgeschakeld. Klik om schrijfbewerkingen van shell-opdrachten van de agent te beperken tot de project- en Kilo-mappen.",
+    "Sandbox is uitgeschakeld. Klik om schrijfbewerkingen van shell-opdrachten van de agent te beperken tot de project- en Raya-mappen.",
   "prompt.action.sandbox.status.enabled": "Sandbox ingeschakeld",
   "prompt.action.sandbox.status.disabled": "Sandbox uitgeschakeld",
   "prompt.action.sandbox.filesystem": "Bestandssysteem",
@@ -206,7 +206,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Geblokkeerd",
   "prompt.action.sandbox.network.allowed": "Toegestaan",
   "prompt.action.sandbox.unrestricted": "Onbeperkt",
-  "prompt.action.sandbox.description.enabled": "Schrijfbewerkingen zijn beperkt tot de project- en Kilo-mappen.",
+  "prompt.action.sandbox.description.enabled": "Schrijfbewerkingen zijn beperkt tot de project- en Raya-mappen.",
   "prompt.action.sandbox.description.disabled":
     "Klik om schrijfbewerkingen in het bestandssysteem en netwerktoegang te beperken.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
@@ -220,7 +220,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Transcriberen... Klik om te annuleren.",
   "speechToText.tooltip.error": "Spraakinvoer mislukt. Klik om te wissen.",
   "speechToText.error.title": "Spraakinvoer mislukt",
-  "speechToText.error.loginRequired": "Meld u aan bij Kilo om spraakinvoer te gebruiken.",
+  "speechToText.error.loginRequired": "Meld u aan bij Raya om spraakinvoer te gebruiken.",
   "speechToText.error.emptyTranscript": "Er is geen spraak gedetecteerd.",
 
   "prompt.toast.promptSendFailed.title": "Verzenden prompt mislukt",
@@ -468,11 +468,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "verouderde configuratie geladen",
   "settings.config.status.notLoaded": "niet geladen",
   "settings.config.status.create": "niet gevonden - maak dit bestand",
-  "settings.config.title": "Open {{scope}} Kilo-configuratiebestand",
+  "settings.config.title": "Open {{scope}} Raya-configuratiebestand",
   "settings.config.placeholder":
     "Configuratiebestanden worden op volgorde samengevoegd; bestanden gemarkeerd als geladen hebben momenteel invloed op de instellingen.",
-  "settings.config.noWorkspace": "Open een werkruimtemap om het lokale Kilo-configuratiebestand te bewerken.",
-  "settings.config.openFailed": "Kan {{scope}} Kilo-configuratiebestand niet openen: {{message}}",
+  "settings.config.noWorkspace": "Open een werkruimtemap om het lokale Raya-configuratiebestand te bewerken.",
+  "settings.config.openFailed": "Kan {{scope}} Raya-configuratiebestand niet openen: {{message}}",
   "settings.config.source.xdg": "XDG globale configuratie",
   "settings.config.source.homeKilo": "Home .kilo-configuratie",
   "settings.config.source.homeKilocode": "Home .kilocode-configuratie",
@@ -787,11 +787,11 @@ export const dict = {
   "settings.aboutKiloCode.importSettings": "Importeren",
   "settings.aboutKiloCode.importSettings.invalidJson":
     "Ongeldig JSON-bestand. Selecteer een geldig instellingenbestand.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "Het bestand bevat geen geldige Kilo-instellingen.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "Het bestand bevat geen geldige Raya-instellingen.",
   "settings.aboutKiloCode.importSettings.tooLarge":
     "Het bestand is te groot. Instellingenbestanden moeten kleiner zijn dan 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "Dit bestand is geëxporteerd vanuit een nieuwere versie van Kilo. Sommige instellingen worden mogelijk genegeerd.",
+    "Dit bestand is geëxporteerd vanuit een nieuwere versie van Raya. Sommige instellingen worden mogelijk genegeerd.",
   "settings.aboutKiloCode.importSettings.success":
     "Instellingen geïmporteerd. Controleer de bovenstaande wijzigingen en klik vervolgens op Opslaan.",
 
@@ -862,7 +862,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Standaard (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Schakel de Kilo-provider in en meld u aan om Speech to Text te gebruiken. Speech to Text wordt momenteel alleen ondersteund met Raya Gateway.",
+    "Schakel de Raya-provider in en meld u aan om Speech to Text te gebruiken. Speech to Text wordt momenteel alleen ondersteund met Raya Gateway.",
   "settings.models.speechToTextModel.title": "Spraak-naar-tekst-model",
   "settings.models.speechToTextModel.description": "Kies het Raya Gateway-transcriptiemodel voor spraakinvoer.",
   "settings.experimental.nativeNotebookTools.title": "Native notebooktools",
@@ -898,7 +898,7 @@ export const dict = {
   "settings.experimental.toolToggles": "Tool Schakelaars",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "Shell-opdrachten van de agent uitvoeren in een sandbox op besturingssysteemniveau die schrijfbewerkingen beperkt tot de project- en Kilo-statusmappen",
+    "Shell-opdrachten van de agent uitvoeren in een sandbox op besturingssysteemniveau die schrijfbewerkingen beperkt tot de project- en Raya-statusmappen",
 
   "settings.agentBehaviour.defaultAgent.title": "Standaard Agent",
   "settings.agentBehaviour.defaultAgent.description": "Agent om te gebruiken wanneer er geen is opgegeven",
@@ -953,7 +953,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code-compatibiliteit",
   "settings.agentBehaviour.claudeCompat.title": "Claude Code-bestanden laden",
   "settings.agentBehaviour.claudeCompat.description":
-    "Laad CLAUDE.md instructies en vaardigheden uit je Claude Code configuratiemap in sessies. Schakel dit in als je wilt dat Kilo je Claude Code instructies en vaardigheden gebruikt. Herstart vereist.",
+    "Laad CLAUDE.md instructies en vaardigheden uit je Claude Code configuratiemap in sessies. Schakel dit in als je wilt dat Raya je Claude Code instructies en vaardigheden gebruikt. Herstart vereist.",
   "settings.agentBehaviour.removeMcp.title": "Verwijder MCP-server",
   "settings.agentBehaviour.removeMcp.confirm":
     'MCP-server "{{name}}" verwijderen? Dit zal deze uit je configuratie verwijderen.',
@@ -1077,7 +1077,7 @@ export const dict = {
   "settings.display.username.title": "Gebruikersnaam",
   "settings.display.username.description": "Aangepaste gebruikersnaam weergegeven in gesprekken",
   "settings.display.fontSize.title": "Lettergrootte",
-  "settings.display.fontSize.description": "Pas de lettergrootte van de Kilo webview UI onafhankelijk van VS Code aan.",
+  "settings.display.fontSize.description": "Pas de lettergrootte van de Raya webview UI onafhankelijk van VS Code aan.",
   "settings.display.reasoningAutoCollapse.title": "Redenering automatisch inklappen",
   "settings.display.reasoningAutoCollapse.description":
     "Klapt redeneerblokken in nadat de agent klaar is met schrijven. Laat uitgeschakeld om redenering uitgeklapt te houden, tenzij je die handmatig inklapt.",
@@ -1162,7 +1162,7 @@ export const dict = {
     "Een uniforme interface voor het parallel uitvoeren van meerdere agents, elk op zijn eigen worktree — monitor de voortgang, wissel van context en bekijk wijzigingen op één plek.",
   "migration.whatsNew.features.foundation.title": "Gedeelde Basis",
   "migration.whatsNew.features.foundation.detail":
-    "Één kleine, efficiënte kern voor elk Kilo-product. Een vertrouwde ervaring, hoe je ook wilt werken.",
+    "Één kleine, efficiënte kern voor elk Raya-product. Een vertrouwde ervaring, hoe je ook wilt werken.",
   "migration.whatsNew.blogLink": "Lees de volledige aankondiging",
   "migration.whatsNew.docsLink": "Wat is er nieuw & veelgestelde vragen",
   "migration.whatsNew.continue": "Doorgaan",
@@ -1263,10 +1263,10 @@ export const dict = {
   "notifications.action.close": "Sluiten",
   "notifications.action.tryModel": "Probeer {{model}}",
   "notifications.action.tryModelGeneric": "Probeer model",
-  "settings.indexing.kiloModel.title": "Kilo-model voorinstelling",
-  "settings.indexing.kiloModel.description": "Kies een ondersteund Kilo-hosted embeddings model.",
-  "settings.indexing.kiloSignIn.title": "Kilo-aanmelding vereist",
-  "settings.indexing.kiloSignIn.description": "Log in op Kilo om hosted embeddings te gebruiken.",
+  "settings.indexing.kiloModel.title": "Raya-model voorinstelling",
+  "settings.indexing.kiloModel.description": "Kies een ondersteund Raya-hosted embeddings model.",
+  "settings.indexing.kiloSignIn.title": "Raya-aanmelding vereist",
+  "settings.indexing.kiloSignIn.description": "Log in op Raya om hosted embeddings te gebruiken.",
   // Missing translations - English fallbacks until translated
   "settings.agentBehaviour.createMode": "Nieuwe modus aanmaken",
   "settings.agentBehaviour.createMode.button": "Aanmaken",
@@ -1315,7 +1315,7 @@ export const dict = {
     "Bestanden gewijzigd in je werkboom maar nog niet gestaged, plus niet-gevolgde (nieuwe) bestanden.",
   "diffViewer.source.session.label": "Sessie",
   "diffViewer.source.session.tooltip":
-    "Bestanden die door Kilo tijdens de huidige sessie zijn gewijzigd, gebaseerd op snapshots per beurt. Wordt gereset bij het starten van een nieuwe sessie.",
+    "Bestanden die door Raya tijdens de huidige sessie zijn gewijzigd, gebaseerd op snapshots per beurt. Wordt gereset bij het starten van een nieuwe sessie.",
   "diffViewer.group.session": "Sessie",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

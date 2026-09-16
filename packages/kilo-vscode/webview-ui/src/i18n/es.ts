@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "No disponible",
   "provider.anaconda.state.unsupported": "Anaconda Desktop no es compatible con {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "Instala Anaconda Desktop en este equipo y luego vuelve aquí. Kilo no ejecuta el instalador por ti.",
+    "Instala Anaconda Desktop en este equipo y luego vuelve aquí. Raya no ejecuta el instalador por ti.",
   "provider.anaconda.state.notRunning":
     "Abre Anaconda Desktop, completa la configuración e inicia sesión, luego elige Comprobar de nuevo.",
   "provider.anaconda.state.invalidConfig":
     "La configuración de Anaconda Desktop está incompleta. Abre Desktop, completa la configuración y reinícialo si es necesario.",
-  "provider.anaconda.state.signedOut": "Abre Anaconda Desktop e inicia sesión antes de conectar Kilo.",
+  "provider.anaconda.state.signedOut": "Abre Anaconda Desktop e inicia sesión antes de conectar Raya.",
   "provider.anaconda.state.unauthorized":
-    "Kilo no pudo acceder a Anaconda Desktop. Abre Desktop, inicia sesión de nuevo y reinícialo si es necesario.",
+    "Raya no pudo acceder a Anaconda Desktop. Abre Desktop, inicia sesión de nuevo y reinícialo si es necesario.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop aún no responde. Ábrelo y espera a que la aplicación termine de iniciarse.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "El servidor de inferencia activo aún no está en buen estado. Compruébalo en Anaconda Desktop y reinicia el servidor si es necesario.",
   "provider.anaconda.state.ready":
-    "Kilo encontró un servidor local de generación de texto en buen estado y puede importar su configuración de conexión actual.",
+    "Raya encontró un servidor local de generación de texto en buen estado y puede importar su configuración de conexión actual.",
   "provider.anaconda.server": "Servidor de inferencia activo",
   "provider.anaconda.context": "Ventana de contexto",
   "provider.anaconda.contextValue": "{{count}} tokens",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "Continuar de todos modos",
   "provider.anaconda.action.manage": "Administrar / Actualizar",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop actualizado",
-  "provider.anaconda.toast.refreshed.description": "El servidor local activo y los modelos están actualizados en Kilo.",
+  "provider.anaconda.toast.refreshed.description": "El servidor local activo y los modelos están actualizados en Raya.",
   "settings.providers.note.anacondaDesktop": "Ejecuta un modelo servido localmente por Anaconda Desktop.",
   "settings.providers.tag.local": "Local",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "Esperando autorización...",
   "provider.connect.status.failed": "Autorización fallida: {{error}}",
   "provider.connect.apiKey.description":
-    "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en Kilo.",
+    "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en Raya.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -124,14 +124,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Visita ",
   "provider.connect.oauth.code.visit.link": "este enlace",
   "provider.connect.oauth.code.visit.suffix":
-    " para obtener tu código de autorización para conectar tu cuenta y usar modelos de {{provider}} en Kilo.",
+    " para obtener tu código de autorización para conectar tu cuenta y usar modelos de {{provider}} en Raya.",
   "provider.connect.oauth.code.label": "Código de autorización {{method}}",
   "provider.connect.oauth.code.placeholder": "Código de autorización",
   "provider.connect.oauth.code.required": "El código de autorización es obligatorio",
   "provider.connect.oauth.auto.visit.prefix": "Visita ",
   "provider.connect.oauth.auto.visit.link": "este enlace",
   "provider.connect.oauth.auto.visit.suffix":
-    " e introduce el código a continuación para conectar tu cuenta y usar modelos de {{provider}} en Kilo.",
+    " e introduce el código a continuación para conectar tu cuenta y usar modelos de {{provider}} en Raya.",
   "provider.connect.oauth.auto.confirmationCode": "Código de confirmación",
   "provider.connect.toast.connected.title": "{{provider}} conectado",
   "provider.connect.toast.connected.description": "Los modelos de {{provider}} ahora están disponibles para usar.",
@@ -195,9 +195,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "Activar sandbox",
   "prompt.action.sandbox.disable": "Desactivar sandbox",
   "prompt.action.sandbox.enabled":
-    "Sandbox activado. Los comandos de shell del agente están limitados a los directorios del proyecto y de Kilo.",
+    "Sandbox activado. Los comandos de shell del agente están limitados a los directorios del proyecto y de Raya.",
   "prompt.action.sandbox.disabled":
-    "Sandbox desactivado. Haz clic para limitar las escrituras de los comandos de shell del agente a los directorios del proyecto y de Kilo.",
+    "Sandbox desactivado. Haz clic para limitar las escrituras de los comandos de shell del agente a los directorios del proyecto y de Raya.",
   "prompt.action.sandbox.status.enabled": "Sandbox activado",
   "prompt.action.sandbox.status.disabled": "Sandbox desactivado",
   "prompt.action.sandbox.filesystem": "Sistema de archivos",
@@ -206,7 +206,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Bloqueada",
   "prompt.action.sandbox.network.allowed": "Permitida",
   "prompt.action.sandbox.unrestricted": "Sin restricciones",
-  "prompt.action.sandbox.description.enabled": "Las escrituras se limitan a los directorios del proyecto y de Kilo.",
+  "prompt.action.sandbox.description.enabled": "Las escrituras se limitan a los directorios del proyecto y de Raya.",
   "prompt.action.sandbox.description.disabled":
     "Haz clic para restringir las escrituras en el sistema de archivos y el acceso a la red.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
@@ -220,7 +220,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Transcribiendo... Haz clic para cancelar.",
   "speechToText.tooltip.error": "Falló la entrada de voz. Haz clic para borrar.",
   "speechToText.error.title": "Falló la entrada de voz",
-  "speechToText.error.loginRequired": "Inicia sesión en Kilo para usar la entrada de voz.",
+  "speechToText.error.loginRequired": "Inicia sesión en Raya para usar la entrada de voz.",
   "speechToText.error.emptyTranscript": "No se detectó voz.",
 
   "prompt.toast.promptSendFailed.title": "Fallo al enviar prompt",
@@ -403,10 +403,10 @@ export const dict = {
   "settings.indexing.provider.title": "Proveedor de embeddings",
   "settings.indexing.provider.description":
     "Elige el proveedor utilizado para generar embeddings para búsqueda semántica.",
-  "settings.indexing.kiloModel.title": "Preajuste de modelo de Kilo",
-  "settings.indexing.kiloModel.description": "Elige un modelo de embeddings alojado por Kilo compatible.",
-  "settings.indexing.kiloSignIn.title": "Se requiere iniciar sesión en Kilo",
-  "settings.indexing.kiloSignIn.description": "Inicia sesión en Kilo para usar embeddings alojados.",
+  "settings.indexing.kiloModel.title": "Preajuste de modelo de Raya",
+  "settings.indexing.kiloModel.description": "Elige un modelo de embeddings alojado por Raya compatible.",
+  "settings.indexing.kiloSignIn.title": "Se requiere iniciar sesión en Raya",
+  "settings.indexing.kiloSignIn.description": "Inicia sesión en Raya para usar embeddings alojados.",
   "settings.indexing.model.title": "Modelo de embeddings",
   "settings.indexing.model.description":
     "Anular el modelo de embeddings predeterminado para el proveedor seleccionado.",
@@ -518,12 +518,12 @@ export const dict = {
   "settings.config.status.loadedLegacy": "configuración heredada cargada",
   "settings.config.status.notLoaded": "no cargado",
   "settings.config.status.create": "no encontrado - crear este archivo",
-  "settings.config.title": "Abrir archivo de configuración Kilo {{scope}}",
+  "settings.config.title": "Abrir archivo de configuración Raya {{scope}}",
   "settings.config.placeholder":
     "Los archivos de configuración se combinan en orden; los archivos marcados como cargados afectan actualmente a los ajustes.",
   "settings.config.noWorkspace":
-    "Abre una carpeta de espacio de trabajo para editar el archivo de configuración Kilo local.",
-  "settings.config.openFailed": "Error al abrir el archivo de configuración Kilo {{scope}}: {{message}}",
+    "Abre una carpeta de espacio de trabajo para editar el archivo de configuración Raya local.",
+  "settings.config.openFailed": "Error al abrir el archivo de configuración Raya {{scope}}: {{message}}",
   "settings.config.source.xdg": "Configuración global XDG",
   "settings.config.source.homeKilo": "Configuración .kilo de Home",
   "settings.config.source.homeKilocode": "Configuración .kilocode de Home",
@@ -801,11 +801,11 @@ export const dict = {
   "settings.aboutKiloCode.importSettings": "Importar",
   "settings.aboutKiloCode.importSettings.invalidJson":
     "Archivo JSON no válido. Seleccione un archivo de ajustes válido.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "El archivo no contiene ajustes válidos de Kilo.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "El archivo no contiene ajustes válidos de Raya.",
   "settings.aboutKiloCode.importSettings.tooLarge":
     "El archivo es demasiado grande. Los archivos de ajustes deben ser menores de 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "Este archivo fue exportado desde una versión más reciente de Kilo. Algunos ajustes podrían ignorarse.",
+    "Este archivo fue exportado desde una versión más reciente de Raya. Algunos ajustes podrían ignorarse.",
   "settings.aboutKiloCode.importSettings.success":
     "Ajustes importados. Revise los cambios anteriores y luego haga clic en Guardar.",
 
@@ -872,7 +872,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Predeterminado (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Habilita e inicia sesión en el proveedor Kilo para usar Speech to Text. Actualmente, Speech to Text solo es compatible con Raya Gateway.",
+    "Habilita e inicia sesión en el proveedor Raya para usar Speech to Text. Actualmente, Speech to Text solo es compatible con Raya Gateway.",
   "settings.models.speechToTextModel.title": "Modelo de voz a texto",
   "settings.models.speechToTextModel.description":
     "Elige el modelo de transcripción de Raya Gateway para la entrada de voz.",
@@ -1012,7 +1012,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Compatibilidad con Claude Code",
   "settings.agentBehaviour.claudeCompat.title": "Cargar archivos de Claude Code",
   "settings.agentBehaviour.claudeCompat.description":
-    "Carga las instrucciones y habilidades de CLAUDE.md desde tu directorio de configuración de Claude Code en las sesiones. Activa esta opción si quieres que Kilo utilice tus instrucciones y habilidades de Claude Code. Requiere reiniciar.",
+    "Carga las instrucciones y habilidades de CLAUDE.md desde tu directorio de configuración de Claude Code en las sesiones. Activa esta opción si quieres que Raya utilice tus instrucciones y habilidades de Claude Code. Requiere reiniciar.",
   "settings.agentBehaviour.mcpDetail.command": "Comando",
   "settings.agentBehaviour.mcpDetail.args": "Argumentos",
   "settings.agentBehaviour.mcpDetail.env": "Entorno",
@@ -1030,7 +1030,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "Anulación global del modelo",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "Ejecutar los comandos de shell del agente dentro de un sandbox a nivel de sistema operativo que restringe las escrituras a los directorios de estado del proyecto y de Kilo",
+    "Ejecutar los comandos de shell del agente dentro de un sandbox a nivel de sistema operativo que restringe las escrituras a los directorios de estado del proyecto y de Raya",
 
   "settings.autoApprove.description":
     "Defina cómo se permite la ejecución de las herramientas. La mayoría de las herramientas tienen como valor predeterminado Permitir. doom_loop y external_directory tienen como valor predeterminado Preguntar.",
@@ -1120,7 +1120,7 @@ export const dict = {
   "settings.display.username.description": "Nombre de usuario personalizado en conversaciones",
   "settings.display.fontSize.title": "Tamaño de fuente",
   "settings.display.fontSize.description":
-    "Ajusta el tamaño de fuente de la webview UI de Kilo de forma independiente a VS Code.",
+    "Ajusta el tamaño de fuente de la webview UI de Raya de forma independiente a VS Code.",
   "settings.display.reasoningAutoCollapse.title": "Contraer razonamiento automáticamente",
   "settings.display.reasoningAutoCollapse.description":
     "Contrae los bloques de razonamiento después de que el agente termine de escribirlos. Déjalo desactivado para mantener el razonamiento expandido, a menos que lo contraigas manualmente.",
@@ -1193,7 +1193,7 @@ export const dict = {
     "Una interfaz unificada para ejecutar múltiples agentes en paralelo, cada uno en su propio worktree — supervisa el progreso, cambia de contexto y revisa cambios en un solo lugar.",
   "migration.whatsNew.features.foundation.title": "Base compartida",
   "migration.whatsNew.features.foundation.detail":
-    "Un núcleo pequeño y eficiente en todos los productos Kilo. Una experiencia familiar sin importar cómo elijas trabajar.",
+    "Un núcleo pequeño y eficiente en todos los productos Raya. Una experiencia familiar sin importar cómo elijas trabajar.",
   "migration.whatsNew.blogLink": "Leer el anuncio completo",
   "migration.whatsNew.docsLink": "Novedades y preguntas frecuentes",
   "migration.whatsNew.continue": "Continuar",
@@ -1303,7 +1303,7 @@ export const dict = {
     "Archivos modificados en tu árbol de trabajo pero que aún no están en el área de preparación, más archivos no rastreados (nuevos).",
   "diffViewer.source.session.label": "Sesión",
   "diffViewer.source.session.tooltip":
-    "Archivos modificados por Kilo durante la sesión actual, basado en snapshots por turno. Se reinicia al empezar una nueva sesión.",
+    "Archivos modificados por Raya durante la sesión actual, basado en snapshots por turno. Se reinicia al empezar una nueva sesión.",
   "diffViewer.group.session": "Sesión",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

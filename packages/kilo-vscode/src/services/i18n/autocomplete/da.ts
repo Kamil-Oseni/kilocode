@@ -17,8 +17,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Deaktiver Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Deaktiver Autocomplete",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya autofuldførelse er sat på pause. Mulige årsager: din Kilo-konto har ingen resterende credits, eller din konfigurerede API-nøgle (BYOK) har nået sin kvotegrænse. Tilføj Kilo-credits eller kontroller din API-nøglekonfiguration for at genoptage autocomplete.",
+    "Raya autofuldførelse er sat på pause. Mulige årsager: din Raya-konto har ingen resterende credits, eller din konfigurerede API-nøgle (BYOK) har nået sin kvotegrænse. Tilføj Raya-credits eller kontroller din API-nøglekonfiguration for at genoptage autocomplete.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Tilføj credits",
   "kilocode:autocomplete.authError.message":
-    "Raya autofuldførelse er sat på pause på grund af et godkendelsesproblem. Mulige årsager: du er ikke logget ind på Kilo, eller din API-nøgle (BYOK) er ugyldig eller mangler. Log ind igen, eller kontroller indstillingerne for udbyderens API-nøgle.",
+    "Raya autofuldførelse er sat på pause på grund af et godkendelsesproblem. Mulige årsager: du er ikke logget ind på Raya, eller din API-nøgle (BYOK) er ugyldig eller mangler. Log ind igen, eller kontroller indstillingerne for udbyderens API-nøgle.",
 }

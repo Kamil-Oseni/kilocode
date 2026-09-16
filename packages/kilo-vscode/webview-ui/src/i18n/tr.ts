@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "Kullanılamıyor",
   "provider.anaconda.state.unsupported": "Anaconda Desktop {{platform}} üzerinde desteklenmiyor.",
   "provider.anaconda.state.notInstalled":
-    "Anaconda Desktop'ı bu makineye kurun, ardından buraya dönün. Kilo kurulumu sizin için çalıştırmaz.",
+    "Anaconda Desktop'ı bu makineye kurun, ardından buraya dönün. Raya kurulumu sizin için çalıştırmaz.",
   "provider.anaconda.state.notRunning":
     "Anaconda Desktop'ı açın, kurulumu tamamlayıp oturum açın, ardından Tekrar kontrol et'i seçin.",
   "provider.anaconda.state.invalidConfig":
     "Anaconda Desktop kurulumu eksik. Desktop'ı açın, kurulumu tamamlayın ve gerekirse yeniden başlatın.",
-  "provider.anaconda.state.signedOut": "Kilo'yu bağlamadan önce Anaconda Desktop'ı açın ve oturum açın.",
+  "provider.anaconda.state.signedOut": "Raya'yu bağlamadan önce Anaconda Desktop'ı açın ve oturum açın.",
   "provider.anaconda.state.unauthorized":
-    "Kilo Anaconda Desktop'a erişemedi. Desktop'ı açın, tekrar oturum açın ve gerekirse yeniden başlatın.",
+    "Raya Anaconda Desktop'a erişemedi. Desktop'ı açın, tekrar oturum açın ve gerekirse yeniden başlatın.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop henüz yanıt vermiyor. Açın ve uygulamanın başlamasını bekleyin.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "Etkin çıkarım sunucusu henüz sağlıklı değil. Anaconda Desktop'ta kontrol edin ve gerekirse sunucuyu yeniden başlatın.",
   "provider.anaconda.state.ready":
-    "Kilo sağlıklı bir yerel metin üretme sunucusu buldu ve mevcut bağlantı ayarlarını içe aktarabilir.",
+    "Raya sağlıklı bir yerel metin üretme sunucusu buldu ve mevcut bağlantı ayarlarını içe aktarabilir.",
   "provider.anaconda.server": "Etkin çıkarım sunucusu",
   "provider.anaconda.context": "Bağlam penceresi",
   "provider.anaconda.contextValue": "{{count}} token",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "Yine de devam et",
   "provider.anaconda.action.manage": "Yönet / Yenile",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop yenilendi",
-  "provider.anaconda.toast.refreshed.description": "Etkin yerel sunucu ve modeller Kilo'da güncel.",
+  "provider.anaconda.toast.refreshed.description": "Etkin yerel sunucu ve modeller Raya'da güncel.",
   "settings.providers.note.anacondaDesktop": "Anaconda Desktop tarafından yerel olarak sunulan bir model çalıştırın.",
   "settings.providers.tag.local": "Yerel",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "Yetkilendirme bekleniyor...",
   "provider.connect.status.failed": "Yetkilendirme başarısız: {{error}}",
   "provider.connect.apiKey.description":
-    "{{provider}} hesabınızı bağlamak ve Kilo'da {{provider}} modellerini kullanmak için {{provider}} API anahtarınızı girin.",
+    "{{provider}} hesabınızı bağlamak ve Raya'da {{provider}} modellerini kullanmak için {{provider}} API anahtarınızı girin.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -120,7 +120,7 @@ export const dict = {
   "provider.connect.azure.resourceName.placeholder": "örn. my-models",
   "provider.connect.azure.baseURL.label": "Azure OpenAI uç nokta URL'si",
   "provider.connect.azure.baseURL.placeholder": "örn. https://my-models.openai.azure.com/openai",
-  "provider.connect.oauth.code.visit.prefix": "Hesabınızı bağlamak ve Kilo'da {{provider}} modellerini kullanmak için ",
+  "provider.connect.oauth.code.visit.prefix": "Hesabınızı bağlamak ve Raya'da {{provider}} modellerini kullanmak için ",
   "provider.connect.oauth.code.visit.link": "bu bağlantıya",
   "provider.connect.oauth.code.visit.suffix": " tıklayarak yetkilendirme kodunuzu alın.",
   "provider.connect.oauth.code.label": "{{method}} yetkilendirme kodu",
@@ -129,7 +129,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "",
   "provider.connect.oauth.auto.visit.link": "Bu bağlantıya",
   "provider.connect.oauth.auto.visit.suffix":
-    " tıklayarak aşağıdaki kodu girin ve hesabınızı bağlayarak Kilo'da {{provider}} modellerini kullanın.",
+    " tıklayarak aşağıdaki kodu girin ve hesabınızı bağlayarak Raya'da {{provider}} modellerini kullanın.",
   "provider.connect.oauth.auto.confirmationCode": "Onay kodu",
   "provider.connect.toast.connected.title": "{{provider}} bağlandı",
   "provider.connect.toast.connected.description": "{{provider}} modelleri artık kullanımda.",
@@ -191,9 +191,9 @@ export const dict = {
     "'Komutu Geliştir' düğmesi, ek bağlam, açıklama veya yeniden ifadelendirme sağlayarak komutunuzu iyileştirmeye yardımcı olur. Buraya bir komut yazıp düğmeye tekrar tıklayarak nasıl çalıştığını görebilirsiniz.",
   "prompt.action.sandbox.enable": "Sandbox'ı etkinleştir",
   "prompt.action.sandbox.disable": "Sandbox'ı devre dışı bırak",
-  "prompt.action.sandbox.enabled": "Sandbox etkin. Agent shell komutları proje ve Kilo dizinleriyle sınırlıdır.",
+  "prompt.action.sandbox.enabled": "Sandbox etkin. Agent shell komutları proje ve Raya dizinleriyle sınırlıdır.",
   "prompt.action.sandbox.disabled":
-    "Sandbox devre dışı. Agent shell komut yazma işlemlerini proje ve Kilo dizinleriyle sınırlamak için tıklayın.",
+    "Sandbox devre dışı. Agent shell komut yazma işlemlerini proje ve Raya dizinleriyle sınırlamak için tıklayın.",
   "prompt.action.sandbox.status.enabled": "Sandbox etkin",
   "prompt.action.sandbox.status.disabled": "Sandbox devre dışı",
   "prompt.action.sandbox.filesystem": "Dosya sistemi",
@@ -202,7 +202,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Engellendi",
   "prompt.action.sandbox.network.allowed": "İzin verildi",
   "prompt.action.sandbox.unrestricted": "Kısıtlanmamış",
-  "prompt.action.sandbox.description.enabled": "Yazma işlemleri proje ve Kilo dizinleriyle sınırlıdır.",
+  "prompt.action.sandbox.description.enabled": "Yazma işlemleri proje ve Raya dizinleriyle sınırlıdır.",
   "prompt.action.sandbox.description.disabled":
     "Dosya sistemi yazma işlemlerini ve ağ erişimini kısıtlamak için tıklayın.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
@@ -216,7 +216,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Metne dönüştürülüyor... İptal etmek için tıklayın.",
   "speechToText.tooltip.error": "Sesli giriş başarısız oldu. Temizlemek için tıklayın.",
   "speechToText.error.title": "Sesli giriş başarısız oldu",
-  "speechToText.error.loginRequired": "Sesli girişi kullanmak için Kilo'ya giriş yapın.",
+  "speechToText.error.loginRequired": "Sesli girişi kullanmak için Raya'ya giriş yapın.",
   "speechToText.error.emptyTranscript": "Hiçbir konuşma algılanmadı.",
 
   "prompt.toast.promptSendFailed.title": "Komut gönderilemedi",
@@ -465,11 +465,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "eski yapılandırma yüklendi",
   "settings.config.status.notLoaded": "yüklenmedi",
   "settings.config.status.create": "bulunamadı - bu dosyayı oluştur",
-  "settings.config.title": "{{scope}} Kilo yapılandırma dosyasını aç",
+  "settings.config.title": "{{scope}} Raya yapılandırma dosyasını aç",
   "settings.config.placeholder":
     "Yapılandırma dosyaları sırayla birleştirilir; yüklendi olarak işaretlenen dosyalar şu anda ayarları etkiler.",
-  "settings.config.noWorkspace": "Yerel Kilo yapılandırma dosyasını düzenlemek için bir çalışma alanı klasörü açın.",
-  "settings.config.openFailed": "{{scope}} Kilo yapılandırma dosyası açılamadı: {{message}}",
+  "settings.config.noWorkspace": "Yerel Raya yapılandırma dosyasını düzenlemek için bir çalışma alanı klasörü açın.",
+  "settings.config.openFailed": "{{scope}} Raya yapılandırma dosyası açılamadı: {{message}}",
   "settings.config.source.xdg": "XDG küresel yapılandırma",
   "settings.config.source.homeKilo": "Home .kilo yapılandırması",
   "settings.config.source.homeKilocode": "Home .kilocode yapılandırması",
@@ -783,10 +783,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "Dışa Aktar",
   "settings.aboutKiloCode.importSettings": "İçe Aktar",
   "settings.aboutKiloCode.importSettings.invalidJson": "Geçersiz JSON dosyası. Lütfen geçerli bir ayar dosyası seçin.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "Dosya geçerli Kilo ayarları içermiyor.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "Dosya geçerli Raya ayarları içermiyor.",
   "settings.aboutKiloCode.importSettings.tooLarge": "Dosya çok büyük. Ayar dosyaları 1 MB altında olmalıdır.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "Bu dosya Kilo'nun daha yeni bir sürümünden dışa aktarılmış. Bazı ayarlar göz ardı edilebilir.",
+    "Bu dosya Raya'nun daha yeni bir sürümünden dışa aktarılmış. Bazı ayarlar göz ardı edilebilir.",
   "settings.aboutKiloCode.importSettings.success":
     "Ayarlar içe aktarıldı. Yukarıdaki değişiklikleri gözden geçirin, ardından Kaydet'e tıklayın.",
 
@@ -853,7 +853,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Varsayılan (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Speech to Text kullanmak için Kilo sağlayıcısını etkinleştirin ve giriş yapın. Speech to Text şu anda yalnızca Raya Gateway ile desteklenmektedir.",
+    "Speech to Text kullanmak için Raya sağlayıcısını etkinleştirin ve giriş yapın. Speech to Text şu anda yalnızca Raya Gateway ile desteklenmektedir.",
   "settings.models.speechToTextModel.title": "Sesten metne modeli",
   "settings.models.speechToTextModel.description": "Sesli giriş için Raya Gateway transkripsiyon modelini seçin.",
   "settings.experimental.nativeNotebookTools.title": "Yerel Not Defteri Araçları",
@@ -888,7 +888,7 @@ export const dict = {
   "settings.experimental.toolToggles": "Araç Açma/Kapatma",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "Agent shell komutlarını, proje ve Kilo durum dizinlerine yazmaları kısıtlanan işletim sistemi düzeyinde bir sandbox içinde çalıştırın",
+    "Agent shell komutlarını, proje ve Raya durum dizinlerine yazmaları kısıtlanan işletim sistemi düzeyinde bir sandbox içinde çalıştırın",
 
   "settings.agentBehaviour.defaultAgent.title": "Varsayılan Ajan",
   "settings.agentBehaviour.defaultAgent.description": "Belirtilmediğinde kullanılacak ajan",
@@ -943,7 +943,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code Uyumluluğu",
   "settings.agentBehaviour.claudeCompat.title": "Claude Code Dosyalarını Yükle",
   "settings.agentBehaviour.claudeCompat.description":
-    "Claude Code yapılandırma dizininizdeki CLAUDE.md talimatlarını ve becerilerini oturumlara yükleyin. Kilo'nun Claude Code talimatlarınızı ve becerilerinizi kullanmasını istiyorsanız bunu etkinleştirin. Yeniden başlatma gerektirir.",
+    "Claude Code yapılandırma dizininizdeki CLAUDE.md talimatlarını ve becerilerini oturumlara yükleyin. Raya'nun Claude Code talimatlarınızı ve becerilerinizi kullanmasını istiyorsanız bunu etkinleştirin. Yeniden başlatma gerektirir.",
   "settings.agentBehaviour.removeMcp.title": "MCP sunucusunu kaldır",
   "settings.agentBehaviour.removeMcp.confirm":
     '"{{name}}" MCP sunucusu kaldırılsın mı? Bu, yapılandırmanızdan kaldırılacak.',
@@ -1064,7 +1064,7 @@ export const dict = {
   "settings.display.username.title": "Kullanıcı Adı",
   "settings.display.username.description": "Sohbetlerde görüntülenen özel kullanıcı adı",
   "settings.display.fontSize.title": "Yazı Tipi Boyutu",
-  "settings.display.fontSize.description": "Kilo webview UI yazı tipi boyutunu VS Code'dan bağımsız olarak ayarlayın.",
+  "settings.display.fontSize.description": "Raya webview UI yazı tipi boyutunu VS Code'dan bağımsız olarak ayarlayın.",
   "settings.display.reasoningAutoCollapse.title": "Akıl yürütmeyi otomatik daralt",
   "settings.display.reasoningAutoCollapse.description":
     "Ajan yazmayı bitirdikten sonra akıl yürütme bloklarını daraltır. Manuel olarak daraltmadığınız sürece akıl yürütmenin geniş kalması için kapalı bırakın.",
@@ -1149,7 +1149,7 @@ export const dict = {
     "Birden fazla ajanı paralel olarak çalıştırmak için birleşik bir arayüz, her biri kendi worktree'sinde — ilerlemeyi izleyin, bağlam değiştirin ve değişiklikleri tek bir yerden inceleyin.",
   "migration.whatsNew.features.foundation.title": "Paylaşılan Temel",
   "migration.whatsNew.features.foundation.detail":
-    "Her Kilo ürününde küçük ve verimli bir çekirdek. Nasıl çalışmayı tercih ederseniz edin, tanıdık bir deneyim.",
+    "Her Raya ürününde küçük ve verimli bir çekirdek. Nasıl çalışmayı tercih ederseniz edin, tanıdık bir deneyim.",
   "migration.whatsNew.blogLink": "Tam duyuruyu oku",
   "migration.whatsNew.docsLink": "Yenilikler ve sık sorulan sorular",
   "migration.whatsNew.continue": "Devam",
@@ -1249,10 +1249,10 @@ export const dict = {
   "notifications.action.close": "Kapat",
   "notifications.action.tryModel": "Dene {{model}}",
   "notifications.action.tryModelGeneric": "Modeli Dene",
-  "settings.indexing.kiloModel.title": "Kilo model önayarı",
-  "settings.indexing.kiloModel.description": "Desteklenen bir Kilo-hosted embeddings modeli seçin.",
-  "settings.indexing.kiloSignIn.title": "Kilo oturumu açmak gerekiyor",
-  "settings.indexing.kiloSignIn.description": "Hosted embeddings kullanmak için Kilo'da oturum açın.",
+  "settings.indexing.kiloModel.title": "Raya model önayarı",
+  "settings.indexing.kiloModel.description": "Desteklenen bir Raya-hosted embeddings modeli seçin.",
+  "settings.indexing.kiloSignIn.title": "Raya oturumu açmak gerekiyor",
+  "settings.indexing.kiloSignIn.description": "Hosted embeddings kullanmak için Raya'da oturum açın.",
   // Missing translations - English fallbacks until translated
   "profile.switchingAccount": "Hesap değiştiriliyor…",
   "settings.agentBehaviour.createMode": "Yeni Mod Oluştur",
@@ -1302,7 +1302,7 @@ export const dict = {
     "Çalışma ağacında değiştirilmiş ancak henüz staged edilmemiş dosyalar, artı takip edilmeyen (yeni) dosyalar.",
   "diffViewer.source.session.label": "Oturum",
   "diffViewer.source.session.tooltip":
-    "Geçerli oturum sırasında Kilo tarafından değiştirilen dosyalar, tur başı anlık görüntülere dayanır. Yeni bir oturum başlatıldığında sıfırlanır.",
+    "Geçerli oturum sırasında Raya tarafından değiştirilen dosyalar, tur başı anlık görüntülere dayanır. Yeni bir oturum başlatıldığında sıfırlanır.",
   "diffViewer.group.session": "Oturum",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

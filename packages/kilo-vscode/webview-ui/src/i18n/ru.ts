@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "Недоступно",
   "provider.anaconda.state.unsupported": "Anaconda Desktop не поддерживается на {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "Установите Anaconda Desktop на этом компьютере, затем вернитесь сюда. Kilo не запускает установщик за вас.",
+    "Установите Anaconda Desktop на этом компьютере, затем вернитесь сюда. Raya не запускает установщик за вас.",
   "provider.anaconda.state.notRunning":
     "Откройте Anaconda Desktop, завершите настройку и войдите в систему, затем выберите «Проверить снова».",
   "provider.anaconda.state.invalidConfig":
     "Настройка Anaconda Desktop не завершена. Откройте Desktop, завершите настройку и при необходимости перезапустите его.",
-  "provider.anaconda.state.signedOut": "Откройте Anaconda Desktop и войдите в систему перед подключением Kilo.",
+  "provider.anaconda.state.signedOut": "Откройте Anaconda Desktop и войдите в систему перед подключением Raya.",
   "provider.anaconda.state.unauthorized":
-    "Kilo не удалось получить доступ к Anaconda Desktop. Откройте Desktop, войдите снова и при необходимости перезапустите его.",
+    "Raya не удалось получить доступ к Anaconda Desktop. Откройте Desktop, войдите снова и при необходимости перезапустите его.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop пока не отвечает. Откройте его и дождитесь завершения запуска приложения.",
   "provider.anaconda.state.noModel":
@@ -32,7 +32,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "Активный сервер вывода пока не работает исправно. Проверьте его в Anaconda Desktop и при необходимости перезапустите сервер.",
   "provider.anaconda.state.ready":
-    "Kilo обнаружил исправный локальный сервер генерации текста и может импортировать его текущие настройки подключения.",
+    "Raya обнаружил исправный локальный сервер генерации текста и может импортировать его текущие настройки подключения.",
   "provider.anaconda.server": "Активный сервер вывода",
   "provider.anaconda.context": "Контекстное окно",
   "provider.anaconda.contextValue": "{{count}} токенов",
@@ -49,7 +49,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "Всё равно продолжить",
   "provider.anaconda.action.manage": "Управление / Обновить",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop обновлён",
-  "provider.anaconda.toast.refreshed.description": "Активный локальный сервер и модели актуальны в Kilo.",
+  "provider.anaconda.toast.refreshed.description": "Активный локальный сервер и модели актуальны в Raya.",
   "settings.providers.note.anacondaDesktop": "Запустите модель, обслуживаемую локально через Anaconda Desktop.",
   "settings.providers.tag.local": "Локально",
 } as const
@@ -100,7 +100,7 @@ export const dict = {
   "provider.connect.status.waiting": "Ожидание авторизации...",
   "provider.connect.status.failed": "Ошибка авторизации: {{error}}",
   "provider.connect.apiKey.description":
-    "Введите ваш API ключ {{provider}} для подключения аккаунта и использования моделей {{provider}} в Kilo.",
+    "Введите ваш API ключ {{provider}} для подключения аккаунта и использования моделей {{provider}} в Raya.",
   "provider.connect.apiKey.description.local":
     "Подключение к локальному серверу {{provider}}. Оставьте ключ пустым, если сервер его не требует (обычно для localhost).",
   "provider.connect.atomicChat.description":
@@ -123,14 +123,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Посетите ",
   "provider.connect.oauth.code.visit.link": "эту ссылку",
   "provider.connect.oauth.code.visit.suffix":
-    " чтобы получить код авторизации для подключения аккаунта и использования моделей {{provider}} в Kilo.",
+    " чтобы получить код авторизации для подключения аккаунта и использования моделей {{provider}} в Raya.",
   "provider.connect.oauth.code.label": "{{method}} код авторизации",
   "provider.connect.oauth.code.placeholder": "Код авторизации",
   "provider.connect.oauth.code.required": "Код авторизации обязателен",
   "provider.connect.oauth.auto.visit.prefix": "Посетите ",
   "provider.connect.oauth.auto.visit.link": "эту ссылку",
   "provider.connect.oauth.auto.visit.suffix":
-    " и введите код ниже для подключения аккаунта и использования моделей {{provider}} в Kilo.",
+    " и введите код ниже для подключения аккаунта и использования моделей {{provider}} в Raya.",
   "provider.connect.oauth.auto.confirmationCode": "Код подтверждения",
   "provider.connect.toast.connected.title": "{{provider}} подключён",
   "provider.connect.toast.connected.description": "Модели {{provider}} теперь доступны.",
@@ -191,9 +191,9 @@ export const dict = {
     "Кнопка 'Улучшить запрос' помогает сделать ваш запрос лучше, предоставляя дополнительный контекст, уточнения или переформулировку. Попробуйте ввести запрос и снова нажать кнопку, чтобы увидеть, как это работает.",
   "prompt.action.sandbox.enable": "Включить песочницу",
   "prompt.action.sandbox.disable": "Отключить песочницу",
-  "prompt.action.sandbox.enabled": "Песочница включена. Команды оболочки агента ограничены каталогами проекта и Kilo.",
+  "prompt.action.sandbox.enabled": "Песочница включена. Команды оболочки агента ограничены каталогами проекта и Raya.",
   "prompt.action.sandbox.disabled":
-    "Песочница отключена. Нажмите, чтобы ограничить запись команд оболочки агента каталогами проекта и Kilo.",
+    "Песочница отключена. Нажмите, чтобы ограничить запись команд оболочки агента каталогами проекта и Raya.",
   "prompt.action.sandbox.status.enabled": "Песочница включена",
   "prompt.action.sandbox.status.disabled": "Песочница отключена",
   "prompt.action.sandbox.filesystem": "Файловая система",
@@ -202,7 +202,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Заблокирована",
   "prompt.action.sandbox.network.allowed": "Разрешена",
   "prompt.action.sandbox.unrestricted": "Без ограничений",
-  "prompt.action.sandbox.description.enabled": "Запись разрешена только в каталогах проекта и Kilo.",
+  "prompt.action.sandbox.description.enabled": "Запись разрешена только в каталогах проекта и Raya.",
   "prompt.action.sandbox.description.disabled": "Нажмите, чтобы ограничить запись в файловую систему и доступ к сети.",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Нажмите, чтобы ограничить запись в файловую систему. Доступ к сети останется разрешённым согласно настройкам песочницы.",
@@ -215,7 +215,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Распознавание... Нажмите для отмены.",
   "speechToText.tooltip.error": "Ошибка голосового ввода. Нажмите, чтобы очистить.",
   "speechToText.error.title": "Ошибка голосового ввода",
-  "speechToText.error.loginRequired": "Войдите в Kilo, чтобы использовать голосовой ввод.",
+  "speechToText.error.loginRequired": "Войдите в Raya, чтобы использовать голосовой ввод.",
   "speechToText.error.emptyTranscript": "Речь не обнаружена.",
 
   "prompt.toast.promptSendFailed.title": "Не удалось отправить запрос",
@@ -399,10 +399,10 @@ export const dict = {
   "settings.indexing.status.title": "Статус",
   "settings.indexing.provider.title": "Провайдер эмбеддингов",
   "settings.indexing.provider.description": "Выберите провайдера для генерации эмбеддингов при семантическом поиске.",
-  "settings.indexing.kiloModel.title": "Предустановка модели Kilo",
-  "settings.indexing.kiloModel.description": "Выберите поддерживаемую модель эмбеддингов, размещенную в Kilo.",
-  "settings.indexing.kiloSignIn.title": "Требуется вход в Kilo",
-  "settings.indexing.kiloSignIn.description": "Войдите в Kilo, чтобы использовать размещенные эмбеддинги.",
+  "settings.indexing.kiloModel.title": "Предустановка модели Raya",
+  "settings.indexing.kiloModel.description": "Выберите поддерживаемую модель эмбеддингов, размещенную в Raya.",
+  "settings.indexing.kiloSignIn.title": "Требуется вход в Raya",
+  "settings.indexing.kiloSignIn.description": "Войдите в Raya, чтобы использовать размещенные эмбеддинги.",
   "settings.indexing.model.title": "Модель эмбеддингов",
   "settings.indexing.model.description": "Переопределить модель эмбеддингов по умолчанию для выбранного провайдера.",
   "settings.indexing.dimension.title": "Размерность вектора",
@@ -512,12 +512,12 @@ export const dict = {
   "settings.config.status.loadedLegacy": "загружена устаревшая конфигурация",
   "settings.config.status.notLoaded": "не загружено",
   "settings.config.status.create": "не найдено - создать этот файл",
-  "settings.config.title": "Открыть файл конфигурации Kilo ({{scope}})",
+  "settings.config.title": "Открыть файл конфигурации Raya ({{scope}})",
   "settings.config.placeholder":
     "Файлы конфигурации объединяются по порядку; файлы, отмеченные как загруженные, в данный момент влияют на настройки.",
   "settings.config.noWorkspace":
-    "Откройте папку рабочей области для редактирования локального файла конфигурации Kilo.",
-  "settings.config.openFailed": "Не удалось открыть файл конфигурации Kilo ({{scope}}): {{message}}",
+    "Откройте папку рабочей области для редактирования локального файла конфигурации Raya.",
+  "settings.config.openFailed": "Не удалось открыть файл конфигурации Raya ({{scope}}): {{message}}",
   "settings.config.source.xdg": "Глобальная конфигурация XDG",
   "settings.config.source.homeKilo": "Конфигурация .kilo (Home)",
   "settings.config.source.homeKilocode": "Конфигурация .kilocode (Home)",
@@ -793,10 +793,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "Экспорт",
   "settings.aboutKiloCode.importSettings": "Импорт",
   "settings.aboutKiloCode.importSettings.invalidJson": "Недопустимый файл JSON. Выберите корректный файл настроек.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "Файл не содержит допустимых настроек Kilo.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "Файл не содержит допустимых настроек Raya.",
   "settings.aboutKiloCode.importSettings.tooLarge": "Файл слишком большой. Файлы настроек должны быть менее 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "Этот файл был экспортирован из более новой версии Kilo. Некоторые настройки могут быть проигнорированы.",
+    "Этот файл был экспортирован из более новой версии Raya. Некоторые настройки могут быть проигнорированы.",
   "settings.aboutKiloCode.importSettings.success":
     "Настройки импортированы. Просмотрите изменения выше и нажмите «Сохранить».",
 
@@ -861,7 +861,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "По умолчанию (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Включите провайдер Kilo и выполните вход, чтобы использовать Speech to Text. В настоящее время Speech to Text поддерживается только с Raya Gateway.",
+    "Включите провайдер Raya и выполните вход, чтобы использовать Speech to Text. В настоящее время Speech to Text поддерживается только с Raya Gateway.",
   "settings.models.speechToTextModel.title": "Модель речи в текст",
   "settings.models.speechToTextModel.description": "Выберите модель транскрипции Raya Gateway для голосового ввода.",
   "settings.experimental.nativeNotebookTools.title": "Нативные инструменты блокнотов",
@@ -997,7 +997,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Совместимость с Claude Code",
   "settings.agentBehaviour.claudeCompat.title": "Загружать файлы Claude Code",
   "settings.agentBehaviour.claudeCompat.description":
-    "Загружать инструкции CLAUDE.md и навыки из каталога конфигурации Claude Code в сессии. Включите эту опцию, если хотите, чтобы Kilo использовал ваши инструкции и навыки Claude Code. Требуется перезапуск.",
+    "Загружать инструкции CLAUDE.md и навыки из каталога конфигурации Claude Code в сессии. Включите эту опцию, если хотите, чтобы Raya использовал ваши инструкции и навыки Claude Code. Требуется перезапуск.",
   "settings.agentBehaviour.mcpDetail.command": "Команда",
   "settings.agentBehaviour.mcpDetail.args": "Аргументы",
   "settings.agentBehaviour.mcpDetail.env": "Окружение",
@@ -1015,7 +1015,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "Глобальное переопределение модели",
   "settings.sandboxing.enabled.title": "Песочница",
   "settings.sandboxing.enabled.description":
-    "Выполнять команды оболочки агента в песочнице на уровне ОС, которая ограничивает запись в каталоги состояния проекта и Kilo",
+    "Выполнять команды оболочки агента в песочнице на уровне ОС, которая ограничивает запись в каталоги состояния проекта и Raya",
 
   "settings.autoApprove.description":
     "Определите правила запуска инструментов. Большинство инструментов по умолчанию Разрешены. Для doom_loop и external_directory по умолчанию установлено Спрашивать.",
@@ -1104,7 +1104,7 @@ export const dict = {
   "settings.display.username.title": "Имя пользователя",
   "settings.display.username.description": "Пользовательское имя в разговорах",
   "settings.display.fontSize.title": "Размер шрифта",
-  "settings.display.fontSize.description": "Настройте размер шрифта webview UI для Kilo независимо от VS Code.",
+  "settings.display.fontSize.description": "Настройте размер шрифта webview UI для Raya независимо от VS Code.",
   "settings.display.reasoningAutoCollapse.title": "Автоматически сворачивать рассуждение",
   "settings.display.reasoningAutoCollapse.description":
     "Сворачивает блоки рассуждения после того, как агент закончит их писать. Оставьте выключенным, чтобы рассуждение оставалось раскрытым, пока вы не свернете его вручную.",
@@ -1176,7 +1176,7 @@ export const dict = {
     "Единый интерфейс для запуска нескольких агентов параллельно, каждый в своём worktree — отслеживайте прогресс, переключайте контекст и просматривайте изменения в одном месте.",
   "migration.whatsNew.features.foundation.title": "Общая основа",
   "migration.whatsNew.features.foundation.detail":
-    "Одно компактное и эффективное ядро для всех продуктов Kilo. Знакомый опыт независимо от выбранного способа работы.",
+    "Одно компактное и эффективное ядро для всех продуктов Raya. Знакомый опыт независимо от выбранного способа работы.",
   "migration.whatsNew.blogLink": "Читать полный анонс",
   "migration.whatsNew.docsLink": "Что нового и часто задаваемые вопросы",
   "migration.whatsNew.continue": "Продолжить",
@@ -1286,7 +1286,7 @@ export const dict = {
     "Файлы, изменённые в рабочем дереве, но ещё не проиндексированные, плюс неотслеживаемые (новые) файлы.",
   "diffViewer.source.session.label": "Сессия",
   "diffViewer.source.session.tooltip":
-    "Файлы, изменённые Kilo в текущей сессии, на основе снимков по ходу. Сбрасывается при начале новой сессии.",
+    "Файлы, изменённые Raya в текущей сессии, на основе снимков по ходу. Сбрасывается при начале новой сессии.",
   "diffViewer.group.session": "Сессия",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

@@ -21,8 +21,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "غیرفعال کردن Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "غیرفعال کردن تکمیل خودکار",
   "kilocode:autocomplete.creditsExhausted.message":
-    "تکمیل خودکار Raya متوقف شده است. دلایل احتمالی: حساب Kilo شما اعتبار کافی ندارد، یا کلید API پیکربندی‌شده (BYOK) به سقف مجاز خود رسیده است. برای از سرگیری تکمیل خودکار، اعتبار Kilo اضافه کنید یا تنظیمات کلید API خود را بررسی کنید.",
+    "تکمیل خودکار Raya متوقف شده است. دلایل احتمالی: حساب Raya شما اعتبار کافی ندارد، یا کلید API پیکربندی‌شده (BYOK) به سقف مجاز خود رسیده است. برای از سرگیری تکمیل خودکار، اعتبار Raya اضافه کنید یا تنظیمات کلید API خود را بررسی کنید.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "افزودن اعتبار",
   "kilocode:autocomplete.authError.message":
-    "تکمیل خودکار Raya به دلیل مشکل احراز هویت متوقف شده است. دلایل احتمالی: وارد Kilo نشده‌اید، یا کلید API (BYOK) شما نامعتبر یا وارد نشده است. لطفاً دوباره وارد شوید یا تنظیمات کلید API ارائه‌دهنده خود را بررسی کنید.",
+    "تکمیل خودکار Raya به دلیل مشکل احراز هویت متوقف شده است. دلایل احتمالی: وارد Raya نشده‌اید، یا کلید API (BYOK) شما نامعتبر یا وارد نشده است. لطفاً دوباره وارد شوید یا تنظیمات کلید API ارائه‌دهنده خود را بررسی کنید.",
 }

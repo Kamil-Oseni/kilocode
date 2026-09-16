@@ -13,14 +13,14 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "ไม่พร้อมใช้งาน",
   "provider.anaconda.state.unsupported": "Anaconda Desktop ไม่รองรับบน {{platform}}",
   "provider.anaconda.state.notInstalled":
-    "ติดตั้ง Anaconda Desktop บนเครื่องนี้ แล้วกลับมาที่นี่ Kilo จะไม่เรียกใช้ตัวติดตั้งให้คุณ",
+    "ติดตั้ง Anaconda Desktop บนเครื่องนี้ แล้วกลับมาที่นี่ Raya จะไม่เรียกใช้ตัวติดตั้งให้คุณ",
   "provider.anaconda.state.notRunning":
     "เปิด Anaconda Desktop ตั้งค่าให้เสร็จและลงชื่อเข้าใช้ แล้วเลือกตรวจสอบอีกครั้ง",
   "provider.anaconda.state.invalidConfig":
     "การตั้งค่า Anaconda Desktop ยังไม่สมบูรณ์ เปิด Desktop ตั้งค่าให้เสร็จ และรีสตาร์ทหากจำเป็น",
-  "provider.anaconda.state.signedOut": "เปิด Anaconda Desktop และลงชื่อเข้าใช้ก่อนเชื่อมต่อ Kilo",
+  "provider.anaconda.state.signedOut": "เปิด Anaconda Desktop และลงชื่อเข้าใช้ก่อนเชื่อมต่อ Raya",
   "provider.anaconda.state.unauthorized":
-    "Kilo ไม่สามารถเข้าถึง Anaconda Desktop ได้ เปิด Desktop ลงชื่อเข้าใช้อีกครั้ง และรีสตาร์ทหากจำเป็น",
+    "Raya ไม่สามารถเข้าถึง Anaconda Desktop ได้ เปิด Desktop ลงชื่อเข้าใช้อีกครั้ง และรีสตาร์ทหากจำเป็น",
   "provider.anaconda.state.unavailable": "Anaconda Desktop ยังไม่ตอบสนอง เปิดและรอให้แอปพลิเคชันเริ่มทำงานเสร็จ",
   "provider.anaconda.state.noModel":
     "ใน Anaconda Desktop ดาวน์โหลดโมเดลสร้างข้อความ เลือกโมเดลที่รองรับการเรียกใช้เครื่องมือเมื่อเป็นไปได้ แล้วเริ่มเซิร์ฟเวอร์ของโมเดลนั้น",
@@ -31,7 +31,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "เซิร์ฟเวอร์การอนุมานที่ใช้งานอยู่ยังไม่พร้อมใช้งาน ตรวจสอบใน Anaconda Desktop และรีสตาร์ทเซิร์ฟเวอร์หากจำเป็น",
   "provider.anaconda.state.ready":
-    "Kilo พบเซิร์ฟเวอร์สร้างข้อความในเครื่องที่พร้อมใช้งาน และสามารถนำเข้าการตั้งค่าการเชื่อมต่อปัจจุบันได้",
+    "Raya พบเซิร์ฟเวอร์สร้างข้อความในเครื่องที่พร้อมใช้งาน และสามารถนำเข้าการตั้งค่าการเชื่อมต่อปัจจุบันได้",
   "provider.anaconda.server": "เซิร์ฟเวอร์การอนุมานที่ใช้งานอยู่",
   "provider.anaconda.context": "หน้าต่างบริบท",
   "provider.anaconda.contextValue": "{{count}} โทเค็น",
@@ -48,7 +48,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "ดำเนินการต่อ",
   "provider.anaconda.action.manage": "จัดการ / รีเฟรช",
   "provider.anaconda.toast.refreshed.title": "รีเฟรช Anaconda Desktop แล้ว",
-  "provider.anaconda.toast.refreshed.description": "เซิร์ฟเวอร์ในเครื่องและโมเดลที่ใช้งานอยู่เป็นปัจจุบันใน Kilo แล้ว",
+  "provider.anaconda.toast.refreshed.description": "เซิร์ฟเวอร์ในเครื่องและโมเดลที่ใช้งานอยู่เป็นปัจจุบันใน Raya แล้ว",
   "settings.providers.note.anacondaDesktop": "เรียกใช้โมเดลที่ให้บริการในเครื่องโดย Anaconda Desktop",
   "settings.providers.tag.local": "ในเครื่อง",
 } as const
@@ -99,7 +99,7 @@ export const dict = {
   "provider.connect.status.waiting": "รอการอนุญาต...",
   "provider.connect.status.failed": "การอนุญาตล้มเหลว: {{error}}",
   "provider.connect.apiKey.description":
-    "ป้อนคีย์ API ของ {{provider}} เพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน Kilo",
+    "ป้อนคีย์ API ของ {{provider}} เพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน Raya",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -122,13 +122,13 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "เยี่ยมชม ",
   "provider.connect.oauth.code.visit.link": "ลิงก์นี้",
   "provider.connect.oauth.code.visit.suffix":
-    " เพื่อรวบรวมรหัสการอนุญาตของคุณเพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน Kilo",
+    " เพื่อรวบรวมรหัสการอนุญาตของคุณเพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน Raya",
   "provider.connect.oauth.code.label": "รหัสการอนุญาต {{method}}",
   "provider.connect.oauth.code.placeholder": "รหัสการอนุญาต",
   "provider.connect.oauth.code.required": "ต้องใช้รหัสการอนุญาต",
   "provider.connect.oauth.auto.visit.prefix": "เยี่ยมชม ",
   "provider.connect.oauth.auto.visit.link": "ลิงก์นี้",
-  "provider.connect.oauth.auto.visit.suffix": " และป้อนรหัสด้านล่างเพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน Kilo",
+  "provider.connect.oauth.auto.visit.suffix": " และป้อนรหัสด้านล่างเพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน Raya",
   "provider.connect.oauth.auto.confirmationCode": "รหัสยืนยัน",
   "provider.connect.toast.connected.title": "{{provider}} ที่เชื่อมต่อแล้ว",
   "provider.connect.toast.connected.description": "โมเดล {{provider}} พร้อมใช้งานแล้ว",
@@ -191,9 +191,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "เปิดใช้งาน sandbox",
   "prompt.action.sandbox.disable": "ปิดใช้งาน sandbox",
   "prompt.action.sandbox.enabled":
-    "เปิดใช้งาน sandbox แล้ว คำสั่ง shell ของ agent ถูกจำกัดไว้ที่โฟลเดอร์โปรเจ็กต์และ Kilo",
+    "เปิดใช้งาน sandbox แล้ว คำสั่ง shell ของ agent ถูกจำกัดไว้ที่โฟลเดอร์โปรเจ็กต์และ Raya",
   "prompt.action.sandbox.disabled":
-    "ปิดใช้งาน sandbox อยู่ คลิกเพื่อจำกัดการเขียนคำสั่ง shell ของ agent ไว้ที่โฟลเดอร์โปรเจ็กต์และ Kilo",
+    "ปิดใช้งาน sandbox อยู่ คลิกเพื่อจำกัดการเขียนคำสั่ง shell ของ agent ไว้ที่โฟลเดอร์โปรเจ็กต์และ Raya",
   "prompt.action.sandbox.status.enabled": "เปิด sandbox แล้ว",
   "prompt.action.sandbox.status.disabled": "ปิด sandbox แล้ว",
   "prompt.action.sandbox.filesystem": "ระบบไฟล์",
@@ -202,7 +202,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "บล็อก",
   "prompt.action.sandbox.network.allowed": "อนุญาต",
   "prompt.action.sandbox.unrestricted": "ไม่จำกัด",
-  "prompt.action.sandbox.description.enabled": "เขียนได้เฉพาะในโฟลเดอร์โปรเจ็กต์และ Kilo",
+  "prompt.action.sandbox.description.enabled": "เขียนได้เฉพาะในโฟลเดอร์โปรเจ็กต์และ Raya",
   "prompt.action.sandbox.description.disabled": "คลิกเพื่อจำกัดการเขียนในระบบไฟล์และการเข้าถึงเครือข่าย",
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "คลิกเพื่อจำกัดการเขียนในระบบไฟล์ การตั้งค่า sandbox ของคุณยังคงอนุญาตให้เข้าถึงเครือข่าย",
@@ -215,7 +215,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "กำลังถอดเสียง... คลิกเพื่อยกเลิก",
   "speechToText.tooltip.error": "การป้อนข้อมูลด้วยเสียงล้มเหลว คลิกเพื่อล้าง",
   "speechToText.error.title": "การป้อนข้อมูลด้วยเสียงล้มเหลว",
-  "speechToText.error.loginRequired": "ลงชื่อเข้าใช้ Kilo เพื่อใช้การป้อนข้อมูลด้วยเสียง",
+  "speechToText.error.loginRequired": "ลงชื่อเข้าใช้ Raya เพื่อใช้การป้อนข้อมูลด้วยเสียง",
   "speechToText.error.emptyTranscript": "ตรวจไม่พบเสียงพูด",
 
   "prompt.toast.promptSendFailed.title": "ไม่สามารถส่งพร้อมท์",
@@ -398,10 +398,10 @@ export const dict = {
     "เปิดใช้งานการทำดัชนีสำหรับพื้นที่ทำงานนี้เมื่อการทำดัชนีแบบโกลบอลถูกปิดใช้งาน",
   "settings.indexing.provider.title": "ผู้ให้บริการการฝัง",
   "settings.indexing.provider.description": "เลือกผู้ให้บริการที่ใช้สร้างการฝังสำหรับการค้นหาเชิงความหมาย",
-  "settings.indexing.kiloModel.title": "พรีเซ็ตโมเดล Kilo",
-  "settings.indexing.kiloModel.description": "เลือกโมเดลการฝังที่ Kilo โฮสต์และรองรับ",
-  "settings.indexing.kiloSignIn.title": "ต้องลงชื่อเข้าใช้ Kilo",
-  "settings.indexing.kiloSignIn.description": "ลงชื่อเข้าใช้ Kilo เพื่อใช้การฝังแบบโฮสต์",
+  "settings.indexing.kiloModel.title": "พรีเซ็ตโมเดล Raya",
+  "settings.indexing.kiloModel.description": "เลือกโมเดลการฝังที่ Raya โฮสต์และรองรับ",
+  "settings.indexing.kiloSignIn.title": "ต้องลงชื่อเข้าใช้ Raya",
+  "settings.indexing.kiloSignIn.description": "ลงชื่อเข้าใช้ Raya เพื่อใช้การฝังแบบโฮสต์",
   "settings.indexing.model.title": "โมเดลการฝัง",
   "settings.indexing.model.description": "แทนที่โมเดลการฝังเริ่มต้นสำหรับผู้ให้บริการที่เลือก",
   "settings.indexing.dimension.title": "ขนาดเวกเตอร์",
@@ -509,11 +509,11 @@ export const dict = {
   "settings.config.status.loadedLegacy": "โหลดการตั้งค่าแบบเก่าแล้ว",
   "settings.config.status.notLoaded": "ยังไม่ได้โหลด",
   "settings.config.status.create": "ไม่พบ - สร้างไฟล์นี้",
-  "settings.config.title": "เปิดไฟล์การตั้งค่า Kilo ({{scope}})",
+  "settings.config.title": "เปิดไฟล์การตั้งค่า Raya ({{scope}})",
   "settings.config.placeholder":
     "ไฟล์การตั้งค่าจะถูกผสานตามลำดับ ไฟล์ที่ถูกทำเครื่องหมายว่าโหลดแล้วจะมีผลกับการตั้งค่าในปัจจุบัน",
-  "settings.config.noWorkspace": "เปิดโฟลเดอร์พื้นที่ทำงานเพื่อแก้ไขไฟล์การตั้งค่า Kilo ภายใน",
-  "settings.config.openFailed": "ไม่สามารถเปิดไฟล์การตั้งค่า Kilo ({{scope}}): {{message}}",
+  "settings.config.noWorkspace": "เปิดโฟลเดอร์พื้นที่ทำงานเพื่อแก้ไขไฟล์การตั้งค่า Raya ภายใน",
+  "settings.config.openFailed": "ไม่สามารถเปิดไฟล์การตั้งค่า Raya ({{scope}}): {{message}}",
   "settings.config.source.xdg": "การตั้งค่า XDG ทั่วโลก",
   "settings.config.source.homeKilo": "การตั้งค่า .kilo ของ Home",
   "settings.config.source.homeKilocode": "การตั้งค่า .kilocode ของ Home",
@@ -784,10 +784,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "ส่งออก",
   "settings.aboutKiloCode.importSettings": "นำเข้า",
   "settings.aboutKiloCode.importSettings.invalidJson": "ไฟล์ JSON ไม่ถูกต้อง กรุณาเลือกไฟล์การตั้งค่าที่ถูกต้อง",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "ไฟล์ไม่มีการตั้งค่า Kilo ที่ถูกต้อง",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "ไฟล์ไม่มีการตั้งค่า Raya ที่ถูกต้อง",
   "settings.aboutKiloCode.importSettings.tooLarge": "ไฟล์มีขนาดใหญ่เกินไป ไฟล์การตั้งค่าต้องมีขนาดไม่เกิน 1 MB",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "ไฟล์นี้ถูกส่งออกจาก Kilo เวอร์ชันใหม่กว่า การตั้งค่าบางรายการอาจถูกข้ามไป",
+    "ไฟล์นี้ถูกส่งออกจาก Raya เวอร์ชันใหม่กว่า การตั้งค่าบางรายการอาจถูกข้ามไป",
   "settings.aboutKiloCode.importSettings.success": "นำเข้าการตั้งค่าแล้ว ตรวจสอบการเปลี่ยนแปลงด้านบน จากนั้นคลิกบันทึก",
 
   "settings.aboutKiloCode.telemetry.title": "Telemetry",
@@ -850,7 +850,7 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "ค่าเริ่มต้น (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "เปิดใช้งานและลงชื่อเข้าใช้ผู้ให้บริการ Kilo เพื่อใช้ Speech to Text ปัจจุบัน Speech to Text รองรับเฉพาะกับ Raya Gateway เท่านั้น",
+    "เปิดใช้งานและลงชื่อเข้าใช้ผู้ให้บริการ Raya เพื่อใช้ Speech to Text ปัจจุบัน Speech to Text รองรับเฉพาะกับ Raya Gateway เท่านั้น",
   "settings.models.speechToTextModel.title": "โมเดลแปลงเสียงเป็นข้อความ",
   "settings.models.speechToTextModel.description": "เลือกโมเดลการถอดเสียง Raya Gateway สำหรับการป้อนข้อมูลด้วยเสียง",
   "settings.experimental.nativeNotebookTools.title": "เครื่องมือโน้ตบุ๊กดั้งเดิม",
@@ -984,7 +984,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "ความเข้ากันได้กับ Claude Code",
   "settings.agentBehaviour.claudeCompat.title": "โหลดไฟล์ Claude Code",
   "settings.agentBehaviour.claudeCompat.description":
-    "โหลดคำแนะนำและทักษะจาก CLAUDE.md ในไดเรกทอรีการกำหนดค่า Claude Code ของคุณลงในเซสชัน เปิดใช้งานตัวเลือกนี้หากคุณต้องการให้ Kilo ใช้คำแนะนำและทักษะจาก Claude Code ของคุณ จำเป็นต้องรีสตาร์ท",
+    "โหลดคำแนะนำและทักษะจาก CLAUDE.md ในไดเรกทอรีการกำหนดค่า Claude Code ของคุณลงในเซสชัน เปิดใช้งานตัวเลือกนี้หากคุณต้องการให้ Raya ใช้คำแนะนำและทักษะจาก Claude Code ของคุณ จำเป็นต้องรีสตาร์ท",
   "settings.agentBehaviour.mcpDetail.command": "คำสั่ง",
   "settings.agentBehaviour.mcpDetail.args": "อาร์กิวเมนต์",
   "settings.agentBehaviour.mcpDetail.env": "สภาพแวดล้อม",
@@ -1002,7 +1002,7 @@ export const dict = {
   "settings.agentBehaviour.workflows.modelDescription": "การแทนที่โมเดลส่วนกลาง",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "เรียกใช้คำสั่ง shell ของ agent ใน sandbox ระดับระบบปฏิบัติการที่จำกัดการเขียนไปยังโฟลเดอร์สถานะของโปรเจ็กต์และ Kilo",
+    "เรียกใช้คำสั่ง shell ของ agent ใน sandbox ระดับระบบปฏิบัติการที่จำกัดการเขียนไปยังโฟลเดอร์สถานะของโปรเจ็กต์และ Raya",
 
   "settings.autoApprove.description":
     "กำหนดวิธีอนุญาตการทำงานของเครื่องมือ โดยค่าเริ่มต้นเครื่องมือส่วนใหญ่คืออนุญาต ส่วน doom_loop และ external_directory ค่าเริ่มต้นคือถาม",
@@ -1084,7 +1084,7 @@ export const dict = {
   "settings.display.username.title": "ชื่อผู้ใช้",
   "settings.display.username.description": "ชื่อผู้ใช้กำหนดเองในบทสนทนา",
   "settings.display.fontSize.title": "ขนาดฟอนต์",
-  "settings.display.fontSize.description": "ปรับขนาดฟอนต์ webview UI ของ Kilo แยกเป็นอิสระจาก VS Code.",
+  "settings.display.fontSize.description": "ปรับขนาดฟอนต์ webview UI ของ Raya แยกเป็นอิสระจาก VS Code.",
   "settings.display.reasoningAutoCollapse.title": "ยุบเหตุผลอัตโนมัติ",
   "settings.display.reasoningAutoCollapse.description":
     "ยุบ block เหตุผลหลังจากเอเจนต์เขียนเสร็จ ปิดไว้เพื่อให้เหตุผลยังคงขยายอยู่ เว้นแต่คุณจะยุบเอง",
@@ -1153,7 +1153,7 @@ export const dict = {
     "อินเทอร์เฟซรวมสำหรับการเรียกใช้เอเจนต์หลายตัวพร้อมกัน แต่ละตัวบน worktree ของตัวเอง — ติดตามความคืบหน้า สลับบริบท และตรวจสอบการเปลี่ยนแปลงได้ในที่เดียว",
   "migration.whatsNew.features.foundation.title": "รากฐานที่ใช้ร่วมกัน",
   "migration.whatsNew.features.foundation.detail":
-    "แกนหลักขนาดเล็กและมีประสิทธิภาพเดียวกันในทุกผลิตภัณฑ์ Kilo ประสบการณ์ที่คุ้นเคยไม่ว่าคุณจะเลือกทำงานอย่างไร",
+    "แกนหลักขนาดเล็กและมีประสิทธิภาพเดียวกันในทุกผลิตภัณฑ์ Raya ประสบการณ์ที่คุ้นเคยไม่ว่าคุณจะเลือกทำงานอย่างไร",
   "migration.whatsNew.blogLink": "อ่านประกาศฉบับเต็ม",
   "migration.whatsNew.docsLink": "มีอะไรใหม่และคำถามที่พบบ่อย",
   "migration.whatsNew.continue": "ดำเนินการต่อ",
@@ -1263,7 +1263,7 @@ export const dict = {
     "ไฟล์ที่ถูกแก้ไขในแผนผังการทำงานแต่ยังไม่ได้ staged และไฟล์ที่ไม่ได้ติดตาม (ใหม่)",
   "diffViewer.source.session.label": "เซสชัน",
   "diffViewer.source.session.tooltip":
-    "ไฟล์ที่ Kilo แก้ไขในช่วงเซสชันปัจจุบัน โดยอิงจากสแน็ปช็อตต่อเทิร์น จะรีเซ็ตเมื่อเริ่มเซสชันใหม่",
+    "ไฟล์ที่ Raya แก้ไขในช่วงเซสชันปัจจุบัน โดยอิงจากสแน็ปช็อตต่อเทิร์น จะรีเซ็ตเมื่อเริ่มเซสชันใหม่",
   "diffViewer.group.session": "เซสชัน",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":

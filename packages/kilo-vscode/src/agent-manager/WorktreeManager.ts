@@ -630,20 +630,20 @@ export class WorktreeManager {
     const gitDir = await this.resolveGitDir()
     const excludePath = path.join(gitDir, "info", "exclude")
     const items = [
-      [".kilo/worktrees/", "Kilo Code agent worktrees"],
-      [".kilo/agent-manager.json", "Kilo Agent Manager state"],
-      [".kilo/setup-script", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.sh", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.ps1", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.cmd", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.bat", "Kilo Code worktree setup script"],
-      [".kilocode/worktrees/", "Kilo Code legacy agent worktrees"],
-      [".kilocode/agent-manager.json", "Kilo Agent Manager legacy state"],
-      [".kilocode/setup-script", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.sh", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.ps1", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.cmd", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.bat", "Kilo Code legacy worktree setup script"],
+      [".kilo/worktrees/", "Raya agent worktrees"],
+      [".kilo/agent-manager.json", "Raya Agent Manager state"],
+      [".kilo/setup-script", "Raya worktree setup script"],
+      [".kilo/setup-script.sh", "Raya worktree setup script"],
+      [".kilo/setup-script.ps1", "Raya worktree setup script"],
+      [".kilo/setup-script.cmd", "Raya worktree setup script"],
+      [".kilo/setup-script.bat", "Raya worktree setup script"],
+      [".kilocode/worktrees/", "Raya legacy agent worktrees"],
+      [".kilocode/agent-manager.json", "Raya Agent Manager legacy state"],
+      [".kilocode/setup-script", "Raya legacy worktree setup script"],
+      [".kilocode/setup-script.sh", "Raya legacy worktree setup script"],
+      [".kilocode/setup-script.ps1", "Raya legacy worktree setup script"],
+      [".kilocode/setup-script.cmd", "Raya legacy worktree setup script"],
+      [".kilocode/setup-script.bat", "Raya legacy worktree setup script"],
     ] as const
 
     for (const [entry, comment] of items) {

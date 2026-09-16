@@ -706,6 +706,9 @@ describe("WorktreeManager.ensureGitExclude", () => {
     await mgr.ensureGitExclude()
 
     const content = await fs.readFile(path.join(root, ".git", "info", "exclude"), "utf-8")
+    expect(content).toContain("# Raya agent worktrees")
+    expect(content).toContain("# Raya Agent Manager state")
+    expect(content).toContain("# Raya worktree setup script")
     expect(content).toContain(".kilo/worktrees/")
     expect(content).toContain(".kilo/agent-manager.json")
   })
@@ -717,6 +720,9 @@ describe("WorktreeManager.ensureGitExclude", () => {
     await mgr.ensureGitExclude()
 
     const content = await fs.readFile(path.join(root, ".git", "info", "exclude"), "utf-8")
+    expect(content).toContain("# Raya legacy agent worktrees")
+    expect(content).toContain("# Raya Agent Manager legacy state")
+    expect(content).toContain("# Raya legacy worktree setup script")
     expect(content).toContain(".kilocode/worktrees/")
     expect(content).toContain(".kilocode/agent-manager.json")
     expect(content).toContain(".kilocode/setup-script")

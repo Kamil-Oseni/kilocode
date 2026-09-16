@@ -605,6 +605,7 @@ export const Inbox: Component<{
   const [searching, setSearching] = createSignal(false)
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
+  const [trail, setTrail] = createSignal<{ id: string; name: string }>()
   const removeDisabled = (id: string) =>
     !ready() || !connected() || phase() === "sending" || (!!removing() && removing() !== id)
   const attachDisabled = () =>
@@ -740,6 +741,7 @@ export const Inbox: Component<{
       setLook("")
       setTrees({})
       setFaults({})
+      setTrail()
       setError("")
       const draft = local()
       setNote(draft?.body ?? "")
@@ -1062,6 +1064,20 @@ export const Inbox: Component<{
     })
   }
 
+  const follow = (id: string, name: string) => {
+    setInfo(false)
+    setPassing(false)
+    setTrail({ id, name })
+    const row = thread().find((item) => item.occurrenceID === id)
+    if (row) {
+      target = { id: row.id, offset: 0 }
+      stick = false
+      queueMicrotask(place)
+    }
+    if (look()) setLook("")
+    show(id)
+  }
+
   return (
     <div
       ref={frame}
@@ -1074,6 +1090,11 @@ export const Inbox: Component<{
         event.preventDefault()
         if (info()) {
           setInfo(false)
+          queueMicrotask(() => infoRef?.focus())
+          return
+        }
+        if (trail()) {
+          setTrail()
           queueMicrotask(() => infoRef?.focus())
           return
         }
@@ -1134,6 +1155,34 @@ export const Inbox: Component<{
           <p class="routines-offline" role="status" aria-live="polite">
             Offline. Your messages and draft stay here. This conversation will refresh when Raya reconnects.
           </p>
+        </Show>
+        <Show when={trail()} keyed>
+          {(item) => (
+            <section class="routines-lineage" aria-label={`Request chain with ${item.name}`}>
+              <div class="routines-lineage-head">
+                <strong>Request chain with {item.name}</strong>
+                <Button
+                  type="button"
+                  size="small"
+                  variant="ghost"
+                  onClick={() => {
+                    setTrail()
+                    queueMicrotask(() => infoRef?.focus())
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+              <Trace
+                id={item.id}
+                busy={look() === item.id}
+                disabled={!connected()}
+                tree={trees()[item.id]}
+                error={faults()[item.id]}
+                onShow={show}
+              />
+            </section>
+          )}
         </Show>
         <div
           ref={pane}
@@ -1274,11 +1323,13 @@ export const Inbox: Component<{
             workspace={props.workspace}
             enabled={props.enabled}
             canInspect={props.canInspect}
+            connected={connected()}
             onEdit={props.onEdit}
             onAccess={props.onAccess}
             onOutput={props.onOutput}
             onInspect={props.onInspect}
             onToggle={props.onToggle}
+            onTrace={follow}
           />
         </div>
       </Show>

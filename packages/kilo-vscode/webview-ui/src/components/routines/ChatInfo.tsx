@@ -117,11 +117,13 @@ export const ChatInfo: Component<{
   workspace?: string
   enabled: boolean
   canInspect: boolean
+  connected: boolean
   onEdit: () => void
   onAccess: () => void
   onOutput: () => void
   onInspect: () => void
   onToggle: () => void
+  onTrace: (id: string, name: string) => void
 }> = (props) => {
   const vscode = useVSCode()
   const [shares, setShares] = createSignal<Share[]>([])
@@ -381,6 +383,14 @@ export const ChatInfo: Component<{
                       {item.response ? <p>{item.response}</p> : null}
                       {item.reason ? <p class="routines-error">{item.reason}</p> : null}
                       {typeof item.cost === "number" ? <p>Recorded child cost: ${item.cost}</p> : null}
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        disabled={!props.connected}
+                        onClick={() => props.onTrace(item.delegationID, item.name)}
+                      >
+                        View request chain
+                      </Button>
                     </div>
                   </div>
                 </li>

@@ -850,7 +850,7 @@ const respond = (message: WebviewMessage) => {
                 role: legal.role,
                 archived: false,
                 direction: "sent",
-                delegationID: "rdg_preview",
+                delegationID: "rdg_org_preview",
                 organizationID: "org_11111111111111111111111111111111",
                 organizationName: "Website Builders",
                 organizationRevision: 1,

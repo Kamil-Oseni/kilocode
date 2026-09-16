@@ -33,6 +33,7 @@ export function resolveManagedServerEnv(
   env: NodeJS.ProcessEnv,
   password: string,
   username = "kilo",
+  claudeCompat = false,
 ): NodeJS.ProcessEnv {
   const resolved: NodeJS.ProcessEnv = {
     ...env,
@@ -48,6 +49,12 @@ export function resolveManagedServerEnv(
     KILO_SERVER_USERNAME: username,
   }
   delete resolved.RAYA_MF_TOKEN
+  delete resolved.RAYA_DISABLE_CLAUDE_CODE
+  delete resolved.KILO_DISABLE_CLAUDE_CODE
+  if (!claudeCompat) {
+    resolved.RAYA_DISABLE_CLAUDE_CODE = "true"
+    resolved.KILO_DISABLE_CLAUDE_CODE = "true"
+  }
   return resolved
 }
 
@@ -135,7 +142,7 @@ export class ServerManager {
           NODE_USE_SYSTEM_CA: "1",
           ...(extraCaCerts && { NODE_EXTRA_CA_CERTS: extraCaCerts }),
           ...(!proxyStrictSSL && { NODE_TLS_REJECT_UNAUTHORIZED: "0" }),
-          ...resolveManagedServerEnv(process.env, password),
+          ...resolveManagedServerEnv(process.env, password, "kilo", claudeCompat),
           // VS Code's http.proxy / http.noProxy settings are not reflected in
           // process.env, so spawned children bypass the user's configured proxy
           // and fail behind corporate firewalls. Forward them as the standard
@@ -165,7 +172,6 @@ export class ServerManager {
           KILO_VSCODE_VERSION: vscode.version,
           KILOCODE_VERSION: this.context.extension.packageJSON.version,
           KILOCODE_EDITOR_NAME: `${vscode.env.appName} ${vscode.version}`,
-          ...(!claudeCompat && { KILO_DISABLE_CLAUDE_CODE: "true" }),
           ...resolveTreeSitterEnv(this.context.extensionPath),
           ...bwrapEnv,
         },

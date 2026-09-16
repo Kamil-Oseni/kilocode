@@ -40,6 +40,7 @@ class KiloBackendCliManagerEnvTest {
         assertEquals("jetbrains", env["KILO_PLATFORM"])
         assertEquals("kilo-code", env["KILO_APP_NAME"])
         assertEquals("all", env["KILO_TELEMETRY_LEVEL"])
+        assertEquals("true", env["RAYA_DISABLE_CLAUDE_CODE"])
         assertEquals("true", env["KILO_DISABLE_CLAUDE_CODE"])
         assertEquals("jetbrains-plugin", env["KILOCODE_FEATURE"])
         assertEquals("pwd123", env["RAYA_SERVER_PASSWORD"])
@@ -73,12 +74,27 @@ class KiloBackendCliManagerEnvTest {
     }
 
     @Test
-    fun `claude compatibility omits disable env var`() {
+    fun `claude compatibility omits both inherited disable aliases`() {
         KiloClaudeCompatSettings.set(true)
 
-        val env = manager.buildEnv("pwd123", emptyMap())
+        val env = manager.buildEnv("pwd123", mapOf(
+            "RAYA_DISABLE_CLAUDE_CODE" to "true",
+            "KILO_DISABLE_CLAUDE_CODE" to "true",
+        ))
 
+        assertFalse(env.containsKey("RAYA_DISABLE_CLAUDE_CODE"))
         assertFalse(env.containsKey("KILO_DISABLE_CLAUDE_CODE"))
+    }
+
+    @Test
+    fun `disabled claude compatibility normalizes both hostile ambient aliases`() {
+        val env = manager.buildEnv("pwd123", mapOf(
+            "RAYA_DISABLE_CLAUDE_CODE" to "false",
+            "KILO_DISABLE_CLAUDE_CODE" to "invalid",
+        ))
+
+        assertEquals("true", env["RAYA_DISABLE_CLAUDE_CODE"])
+        assertEquals("true", env["KILO_DISABLE_CLAUDE_CODE"])
     }
 
     @Test

@@ -347,7 +347,7 @@ describe("server workspace helpers", () => {
     expect(resolveIndexingEnv([{ uri: { fsPath: "/repo" } }])).toEqual({})
   })
 
-  it("disables unused services, strips the media key, and pins both auth aliases", () => {
+  it("disables unused services, strips the media key, and pins managed aliases", () => {
     expect(
       resolveManagedServerEnv(
         {
@@ -359,6 +359,8 @@ describe("server workspace helpers", () => {
           KILO_SERVER_PASSWORD: "hostile-kilo-password",
           RAYA_SERVER_USERNAME: "hostile-raya-user",
           KILO_SERVER_USERNAME: "hostile-kilo-user",
+          RAYA_DISABLE_CLAUDE_CODE: "false",
+          KILO_DISABLE_CLAUDE_CODE: "invalid",
         },
         "generated-password",
       ),
@@ -370,6 +372,23 @@ describe("server workspace helpers", () => {
       KILO_SERVER_PASSWORD: "generated-password",
       RAYA_SERVER_USERNAME: "kilo",
       KILO_SERVER_USERNAME: "kilo",
+      RAYA_DISABLE_CLAUDE_CODE: "true",
+      KILO_DISABLE_CLAUDE_CODE: "true",
     })
+  })
+
+  it("omits both Claude disable aliases when compatibility is enabled", () => {
+    const env = resolveManagedServerEnv(
+      {
+        RAYA_DISABLE_CLAUDE_CODE: "true",
+        KILO_DISABLE_CLAUDE_CODE: "true",
+      },
+      "generated-password",
+      "kilo",
+      true,
+    )
+
+    expect(env.RAYA_DISABLE_CLAUDE_CODE).toBeUndefined()
+    expect(env.KILO_DISABLE_CLAUDE_CODE).toBeUndefined()
   })
 })

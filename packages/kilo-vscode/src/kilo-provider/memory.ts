@@ -236,7 +236,7 @@ export class KiloProviderMemory {
       const items = stored(show.items)
       if (mode === "show" && items.length === 0) {
         void vscode.window.showInformationMessage(
-          "This project doesn't have any memory yet. It will start showing after you use Kilo.",
+          "This project doesn't have any memory yet. It will start showing after you use Raya.",
         )
         return
       }

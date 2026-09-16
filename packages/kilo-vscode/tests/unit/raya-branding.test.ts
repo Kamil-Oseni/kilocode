@@ -159,6 +159,28 @@ describe("Raya branding boundary", () => {
     expect(source).not.toContain(["Ki", "lo Pass"].join(""))
   })
 
+  test("uses Raya in remote status, memory, and MCP recovery copy", async () => {
+    const remote = [...new Bun.Glob("src/services/cli-backend/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
+    const locales = [...new Bun.Glob("webview-ui/src/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
+    const sources = await Promise.all(remote.map((file) => Bun.file(file).text()))
+    const memory = await Promise.all(locales.map((file) => Bun.file(file).text()))
+    const status = await read("src/services/RemoteStatusService.ts")
+    const oauth = await read("src/kilo-provider/mcp-oauth.ts")
+    const host = await read("src/kilo-provider/memory.ts")
+    const labeled = sources.filter((source) => source.includes('"remote.connected"'))
+
+    expect(labeled).toHaveLength(21)
+    expect(labeled.every((source) => source.includes("Raya Remote"))).toBe(true)
+    expect(sources.some((source) => source.includes("Kilo Remote"))).toBe(false)
+    expect(status).toContain('"$(radio-tower) Raya Remote"')
+    expect(status).not.toContain('"$(radio-tower) Kilo Remote"')
+    expect(memory.some((source) => source.includes("after you use Kilo"))).toBe(false)
+    expect(memory.some((source) => source.includes("after you use Raya"))).toBe(true)
+    expect(host).toContain("after you use Raya")
+    expect(oauth).toContain("Check the Raya logs for the authentication URL")
+    expect(oauth).not.toContain("Check the Kilo logs for the authentication URL")
+  })
+
   test("brands generated worktree setup scripts as Raya", () => {
     const scripts = [SETUP_SCRIPT_TEMPLATE, SETUP_SCRIPT_TEMPLATE_POWERSHELL]
 

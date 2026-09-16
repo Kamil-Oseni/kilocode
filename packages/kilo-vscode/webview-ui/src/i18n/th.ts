@@ -1063,7 +1063,7 @@ export const dict = {
   "settings.context.memory.storage.enable": "Enable memory to create project memory files.",
   "settings.context.memory.inspect": "ตรวจสอบ",
   "chat.memory.project.disabled": "ปิดใช้ความจำของโปรเจกต์แล้ว",
-  "chat.memory.project.empty": "This project doesn't have any memory yet. It will start showing after you use Kilo.",
+  "chat.memory.project.empty": "This project doesn't have any memory yet. It will start showing after you use Raya.",
   "chat.memory.command.failed": "คำสั่งความจำล้มเหลว",
   "chat.memory.updated": "Memory updated",
   "chat.memory.rebuild": "Memory index rebuilt",

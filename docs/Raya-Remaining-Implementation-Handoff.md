@@ -1,10 +1,24 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `138064c163`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `df7b6c1541`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 22:25 America/Toronto - Keep all configuration-alias readers closed
+
+Preserve product commit `df7b6c1541`. `RAYA_CONFIG`, `RAYA_CONFIG_DIR` and `RAYA_CONFIG_CONTENT` were already declared active, but two client boundaries bypassed them. VS Code config discovery and SDK nested-process launches now follow the same defined-value rule as Core: Raya wins whenever it is defined, including an empty string; Kilo remains the fallback only when Raya is absent.
+
+Keep the SDK behavior exact. Both `src/server.ts` and `src/v2/server.ts` merge inherited `RAYA_CONFIG_CONTENT ?? KILO_CONFIG_CONTENT`, preserve invalid-JSON fallback, calculate the child payload once, and set both child variables to that same payload for server and TUI launches. Do not let either generation compute the aliases independently. The real fake-CLI test proves equality across the process boundary and incoming-config precedence.
+
+Keep VS Code discovery local and dependency-light. Its helper checks `process.env[raya] !== undefined`, then falls back to Kilo. Existing truthiness after selection means an explicit empty Raya value creates no file, directory or virtual entry and cannot reveal the legacy value. When content is active, the displayed virtual entry names the variable that actually won. Do not include `KILO_DISABLE_PROJECT_CONFIG` in this slice; it has additional Core, OpenCode and extension readers and requires a separate complete migration.
+
+Evidence: SDK **11 / 22**, VS Code discovery **10 / 33**, both relevant typechecks, VS Code lint, Kilo-marker guard, annotation guard and whitespace checks. The changeset covers `@kilocode/sdk` and `raya`. The ledger remains at 15 pairs because these are corrected consumers of three existing pairs. No canonical identity or profile writer changed; coverage remains 10 of 32.
+
+The extension source changed, so carry `df7b6c1541` into the next low-memory snapshot reinstall. Do not rebuild solely for this checkpoint. The Raya-owned VS Code distribution remains Version 3 work.
+
+After this handoff and progress record is included, the checked inventory is **69,444** total: public 1,693; compatibility 35,432; provenance 5,686; internal 26,633. The pinned compatibility digest is `5d910af757b29872a3f0878e62b9095aaedcf83d713d634bf4204825ca4cfb50`.
 
 ## ChatGPT 2026-09-15 22:07 America/Toronto - Preserve normalized log aliases and keep log paths canonical
 
@@ -808,7 +822,7 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 15 reviewed environment pairs with explicit CLI precedence, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
+| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 15 reviewed environment pairs with documented precedence, including closed config readers in Core, both SDK generations and VS Code, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |

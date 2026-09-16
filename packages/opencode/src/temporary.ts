@@ -2,6 +2,7 @@ import yargs from "yargs"
 import { TuiThreadCommand } from "./cli/cmd/tui"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { hideBin } from "yargs/helpers"
+import { KiloLog } from "@/kilocode/log" // kilocode_change
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
@@ -24,8 +25,8 @@ const cli = yargs(hideBin(process.argv))
     type: "boolean",
   })
   .middleware((opts) => {
-    if (opts.printLogs) process.env.KILO_PRINT_LOGS = "1"
-    if (opts.logLevel) process.env.KILO_LOG_LEVEL = opts.logLevel
+    // kilocode_change - keep explicit CLI flags above inherited Raya and Kilo aliases
+    KiloLog.configure({ printLogs: opts.printLogs === true, logLevel: opts.logLevel }) // kilocode_change
   })
   .command(TuiThreadCommand)
   .parse()

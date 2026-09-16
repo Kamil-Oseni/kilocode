@@ -79,6 +79,18 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_NO_DAEMON",
       policy: "raya-wins-legacy-write",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:log_level",
+      raya: "RAYA_LOG_LEVEL",
+      legacy: "KILO_LOG_LEVEL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:print_logs",
+      raya: "RAYA_PRINT_LOGS",
+      legacy: "KILO_PRINT_LOGS",
+      policy: "raya-wins-legacy-write",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

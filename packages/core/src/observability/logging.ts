@@ -2,6 +2,7 @@ import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
+import { EnvAlias } from "../kilocode/env-alias" // kilocode_change
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -54,7 +55,7 @@ export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
 
 export function minimumLogLevel() {
-  const value = process.env.KILO_LOG_LEVEL?.toUpperCase()
+  const value = EnvAlias.read("RAYA_LOG_LEVEL", "KILO_LOG_LEVEL")?.toUpperCase() // kilocode_change
   const levels = {
     DEBUG: "Debug",
     INFO: "Info",
@@ -65,7 +66,11 @@ export function minimumLogLevel() {
 }
 
 export function loggers() {
-  return process.env.KILO_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
+  // kilocode_change start - Raya input with Kilo compatibility fallback
+  return EnvAlias.read("RAYA_PRINT_LOGS", "KILO_PRINT_LOGS") === "1"
+    ? [fileLogger(), stderrLogger]
+    : [fileLogger()]
+  // kilocode_change end
 }
 
 export * as Logging from "./logging"

@@ -1,6 +1,7 @@
 import { PostHog } from "posthog-node"
 import { Identity } from "./identity.js"
 import { TelemetryEvent } from "./events.js"
+import { print } from "./env.js"
 
 const POSTHOG_API_KEY = "phc_GK2Pxl0HPj5ZPfwhLRjXrtdz8eD7e9MKnXiFrOqnB6z"
 const POSTHOG_HOST = "https://us.i.posthog.com"
@@ -98,7 +99,7 @@ export namespace Client {
     const timer = setTimeout(() => {
       if (!client) return
       client.flush().catch((err) => {
-        if (process.env.KILO_PRINT_LOGS) console.warn("telemetry background flush failed", err)
+        if (print()) console.warn("telemetry background flush failed", err)
       })
     }, delayMs)
     timer.unref?.()

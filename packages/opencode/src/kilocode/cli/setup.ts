@@ -80,7 +80,10 @@ export namespace KiloCli {
     if (info) return
 
     const { KiloLog } = await import("@/kilocode/log")
-    await KiloLog.init()
+    await KiloLog.init({
+      printLogs: opts.printLogs === true,
+      logLevel: typeof opts.logLevel === "string" ? opts.logLevel : undefined,
+    })
 
     const gateway = await import("@kilocode/kilo-gateway")
     if (!process.env[gateway.ENV_FEATURE])

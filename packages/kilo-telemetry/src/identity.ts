@@ -2,6 +2,7 @@ import * as path from "path"
 import { createHash } from "crypto"
 import { writeFile, chmod, rename, rm } from "fs/promises"
 import { fetchProfile } from "@kilocode/kilo-gateway"
+import { print } from "./env.js"
 
 export namespace Identity {
   let machineId: string | null = null
@@ -96,9 +97,9 @@ export namespace Identity {
       await rename(tmp, filepath)
     } catch (err) {
       await rm(tmp, { force: true }).catch((rmErr) => {
-        if (process.env.KILO_PRINT_LOGS) console.warn("telemetry profile cache temp cleanup failed", rmErr)
+        if (print()) console.warn("telemetry profile cache temp cleanup failed", rmErr)
       })
-      if (process.env.KILO_PRINT_LOGS) console.warn("telemetry profile cache write failed", err)
+      if (print()) console.warn("telemetry profile cache write failed", err)
     }
   }
 
@@ -121,7 +122,7 @@ export namespace Identity {
       userId = cached.email
       if (Date.now() - cached.fetchedAt > CACHE_TTL) {
         refresh(token, tokenHash).catch((err) => {
-          if (process.env.KILO_PRINT_LOGS) console.warn("telemetry profile refresh failed", err)
+          if (print()) console.warn("telemetry profile refresh failed", err)
         })
       }
       return

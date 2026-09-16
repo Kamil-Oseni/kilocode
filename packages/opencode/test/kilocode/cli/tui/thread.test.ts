@@ -114,7 +114,7 @@ describe("kilo tui thread", () => {
           return
         }
         // The title is emitted only after the worker-backed TUI reaches its rendered app.
-        if (state.text.includes("Kilo CLI")) ready.resolve()
+        if (state.text.includes("Raya CLI")) ready.resolve()
       })
       const exit = proc.onExit((event) => {
         state.exit = event
@@ -131,7 +131,7 @@ describe("kilo tui thread", () => {
 
       try {
         await ready.promise
-        expect(state.text).toContain("Kilo CLI")
+        expect(state.text).toContain("Raya CLI")
       } finally {
         clearTimeout(timer)
         data.dispose()

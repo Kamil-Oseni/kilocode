@@ -41,13 +41,13 @@ export { KiloTuiConfig } from "@/kilocode/cli/cmd/tui/context/tui-config"
 // ---------------------------------------------------------------------------
 
 /** Default terminal window title. */
-export const APP_TITLE = "Kilo CLI"
+export const APP_TITLE = "Raya CLI"
 
 /** Public docs URL shown in the command palette. */
 export const DOCS_URL = "https://kilo.ai/docs"
 
 /** Human-readable product name used in user-facing messages. */
-export const APP_NAME = "Kilo"
+export const APP_NAME = "Raya"
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -199,7 +199,12 @@ export function getTerminalTitle(input: {
 
   if (input.route.data.type === "kiloclaw") {
     return {
-      title: KiloTerminalTitle.format({ base: input.base, title: "KiloClaw", indicator: "none", icon: input.icon }),
+      title: KiloTerminalTitle.format({
+        base: input.base,
+        title: "Raya Messenger",
+        indicator: "none",
+        icon: input.icon,
+      }),
       active: false,
       indicator: "none",
     }
@@ -267,7 +272,7 @@ export function init() {
         name: "background_process.list",
         title: "Background processes",
         desc: "List and manage tracked background processes",
-        category: "Kilo",
+        category: "Raya",
         slashName: "process",
         slashAliases: ["processes"],
         run: () => {

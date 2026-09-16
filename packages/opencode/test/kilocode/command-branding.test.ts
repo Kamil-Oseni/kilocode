@@ -35,11 +35,16 @@ describe("Kilo command branding", () => {
   test("runtime presentation uses Raya while compatibility commands and links remain stable", async () => {
     const files = [
       "src/kilocode/background-process/index.ts",
+      "src/kilocode/cli/cmd/profile.ts",
+      "src/kilocode/cli/cmd/tui/app.tsx",
+      "src/kilocode/cli/cmd/tui/component/dialog-provider.tsx",
+      "src/kilocode/cli/cmd/tui/feature-plugins/home/tips.ts",
       "src/kilocode/cli/cmd/tui-worktree.ts",
       "src/kilocode/cli/dev-setup.ts",
       "src/kilocode/components/dialog-claw-setup.tsx",
       "src/kilocode/components/dialog-claw-upgrade.tsx",
       "src/kilocode/components/dialog-indexing.tsx",
+      "src/kilocode/components/dialog-kilo-profile.tsx",
       "src/kilocode/components/tips.tsx",
       "src/kilocode/config/sources.ts",
     ]
@@ -62,10 +67,23 @@ describe("Kilo command branding", () => {
       "Kilo CLI dev launcher setup",
       "# Kilo Code agent worktrees",
       "another Kilo process",
+      'APP_TITLE = "Kilo CLI"',
+      'APP_NAME = "Kilo"',
+      'title: "KiloClaw"',
+      'category: "Kilo"',
+      "show Kilo account profile",
+      "Not authenticated with Kilo Gateway",
+      "Kilo Gateway Profile",
+      "Kilo Gateway gives you",
+      "prevent Kilo from reading",
+      "with Kilo Gateway for curated",
     ]
 
     expect(legacy.filter((text) => src.includes(text))).toEqual([])
     expect(src).toContain("Raya Messenger gives you")
+    expect(src).toContain('APP_TITLE = "Raya CLI"')
+    expect(src).toContain('APP_NAME = "Raya"')
+    expect(src).toContain("Raya Gateway Profile")
     expect(src).toContain("Raya Embedding Model")
     expect(src).toContain("Raya Cloud organization config")
     expect(src).toContain("{highlight}kilo serve{/highlight}")

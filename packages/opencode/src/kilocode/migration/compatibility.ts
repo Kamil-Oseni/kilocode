@@ -116,6 +116,7 @@ export namespace RayaMigrationLedger {
     "MODELS_URL",
     "COMMAND_TIMEOUT_MAX_MS",
     "COMMAND_TIMEOUT_MAX_MS_MESSAGE",
+    "NO_DAEMON",
   ].map((name) => ({
     kind: `environment:${name.toLowerCase()}`,
     raya: `RAYA_${name}`,
@@ -368,8 +369,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_317,
-        digest: "ff0355a82598f62d3935f0aaf3c4aa218439160e8e12a7f22b5f27a41d572734",
+        count: 35_325,
+        digest: "f79dabd213bfe74c283425f1ab1f57aa29b8514e87ad01f724ac28190278d06c",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

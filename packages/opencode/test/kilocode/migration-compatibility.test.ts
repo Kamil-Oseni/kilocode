@@ -73,6 +73,12 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_COMMAND_TIMEOUT_MAX_MS_MESSAGE",
       policy: "raya-wins-legacy-write",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:no_daemon",
+      raya: "RAYA_NO_DAEMON",
+      legacy: "KILO_NO_DAEMON",
+      policy: "raya-wins-legacy-write",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

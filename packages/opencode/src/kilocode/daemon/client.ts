@@ -1,4 +1,5 @@
 import * as Log from "@opencode-ai/core/util/log"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import { Daemon } from "./daemon"
 
 export namespace DaemonClient {
@@ -11,7 +12,7 @@ export namespace DaemonClient {
   }
 
   export function enabled() {
-    return !process.env.KILO_NO_DAEMON
+    return !EnvAlias.read("RAYA_NO_DAEMON", "KILO_NO_DAEMON")
   }
 
   export function headers(state: Daemon.State) {

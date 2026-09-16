@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import { Daemon } from "../../src/kilocode/daemon/daemon"
 import { DaemonClient } from "../../src/kilocode/daemon/client"
 import { tmpdir } from "../fixture/fixture"
@@ -8,11 +9,13 @@ const original = {
   state: process.env.KILO_TEST_DAEMON_STATE_DIR,
   log: process.env.KILO_TEST_DAEMON_LOG_DIR,
   disabled: process.env.KILO_NO_DAEMON,
+  rayaDisabled: process.env.RAYA_NO_DAEMON,
 }
 
 afterEach(async () => {
   if (process.env.KILO_TEST_DAEMON_STATE_DIR !== original.state) await Daemon.stop().catch(() => undefined)
   restore()
+  EnvAlias.conflicts()
 })
 
 function restore() {
@@ -22,6 +25,8 @@ function restore() {
   else process.env.KILO_TEST_DAEMON_LOG_DIR = original.log
   if (original.disabled === undefined) delete process.env.KILO_NO_DAEMON
   else process.env.KILO_NO_DAEMON = original.disabled
+  if (original.rayaDisabled === undefined) delete process.env.RAYA_NO_DAEMON
+  else process.env.RAYA_NO_DAEMON = original.rayaDisabled
 }
 
 function dirs(root: string) {
@@ -94,6 +99,22 @@ async function deadline<T>(promise: Promise<T>, timeout: number) {
 }
 
 describe("daemon manager", () => {
+  test("prefers the Raya daemon opt-out and retains the Kilo fallback", () => {
+    delete process.env.RAYA_NO_DAEMON
+    delete process.env.KILO_NO_DAEMON
+    expect(DaemonClient.enabled()).toBe(true)
+
+    process.env.KILO_NO_DAEMON = "1"
+    expect(DaemonClient.enabled()).toBe(false)
+
+    process.env.RAYA_NO_DAEMON = ""
+    expect(DaemonClient.enabled()).toBe(true)
+
+    process.env.RAYA_NO_DAEMON = "1"
+    delete process.env.KILO_NO_DAEMON
+    expect(DaemonClient.enabled()).toBe(false)
+  })
+
   test("reports not running without daemon state", async () => {
     await using tmp = await tmpdir()
     dirs(tmp.path)

@@ -193,7 +193,7 @@ Remote HTTP proxy responses can include sync fence metadata. Router waits for ma
 | Health | Probes authenticated `/global/health` with 2 second timeout |
 | Reuse | Reuses daemon only when process is alive, health succeeds, and installed version matches |
 | Cleanup | Terminates stale process when present, clears stale state, then starts replacement |
-| Opt-out | `KILO_NO_DAEMON` disables automatic attach by clients; explicit daemon commands still manage daemon |
+| Opt-out | `RAYA_NO_DAEMON` disables automatic attach by clients; `KILO_NO_DAEMON` remains a compatibility fallback, and explicit daemon commands still manage daemon |
 
 Daemon credentials differ from editor-spawned server credentials. Current daemon source stores username `kilo`, password `kilo`, and base64 Basic token in `daemon.json`. File permissions protect this local credential record. Editor clients generate random passwords per spawned server.
 

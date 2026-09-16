@@ -80,7 +80,9 @@ In the VS Code extension, the same option lives under **Settings → Web Tools �
 
 `websearch` routes through the Exa or Parallel search providers. When the Exa provider is used and you are signed into Kilo, requests go through the Kilo proxy automatically — no separate Exa API key is required. Setting `EXA_API_KEY` uses your own Exa key instead. Exa searches return at most 10 results.
 
-Set the `KILO_WEBSEARCH_PROVIDER` environment variable to force a provider:
+Set the `RAYA_WEBSEARCH_PROVIDER` environment variable to force a provider. The legacy `KILO_WEBSEARCH_PROVIDER` name remains compatible; when both are defined, the Raya value takes precedence.
+
+An empty or unsupported Raya value suppresses the legacy value and leaves provider selection to the normal flags and stable session routing.
 
 | Value | Behavior |
 |---|---|

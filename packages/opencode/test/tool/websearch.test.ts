@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { parseResponse } from "../../src/tool/mcp-websearch"
-import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } from "../../src/tool/websearch"
+import { // kilocode_change start - test the Raya provider override alias
+  resolveWebSearchProvider,
+  selectWebSearchProvider,
+  webSearchModelName,
+  webSearchProviderLabel,
+} from "../../src/tool/websearch" // kilocode_change end
 
 import { webSearchEnabled } from "../../src/tool/registry"
 import { it } from "../lib/effect"
@@ -10,6 +15,18 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 const SESSION_ID = "ses_0196aabbccddeeff001122334455"
 
 describe("websearch provider", () => {
+  // kilocode_change start - prove Raya-preferred provider alias semantics
+  test.each([
+    ["Raya-only", "parallel", undefined, "parallel"],
+    ["Kilo-only", undefined, "exa", "exa"],
+    ["Raya wins a conflict", "parallel", "exa", "parallel"],
+    ["empty Raya suppresses Kilo", "", "exa", undefined],
+    ["invalid Raya suppresses Kilo", "invalid", "exa", undefined],
+  ] as const)("resolves the %s provider alias", (_name, raya, kilo, expected) => {
+    expect(resolveWebSearchProvider(raya, kilo)).toBe(expected)
+  })
+  // kilocode_change end
+
   test("selects a stable provider per session", () => {
     expect(selectWebSearchProvider(SESSION_ID)).toBe(selectWebSearchProvider(SESSION_ID))
   })

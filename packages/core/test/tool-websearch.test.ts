@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test" // kilocode_change - alias-test isolation
 import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -8,6 +8,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change - alias-test isolation
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
@@ -21,6 +22,30 @@ const payload = (text: string) =>
   })
 
 describe("WebSearchTool provider selection", () => {
+  // kilocode_change start - prove Raya-preferred provider alias semantics
+  afterEach(() => {
+    EnvAlias.conflicts()
+  })
+
+  test.each([
+    ["Raya-only", { RAYA_WEBSEARCH_PROVIDER: "parallel" }, "parallel"],
+    ["Kilo-only", { KILO_WEBSEARCH_PROVIDER: "exa" }, "exa"],
+    [
+      "Raya wins a conflict",
+      { RAYA_WEBSEARCH_PROVIDER: "parallel", KILO_WEBSEARCH_PROVIDER: "exa" },
+      "parallel",
+    ],
+    ["empty Raya suppresses Kilo", { RAYA_WEBSEARCH_PROVIDER: "", KILO_WEBSEARCH_PROVIDER: "exa" }, undefined],
+    [
+      "invalid Raya suppresses Kilo",
+      { RAYA_WEBSEARCH_PROVIDER: "invalid", KILO_WEBSEARCH_PROVIDER: "exa" },
+      undefined,
+    ],
+  ] as const)("resolves the %s provider alias", (_name, env, expected) => {
+    expect(WebSearchTool.resolveProvider(env)).toBe(expected)
+  })
+  // kilocode_change end
+
   test("rejects out-of-range numeric controls", () => {
     const decode = Schema.decodeUnknownSync(WebSearchTool.Input)
     expect(() => decode({ query: "x", numResults: 0 })).toThrow()

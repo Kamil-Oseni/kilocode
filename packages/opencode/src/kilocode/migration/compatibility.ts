@@ -119,6 +119,7 @@ export namespace RayaMigrationLedger {
     "NO_DAEMON",
     "LOG_LEVEL",
     "PRINT_LOGS",
+    "WEBSEARCH_PROVIDER",
   ].map((name) => ({
     kind: `environment:${name.toLowerCase()}`,
     raya: `RAYA_${name}`,

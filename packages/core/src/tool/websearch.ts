@@ -14,6 +14,7 @@ import { Tools } from "./tools"
 import { collectBoundedResponseBody } from "./http-body"
 import { checksum } from "../util/encode"
 import { ToolRegistry } from "./registry"
+import { EnvAlias } from "../kilocode/env-alias" // kilocode_change - Raya provider override alias
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
@@ -59,6 +60,13 @@ export const Input = Schema.Struct({
 export const Provider = Schema.Literals(["exa", "parallel"])
 export type Provider = typeof Provider.Type
 
+// kilocode_change start - prefer the Raya override while retaining the Kilo compatibility input
+export function resolveProvider(env: NodeJS.ProcessEnv = process.env): Provider | undefined {
+  const value = EnvAlias.read("RAYA_WEBSEARCH_PROVIDER", "KILO_WEBSEARCH_PROVIDER", env)
+  return value === "exa" || value === "parallel" ? value : undefined
+}
+// kilocode_change end
+
 export interface Config {
   readonly provider?: Provider
   readonly enableExa: boolean
@@ -72,10 +80,7 @@ export class ConfigService extends Context.Service<ConfigService, Config>()("@op
 /** Isolates the retained product environment contract from the generic tool implementation. */
 export const defaultConfigLayer = Layer.sync(ConfigService, () =>
   ConfigService.of({
-    provider:
-      process.env.KILO_WEBSEARCH_PROVIDER === "exa" || process.env.KILO_WEBSEARCH_PROVIDER === "parallel"
-        ? process.env.KILO_WEBSEARCH_PROVIDER
-        : undefined,
+    provider: resolveProvider(), // kilocode_change - Raya-preferred compatibility resolver
     enableExa: truthy("KILO_EXPERIMENTAL") || truthy("KILO_ENABLE_EXA") || truthy("KILO_EXPERIMENTAL_EXA"),
     enableParallel: truthy("KILO_ENABLE_PARALLEL") || truthy("KILO_EXPERIMENTAL_PARALLEL"),
     exaApiKey: process.env.EXA_API_KEY,

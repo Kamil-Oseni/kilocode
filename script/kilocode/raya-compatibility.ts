@@ -68,6 +68,7 @@ export function check(
     "NO_DAEMON",
     "LOG_LEVEL",
     "PRINT_LOGS",
+    "WEBSEARCH_PROVIDER",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   if (JSON.stringify(env) !== JSON.stringify(expected))
     throw new Error("Environment aliases or precedence differ from the compatibility ledger.")

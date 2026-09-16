@@ -37,7 +37,12 @@ export const Parameters = Schema.Struct({
 const WebSearchProviderSchema = Schema.Literals(["exa", "parallel", "kilo-exa"]) // kilocode_change - kilo-exa env override
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
-// kilocode_change start - signature reflowed by the added override parameter (KILO_WEBSEARCH_PROVIDER resolved via Env.Service by the caller)
+// kilocode_change start - provider overrides are resolved from Raya and Kilo inputs via Env.Service
+export function resolveWebSearchProvider(raya: string | undefined, kilo: string | undefined) {
+  const value = raya !== undefined ? raya : kilo
+  return value === "exa" || value === "parallel" || value === "kilo-exa" ? value : undefined
+}
+
 export function selectWebSearchProvider(
   sessionID: string,
   flags = { exa: false, parallel: false },
@@ -135,7 +140,8 @@ export const webSearchTool = (goals?: GoalDeps) =>
         execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
           Effect.gen(function* () {
             // kilocode_change start - config via Env.Service instead of process.env reads
-            const [override, exaKey, parallelKey] = yield* Effect.all([
+            const [raya, kilo, exaKey, parallelKey] = yield* Effect.all([
+              env.get("RAYA_WEBSEARCH_PROVIDER"),
               env.get("KILO_WEBSEARCH_PROVIDER"),
               env.get("EXA_API_KEY"),
               env.get("PARALLEL_API_KEY"),
@@ -146,7 +152,7 @@ export const webSearchTool = (goals?: GoalDeps) =>
                 exa: flags.enableExa,
                 parallel: flags.enableParallel,
               },
-              override,
+              resolveWebSearchProvider(raya, kilo),
             )
             // kilocode_change end
             const title = webSearchProviderLabel(provider)
@@ -202,7 +208,9 @@ export const webSearchTool = (goals?: GoalDeps) =>
               const token = kiloToken
               if (!token)
                 return yield* Effect.die(
-                  new Error("KILO_WEBSEARCH_PROVIDER=kilo-exa requires Kilo auth; run `kilo auth login`"),
+                  new Error(
+                    "RAYA_WEBSEARCH_PROVIDER=kilo-exa (or legacy KILO_WEBSEARCH_PROVIDER=kilo-exa) requires Kilo auth; run `kilo auth login`",
+                  ),
                 )
               const lease = charges
                 ? yield* charges.claim(

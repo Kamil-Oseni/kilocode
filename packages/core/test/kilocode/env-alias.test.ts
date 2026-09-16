@@ -157,6 +157,85 @@ describe("Raya environment aliases", () => {
   })
 
   for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "true", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: true },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: true },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: true },
+  ]) {
+    test(`wires plugin safety flags from ${item.name}`, () => {
+      const names = [
+        "RAYA_DISABLE_DEFAULT_PLUGINS",
+        "KILO_DISABLE_DEFAULT_PLUGINS",
+        "RAYA_DISABLE_LSP_DOWNLOAD",
+        "KILO_DISABLE_LSP_DOWNLOAD",
+      ]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      if (item.raya !== undefined) {
+        env.RAYA_DISABLE_DEFAULT_PLUGINS = item.raya
+        env.RAYA_DISABLE_LSP_DOWNLOAD = item.raya
+      }
+      if (item.kilo !== undefined) {
+        env.KILO_DISABLE_DEFAULT_PLUGINS = item.kilo
+        env.KILO_DISABLE_LSP_DOWNLOAD = item.kilo
+      }
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify([Flag.KILO_DISABLE_DEFAULT_PLUGINS, Flag.KILO_DISABLE_LSP_DOWNLOAD]))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toEqual([item.expected, item.expected])
+    })
+  }
+
+  test("reports plugin safety flag conflicts without their values", () => {
+    const names = [
+      "RAYA_DISABLE_DEFAULT_PLUGINS",
+      "KILO_DISABLE_DEFAULT_PLUGINS",
+      "RAYA_DISABLE_LSP_DOWNLOAD",
+      "KILO_DISABLE_LSP_DOWNLOAD",
+    ]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    Object.assign(env, {
+      RAYA_DISABLE_DEFAULT_PLUGINS: "raya-plugin-secret",
+      KILO_DISABLE_DEFAULT_PLUGINS: "kilo-plugin-secret",
+      RAYA_DISABLE_LSP_DOWNLOAD: "raya-lsp-secret",
+      KILO_DISABLE_LSP_DOWNLOAD: "kilo-lsp-secret",
+    })
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flags: [Flag.KILO_DISABLE_DEFAULT_PLUGINS, Flag.KILO_DISABLE_LSP_DOWNLOAD], conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({
+      flags: [false, false],
+      conflicts: [
+        "RAYA_DISABLE_DEFAULT_PLUGINS/KILO_DISABLE_DEFAULT_PLUGINS",
+        "RAYA_DISABLE_LSP_DOWNLOAD/KILO_DISABLE_LSP_DOWNLOAD",
+      ],
+    })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
     { name: "Raya input", env: { RAYA_SHOW_TTFD: "true" }, expected: true },
     { name: "Kilo fallback", env: { KILO_SHOW_TTFD: "1" }, expected: true },
     {

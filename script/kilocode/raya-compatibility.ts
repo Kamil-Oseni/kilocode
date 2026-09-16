@@ -71,6 +71,7 @@ export function check(
     "WEBSEARCH_PROVIDER",
     "DISABLE_PROJECT_CONFIG",
     "SESSION_RETRY_LIMIT",
+    "SHOW_TTFD",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
     ["RAYA_PURE", "KILO_PURE", "safety-monotonic-aliases"],

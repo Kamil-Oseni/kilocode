@@ -125,6 +125,7 @@ export namespace RayaMigrationLedger {
       "WEBSEARCH_PROVIDER",
       "DISABLE_PROJECT_CONFIG",
       "SESSION_RETRY_LIMIT",
+      "SHOW_TTFD",
     ].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
@@ -390,8 +391,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_708,
-        digest: "4c5b8e67a066bf9c3b6fe1dcee1b230ca4e8f2f1b02fb3a420bdc6284c3e4366",
+        count: 35_730,
+        digest: "6f8d633f400b19414c29a748d3907e30ce5eecbc7651bcc82fffd1182c54e9a3",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

@@ -110,6 +110,12 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:show_ttfd",
+      raya: "RAYA_SHOW_TTFD",
+      legacy: "KILO_SHOW_TTFD",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:pure",
       raya: "RAYA_PURE",
       legacy: "KILO_PURE",

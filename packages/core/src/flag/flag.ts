@@ -67,7 +67,7 @@ export const Flag = {
   // kilocode_change end
   KILO_DISABLE_AUTOUPDATE: truthy("KILO_DISABLE_AUTOUPDATE"),
   KILO_ALWAYS_NOTIFY_UPDATE: truthy("KILO_ALWAYS_NOTIFY_UPDATE"),
-  KILO_DISABLE_PRUNE: truthy("KILO_DISABLE_PRUNE"),
+  KILO_DISABLE_PRUNE: EnvAlias.enabled("RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE"), // kilocode_change
   KILO_DISABLE_TERMINAL_TITLE: truthy("KILO_DISABLE_TERMINAL_TITLE"),
   KILO_SHOW_TTFD: ttfd === "true" || ttfd === "1", // kilocode_change
   // kilocode_change start
@@ -75,7 +75,7 @@ export const Flag = {
   KILO_DISABLE_LSP_DOWNLOAD: truthy("KILO_DISABLE_LSP_DOWNLOAD"),
   KILO_ENABLE_EXPERIMENTAL_MODELS: truthy("KILO_ENABLE_EXPERIMENTAL_MODELS"),
   // kilocode_change end
-  KILO_DISABLE_AUTOCOMPACT: truthy("KILO_DISABLE_AUTOCOMPACT"),
+  KILO_DISABLE_AUTOCOMPACT: EnvAlias.enabled("RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT"), // kilocode_change
   KILO_DISABLE_MODELS_FETCH: truthy("KILO_DISABLE_MODELS_FETCH"),
   KILO_DISABLE_MOUSE: EnvAlias.enabled("RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE"), // kilocode_change
   // kilocode_change start

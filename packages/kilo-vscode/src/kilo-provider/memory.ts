@@ -181,7 +181,7 @@ export class KiloProviderMemory {
       this.cache(directory, msg)
       this.input.post(msg)
     } catch (err) {
-      console.error("[Raya] KiloProvider: Failed to fetch memory:", err)
+      console.error("[Raya] Provider: Failed to fetch memory:", err)
       this.input.post({
         type: "memoryLoaded",
         sessionID,
@@ -273,7 +273,7 @@ export class KiloProviderMemory {
         matchOnDetail: true,
       })
     } catch (err) {
-      console.error("[Raya] KiloProvider: Failed to show memory:", err)
+      console.error("[Raya] Provider: Failed to show memory:", err)
       this.input.post({
         type: "memoryLoaded",
         sessionID,
@@ -376,7 +376,7 @@ export class KiloProviderMemory {
       }
       return true
     } catch (err) {
-      console.error("[Raya] KiloProvider: Failed memory operation:", err)
+      console.error("[Raya] Provider: Failed memory operation:", err)
       this.input.post({
         type: "memoryOperationResult",
         operation: message.operation,

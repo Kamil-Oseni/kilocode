@@ -118,7 +118,7 @@ export async function checkAndShowMigrationWizard(ctx: MigrationContext): Promis
 
   if (!data.hasData) return
 
-  console.log("[Raya] KiloProvider: 🔄 Legacy data detected, showing migration wizard")
+  console.log("[Raya] Provider: 🔄 Legacy data detected, showing migration wizard")
   // The wizard re-requests the data via requestMigrationData on mount, so only the flag is sent here.
   ctx.postMessage({
     type: "migrationState",
@@ -237,7 +237,7 @@ async function startLegacyMigration(
     ctx.postMessage({ type: "migrationComplete", source: "legacy", operationId, results })
   } catch (error) {
     ctx.lastMigrationHadErrors = true
-    console.error("[Raya] KiloProvider: ❌ Migration failed", error)
+    console.error("[Raya] Provider: ❌ Migration failed", error)
     ctx.postMessage({
       type: "migrationComplete",
       source: "legacy",

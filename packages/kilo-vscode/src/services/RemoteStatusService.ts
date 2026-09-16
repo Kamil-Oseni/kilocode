@@ -51,7 +51,7 @@ export class RemoteStatusService implements vscode.Disposable {
   async refresh(): Promise<void> {
     if (!this.client) return
     const res = await this.client.remote.status().catch((err: unknown) => {
-      console.warn("[Kilo] remote status refresh failed:", err)
+      console.warn("[Raya] remote status refresh failed:", err)
       return undefined
     })
     if (!res?.data) return

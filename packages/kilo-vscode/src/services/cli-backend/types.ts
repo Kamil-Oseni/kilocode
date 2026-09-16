@@ -45,7 +45,7 @@ interface ProfileData {
   currentOrgId: string | null
 }
 
-// Cloud session from the Kilo cloud API (cli_sessions_v2)
+// Cloud session from the Raya Cloud API (cli_sessions_v2)
 interface CloudSessionInfo {
   session_id: string
   title: string | null

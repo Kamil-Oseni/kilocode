@@ -48,7 +48,7 @@ function previewImage(dir: vscode.Uri | undefined, dataUrl: string, filename: st
             Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.joinPath(root, name), { recursive: true })).then(
               undefined,
               (err: unknown) => {
-                console.warn("[Raya] KiloProvider: Failed to delete stale preview:", err)
+                console.warn("[Raya] Provider: Failed to delete stale preview:", err)
               },
             ),
           ),
@@ -65,7 +65,7 @@ function previewImage(dir: vscode.Uri | undefined, dataUrl: string, filename: st
     .createDirectory(root)
     .then(() => vscode.workspace.fs.writeFile(uri, img.data))
     .then(() => clean())
-    .then(open, (err) => console.error("[Raya] KiloProvider: Failed to preview image:", err))
+    .then(open, (err) => console.error("[Raya] Provider: Failed to preview image:", err))
 }
 
 export function openAttachment(
@@ -97,7 +97,7 @@ export function openAttachment(
         Promise.all(
           trimEntries(items.map(([name]) => ({ path: name }))).map((name) =>
             vscode.workspace.fs.delete(vscode.Uri.joinPath(root, name)).then(undefined, (err: unknown) => {
-              console.warn("[Raya] KiloProvider: Failed to delete stale routine attachment:", err)
+              console.warn("[Raya] Provider: Failed to delete stale routine attachment:", err)
             }),
           ),
         ),
@@ -108,7 +108,7 @@ export function openAttachment(
     .then(() => vscode.workspace.fs.writeFile(uri, data))
     .then(clean)
     .then(() => vscode.commands.executeCommand("vscode.open", uri))
-    .then(undefined, (err) => console.error("[Raya] KiloProvider: Failed to open routine attachment:", err))
+    .then(undefined, (err) => console.error("[Raya] Provider: Failed to open routine attachment:", err))
 }
 
 export function handleEditorAction(
@@ -162,7 +162,7 @@ export function handleEditorAction(
       // worktree during an Agent Manager session switch).
       validateFiles(opts.dir(message.sessionID), paths).then(
         (existing) => post({ type: "validateFilesResult", id, existing }),
-        (err) => console.error("[Raya] KiloProvider: validateFiles failed:", err),
+        (err) => console.error("[Raya] Provider: validateFiles failed:", err),
       )
     }
     return true
@@ -185,7 +185,7 @@ export function handleEditorAction(
 function openContent(content: string, language?: string): void {
   vscode.workspace.openTextDocument({ content, language: language || "log" }).then(
     (doc) => vscode.window.showTextDocument(doc, { preview: true }),
-    (err) => console.error("[Raya] KiloProvider: Failed to open content:", err),
+    (err) => console.error("[Raya] Provider: Failed to open content:", err),
   )
 }
 
@@ -200,9 +200,9 @@ function show(uri: vscode.Uri, line?: number, column?: number): void {
       }
       vscode.window
         .showTextDocument(doc, options)
-        .then(undefined, (err) => console.error("[Raya] KiloProvider: Failed to show document:", uri.fsPath, err))
+        .then(undefined, (err) => console.error("[Raya] Provider: Failed to show document:", uri.fsPath, err))
     },
-    (err) => console.error("[Raya] KiloProvider: Failed to open file:", uri.fsPath, err),
+    (err) => console.error("[Raya] Provider: Failed to open file:", uri.fsPath, err),
   )
 }
 
@@ -229,13 +229,13 @@ function findFallback(dir: string, filePath: string, line?: number, column?: num
           (pick) => {
             if (pick) show(pick.uri, line, column)
           },
-          (err) => console.error("[Raya] KiloProvider: showQuickPick failed:", err),
+          (err) => console.error("[Raya] Provider: showQuickPick failed:", err),
         )
         return
       }
       vscode.window.showWarningMessage(`File not found: ${filePath}`)
     },
-    (err: unknown) => console.error("[Raya] KiloProvider: findFiles failed:", err),
+    (err: unknown) => console.error("[Raya] Provider: findFiles failed:", err),
   )
 }
 

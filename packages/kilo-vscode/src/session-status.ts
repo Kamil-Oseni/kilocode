@@ -46,6 +46,6 @@ export async function seedSessionStatuses(
       }
     }
   } catch (error) {
-    console.error("[Raya] KiloProvider: Failed to seed session statuses:", error)
+    console.error("[Raya] Provider: Failed to seed session statuses:", error)
   }
 }

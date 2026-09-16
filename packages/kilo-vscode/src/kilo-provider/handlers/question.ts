@@ -84,7 +84,7 @@ export async function fetchAndSendPendingQuestions(
         const { data, error } = await ctx.client.question.list({ directory: dir })
         if (error) {
           failed.add(dir)
-          console.error(`[Raya] KiloProvider: Failed to fetch pending questions for ${dir}:`, error)
+          console.error(`[Raya] Provider: Failed to fetch pending questions for ${dir}:`, error)
           continue
         }
         scanned.add(dir)
@@ -117,7 +117,7 @@ export async function fetchAndSendPendingQuestions(
       return { seen, complete: failed.size === 0 }
     }
   } catch (error) {
-    console.error("[Raya] KiloProvider: Failed to fetch pending questions:", error)
+    console.error("[Raya] Provider: Failed to fetch pending questions:", error)
   }
 }
 
@@ -149,12 +149,12 @@ export async function handleQuestionReply(
         ctx.clearQuestionDirectory(requestID)
         return true
       } catch (retry) {
-        console.error("[Raya] KiloProvider: Failed to reply to recovered question:", retry)
+        console.error("[Raya] Provider: Failed to reply to recovered question:", retry)
         ctx.postMessage({ type: "questionError", requestID })
         return false
       }
     }
-    console.error("[Raya] KiloProvider: Failed to reply to question:", error)
+    console.error("[Raya] Provider: Failed to reply to question:", error)
     ctx.postMessage({ type: "questionError", requestID })
     return false
   }
@@ -187,12 +187,12 @@ export async function handleQuestionReject(
         ctx.clearQuestionDirectory(requestID)
         return true
       } catch (retry) {
-        console.error("[Raya] KiloProvider: Failed to reject recovered question:", retry)
+        console.error("[Raya] Provider: Failed to reject recovered question:", retry)
         ctx.postMessage({ type: "questionError", requestID })
         return false
       }
     }
-    console.error("[Raya] KiloProvider: Failed to reject question:", error)
+    console.error("[Raya] Provider: Failed to reject question:", error)
     ctx.postMessage({ type: "questionError", requestID })
     return false
   }

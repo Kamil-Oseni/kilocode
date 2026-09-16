@@ -41,7 +41,7 @@ export async function handleForkSession(ctx: ForkContext, sessionId: string, mes
         ctx.forked(session, sessionId)
       },
       registerSession: () => {},
-      log: (...args) => console.log("[Raya] KiloProvider:", ...args),
+      log: (...args) => console.log("[Raya] Provider:", ...args),
     },
     sessionId,
     undefined,

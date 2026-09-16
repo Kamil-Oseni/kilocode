@@ -55,7 +55,7 @@ const panelTitleHandler = (panel: vscode.WebviewPanel) => (title: string) => {
 
 // Activated via "onStartupFinished" and "onUri" (package.json) so that commands, code actions,
 // keybindings, autocomplete, commit-message generation, and URI deep links all work immediately —
-// without requiring the user to open a Kilo sidebar or panel first. The CLI backend is NOT spawned here;
+// without requiring the user to open a Raya sidebar or panel first. The CLI backend is NOT spawned here;
 // it starts lazily when a webview connects or when ensureBackendForAutocomplete() triggers it.
 export function activate(context: vscode.ExtensionContext) {
   console.log("Raya extension is now active")

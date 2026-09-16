@@ -67,7 +67,7 @@ export async function handlePermissionResponse(
 
   const target = sessionID || ctx.currentSessionId
   if (!target) {
-    console.error("[Raya] KiloProvider: No sessionID for permission response")
+    console.error("[Raya] Provider: No sessionID for permission response")
     ctx.postMessage({ type: "permissionError", permissionID: permissionId })
     return
   }
@@ -94,7 +94,7 @@ export async function handlePermissionResponse(
       .then(() => "ok" as const)
       .catch((error: unknown) => {
         if (isNotFoundError(error)) return "stale" as const
-        console.error("[Raya] KiloProvider: Failed to save always-rules:", error)
+        console.error("[Raya] Provider: Failed to save always-rules:", error)
         ctx.postMessage({ type: "permissionError", permissionID: permissionId })
         return "error" as const
       })
@@ -110,7 +110,7 @@ export async function handlePermissionResponse(
     .then(() => "ok" as const)
     .catch((error: unknown) => {
       if (isNotFoundError(error)) return "stale" as const
-      console.error("[Raya] KiloProvider: Failed to respond to permission:", error)
+      console.error("[Raya] Provider: Failed to respond to permission:", error)
       ctx.postMessage({ type: "permissionError", permissionID: permissionId })
       return "error" as const
     })
@@ -135,7 +135,7 @@ export async function fetchAndSendPendingPermissions(ctx: PermissionContext): Pr
     for (const dir of dirs) {
       const { data, error } = await ctx.client.permission.list({ directory: dir })
       if (error) {
-        console.error(`[Raya] KiloProvider: Failed to fetch pending permissions for ${dir}:`, error)
+        console.error(`[Raya] Provider: Failed to fetch pending permissions for ${dir}:`, error)
         continue
       }
       valid.add(dir)
@@ -159,6 +159,6 @@ export async function fetchAndSendPendingPermissions(ctx: PermissionContext): Pr
     }
     ctx.prunePermissionDirectories(seen, valid)
   } catch (error) {
-    console.error("[Raya] KiloProvider: Failed to fetch pending permissions:", error)
+    console.error("[Raya] Provider: Failed to fetch pending permissions:", error)
   }
 }

@@ -95,7 +95,7 @@ export async function handleRequestCloudSessions(
       nextCursor: result.data.nextCursor ?? null,
     })
   } catch (error) {
-    console.error("[Raya] KiloProvider: Failed to fetch cloud sessions:", error)
+    console.error("[Raya] Provider: Failed to fetch cloud sessions:", error)
     fail("Cloud history could not be loaded. Retry when the connection is available.")
   }
 }

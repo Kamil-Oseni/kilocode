@@ -181,6 +181,30 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_DISABLE_EXTERNAL_SKILLS",
       policy: "safety-monotonic-aliases",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_claude_code",
+      raya: "RAYA_DISABLE_CLAUDE_CODE",
+      legacy: "KILO_DISABLE_CLAUDE_CODE",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_claude_code_prompt",
+      raya: "RAYA_DISABLE_CLAUDE_CODE_PROMPT",
+      legacy: "KILO_DISABLE_CLAUDE_CODE_PROMPT",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_claude_code_skills",
+      raya: "RAYA_DISABLE_CLAUDE_CODE_SKILLS",
+      legacy: "KILO_DISABLE_CLAUDE_CODE_SKILLS",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_skill_shell",
+      raya: "RAYA_DISABLE_SKILL_SHELL",
+      legacy: "KILO_DISABLE_SKILL_SHELL",
+      policy: "safety-monotonic-aliases",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

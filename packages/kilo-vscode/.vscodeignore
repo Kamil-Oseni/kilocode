@@ -8,6 +8,7 @@ storybook-static/**
 tmp/**
 .tmp/**
 coverage/**
+.turbo/**
 .kilo-dev/**
 # raya_change end
 src/**

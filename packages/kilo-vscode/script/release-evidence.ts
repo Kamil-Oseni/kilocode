@@ -112,13 +112,13 @@ export async function inspect(file: string, target: string, release: string) {
     for await (const entry of zip.eachEntry()) {
       entries++
       if (entry.fileName === host.cli) cli = entry.uncompressedSize
-      if (/(^|\/)(\.env($|\.)|[^/]*\.tmp$)/i.test(entry.fileName)) sensitive++
+      if (/(^|\/)(\.env($|\.)|\.turbo\/|[^/]*\.(tmp|log)$)/i.test(entry.fileName)) sensitive++
     }
   } finally {
     zip.close()
   }
   if (!entries || !cli) throw new Error("Release archive is missing its bundled CLI or has no entries.")
-  if (sensitive) throw new Error("Release archive contains .env or .tmp files.")
+  if (sensitive) throw new Error("Release archive contains environment, temporary, cache, or log files.")
   return {
     path: path.relative(root, file).replaceAll("\\", "/"),
     bytes: Bun.file(file).size,

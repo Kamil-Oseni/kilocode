@@ -73,7 +73,11 @@ describe("release evidence runner", () => {
 
       const unsafe = path.join(root, "unsafe.vsix")
       await archive(unsafe, "extension/.env")
-      await expect(inspect(unsafe, "win32-x64", "7.4.24")).rejects.toThrow(".env or .tmp")
+      await expect(inspect(unsafe, "win32-x64", "7.4.24")).rejects.toThrow("environment, temporary")
+
+      const cache = path.join(root, "cache.vsix")
+      await archive(cache, "extension/.turbo/turbo-typecheck.log")
+      await expect(inspect(cache, "win32-x64", "7.4.24")).rejects.toThrow("cache, or log")
     } finally {
       await rm(root, { recursive: true, force: true })
     }

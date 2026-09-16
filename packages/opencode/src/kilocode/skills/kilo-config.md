@@ -1,8 +1,8 @@
-# Kilo CLI Configuration Reference
+# Raya CLI Configuration Reference
 
 All config lives in `kilo.json` (or `kilo.jsonc`). Precedence low-to-high: remote well-known, global (`~/.config/kilo/kilo.json`), env `KILO_CONFIG`, project `./kilo.json`, `.kilo/kilo.json`, `KILO_CONFIG_CONTENT`, managed (see Config File Locations). Deep-merged; later wins.
 
-This also covers where Kilo looks for config files, commands, agents, and skills across project, global, and legacy paths such as `.kilo/`, `.kilocode/`, and `~/.config/kilo/`, plus Agent Manager setup/run scripts in the VS Code extension.
+This also covers where Raya looks for config files, commands, agents, and skills across project, global, and legacy paths such as `.kilo/`, `.kilocode/`, and `~/.config/kilo/`, plus Agent Manager setup/run scripts in the VS Code extension.
 
 ## Commands (`.kilo/command/*.md`)
 
@@ -218,7 +218,7 @@ Rules are evaluated top-to-bottom — the **last** matching rule wins. Put broad
 
 Use `disabled_providers` to prevent specific providers from loading. This is useful when you want to exclude providers that are built-in, or auto-detected via environment variables, from appearing in the model picker.
 
-For example, this configuration will hide all models from the built-in Kilo Gateway as well as any from the OpenAI provider which may be enabled automatically through environment variables.
+For example, this configuration will hide all models from the built-in Raya Gateway as well as any from the OpenAI provider which may be enabled automatically through environment variables.
 
 ```jsonc
 {

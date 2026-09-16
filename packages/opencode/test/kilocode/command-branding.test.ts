@@ -69,6 +69,8 @@ describe("Kilo command branding", () => {
       "src/cli/cmd/uninstall.ts",
       "src/provider/error.ts",
       "src/provider/provider.ts",
+      "src/kilocode/skills/kilo-config.md",
+      "src/kilocode/session/processor.ts",
     ]
     const src = (await Promise.all(files.map((file) => Bun.file(path.join(root, file)).text()))).join("\n")
     const legacy = [
@@ -133,6 +135,10 @@ describe("Kilo command branding", () => {
       "Thank you for using Kilo",
       "work properly with Kilo",
       "Kilo auth",
+      "# Kilo CLI Configuration Reference",
+      "where Kilo looks for config files",
+      "built-in Kilo Gateway",
+      "Kilo will compact",
     ]
 
     expect(legacy.filter((text) => src.includes(text))).toEqual([])
@@ -170,6 +176,10 @@ describe("Kilo command branding", () => {
     expect(src).toContain("Thank you for using Raya")
     expect(src).toContain("work properly with Raya")
     expect(src).toContain("Raya sign-in")
+    expect(src).toContain("# Raya CLI Configuration Reference")
+    expect(src).toContain("where Raya looks for config files")
+    expect(src).toContain("built-in Raya Gateway")
+    expect(src).toContain("Raya will compact")
     expect(src).toContain('id: "kilo"')
     expect(src).toContain("`kilo auth login`")
     expect(src).toContain("{highlight}kilo serve{/highlight}")

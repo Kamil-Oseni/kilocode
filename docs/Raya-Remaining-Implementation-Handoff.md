@@ -1,10 +1,30 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `e48019e771`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `b129dfdee7`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 20:12 America/Toronto - Continue from ten admitted profile writers
+
+Product commit `b129dfdee7` is on `origin/main`. The partial manifest now has **10 of 33 ordinary writers integrated**: JSON Storage; provider credentials; MCP credentials; managed tool output; sandbox preference; sandbox policy; plugin metadata; reverted-change notes; browser-upload cache; and remote-attachment scratch. The manifest must remain `complete: false`, the compatibility ledger must remain `cutoverReady: false`, and production must expose no root-switch coordinator while the other 23 writer boundaries, readers, process ownership, copy, recovery and rollback are incomplete.
+
+`profile.tmp.attachments` now admits one complete `materialize(parts)` operation before resolving `Global.Path.tmp`. Keep that lease around all sequential attachment fetches and every scratch mutation so a multipart prompt cannot return paths from different generations. `dispose()` must first wait for the helper's active materializations, then run recursive scratch cleanup through a separately admitted operation. Preserve its caught-and-logged cleanup failure: the production sender deliberately invokes disposal as best effort. Do not make a closed cleanup rejection escape that caller.
+
+The attachment admission test changes the root inside admission, proves one active lease, drains a delayed fetch, rejects a late materialization during `draining`, preserves the earlier root, tolerates cleanup while closed, and verifies materialization plus cleanup after reopen. The complete focused group passes **47 tests / 562 assertions**; the actual `RemoteSender` suite passes **92 tests / 288 assertions**. Bounded CLI typecheck and the brand, annotation, Promise-facade, Markdown-table, formatting and whitespace guards pass. The protected push passed all 29 JavaScript/TypeScript packages plus JetBrains. The reviewed inventory is **69,220** total: public 1,693; compatibility 35,274; provenance 5,686; internal 26,567. Its pinned compatibility digest is `13e2a9a9b43dedb63575dbc179fa53aaf4a1577ca9881cad205abd756709d456`.
+
+Preserve the revert-note concurrency follow-up in `f7a24693e2`. `record` and `take` use `Flock` keyed by the resolved note file, publish JSON atomically, remove with forced unlink semantics and update the in-memory cache only after durable success. Same-process concurrent records retain their merged paths. Do not restore the older handoff claim that revert notes use an unflocked overwrite. The remaining gap is narrower: the lock directory is startup-rooted, so independently rooted processes pointed at the same override file can still evade one another.
+
+Continue the compatibility work in this corrected order:
+
+1. Re-audit `profile.cache.models` and integrate it only if every producer, timer and cleanup path is enumerated. Resolve the active root after admission, retain one generation through each operation, test closure without byte changes and preserve existing serialization.
+2. Re-scope `profile.cache.commands` before implementation. Its current manifest entry is too broad because at least one delete path can target project files outside profile roots. Split external/project mutation from reconstructible profile cache, update sources and methods, and admit only the exact profile writer.
+3. Correct `profile.data.repos` by adding the omitted `packages/core/src/repository-cache.ts` source, then inspect both processes and lifecycle before changing coverage.
+4. Audit `profile.bin.ripgrep` only after confirming download, extraction, executable replacement, partial cleanup and concurrent installer ownership. Treat externally overridden binary roots separately.
+5. Keep both SQLite clients for a later paired boundary. They require blocked acquisition, drained transactions, Effect layer disposal, legacy `Database.close()`, cross-process ownership and SQLite online backup; never copy WAL or SHM files.
+
+For every boundary, add real-file generation-selection, closed-gate preservation, failure/interruption release and reopen evidence before changing coverage. Regenerate the tracked brand inventory only after new files are staged so the baseline includes them, pin the new compatibility count and digest in `migration/compatibility.ts`, run the smallest focused suite plus bounded CLI typecheck and affected guards, commit and push the product slice, then update both implementation documents with `ChatGPT`, local date/time, exact commit, evidence and remaining risk. Continue batching these internal-only slices for a coherent low-memory snapshot; do not rebuild the roughly 500 MB extension after every writer. Do not rename or delete a live Kilo identity in place. The Raya-owned VS Code distribution remains Version 3 work.
 
 ## ChatGPT 2026-09-15 18:39 America/Toronto - Continue from the partial profile-writer manifest
 

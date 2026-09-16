@@ -1,10 +1,18 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `51b8fd6e8d`; the installed package source is `51b8fd6e8d`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `6807478b00`; the installed package source is `6807478b00`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 04:36 America/Toronto - Final permission baseline installed
+
+**Status: pushed and installed from `6807478b00`.** The follow-up inventory correction includes every newly tracked resolver, test and changeset file. Its constrained push reused 28 of 29 JavaScript/TypeScript checks, reran the changed CLI check, and reused the successful JetBrains gate. The low-memory workflow then regenerated the SDK, rebuilt and smoke-tested the Windows CLI, reran both extension typechecks, cached lint and production bundling, and installed the final package.
+
+Installed version: `eden.raya@7.4.23-snapshot+6807478b00.kamil-oseni.1789547541197`. Vault package `raya.5434352747e5525514b398bca5ee18dc441a967064959666f042744b23ba84f5.vsix` is `520,230,974` bytes with SHA-256 `5434352747E5525514B398BCA5EE18DC441A967064959666F042744B23BA84F5`. Its installed CLI is `231,276,544` bytes with SHA-256 `6FF3BE3CFF6045CF6005750045358417FDB046DA4AF89AD57955633F21887A8C`; both match the vault manifest. Free disk space is `124,100,112,384` bytes (115.58 GiB), and no Bun, tsgo, tsgolint or Java process remains.
+
+The open host still has the prior active pointer. A normal VS Code reload must change digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, to digest `5434352747e5525514b398bca5ee18dc441a967064959666f042744b23ba84f5` before installed-host acceptance.
 
 ## ChatGPT 2026-09-16 04:26 America/Toronto - Permission-authority checkpoint pushed and installed
 

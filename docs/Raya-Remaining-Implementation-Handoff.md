@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `51b8fd6e8d`; the installed package source is `51b8fd6e8d`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `6807478b00`; the installed package source is `6807478b00`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 04:36 America/Toronto - Continue from final installed permission baseline
+
+Product checkpoint `6807478b00` is on `origin/main` and installed. It corrects the inventory timing edge case by including all newly tracked permission resolver, test and changeset files in the baseline. The inventory now has **70,403** references: public 1,654; compatibility 36,153; provenance 5,686; internal 26,910. The compatibility digest is `0726013a1433172b2e20c9e6ad5008028f1be8ddb2d7326d7c7de8be33b10458`. Inventory, ledger script and ledger tests pass after the correction.
+
+Installed version is `eden.raya@7.4.23-snapshot+6807478b00.kamil-oseni.1789547541197`. Preserve `raya.5434352747e5525514b398bca5ee18dc441a967064959666f042744b23ba84f5.vsix`: exact size `520,230,974` bytes, SHA-256 `5434352747E5525514B398BCA5EE18DC441A967064959666F042744B23BA84F5`. The installed CLI is `231,276,544` bytes with SHA-256 `6FF3BE3CFF6045CF6005750045358417FDB046DA4AF89AD57955633F21887A8C`. Both match the vault manifest. The low-memory workflow passed SDK generation, the fresh Windows CLI build and three smoke boundaries, host/webview typechecks, cached lint, production bundle, packaging, retention and installation. Free disk space is 115.58 GiB and no build process remains.
+
+The open host remains on digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`. After a normal reload, require digest `5434352747e5525514b398bca5ee18dc441a967064959666f042744b23ba84f5` before manual installed-host verification. Continue autonomous repository work without waiting for that reload.
 
 ## ChatGPT 2026-09-16 04:26 America/Toronto - Continue from installed permission-authority checkpoint
 

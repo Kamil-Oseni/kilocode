@@ -1,10 +1,18 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `7e7aba8673`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `c077d106e8`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 02:32 America/Toronto - Claude safety checkpoint pushed and installed
+
+**Status: pushed and installed.** Local and remote `main` reached `c077d106e8`, then the low-memory workflow built and installed `7.4.23-snapshot+c077d106e8.kamil-oseni.1789540126617`. SDK preparation regenerated the v2 client without tracked drift. A fresh Windows CLI build passed version, model-catalog and sandbox-worker smoke checks; extension host/webview types, full lint, production bundling, VSIX packaging and installation also passed.
+
+The VSIX contains 435 files and reports 496.12 MB. The installer retained rollback package `raya.f077fa1cb4d601e1c6ce7b176ee059aa353bcb04c0ce9967b81f5d03e5aa79d5.vsix`, then removed one older vault package, one staged package and one installed snapshot. Independent extension listing confirms `eden.raya@7.4.23-snapshot+c077d106e8.kamil-oseni.1789540126617`. Free disk space is 116.14 GB.
+
+The already-open VS Code host was not force-reloaded and may continue using its prior package until the user normally reloads. The implementation goal remains active.
 
 ## ChatGPT 2026-09-16 02:03 America/Toronto - Claude compatibility restrictions gain complete Raya aliases
 

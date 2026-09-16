@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `25bc30dd2f`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `de11ef27ec`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 00:33 America/Toronto - Preserve safety-monotonic pure-mode compatibility
+
+Preserve product commits `4f67b6afea`, `c8bf151157` and `de11ef27ec`. `RAYA_PURE` and `KILO_PURE` are a safety-monotonic pair: case-insensitive `true` or `1` in either name must keep external plugins disabled. Never replace this with ordinary Raya-first selection, because a false, empty or invalid Raya value could then suppress a true Kilo value and unexpectedly enable third-party code. Both names must be absent or false before external plugins load. Conflict diagnostics may expose the two labels but no supplied values.
+
+Keep Core `EnvAlias.enabledValues` as the shared injected-value parser, `EnvAlias.enabled` as the process-environment wrapper, and the legacy `Flag.KILO_PURE` getter dynamic. Keep the Effect `RuntimeFlags.pure` reader on the same resolver. The `--pure` writer must continue setting both aliases through `PureEnv.enable`; retain its use in both the main CLI and `temporary.ts`. The temporary TUI previously accepted `--pure` without applying it, and this fix must not regress. Ambient variables already flow through direct CLI, daemon, VS Code and JetBrains launch paths.
+
+Evidence is Core **35 / 70**, Effect runtime flags **44 / 95**, TUI plugin loading **5 / 5**, and CLI writer behavior **2 / 2**, with Core and bounded OpenCode typechecks plus affected guards. The ledger has **21 environment pairs**: 18 ordinary Raya-first, one safety-monotonic pure pair, and two strict credentials. The Admin response and generated SDK must retain `safety-monotonic-aliases`; `cutoverReady` remains false. Treat `KILO_PERMISSION` separately: it is authority-bearing and needs a dedicated fail-closed merge design before adding `RAYA_PERMISSION`. Installed source remains `4e5207a6ea`; batch this slice into a later coherent low-memory snapshot.
+
+After this handoff and progress record, the checked inventory is **69,791** total: public 1,654; compatibility 35,708; provenance 5,686; internal 26,743. The pinned compatibility digest is `4c5b8e67a066bf9c3b6fe1dcee1b230ca4e8f2f1b02fb3a420bdc6284c3e4366`.
 
 ## ChatGPT 2026-09-16 00:10 America/Toronto - Continue from installed compatibility checkpoint
 
@@ -890,7 +900,7 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 20 reviewed environment pairs with documented precedence, including closed config readers in Core, both SDK generations and VS Code, strict server credentials, the project-config opt-out and session retry budget, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
+| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 21 reviewed environment pairs with documented policies, including closed config readers in Core, both SDK generations and VS Code, strict server credentials, safety-monotonic pure mode, the project-config opt-out and session retry budget, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |

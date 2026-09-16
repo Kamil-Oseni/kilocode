@@ -109,7 +109,7 @@ Duplicates (same package, same version) are deduplicated. Hooks from multiple pl
 
 ### Disabling external plugins
 
-Set the `KILO_PURE=1` environment variable to skip all external plugins — only built-in plugins will load. Useful for reproducible CI runs or debugging.
+Set `RAYA_PURE=1` to skip all external plugins; `KILO_PURE=1` remains a compatibility alias. Either variable can enable pure mode, so both must be absent or false to load external plugins — only built-in plugins will load. Useful for reproducible CI runs or debugging.
 
 ---
 
@@ -581,7 +581,7 @@ Host slots include `home_prompt_right`, `session_prompt`, `session_prompt_right`
 - **Package installed but not active in one runtime** — make sure the package exposes the matching entrypoint. Server plugins need `exports["./server"]` or `main`; TUI plugins need `exports["./tui"]` or valid `oc-themes`. Packages that only support the other runtime are skipped with a warning instead of causing a fatal load error.
 
 - **Local plugin can't find an npm import** — add a `package.json` in the config directory so `bun install` picks up the dependency (see [Dependencies](#dependencies)).
-- **Plugin loads in dev but not in CI** — verify `KILO_PURE` is not set, and that npm-installed plugins are cached under `packages/` in the current CLI XDG cache directory (`~/.cache/opencode/packages/` by default, or `$XDG_CACHE_HOME/opencode/packages/` when `XDG_CACHE_HOME` is set). Run with `--log-level DEBUG` to see install output.
+- **Plugin loads in dev but not in CI** — verify neither `RAYA_PURE` nor `KILO_PURE` enables pure mode, and that npm-installed plugins are cached under `packages/` in the current CLI XDG cache directory (`~/.cache/opencode/packages/` by default, or `$XDG_CACHE_HOME/opencode/packages/` when `XDG_CACHE_HOME` is set). Run with `--log-level DEBUG` to see install output.
 - **Reset the plugin cache** — delete the plugin package folder under the CLI's `packages/` cache directory (or the `node_modules` cache under your config directory) and restart Kilo.
 
 ---

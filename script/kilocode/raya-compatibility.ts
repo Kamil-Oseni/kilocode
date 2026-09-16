@@ -73,6 +73,7 @@ export function check(
     "SESSION_RETRY_LIMIT",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
+    ["RAYA_PURE", "KILO_PURE", "safety-monotonic-aliases"],
     ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],
     ["RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", "explicit-or-matching-aliases"],
   )

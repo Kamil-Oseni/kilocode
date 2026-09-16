@@ -41,6 +41,7 @@ export namespace RayaMigrationLedger {
   export const Policy = Schema.Literals([
     "raya-preferred",
     "raya-wins-legacy-write",
+    "safety-monotonic-aliases",
     "explicit-or-matching-aliases",
     "legacy-canonical",
     "raya-new-only",
@@ -130,6 +131,12 @@ export namespace RayaMigrationLedger {
       legacy: `KILO_${name}`,
       policy: "raya-wins-legacy-write" as const,
     })),
+    {
+      kind: "environment:pure",
+      raya: "RAYA_PURE",
+      legacy: "KILO_PURE",
+      policy: "safety-monotonic-aliases" as const,
+    },
     ...["SERVER_PASSWORD", "SERVER_USERNAME"].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
@@ -383,8 +390,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_640,
-        digest: "f91d01e09f8acd3b9b68686d250d0f7e9b1ff7c113ee8cbb79df76310822735a",
+        count: 35_708,
+        digest: "4c5b8e67a066bf9c3b6fe1dcee1b230ca4e8f2f1b02fb3a420bdc6284c3e4366",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

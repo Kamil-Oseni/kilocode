@@ -41,12 +41,13 @@ globalThis.window = window
 const sent = []
 globalThis.acquireVsCodeApi = () => ({ postMessage: (msg) => sent.push(msg), getState: () => ({}), setState: () => {} })
 
-const { createComponent } = await import("solid-js")
+const { createComponent, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx")
 const { Inbox } = await import("../../webview-ui/src/components/routines/Inbox.tsx")
 const root = document.createElement("div")
 document.body.append(root)
+const [connection, setConnection] = createSignal("connected")
 const dispose = render(
   () =>
     createComponent(VSCodeProvider, {
@@ -61,6 +62,9 @@ const dispose = render(
           output: "Weekly report",
           enabled: true,
           canInspect: false,
+          get connection() {
+            return connection()
+          },
           box: {
             agentID: "books",
             conversationID: "rcv_books",
@@ -110,6 +114,11 @@ try {
   await Promise.resolve()
   assert.match(root.textContent, /Reports and follow-ups/)
 
+  const composer = root.querySelector("textarea[aria-label='Message this worker']")
+  assert.ok(composer)
+  composer.value = "Keep this draft"
+  composer.dispatchEvent(new window.Event("input", { bubbles: true }))
+
   const search = root.querySelector("input[type='search']")
   assert.ok(search)
   search.value = "tax"
@@ -118,10 +127,83 @@ try {
   const filtered = sent.findLast((msg) => msg.type === "routineInboxPage")
   assert.equal(filtered.search, "tax")
   assert.equal(root.querySelectorAll(".routines-line-skeleton").length, 3)
-  emit({ type: "routineInboxPage", requestID: filtered.requestID, agentID: "books", messages: [] })
+  setConnection("disconnected")
+  await Promise.resolve()
+  assert.equal(root.querySelector("[role='log']")?.getAttribute("aria-busy"), "false")
+  assert.match(root.textContent, /Offline\. Your messages and draft stay here/)
+  assert.equal(root.querySelector("input[type='search']")?.disabled, true)
+  assert.equal(composer.disabled, false)
+  assert.equal(composer.value, "Keep this draft")
+  const send = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === "Send")
+  assert.ok(send)
+  assert.equal(send.disabled, true)
+
+  emit({
+    type: "routineInboxPage",
+    requestID: filtered.requestID,
+    agentID: "books",
+    messages: [
+      { id: "late", agentID: "books", kind: "worker", source: "late", body: "Obsolete reply", time: 1 },
+    ],
+  })
+  await Promise.resolve()
+  assert.equal(root.textContent.includes("Obsolete reply"), false)
+
+  setConnection("connected")
+  await Promise.resolve()
+  const recovered = sent.findLast((msg) => msg.type === "routineInboxPage")
+  assert.notEqual(recovered.requestID, filtered.requestID)
+  assert.equal(recovered.search, "tax")
+  assert.equal(root.textContent.includes("Offline. Your messages and draft stay here"), false)
+  assert.equal(root.querySelector("[role='log']")?.getAttribute("aria-busy"), "true")
+  assert.equal(composer.value, "Keep this draft")
+  assert.equal(sent.findLast((msg) => msg.type === "routineInboxDraft")?.draft, "Keep this draft")
+
+  emit({ type: "routineInboxPage", requestID: recovered.requestID, agentID: "books", messages: [] })
   await Promise.resolve()
   assert.match(root.textContent, /No messages match this search/)
-  console.log("routine-inbox-state: initial load, failure, retry, empty, and filtered-empty assertions passed")
+
+  send.click()
+  await Promise.resolve()
+  const firstSend = sent.findLast((msg) => msg.type === "routineInboxSend")
+  assert.ok(firstSend)
+  setConnection("disconnected")
+  await Promise.resolve()
+  assert.match(root.textContent, /connection was lost before Raya confirmed this message/)
+  const retrySend = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === "Retry")
+  assert.ok(retrySend)
+  assert.equal(retrySend.disabled, true)
+
+  setConnection("connected")
+  await Promise.resolve()
+  const refreshed = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({ type: "routineInboxPage", requestID: refreshed.requestID, agentID: "books", messages: [] })
+  await Promise.resolve()
+  assert.equal(retrySend.disabled, false)
+  retrySend.click()
+  await Promise.resolve()
+  const secondSend = sent.findLast((msg) => msg.type === "routineInboxSend")
+  assert.notEqual(secondSend.requestID, firstSend.requestID)
+  assert.equal(secondSend.source, firstSend.source)
+  emit({
+    type: "routineInboxSent",
+    requestID: secondSend.requestID,
+    agentID: "books",
+    message: {
+      id: "saved",
+      agentID: "books",
+      kind: "user",
+      source: secondSend.source,
+      body: secondSend.body,
+      time: 2,
+    },
+  })
+  await Promise.resolve()
+  assert.equal(composer.value, "")
+  assert.equal(sent.findLast((msg) => msg.type === "routineInboxDraft")?.draft, null)
+  console.log(
+    "routine-inbox-state: load, retry, offline preservation, reconnect, exact send retry, and filtered-empty assertions passed",
+  )
 } finally {
   dispose()
   root.remove()

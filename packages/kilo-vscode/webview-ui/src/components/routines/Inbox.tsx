@@ -1,7 +1,7 @@
 import { Component, For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
-import type { ExtensionMessage } from "../../types/messages"
+import type { ConnectionState, ExtensionMessage } from "../../types/messages"
 import { ChatInfo } from "./ChatInfo"
 import { ConversationSearch } from "./ConversationSearch"
 import { ConversationState } from "./ConversationState"
@@ -207,6 +207,7 @@ function title(role: "prior" | "this" | "follow") {
 const Trace: Component<{
   id: string
   busy: boolean
+  disabled: boolean
   tree?: Tree
   error?: string
   onShow: (id: string) => void
@@ -222,7 +223,13 @@ const Trace: Component<{
   }
   return (
     <>
-      <Button type="button" size="small" variant="ghost" disabled={props.busy} onClick={() => props.onShow(props.id)}>
+      <Button
+        type="button"
+        size="small"
+        variant="ghost"
+        disabled={props.busy || props.disabled}
+        onClick={() => props.onShow(props.id)}
+      >
         {props.busy ? "Loading request chain" : props.tree ? "Refresh request chain" : "Show request chain"}
       </Button>
       <Show when={props.error}>
@@ -252,6 +259,7 @@ const Line: Component<{
   item: Note
   rows: Note[]
   busy: boolean
+  disabled: boolean
   look: string
   tree?: Tree
   fault?: string
@@ -278,7 +286,7 @@ const Line: Component<{
           type="button"
           size="small"
           variant="ghost"
-          disabled={props.busy}
+          disabled={props.busy || props.disabled}
           onClick={() => {
             const id = props.item.occurrenceID
             if (id) props.onStop(id)
@@ -292,6 +300,7 @@ const Line: Component<{
           <Trace
             id={value()}
             busy={props.look === value()}
+            disabled={props.disabled}
             tree={props.tree}
             error={props.fault}
             onShow={props.onShow}
@@ -410,9 +419,14 @@ function saved(value: unknown) {
   return { state, reason }
 }
 
-const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; runID?: string; onDone?: () => void }> = (
-  props,
-) => {
+const Pass: Component<{
+  agentID: string
+  workers: Peer[]
+  workspace?: string
+  runID?: string
+  connected: boolean
+  onDone?: () => void
+}> = (props) => {
   const vscode = useVSCode()
   const [ask, setAsk] = createSignal("")
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
@@ -434,6 +448,13 @@ const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; ru
   createEffect(() => {
     const id = props.agentID
     if (id !== seen) reset(id)
+  })
+
+  createEffect(() => {
+    if (props.connected || phase() !== "sending") return
+    setPhase("failed")
+    setError("The connection was lost before Raya confirmed this request. Reconnect, then retry.")
+    setNews("")
   })
 
   const receive = (msg: ExtensionMessage) => {
@@ -471,7 +492,7 @@ const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; ru
   const submit = (recipientID: string) => {
     const body = ask().trim()
     const peer = props.workers.find((item) => item.id === recipientID)
-    if (!body || phase() === "sending" || (peer && !ready(peer, props.workspace))) return
+    if (!props.connected || !body || phase() === "sending" || (peer && !ready(peer, props.workspace))) return
     setPhase("sending")
     setError("")
     setNews("")
@@ -526,7 +547,7 @@ const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; ru
           <Button
             type="button"
             size="small"
-            disabled={phase() === "sending" || !ask().trim() || !ready(item, props.workspace)}
+            disabled={!props.connected || phase() === "sending" || !ask().trim() || !ready(item, props.workspace)}
             onClick={() => submit(item.id)}
           >
             {caption(item, phase(), props.workspace)}
@@ -551,6 +572,7 @@ export const Inbox: Component<{
   output: string
   enabled: boolean
   canInspect: boolean
+  connection: ConnectionState
   onEdit: () => void
   onAccess: () => void
   onOutput: () => void
@@ -562,6 +584,7 @@ export const Inbox: Component<{
 }> = (props) => {
   const vscode = useVSCode()
   const ready = () => !!props.box
+  const connected = () => props.connection === "connected"
   const [thread, setThread] = createSignal<Note[]>([])
   const [cursor, setNext] = createSignal<string>()
   const [note, setNote] = createSignal("")
@@ -582,9 +605,12 @@ export const Inbox: Component<{
   const [searching, setSearching] = createSignal(false)
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
-  const removeDisabled = (id: string) => !ready() || phase() === "sending" || (!!removing() && removing() !== id)
-  const attachDisabled = () => !ready() || phase() === "sending" || picking() || !!removing() || files().length >= 8
-  const sendDisabled = () => !ready() || phase() === "sending" || (!note().trim() && files().length === 0)
+  const removeDisabled = (id: string) =>
+    !ready() || !connected() || phase() === "sending" || (!!removing() && removing() !== id)
+  const attachDisabled = () =>
+    !ready() || !connected() || phase() === "sending" || picking() || !!removing() || files().length >= 8
+  const sendDisabled = () =>
+    !ready() || !connected() || phase() === "sending" || (!note().trim() && files().length === 0)
   let source = `user:${crypto.randomUUID()}`
   let pageID = ""
   let sendID = ""
@@ -604,6 +630,7 @@ export const Inbox: Component<{
   let frame: HTMLDivElement | undefined
   let infoRef: HTMLButtonElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
+  let connection = props.connection
 
   const viewState = () => {
     const value = vscode.getState<InboxState>()
@@ -629,7 +656,7 @@ export const Inbox: Component<{
   }
 
   const load = (after?: string, search?: string) => {
-    if (wait) return
+    if (wait || !connected()) return
     wait = true
     older = !!after
     setLoading(true)
@@ -743,6 +770,50 @@ export const Inbox: Component<{
       rememberDraft(props.box.draft ?? "", props.box.draftAttachments ?? [])
     }
     refresh(latest)
+  })
+
+  createEffect(() => {
+    const state = props.connection
+    if (state === connection) return
+    connection = state
+    if (state !== "connected") {
+      pageID = crypto.randomUUID()
+      wait = false
+      setLoading(false)
+      setPageError("")
+      if (phase() === "sending") {
+        setPhase("failed")
+        setError("The connection was lost before Raya confirmed this message. Your draft is still here. Reconnect, then retry.")
+      }
+      if (picking()) {
+        setPicking(false)
+        setPickFailed(true)
+        setError("The connection was lost before Raya confirmed the attachment. Reconnect, then retry.")
+      }
+      const removal = removing()
+      if (removal) {
+        setRemoving("")
+        setRemoveFailed(removal)
+        setError("The connection was lost before Raya confirmed the attachment change. Reconnect, then retry.")
+      }
+      if (halt() === "sending") {
+        setHalt("failed")
+        setError("The connection was lost before Raya confirmed the stop request. Reconnect, then retry.")
+      }
+      if (look()) {
+        setFaults((prior) => ({ ...prior, [look()]: "Reconnect to read this request chain." }))
+        setLook("")
+      }
+      return
+    }
+    wait = false
+    setPageError("")
+    load(undefined, term || undefined)
+    if (timer) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+    persist(note())
   })
 
   const page = (msg: ExtensionMessage) => {
@@ -899,6 +970,7 @@ export const Inbox: Component<{
   }
 
   const search = (value: string) => {
+    if (!connected()) return
     wait = false
     older = false
     stick = true
@@ -912,6 +984,7 @@ export const Inbox: Component<{
   }
 
   const retry = () => {
+    if (!connected()) return
     const after = older ? cursor() : undefined
     wait = false
     load(after, term || undefined)
@@ -919,7 +992,7 @@ export const Inbox: Component<{
 
   const submit = () => {
     const body = note().trim()
-    if ((!body && files().length === 0) || phase() === "sending") return
+    if (!connected() || (!body && files().length === 0) || phase() === "sending") return
     setPhase("sending")
     setError("")
     sendID = crypto.randomUUID()
@@ -934,7 +1007,7 @@ export const Inbox: Component<{
   }
 
   const attach = () => {
-    if (picking() || files().length >= 8) return
+    if (!connected() || picking() || files().length >= 8) return
     setPicking(true)
     setPickFailed(false)
     setError("")
@@ -950,7 +1023,7 @@ export const Inbox: Component<{
 
   const remove = (id: string) => {
     const next = files().filter((file) => file.id !== id)
-    if (removing() || phase() === "sending") return
+    if (!connected() || removing() || phase() === "sending") return
     setRemoving(id)
     setRemoveFailed("")
     setError("")
@@ -965,7 +1038,7 @@ export const Inbox: Component<{
   }
 
   const stop = (id: string) => {
-    if (halt() === "sending") return
+    if (!connected() || halt() === "sending") return
     setHalt("sending")
     setError("")
     haltID = crypto.randomUUID()
@@ -978,7 +1051,7 @@ export const Inbox: Component<{
   }
 
   const show = (id: string) => {
-    if (look()) return
+    if (!connected() || look()) return
     setLook(id)
     lookID = crypto.randomUUID()
     vscode.postMessage({
@@ -1031,7 +1104,13 @@ export const Inbox: Component<{
           </span>
         </div>
         <Show when={!info() && props.workers && props.workers.length > 0}>
-          <Button variant="ghost" size="small" aria-expanded={passing()} onClick={() => setPassing((value) => !value)}>
+          <Button
+            variant="ghost"
+            size="small"
+            disabled={!connected()}
+            aria-expanded={passing()}
+            onClick={() => setPassing((value) => !value)}
+          >
             Delegate
           </Button>
         </Show>
@@ -1050,7 +1129,12 @@ export const Inbox: Component<{
         </Button>
       </header>
       <div class="routines-conversation" hidden={info()}>
-        <ConversationSearch agentID={props.agentID} name={props.name} onSearch={search} />
+        <ConversationSearch agentID={props.agentID} name={props.name} disabled={!connected()} onSearch={search} />
+        <Show when={!connected()}>
+          <p class="routines-offline" role="status" aria-live="polite">
+            Offline. Your messages and draft stay here. This conversation will refresh when Raya reconnects.
+          </p>
+        </Show>
         <div
           ref={pane}
           class="routines-thread-body"
@@ -1065,7 +1149,7 @@ export const Inbox: Component<{
             <Button
               variant="ghost"
               size="small"
-              disabled={loading()}
+              disabled={loading() || !connected()}
               onClick={() => {
                 const after = cursor()
                 if (after) load(after, term || undefined)
@@ -1074,7 +1158,7 @@ export const Inbox: Component<{
               {loading() && older ? "Loading earlier messages" : "Earlier messages"}
             </Button>
           </Show>
-          <Show when={!thread().length}>
+          <Show when={!thread().length && connected()}>
             <ConversationState loading={loading()} searching={searching()} error={pageError()} onRetry={retry} />
           </Show>
           <For each={thread()}>
@@ -1085,6 +1169,7 @@ export const Inbox: Component<{
                   item={item}
                   rows={thread()}
                   busy={halt() === "sending"}
+                  disabled={!connected()}
                   look={look()}
                   tree={id ? trees()[id] : undefined}
                   fault={id ? faults()[id] : undefined}
@@ -1097,7 +1182,7 @@ export const Inbox: Component<{
           <Show when={thread().length > 0 && pageError()}>
             <div class="routines-load-error" role="alert">
               <p>{pageError()}</p>
-              <Button type="button" size="small" variant="ghost" onClick={retry}>
+              <Button type="button" size="small" variant="ghost" disabled={!connected()} onClick={retry}>
                 Retry
               </Button>
             </div>
@@ -1167,6 +1252,7 @@ export const Inbox: Component<{
             workers={props.workers!}
             workspace={props.workspace}
             runID={props.runID}
+            connected={connected()}
             onDone={() => {
               wait = false
               load(undefined, term || undefined)

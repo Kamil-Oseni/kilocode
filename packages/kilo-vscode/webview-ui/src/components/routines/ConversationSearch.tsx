@@ -4,6 +4,7 @@ import { Component, Show, createEffect, createSignal, onCleanup } from "solid-js
 export const ConversationSearch: Component<{
   agentID: string
   name: string
+  disabled?: boolean
   onSearch: (query: string) => void
 }> = (props) => {
   const [query, setQuery] = createSignal("")
@@ -18,6 +19,12 @@ export const ConversationSearch: Component<{
     if (timer) clearTimeout(timer)
   })
 
+  createEffect(() => {
+    if (!props.disabled || !timer) return
+    clearTimeout(timer)
+    timer = undefined
+  })
+
   onCleanup(() => {
     if (timer) clearTimeout(timer)
   })
@@ -25,6 +32,7 @@ export const ConversationSearch: Component<{
   const change = (value: string) => {
     setQuery(value)
     if (timer) clearTimeout(timer)
+    if (props.disabled) return
     timer = setTimeout(() => props.onSearch(value.trim()), 250)
   }
 
@@ -41,6 +49,7 @@ export const ConversationSearch: Component<{
         <input
           type="search"
           value={query()}
+          disabled={props.disabled}
           maxLength={200}
           placeholder="Search conversation"
           aria-label={`Search messages with ${props.name}`}
@@ -54,7 +63,7 @@ export const ConversationSearch: Component<{
         />
       </label>
       <Show when={query()}>
-        <Button type="button" size="small" variant="ghost" onClick={() => change("")}>
+        <Button type="button" size="small" variant="ghost" disabled={props.disabled} onClick={() => change("")}>
           Clear
         </Button>
       </Show>

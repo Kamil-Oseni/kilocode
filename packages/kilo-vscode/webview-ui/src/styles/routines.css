@@ -1169,6 +1169,13 @@
   overflow-wrap: anywhere;
 }
 
+.routines-offline {
+  margin: 0;
+  padding: var(--raya-space-8) var(--raya-space-12);
+  border-block: 1px solid var(--border-muted, var(--vscode-panel-border));
+  color: var(--text-muted, var(--vscode-descriptionForeground));
+}
+
 .routines-line {
   display: flex;
   flex-direction: column;

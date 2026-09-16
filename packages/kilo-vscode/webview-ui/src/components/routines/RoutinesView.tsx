@@ -19,7 +19,7 @@ import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { runPresence } from "../../utils/run-presence"
-import type { AgentInfo, ExtensionMessage } from "../../types/messages"
+import type { AgentInfo, ConnectionState, ExtensionMessage } from "../../types/messages"
 import { action, reason, select, type Execution } from "./run"
 import { compile, initial, populate } from "../../../../src/shared/routine-schedule"
 import { ScheduleEditor } from "./ScheduleEditor"
@@ -774,6 +774,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [loaded, setLoaded] = createSignal(false)
   const [refreshing, setRefreshing] = createSignal(false)
   const [freshness, setFreshness] = createSignal("Waiting to refresh routines.")
+  const [connection, setConnection] = createSignal<ConnectionState>("connected")
   const [stale, setStale] = createSignal<Record<string, string>>({})
   const [boxes, setBoxes] = createSignal<Record<string, Box>>({})
   const [chosen, setChosen] = createSignal<string>()
@@ -1062,6 +1063,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const load = () => {
+    if (connection() !== "connected") {
+      setRefreshing(false)
+      setFreshness("Disconnected. Previously loaded routine information may be stale.")
+      return
+    }
     if (refreshing()) {
       dirty = true
       return
@@ -1104,6 +1110,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const refresh = (msg: ExtensionMessage) => {
     if (msg.type === "connectionState") {
+      setConnection(msg.state)
       correlation = crypto.randomUUID()
       revision = 0
       dirty = false
@@ -1798,6 +1805,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   output={item.output?.description?.trim() || "No required output"}
                   enabled={item.enabled}
                   canInspect={inspectable(item)}
+                  connection={connection()}
                   box={boxes()[item.id]}
                   workspace={item.dir ? folder(item.dir) : undefined}
                   workers={others(item.id, agents())}

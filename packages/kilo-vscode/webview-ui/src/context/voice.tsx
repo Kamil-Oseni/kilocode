@@ -392,7 +392,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
     if (message.type === "speechPlaybackError") {
       if (message.requestId !== state.request) return true
-      console.error("[Kilo New] Speech playback failed:", message.error)
+      console.error("[Raya] Speech playback failed:", message.error)
       setError(message.error)
       player.stop()
       return true
@@ -479,7 +479,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     unsubscribe()
     stopOpenAI()
     state.generation++
-    void realtime.stop().catch(() => console.error("[Kilo New] Voice cleanup failed during webview disposal."))
+    void realtime.stop().catch(() => console.error("[Raya] Voice cleanup failed during webview disposal."))
     vscode.postMessage({ type: "speechRealtimeStop" })
     player.stop(false)
     vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request || undefined })

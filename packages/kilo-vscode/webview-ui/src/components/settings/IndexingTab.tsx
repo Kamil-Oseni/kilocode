@@ -33,7 +33,7 @@ type Project = { id: string; root: string; label: string }
 type TuningKey = "searchMinScore" | "searchMaxResults" | "embeddingBatchSize" | "scannerMaxBatchRetries"
 
 const allProviders: { value: ProviderId; label: string }[] = [
-  { value: "kilo", label: "Kilo" },
+  { value: "kilo", label: "Raya" },
   { value: "openai", label: "OpenAI" },
   { value: "ollama", label: "Ollama (local)" },
   { value: "openai-compatible", label: "OpenAI-Compatible" },

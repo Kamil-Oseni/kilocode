@@ -217,7 +217,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
     window.addEventListener("mouseup", onUp)
   }
 
-  // Only show models from Kilo Gateway or connected providers.
+  // Only show models from Raya Gateway or connected providers.
   // kilo-auto/small is excluded unless includeAutoSmall is explicitly true.
   const visibleModels = createMemo(() => {
     if (props.models) return props.models

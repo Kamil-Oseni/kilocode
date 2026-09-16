@@ -1,6 +1,6 @@
 /**
  * CloudSessionList component
- * Displays cloud sessions from the Kilo cloud API, grouped by date.
+ * Displays cloud sessions from the Raya Cloud API, grouped by date.
  * Supports filtering by repository (git URL) and search by title.
  * Header/back button/import button are owned by the parent HistoryView.
  */

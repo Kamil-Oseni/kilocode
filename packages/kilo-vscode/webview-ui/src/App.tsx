@@ -373,18 +373,18 @@ const AppContent: Component = () => {
     const handler = (event: MessageEvent) => {
       const message = event.data
       if (message?.type === "action" && message.action) {
-        console.log("[Kilo New] App: 🎬 action:", message.action)
+        console.log("[Raya] App: 🎬 action:", message.action)
         handleViewAction(message.action)
       }
       if (message?.type === "navigate" && message.view && VALID_VIEWS.has(message.view)) {
-        console.log("[Kilo New] App: 🧭 navigate:", message.view, message.tab ? `tab=${message.tab}` : "")
+        console.log("[Raya] App: 🧭 navigate:", message.view, message.tab ? `tab=${message.tab}` : "")
         if (message.tab) setSettingsTab(message.tab)
         setAgentManagerProjectId(message.projectId)
         setCurrentView(message.view as ViewType)
         vscode.postMessage({ type: "settingsTabChanged", tab: message.tab })
       }
       if (message?.type === "openCloudSession" && message.sessionId) {
-        console.log("[Kilo New] App: ☁️ openCloudSession:", message.sessionId)
+        console.log("[Raya] App: ☁️ openCloudSession:", message.sessionId)
         session.selectCloudSession(message.sessionId)
         setCurrentView("newTask")
       }
@@ -392,14 +392,14 @@ const AppContent: Component = () => {
       handleForked(message)
       const target = subagentTarget(message)
       if (target) {
-        console.log("[Kilo New] App: 🔍 viewSubAgentSession:", target.sessionID)
+        console.log("[Raya] App: 🔍 viewSubAgentSession:", target.sessionID)
         setSubagent(target)
         session.setCurrentSessionID(target.sessionID)
         setCurrentView("subAgentViewer")
       }
       // legacy-migration: state-driven migration wizard
       if (message?.type === "migrationState") {
-        console.log("[Kilo New] App: 🔄 migrationState:", message.needed)
+        console.log("[Raya] App: 🔄 migrationState:", message.needed)
         setMigrationSource(message.source)
         setMigrationNeeded(message.needed)
       }

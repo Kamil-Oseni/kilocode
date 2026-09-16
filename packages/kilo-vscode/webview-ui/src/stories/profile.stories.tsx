@@ -55,7 +55,7 @@ const usage: ProviderUsageData = {
       sourceKind: "kilo_managed",
       providerLabel: "MiniMax",
       planLabel: "Token Plan Plus",
-      sourceLabel: "via Kilo",
+      sourceLabel: "via Raya",
       fetchState: "ready",
       planState: "active",
       routingState: "active",

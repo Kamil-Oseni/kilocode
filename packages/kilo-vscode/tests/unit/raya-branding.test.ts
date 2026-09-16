@@ -192,6 +192,43 @@ describe("Raya branding boundary", () => {
     expect(sources.some((source) => source.includes("kilo.jsonc"))).toBe(true)
   })
 
+  test("presents Raya in webview providers, diagnostics, and visual fixtures", async () => {
+    const indexing = await read("webview-ui/src/components/settings/IndexingTab.tsx")
+    const diagnostics = await Promise.all(
+      [
+        "webview-ui/src/App.tsx",
+        "webview-ui/src/components/history/SessionList.tsx",
+        "webview-ui/src/context/server.tsx",
+        "webview-ui/src/context/session.tsx",
+        "webview-ui/src/context/voice.tsx",
+        "webview-ui/src/context/vscode.tsx",
+      ].map(read),
+    )
+    const stories = await Promise.all(
+      [
+        "webview-ui/src/stories/StoryProviders.tsx",
+        "webview-ui/src/stories/chat.stories.tsx",
+        "webview-ui/src/stories/marketplace.stories.tsx",
+        "webview-ui/src/stories/profile.stories.tsx",
+        "webview-ui/src/stories/settings.stories.tsx",
+        "webview-ui/src/stories/shared.stories.tsx",
+        "webview-ui/src/stories/tool-call-lab.stories.tsx",
+      ].map(read),
+    )
+    const logs = diagnostics.join("\n")
+    const fixtures = stories.join("\n")
+
+    expect(indexing).toContain('{ value: "kilo", label: "Raya" }')
+    expect(indexing).not.toContain('{ value: "kilo", label: "Kilo" }')
+    expect(logs).toContain("[Raya]")
+    expect(logs).not.toContain("[Kilo New]")
+    expect(fixtures).toContain('name: "Raya Gateway"')
+    expect(fixtures).toContain('providerName: "Raya"')
+    expect(fixtures).not.toContain('name: "Kilo Gateway"')
+    expect(fixtures).not.toContain('providerName: "Kilo"')
+    expect(fixtures).toContain("Kilo-Org/kilocode")
+  })
+
   test("uses Raya in remote status, memory, and MCP recovery copy", async () => {
     const remote = [...new Bun.Glob("src/services/cli-backend/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
     const locales = [...new Bun.Glob("webview-ui/src/i18n/*.ts").scanSync({ cwd: root, absolute: true })]

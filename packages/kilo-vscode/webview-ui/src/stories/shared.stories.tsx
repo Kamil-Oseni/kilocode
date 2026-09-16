@@ -62,9 +62,9 @@ export const ModelSelectorNoProviders: Story = {
 const ACCESSIBLE_MODELS: EnrichedModel[] = [
   {
     id: "kilo-auto/efficient",
-    name: "Kilo Auto Efficient",
+    name: "Raya Auto Efficient",
     providerID: "kilo",
-    providerName: "Kilo",
+    providerName: "Raya",
     recommendedIndex: 0,
     options: {
       description:
@@ -74,9 +74,9 @@ const ACCESSIBLE_MODELS: EnrichedModel[] = [
   },
   {
     id: "kilo-auto/frontier",
-    name: "Kilo Auto Frontier",
+    name: "Raya Auto Frontier",
     providerID: "kilo",
-    providerName: "Kilo",
+    providerName: "Raya",
     recommendedIndex: 1,
     options: {
       description: "Routes each request to the strongest available models.",
@@ -84,11 +84,11 @@ const ACCESSIBLE_MODELS: EnrichedModel[] = [
     autoRouting: { models: ["openai/gpt-5.5", "anthropic/claude-opus-4.6"] },
   },
   { id: "omega", name: "Omega", providerID: "openai", providerName: "OpenAI", recommendedIndex: 2 },
-  { id: "alpha", name: "Alpha", providerID: "kilo", providerName: "Kilo" },
-  { id: "bravo", name: "Bravo", providerID: "kilo", providerName: "Kilo" },
-  { id: "charlie", name: "Charlie", providerID: "kilo", providerName: "Kilo" },
-  { id: "delta", name: "Delta", providerID: "kilo", providerName: "Kilo" },
-  { id: "echo", name: "Echo", providerID: "kilo", providerName: "Kilo" },
+  { id: "alpha", name: "Alpha", providerID: "kilo", providerName: "Raya" },
+  { id: "bravo", name: "Bravo", providerID: "kilo", providerName: "Raya" },
+  { id: "charlie", name: "Charlie", providerID: "kilo", providerName: "Raya" },
+  { id: "delta", name: "Delta", providerID: "kilo", providerName: "Raya" },
+  { id: "echo", name: "Echo", providerID: "kilo", providerName: "Raya" },
   { id: "nova", name: "Nova", providerID: "nvidia", providerName: "NVIDIA" },
   { id: "nemotron", name: "Nemotron", providerID: "nvidia", providerName: "NVIDIA" },
 ]

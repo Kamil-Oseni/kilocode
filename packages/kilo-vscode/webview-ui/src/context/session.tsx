@@ -717,11 +717,11 @@ export const SessionProvider: ParentComponent = (props) => {
     if (!pending || agents().length === 0 || (pending.modelID && catalog() <= pending.after)) return
     setPendingKiloModel(null)
     if (pending.modelID && !provider.providers()[KILO_PROVIDER_ID]?.models[pending.modelID]) {
-      console.warn("[Kilo New] Ignoring unavailable Kilo catalog model:", pending.modelID)
+      console.warn("[Raya] Ignoring unavailable Raya catalog model:", pending.modelID)
       return
     }
     if (pending.agent && !agentNames().has(pending.agent)) {
-      console.warn("[Kilo New] Ignoring unavailable Kilo agent:", pending.agent)
+      console.warn("[Raya] Ignoring unavailable Raya agent:", pending.agent)
       return
     }
     if (pending.agent) selectAgent(pending.agent)
@@ -1585,7 +1585,7 @@ export const SessionProvider: ParentComponent = (props) => {
     const effectiveMessageID = messageID || part.messageID
 
     if (!effectiveMessageID) {
-      console.warn("[Kilo New] Part updated without messageID:", part.id, part.type)
+      console.warn("[Raya] Part updated without messageID:", part.id, part.type)
       return
     }
 
@@ -2251,7 +2251,7 @@ export const SessionProvider: ParentComponent = (props) => {
     origin?: string | null,
   ) {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot send message: not connected")
+      console.warn("[Raya] Cannot send message: not connected")
       return
     }
 
@@ -2332,7 +2332,7 @@ export const SessionProvider: ParentComponent = (props) => {
     overrides?: { agent?: string; model?: string; variant?: string },
   ) {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot send command: not connected")
+      console.warn("[Raya] Cannot send command: not connected")
       return
     }
 
@@ -2422,7 +2422,7 @@ export const SessionProvider: ParentComponent = (props) => {
     const sessionID = currentSessionID()
     const scope = sessionID ?? draftSessionID()
     if (!scope) {
-      console.warn("[Kilo New] Cannot abort: no current or pending session")
+      console.warn("[Raya] Cannot abort: no current or pending session")
       return
     }
     const messageID = [...pendingSubmissions].reverse().find(([, sid]) => sid === scope)?.[0]
@@ -2436,13 +2436,13 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function compact() {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot compact: not connected")
+      console.warn("[Raya] Cannot compact: not connected")
       return
     }
 
     const sessionID = currentSessionID()
     if (!sessionID) {
-      console.warn("[Kilo New] Cannot compact: no current session")
+      console.warn("[Raya] Cannot compact: no current session")
       return
     }
 
@@ -2556,7 +2556,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function createSession() {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot create session: not connected")
+      console.warn("[Raya] Cannot create session: not connected")
       return
     }
 
@@ -2579,7 +2579,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function loadSessions() {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot load sessions: not connected")
+      console.warn("[Raya] Cannot load sessions: not connected")
       return
     }
     vscode.postMessage({ type: "loadSessions" })
@@ -2608,7 +2608,7 @@ export const SessionProvider: ParentComponent = (props) => {
   function selectSession(id: string, options: { focus?: boolean } = {}) {
     // Cloud preview sessions use a separate keyed path (selectCloudSession).
     if (id.startsWith("cloud:")) {
-      console.warn("[Kilo New] Cannot select cloud preview session via selectSession")
+      console.warn("[Raya] Cannot select cloud preview session via selectSession")
       return
     }
     const ready = loaded().has(id)
@@ -2669,7 +2669,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function selectCloudSession(cloudSessionId: string) {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot select cloud session: not connected")
+      console.warn("[Raya] Cannot select cloud session: not connected")
       return
     }
     const key = `cloud:${cloudSessionId}`
@@ -2685,7 +2685,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function deleteSession(id: string) {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot delete session: not connected")
+      console.warn("[Raya] Cannot delete session: not connected")
       return
     }
     // Optimistically remove from the list so the UI updates immediately
@@ -2707,7 +2707,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function renameSession(id: string, title: string) {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot rename session: not connected")
+      console.warn("[Raya] Cannot rename session: not connected")
       return
     }
     vscode.postMessage({ type: "renameSession", sessionID: id, title })
@@ -2715,11 +2715,11 @@ export const SessionProvider: ParentComponent = (props) => {
 
   function exportSessionTranscript(id: string) {
     if (!server.isConnected()) {
-      console.warn("[Kilo New] Cannot export session transcript: not connected")
+      console.warn("[Raya] Cannot export session transcript: not connected")
       return
     }
     if (id.startsWith("cloud:")) {
-      console.warn("[Kilo New] Cannot export cloud session transcript")
+      console.warn("[Raya] Cannot export cloud session transcript")
       return
     }
     vscode.postMessage({ type: "exportSessionTranscript", sessionID: id })

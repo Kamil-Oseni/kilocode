@@ -142,6 +142,7 @@ export function scheduleTaskTool(input: {
                   ? ` Required output in the run conversation: ${agent.output.description}. Acceptance criteria: ${agent.output.criteria.map((item) => item.id).join(", ")}.`
                   : ""),
               metadata: {
+                view: "routines",
                 agentID: agent.id,
                 runID,
                 schedule: agent.schedule,

@@ -134,6 +134,8 @@ it.live(
         expect(accepted.title).toBe("Agent assigned")
         expect(requests[2]?.metadata.output).toEqual(params.output)
         expect(accepted.metadata.output).toEqual(params.output)
+        expect(accepted.metadata).toMatchObject({ view: "routines" })
+        expect(typeof accepted.metadata.agentID).toBe("string")
         expect(accepted.output).toContain("Acceptance criteria: evidence")
         expect((yield* RayaTask.make(input).list())[0]?.output).toEqual(params.output)
         expect(requests[2]?.metadata).toMatchObject({
@@ -236,7 +238,8 @@ it.live(
         )
         expect(uncertain.title).toBe("Routine saved; startup needs review")
         expect(uncertain.output).toContain("do not create a replacement")
-        expect(uncertain.metadata).toMatchObject({ startup: "review" })
+        expect(uncertain.metadata).toMatchObject({ view: "routines", startup: "review" })
+        expect(typeof uncertain.metadata.agentID).toBe("string")
         const roster = yield* RayaTask.make(input).list()
         expect(roster).toHaveLength(3)
         const evidence = yield* Schema.decodeUnknownEffect(

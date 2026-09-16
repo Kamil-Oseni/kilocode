@@ -15,6 +15,7 @@ import { SidebarEmptyState } from "./components/chat/SidebarEmptyState"
 import { SidebarTopBar } from "./components/chat/SidebarTopBar"
 import { registerExpandedTaskTool } from "./components/chat/TaskToolExpanded"
 import { registerVscodeToolOverrides } from "./components/chat/VscodeToolOverrides"
+import { routineDestination } from "./components/chat/routine-result"
 import { useWorktreeMode } from "./context/worktree-mode"
 import { useDiffStyle } from "./context/diff-style"
 import { dispatchAgentManagerEditPreview } from "./utils/agent-manager-events"
@@ -263,12 +264,9 @@ const AppContent: Component = () => {
   onMount(() => {
     const open = (event: Event) => {
       const detail = (event as CustomEvent<{ organizationID?: unknown; agentID?: unknown }>).detail
-      const organizationID = typeof detail?.organizationID === "string" ? detail.organizationID : undefined
-      const agentID = typeof detail?.agentID === "string" ? detail.agentID : undefined
-      if (organizationID && !/^org_[a-f0-9]{32}$/.test(organizationID)) return
-      if (agentID && !/^[0-9a-f-]{36}$/i.test(agentID)) return
-      if (!organizationID && !agentID) return
-      setRoutineTarget({ nonce: crypto.randomUUID(), organizationID, agentID })
+      const target = routineDestination(detail ?? {})
+      if (!target) return
+      setRoutineTarget({ nonce: crypto.randomUUID(), ...target })
       setCurrentView("routines")
     }
     window.addEventListener("raya:open-routines", open)

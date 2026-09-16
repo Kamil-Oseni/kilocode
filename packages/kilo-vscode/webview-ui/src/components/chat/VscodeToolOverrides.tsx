@@ -17,6 +17,7 @@ import { useVSCode } from "../../context/vscode"
 import { editReview } from "./edit-review"
 import { EditReviewChrome } from "./EditReviewChrome"
 import { note, targets, type Kind } from "./review-files"
+import { routineTarget, routineTitle } from "./routine-result"
 import {
   TodoProposalCard,
   type TodoProposal,
@@ -30,7 +31,7 @@ import {
 const DEFAULT_OPEN_TOOLS = ["bash"]
 /** File-mutating tools that get the inline review chrome (Undo/Keep + navigator). */
 const REVIEW_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
-const ROUTINE_TOOLS = ["create_organization", "update_routine", "update_organization"]
+const ROUTINE_TOOLS = ["schedule_task", "create_organization", "update_routine", "update_organization"]
 const PROPOSAL = /^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SUBTODO = /^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TODO = /^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -415,25 +416,12 @@ function expanded(status?: string, open?: boolean) {
 }
 
 function RoutineResultTool(props: ToolProps) {
-  const target = createMemo(() => {
-    if (props.status !== "completed" || props.metadata.view !== "routines") return
-    const organizationID = text(props.metadata.organizationID)
-    const agentID = text(props.metadata.agentID)
-    if (organizationID && !/^org_[a-f0-9]{32}$/.test(organizationID)) return
-    if (agentID && !/^[0-9a-f-]{36}$/i.test(agentID)) return
-    if (!organizationID && !agentID) return
-    return { organizationID, agentID }
-  })
-  const title = () => {
-    if (props.tool === "create_organization") return "Create organization"
-    if (props.tool === "update_organization") return "Update organization"
-    return "Update routine"
-  }
+  const target = createMemo(() => routineTarget(props.status, props.metadata))
   return (
     <BasicTool
       {...props}
       icon="task"
-      trigger={{ title: title(), subtitle: text(props.metadata.requestStatus), args: [] }}
+      trigger={{ title: routineTitle(props.tool), subtitle: text(props.metadata.requestStatus), args: [] }}
       defaultOpen={props.defaultOpen ?? true}
     >
       <Show when={output(props.output)}>

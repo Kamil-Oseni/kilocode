@@ -115,6 +115,16 @@ describe("RuntimeFlags", () => {
   // kilocode_change start - disable aliases are safety-monotonic
   for (const pair of [
     {
+      fields: ["disableChannelDb"] as const,
+      raya: "RAYA_DISABLE_CHANNEL_DB",
+      kilo: "KILO_DISABLE_CHANNEL_DB",
+    },
+    {
+      fields: ["skipMigrations"] as const,
+      raya: "RAYA_SKIP_MIGRATIONS",
+      kilo: "KILO_SKIP_MIGRATIONS",
+    },
+    {
       fields: ["disableDefaultPlugins"] as const,
       raya: "RAYA_DISABLE_DEFAULT_PLUGINS",
       kilo: "KILO_DISABLE_DEFAULT_PLUGINS",

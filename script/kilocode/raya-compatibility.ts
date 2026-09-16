@@ -89,6 +89,8 @@ export function check(
     ["RAYA_DISABLE_CLAUDE_CODE_PROMPT", "KILO_DISABLE_CLAUDE_CODE_PROMPT", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_CLAUDE_CODE_SKILLS", "KILO_DISABLE_CLAUDE_CODE_SKILLS", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_SKILL_SHELL", "KILO_DISABLE_SKILL_SHELL", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_CHANNEL_DB", "KILO_DISABLE_CHANNEL_DB", "safety-monotonic-aliases"],
+    ["RAYA_SKIP_MIGRATIONS", "KILO_SKIP_MIGRATIONS", "safety-monotonic-aliases"],
     ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],
     ["RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", "explicit-or-matching-aliases"],
   )

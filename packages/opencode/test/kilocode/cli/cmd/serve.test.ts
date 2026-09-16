@@ -178,6 +178,7 @@ test("hard parent exit preserves authenticated server and session ownership", as
           KILO_DISABLE_PROJECT_CONFIG: "1",
           KILO_DISABLE_AUTOUPDATE: "1",
           KILO_DISABLE_MODELS_FETCH: "1",
+          RAYA_DISABLE_CHANNEL_DB: "true",
           KILO_DISABLE_CHANNEL_DB: "true",
           KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
           KILO_PURE: "1",

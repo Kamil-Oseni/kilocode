@@ -167,9 +167,9 @@ export const Flag = {
   },
   // kilocode_change end
 
-  KILO_DISABLE_CHANNEL_DB: truthy("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
+  KILO_DISABLE_CHANNEL_DB: EnvAlias.enabled("RAYA_DISABLE_CHANNEL_DB", "KILO_DISABLE_CHANNEL_DB"), // kilocode_change
 
-  KILO_SKIP_MIGRATIONS: truthy("KILO_SKIP_MIGRATIONS"), // kilocode_change
+  KILO_SKIP_MIGRATIONS: EnvAlias.enabled("RAYA_SKIP_MIGRATIONS", "KILO_SKIP_MIGRATIONS"), // kilocode_change
 
   KILO_STRICT_CONFIG_DEPS: truthy("KILO_STRICT_CONFIG_DEPS"), // kilocode_change
 

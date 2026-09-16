@@ -37,6 +37,7 @@ export function resolveManagedServerEnv(
 ): NodeJS.ProcessEnv {
   const resolved: NodeJS.ProcessEnv = {
     ...env,
+    RAYA_DISABLE_CHANNEL_DB: "true",
     KILO_DISABLE_CHANNEL_DB: "true",
     // VS Code does not consume the backend's file.watcher.updated events.
     KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",

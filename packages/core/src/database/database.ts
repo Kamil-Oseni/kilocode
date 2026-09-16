@@ -8,6 +8,7 @@ import { Flag } from "../flag/flag"
 import { DbPreflight } from "../kilocode/db-preflight" // kilocode_change
 import { ensure as compat } from "../kilocode/database-compat" // kilocode_change
 import { resolve } from "../kilocode/database-path" // kilocode_change
+import { EnvAlias } from "../kilocode/env-alias" // kilocode_change
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
 import { makeGlobalNode } from "../effect/app-node"
@@ -51,7 +52,7 @@ export function path() {
   return resolve({
     data: Global.Path.data,
     channel: InstallationChannel,
-    disabled: process.env.KILO_DISABLE_CHANNEL_DB === "1" || process.env.KILO_DISABLE_CHANNEL_DB === "true",
+    disabled: EnvAlias.enabled("RAYA_DISABLE_CHANNEL_DB", "KILO_DISABLE_CHANNEL_DB"),
     override: Flag.KILO_DB,
   })
   // kilocode_change end

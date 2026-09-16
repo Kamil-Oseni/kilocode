@@ -30,12 +30,12 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   autoShare: bool("KILO_AUTO_SHARE"),
   pure: safety("RAYA_PURE", "KILO_PURE"), // kilocode_change
   disableDefaultPlugins: safety("RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS"), // kilocode_change
-  disableChannelDb: bool("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
+  disableChannelDb: safety("RAYA_DISABLE_CHANNEL_DB", "KILO_DISABLE_CHANNEL_DB"), // kilocode_change
   disableEmbeddedWebUi: safety("RAYA_DISABLE_EMBEDDED_WEB_UI", "KILO_DISABLE_EMBEDDED_WEB_UI"), // kilocode_change
   disableExternalSkills: safety("RAYA_DISABLE_EXTERNAL_SKILLS", "KILO_DISABLE_EXTERNAL_SKILLS"), // kilocode_change
   disableSkillShell: safety("RAYA_DISABLE_SKILL_SHELL", "KILO_DISABLE_SKILL_SHELL"), // kilocode_change
   disableLspDownload: safety("RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD"), // kilocode_change
-  skipMigrations: bool("KILO_SKIP_MIGRATIONS"), // kilocode_change
+  skipMigrations: safety("RAYA_SKIP_MIGRATIONS", "KILO_SKIP_MIGRATIONS"), // kilocode_change
   disableClaudeCodePrompt: Config.all({
     broad: claude, // kilocode_change
     direct: safety("RAYA_DISABLE_CLAUDE_CODE_PROMPT", "KILO_DISABLE_CLAUDE_CODE_PROMPT"), // kilocode_change

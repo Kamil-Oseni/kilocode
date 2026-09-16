@@ -390,3 +390,5 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `RAYA_DISABLE_CLAUDE_CODE_PROMPT` / `KILO_DISABLE_CLAUDE_CODE_PROMPT` | Skip only `CLAUDE.md` instructions. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_CLAUDE_CODE_SKILLS` / `KILO_DISABLE_CLAUDE_CODE_SKILLS` | Skip only `.claude/skills/`. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_SKILL_SHELL` / `KILO_DISABLE_SKILL_SHELL` | Disable embedded shell commands in skills. The Raya name is public; either name set to `true` or `1` enables the safety override. |
+| `RAYA_DISABLE_CHANNEL_DB` / `KILO_DISABLE_CHANNEL_DB` | Use the shared compatibility database instead of a channel-specific database. Either name set to `true` or `1` enables the safety override. |
+| `RAYA_SKIP_MIGRATIONS` / `KILO_SKIP_MIGRATIONS` | Record pending legacy-client migrations without executing their SQL. Either name set to `true` or `1` enables the safety override. This does not disable Core migrations. |

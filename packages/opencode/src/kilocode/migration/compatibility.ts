@@ -222,6 +222,18 @@ export namespace RayaMigrationLedger {
       legacy: "KILO_DISABLE_SKILL_SHELL",
       policy: "safety-monotonic-aliases" as const,
     },
+    {
+      kind: "environment:disable_channel_db",
+      raya: "RAYA_DISABLE_CHANNEL_DB",
+      legacy: "KILO_DISABLE_CHANNEL_DB",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
+      kind: "environment:skip_migrations",
+      raya: "RAYA_SKIP_MIGRATIONS",
+      legacy: "KILO_SKIP_MIGRATIONS",
+      policy: "safety-monotonic-aliases" as const,
+    },
     ...["SERVER_PASSWORD", "SERVER_USERNAME"].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
@@ -475,8 +487,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_986,
-        digest: "47a6e4b9639fa4e32d91dd19202c2f7fe4dd150edcedd6a92f2c48d970849168",
+        count: 36_041,
+        digest: "685ebeb7280ef94020ced0955468d0ee76353172a22667ba4e2d6cd3bb41838c",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

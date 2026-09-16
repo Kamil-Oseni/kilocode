@@ -353,6 +353,7 @@ describe("server workspace helpers", () => {
         {
           PATH: "/usr/bin",
           RAYA_MF_TOKEN: "media-service-key",
+          RAYA_DISABLE_CHANNEL_DB: "invalid",
           KILO_DISABLE_CHANNEL_DB: "false",
           KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
           RAYA_SERVER_PASSWORD: "hostile-raya-password",
@@ -366,6 +367,7 @@ describe("server workspace helpers", () => {
       ),
     ).toEqual({
       PATH: "/usr/bin",
+      RAYA_DISABLE_CHANNEL_DB: "true",
       KILO_DISABLE_CHANNEL_DB: "true",
       KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
       RAYA_SERVER_PASSWORD: "generated-password",

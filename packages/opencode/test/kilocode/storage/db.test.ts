@@ -46,4 +46,32 @@ describe("kilo channel database paths", () => {
       ;(Global.Path as { data: string }).data = data
     }
   })
+
+  custom("uses the Raya channel-database safety alias at the Core path boundary", async () => {
+    await using dir = await tmpdir()
+    const data = Global.Path.data
+    const rayaDb = process.env.RAYA_DB
+    const kiloDb = process.env.KILO_DB
+    const raya = process.env.RAYA_DISABLE_CHANNEL_DB
+    const kilo = process.env.KILO_DISABLE_CHANNEL_DB
+    ;(Global.Path as { data: string }).data = dir.path
+    delete process.env.RAYA_DB
+    delete process.env.KILO_DB
+    process.env.RAYA_DISABLE_CHANNEL_DB = "true"
+    process.env.KILO_DISABLE_CHANNEL_DB = "false"
+
+    try {
+      expect(CoreDatabase.path()).toBe(path.join(dir.path, "kilo.db"))
+    } finally {
+      ;(Global.Path as { data: string }).data = data
+      if (rayaDb === undefined) delete process.env.RAYA_DB
+      if (rayaDb !== undefined) process.env.RAYA_DB = rayaDb
+      if (kiloDb === undefined) delete process.env.KILO_DB
+      if (kiloDb !== undefined) process.env.KILO_DB = kiloDb
+      if (raya === undefined) delete process.env.RAYA_DISABLE_CHANNEL_DB
+      if (raya !== undefined) process.env.RAYA_DISABLE_CHANNEL_DB = raya
+      if (kilo === undefined) delete process.env.KILO_DISABLE_CHANNEL_DB
+      if (kilo !== undefined) process.env.KILO_DISABLE_CHANNEL_DB = kilo
+    }
+  })
 })

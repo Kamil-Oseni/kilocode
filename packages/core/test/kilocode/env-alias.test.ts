@@ -64,6 +64,13 @@ describe("Raya environment aliases", () => {
     expect(JSON.stringify(conflicts)).not.toContain("secret")
   })
 
+  test("resolves injected safety-sensitive values with the same conflict policy", () => {
+    EnvAlias.conflicts()
+    expect(EnvAlias.enabledValues("RAYA_PURE", "KILO_PURE", "false", "1")).toBe(true)
+    expect(EnvAlias.conflicts()).toEqual(["RAYA_PURE/KILO_PURE"])
+    expect(EnvAlias.enabledValues("RAYA_PURE", "KILO_PURE", undefined, undefined)).toBe(false)
+  })
+
   test("wires safety-sensitive boolean aliases through the legacy Flag property", () => {
     const names = ["RAYA_PURE", "KILO_PURE"]
     const env = { ...process.env }

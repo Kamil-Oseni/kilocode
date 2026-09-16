@@ -21,15 +21,18 @@ export namespace EnvAlias {
     return next !== undefined ? next : legacy
   }
 
-  /** Enable a safety-sensitive boolean when either compatibility name is truthy. */
-  export function enabled(raya: string, kilo: string, env: NodeJS.ProcessEnv = process.env) {
-    const next = env[raya]
-    const legacy = env[kilo]
+  /** Resolve injected safety-sensitive values while retaining value-free conflict diagnostics. */
+  export function enabledValues(raya: string, kilo: string, next: string | undefined, legacy: string | undefined) {
     if (next !== undefined && legacy !== undefined && next !== legacy) found.add(`${raya}/${kilo}`)
     return [next, legacy].some((value) => {
       const normalized = value?.toLowerCase()
       return normalized === "true" || normalized === "1"
     })
+  }
+
+  /** Enable a safety-sensitive boolean when either compatibility name is truthy. */
+  export function enabled(raya: string, kilo: string, env: NodeJS.ProcessEnv = process.env) {
+    return enabledValues(raya, kilo, env[raya], env[kilo])
   }
 
   /** Resolve sensitive input without silently choosing between conflicting aliases. */

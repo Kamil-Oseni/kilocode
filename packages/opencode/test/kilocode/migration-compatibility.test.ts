@@ -103,6 +103,12 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_DISABLE_PROJECT_CONFIG",
       policy: "raya-wins-legacy-write",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:session_retry_limit",
+      raya: "RAYA_SESSION_RETRY_LIMIT",
+      legacy: "KILO_SESSION_RETRY_LIMIT",
+      policy: "raya-wins-legacy-write",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

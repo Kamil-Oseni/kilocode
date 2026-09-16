@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `8fb1a4dc46`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `25bc30dd2f`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 00:05 America/Toronto - Preserve session retry alias semantics
+
+Preserve product commits `ad003bb846` and `25bc30dd2f`. `RAYA_SESSION_RETRY_LIMIT` is preferred whenever it is defined; `KILO_SESSION_RETRY_LIMIT` is consulted only when Raya is absent. Parse the selected value with the existing positive-integer `Number()` contract. Empty, invalid, zero, negative or fractional Raya input must suppress a conflicting valid Kilo value and produce the ordinary default budget of eight. Do not tighten accepted textual forms such as whitespace, leading zeroes, `2.0` or `2e0` in an alias migration.
+
+Keep the implementation centralized in the dynamic Core flag getter. There is no production writer and no setter; adding a string setter widens the numeric getter type. Direct CLI, daemon, VS Code and JetBrains launchers already preserve ambient variables. The real processor test must continue proving Raya-only limit two produces three total model calls. Keep direct policy checks for used-budget subtraction, legacy fallback, Raya conflict precedence and explicit-empty defaulting. Kilo-only incomplete-response fixtures must clear ambient Raya first and restore both variables.
+
+Evidence is Core **25 / 56** and OpenCode **7 / 14**, with Core and bounded OpenCode typechecks. The three older incomplete-response cases exceed their pre-existing five-second timeout on the loaded machine; do not claim them as passing alias evidence or weaken their assertions. The ledger has **20 environment pairs**, 18 ordinary Raya-first pairs and two strict credentials; `cutoverReady` remains false.
+
+After this handoff and progress record, the checked inventory is **69,696** total: public 1,654; compatibility 35,639; provenance 5,686; internal 26,717. The pinned compatibility digest is `17437cbe5c3c572945dff7d756d9e4797c157bfa2add7f96384928aa912f3919`.
 
 ## ChatGPT 2026-09-15 23:51 America/Toronto - Preserve project-config opt-out alias semantics
 
@@ -872,7 +882,7 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 19 reviewed environment pairs with documented precedence, including closed config readers in Core, both SDK generations and VS Code, strict server credentials and the project-config opt-out, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
+| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 20 reviewed environment pairs with documented precedence, including closed config readers in Core, both SDK generations and VS Code, strict server credentials, the project-config opt-out and session retry budget, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |

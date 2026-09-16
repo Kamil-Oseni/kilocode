@@ -125,6 +125,17 @@ describe("profile writer manifest", () => {
     expect(find("profile.log.diagnostics")?.sources).toContain("packages/opencode/src/cli/tui/worker.ts")
     expect(find("profile.log.diagnostics")?.methods).toContain("worker-heap-snapshot")
 
+    expect(find("profile.state.model")?.sources).toEqual([
+      "packages/kilo-jetbrains/backend/src/main/kotlin/ai/kilocode/backend/app/KiloBackendModelStateManager.kt",
+      "packages/kilo-vscode/src/kilo-provider/model-state.ts",
+      "packages/opencode/src/cli/cmd/run/variant.shared.ts",
+      "packages/opencode/src/kilocode/config/model-state.ts",
+      "packages/tui/src/context/local.tsx",
+    ])
+    expect(find("profile.state.model")?.sources).not.toContain("packages/opencode/src/kilocode/tool/task.ts")
+    expect(find("profile.state.model")?.methods).toContain("replace-favorites")
+    expect(find("profile.state.model")?.lifecycle).toContain("JetBrains mutex")
+
     expect(ProfileWriterManifest.manifest.gaps).toContain(
       "skill removal can unlink project or externally injected manifests outside profile roots",
     )

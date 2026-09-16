@@ -236,6 +236,94 @@ describe("Raya environment aliases", () => {
   })
 
   for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "true", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: true },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: true },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: true },
+  ]) {
+    test(`wires runtime safety flags from ${item.name}`, () => {
+      const names = [
+        "RAYA_DISABLE_AUTOUPDATE",
+        "KILO_DISABLE_AUTOUPDATE",
+        "RAYA_DISABLE_MODELS_FETCH",
+        "KILO_DISABLE_MODELS_FETCH",
+        "RAYA_DISABLE_TERMINAL_TITLE",
+        "KILO_DISABLE_TERMINAL_TITLE",
+      ]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      if (item.raya !== undefined) {
+        env.RAYA_DISABLE_AUTOUPDATE = item.raya
+        env.RAYA_DISABLE_MODELS_FETCH = item.raya
+        env.RAYA_DISABLE_TERMINAL_TITLE = item.raya
+      }
+      if (item.kilo !== undefined) {
+        env.KILO_DISABLE_AUTOUPDATE = item.kilo
+        env.KILO_DISABLE_MODELS_FETCH = item.kilo
+        env.KILO_DISABLE_TERMINAL_TITLE = item.kilo
+      }
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify([Flag.KILO_DISABLE_AUTOUPDATE, Flag.KILO_DISABLE_MODELS_FETCH, Flag.KILO_DISABLE_TERMINAL_TITLE]))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toEqual([item.expected, item.expected, item.expected])
+    })
+  }
+
+  test("reports runtime safety flag conflicts without their values", () => {
+    const names = [
+      "RAYA_DISABLE_AUTOUPDATE",
+      "KILO_DISABLE_AUTOUPDATE",
+      "RAYA_DISABLE_MODELS_FETCH",
+      "KILO_DISABLE_MODELS_FETCH",
+      "RAYA_DISABLE_TERMINAL_TITLE",
+      "KILO_DISABLE_TERMINAL_TITLE",
+    ]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    Object.assign(env, {
+      RAYA_DISABLE_AUTOUPDATE: "raya-update-secret",
+      KILO_DISABLE_AUTOUPDATE: "kilo-update-secret",
+      RAYA_DISABLE_MODELS_FETCH: "raya-model-secret",
+      KILO_DISABLE_MODELS_FETCH: "kilo-model-secret",
+      RAYA_DISABLE_TERMINAL_TITLE: "raya-terminal-secret",
+      KILO_DISABLE_TERMINAL_TITLE: "kilo-terminal-secret",
+    })
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flags: [Flag.KILO_DISABLE_AUTOUPDATE, Flag.KILO_DISABLE_MODELS_FETCH, Flag.KILO_DISABLE_TERMINAL_TITLE], conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({
+      flags: [false, false, false],
+      conflicts: [
+        "RAYA_DISABLE_AUTOUPDATE/KILO_DISABLE_AUTOUPDATE",
+        "RAYA_DISABLE_MODELS_FETCH/KILO_DISABLE_MODELS_FETCH",
+        "RAYA_DISABLE_TERMINAL_TITLE/KILO_DISABLE_TERMINAL_TITLE",
+      ],
+    })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
     { name: "Raya input", env: { RAYA_SHOW_TTFD: "true" }, expected: true },
     { name: "Kilo fallback", env: { KILO_SHOW_TTFD: "1" }, expected: true },
     {

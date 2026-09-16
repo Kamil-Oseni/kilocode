@@ -1,6 +1,32 @@
 import { describe, expect, test } from "bun:test"
 import { EnvAlias } from "../../src/kilocode/env-alias"
 
+function claude(input: NodeJS.ProcessEnv) {
+  const names = [
+    "RAYA_DISABLE_CLAUDE_CODE",
+    "KILO_DISABLE_CLAUDE_CODE",
+    "RAYA_DISABLE_CLAUDE_CODE_PROMPT",
+    "KILO_DISABLE_CLAUDE_CODE_PROMPT",
+    "RAYA_DISABLE_CLAUDE_CODE_SKILLS",
+    "KILO_DISABLE_CLAUDE_CODE_SKILLS",
+  ]
+  const env = { ...process.env }
+  for (const name of names) delete env[name]
+  Object.assign(env, input)
+  const child = Bun.spawnSync({
+    cmd: [
+      process.execPath,
+      "-e",
+      'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flags: [Flag.KILO_DISABLE_CLAUDE_CODE, Flag.KILO_DISABLE_CLAUDE_CODE_PROMPT, Flag.KILO_DISABLE_CLAUDE_CODE_SKILLS], conflicts: EnvAlias.conflicts() }))',
+    ],
+    cwd: `${import.meta.dir}/../..`,
+    env,
+  })
+
+  expect(child.exitCode).toBe(0)
+  return child.stdout.toString()
+}
+
 describe("Raya environment aliases", () => {
   for (const item of [
     { name: "neither name", env: {}, expected: undefined },
@@ -318,6 +344,80 @@ describe("Raya environment aliases", () => {
         "RAYA_DISABLE_AUTOUPDATE/KILO_DISABLE_AUTOUPDATE",
         "RAYA_DISABLE_MODELS_FETCH/KILO_DISABLE_MODELS_FETCH",
         "RAYA_DISABLE_TERMINAL_TITLE/KILO_DISABLE_TERMINAL_TITLE",
+      ],
+    })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "true", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: true },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: true },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: true },
+  ]) {
+    test(`wires direct Claude safety aliases from ${item.name}`, () => {
+      const env: NodeJS.ProcessEnv = {}
+      if (item.raya !== undefined) {
+        env.RAYA_DISABLE_CLAUDE_CODE_PROMPT = item.raya
+        env.RAYA_DISABLE_CLAUDE_CODE_SKILLS = item.raya
+      }
+      if (item.kilo !== undefined) {
+        env.KILO_DISABLE_CLAUDE_CODE_PROMPT = item.kilo
+        env.KILO_DISABLE_CLAUDE_CODE_SKILLS = item.kilo
+      }
+
+      expect(JSON.parse(claude(env)).flags).toEqual([false, item.expected, item.expected])
+    })
+
+    test(`inherits the broad Claude safety alias from ${item.name}`, () => {
+      const env: NodeJS.ProcessEnv = {
+        RAYA_DISABLE_CLAUDE_CODE_PROMPT: "false",
+        RAYA_DISABLE_CLAUDE_CODE_SKILLS: "invalid",
+      }
+      if (item.raya !== undefined) env.RAYA_DISABLE_CLAUDE_CODE = item.raya
+      if (item.kilo !== undefined) env.KILO_DISABLE_CLAUDE_CODE = item.kilo
+
+      expect(JSON.parse(claude(env)).flags).toEqual([item.expected, item.expected, item.expected])
+    })
+  }
+
+  for (const item of [
+    {
+      name: "prompt",
+      env: { RAYA_DISABLE_CLAUDE_CODE_PROMPT: "true" },
+      expected: [false, true, false],
+    },
+    {
+      name: "skills",
+      env: { KILO_DISABLE_CLAUDE_CODE_SKILLS: "1" },
+      expected: [false, false, true],
+    },
+  ]) {
+    test(`keeps the direct Claude ${item.name} switch independent`, () => {
+      expect(JSON.parse(claude(item.env)).flags).toEqual(item.expected)
+    })
+  }
+
+  test("reports Claude safety alias conflicts without their values", () => {
+    const output = claude({
+      RAYA_DISABLE_CLAUDE_CODE: "raya-broad-secret",
+      KILO_DISABLE_CLAUDE_CODE: "kilo-broad-secret",
+      RAYA_DISABLE_CLAUDE_CODE_PROMPT: "raya-prompt-secret",
+      KILO_DISABLE_CLAUDE_CODE_PROMPT: "kilo-prompt-secret",
+      RAYA_DISABLE_CLAUDE_CODE_SKILLS: "raya-skills-secret",
+      KILO_DISABLE_CLAUDE_CODE_SKILLS: "kilo-skills-secret",
+    })
+
+    expect(JSON.parse(output)).toEqual({
+      flags: [false, false, false],
+      conflicts: [
+        "RAYA_DISABLE_CLAUDE_CODE/KILO_DISABLE_CLAUDE_CODE",
+        "RAYA_DISABLE_CLAUDE_CODE_PROMPT/KILO_DISABLE_CLAUDE_CODE_PROMPT",
+        "RAYA_DISABLE_CLAUDE_CODE_SKILLS/KILO_DISABLE_CLAUDE_CODE_SKILLS",
       ],
     })
     expect(output).not.toContain("secret")

@@ -434,8 +434,12 @@ When a user's config is broken and opencode won't start, these env vars help:
   inject inline JSON as a final local-scope merge.
 - `RAYA_DISABLE_DEFAULT_PLUGINS=1`: skip default plugins (`KILO_DISABLE_DEFAULT_PLUGINS` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_LSP_DOWNLOAD=1`: prevent automatic LSP downloads (`KILO_DISABLE_LSP_DOWNLOAD` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_AUTOUPDATE=1`: disable automatic CLI updates (`KILO_DISABLE_AUTOUPDATE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_MODELS_FETCH=1`: prevent remote model-catalog fetches (`KILO_DISABLE_MODELS_FETCH` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_TERMINAL_TITLE=1`: prevent terminal-title updates (`KILO_DISABLE_TERMINAL_TITLE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_EMBEDDED_WEB_UI=1`: disable the embedded web UI (`KILO_DISABLE_EMBEDDED_WEB_UI` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_PURE=1`: skip external plugins entirely (`KILO_PURE` remains a compatibility alias; either name can enable pure mode).
-- `KILO_DISABLE_EXTERNAL_SKILLS=1`,
+- `RAYA_DISABLE_EXTERNAL_SKILLS=1` (`KILO_DISABLE_EXTERNAL_SKILLS` remains a compatibility alias; either name set to `true` or `1` enables the safety override),
   `KILO_DISABLE_CLAUDE_CODE_SKILLS=1`: skip the external skill scans under
   `~/.claude/` and `~/.agents/`.
 

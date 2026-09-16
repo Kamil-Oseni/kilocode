@@ -112,7 +112,7 @@ describe("RuntimeFlags", () => {
   )
   // kilocode_change end
 
-  // kilocode_change start - default-plugin and LSP-download aliases are safety-monotonic
+  // kilocode_change start - disable aliases are safety-monotonic
   for (const pair of [
     {
       field: "disableDefaultPlugins" as const,
@@ -123,6 +123,16 @@ describe("RuntimeFlags", () => {
       field: "disableLspDownload" as const,
       raya: "RAYA_DISABLE_LSP_DOWNLOAD",
       kilo: "KILO_DISABLE_LSP_DOWNLOAD",
+    },
+    {
+      field: "disableEmbeddedWebUi" as const,
+      raya: "RAYA_DISABLE_EMBEDDED_WEB_UI",
+      kilo: "KILO_DISABLE_EMBEDDED_WEB_UI",
+    },
+    {
+      field: "disableExternalSkills" as const,
+      raya: "RAYA_DISABLE_EXTERNAL_SKILLS",
+      kilo: "KILO_DISABLE_EXTERNAL_SKILLS",
     },
   ]) {
     for (const input of [
@@ -214,22 +224,6 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
       expect(flags.experimentalIconDiscovery).toBe(false)
-    }),
-  )
-
-  it.effect("disableExternalSkills defaults to false", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
-
-      expect(flags.disableExternalSkills).toBe(false)
-    }),
-  )
-
-  it.effect("disableExternalSkills reads KILO_DISABLE_EXTERNAL_SKILLS", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_EXTERNAL_SKILLS: "true" })))
-
-      expect(flags.disableExternalSkills).toBe(true)
     }),
   )
 

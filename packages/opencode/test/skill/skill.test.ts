@@ -22,17 +22,22 @@ const skills = (disableExternalSkills: boolean, disableClaudeCodeSkills: boolean
     [RuntimeFlags.node, RuntimeFlags.layer({ disableExternalSkills, disableClaudeCodeSkills })],
   ])
 
-// kilocode_change start - exercise the Raya safety alias through real skill discovery
-const alias = RuntimeFlags.Service.layer.pipe(
+// kilocode_change start - exercise Raya safety aliases through real skill discovery
+const externalAlias = RuntimeFlags.Service.layer.pipe(
   Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ RAYA_DISABLE_EXTERNAL_SKILLS: "1" }))),
   Layer.orDie,
 )
-const skillsWithoutExternal = AppNodeBuilder.build(Skill.node, [[RuntimeFlags.node, alias]])
+const claudeAlias = RuntimeFlags.Service.layer.pipe(
+  Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ RAYA_DISABLE_CLAUDE_CODE_SKILLS: "1" }))),
+  Layer.orDie,
+)
+const skillsWithoutExternal = AppNodeBuilder.build(Skill.node, [[RuntimeFlags.node, externalAlias]])
+const skillsWithoutClaude = AppNodeBuilder.build(Skill.node, [[RuntimeFlags.node, claudeAlias]])
 // kilocode_change end
 
 const it = testEffect(Layer.mergeAll(skills(false, false), node, testInstanceStoreLayer))
 const itWithoutExternalSkills = testEffect(Layer.mergeAll(skillsWithoutExternal, node, testInstanceStoreLayer)) // kilocode_change
-const itWithoutClaudeCodeSkills = testEffect(Layer.mergeAll(skills(false, true), node, testInstanceStoreLayer)) // kilocode_change
+const itWithoutClaudeCodeSkills = testEffect(Layer.mergeAll(skillsWithoutClaude, node, testInstanceStoreLayer)) // kilocode_change
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")

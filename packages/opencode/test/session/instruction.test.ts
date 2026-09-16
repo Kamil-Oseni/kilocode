@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { Effect, FileSystem, Layer } from "effect"
+import { ConfigProvider, Effect, FileSystem, Layer } from "effect" // kilocode_change
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
 import { Instruction } from "../../src/session/instruction"
@@ -39,10 +39,32 @@ const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<Runt
     [RuntimeFlags.node, RuntimeFlags.layer(flags)],
   ])
 
+// kilocode_change start - exercise the Raya prompt safety alias through real instruction discovery
+const instructionAliasLayer = (global: Partial<Global.Interface>) =>
+  AppNodeBuilder.build(Instruction.node, [
+    [Config.node, configLayer],
+    [Global.node, Global.layerWith(global)],
+    [
+      RuntimeFlags.node,
+      RuntimeFlags.Service.layer.pipe(
+        Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ RAYA_DISABLE_CLAUDE_CODE_PROMPT: "1" }))),
+        Layer.orDie,
+      ),
+    ],
+  ])
+// kilocode_change end
+
 const provideInstruction =
   (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     self.pipe(Effect.provide(instructionLayer(global, flags)))
+
+// kilocode_change start - provide the production config-backed Raya alias layer
+const provideInstructionAlias =
+  (global: Partial<Global.Interface>) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>) =>
+    self.pipe(Effect.provide(instructionAliasLayer(global)))
+// kilocode_change end
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -242,7 +264,7 @@ describe("Instruction.system", () => {
         expect(yield* svc.system()).toEqual([])
       }).pipe(
         provideInstance(projectTmp),
-        provideInstruction({ home: globalTmp, config: globalTmp }, { disableClaudeCodePrompt: true }),
+        provideInstructionAlias({ home: globalTmp, config: globalTmp }), // kilocode_change
       )
     }),
   )

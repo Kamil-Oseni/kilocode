@@ -16,7 +16,7 @@ export const dict = {
     "Raya Messenger 为你提供一个个人 AI，可以阅读邮件、管理日历、监控项目，并且存在于 Telegram、Slack \u2014 任何你已经在使用的平台中。",
   "kiloClaw.setup.description2": "无需安装应用。无需学习新界面。只需像朋友一样跟它发消息。",
   "kiloClaw.setup.learnMore": "了解更多",
-  "kiloClaw.setup.tryRaya Messenger": "尝试 Raya Messenger",
+  "kiloClaw.setup.tryKiloClaw": "尝试 Raya Messenger",
   "kiloClaw.upgrade.title": "Raya Messenger 聊天需要升级",
   "kiloClaw.upgrade.description1": "此实例是在启用聊天功能之前配置的。",
   "kiloClaw.upgrade.description2.before": "使用 Raya Messenger 仪表板上的 ",

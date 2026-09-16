@@ -17,7 +17,7 @@ export const dict = {
   "kiloClaw.setup.description2":
     "Yüklenecek bir uygulama yok. Öğrenilecek yeni bir arayüz yok. Sadece bir arkadaşınız gibi mesajlaşın.",
   "kiloClaw.setup.learnMore": "Daha fazla bilgi edinin",
-  "kiloClaw.setup.tryRaya Messenger": "Raya Messenger'ı Deneyin",
+  "kiloClaw.setup.tryKiloClaw": "Raya Messenger'ı Deneyin",
   "kiloClaw.upgrade.title": "Raya Messenger Sohbeti yükseltme gerektiriyor",
   "kiloClaw.upgrade.description1": "Bu örnek, sohbet etkinleştirilmeden önce oluşturulmuş.",
   "kiloClaw.upgrade.description2.before":

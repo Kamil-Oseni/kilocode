@@ -17,7 +17,7 @@ export const dict = {
   "kiloClaw.setup.description2":
     "설치할 앱이 없습니다. 배울 새로운 인터페이스도 없습니다. 친구에게 메시지하듯 대화하세요.",
   "kiloClaw.setup.learnMore": "자세히 보기",
-  "kiloClaw.setup.tryRaya Messenger": "Raya Messenger 사용해 보기",
+  "kiloClaw.setup.tryKiloClaw": "Raya Messenger 사용해 보기",
   "kiloClaw.upgrade.title": "Raya Messenger 채팅에 업그레이드가 필요합니다",
   "kiloClaw.upgrade.description1": "이 인스턴스는 채팅이 활성화되기 전에 프로비저닝되었습니다.",
   "kiloClaw.upgrade.description2.before": "Raya Messenger 대시보드에서 ",

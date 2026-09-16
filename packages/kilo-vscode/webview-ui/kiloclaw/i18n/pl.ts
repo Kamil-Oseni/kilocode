@@ -17,7 +17,7 @@ export const dict = {
   "kiloClaw.setup.description2":
     "Żadnych aplikacji do instalacji. Żadnego nowego interfejsu do nauki. Po prostu pisz do niej jak do przyjaciela.",
   "kiloClaw.setup.learnMore": "Dowiedz się więcej",
-  "kiloClaw.setup.tryRaya Messenger": "Wypróbuj Raya Messenger",
+  "kiloClaw.setup.tryKiloClaw": "Wypróbuj Raya Messenger",
   "kiloClaw.upgrade.title": "Raya Messenger Chat wymaga aktualizacji",
   "kiloClaw.upgrade.description1": "Ta instancja została utworzona przed włączeniem czatu.",
   "kiloClaw.upgrade.description2.before": "Użyj przycisku ",

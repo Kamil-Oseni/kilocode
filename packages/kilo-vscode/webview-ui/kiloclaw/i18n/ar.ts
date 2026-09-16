@@ -16,7 +16,7 @@ export const dict = {
     "يمنحك Raya Messenger ذكاءً اصطناعياً شخصياً يقرأ البريد الإلكتروني، ويدير تقويمك، ويراقب مشاريعك، ويتواجد في Telegram و Slack — وأي شيء تستخدمه بالفعل.",
   "kiloClaw.setup.description2": "لا يوجد تطبيق لتثبيته. لا توجد واجهة جديدة لتعلمها. فقط أرسل له رسالة كصديق.",
   "kiloClaw.setup.learnMore": "معرفة المزيد",
-  "kiloClaw.setup.tryRaya Messenger": "جرب Raya Messenger",
+  "kiloClaw.setup.tryKiloClaw": "جرب Raya Messenger",
   "kiloClaw.upgrade.title": "تتطلب دردشة Raya Messenger ترقية",
   "kiloClaw.upgrade.description1": "تم إعداد هذا المثيل قبل تفعيل الدردشة.",
   "kiloClaw.upgrade.description2.before": "استخدم زر ",

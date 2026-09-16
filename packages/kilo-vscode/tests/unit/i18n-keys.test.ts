@@ -3,10 +3,11 @@
  *
  * 1. Ensures every string-literal translation key passed to a t() function
  *    actually exists in the corresponding English dictionary.
- * 2. Ensures every English key has a translation in all other locale files.
+ * 2. Ensures complete locale pools translate every English key.
+ * 3. Ensures partial Messenger locales only override valid English fallback keys.
  *
  * Three independent key pools are checked:
- *   - Webview (sidebar + agent manager): merged from app, ui, kilo-i18n, agent-manager dicts
+ *   - Webview (sidebar + agent manager + Messenger): merged from their actual dictionaries
  *   - CLI backend (extension-side server-manager): cli-backend/i18n dict
  *   - Extension host: services/i18n aggregate dict
  *
@@ -93,6 +94,9 @@ import { dict as amTr } from "../../webview-ui/agent-manager/i18n/tr"
 import { dict as amNl } from "../../webview-ui/agent-manager/i18n/nl"
 import { dict as amUk } from "../../webview-ui/agent-manager/i18n/uk"
 
+// Layer 5: Raya Messenger
+import { dict as messengerEn } from "../../webview-ui/kiloclaw/i18n/en"
+
 // ── Extension-side dictionaries ─────────────────────────────────────────────
 
 import { dict as cliEn } from "../../src/services/cli-backend/i18n/en"
@@ -142,6 +146,7 @@ import { dict as hostFa } from "../../src/services/i18n/fa"
 // ── Locale maps ─────────────────────────────────────────────────────────────
 
 const ROOT = path.resolve(import.meta.dir, "../..")
+const MESSENGER_ROOT = path.join(ROOT, "webview-ui/kiloclaw")
 
 const appLocales: Record<string, Record<string, string>> = {
   en: appEn,
@@ -262,7 +267,7 @@ const hostLocales: Record<string, Record<string, string>> = {
 }
 
 // Merge webview dictionaries in the same priority order as language.tsx
-const webviewKeys = new Set(Object.keys({ ...appEn, ...uiEn, ...kiloEn, ...amEn }))
+const webviewKeys = new Set(Object.keys({ ...appEn, ...uiEn, ...kiloEn, ...amEn, ...messengerEn }))
 const cliKeys = new Set(Object.keys(cliEn))
 const hostKeys = new Set(Object.keys(hostEn))
 
@@ -312,11 +317,21 @@ async function collectFiles(glob: Glob, dir: string): Promise<string[]> {
   return files
 }
 
+async function loadMessenger(): Promise<Record<string, Record<string, string>>> {
+  const locales: Record<string, Record<string, string>> = {}
+  for await (const file of new Glob("*.ts").scan({ cwd: path.join(MESSENGER_ROOT, "i18n"), absolute: true })) {
+    const locale = path.basename(file, ".ts")
+    const mod = (await import(file)) as { dict: Record<string, string> }
+    locales[locale] = mod.dict
+  }
+  return locales
+}
+
 // ── Webview files ───────────────────────────────────────────────────────────
 
 async function findWebviewMissing(): Promise<Missing[]> {
   const glob = new Glob("**/*.{ts,tsx}")
-  const dirs = [path.join(ROOT, "webview-ui/src"), path.join(ROOT, "webview-ui/agent-manager")]
+  const dirs = [path.join(ROOT, "webview-ui/src"), path.join(ROOT, "webview-ui/agent-manager"), MESSENGER_ROOT]
 
   const files: string[] = []
   for (const dir of dirs) {
@@ -398,6 +413,21 @@ function findMissingLocaleKeys(
   return results
 }
 
+function findUnknownLocaleKeys(
+  en: Record<string, string>,
+  locales: Record<string, Record<string, string>>,
+): Array<{ locale: string; key: string }> {
+  const base = new Set(Object.keys(en))
+  const results: Array<{ locale: string; key: string }> = []
+  for (const [locale, dict] of Object.entries(locales)) {
+    if (locale === "en") continue
+    for (const key of Object.keys(dict)) {
+      if (!base.has(key)) results.push({ locale, key })
+    }
+  }
+  return results
+}
+
 function formatLocaleReport(items: Array<{ locale: string; key: string }>): string {
   return items.map((m) => `  [${m.locale}] "${m.key}"`).join("\n")
 }
@@ -443,7 +473,7 @@ describe("i18n key validation — no missing translation keys", () => {
   })
 })
 
-describe("i18n locale completeness — every English key exists in all locales", () => {
+describe("i18n locale dictionary contracts", () => {
   it("shared UI: every English key has a translation in all locales", () => {
     const missing = findMissingLocaleKeys(uiEn, uiLocales)
     if (missing.length > 0) {
@@ -464,6 +494,17 @@ describe("i18n locale completeness — every English key exists in all locales",
       ).toEqual([])
     }
     expect(missing).toEqual([])
+  })
+
+  it("Raya Messenger: every translated key exists in the English fallback", async () => {
+    const unknown = findUnknownLocaleKeys(messengerEn, await loadMessenger())
+    if (unknown.length > 0) {
+      expect(
+        unknown,
+        `Found ${unknown.length} unknown Raya Messenger translation key(s):\n${formatLocaleReport(unknown)}`,
+      ).toEqual([])
+    }
+    expect(unknown).toEqual([])
   })
 
   it("kilo-i18n: every English key has a translation in all locales", () => {

@@ -65,7 +65,7 @@ export const dict = {
     "Raya Messenger gives you a personal AI that reads email, manages your calendar, monitors your projects, and lives in Telegram, Slack \u2014 whatever you already use.",
   "kiloClaw.setup.description2": "No app to install. No new interface to learn. Just message it like a friend.",
   "kiloClaw.setup.learnMore": "Learn more",
-  "kiloClaw.setup.tryRaya Messenger": "Try Raya Messenger",
+  "kiloClaw.setup.tryKiloClaw": "Try Raya Messenger",
 
   // Upgrade
   "kiloClaw.upgrade.title": "Raya Messenger Chat requires an upgrade",

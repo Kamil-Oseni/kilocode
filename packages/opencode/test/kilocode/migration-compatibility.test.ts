@@ -128,6 +128,12 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:enable_question_tool",
+      raya: "RAYA_ENABLE_QUESTION_TOOL",
+      legacy: "KILO_ENABLE_QUESTION_TOOL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:permission",
       raya: "RAYA_PERMISSION",
       legacy: "KILO_PERMISSION",

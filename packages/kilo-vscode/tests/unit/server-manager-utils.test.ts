@@ -366,6 +366,8 @@ describe("server workspace helpers", () => {
           KILO_SERVER_USERNAME: "hostile-kilo-user",
           RAYA_DISABLE_CLAUDE_CODE: "false",
           KILO_DISABLE_CLAUDE_CODE: "invalid",
+          RAYA_ENABLE_QUESTION_TOOL: "false",
+          KILO_ENABLE_QUESTION_TOOL: "invalid",
         },
         "generated-password",
       ),
@@ -380,6 +382,8 @@ describe("server workspace helpers", () => {
       KILO_SERVER_USERNAME: "kilo",
       RAYA_DISABLE_CLAUDE_CODE: "true",
       KILO_DISABLE_CLAUDE_CODE: "true",
+      RAYA_ENABLE_QUESTION_TOOL: "true",
+      KILO_ENABLE_QUESTION_TOOL: "true",
     })
   })
 

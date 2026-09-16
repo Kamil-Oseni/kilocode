@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test" // kilocode_change
-import { ConfigProvider, Effect, Layer } from "effect"
+import { ConfigProvider, Effect, Exit, Layer } from "effect" // kilocode_change
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -79,6 +79,55 @@ describe("RuntimeFlags", () => {
       expect(flags.client).toBe("desktop")
     }),
   )
+
+  // kilocode_change start - clarification questions accept the Raya name with defined-value precedence
+  for (const input of [
+    { name: "neither alias", config: {}, expected: false, conflict: false },
+    { name: "Raya only", config: { RAYA_ENABLE_QUESTION_TOOL: "true" }, expected: true, conflict: false },
+    { name: "Kilo fallback", config: { KILO_ENABLE_QUESTION_TOOL: "yes" }, expected: true, conflict: false },
+    {
+      name: "matching aliases",
+      config: { RAYA_ENABLE_QUESTION_TOOL: "true", KILO_ENABLE_QUESTION_TOOL: "true" },
+      expected: true,
+      conflict: false,
+    },
+    {
+      name: "Raya false over Kilo true",
+      config: { RAYA_ENABLE_QUESTION_TOOL: "false", KILO_ENABLE_QUESTION_TOOL: "true" },
+      expected: false,
+      conflict: true,
+    },
+    {
+      name: "Raya true over invalid Kilo",
+      config: { RAYA_ENABLE_QUESTION_TOOL: "true", KILO_ENABLE_QUESTION_TOOL: "invalid" },
+      expected: true,
+      conflict: true,
+    },
+  ]) {
+    it.effect(`resolves clarification questions from ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+        expect(flags.enableQuestionTool).toBe(input.expected)
+        expect(EnvAlias.conflicts()).toEqual(
+          input.conflict ? ["RAYA_ENABLE_QUESTION_TOOL/KILO_ENABLE_QUESTION_TOOL"] : [],
+        )
+      }),
+    )
+  }
+
+  it.effect("does not fall back when the defined Raya clarification value is invalid", () =>
+    Effect.gen(function* () {
+      const exit = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({ RAYA_ENABLE_QUESTION_TOOL: "invalid", KILO_ENABLE_QUESTION_TOOL: "true" }),
+        ),
+        Effect.exit,
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(EnvAlias.conflicts()).toEqual(["RAYA_ENABLE_QUESTION_TOOL/KILO_ENABLE_QUESTION_TOOL"])
+    }),
+  )
+  // kilocode_change end
 
   // kilocode_change start - Raya/Kilo pure-mode aliases are safety-monotonic
   for (const input of [

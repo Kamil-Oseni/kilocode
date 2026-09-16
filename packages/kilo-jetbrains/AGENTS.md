@@ -203,7 +203,7 @@ For the full release process (resolve version, pin verification, prepare, change
 
 - The plugin spawns `kilo serve --port 0` (OS assigns random port) and reads stdout for `listening on http://...:(\d+)` to discover the port.
 - A random 32-byte hex password is passed via `KILO_SERVER_PASSWORD` env var for Basic Auth.
-- Fixed env vars set on every spawn: `KILO_CLIENT=jetbrains`, `KILO_PLATFORM=jetbrains`, `KILO_APP_NAME=kilo-code`, `KILO_ENABLE_QUESTION_TOOL=true`, `KILOCODE_FEATURE=jetbrains-plugin`. By default, both `RAYA_DISABLE_CLAUDE_CODE=true` and `KILO_DISABLE_CLAUDE_CODE=true` are also set; enabling Claude Code compatibility omits both names.
+- Fixed env vars set on every spawn: `KILO_CLIENT=jetbrains`, `KILO_PLATFORM=jetbrains`, `KILO_APP_NAME=kilo-code`, `RAYA_ENABLE_QUESTION_TOOL=true`, `KILO_ENABLE_QUESTION_TOOL=true`, `KILOCODE_FEATURE=jetbrains-plugin`. By default, both `RAYA_DISABLE_CLAUDE_CODE=true` and `KILO_DISABLE_CLAUDE_CODE=true` are also set; enabling Claude Code compatibility omits both names.
 - Unless already provided by the base environment, the backend sets `KILO_CONFIG_CONTENT` to make `edit` and `bash` permissions ask by default for JetBrains-launched CLI processes.
 - This is the same protocol used by the VS Code extension (`packages/kilo-vscode/src/services/cli-backend/server-manager.ts`).
 

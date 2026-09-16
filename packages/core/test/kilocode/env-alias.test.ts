@@ -172,6 +172,60 @@ describe("Raya environment aliases", () => {
 
   for (const item of [
     { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "TRUE", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: false },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: false },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: false },
+  ]) {
+    test(`wires clarification questions from ${item.name}`, () => {
+      const env = { ...process.env }
+      delete env.RAYA_ENABLE_QUESTION_TOOL
+      delete env.KILO_ENABLE_QUESTION_TOOL
+      if (item.raya !== undefined) env.RAYA_ENABLE_QUESTION_TOOL = item.raya
+      if (item.kilo !== undefined) env.KILO_ENABLE_QUESTION_TOOL = item.kilo
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_ENABLE_QUESTION_TOOL))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toBe(item.expected)
+    })
+  }
+
+  test("reports the clarification question alias conflict without its values", () => {
+    const env = { ...process.env }
+    env.RAYA_ENABLE_QUESTION_TOOL = "raya-secret"
+    env.KILO_ENABLE_QUESTION_TOOL = "kilo-secret"
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flag: Flag.KILO_ENABLE_QUESTION_TOOL, conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({
+      flag: false,
+      conflicts: ["RAYA_ENABLE_QUESTION_TOOL/KILO_ENABLE_QUESTION_TOOL"],
+    })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
     { name: "Raya true", raya: "true", kilo: undefined, expected: true },
     { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
     { name: "both true", raya: "true", kilo: "true", expected: true },

@@ -36,6 +36,7 @@ const copy = process.env["KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 const fff = process.env["KILO_DISABLE_FFF"]
 const ttfd = EnvAlias.read("RAYA_SHOW_TTFD", "KILO_SHOW_TTFD")?.toLowerCase() // kilocode_change
 const heap = EnvAlias.read("RAYA_AUTO_HEAP_SNAPSHOT", "KILO_AUTO_HEAP_SNAPSHOT")?.toLowerCase() // kilocode_change
+const question = EnvAlias.read("RAYA_ENABLE_QUESTION_TOOL", "KILO_ENABLE_QUESTION_TOOL")?.toLowerCase() // kilocode_change
 
 function enabledByExperimental(key: string) {
   return process.env[key] === undefined ? truthy("KILO_EXPERIMENTAL") : truthy(key)
@@ -104,7 +105,7 @@ export const Flag = {
     EnvAlias.write("RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", value)
   },
   // kilocode_change end
-  KILO_ENABLE_QUESTION_TOOL: truthy("KILO_ENABLE_QUESTION_TOOL"), // kilocode_change
+  KILO_ENABLE_QUESTION_TOOL: question === "true" || question === "1", // kilocode_change
 
   KILO_EXPERIMENTAL, // kilocode_change
 

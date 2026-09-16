@@ -36,6 +36,7 @@ class KiloBackendCliManagerEnvTest {
         val env = manager.buildEnv("pwd123", emptyMap())
 
         assertEquals("jetbrains", env["KILO_CLIENT"])
+        assertEquals("true", env["RAYA_ENABLE_QUESTION_TOOL"])
         assertEquals("true", env["KILO_ENABLE_QUESTION_TOOL"])
         assertEquals("jetbrains", env["KILO_PLATFORM"])
         assertEquals("kilo-code", env["KILO_APP_NAME"])
@@ -56,12 +57,16 @@ class KiloBackendCliManagerEnvTest {
             "KILO_SERVER_PASSWORD" to "hostile-kilo-password",
             "RAYA_SERVER_USERNAME" to "hostile-raya-user",
             "KILO_SERVER_USERNAME" to "hostile-kilo-user",
+            "RAYA_ENABLE_QUESTION_TOOL" to "false",
+            "KILO_ENABLE_QUESTION_TOOL" to "invalid",
         ))
 
         assertEquals("generated", env["RAYA_SERVER_PASSWORD"])
         assertEquals(env["RAYA_SERVER_PASSWORD"], env["KILO_SERVER_PASSWORD"])
         assertEquals("kilo", env["RAYA_SERVER_USERNAME"])
         assertEquals(env["RAYA_SERVER_USERNAME"], env["KILO_SERVER_USERNAME"])
+        assertEquals("true", env["RAYA_ENABLE_QUESTION_TOOL"])
+        assertEquals(env["RAYA_ENABLE_QUESTION_TOOL"], env["KILO_ENABLE_QUESTION_TOOL"])
     }
 
     @Test

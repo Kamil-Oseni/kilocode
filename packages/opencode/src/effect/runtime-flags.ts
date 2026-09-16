@@ -1,4 +1,4 @@
-import { Config, ConfigProvider, Context, Effect, Layer, Option } from "effect"
+import { Config, ConfigProvider, Context, Effect, Layer, Option, Schema } from "effect" // kilocode_change
 import { ConfigService } from "@/effect/config-service"
 import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 
@@ -12,6 +12,24 @@ const safety = (raya: string, kilo: string) =>
     Config.map((flags) =>
       EnvAlias.enabledValues(raya, kilo, Option.getOrUndefined(flags.next), Option.getOrUndefined(flags.legacy)),
     ),
+  )
+const alias = (raya: string, kilo: string) =>
+  Config.all({
+    next: Config.string(raya).pipe(Config.option),
+    legacy: Config.string(kilo).pipe(Config.option),
+  }).pipe(
+    Config.mapOrFail((flags) => {
+      const value = EnvAlias.readValues(
+        raya,
+        kilo,
+        Option.getOrUndefined(flags.next),
+        Option.getOrUndefined(flags.legacy),
+      )
+      if (value === undefined) return Effect.succeed(false)
+      return Schema.decodeUnknownEffect(Config.Boolean)(value).pipe(
+        Effect.mapError((err) => new Config.ConfigError(err)),
+      )
+    }),
   )
 // kilocode_change end
 const claude = safety("RAYA_DISABLE_CLAUDE_CODE", "KILO_DISABLE_CLAUDE_CODE") // kilocode_change
@@ -54,7 +72,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
     legacy: bool("KILO_EXPERIMENTAL_PARALLEL"),
   }).pipe(Config.map((flags) => flags.enabled || flags.legacy)),
   enableExperimentalModels: bool("KILO_ENABLE_EXPERIMENTAL_MODELS"),
-  enableQuestionTool: bool("KILO_ENABLE_QUESTION_TOOL"),
+  enableQuestionTool: alias("RAYA_ENABLE_QUESTION_TOOL", "KILO_ENABLE_QUESTION_TOOL"), // kilocode_change
   experimentalScout: enabledByExperimental("KILO_EXPERIMENTAL_SCOUT"), // kilocode_change
   experimentalReferences: enabledByExperimental("KILO_EXPERIMENTAL_REFERENCES"),
   // kilocode_change start - enabled by default, with an opt-out kill switch

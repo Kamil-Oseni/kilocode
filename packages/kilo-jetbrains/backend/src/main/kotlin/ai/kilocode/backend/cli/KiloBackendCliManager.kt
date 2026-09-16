@@ -602,6 +602,7 @@ internal fun buildKiloCliEnv(
     // to signal or run the JVM shutdown hook, so it is never orphaned. See parent-watchdog.ts.
     put("KILO_PARENT_PID", ProcessHandle.current().pid().toString())
     put("KILO_CLIENT", "jetbrains")
+    put("RAYA_ENABLE_QUESTION_TOOL", "true")
     put("KILO_ENABLE_QUESTION_TOOL", "true")
     put("KILO_PLATFORM", "jetbrains")
     put("KILO_APP_NAME", "kilo-code")

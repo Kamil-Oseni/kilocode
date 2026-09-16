@@ -15,8 +15,11 @@ export namespace EnvAlias {
 
   /** Read a Raya environment name while retaining the Kilo name as a compatibility fallback. */
   export function read(raya: string, kilo: string, env: NodeJS.ProcessEnv = process.env) {
-    const next = env[raya]
-    const legacy = env[kilo]
+    return readValues(raya, kilo, env[raya], env[kilo])
+  }
+
+  /** Resolve injected ordinary values with Raya precedence and value-free conflict diagnostics. */
+  export function readValues(raya: string, kilo: string, next: string | undefined, legacy: string | undefined) {
     if (next !== undefined && legacy !== undefined && next !== legacy) found.add(`${raya}/${kilo}`)
     return next !== undefined ? next : legacy
   }

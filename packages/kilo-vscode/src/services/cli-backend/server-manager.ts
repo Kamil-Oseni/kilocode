@@ -51,6 +51,8 @@ export function resolveManagedServerEnv(
     KILO_SERVER_PASSWORD: password,
     RAYA_SERVER_USERNAME: username,
     KILO_SERVER_USERNAME: username,
+    RAYA_ENABLE_QUESTION_TOOL: "true",
+    KILO_ENABLE_QUESTION_TOOL: "true",
   }
   delete resolved.RAYA_MF_TOKEN
   delete resolved.RAYA_DISABLE_CLAUDE_CODE
@@ -164,7 +166,6 @@ export class ServerManager {
           // chance to run dispose(), so it is never orphaned. See parent-watchdog.ts.
           KILO_PARENT_PID: String(process.pid),
           KILO_CLIENT: "vscode",
-          KILO_ENABLE_QUESTION_TOOL: "true",
           KILOCODE_FEATURE: "vscode-extension",
           ...indexingEnv,
           KILO_TELEMETRY_LEVEL: vscode.env.isTelemetryEnabled ? "all" : "off",

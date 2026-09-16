@@ -1283,7 +1283,7 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("nvidia")].options.headers).toEqual({
       "HTTP-Referer": "https://kilo.ai/", // kilocode_change
-      "X-Title": "Kilo Code", // kilocode_change
+      "X-Title": "Raya", // kilocode_change
       "X-BILLING-INVOKE-ORIGIN": "KiloCode", // kilocode_change
     })
   }),
@@ -1296,7 +1296,7 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("nvidia")].options.headers).toEqual({
       "HTTP-Referer": "https://kilo.ai/", // kilocode_change
-      "X-Title": "Kilo Code", // kilocode_change
+      "X-Title": "Raya", // kilocode_change
       "X-BILLING-INVOKE-ORIGIN": "KiloCode", // kilocode_change
     })
   }),

@@ -35,6 +35,7 @@ const KILO_DISABLE_CLAUDE_CODE_SKILLS = KILO_DISABLE_CLAUDE_CODE || skills
 const copy = process.env["KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 const fff = process.env["KILO_DISABLE_FFF"]
 const ttfd = EnvAlias.read("RAYA_SHOW_TTFD", "KILO_SHOW_TTFD")?.toLowerCase() // kilocode_change
+const heap = EnvAlias.read("RAYA_AUTO_HEAP_SNAPSHOT", "KILO_AUTO_HEAP_SNAPSHOT")?.toLowerCase() // kilocode_change
 
 function enabledByExperimental(key: string) {
   return process.env[key] === undefined ? truthy("KILO_EXPERIMENTAL") : truthy(key)
@@ -45,7 +46,7 @@ export const Flag = {
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
 
   KILO_AUTO_SHARE: truthy("KILO_AUTO_SHARE"), // kilocode_change
-  KILO_AUTO_HEAP_SNAPSHOT: truthy("KILO_AUTO_HEAP_SNAPSHOT"),
+  KILO_AUTO_HEAP_SNAPSHOT: heap === "true" || heap === "1", // kilocode_change
   // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_GIT_BASH_PATH() {
     return EnvAlias.read("RAYA_GIT_BASH_PATH", "KILO_GIT_BASH_PATH")

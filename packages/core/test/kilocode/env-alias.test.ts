@@ -118,6 +118,60 @@ describe("Raya environment aliases", () => {
 
   for (const item of [
     { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "TRUE", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: false },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: false },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: false },
+  ]) {
+    test(`wires automatic heap snapshots from ${item.name}`, () => {
+      const env = { ...process.env }
+      delete env.RAYA_AUTO_HEAP_SNAPSHOT
+      delete env.KILO_AUTO_HEAP_SNAPSHOT
+      if (item.raya !== undefined) env.RAYA_AUTO_HEAP_SNAPSHOT = item.raya
+      if (item.kilo !== undefined) env.KILO_AUTO_HEAP_SNAPSHOT = item.kilo
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_AUTO_HEAP_SNAPSHOT))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toBe(item.expected)
+    })
+  }
+
+  test("reports the automatic heap snapshot alias conflict without its values", () => {
+    const env = { ...process.env }
+    env.RAYA_AUTO_HEAP_SNAPSHOT = "raya-secret"
+    env.KILO_AUTO_HEAP_SNAPSHOT = "kilo-secret"
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flag: Flag.KILO_AUTO_HEAP_SNAPSHOT, conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({
+      flag: false,
+      conflicts: ["RAYA_AUTO_HEAP_SNAPSHOT/KILO_AUTO_HEAP_SNAPSHOT"],
+    })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
     { name: "Raya true", raya: "true", kilo: undefined, expected: true },
     { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
     { name: "both true", raya: "true", kilo: "true", expected: true },

@@ -437,6 +437,7 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `RAYA_DISABLE_LSP_DOWNLOAD=1`: prevent automatic LSP downloads (`KILO_DISABLE_LSP_DOWNLOAD` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_AUTOUPDATE=1`: disable automatic CLI updates (`KILO_DISABLE_AUTOUPDATE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_ALWAYS_NOTIFY_UPDATE=1`: announce an available update instead of installing a patch automatically (`KILO_ALWAYS_NOTIFY_UPDATE` remains a compatibility alias; either name set to `true` or `1` keeps notification-only behavior).
+- `RAYA_AUTO_HEAP_SNAPSHOT=1`: automatically capture a heap snapshot above the diagnostic memory threshold (`KILO_AUTO_HEAP_SNAPSHOT` remains a fallback; Raya takes precedence when both are defined).
 - `RAYA_DISABLE_MODELS_FETCH=1`: prevent remote model-catalog fetches (`KILO_DISABLE_MODELS_FETCH` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_TERMINAL_TITLE=1`: prevent terminal-title updates (`KILO_DISABLE_TERMINAL_TITLE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_EMBEDDED_WEB_UI=1`: disable the embedded web UI (`KILO_DISABLE_EMBEDDED_WEB_UI` remains a compatibility alias; either name set to `true` or `1` enables the safety override).

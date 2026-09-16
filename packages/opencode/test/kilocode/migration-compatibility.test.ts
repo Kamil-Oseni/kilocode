@@ -122,6 +122,12 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:auto_heap_snapshot",
+      raya: "RAYA_AUTO_HEAP_SNAPSHOT",
+      legacy: "KILO_AUTO_HEAP_SNAPSHOT",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:permission",
       raya: "RAYA_PERMISSION",
       legacy: "KILO_PERMISSION",

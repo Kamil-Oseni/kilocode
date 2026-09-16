@@ -63,6 +63,8 @@ export function check(
     "BIN_PATH",
     "TUI_CONFIG",
     "MODELS_URL",
+    "COMMAND_TIMEOUT_MAX_MS",
+    "COMMAND_TIMEOUT_MAX_MS_MESSAGE",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   if (JSON.stringify(env) !== JSON.stringify(expected))
     throw new Error("Environment aliases or precedence differ from the compatibility ledger.")

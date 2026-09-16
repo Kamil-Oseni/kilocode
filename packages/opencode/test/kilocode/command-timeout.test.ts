@@ -19,6 +19,8 @@ import { testEffect } from "../lib/effect"
 
 const max = process.env.KILO_COMMAND_TIMEOUT_MAX_MS
 const msg = process.env.KILO_COMMAND_TIMEOUT_MAX_MS_MESSAGE
+const rayaMax = process.env.RAYA_COMMAND_TIMEOUT_MAX_MS
+const rayaMsg = process.env.RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE
 const encoder = new TextEncoder()
 const it = testEffect(Layer.empty)
 const shell = testEffect(
@@ -59,9 +61,33 @@ afterEach(() => {
   else process.env.KILO_COMMAND_TIMEOUT_MAX_MS = max
   if (msg === undefined) delete process.env.KILO_COMMAND_TIMEOUT_MAX_MS_MESSAGE
   else process.env.KILO_COMMAND_TIMEOUT_MAX_MS_MESSAGE = msg
+  if (rayaMax === undefined) delete process.env.RAYA_COMMAND_TIMEOUT_MAX_MS
+  else process.env.RAYA_COMMAND_TIMEOUT_MAX_MS = rayaMax
+  if (rayaMsg === undefined) delete process.env.RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE
+  else process.env.RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE = rayaMsg
 })
 
 describe("CommandTimeout", () => {
+  test("prefers Raya timeout inputs and retains Kilo fallbacks", () => {
+    delete process.env.RAYA_COMMAND_TIMEOUT_MAX_MS
+    delete process.env.RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE
+    process.env.KILO_COMMAND_TIMEOUT_MAX_MS = "300"
+    process.env.KILO_COMMAND_TIMEOUT_MAX_MS_MESSAGE = "Legacy guidance."
+
+    expect(CommandTimeout.env()).toEqual({ timeout: 300, capped: true })
+    expect(CommandTimeout.message(300, "shell command terminated")).toBe(
+      "shell command terminated after exceeding environment timeout 300 ms. Legacy guidance.",
+    )
+
+    process.env.RAYA_COMMAND_TIMEOUT_MAX_MS = "125"
+    process.env.RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE = "Raya guidance."
+
+    expect(CommandTimeout.env()).toEqual({ timeout: 125, capped: true })
+    expect(CommandTimeout.message(125, "shell command terminated")).toBe(
+      "shell command terminated after exceeding environment timeout 125 ms. Raya guidance.",
+    )
+  })
+
   // Pure policy coverage: no process or timer waits.
   test("resolves hosted timeout policy", () => {
     for (const value of [undefined, "0", "-1", "abc"]) {

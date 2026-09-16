@@ -114,6 +114,8 @@ export namespace RayaMigrationLedger {
     "BIN_PATH",
     "TUI_CONFIG",
     "MODELS_URL",
+    "COMMAND_TIMEOUT_MAX_MS",
+    "COMMAND_TIMEOUT_MAX_MS_MESSAGE",
   ].map((name) => ({
     kind: `environment:${name.toLowerCase()}`,
     raya: `RAYA_${name}`,
@@ -366,8 +368,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_311,
-        digest: "37778512e0d0f9409a339082bdd4a72309d3260d27fb61c2015ba5d23750290c",
+        count: 35_317,
+        digest: "ff0355a82598f62d3935f0aaf3c4aa218439160e8e12a7f22b5f27a41d572734",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

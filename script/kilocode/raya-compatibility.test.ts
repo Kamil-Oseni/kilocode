@@ -35,6 +35,10 @@ test("the real tree agrees with the fail-closed compatibility ledger", () => {
 
 test("package, command, baseline and editor drift fail closed", () => {
   const cli = manifests.find((item) => item.file === "packages/opencode/package.json")!
+  const brand = JSON.parse(inventory) as { categories: Record<string, { count: number }> }
+  const baseline = brand.categories["compatibility-key"]
+  if (!baseline) throw new Error("Expected compatibility-key inventory category.")
+  baseline.count++
   const cases = [
     {
       list: manifests.filter((item) => item.file !== "packages/kilo-memory/package.json"),
@@ -48,7 +52,7 @@ test("package, command, baseline and editor drift fail closed", () => {
       brand: inventory,
       vscode: extension,
     },
-    { list: manifests, brand: inventory.replace('"count": 35185', '"count": 35186'), vscode: extension },
+    { list: manifests, brand: JSON.stringify(brand), vscode: extension },
     { list: manifests, brand: inventory, vscode: extension.replace('"publisher": "eden"', '"publisher": "other"') },
   ]
   for (const item of cases)

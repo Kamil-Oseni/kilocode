@@ -61,6 +61,18 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_MODELS_URL",
       policy: "raya-wins-legacy-write",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:command_timeout_max_ms",
+      raya: "RAYA_COMMAND_TIMEOUT_MAX_MS",
+      legacy: "KILO_COMMAND_TIMEOUT_MAX_MS",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:command_timeout_max_ms_message",
+      raya: "RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE",
+      legacy: "KILO_COMMAND_TIMEOUT_MAX_MS_MESSAGE",
+      policy: "raya-wins-legacy-write",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

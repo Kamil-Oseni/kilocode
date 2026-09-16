@@ -72,6 +72,7 @@ export function check(
     "DISABLE_PROJECT_CONFIG",
     "SESSION_RETRY_LIMIT",
     "SHOW_TTFD",
+    "DISABLE_CODEBASE_INDEXING",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
     ["RAYA_PERMISSION", "KILO_PERMISSION", "matching-authority-aliases"],

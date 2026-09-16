@@ -26,7 +26,10 @@ export function resolveServerCwd(folders: readonly WorkspaceFolderLike[] | undef
 
 export function resolveIndexingEnv(folders: readonly WorkspaceFolderLike[] | undefined): Record<string, string> {
   if (folders && folders.length > 0) return {}
-  return { KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" }
+  return {
+    RAYA_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace",
+    KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace",
+  }
 }
 
 export function resolveManagedServerEnv(

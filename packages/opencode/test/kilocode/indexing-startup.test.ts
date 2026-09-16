@@ -8,6 +8,7 @@ import { normalizeIndexingStatus } from "@kilocode/kilo-indexing/status"
 import type { Config } from "../../src/config/config"
 import { GlobalBus } from "../../src/bus/global"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import { WorkspaceContext } from "../../src/control-plane/workspace-context"
 import { KiloIndexing, IndexingModelError } from "../../src/kilocode/indexing"
 import { indexingWarningKey } from "../../src/kilocode/indexing-warning"
@@ -80,6 +81,7 @@ const staleKilo: Partial<Config.Info> = {
 }
 const configDir = process.env["KILO_CONFIG_DIR"]
 const disabled = process.env["KILO_DISABLE_CODEBASE_INDEXING"]
+const rayaDisabled = process.env["RAYA_DISABLE_CODEBASE_INDEXING"]
 const platform = process.env["KILO_PLATFORM"]
 const error = new Error("test indexing initialization failed")
 
@@ -130,6 +132,8 @@ afterEach(async () => {
   else process.env["KILO_CONFIG_DIR"] = configDir
   if (disabled === undefined) delete process.env["KILO_DISABLE_CODEBASE_INDEXING"]
   else process.env["KILO_DISABLE_CODEBASE_INDEXING"] = disabled
+  if (rayaDisabled === undefined) delete process.env["RAYA_DISABLE_CODEBASE_INDEXING"]
+  else process.env["RAYA_DISABLE_CODEBASE_INDEXING"] = rayaDisabled
   if (platform === undefined) delete process.env["KILO_PLATFORM"]
   else process.env["KILO_PLATFORM"] = platform
   global.fetch = fetch
@@ -174,6 +178,37 @@ describe("indexing model catalog", () => {
     expect(response.status).toBe(200)
     expect(catalogs).toHaveLength(1)
     expect(catalogs[0]).not.toContain("127.0.0.1:4567")
+  })
+})
+
+describe("indexing environment", () => {
+  test.each([
+    [{}, false, []],
+    [{ RAYA_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" }, true, []],
+    [{ KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" }, true, []],
+    [
+      { RAYA_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace", KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" },
+      true,
+      [],
+    ],
+    [
+      { RAYA_DISABLE_CODEBASE_INDEXING: "enabled", KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" },
+      false,
+      ["RAYA_DISABLE_CODEBASE_INDEXING/KILO_DISABLE_CODEBASE_INDEXING"],
+    ],
+    [
+      { RAYA_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace", KILO_DISABLE_CODEBASE_INDEXING: "enabled" },
+      true,
+      ["RAYA_DISABLE_CODEBASE_INDEXING/KILO_DISABLE_CODEBASE_INDEXING"],
+    ],
+    [
+      { RAYA_DISABLE_CODEBASE_INDEXING: "", KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" },
+      false,
+      ["RAYA_DISABLE_CODEBASE_INDEXING/KILO_DISABLE_CODEBASE_INDEXING"],
+    ],
+  ] as const)("uses Raya-first sentinel precedence for %j", (env, expected, conflicts) => {
+    expect(KiloIndexing.disabled(env)).toBe(expected)
+    expect(EnvAlias.conflicts()).toEqual([...conflicts])
   })
 })
 
@@ -988,7 +1023,8 @@ describe("indexing startup degradation", () => {
   test("stays disabled when VS Code starts without a workspace folder", async () => {
     await using tmp = await tmpdir({ git: true, config: cfg })
     process.env["KILO_CONFIG_DIR"] = tmp.path
-    process.env["KILO_DISABLE_CODEBASE_INDEXING"] = "vscode-no-workspace"
+    delete process.env["KILO_DISABLE_CODEBASE_INDEXING"]
+    process.env["RAYA_DISABLE_CODEBASE_INDEXING"] = "vscode-no-workspace"
     const init = spyOn(CodeIndexManager.prototype, "initialize")
 
     try {

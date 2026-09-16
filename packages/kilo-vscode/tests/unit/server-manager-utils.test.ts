@@ -342,8 +342,12 @@ describe("server workspace helpers", () => {
   })
 
   it("disables codebase indexing only when no workspace folder is open", () => {
-    expect(resolveIndexingEnv(undefined)).toEqual({ KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" })
-    expect(resolveIndexingEnv([])).toEqual({ KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace" })
+    const disabled = {
+      RAYA_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace",
+      KILO_DISABLE_CODEBASE_INDEXING: "vscode-no-workspace",
+    }
+    expect(resolveIndexingEnv(undefined)).toEqual(disabled)
+    expect(resolveIndexingEnv([])).toEqual(disabled)
     expect(resolveIndexingEnv([{ uri: { fsPath: "/repo" } }])).toEqual({})
   })
 

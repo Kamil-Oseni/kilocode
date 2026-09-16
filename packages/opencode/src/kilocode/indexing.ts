@@ -15,6 +15,7 @@ import { Auth } from "@/auth"
 import { makeRuntime } from "@/effect/run-service"
 import { registerDisposer } from "@/effect/instance-registry"
 import { Global } from "@opencode-ai/core/global"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -216,6 +217,12 @@ export namespace KiloIndexing {
     })
   }
 
+  export function disabled(env: NodeJS.ProcessEnv = process.env) {
+    return (
+      EnvAlias.read("RAYA_DISABLE_CODEBASE_INDEXING", "KILO_DISABLE_CODEBASE_INDEXING", env) === "vscode-no-workspace"
+    )
+  }
+
   type Entry = {
     engine?: IndexingWorker.Driver
     initialized?: boolean
@@ -275,7 +282,7 @@ export namespace KiloIndexing {
     const cfg = startup.cfg
     const project = (await AppRuntime.runPromise(primaryWorktree(dir))) ?? dir
     projects.set(dir, project)
-    if (process.env["KILO_DISABLE_CODEBASE_INDEXING"] === "vscode-no-workspace") {
+    if (disabled()) {
       return track(hit, await inert(() => noWorkspace()))
     }
     if (process.env["KILO_PLATFORM"] === "vscode" && !consent.get(project)) {

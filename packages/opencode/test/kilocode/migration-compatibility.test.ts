@@ -116,6 +116,12 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_codebase_indexing",
+      raya: "RAYA_DISABLE_CODEBASE_INDEXING",
+      legacy: "KILO_DISABLE_CODEBASE_INDEXING",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:permission",
       raya: "RAYA_PERMISSION",
       legacy: "KILO_PERMISSION",

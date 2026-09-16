@@ -395,3 +395,4 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `RAYA_SKIP_MIGRATIONS` / `KILO_SKIP_MIGRATIONS` | Record pending legacy-client migrations without executing their SQL. Either name set to `true` or `1` enables the safety override. This does not disable Core migrations. |
 | `RAYA_DISABLE_SHARE` / `KILO_DISABLE_SHARE` | Block public session sharing and unsharing without disabling private session ingest. Either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_PRESENCE` / `KILO_DISABLE_PRESENCE` | Block Event Service presence sockets while retaining local attached-session tracking. Either name set to `true` or `1` enables the safety override. |
+| `RAYA_DISABLE_CODEBASE_INDEXING` / `KILO_DISABLE_CODEBASE_INDEXING` | Keep codebase indexing inactive when a managed client has no workspace folder. The exact value is `vscode-no-workspace`, not a boolean; the Raya name takes precedence when both are defined. |

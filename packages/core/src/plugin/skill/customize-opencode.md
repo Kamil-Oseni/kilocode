@@ -449,6 +449,7 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `RAYA_SKIP_MIGRATIONS=1`: record pending legacy-client migrations without executing their SQL (`KILO_SKIP_MIGRATIONS` remains a compatibility alias; either name set to `true` or `1` enables the safety override). This does not disable Core migrations.
 - `RAYA_DISABLE_SHARE=1`: block public session sharing and unsharing without disabling private session ingest (`KILO_DISABLE_SHARE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_PRESENCE=1`: block Event Service presence sockets while retaining local attached-session tracking (`KILO_DISABLE_PRESENCE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_CODEBASE_INDEXING=vscode-no-workspace`: keep codebase indexing inactive when a managed client has no workspace folder (`KILO_DISABLE_CODEBASE_INDEXING` remains a compatibility fallback). This is an exact sentinel, not a boolean switch; when both names are defined, the Raya value takes precedence.
 
 ## When proposing edits
 

@@ -4,6 +4,7 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import { ChatInfo } from "./ChatInfo"
 import { ConversationSearch } from "./ConversationSearch"
+import { ConversationState } from "./ConversationState"
 import { MediaAttachment, previewable } from "./MediaAttachment"
 import { MessageTime } from "../chat/MessageTime"
 
@@ -576,6 +577,8 @@ export const Inbox: Component<{
   const [error, setError] = createSignal("")
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
   const [look, setLook] = createSignal("")
+  const [loading, setLoading] = createSignal(true)
+  const [pageError, setPageError] = createSignal("")
   const [searching, setSearching] = createSignal(false)
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
@@ -626,9 +629,11 @@ export const Inbox: Component<{
   }
 
   const load = (after?: string, search?: string) => {
-    if (wait && !after) return
+    if (wait) return
     wait = true
     older = !!after
+    setLoading(true)
+    setPageError("")
     pageID = crypto.randomUUID()
     vscode.postMessage({
       type: "routineInboxPage",
@@ -701,6 +706,8 @@ export const Inbox: Component<{
       setNext()
       setPhase("idle")
       setHalt("idle")
+      setLoading(true)
+      setPageError("")
       term = ""
       setSearching(false)
       setLook("")
@@ -741,13 +748,15 @@ export const Inbox: Component<{
   const page = (msg: ExtensionMessage) => {
     if (msg.type !== "routineInboxPage" || msg.requestID !== pageID || msg.agentID !== props.agentID) return
     wait = false
+    setLoading(false)
     if (msg.error) {
-      setError(msg.error)
+      setPageError(msg.error)
       return
     }
     const rows = Array.isArray(msg.messages) ? (msg.messages as Note[]) : []
     setThread((prior) => (older ? [...rows, ...prior] : rows))
     setNext(msg.next)
+    setPageError("")
     setError("")
     const last = rows.at(-1)
     if (last && !older)
@@ -897,8 +906,15 @@ export const Inbox: Component<{
     setSearching(!!value)
     setThread([])
     setNext()
+    setPageError("")
     setError("")
     load(undefined, term || undefined)
+  }
+
+  const retry = () => {
+    const after = older ? cursor() : undefined
+    wait = false
+    load(after, term || undefined)
   }
 
   const submit = () => {
@@ -1040,6 +1056,7 @@ export const Inbox: Component<{
           class="routines-thread-body"
           role="log"
           tabIndex={0}
+          aria-busy={loading()}
           aria-label={`Messages with ${props.name}`}
           aria-relevant="additions"
           onScroll={remember}
@@ -1048,18 +1065,17 @@ export const Inbox: Component<{
             <Button
               variant="ghost"
               size="small"
+              disabled={loading()}
               onClick={() => {
                 const after = cursor()
                 if (after) load(after, term || undefined)
               }}
             >
-              Earlier messages
+              {loading() && older ? "Loading earlier messages" : "Earlier messages"}
             </Button>
           </Show>
           <Show when={!thread().length}>
-            <p class="routines-empty">
-              {searching() ? "No messages match this search." : "Reports and follow-ups for this worker will appear here."}
-            </p>
+            <ConversationState loading={loading()} searching={searching()} error={pageError()} onRetry={retry} />
           </Show>
           <For each={thread()}>
             {(item) => {
@@ -1078,6 +1094,14 @@ export const Inbox: Component<{
               )
             }}
           </For>
+          <Show when={thread().length > 0 && pageError()}>
+            <div class="routines-load-error" role="alert">
+              <p>{pageError()}</p>
+              <Button type="button" size="small" variant="ghost" onClick={retry}>
+                Retry
+              </Button>
+            </div>
+          </Show>
         </div>
         <Show when={error()}>
           <p class="routines-error" role="alert">

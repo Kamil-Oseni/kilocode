@@ -9,7 +9,14 @@ import { TuiConfig } from "../../../src/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
-test("skips external tui plugins in pure mode", async () => {
+// kilocode_change start
+test.each([
+  ["1", undefined],
+  [undefined, "1"],
+  ["1", "0"],
+  ["0", "1"],
+  ["", "1"],
+] as const)("skips external tui plugins when either pure alias enables safety", async (raya, kilo) => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const file = path.join(dir, "plugin.ts")
@@ -33,9 +40,12 @@ test("skips external tui plugins in pure mode", async () => {
     },
   })
 
-  const pure = process.env.KILO_PURE
+  const current = { raya: process.env.RAYA_PURE, kilo: process.env.KILO_PURE }
   const meta = process.env.KILO_PLUGIN_META_FILE
-  process.env.KILO_PURE = "1"
+  if (raya === undefined) delete process.env.RAYA_PURE
+  else process.env.RAYA_PURE = raya
+  if (kilo === undefined) delete process.env.KILO_PURE
+  else process.env.KILO_PURE = kilo
   process.env.KILO_PLUGIN_META_FILE = tmp.extra.meta
 
   const config = createTuiResolvedConfig({
@@ -58,11 +68,10 @@ test("skips external tui plugins in pure mode", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    if (pure === undefined) {
-      delete process.env.KILO_PURE
-    } else {
-      process.env.KILO_PURE = pure
-    }
+    if (current.raya === undefined) delete process.env.RAYA_PURE
+    else process.env.RAYA_PURE = current.raya
+    if (current.kilo === undefined) delete process.env.KILO_PURE
+    else process.env.KILO_PURE = current.kilo
     if (meta === undefined) {
       delete process.env.KILO_PLUGIN_META_FILE
     } else {
@@ -70,3 +79,4 @@ test("skips external tui plugins in pure mode", async () => {
     }
   }
 })
+// kilocode_change end

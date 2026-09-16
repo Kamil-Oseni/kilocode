@@ -483,7 +483,7 @@ Metadata is persisted by plugin id.
 
 - Internal TUI plugins load first.
 - External TUI plugins load from `tuiConfig.plugin`.
-- `--pure` / `KILO_PURE` skips external TUI plugins only.
+- Pure mode disables external plugins across the main/server and TUI runtimes while retaining internal plugins. Either `RAYA_PURE` or `KILO_PURE` can enable it, and `--pure` sets both names.
 - External plugin resolution and import are parallel.
 - Packages with no `./tui` entrypoint and valid `oc-themes` are loaded as synthetic no-op TUI plugin modules.
 - Theme-only packages loaded this way appear in `api.plugins.list()` and plugin manager rows like other external plugins.

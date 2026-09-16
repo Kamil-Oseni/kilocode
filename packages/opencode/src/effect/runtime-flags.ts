@@ -1,7 +1,19 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option } from "effect"
 import { ConfigService } from "@/effect/config-service"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 
 const bool = (name: string) => Config.boolean(name).pipe(Config.withDefault(false))
+// kilocode_change start - safety flags stay enabled when either Raya or Kilo requests them
+const safety = (raya: string, kilo: string) =>
+  Config.all({
+    next: Config.string(raya).pipe(Config.option),
+    legacy: Config.string(kilo).pipe(Config.option),
+  }).pipe(
+    Config.map((flags) =>
+      EnvAlias.enabledValues(raya, kilo, Option.getOrUndefined(flags.next), Option.getOrUndefined(flags.legacy)),
+    ),
+  )
+// kilocode_change end
 const positiveInteger = (name: string) =>
   Config.number(name).pipe(
     Config.map((value) => (Number.isInteger(value) && value > 0 ? value : undefined)),
@@ -15,7 +27,7 @@ const enabledByExperimental = (name: string) =>
 
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("KILO_AUTO_SHARE"),
-  pure: bool("KILO_PURE"),
+  pure: safety("RAYA_PURE", "KILO_PURE"), // kilocode_change
   disableDefaultPlugins: bool("KILO_DISABLE_DEFAULT_PLUGINS"),
   disableChannelDb: bool("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
   disableEmbeddedWebUi: bool("KILO_DISABLE_EMBEDDED_WEB_UI"),

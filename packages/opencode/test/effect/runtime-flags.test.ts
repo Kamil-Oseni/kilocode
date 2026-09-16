@@ -1,6 +1,7 @@
-import { describe, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test" // kilocode_change
 import { ConfigProvider, Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { it } from "../lib/effect"
 
@@ -8,6 +9,8 @@ const fromConfig = (input: Record<string, unknown>) =>
   AppNodeBuilder.build(RuntimeFlags.node).pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(input))))
 
 const readFlags = RuntimeFlags.Service.useSync((flags) => flags)
+
+afterEach(() => EnvAlias.conflicts()) // kilocode_change
 
 describe("RuntimeFlags", () => {
   it.effect("layer defaults autoShare to false", () =>
@@ -76,6 +79,38 @@ describe("RuntimeFlags", () => {
       expect(flags.client).toBe("desktop")
     }),
   )
+
+  // kilocode_change start - Raya/Kilo pure-mode aliases are safety-monotonic
+  for (const input of [
+    { name: "Raya only", config: { RAYA_PURE: "true" } },
+    { name: "Kilo fallback", config: { KILO_PURE: "true" } },
+    { name: "Raya true and Kilo false", config: { RAYA_PURE: "true", KILO_PURE: "false" } },
+    { name: "Raya false and Kilo true", config: { RAYA_PURE: "false", KILO_PURE: "true" } },
+    { name: "empty Raya and Kilo true", config: { RAYA_PURE: "", KILO_PURE: "true" } },
+  ]) {
+    it.effect(`enables pure mode from ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+        expect(flags.pure).toBe(true)
+      }),
+    )
+  }
+
+  it.effect("keeps pure mode disabled when both aliases are false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ RAYA_PURE: "false", KILO_PURE: "false" })))
+      expect(flags.pure).toBe(false)
+    }),
+  )
+
+  it.effect("records only pure alias labels when server config aliases conflict", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ RAYA_PURE: "false", KILO_PURE: "true" })))
+      expect(flags.pure).toBe(true)
+      expect(EnvAlias.conflicts()).toEqual(["RAYA_PURE/KILO_PURE"])
+    }),
+  )
+  // kilocode_change end
 
   it.effect("layer parses KILO_EXPERIMENTAL_LSP_TY", () =>
     Effect.gen(function* () {

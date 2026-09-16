@@ -3,6 +3,7 @@ import { TuiThreadCommand } from "./cli/cmd/tui"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { hideBin } from "yargs/helpers"
 import { KiloLog } from "@/kilocode/log" // kilocode_change
+import { PureEnv } from "@/kilocode/cli/pure" // kilocode_change
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
@@ -27,6 +28,7 @@ const cli = yargs(hideBin(process.argv))
   .middleware((opts) => {
     // kilocode_change - keep explicit CLI flags above inherited Raya and Kilo aliases
     KiloLog.configure({ printLogs: opts.printLogs === true, logLevel: opts.logLevel }) // kilocode_change
+    if (opts.pure) PureEnv.enable() // kilocode_change - keep the temporary TUI's --pure behavior aligned with the main CLI
   })
   .command(TuiThreadCommand)
   .parse()

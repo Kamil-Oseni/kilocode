@@ -32,6 +32,7 @@ import { Heap } from "./cli/heap"
 import { KiloCli } from "@/kilocode/cli/setup" // kilocode_change
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process" // kilocode_change
+import { PureEnv } from "@/kilocode/cli/pure" // kilocode_change
 
 const args = hideBin(process.argv)
 const metadata = ensureProcessMetadata("main") // kilocode_change - correlate logs across the CLI and TUI worker
@@ -72,9 +73,7 @@ let cli = yargs(args) // kilocode_change
   .middleware(async (opts) => {
     if (opts.printLogs) process.env.KILO_PRINT_LOGS = "1"
     if (opts.logLevel) process.env.KILO_LOG_LEVEL = opts.logLevel
-    if (opts.pure) {
-      process.env.KILO_PURE = "1"
-    }
+    if (opts.pure) PureEnv.enable() // kilocode_change - explicit CLI safety flag updates both aliases
 
     Heap.start()
 

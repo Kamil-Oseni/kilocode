@@ -65,6 +65,7 @@ export default {
           \`read_at\` integer NOT NULL,
           \`draft\` text,
           \`draft_attachments\` text,
+          \`draft_revision\` integer DEFAULT 0 NOT NULL,
           \`time_updated\` integer NOT NULL
         );
       `)

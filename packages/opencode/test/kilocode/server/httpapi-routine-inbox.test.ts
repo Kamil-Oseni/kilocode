@@ -82,15 +82,24 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
   const draft = await app.request(`${route}/draft`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ draft: "Ask for the travel breakdown" }),
+    body: JSON.stringify({ draft: "Ask for the travel breakdown", revision: 1 }),
   })
   expect(draft.status).toBe(200)
-  expect(await draft.json()).toEqual({ draft: "Ask for the travel breakdown" })
+  expect(await draft.json()).toEqual({ draft: "Ask for the travel breakdown", revision: 1 })
+  expect(
+    (
+      await app.request(`${route}/draft`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ draft: "Older text", revision: 0 }),
+      })
+    ).status,
+  ).toBe(409)
   expect(
     Schema.decodeUnknownSync(Schema.toCodecJson(Schema.Array(Item)))(
       await (await app.request("/kilocode/agent-inbox", { headers })).json(),
-    )[0].draft,
-  ).toBe("Ask for the travel breakdown")
+    )[0],
+  ).toMatchObject({ draft: "Ask for the travel breakdown", draftRevision: 1 })
   const read = await app.request(`${route}/read`, {
     method: "POST",
     headers,
@@ -255,6 +264,7 @@ test("routine inbox HTTP stages durable attachment drafts and reads content thro
   expect(await staged.json()).toEqual({
     draft: "Review ledger",
     attachments: [{ id: file.id, name: file.name, mime: file.mime, size: file.size }],
+    revision: 1,
   })
   const roster = await (await app.request("/kilocode/agent-inbox", { headers })).text()
   expect(roster).not.toContain(file.data)
@@ -292,7 +302,7 @@ test("routine inbox HTTP stages durable attachment drafts and reads content thro
     body: JSON.stringify({ draft: null, attachmentIDs: [] }),
   })
   expect(cleared.status).toBe(200)
-  expect(await cleared.json()).toEqual({ draft: null })
+  expect(await cleared.json()).toEqual({ draft: null, revision: 3 })
   const invalid = await app.request(`${route}/draft`, {
     method: "POST",
     headers,

@@ -145,10 +145,15 @@ export const Send = Schema.Struct({
 export const Read = Schema.Struct({
   at: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
 })
+const Version = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0),
+  Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
+)
 export const Draft = Schema.Struct({
   draft: Schema.Union([Schema.String.check(Schema.isMaxLength(8000)), Schema.Null]),
   attachments: Schema.optional(DraftUploads),
   attachmentIDs: Schema.optional(DraftAttachmentIDs),
+  revision: Schema.optional(Version),
 }).check(
   Schema.makeFilter((value) => {
     if (value.attachments === undefined && value.attachmentIDs === undefined) return
@@ -160,6 +165,7 @@ export const Draft = Schema.Struct({
 export const DraftState = Schema.Struct({
   draft: Draft.fields.draft,
   attachments: Schema.optional(Attachments),
+  revision: Version,
 })
 export const Page = Schema.Struct({
   messages: Schema.Array(Record),
@@ -176,6 +182,7 @@ export const Item = Schema.Struct({
   nextRun: Schema.optional(Schema.Number),
   draft: Schema.optional(Schema.String),
   draftAttachments: Schema.optional(Attachments),
+  draftRevision: Version,
 })
 export type Record = typeof Record.Type
 export type Publish = typeof Publish.Type
@@ -528,11 +535,15 @@ export namespace RayaTaskInbox {
               const remaining = listedAttachments(conversation?.draft_attachments ?? null)?.filter(
                 (file) => !sent.has(file.id),
               )
+              const changed =
+                conversation?.draft === value.body ||
+                !matchedAttachments(remaining, listedAttachments(conversation?.draft_attachments ?? null))
               yield* tx
                 .update(Conversation)
                 .set({
                   ...(conversation?.draft === value.body ? { draft: null } : {}),
                   draft_attachments: packedAttachments(remaining),
+                  ...(changed && conversation ? { draft_revision: conversation.draft_revision + 1 } : {}),
                   time_updated: now,
                 })
                 .where(eq(Conversation.agent_id, value.agentID))
@@ -801,13 +812,22 @@ export namespace RayaTaskInbox {
         .transaction(
           (tx) =>
             Effect.gen(function* () {
+              const current = yield* tx
+                .select()
+                .from(Conversation)
+                .where(eq(Conversation.agent_id, agentID))
+                .get()
+                .pipe(Effect.orDie)
+              if (!current) return yield* new Conflict({ message: "This routine conversation is no longer available." })
               const saved = value.draft && value.draft.length ? value.draft : null
-              const update: { draft: string | null; time_updated: number; draft_attachments?: string | null } = {
-                draft: saved,
-                time_updated: Date.now(),
-              }
-              if (value.attachments !== undefined || value.attachmentIDs !== undefined) {
-                const files: Upload[] = []
+              const revision = value.revision ?? current.draft_revision + 1
+              if (revision < current.draft_revision)
+                return yield* new Conflict({
+                  message: "This draft is older than the version Raya already saved.",
+                })
+              const explicit = value.attachments !== undefined || value.attachmentIDs !== undefined
+              const files: Upload[] = []
+              if (explicit) {
                 for (const id of value.attachmentIDs ?? []) {
                   const file = yield* tx
                     .select()
@@ -834,6 +854,26 @@ export namespace RayaTaskInbox {
                 }
                 if (files.length > 8 || files.reduce((size, file) => size + file.size, 0) > MAX_TOTAL)
                   return yield* new Invalid({ message: "Routine drafts allow 8 attachments and 20 MB total." })
+              }
+              const next = explicit ? metadata(files) : listedAttachments(current.draft_attachments)
+              if (revision === current.draft_revision) {
+                if (saved !== current.draft || !matchedAttachments(next, listedAttachments(current.draft_attachments)))
+                  return yield* new Conflict({
+                    message: "This draft revision already contains different text or attachments.",
+                  })
+                return { draft: current.draft, ...(next ? { attachments: next } : {}), revision }
+              }
+              const update: {
+                draft: string | null
+                draft_revision: number
+                time_updated: number
+                draft_attachments?: string | null
+              } = {
+                draft: saved,
+                draft_revision: revision,
+                time_updated: Date.now(),
+              }
+              if (explicit) {
                 yield* tx
                   .delete(Attachment)
                   .where(and(eq(Attachment.agent_id, agentID), isNull(Attachment.message_id)))
@@ -856,7 +896,7 @@ export namespace RayaTaskInbox {
                     .run()
                     .pipe(Effect.orDie)
                 }
-                update.draft_attachments = packedAttachments(metadata(files))
+                update.draft_attachments = packedAttachments(next)
               }
               yield* tx
                 .update(Conversation)
@@ -871,7 +911,7 @@ export namespace RayaTaskInbox {
                 .get()
                 .pipe(Effect.orDie)
               const attachments = listedAttachments(row?.draft_attachments ?? null)
-              return { draft: saved, ...(attachments ? { attachments } : {}) }
+              return { draft: saved, ...(attachments ? { attachments } : {}), revision }
             }),
           { behavior: "immediate" },
         )
@@ -941,6 +981,7 @@ export namespace RayaTaskInbox {
           ...(listedAttachments(row.draft_attachments)
             ? { draftAttachments: listedAttachments(row.draft_attachments) }
             : {}),
+          draftRevision: row.draft_revision,
           ...(agent.nextRun !== undefined ? { nextRun: agent.nextRun } : {}),
           ...(last ? { latest: last } : {}),
         })

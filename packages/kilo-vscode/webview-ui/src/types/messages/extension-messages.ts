@@ -360,6 +360,7 @@ export interface RoutineInboxFilesMessage {
   agentID: string
   draft?: string | null
   files?: { id: string; name: string; mime: string; size: number }[]
+  revision?: number
   error?: string
 }
 
@@ -402,6 +403,7 @@ export interface RoutineInboxDraftResultMessage {
   agentID: string
   draft?: string | null
   files?: { id: string; name: string; mime: string; size: number }[]
+  revision?: number
   error?: string
 }
 

@@ -46,6 +46,7 @@ export const RayaRoutineConversationTable = sqliteTable("raya_routine_conversati
   read_at: integer().notNull(),
   draft: text(),
   draft_attachments: text(),
+  draft_revision: integer().notNull().default(0),
   time_updated: integer().notNull(),
 })
 

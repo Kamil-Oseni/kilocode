@@ -23987,6 +23987,7 @@ export type KilocodeRoutineInboxResponses = {
       mime: string
       size: number
     }>
+    draftRevision: number
   }>
 }
 
@@ -24281,6 +24282,7 @@ export type KilocodeRoutineInboxDraftData = {
       data: string
     }>
     attachmentIDs?: Array<string>
+    revision?: number
   }
   path: {
     agentID: string
@@ -24321,6 +24323,7 @@ export type KilocodeRoutineInboxDraftResponses = {
       mime: string
       size: number
     }>
+    revision: number
   }
 }
 

@@ -237,6 +237,7 @@ export interface RoutineInboxFilesPickMessage {
   agentID: string
   draft: string | null
   attachmentIDs?: string[]
+  revision: number
 }
 
 export interface RoutineInboxFilesForgetMessage {
@@ -245,6 +246,7 @@ export interface RoutineInboxFilesForgetMessage {
   agentID: string
   draft: string | null
   attachmentIDs: string[] | null
+  revision: number
 }
 
 export interface RoutineInboxAttachmentOpenMessage {
@@ -282,6 +284,7 @@ export interface RoutineInboxDraftMessage {
   agentID: string
   draft: string | null
   attachmentIDs: string[] | null
+  revision: number
 }
 
 export interface RoutineDelegateMessage {

@@ -1037,9 +1037,9 @@ export const KilocodeApi = HttpApi.make("kilocode")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.inbox.draft",
-            summary: "Save a per-conversation inbox draft",
-            description:
-              "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
+              summary: "Save a per-conversation inbox draft",
+              description:
+                "Replace or clear the draft for one roster worker. Versioned saves reject stale or divergent replays. Drafts are not messages and do not admit work.",
           }),
         ),
         HttpApiEndpoint.get("agentInboxAttachment", KilocodePaths.agentInboxAttachment, {

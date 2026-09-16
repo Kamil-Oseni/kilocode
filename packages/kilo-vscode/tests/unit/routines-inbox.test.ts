@@ -52,6 +52,7 @@ test("routine inbox page send read and draft keep request identity and retry the
         drafts.push(body)
         return Response.json({
           draft: body.draft,
+          revision: body.revision,
           attachments:
             Array.isArray(body.attachmentIDs) && body.attachmentIDs.length === 0 && !body.attachments
               ? undefined
@@ -72,6 +73,7 @@ test("routine inbox page send read and draft keep request identity and retry the
       requestID: "pick1",
       agentID: "routine",
       draft: "Why?",
+      revision: 1,
     },
   })
   expect(drafts.at(-1)).toMatchObject({
@@ -81,6 +83,7 @@ test("routine inbox page send read and draft keep request identity and retry the
   expect(messages.at(-1)).toMatchObject({
     type: "routineInboxFiles",
     files: [{ id, name: "ledger.pdf", mime: "application/pdf", size: 3 }],
+    revision: 1,
   })
   expect(JSON.stringify(messages.at(-1))).not.toContain("AQID")
   await handleRoutineMessage({
@@ -131,9 +134,15 @@ test("routine inbox page send read and draft keep request identity and retry the
       agentID: "routine",
       draft: "Why?",
       attachmentIDs: [id],
+      revision: 2,
     },
   })
-  expect(messages.at(-1)).toMatchObject({ type: "routineInboxDraft", requestID: "draft1", draft: "Why?" })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxDraft",
+    requestID: "draft1",
+    draft: "Why?",
+    revision: 2,
+  })
   await handleRoutineMessage({
     client: null,
     directory: "workspace",
@@ -146,7 +155,7 @@ test("routine inbox page send read and draft keep request identity and retry the
     error: "Raya is not connected.",
   })
   expect(payload).toEqual({ source: "user:retry", body: "Why?", attachmentIDs: [id] })
-  expect(drafts.at(-1)).toMatchObject({ draft: "Why?", attachmentIDs: [id] })
+  expect(drafts.at(-1)).toMatchObject({ draft: "Why?", attachmentIDs: [id], revision: 2 })
 })
 
 test("routine image preview returns verified bytes without opening an external editor", async () => {
@@ -299,6 +308,7 @@ test("routine attachment removal sends the ordered retained IDs and can clear th
       const kept = Array.isArray(body.attachmentIDs) ? body.attachmentIDs : []
       return Response.json({
         draft: body.draft,
+        revision: body.revision,
         ...(kept.length
           ? { attachments: kept.map((id) => ({ id, name: `${id}.txt`, mime: "text/plain", size: 1 })) }
           : {}),
@@ -316,10 +326,15 @@ test("routine attachment removal sends the ordered retained IDs and can clear th
       agentID: "routine",
       draft: "Review",
       attachmentIDs: [ids[0], ids[2]],
+      revision: 4,
     },
   })
-  expect(calls.at(-1)).toMatchObject({ attachmentIDs: [ids[0], ids[2]] })
-  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [{ id: ids[0] }, { id: ids[2] }] })
+  expect(calls.at(-1)).toMatchObject({ attachmentIDs: [ids[0], ids[2]], revision: 4 })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxFiles",
+    files: [{ id: ids[0] }, { id: ids[2] }],
+    revision: 4,
+  })
   await handleRoutineMessage({
     client,
     directory: "workspace",
@@ -330,10 +345,11 @@ test("routine attachment removal sends the ordered retained IDs and can clear th
       agentID: "routine",
       draft: null,
       attachmentIDs: null,
+      revision: 5,
     },
   })
   expect(calls.at(-1)).toMatchObject({ attachmentIDs: [] })
-  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [] })
+  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [], revision: 5 })
 })
 
 test("routine delegate posts the same source on retry and refreshes inbox summaries", async () => {

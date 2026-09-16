@@ -69,7 +69,7 @@ const mount = (workspace = "C:/Projects/Books") =>
       createComponent(VSCodeProvider, {
         get children() {
           return createComponent(LanguageContext.Provider, {
-            value: { t: (key) => key },
+            value: { locale: () => "en", setLocale: () => {}, userOverride: () => "", t: (key) => key },
             get children() {
               return createComponent(SessionContext.Provider, {
                 value: { agents: () => [] },
@@ -163,9 +163,11 @@ try {
     agentID: agent.id,
     messages: [note],
   })
+  await new Promise((resolve) => setImmediate(resolve))
   assert.match(root.textContent, /Report/)
   assert.doesNotMatch(root.textContent, /Does not change the assignment/)
   const card = root.querySelector('[aria-label="Open ledger.pdf"]')
+  assert.ok(card)
   assert.equal(card.querySelector(".routines-file-name").textContent, "ledger.pdf")
   card.click()
   const opened = sent.findLast((msg) => msg.type === "openFile")
@@ -211,6 +213,7 @@ try {
     agentID: agent.id,
     draft: pick.draft,
     files: [attachment],
+    revision: pick.revision,
   })
   assert.match(root.textContent, /receipt.pdf/)
   button("Send").click()
@@ -310,6 +313,40 @@ try {
   draft.focus()
   draft.value = "Keep this draft"
   draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 450))
+  const firstDraft = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  draft.value = "Newest draft"
+  draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 450))
+  const newestDraft = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.ok(newestDraft.revision > firstDraft.revision)
+  emit({
+    type: "routineInboxDraft",
+    requestID: newestDraft.requestID,
+    agentID: agent.id,
+    draft: newestDraft.draft,
+    revision: newestDraft.revision,
+  })
+  emit({
+    type: "routineInboxDraft",
+    requestID: firstDraft.requestID,
+    agentID: agent.id,
+    error: "This draft is older than the version Raya already saved.",
+  })
+  assert.equal(draft.value, "Newest draft")
+  assert.doesNotMatch(root.textContent, /changed in another Raya window/)
+  draft.value = "Keep this draft"
+  draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 450))
+  const conflictedDraft = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  emit({
+    type: "routineInboxDraft",
+    requestID: conflictedDraft.requestID,
+    agentID: agent.id,
+    error: "This draft is older than the version Raya already saved.",
+  })
+  assert.equal(draft.value, "Keep this draft")
+  assert.match(root.textContent, /changed in another Raya window/)
   const infoToggle = button("Info")
   infoToggle.click()
   assert.equal(infoToggle.getAttribute("aria-expanded"), "true")
@@ -400,16 +437,18 @@ try {
   infoToggle.click()
   await new Promise((resolve) => setImmediate(resolve))
   const linkRow = sharedLink.closest("li")
-  const locate = [...linkRow.querySelectorAll("button")].find((item) => item.textContent.includes("Show in conversation"))
+  const locate = [...linkRow.querySelectorAll("button")].find((item) =>
+    item.textContent.includes("Show in conversation"),
+  )
   assert.ok(locate)
   locate.click()
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(infoToggle.getAttribute("aria-expanded"), "false")
-  const older = sent.findLast((msg) => msg.type === "routineInboxPage")
-  assert.equal(older.cursor, "older-share")
+  const olderShare = sent.findLast((msg) => msg.type === "routineInboxPage")
+  assert.equal(olderShare.cursor, "older-share")
   emit({
     type: "routineInboxPage",
-    requestID: older.requestID,
+    requestID: olderShare.requestID,
     agentID: agent.id,
     messages: [
       {
@@ -433,7 +472,18 @@ try {
     requestID: returned.requestID,
     agentID: agent.id,
     next: "older-share",
-    messages: [note],
+    messages: [
+      note,
+      { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
+      {
+        id: "rmg_3",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ2",
+        body: "The next Friday close found the travel receipts.",
+        time: 3,
+      },
+    ],
   })
   await new Promise((resolve) => setImmediate(resolve))
   const legal = {
@@ -697,11 +747,11 @@ try {
     next: "2:rmg_user",
   })
   await new Promise((resolve) => setImmediate(resolve))
-  const older = sent.findLast((msg) => msg.type === "routineInboxPage")
-  assert.equal(older.cursor, "2:rmg_user")
+  const olderRestore = sent.findLast((msg) => msg.type === "routineInboxPage")
+  assert.equal(olderRestore.cursor, "2:rmg_user")
   emit({
     type: "routineInboxPage",
-    requestID: older.requestID,
+    requestID: olderRestore.requestID,
     agentID: agent.id,
     messages: [
       note,

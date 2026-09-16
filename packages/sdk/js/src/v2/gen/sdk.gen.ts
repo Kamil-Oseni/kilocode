@@ -9497,7 +9497,7 @@ export class Inbox extends HeyApiClient {
   /**
    * Save a per-conversation inbox draft
    *
-   * Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.
+   * Replace or clear the draft for one roster worker. Versioned saves reject stale or divergent replays. Drafts are not messages and do not admit work.
    */
   public draft<ThrowOnError extends boolean = false>(
     parameters: {
@@ -9513,6 +9513,7 @@ export class Inbox extends HeyApiClient {
         data: string
       }>
       attachmentIDs?: Array<string>
+      revision?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -9527,6 +9528,7 @@ export class Inbox extends HeyApiClient {
             { in: "body", key: "draft" },
             { in: "body", key: "attachments" },
             { in: "body", key: "attachmentIDs" },
+            { in: "body", key: "revision" },
           ],
         },
       ],

@@ -525,6 +525,7 @@ async function seen(ctx: Ctx) {
 async function scribble(ctx: Ctx) {
   const msg = ctx.message
   if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the conversation before saving a draft.")
+  const revision = draftVersion(msg)
   const draft = msg.draft === null || msg.draft === undefined ? null : String(msg.draft)
   if (draft !== null && draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
   const result = await ctx.kilo.inbox2.draft(
@@ -532,6 +533,7 @@ async function scribble(ctx: Ctx) {
       directory: ctx.dir,
       agentID: String(msg.agentID),
       draft: draft ?? "",
+      revision,
       ...(msg.attachmentIDs === undefined ? {} : { attachmentIDs: attachmentIDs(msg.attachmentIDs) }),
     },
     { throwOnError: true },
@@ -542,6 +544,7 @@ async function scribble(ctx: Ctx) {
     agentID: msg.agentID,
     draft: result.data?.draft ?? null,
     files: result.data?.attachments,
+    revision: result.data?.revision,
   })
 }
 
@@ -639,6 +642,12 @@ function revision(msg: Msg) {
   if (!Number.isSafeInteger(msg.expectedRevision) || Number(msg.expectedRevision) < 1)
     throw new Error("Reload the organization before saving it.")
   return Number(msg.expectedRevision)
+}
+
+function draftVersion(msg: Msg) {
+  const value = Number(msg.revision)
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Reload the conversation before saving this draft.")
+  return value
 }
 
 async function revise(ctx: Ctx) {
@@ -1088,6 +1097,7 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
   }
   try {
     if (!input.client) throw new Error("Raya is not connected.")
+    const revision = draftVersion(msg)
     const ids = attachmentIDs(msg.attachmentIDs)
     const draft = msg.draft === null || msg.draft === undefined ? "" : String(msg.draft)
     if (draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
@@ -1105,6 +1115,7 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
         directory: input.directory,
         agentID: String(msg.agentID),
         draft,
+        revision,
         attachmentIDs: ids,
         ...(selected.length ? { attachments: selected } : {}),
       },
@@ -1116,6 +1127,7 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
       agentID: msg.agentID,
       draft: result.data?.draft ?? null,
       files: result.data?.attachments ?? [],
+      revision: result.data?.revision,
     })
   } catch (err) {
     input.post({

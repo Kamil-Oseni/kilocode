@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "d38f6f98-afbd-4b6c-a794-5ff83995e2da",
+  "id": "74f52b07-3429-45e7-95ce-679f842e19e0",
   "prevIds": [
-    "d1040d32-02e8-46f3-9a67-bb7fa4352555"
+    "d38f6f98-afbd-4b6c-a794-5ff83995e2da"
   ],
   "ddl": [
     {
@@ -421,6 +421,16 @@
       "default": null,
       "generated": null,
       "name": "draft_attachments",
+      "entityType": "columns",
+      "table": "raya_routine_conversation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "draft_revision",
       "entityType": "columns",
       "table": "raya_routine_conversation"
     },

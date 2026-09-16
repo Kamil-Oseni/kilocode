@@ -36783,9 +36783,14 @@
                         },
                         "minItems": 1,
                         "maxItems": 8
+                      },
+                      "draftRevision": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
-                    "required": ["agentID", "conversationID", "name", "role", "unread", "state"],
+                    "required": ["agentID", "conversationID", "name", "role", "unread", "state", "draftRevision"],
                     "additionalProperties": false
                   },
                   "description": "Routine inbox summaries"
@@ -37902,9 +37907,14 @@
                       },
                       "minItems": 1,
                       "maxItems": 8
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
-                  "required": ["draft"],
+                  "required": ["draft", "revision"],
                   "additionalProperties": false,
                   "description": "Saved draft"
                 }
@@ -37949,7 +37959,7 @@
             }
           }
         },
-        "description": "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
+        "description": "Replace or clear the draft for one roster worker. Versioned saves reject stale or divergent replays. Drafts are not messages and do not admit work.",
         "summary": "Save a per-conversation inbox draft",
         "requestBody": {
           "content": {
@@ -38006,6 +38016,11 @@
                       "format": "uuid"
                     },
                     "maxItems": 8
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["draft"],

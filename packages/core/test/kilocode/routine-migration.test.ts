@@ -11,6 +11,7 @@ import attachments from "@opencode-ai/core/database/migration/20260912150000_kil
 import organization from "@opencode-ai/core/database/migration/20260912210000_kilocode-routine-organization"
 import delegation from "@opencode-ai/core/database/migration/20260912231306_kilocode-routine-organization-delegation"
 import policy from "@opencode-ai/core/database/migration/20260915143138_kilocode-routine-organization-policy"
+import draft from "@opencode-ai/core/database/migration/20260916221534_kilocode-routine-draft-revision"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -263,6 +264,32 @@ test("organization policy migration preserves existing organizations with no inf
       })
       yield* DatabaseMigration.applyOnly(db, [policy])
       expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${policy.id}`)).toEqual({ count: 1 })
+    }),
+  )
+})
+
+test("draft revision migration preserves existing routine drafts and starts them at revision zero", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === draft.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* db.run(
+        sql`INSERT INTO raya_routine_conversation (id, agent_id, read_at, draft, draft_attachments, time_updated) VALUES ('conversation', 'books', 0, 'keep this', '[{"id":"file","name":"ledger.txt","mime":"text/plain","size":6}]', 10)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [draft])
+      expect(
+        yield* db.get(
+          sql`SELECT draft, draft_attachments, draft_revision FROM raya_routine_conversation WHERE agent_id = 'books'`,
+        ),
+      ).toEqual({
+        draft: "keep this",
+        draft_attachments: '[{"id":"file","name":"ledger.txt","mime":"text/plain","size":6}]',
+        draft_revision: 0,
+      })
+      yield* DatabaseMigration.applyOnly(db, [draft])
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${draft.id}`)).toEqual({ count: 1 })
     }),
   )
 })

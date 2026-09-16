@@ -80,6 +80,11 @@ export function check(
     ["RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_AUTOUPDATE", "KILO_DISABLE_AUTOUPDATE", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_MODELS_FETCH", "KILO_DISABLE_MODELS_FETCH", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_TERMINAL_TITLE", "KILO_DISABLE_TERMINAL_TITLE", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_EMBEDDED_WEB_UI", "KILO_DISABLE_EMBEDDED_WEB_UI", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_EXTERNAL_SKILLS", "KILO_DISABLE_EXTERNAL_SKILLS", "safety-monotonic-aliases"],
     ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],
     ["RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", "explicit-or-matching-aliases"],
   )

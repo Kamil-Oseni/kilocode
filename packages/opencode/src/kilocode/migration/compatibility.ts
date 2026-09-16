@@ -168,6 +168,36 @@ export namespace RayaMigrationLedger {
       legacy: "KILO_DISABLE_LSP_DOWNLOAD",
       policy: "safety-monotonic-aliases" as const,
     },
+    {
+      kind: "environment:disable_autoupdate",
+      raya: "RAYA_DISABLE_AUTOUPDATE",
+      legacy: "KILO_DISABLE_AUTOUPDATE",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
+      kind: "environment:disable_models_fetch",
+      raya: "RAYA_DISABLE_MODELS_FETCH",
+      legacy: "KILO_DISABLE_MODELS_FETCH",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
+      kind: "environment:disable_terminal_title",
+      raya: "RAYA_DISABLE_TERMINAL_TITLE",
+      legacy: "KILO_DISABLE_TERMINAL_TITLE",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
+      kind: "environment:disable_embedded_web_ui",
+      raya: "RAYA_DISABLE_EMBEDDED_WEB_UI",
+      legacy: "KILO_DISABLE_EMBEDDED_WEB_UI",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
+      kind: "environment:disable_external_skills",
+      raya: "RAYA_DISABLE_EXTERNAL_SKILLS",
+      legacy: "KILO_DISABLE_EXTERNAL_SKILLS",
+      policy: "safety-monotonic-aliases" as const,
+    },
     ...["SERVER_PASSWORD", "SERVER_USERNAME"].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
@@ -421,8 +451,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_852,
-        digest: "a06aace087a425c6b65ccb837609437cc5c2b5d0a8596135953c935253151245",
+        count: 35_920,
+        digest: "3dd9a46413dbf7da93485c96626288cf9198bc6584cb00ddee5c8bc45db4eaa1",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

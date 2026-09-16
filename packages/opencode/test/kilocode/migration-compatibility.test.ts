@@ -151,6 +151,36 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_DISABLE_LSP_DOWNLOAD",
       policy: "safety-monotonic-aliases",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_autoupdate",
+      raya: "RAYA_DISABLE_AUTOUPDATE",
+      legacy: "KILO_DISABLE_AUTOUPDATE",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_models_fetch",
+      raya: "RAYA_DISABLE_MODELS_FETCH",
+      legacy: "KILO_DISABLE_MODELS_FETCH",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_terminal_title",
+      raya: "RAYA_DISABLE_TERMINAL_TITLE",
+      legacy: "KILO_DISABLE_TERMINAL_TITLE",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_embedded_web_ui",
+      raya: "RAYA_DISABLE_EMBEDDED_WEB_UI",
+      legacy: "KILO_DISABLE_EMBEDDED_WEB_UI",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_external_skills",
+      raya: "RAYA_DISABLE_EXTERNAL_SKILLS",
+      legacy: "KILO_DISABLE_EXTERNAL_SKILLS",
+      policy: "safety-monotonic-aliases",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

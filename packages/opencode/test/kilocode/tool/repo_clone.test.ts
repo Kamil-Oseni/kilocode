@@ -184,6 +184,8 @@ describe("tool.repo_clone", () => {
 
         expect(result.metadata.status).toBe("cloned")
         expect(result.metadata.branch).toBe("docs")
+        expect(result.output).toContain(`Local path: ${result.metadata.localPath}`)
+        expect(result.metadata.localPath).toEndWith("repo@docs")
         expect(normalize(yield* fs.readFileString(path.join(result.metadata.localPath, "DOCS.md")))).toBe("docs\n")
       }),
     ),

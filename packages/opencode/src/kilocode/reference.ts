@@ -92,7 +92,7 @@ function resolve(name: string, entry: Normalized, directory: string, worktree: s
     kind: "git",
     repository: entry.repository,
     reference,
-    path: repositoryCachePath(reference),
+    path: repositoryCachePath(reference, entry.branch),
     branch: entry.branch,
     description: entry.description,
     hidden: entry.hidden,

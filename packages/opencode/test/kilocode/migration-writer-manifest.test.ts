@@ -93,6 +93,18 @@ describe("profile writer manifest", () => {
     ])
     expect(find("profile.cache.skills")?.sources).not.toContain("packages/opencode/src/kilocode/skill-remove.ts")
 
+    expect(find("profile.bin.ripgrep")?.methods).toEqual([
+      "ensure-directory",
+      "write-archive",
+      "create-temp",
+      "extract-child",
+      "copy-target",
+      "chmod-target",
+      "remove-archive",
+      "remove-temp",
+    ])
+    expect(find("profile.bin.ripgrep")?.lifecycle).toContain("versioned target")
+
     expect(find("profile.data.repos")?.roots).toEqual(["repos", "state"])
     expect(find("profile.data.repos")?.sources).toEqual([
       "packages/core/src/git.ts",

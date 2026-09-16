@@ -219,9 +219,12 @@ export function parseGitHubRemote(input: string) {
   return { owner: parsed.owner, repo: parsed.repo }
 }
 
-export function repositoryCachePath(input: Reference) {
-  return path.join(Global.Path.repos, ...input.host.split(":"), ...input.segments)
+// kilocode_change start - keep configured branches on their branch-specific Core cache paths
+export function repositoryCachePath(input: Reference, branch?: string) {
+  const base = path.join(Global.Path.repos, ...input.host.split(":"), ...input.segments)
+  return branch ? `${base}@${encodeURIComponent(branch)}` : base
 }
+// kilocode_change end
 
 export function repositoryCacheIdentity(input: Reference) {
   return `${input.host}/${input.path}`

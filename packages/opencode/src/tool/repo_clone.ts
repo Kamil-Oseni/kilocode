@@ -42,7 +42,7 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, Repository
 
           const repository = reference.label
           const remote = reference.remote
-          const localPath = Repository.cachePath(Global.Path.repos, reference)
+          const localPath = Repository.cachePath(Global.Path.repos, reference, params.branch) // kilocode_change
 
           yield* ctx.ask({
             permission: "repo_clone",

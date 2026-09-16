@@ -25,6 +25,20 @@ function remote() {
 }
 
 describe("configured references", () => {
+  test("keeps configured branches on their branch-specific cache paths", () => {
+    const item = Reference.resolveAll({
+      references: { docs: { repository: "Kilo-Org/kilocode", branch: "feature/docs" } },
+      directory: "/workspace",
+      worktree: "/workspace",
+    })[0]
+
+    expect(item).toMatchObject({
+      kind: "git",
+      branch: "feature/docs",
+      path: `${path.join(Global.Path.repos, "github.com", "Kilo-Org", "kilocode")}@feature%2Fdocs`,
+    })
+  })
+
   test("preserves interruption while materializing a repository", async () => {
     const cache = RepositoryCache.Service.of({ ensure: () => Effect.interrupt })
     const exit = await Effect.runPromiseExit(Reference.ensure(cache, remote()))

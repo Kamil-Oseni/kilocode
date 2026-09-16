@@ -29,6 +29,11 @@ describe("util.repository", () => {
       label: "owner/repo",
     })
     expect(repositoryCachePath(reference)).toBe(path.join(Global.Path.repos, "github.com", "owner", "repo"))
+    // kilocode_change start - match the branch-specific Core repository cache contract
+    expect(repositoryCachePath(reference, "feature/docs")).toBe(
+      `${path.join(Global.Path.repos, "github.com", "owner", "repo")}@feature%2Fdocs`,
+    )
+    // kilocode_change end
     expect(repositoryCacheIdentity(reference)).toBe("github.com/owner/repo")
   })
 

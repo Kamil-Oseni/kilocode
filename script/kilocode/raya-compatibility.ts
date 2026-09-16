@@ -76,6 +76,8 @@ export function check(
   expected.push(
     ["RAYA_PURE", "KILO_PURE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE", "safety-monotonic-aliases"],
     ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],
     ["RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", "explicit-or-matching-aliases"],
   )

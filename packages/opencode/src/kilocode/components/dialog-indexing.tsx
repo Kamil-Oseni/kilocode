@@ -39,7 +39,7 @@ type EmbeddingProvider = NonNullable<IndexingConfig["provider"]>
 const log = Log.create({ service: "indexing-model-select" })
 
 const PROVIDER_LABELS: Record<EmbeddingProvider, string> = {
-  kilo: "Kilo",
+  kilo: "Raya",
   openai: "OpenAI",
   ollama: "Ollama (local)",
   "openai-compatible": "OpenAI-Compatible",
@@ -238,7 +238,7 @@ function KiloModelSelect(props: SubDialogProps) {
 
   return (
     <DialogSelect
-      title="Kilo Embedding Model"
+      title="Raya Embedding Model"
       options={options()}
       current={current()}
       renderFilter={(catalog()?.models.length ?? 0) > 0}
@@ -559,7 +559,7 @@ export function DialogIndexing(props: DialogIndexingProps) {
         title: "Embedding Model",
         category: "Embedding",
         description: mark(
-          indexing.provider === "kilo" ? (indexing.model ?? "Kilo catalog") : (indexing.model ?? "default"),
+          indexing.provider === "kilo" ? (indexing.model ?? "Raya catalog") : (indexing.model ?? "default"),
           [["model"]],
         ),
       },
@@ -569,7 +569,7 @@ export function DialogIndexing(props: DialogIndexingProps) {
         category: "Embedding",
         description:
           indexing.provider === "kilo"
-            ? "provided by Kilo"
+            ? "provided by Raya"
             : mark(indexing.dimension ? String(indexing.dimension) : "auto", [["dimension"]]),
         disabled: indexing.provider === "kilo",
       },

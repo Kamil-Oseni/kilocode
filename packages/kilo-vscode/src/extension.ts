@@ -58,7 +58,7 @@ const panelTitleHandler = (panel: vscode.WebviewPanel) => (title: string) => {
 // without requiring the user to open a Kilo sidebar or panel first. The CLI backend is NOT spawned here;
 // it starts lazily when a webview connects or when ensureBackendForAutocomplete() triggers it.
 export function activate(context: vscode.ExtensionContext) {
-  console.log("Kilo Code extension is now active")
+  console.log("Raya extension is now active")
   shuttingDown = false
 
   // Drives the "!raya.isCursor" guards on the native view/title and

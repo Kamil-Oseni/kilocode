@@ -31,4 +31,44 @@ describe("Kilo command branding", () => {
     expect(src).toContain("Run /connect or `kilo auth login` to connect to Raya Gateway")
     expect(src).not.toContain("connect to Kilo Gateway")
   })
+
+  test("runtime presentation uses Raya while compatibility commands and links remain stable", async () => {
+    const files = [
+      "src/kilocode/background-process/index.ts",
+      "src/kilocode/cli/cmd/tui-worktree.ts",
+      "src/kilocode/cli/dev-setup.ts",
+      "src/kilocode/components/dialog-claw-setup.tsx",
+      "src/kilocode/components/dialog-claw-upgrade.tsx",
+      "src/kilocode/components/dialog-indexing.tsx",
+      "src/kilocode/components/tips.tsx",
+      "src/kilocode/config/sources.ts",
+    ]
+    const src = (await Promise.all(files.map((file) => Bun.file(path.join(root, file)).text()))).join("\n")
+    const legacy = [
+      "KiloClaw gives you",
+      "Try KiloClaw",
+      "KiloClaw Chat requires",
+      "button on the KiloClaw",
+      'kilo: "Kilo"',
+      'title="Kilo Embedding Model"',
+      '"Kilo catalog"',
+      '"provided by Kilo"',
+      '"Kilo can',
+      '"Ask Kilo',
+      '"Kilo auto-',
+      'access to Kilo"',
+      '"Kilo Cloud organization config"',
+      "managed by Kilo Cloud",
+      "Kilo CLI dev launcher setup",
+      "# Kilo Code agent worktrees",
+      "another Kilo process",
+    ]
+
+    expect(legacy.filter((text) => src.includes(text))).toEqual([])
+    expect(src).toContain("Raya Messenger gives you")
+    expect(src).toContain("Raya Embedding Model")
+    expect(src).toContain("Raya Cloud organization config")
+    expect(src).toContain("{highlight}kilo serve{/highlight}")
+    expect(src).toContain("https://kilo.ai/kiloclaw")
+  })
 })

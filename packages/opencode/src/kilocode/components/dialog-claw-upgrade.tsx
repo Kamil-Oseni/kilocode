@@ -29,7 +29,7 @@ export function DialogClawUpgrade(props: { orgId?: string | null }) {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text}>
-          <span style={{ bold: true }}>KiloClaw Chat requires an upgrade</span>
+          <span style={{ bold: true }}>Raya Messenger requires an upgrade</span>
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
@@ -39,8 +39,8 @@ export function DialogClawUpgrade(props: { orgId?: string | null }) {
           This instance was provisioned before chat was enabled.
         </text>
         <text fg={theme.textMuted} wrapMode="word">
-          Use the <span style={{ fg: theme.warning, bold: true }}>↻ Upgrade to Latest</span> button on the KiloClaw
-          dashboard to activate real-time chat with your bot.
+          Use the <span style={{ fg: theme.warning, bold: true }}>↻ Upgrade to Latest</span> button on the Raya
+          Messenger dashboard to activate real-time chat with your bot.
         </text>
       </box>
 

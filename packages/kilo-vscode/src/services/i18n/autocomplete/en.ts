@@ -20,8 +20,8 @@ export const dict = {
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableCopilot": "Disable Copilot",
   "kilocode:autocomplete.incompatibilityExtensionPopup.disableInlineAssist": "Disable Autocomplete",
   "kilocode:autocomplete.creditsExhausted.message":
-    "Raya Autocomplete has been paused. Possible causes: your Kilo account has no remaining credits, or your configured API key (BYOK) has reached its quota limit. Add Kilo credits or check your API key configuration to resume autocomplete.",
+    "Raya Autocomplete has been paused. Possible causes: your Raya account has no remaining credits, or your configured API key (BYOK) has reached its quota limit. Add Raya credits or check your API key configuration to resume autocomplete.",
   "kilocode:autocomplete.creditsExhausted.addCredits": "Add Credits",
   "kilocode:autocomplete.authError.message":
-    "Raya Autocomplete has been paused due to an authentication issue. Possible causes: you are not signed in to Kilo, or your API key (BYOK) is invalid or missing. Please sign in again or check your provider API key settings.",
+    "Raya Autocomplete has been paused due to an authentication issue. Possible causes: you are not signed in to Raya, or your API key (BYOK) is invalid or missing. Please sign in again or check your provider API key settings.",
 }

@@ -263,6 +263,45 @@ describe("Raya environment aliases", () => {
   })
 
   for (const item of [
+    { name: "legacy fallback", env: { KILO_SESSION_RETRY_LIMIT: "4" }, expected: 4 },
+    { name: "Raya input", env: { RAYA_SESSION_RETRY_LIMIT: "5" }, expected: 5 },
+    {
+      name: "Raya precedence on conflict",
+      env: { RAYA_SESSION_RETRY_LIMIT: "6", KILO_SESSION_RETRY_LIMIT: "7" },
+      expected: 6,
+    },
+    {
+      name: "explicit empty Raya input",
+      env: { RAYA_SESSION_RETRY_LIMIT: "", KILO_SESSION_RETRY_LIMIT: "8" },
+      expected: null,
+    },
+    {
+      name: "invalid Raya input",
+      env: { RAYA_SESSION_RETRY_LIMIT: "invalid", KILO_SESSION_RETRY_LIMIT: "9" },
+      expected: null,
+    },
+  ]) {
+    test(`resolves the session retry limit from ${item.name}`, () => {
+      const names = ["RAYA_SESSION_RETRY_LIMIT", "KILO_SESSION_RETRY_LIMIT"]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      Object.assign(env, item.env)
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_SESSION_RETRY_LIMIT ?? null))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toBe(item.expected)
+    })
+  }
+
+  for (const item of [
     {
       name: "legacy inputs",
       env: {

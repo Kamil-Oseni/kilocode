@@ -223,7 +223,10 @@ export const Flag = {
   },
   // kilocode_change start
   get KILO_SESSION_RETRY_LIMIT() {
-    return number("KILO_SESSION_RETRY_LIMIT")
+    const value = EnvAlias.read("RAYA_SESSION_RETRY_LIMIT", "KILO_SESSION_RETRY_LIMIT")
+    if (!value) return undefined
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   },
   // kilocode_change end
 }

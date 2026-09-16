@@ -179,12 +179,12 @@ describe("Config", () => {
             ])
           })
 
-          const prior = process.env.KILO_DISABLE_PROJECT_CONFIG
-          process.env.KILO_DISABLE_PROJECT_CONFIG = "1"
+          const prior = process.env.RAYA_DISABLE_PROJECT_CONFIG
+          process.env.RAYA_DISABLE_PROJECT_CONFIG = "1"
           yield* Effect.addFinalizer(() =>
             Effect.sync(() => {
-              if (prior === undefined) delete process.env.KILO_DISABLE_PROJECT_CONFIG
-              else process.env.KILO_DISABLE_PROJECT_CONFIG = prior
+              if (prior === undefined) delete process.env.RAYA_DISABLE_PROJECT_CONFIG
+              else process.env.RAYA_DISABLE_PROJECT_CONFIG = prior
             }),
           )
 

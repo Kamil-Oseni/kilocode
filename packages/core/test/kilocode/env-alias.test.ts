@@ -216,6 +216,53 @@ describe("Raya environment aliases", () => {
   })
 
   for (const item of [
+    { name: "legacy fallback", env: { KILO_DISABLE_PROJECT_CONFIG: "1" }, expected: true },
+    { name: "Raya input", env: { RAYA_DISABLE_PROJECT_CONFIG: "true" }, expected: true },
+    {
+      name: "Raya precedence on conflict",
+      env: { RAYA_DISABLE_PROJECT_CONFIG: "0", KILO_DISABLE_PROJECT_CONFIG: "1" },
+      expected: false,
+    },
+  ]) {
+    test(`resolves the project configuration opt-out from ${item.name}`, () => {
+      const names = ["RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG"]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      Object.assign(env, item.env)
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_DISABLE_PROJECT_CONFIG))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toBe(item.expected)
+    })
+  }
+
+  test("writes and clears the project configuration opt-out through both names", () => {
+    const names = ["RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG"]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; Flag.KILO_DISABLE_PROJECT_CONFIG = "1"; const written = [process.env.RAYA_DISABLE_PROJECT_CONFIG, process.env.KILO_DISABLE_PROJECT_CONFIG, Flag.KILO_DISABLE_PROJECT_CONFIG]; Flag.KILO_DISABLE_PROJECT_CONFIG = undefined; console.log(JSON.stringify([...written, process.env.RAYA_DISABLE_PROJECT_CONFIG ?? null, process.env.KILO_DISABLE_PROJECT_CONFIG ?? null, Flag.KILO_DISABLE_PROJECT_CONFIG]))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual(["1", "1", true, null, null, false])
+  })
+
+  for (const item of [
     {
       name: "legacy inputs",
       env: {

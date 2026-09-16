@@ -426,7 +426,7 @@ the `plan` agent's permission ruleset (`edit: deny *`).
 
 When a user's config is broken and opencode won't start, these env vars help:
 
-- `KILO_DISABLE_PROJECT_CONFIG=1`: skip the project's local `opencode.json`
+- `RAYA_DISABLE_PROJECT_CONFIG=1`: skip the project's local `opencode.json` (`KILO_DISABLE_PROJECT_CONFIG` remains a compatibility fallback)
   and start from globals only. Run from the project directory, opencode loads,
   the user edits the broken file, then they restart without the flag.
 - `KILO_CONFIG=/path/to/file.json`: load an additional explicit config.

@@ -181,9 +181,16 @@ export const Flag = {
 
   KILO_DISABLE_FFF: fff === undefined ? process.platform === "win32" : truthy("KILO_DISABLE_FFF"), // kilocode_change
 
+  // kilocode_change start - Raya input alias retains the Kilo compatibility name
   get KILO_DISABLE_PROJECT_CONFIG() {
-    return truthy("KILO_DISABLE_PROJECT_CONFIG")
+    const value = EnvAlias.read("RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG")?.toLowerCase()
+    return value === "true" || value === "1"
   },
+  set KILO_DISABLE_PROJECT_CONFIG(value: boolean | string | undefined) {
+    const encoded = typeof value === "boolean" ? (value ? "1" : "0") : value
+    EnvAlias.write("RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG", encoded)
+  },
+  // kilocode_change end
   get KILO_EXPERIMENTAL_REFERENCES() {
     return enabledByExperimental("KILO_EXPERIMENTAL_REFERENCES")
   },

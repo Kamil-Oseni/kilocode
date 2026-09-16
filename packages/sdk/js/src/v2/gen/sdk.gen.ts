@@ -7220,7 +7220,7 @@ export class Audio extends HeyApiClient {
   /**
    * Speech to text transcription
    *
-   * Proxy an audio transcription request to the Kilo Gateway
+   * Proxy an audio transcription request to Raya Gateway
    */
   public transcriptions<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7278,7 +7278,7 @@ export class Models extends HeyApiClient {
   /**
    * Image generation models
    *
-   * List image-capable models from the Kilo Gateway OpenRouter passthrough
+   * List image-capable models from the Raya Gateway OpenRouter passthrough
    */
   public images<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7308,7 +7308,7 @@ export class Models extends HeyApiClient {
   /**
    * Speech-to-text models
    *
-   * List transcription-capable models from the Kilo Gateway catalog
+   * List transcription-capable models from the Raya Gateway catalog
    */
   public transcriptions<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7342,9 +7342,9 @@ export class Models extends HeyApiClient {
 
 export class Organization extends HeyApiClient {
   /**
-   * Update Kilo Gateway organization
+   * Update Raya Gateway organization
    *
-   * Switch to a different Kilo Gateway organization
+   * Switch to a different Raya Gateway organization
    */
   public set<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7383,9 +7383,9 @@ export class Organization extends HeyApiClient {
 
 export class Claw extends HeyApiClient {
   /**
-   * Get KiloClaw instance status
+   * Get Raya Messenger instance status
    *
-   * Fetch the user's KiloClaw instance status via the KiloClaw worker
+   * Fetch the user's Raya Messenger instance status
    */
   public status<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7413,9 +7413,9 @@ export class Claw extends HeyApiClient {
   }
 
   /**
-   * Get KiloClaw chat credentials
+   * Get Raya Messenger chat credentials
    *
-   * Returns the bearer token and endpoint URLs the client uses to talk to the Kilo Chat worker and the Event Service. The bearer is the user's existing long-lived Kilo JWT — kilo-chat and event-service both verify it directly with NEXTAUTH_SECRET, so no separate token mint is needed.
+   * Return the bearer token and endpoint URLs for Raya Messenger and the Event Service. The compatibility services `kilo-chat` and `event-service` verify the existing long-lived Gateway JWT directly with NEXTAUTH_SECRET, so no separate token mint is needed.
    */
   public chatCredentials<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7451,7 +7451,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Get cloud session
    *
-   * Fetch full session data from the Kilo cloud for preview
+   * Fetch full session data from Raya Cloud for preview
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -7531,9 +7531,9 @@ export class Cloud extends HeyApiClient {
 
 export class Kilo extends HeyApiClient {
   /**
-   * Get Kilo Gateway profile
+   * Get Raya Gateway profile
    *
-   * Fetch user profile and organizations from Kilo Gateway
+   * Fetch the user profile and organizations from Raya Gateway
    */
   public profile<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7561,9 +7561,9 @@ export class Kilo extends HeyApiClient {
   }
 
   /**
-   * Get Kilo authentication status
+   * Get Raya authentication status
    *
-   * Check whether a locally stored Kilo credential can authenticate Gateway requests
+   * Check whether a locally stored Raya credential can authenticate Gateway requests
    */
   public authStatus<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7623,7 +7623,7 @@ export class Kilo extends HeyApiClient {
   /**
    * FIM completion
    *
-   * Proxy a Fill-in-the-Middle completion request to the Kilo Gateway
+   * Proxy a Fill-in-the-Middle completion request to Raya Gateway
    */
   public fim<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7728,9 +7728,9 @@ export class Kilo extends HeyApiClient {
   }
 
   /**
-   * Get Kilo notifications
+   * Get Raya notifications
    *
-   * Fetch notifications from Kilo Gateway for CLI display
+   * Fetch notifications from Raya Gateway for CLI display
    */
   public notifications<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -7760,7 +7760,7 @@ export class Kilo extends HeyApiClient {
   /**
    * Get cloud sessions
    *
-   * Fetch cloud CLI sessions from Kilo API
+   * Fetch cloud CLI sessions from the Raya API
    */
   public cloudSessions<ThrowOnError extends boolean = false>(
     parameters?: {

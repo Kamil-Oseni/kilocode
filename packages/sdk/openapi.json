@@ -13574,7 +13574,7 @@
     },
     "/kilo/profile": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.profile",
         "parameters": [
           {
@@ -13730,8 +13730,8 @@
             }
           }
         },
-        "description": "Fetch user profile and organizations from Kilo Gateway",
-        "summary": "Get Kilo Gateway profile",
+        "description": "Fetch the user profile and organizations from Raya Gateway",
+        "summary": "Get Raya Gateway profile",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -13742,7 +13742,7 @@
     },
     "/kilo/auth-status": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.authStatus",
         "parameters": [
           {
@@ -13764,7 +13764,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Kilo authentication status",
+            "description": "Raya authentication status",
             "content": {
               "application/json": {
                 "schema": {
@@ -13780,7 +13780,7 @@
                   },
                   "required": ["authenticated"],
                   "additionalProperties": false,
-                  "description": "Kilo authentication status"
+                  "description": "Raya authentication status"
                 }
               }
             }
@@ -13803,8 +13803,8 @@
             }
           }
         },
-        "description": "Check whether a locally stored Kilo credential can authenticate Gateway requests",
-        "summary": "Get Kilo authentication status",
+        "description": "Check whether a locally stored Raya credential can authenticate Gateway requests",
+        "summary": "Get Raya authentication status",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -13815,7 +13815,7 @@
     },
     "/kilo/modes": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.modes",
         "parameters": [
           {
@@ -13978,7 +13978,7 @@
     },
     "/kilo/fim": {
       "post": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.fim",
         "parameters": [
           {
@@ -14062,7 +14062,7 @@
             }
           }
         },
-        "description": "Proxy a Fill-in-the-Middle completion request to the Kilo Gateway",
+        "description": "Proxy a Fill-in-the-Middle completion request to Raya Gateway",
         "summary": "FIM completion",
         "requestBody": {
           "content": {
@@ -14105,7 +14105,7 @@
     },
     "/kilo/edit": {
       "post": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.edit",
         "parameters": [
           {
@@ -14257,7 +14257,7 @@
     },
     "/kilo/audio/transcriptions": {
       "post": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.audio.transcriptions",
         "parameters": [
           {
@@ -14325,7 +14325,7 @@
             }
           }
         },
-        "description": "Proxy an audio transcription request to the Kilo Gateway",
+        "description": "Proxy an audio transcription request to Raya Gateway",
         "summary": "Speech to text transcription",
         "requestBody": {
           "content": {
@@ -14385,7 +14385,7 @@
     },
     "/kilo/models/images": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.models.images",
         "parameters": [
           {
@@ -14451,7 +14451,7 @@
             }
           }
         },
-        "description": "List image-capable models from the Kilo Gateway OpenRouter passthrough",
+        "description": "List image-capable models from the Raya Gateway OpenRouter passthrough",
         "summary": "Image generation models",
         "x-codeSamples": [
           {
@@ -14463,7 +14463,7 @@
     },
     "/kilo/models/transcriptions": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.models.transcriptions",
         "parameters": [
           {
@@ -14526,7 +14526,7 @@
             }
           }
         },
-        "description": "List transcription-capable models from the Kilo Gateway catalog",
+        "description": "List transcription-capable models from the Raya Gateway catalog",
         "summary": "Speech-to-text models",
         "x-codeSamples": [
           {
@@ -14538,7 +14538,7 @@
     },
     "/kilo/notifications": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.notifications",
         "parameters": [
           {
@@ -14626,8 +14626,8 @@
             }
           }
         },
-        "description": "Fetch notifications from Kilo Gateway for CLI display",
-        "summary": "Get Kilo notifications",
+        "description": "Fetch notifications from Raya Gateway for CLI display",
+        "summary": "Get Raya notifications",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -14638,7 +14638,7 @@
     },
     "/kilo/organization": {
       "post": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.organization.set",
         "parameters": [
           {
@@ -14688,8 +14688,8 @@
             }
           }
         },
-        "description": "Switch to a different Kilo Gateway organization",
-        "summary": "Update Kilo Gateway organization",
+        "description": "Switch to a different Raya Gateway organization",
+        "summary": "Update Raya Gateway organization",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14723,7 +14723,7 @@
     },
     "/kilo/claw/status": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.claw.status",
         "parameters": [
           {
@@ -14868,8 +14868,8 @@
             }
           }
         },
-        "description": "Fetch the user's KiloClaw instance status via the KiloClaw worker",
-        "summary": "Get KiloClaw instance status",
+        "description": "Fetch the user's Raya Messenger instance status",
+        "summary": "Get Raya Messenger instance status",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -14880,7 +14880,7 @@
     },
     "/kilo/claw/chat-credentials": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.claw.chatCredentials",
         "parameters": [
           {
@@ -14902,7 +14902,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Kilo Chat credentials or null",
+            "description": "Raya Messenger credentials or null",
             "content": {
               "application/json": {
                 "schema": {
@@ -14945,8 +14945,8 @@
             }
           }
         },
-        "description": "Returns the bearer token and endpoint URLs the client uses to talk to the Kilo Chat worker and the Event Service. The bearer is the user's existing long-lived Kilo JWT — kilo-chat and event-service both verify it directly with NEXTAUTH_SECRET, so no separate token mint is needed.",
-        "summary": "Get KiloClaw chat credentials",
+        "description": "Return the bearer token and endpoint URLs for Raya Messenger and the Event Service. The compatibility services `kilo-chat` and `event-service` verify the existing long-lived Gateway JWT directly with NEXTAUTH_SECRET, so no separate token mint is needed.",
+        "summary": "Get Raya Messenger chat credentials",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -14957,7 +14957,7 @@
     },
     "/kilo/cloud-sessions": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.cloudSessions",
         "parameters": [
           {
@@ -15077,7 +15077,7 @@
             }
           }
         },
-        "description": "Fetch cloud CLI sessions from Kilo API",
+        "description": "Fetch cloud CLI sessions from the Raya API",
         "summary": "Get cloud sessions",
         "x-codeSamples": [
           {
@@ -15089,7 +15089,7 @@
     },
     "/kilo/cloud/session/{id}": {
       "get": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.cloud.session.get",
         "parameters": [
           {
@@ -15238,7 +15238,7 @@
             }
           }
         },
-        "description": "Fetch full session data from the Kilo cloud for preview",
+        "description": "Fetch full session data from Raya Cloud for preview",
         "summary": "Get cloud session",
         "x-codeSamples": [
           {
@@ -15250,7 +15250,7 @@
     },
     "/kilo/cloud/session/import": {
       "post": {
-        "tags": ["kilo"],
+        "tags": ["Raya Gateway"],
         "operationId": "kilo.cloud.session.import",
         "parameters": [
           {
@@ -102205,8 +102205,8 @@
       "description": "Kilo human-driven interactive terminal routes."
     },
     {
-      "name": "kilo",
-      "description": "Kilo Gateway routes."
+      "name": "Raya Gateway",
+      "description": "Raya Gateway routes."
     },
     {
       "name": "kilocode",

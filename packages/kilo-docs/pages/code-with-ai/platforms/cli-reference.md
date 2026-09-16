@@ -697,7 +697,7 @@ Options:
 ## kilo profile
 
 ```
-show Kilo account profile
+show Raya account profile
 
 Options:
   --help     Show help  [boolean]
@@ -1036,7 +1036,7 @@ Options:
   --branch     repository branch  [string]
   --model      Cloud Agent model  [string]
   --mode       Cloud Agent mode  [string]
-  --org-id     Kilo organization ID  [string]
+  --org-id     Raya organization ID  [string]
   --stream     connect to the WebSocket stream and print events as JSONL  [boolean]
 ```
 

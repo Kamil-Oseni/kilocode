@@ -18495,7 +18495,7 @@ export type KiloAuthStatusError = KiloAuthStatusErrors[keyof KiloAuthStatusError
 
 export type KiloAuthStatusResponses = {
   /**
-   * Kilo authentication status
+   * Raya authentication status
    */
   200: {
     authenticated: boolean
@@ -18910,7 +18910,7 @@ export type KiloClawChatCredentialsError = KiloClawChatCredentialsErrors[keyof K
 
 export type KiloClawChatCredentialsResponses = {
   /**
-   * Kilo Chat credentials or null
+   * Raya Messenger credentials or null
    */
   200: {
     token: string

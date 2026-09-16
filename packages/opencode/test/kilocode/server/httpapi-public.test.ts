@@ -42,10 +42,54 @@ type Body = {
 }
 
 describe("Kilo PublicApi OpenAPI contract", () => {
-  test("uses Kilo branding", () => {
+  test("presents Raya while retaining the compatible API surface", () => {
     const spec = OpenApi.fromApi(PublicApi)
-    expect(spec.info.title).toBe("kilo")
-    expect(spec.info.description).toBe("kilo api")
+    expect(spec.info.title).toBe("Raya")
+    expect(spec.info.description).toBe("Raya API")
+
+    expect(spec.paths[KiloGatewayPaths.profile]?.get).toMatchObject({
+      operationId: "kilo.profile",
+      summary: "Get Raya Gateway profile",
+      description: "Fetch the user profile and organizations from Raya Gateway",
+    })
+    expect(spec.paths[KiloGatewayPaths.clawStatus]?.get).toMatchObject({
+      operationId: "kilo.claw.status",
+      summary: "Get Raya Messenger instance status",
+      description: "Fetch the user's Raya Messenger instance status",
+    })
+    expect(spec.paths[KiloGatewayPaths.clawChatCredentials]?.get).toMatchObject({
+      operationId: "kilo.claw.chatCredentials",
+      summary: "Get Raya Messenger chat credentials",
+    })
+    expect(spec.paths[KiloGatewayPaths.clawChatCredentials]?.get?.description).toContain("`kilo-chat`")
+    expect(spec.paths[KiloGatewayPaths.cloudSessions]?.get?.description).toBe(
+      "Fetch cloud CLI sessions from the Raya API",
+    )
+
+    const docs = JSON.stringify(spec)
+    for (const legacy of [
+      "Kilo Gateway profile",
+      "from Kilo Gateway",
+      "Kilo authentication status",
+      "Kilo credential",
+      "to the Kilo Gateway",
+      "from the Kilo Gateway",
+      "Kilo notifications",
+      "Kilo Gateway organization",
+      "KiloClaw instance status",
+      "KiloClaw worker",
+      "Kilo Chat credentials",
+      "KiloClaw chat credentials",
+      "Kilo Chat worker",
+      "from Kilo API",
+      "Kilo cloud",
+      "Kilo Gateway routes",
+    ]) {
+      expect(docs).not.toContain(legacy)
+    }
+    for (const compatible of ["kilo.profile", "kilo.claw.status", "kilo.claw.chatCredentials", "kilo-chat"]) {
+      expect(docs).toContain(compatible)
+    }
   })
 
   test("includes legacy Kilo events in the generated SDK contract", () => {
@@ -191,8 +235,8 @@ describe("Kilo PublicApi OpenAPI contract", () => {
   test("publishes routine organization and self-heal error responses", () => {
     const spec = OpenApi.fromApi(PublicApi)
     const organization = spec.paths[KilocodePaths.organizations]?.post?.responses
-    const verification = spec.paths[KilocodePaths.selfHealItem.replace(":itemID", "{itemID}") + "/verification"]?.post
-      ?.responses
+    const verification =
+      spec.paths[KilocodePaths.selfHealItem.replace(":itemID", "{itemID}") + "/verification"]?.post?.responses
 
     expect(Object.keys(organization ?? {}).toSorted()).toEqual(["200", "400", "409"])
     expect(Object.keys(verification ?? {}).toSorted()).toEqual(["200", "400", "404", "409", "500"])

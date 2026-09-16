@@ -300,19 +300,19 @@ export const KiloGatewayApi = HttpApi.make("kilo")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.profile",
-            summary: "Get Kilo Gateway profile",
-            description: "Fetch user profile and organizations from Kilo Gateway",
+            summary: "Get Raya Gateway profile",
+            description: "Fetch the user profile and organizations from Raya Gateway",
           }),
         ),
         HttpApiEndpoint.get("authStatus", KiloGatewayPaths.authStatus, {
           query: WorkspaceRoutingQuery,
-          success: described(AuthStatus, "Kilo authentication status"),
+          success: described(AuthStatus, "Raya authentication status"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.authStatus",
-            summary: "Get Kilo authentication status",
-            description: "Check whether a locally stored Kilo credential can authenticate Gateway requests",
+            summary: "Get Raya authentication status",
+            description: "Check whether a locally stored Raya credential can authenticate Gateway requests",
           }),
         ),
         HttpApiEndpoint.get("modes", KiloGatewayPaths.modes, {
@@ -334,7 +334,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           OpenApi.annotations({
             identifier: "kilo.fim",
             summary: "FIM completion",
-            description: "Proxy a Fill-in-the-Middle completion request to the Kilo Gateway",
+            description: "Proxy a Fill-in-the-Middle completion request to Raya Gateway",
           }),
         ),
         HttpApiEndpoint.post("edit", KiloGatewayPaths.edit, {
@@ -360,7 +360,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           OpenApi.annotations({
             identifier: "kilo.audio.transcriptions",
             summary: "Speech to text transcription",
-            description: "Proxy an audio transcription request to the Kilo Gateway",
+            description: "Proxy an audio transcription request to Raya Gateway",
           }),
         ),
         HttpApiEndpoint.get("imageModels", KiloGatewayPaths.imageModels, {
@@ -371,7 +371,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           OpenApi.annotations({
             identifier: "kilo.models.images",
             summary: "Image generation models",
-            description: "List image-capable models from the Kilo Gateway OpenRouter passthrough",
+            description: "List image-capable models from the Raya Gateway OpenRouter passthrough",
           }),
         ),
         HttpApiEndpoint.get("transcriptionModels", KiloGatewayPaths.transcriptionModels, {
@@ -382,7 +382,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           OpenApi.annotations({
             identifier: "kilo.models.transcriptions",
             summary: "Speech-to-text models",
-            description: "List transcription-capable models from the Kilo Gateway catalog",
+            description: "List transcription-capable models from the Raya Gateway catalog",
           }),
         ),
         HttpApiEndpoint.get("notifications", KiloGatewayPaths.notifications, {
@@ -392,8 +392,8 @@ export const KiloGatewayApi = HttpApi.make("kilo")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.notifications",
-            summary: "Get Kilo notifications",
-            description: "Fetch notifications from Kilo Gateway for CLI display",
+            summary: "Get Raya notifications",
+            description: "Fetch notifications from Raya Gateway for CLI display",
           }),
         ),
         HttpApiEndpoint.post("organization", KiloGatewayPaths.organization, {
@@ -404,8 +404,8 @@ export const KiloGatewayApi = HttpApi.make("kilo")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.organization.set",
-            summary: "Update Kilo Gateway organization",
-            description: "Switch to a different Kilo Gateway organization",
+            summary: "Update Raya Gateway organization",
+            description: "Switch to a different Raya Gateway organization",
           }),
         ),
         HttpApiEndpoint.get("clawStatus", KiloGatewayPaths.clawStatus, {
@@ -415,22 +415,22 @@ export const KiloGatewayApi = HttpApi.make("kilo")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.claw.status",
-            summary: "Get KiloClaw instance status",
-            description: "Fetch the user's KiloClaw instance status via the KiloClaw worker",
+            summary: "Get Raya Messenger instance status",
+            description: "Fetch the user's Raya Messenger instance status",
           }),
         ),
         HttpApiEndpoint.get("clawChatCredentials", KiloGatewayPaths.clawChatCredentials, {
           query: WorkspaceRoutingQuery,
-          success: described(ClawChatCredentials, "Kilo Chat credentials or null"),
+          success: described(ClawChatCredentials, "Raya Messenger credentials or null"),
           error: HttpApiError.Unauthorized,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.claw.chatCredentials",
-            summary: "Get KiloClaw chat credentials",
+            summary: "Get Raya Messenger chat credentials",
             description:
-              "Returns the bearer token and endpoint URLs the client uses to talk to the Kilo Chat worker " +
-              "and the Event Service. The bearer is the user's existing long-lived Kilo JWT — kilo-chat and " +
-              "event-service both verify it directly with NEXTAUTH_SECRET, so no separate token mint is needed.",
+              "Return the bearer token and endpoint URLs for Raya Messenger and the Event Service. " +
+              "The compatibility services `kilo-chat` and `event-service` verify the existing long-lived Gateway JWT " +
+              "directly with NEXTAUTH_SECRET, so no separate token mint is needed.",
           }),
         ),
         HttpApiEndpoint.get("cloudSessions", KiloGatewayPaths.cloudSessions, {
@@ -446,7 +446,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           OpenApi.annotations({
             identifier: "kilo.cloudSessions",
             summary: "Get cloud sessions",
-            description: "Fetch cloud CLI sessions from Kilo API",
+            description: "Fetch cloud CLI sessions from the Raya API",
           }),
         ),
         HttpApiEndpoint.get("cloudSession", KiloGatewayPaths.cloudSession, {
@@ -458,7 +458,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           OpenApi.annotations({
             identifier: "kilo.cloud.session.get",
             summary: "Get cloud session",
-            description: "Fetch full session data from the Kilo cloud for preview",
+            description: "Fetch full session data from Raya Cloud for preview",
           }),
         ),
         HttpApiEndpoint.post("cloudSessionImport", KiloGatewayPaths.cloudSessionImport, {
@@ -476,8 +476,8 @@ export const KiloGatewayApi = HttpApi.make("kilo")
       )
       .annotateMerge(
         OpenApi.annotations({
-          title: "kilo",
-          description: "Kilo Gateway routes.",
+          title: "Raya Gateway",
+          description: "Raya Gateway routes.",
         }),
       )
       .middleware(InstanceContextMiddleware)
@@ -486,8 +486,8 @@ export const KiloGatewayApi = HttpApi.make("kilo")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "kilo HttpApi",
+      title: "Raya Gateway API",
       version: "0.0.1",
-      description: "Kilo HttpApi surface.",
+      description: "Raya Gateway API surface.",
     }),
   )

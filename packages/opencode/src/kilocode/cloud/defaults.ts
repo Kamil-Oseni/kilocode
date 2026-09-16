@@ -131,7 +131,7 @@ export namespace CloudDefaults {
     return yield* Effect.fail(
       new ResolutionError({
         kind: "model",
-        message: "The Kilo model catalog has no available default model",
+        message: "The Raya model catalog has no available default model",
       }),
     )
   })

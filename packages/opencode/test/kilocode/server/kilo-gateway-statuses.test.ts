@@ -190,7 +190,7 @@ describe("Kilo gateway HttpApi statuses", () => {
       const response = yield* HttpClient.get(KiloGatewayPaths.clawStatus)
 
       expect(response.status).toBe(500)
-      expect(yield* response.json).toEqual({ error: "KiloClaw request failed: 500 worker failed" })
+      expect(yield* response.json).toEqual({ error: "Raya Messenger request failed: 500 worker failed" })
     }),
   )
 
@@ -227,7 +227,7 @@ describe("Kilo gateway HttpApi statuses", () => {
       const response = yield* HttpClient.get(KiloGatewayPaths.clawStatus)
 
       expect(response.status).toBe(502)
-      expect(yield* response.json).toEqual({ error: "Failed to reach KiloClaw" })
+      expect(yield* response.json).toEqual({ error: "Failed to reach Raya Messenger" })
     }),
   )
 })

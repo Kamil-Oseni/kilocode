@@ -41,7 +41,7 @@ export const CloudStartCommand = effectCmd({
       })
       .option("org-id", {
         type: "string",
-        describe: "Kilo organization ID",
+        describe: "Raya organization ID",
       })
       .option("stream", {
         type: "boolean",

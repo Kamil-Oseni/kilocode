@@ -361,6 +361,33 @@ it.instance(
 )
 
 it.instance(
+  "reports Raya when the catalog has no usable default model",
+  () =>
+    withCatalog([], "anthropic/missing", (url, requests) =>
+      Effect.gen(function* () {
+        const error = yield* CloudDefaults.resolve().pipe(Effect.flip)
+        expect(error).toMatchObject({
+          _tag: "CloudDefaultsResolutionError",
+          kind: "model",
+          message: "The Raya model catalog has no available default model",
+        })
+        expect(requests.map((request) => request.path)).toEqual(["/api/openrouter/models", "/api/defaults"])
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            authLayer(new Auth.Api({ type: "api", key: "stored-api-token" })),
+            stateLayer(state()),
+            CloudCatalog.layer({ env: { KILO_API_URL: url.origin } }),
+          ),
+        ),
+      ),
+    ),
+  {
+    config: { agent: { code: { model: null } } },
+  },
+)
+
+it.instance(
   "falls back from an inferred custom mode but rejects an explicit custom mode",
   () =>
     withCatalog(["anthropic/code", "anthropic/custom", "anthropic/default"], "anthropic/default", (url, requests) =>

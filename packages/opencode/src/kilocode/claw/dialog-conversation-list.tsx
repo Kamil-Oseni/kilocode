@@ -59,7 +59,7 @@ export function DialogConversationList(props: Props) {
 
   return (
     <DialogSelect
-      title="KiloClaw Conversations"
+      title="Raya Messenger conversations"
       options={options()}
       current={props.chat.activeConversationId() ?? undefined}
       onMove={() => setToDelete(undefined)}

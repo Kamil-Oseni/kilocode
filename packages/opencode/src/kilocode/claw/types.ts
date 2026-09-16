@@ -30,10 +30,10 @@ export type ClawStatus = {
   channelCount?: number
   secretCount?: number
   userId?: string
-  // User-chosen name for the KiloClaw bot, set during onboarding via the
+  // User-chosen Messenger bot name, set during onboarding via the
   // `patchBotIdentity` mutation. May be null for fresh instances that
   // skipped the bot-identity step. The chat UI should fall back to the
-  // literal string "KiloClaw" when null.
+  // Raya Messenger presentation fallback when null.
   botName?: string | null
 }
 

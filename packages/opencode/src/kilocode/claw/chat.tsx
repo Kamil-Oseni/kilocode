@@ -89,7 +89,7 @@ export function ClawChat(props: {
   // Render the typing banner with friendly names. Bot members come in as
   // `bot:kiloclaw:{sandboxId}` — the bot is the only non-self member in 1:1
   // chats, so we resolve bot ids to the user-configured `botName` (which
-  // falls back to "KiloClaw" upstream) and render any human collaborators
+  // falls back to Raya Messenger in the parent view) and render any human collaborators
   // by their raw memberId.
   const typingLabel = createMemo(() => {
     const list = props.typingMembers

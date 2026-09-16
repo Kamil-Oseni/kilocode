@@ -35,11 +35,10 @@ export function KiloClawView() {
     return !s || s.status !== "running"
   })
 
-  // Bot display name — sourced from the KiloClaw platform status (set by the
-  // user during onboarding via patchBotIdentity). Falls back to the literal
-  // "KiloClaw" while loading or for instances that skipped onboarding,
-  // matching the web UI's fallback chain.
-  const botName = createMemo(() => status()?.botName ?? "KiloClaw")
+  // Bot display name — sourced from the compatibility platform status (set by
+  // the user during onboarding via patchBotIdentity). Falls back to Raya
+  // Messenger while loading or for instances that skipped onboarding.
+  const botName = createMemo(() => status()?.botName ?? "Raya Messenger")
 
   // KiloClaw view commands — single source of truth for both the global
   // command palette / keybinds and the in-chat slash autocomplete.
@@ -52,7 +51,7 @@ export function KiloClawView() {
         name: "kiloclaw.back",
         title: "Back",
         desc: "Return to the previous view",
-        category: "KiloClaw",
+        category: "Raya Messenger",
         namespace: "palette",
         slashName: "back",
         slashAliases: [] as string[],
@@ -66,8 +65,8 @@ export function KiloClawView() {
       {
         name: "kiloclaw.new",
         title: "New conversation",
-        desc: "Start a new KiloClaw conversation",
-        category: "KiloClaw",
+        desc: "Start a new Raya Messenger conversation",
+        category: "Raya Messenger",
         namespace: "palette",
         slashName: "new",
         slashAliases: [] as string[],
@@ -81,8 +80,8 @@ export function KiloClawView() {
       {
         name: "kiloclaw.conversations",
         title: "Conversations",
-        desc: "Browse, rename, and delete KiloClaw conversations",
-        category: "KiloClaw",
+        desc: "Browse, rename, and delete Raya Messenger conversations",
+        category: "Raya Messenger",
         namespace: "palette",
         slashName: "conversations",
         slashAliases: ["chats"],

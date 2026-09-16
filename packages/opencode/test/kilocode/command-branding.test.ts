@@ -56,6 +56,12 @@ describe("Kilo command branding", () => {
       "src/kilocode/cloud/auth.ts",
       "src/kilocode/cloud/catalog.ts",
       "src/kilocode/tool/dictation-billing.ts",
+      "src/kilocode/claw/view.tsx",
+      "src/kilocode/claw/dialog-conversation-list.tsx",
+      "src/kilocode/claw/autocomplete.tsx",
+      "src/kilocode/server/httpapi/handlers/kilo-gateway.ts",
+      "src/kilocode/cli/cmd/cloud.ts",
+      "src/kilocode/cloud/defaults.ts",
     ]
     const src = (await Promise.all(files.map((file) => Bun.file(path.join(root, file)).text()))).join("\n")
     const legacy = [
@@ -103,6 +109,14 @@ describe("Kilo command branding", () => {
       "the Kilo model catalog",
       "The Kilo model catalog",
       "Kilo Gateway completed the transcription",
+      'status()?.botName ?? "KiloClaw"',
+      'category: "KiloClaw"',
+      "KiloClaw conversation",
+      "KiloClaw Conversations",
+      "KiloClaw request failed",
+      "Failed to reach KiloClaw",
+      'describe: "Kilo organization ID"',
+      "The Kilo model catalog has no available default model",
     ]
 
     expect(legacy.filter((text) => src.includes(text))).toEqual([])
@@ -126,6 +140,13 @@ describe("Kilo command branding", () => {
     expect(src).toContain("Raya organization ID")
     expect(src).toContain("Raya model catalog")
     expect(src).toContain("Raya Gateway completed the transcription")
+    expect(src).toContain('status()?.botName ?? "Raya Messenger"')
+    expect(src).toContain('category: "Raya Messenger"')
+    expect(src).toContain('title="Raya Messenger conversations"')
+    expect(src).toContain("Raya Messenger request failed")
+    expect(src).toContain("Failed to reach Raya Messenger")
+    expect(src).toContain('describe: "Raya organization ID"')
+    expect(src).toContain("The Raya model catalog has no available default model")
     expect(src).toContain('id: "kilo"')
     expect(src).toContain("`kilo auth login`")
     expect(src).toContain("{highlight}kilo serve{/highlight}")

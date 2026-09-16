@@ -487,8 +487,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 36_041,
-        digest: "685ebeb7280ef94020ced0955468d0ee76353172a22667ba4e2d6cd3bb41838c",
+        count: 36_050,
+        digest: "4c493ea26366f889f6971923edeb7086ee5351827188325c0d06492129a1f8b7",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

@@ -1,10 +1,22 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `c077d106e8`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `5b7299016f`; the installed package source is `c077d106e8`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 02:48 America/Toronto - Preserve database startup safety aliases
+
+Preserve product commit `5b7299016f`. `RAYA_DISABLE_CHANNEL_DB`/`KILO_DISABLE_CHANNEL_DB` and `RAYA_SKIP_MIGRATIONS`/`KILO_SKIP_MIGRATIONS` are safety-monotonic pairs: case-insensitive `true` or `1` under either name keeps the restriction active. False, empty or invalid input under one alias must never cancel a true sibling. Conflict diagnostics may contain only names.
+
+Keep `CoreDatabase.path()` on a direct late-bound `EnvAlias.enabled` call; routing it through the eager `Flag.KILO_DISABLE_CHANNEL_DB` field would break embedded-host and test behavior. Explicit `RAYA_DB`/`KILO_DB` overrides must remain stronger than channel selection. Keep migration skipping limited to the legacy OpenCode database client. Core must continue running `DatabaseMigration.apply` unconditionally. Managed VS Code launches must pin both channel-database aliases after inherited environment values, but must not set migration skipping.
+
+Evidence passes: Core **99 / 211**, OpenCode runtime/database/ledger boundaries **126 / 313**, VS Code launcher utilities **35 / 60**, all three affected typecheck boundaries, full extension lint, Knip, Kilo-marker, annotations, Promise-facade, Markdown-table, formatting, inventory, compatibility-ledger and diff guards.
+
+The ledger now has **38 environment pairs**: 19 ordinary Raya-first, 17 safety-monotonic and two strict credentials. `cutoverReady` remains false. Inventory is **70,266** total: public 1,654; compatibility 36,050; provenance 5,686; internal 26,876; compatibility digest `4c493ea26366f889f6971923edeb7086ee5351827188325c0d06492129a1f8b7`.
+
+Installed source remains `c077d106e8`. Batch this committed extension change with the next coherent low-memory snapshot. The next simple network-control slice may add safety-monotonic `RAYA_DISABLE_SHARE` and `RAYA_DISABLE_PRESENCE`, but it must cover both sharing implementations, preserve private session ingest and retain presence-owned local attachment tracking. Handle `RAYA_PERMISSION` only as a dedicated authority slice: matching ordered semantic rules or a redacted startup refusal, never ordinary Raya precedence or merged rule maps.
 
 ## ChatGPT 2026-09-16 02:32 America/Toronto - Continue from installed Claude safety checkpoint
 

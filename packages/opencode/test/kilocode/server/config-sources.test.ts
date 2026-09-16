@@ -179,6 +179,7 @@ describe("config source routes", () => {
     ["1", "0", "RAYA"] as const,
     ["0", "1", "KILO"] as const,
     ["", "1", "KILO"] as const,
+    ["secret-inline-value", "1", "KILO"] as const,
     ["invalid", "1", "KILO"] as const,
   ])("reports the effective compaction safety aliases without values", async (raya, kilo, prefix) => {
     await using tmp = await tmpdir()
@@ -201,6 +202,7 @@ describe("config source routes", () => {
       })
       expect(item).not.toHaveProperty("value")
     }
+    expect(JSON.stringify(body)).not.toContain("secret-inline-value")
   })
 
   test.each([["false", undefined] as const, ["false", "0"] as const, [undefined, undefined] as const])(

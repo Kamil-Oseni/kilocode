@@ -32,7 +32,7 @@ export namespace CloudAuth {
       return yield* Effect.fail(
         new ResolutionError({
           kind: "missing",
-          message: "Kilo credentials are required; run `kilo auth login`",
+          message: "Raya credentials are required; run `kilo auth login`",
         }),
       )
     }
@@ -53,7 +53,7 @@ export namespace CloudAuth {
       return yield* Effect.fail(
         new ResolutionError({
           kind: "organization",
-          message: "Kilo organization ID must be a valid UUID",
+          message: "Raya organization ID must be a valid UUID",
         }),
       )
     }

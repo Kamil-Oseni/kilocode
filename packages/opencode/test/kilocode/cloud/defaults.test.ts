@@ -398,6 +398,16 @@ it.instance(
 
 it.instance("rejects invalid persisted organization state and insecure catalog origins", () =>
   Effect.gen(function* () {
+    const missing = yield* CloudAuth.resolve({ env: {} }).pipe(
+      Effect.provide(Layer.mock(Auth.Service)({ get: () => Effect.succeed(undefined) })),
+      Effect.flip,
+    )
+    expect(missing).toMatchObject({
+      _tag: "CloudAuthResolutionError",
+      kind: "missing",
+      message: "Raya credentials are required; run `kilo auth login`",
+    })
+
     const invalid = authLayer(oauth("stored-token", "not-a-uuid"))
     const token = yield* CloudAuth.token().pipe(Effect.provide(invalid))
     expect(Redacted.value(token)).toBe("stored-token")
@@ -406,6 +416,7 @@ it.instance("rejects invalid persisted organization state and insecure catalog o
     expect(org).toMatchObject({
       _tag: "CloudAuthResolutionError",
       kind: "organization",
+      message: "Raya organization ID must be a valid UUID",
     })
 
     const catalog = yield* CloudDefaults.resolve({ env: { KILO_API_URL: "http://example.com" } }).pipe(
@@ -424,6 +435,7 @@ it.instance("rejects invalid persisted organization state and insecure catalog o
     expect(catalog).toMatchObject({
       _tag: "CloudCatalogError",
       kind: "schema",
+      message: "Raya catalog URL must be secure",
     })
   }),
 )

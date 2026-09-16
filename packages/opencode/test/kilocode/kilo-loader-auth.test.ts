@@ -127,6 +127,7 @@ it.live("assembles paid Kilo models without auth", () =>
     )
     const kilo = Provider.fromModelsDevProvider(providers.kilo)
 
+    expect(kilo.name).toBe("Raya Gateway")
     expect(kilo.models["paid-model"]).toMatchObject({
       id: "paid-model",
       providerID: "kilo",

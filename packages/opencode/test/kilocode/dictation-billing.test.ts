@@ -2,15 +2,22 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import * as Billing from "@/kilocode/tool/dictation-billing"
 
-const lease = (events: string[], fail?: "dispatch" | "finish" | "uncertain"): Billing.Lease => ({
+const lease = (
+  events: string[],
+  fail?: "dispatch" | "finish" | "uncertain",
+  reasons: string[] = [],
+): Billing.Lease => ({
   dispatch:
     fail === "dispatch" ? Effect.fail(new Error("dispatch failed")) : Effect.sync(() => void events.push("dispatch")),
   finish: fail === "finish" ? Effect.fail(new Error("finish failed")) : Effect.sync(() => void events.push("finish")),
   release: Effect.sync(() => void events.push("release")),
-  uncertain: () =>
+  uncertain: (reason) =>
     fail === "uncertain"
       ? Effect.fail(new Error("settlement failed"))
-      : Effect.sync(() => void events.push("uncertain")),
+      : Effect.sync(() => {
+          reasons.push(reason)
+          events.push("uncertain")
+        }),
 })
 
 describe("hosted dictation billing", () => {
@@ -48,9 +55,10 @@ describe("hosted dictation billing", () => {
 
   test("dispatches before a successful request and settles unknown before returning", async () => {
     const events: string[] = []
+    const reasons: string[] = []
     const result = await Effect.runPromise(
       Billing.run(
-        lease(events),
+        lease(events, undefined, reasons),
         Effect.sync(() => {
           events.push("send")
           return Response.json({ text: "hello" })
@@ -59,6 +67,7 @@ describe("hosted dictation billing", () => {
     )
     expect(result.text).toBe('{"text":"hello"}')
     expect(events).toEqual(["dispatch", "send", "uncertain", "release"])
+    expect(reasons).toEqual(["Raya Gateway completed the transcription without an authoritative monetary receipt."])
   })
 
   test("finalizes an explicit provider refusal", async () => {

@@ -87,7 +87,7 @@ export const layer: Layer.Layer<Service, never, Core.Service | Config.Service | 
         const models = Object.keys(fetched).length > 0 ? fetched : (fallback?.models ?? {})
         providers.kilo = {
           id: "kilo",
-          name: "Kilo Gateway",
+          name: "Raya Gateway", // kilocode_change - presentation; provider ID and routes remain compatible
           env: ["KILO_API_KEY"],
           api: KILO_OPENROUTER_BASE.endsWith("/") ? KILO_OPENROUTER_BASE : `${KILO_OPENROUTER_BASE}/`,
           npm: "@kilocode/kilo-gateway",

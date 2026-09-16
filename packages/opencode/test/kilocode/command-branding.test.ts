@@ -51,6 +51,11 @@ describe("Kilo command branding", () => {
       "src/kilocode/mcp-oauth-callback.ts",
       "src/cli/cmd/run/footer.permission.tsx",
       "src/mcp/oauth-provider.ts",
+      "src/provider/models.ts",
+      "src/kilo-sessions/kilo-sessions.ts",
+      "src/kilocode/cloud/auth.ts",
+      "src/kilocode/cloud/catalog.ts",
+      "src/kilocode/tool/dictation-billing.ts",
     ]
     const src = (await Promise.all(files.map((file) => Bun.file(path.join(root, file)).text()))).join("\n")
     const legacy = [
@@ -87,6 +92,17 @@ describe("Kilo command branding", () => {
       "View your Kilo Gateway profile",
       "Switch between Kilo Gateway teams",
       "Open KiloClaw chat & dashboard",
+      'name: "Kilo Gateway"',
+      "no Kilo credentials found",
+      "invalid or expired Kilo credentials",
+      "failed to verify Kilo credentials",
+      "Kilo credentials are required",
+      "Kilo organization ID must be a valid UUID",
+      "Kilo catalog URL is invalid",
+      "Kilo catalog URL must be secure",
+      "the Kilo model catalog",
+      "The Kilo model catalog",
+      "Kilo Gateway completed the transcription",
     ]
 
     expect(legacy.filter((text) => src.includes(text))).toEqual([])
@@ -105,6 +121,13 @@ describe("Kilo command branding", () => {
     expect(src).toContain('client_uri: "https://kilo.ai"')
     expect(src).toContain('name: "kilo.profile"')
     expect(src).toContain('slashName: "kiloclaw"')
+    expect(src).toContain('name: "Raya Gateway"')
+    expect(src).toContain("Raya credentials")
+    expect(src).toContain("Raya organization ID")
+    expect(src).toContain("Raya model catalog")
+    expect(src).toContain("Raya Gateway completed the transcription")
+    expect(src).toContain('id: "kilo"')
+    expect(src).toContain("`kilo auth login`")
     expect(src).toContain("{highlight}kilo serve{/highlight}")
     expect(src).toContain("https://kilo.ai/kiloclaw")
   })

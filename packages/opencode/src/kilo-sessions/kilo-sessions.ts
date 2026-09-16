@@ -687,14 +687,14 @@ export namespace KiloSessions {
     enabling = (async () => {
       const token = await kilocodeToken()
       if (!token) {
-        throw new Error("Unable to enable remote: no Kilo credentials found. Run `kilo auth login`.")
+        throw new Error("Unable to enable remote: no Raya credentials found. Run `kilo auth login`.")
       }
 
       const valid = await authValid(token)
       if (valid === false) {
-        throw new Error("Unable to enable remote: invalid or expired Kilo credentials. Run `kilo auth login`.")
+        throw new Error("Unable to enable remote: invalid or expired Raya credentials. Run `kilo auth login`.")
       }
-      if (valid === undefined) throw new Error("Unable to enable remote: failed to verify Kilo credentials.")
+      if (valid === undefined) throw new Error("Unable to enable remote: failed to verify Raya credentials.")
 
       const url = (process.env["KILO_SESSION_INGEST_URL"] ?? "https://ingest.kilosessions.ai")
         .replace(/^https:\/\//, "wss://")
@@ -1050,7 +1050,7 @@ export namespace KiloSessions {
 
     const client = await getClient()
     if (!client) {
-      throw new Error("Unable to share session: no Kilo credentials found. Run `kilo auth login`.")
+      throw new Error("Unable to share session: no Raya credentials found. Run `kilo auth login`.")
     }
 
     const current = (await get(sessionId).catch(() => undefined)) ?? (await create(sessionId))
@@ -1095,7 +1095,7 @@ export namespace KiloSessions {
 
     const client = await getClient()
     if (!client) {
-      throw new Error("Unable to unshare session: no Kilo credentials found. Run `kilo auth login`.")
+      throw new Error("Unable to unshare session: no Raya credentials found. Run `kilo auth login`.")
     }
 
     log.info("unsharing", { sessionId })

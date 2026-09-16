@@ -1,10 +1,30 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `b1b3f196cb`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `55b4f33784`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 20:55 America/Toronto - Preserve branch cache paths and defer unsafe ripgrep admission
+
+Product commit `55b4f33784` is on `origin/main`. Preserve its branch-path correction: `RepoCloneTool` must pass `params.branch` to Core `Repository.cachePath`, and the Kilo configured-reference resolver must pass `entry.branch` to `repositoryCachePath`. That helper mirrors Core by appending `@${encodeURIComponent(branch)}`. The permission prompt, tool output, metadata, prompt reference path and downstream file/reference authorization must all describe the exact checkout that `RepositoryCache.ensure` creates. Do not collapse different configured branches back onto one branchless path. The real branch clone plus utility/reference regressions cover this behavior, and the patch has a CLI changeset.
+
+Do not choose `profile.bin.ripgrep` as the next easy admission. Its full audit found these blockers:
+
+- One cached install reads `Global.Path.bin` independently for the target, archive, ensured directory and extraction temp root, so a switch can split a single operation.
+- Infinite `Effect.cached` retains the old absolute executable after a generation switch and permanently caches admission refusal or transient install failure.
+- AppRuntime, HTTP, ToolRegistry and default location-service graphs can instantiate independent installers. No shared cross-layer or cross-process lock exists.
+- PowerShell/tar extraction mutates a scoped tree, but final publication is direct `copyFile` plus chmod into unversioned `rg(.exe)`. It is not atomic and does not verify version or integrity.
+- Failure can retain the archive or a partial/questionable target; future processes accept any existing target as valid.
+
+The corrected manifest methods are `ensure-directory`, `write-archive`, `create-temp`, `extract-child`, `copy-target`, `chmod-target`, `remove-archive` and `remove-temp`. Keep coverage `declared-unintegrated`. The eventual implementation must place canonical fail-closed admission in the Core graph or bind an unbound writer dependency in every graph with a static guard; acquire before reading one bin root; recheck the target after serialization; keep caching generation-aware and retry failures; use a shared cross-process installer lock; download to unique staging; verify version/checksum and executability; atomically rename a versioned target; await child exit; and clean archive/temp/staging on every exit. Preserve non-Windows system-ripgrep discovery and Windows' deliberate refusal to use an arbitrary PATH `rg.exe`.
+
+Required ripgrep tests are: delayed download keeps quiescence draining and rejects a second install; root mutation after acquisition keeps every artifact in one selected root; the same long-lived service returns the new generation after reopen; closed refusal retries successfully rather than poisoning the cache; corrupt archive, copy/chmod failure and interruption leave no archive/temp/final target; independent layer instances/processes converge on one verified executable; extraction child exit precedes lease release; and wiring/static checks cover AppRuntime, HTTP app, ToolRegistry/location services and the exported default location map.
+
+Verification for `55b4f33784`: real repo-clone **6 / 24**, utility/configured-reference **12 / 28**, manifest/compatibility **8 / 412**, bounded CLI typecheck and affected guards. The protected push passes all 29 JavaScript/TypeScript packages plus JetBrains. With this detailed handoff and progress record included, the checked inventory is **69,248** total: public 1,693; compatibility 35,292; provenance 5,686; internal 26,577; compatibility digest `b34cabe3e7821e6d353dffd8a04451532ad08bb6a4d4e3b49c935a6876a9cfc8`. Coverage remains 10 of 33 and no root switch is exposed.
+
+The next bounded candidate should therefore be diagnostics consolidation or a newly audited single-owner file boundary, not ripgrep, models, skills, repository cache or self-heal. Keep the existing detailed plans below. Update both documents as each slice lands. Batch internal CLI work for the low-memory extension snapshot; the Raya-owned VS Code distribution remains Version 3 work.
 
 ## ChatGPT 2026-09-15 20:42 America/Toronto - Continue from the corrected writer graph
 

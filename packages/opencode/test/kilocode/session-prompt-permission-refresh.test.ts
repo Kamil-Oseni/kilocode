@@ -2,7 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import fs, { rename, rm, symlink } from "fs/promises"
 import os from "os"
@@ -54,6 +54,9 @@ import { KiloHeadless } from "../../src/kilocode/permission/headless"
 import { KiloSessionPrompt } from "../../src/kilocode/session/prompt"
 import { KiloReadObject } from "../../src/kilocode/tool/read-object"
 import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions"
+import { Storage } from "../../src/storage/storage"
+import { RayaTask } from "../../src/kilocode/task"
+import { RayaTaskOrganization } from "../../src/kilocode/task/organization"
 import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
@@ -183,6 +186,14 @@ function makeHttp() {
   ])
 }
 const it = testEffect(makeHttp())
+const routineIt = testEffect(
+  LayerNode.compile(LayerNode.group([promptRoot, Storage.node]), [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, mcp],
+    [KiloSessions.node, KiloSessions.testLayer],
+  ]),
+)
 const symlinkIt = process.platform === "win32" ? it.live.skip : it.live
 
 it.live("recognizes Windows named-pipe paths before filesystem inspection", () =>
@@ -239,6 +250,274 @@ function providerCfg(url: string) {
     },
   }
 }
+
+routineIt.live(
+  "main chat clarifies and reviews complete Routine and organization assignments",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const questions = yield* Question.Service
+        const permissions = yield* Permission.Service
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const baseline = {
+          tasks: (yield* tasks.list()).length,
+          organizations: (yield* organizations.list()).items.length,
+        }
+        const access = [
+          { permission: "*", pattern: "*", action: "allow" as const },
+          { permission: "schedule_task", pattern: "*", action: "ask" as const },
+        ]
+        const routine = {
+          name: "Friday Books",
+          role: "Accountant",
+          objective: "Review the weekly accounts and report discrepancies",
+          output: {
+            destination: "conversation" as const,
+            description: "Weekly accounting review",
+            criteria: [
+              {
+                id: "variance",
+                description: "List material discrepancies",
+                verification: "Cite each affected account and amount",
+              },
+            ],
+          },
+          when: "every Friday at 5pm",
+          timezone: "America/Toronto",
+          capabilities: ["money"],
+          access: "brief" as const,
+          tools: ["read"],
+          runNow: false,
+        }
+        const chat = yield* sessions.create({ title: "Friday accounting routine", permission: access })
+
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "Create an agent to review my accounting every Friday" }],
+        })
+        yield* llm.push(
+          reply().tool("ask_options", {
+            questions: [
+              {
+                prompt: "Which timezone should Friday at 5pm use?",
+                options: [
+                  { id: "toronto", label: "Toronto" },
+                  { id: "utc", label: "UTC" },
+                ],
+              },
+            ],
+          }),
+          reply().tool("schedule_task", routine),
+          reply().text("Friday Books is ready. Its reports will appear in Routines.").stop(),
+        )
+
+        const first = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkScoped)
+        const timezone = yield* pollWithTimeout(
+          questions.list().pipe(Effect.map((items) => items.find((item) => item.sessionID === chat.id))),
+          "Routine clarification was never surfaced",
+          "15 seconds",
+        )
+        yield* questions.reply({ requestID: timezone.id, answers: [["raya-option:toronto"]] })
+        const review = yield* pollWithTimeout(
+          permissions
+            .list()
+            .pipe(
+              Effect.map((items) =>
+                items.find((item) => item.sessionID === chat.id && item.permission === "schedule_task"),
+              ),
+            ),
+          "Routine review was never surfaced",
+          "15 seconds",
+        )
+        expect(review.patterns).toEqual(["access:brief", "capability:money", "tool:read"])
+        expect(review.metadata).toMatchObject({
+          name: routine.name,
+          role: routine.role,
+          objective: routine.objective,
+          output: routine.output,
+          access: routine.access,
+          capabilities: routine.capabilities,
+          tools: routine.tools,
+          runNow: routine.runNow,
+          schedule: { kind: "cron", expr: "0 17 * * 5", tz: "America/Toronto" },
+        })
+        yield* permissions.reply({ requestID: review.id, reply: "once" })
+        const firstResult = yield* awaitWithTimeout(Fiber.join(first), "Routine chat did not finish", "20 seconds")
+        expect(
+          firstResult.parts.some((part) => part.type === "text" && part.text.includes("Friday Books is ready")),
+        ).toBe(true)
+        const firstMessages = yield* MessageV2.filterCompactedEffect(chat.id)
+        const firstTools = firstMessages.flatMap((message) => message.parts).filter((part) => part.type === "tool")
+        expect(firstTools.map((part) => part.tool)).toEqual(["ask_options", "schedule_task"])
+        const scheduled = firstTools.find((part) => part.tool === "schedule_task")
+        if (scheduled?.state.status !== "completed")
+          throw new Error(scheduled?.state.status === "error" ? scheduled.state.error : "The Routine was not created.")
+        const identity = yield* Schema.decodeUnknownEffect(Schema.Struct({ agentID: Schema.String }))(
+          scheduled.state.metadata,
+        ).pipe(Effect.orDie)
+        const afterRoutine = yield* tasks.list()
+        expect(afterRoutine).toHaveLength(baseline.tasks + 1)
+        expect(afterRoutine.find((item) => item.id === identity.agentID)).toMatchObject({
+          name: routine.name,
+          role: routine.role,
+          objective: routine.objective,
+          access: routine.access,
+          capabilities: routine.capabilities,
+          tools: routine.tools,
+          schedule: { kind: "cron", expr: "0 17 * * 5", tz: "America/Toronto" },
+          output: routine.output,
+        })
+
+        const company = {
+          name: "Website Builders",
+          purpose: "Design and build reviewed websites for approved clients",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "design",
+              name: "Design Lead",
+              role: "Designer",
+              objective: "Design each approved client website",
+              output: {
+                destination: "conversation" as const,
+                description: "Reviewed website design",
+                criteria: [
+                  {
+                    id: "design",
+                    description: "Present the complete design",
+                    verification: "Attach visual evidence",
+                  },
+                ],
+              },
+              capabilities: [] as string[],
+              access: "brief" as const,
+              tools: ["read"],
+              when: "only when I ask",
+              canCreateWorkers: false,
+              delegatesTo: ["build"],
+            },
+            {
+              kind: "new" as const,
+              key: "build",
+              name: "Frontend Builder",
+              role: "Coder",
+              objective: "Implement the approved design",
+              output: {
+                destination: "conversation" as const,
+                description: "Verified website implementation",
+                criteria: [
+                  {
+                    id: "build",
+                    description: "Deliver the working site",
+                    verification: "Report the passing checks",
+                  },
+                ],
+              },
+              capabilities: [] as string[],
+              access: "full" as const,
+              tools: ["read", "write"],
+              when: "only when I ask",
+              canCreateWorkers: false,
+              supervisorKey: "design",
+              delegatesTo: [] as string[],
+            },
+          ],
+        }
+        const organization = yield* sessions.create({ title: "Website organization", permission: access })
+        yield* prompt.prompt({
+          sessionID: organization.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "Create a company of agents that makes websites" }],
+        })
+        yield* llm.push(
+          reply().tool("ask_options", {
+            questions: [
+              {
+                prompt: "How should work move through this organization?",
+                options: [
+                  { id: "design-build", label: "Design, then build" },
+                  { id: "independent", label: "Work independently" },
+                ],
+              },
+            ],
+          }),
+          reply().tool("create_organization", company),
+          reply().text("Website Builders is ready. You can open it in Routines.").stop(),
+        )
+
+        const second = yield* prompt.loop({ sessionID: organization.id }).pipe(Effect.forkScoped)
+        const flow = yield* pollWithTimeout(
+          questions.list().pipe(Effect.map((items) => items.find((item) => item.sessionID === organization.id))),
+          "Organization clarification was never surfaced",
+          "15 seconds",
+        )
+        yield* questions.reply({ requestID: flow.id, answers: [["raya-option:design-build"]] })
+        const approval = yield* pollWithTimeout(
+          permissions
+            .list()
+            .pipe(
+              Effect.map((items) =>
+                items.find((item) => item.sessionID === organization.id && item.permission === "schedule_task"),
+              ),
+            ),
+          "Organization review was never surfaced",
+          "15 seconds",
+        )
+        expect(approval.patterns).toEqual(["access:brief", "access:full", "tool:read", "tool:write"])
+        expect(approval.metadata).toMatchObject(company)
+        yield* permissions.reply({ requestID: approval.id, reply: "once" })
+        const secondResult = yield* awaitWithTimeout(
+          Fiber.join(second),
+          "Organization chat did not finish",
+          "20 seconds",
+        )
+        expect(
+          secondResult.parts.some((part) => part.type === "text" && part.text.includes("Website Builders is ready")),
+        ).toBe(true)
+        const secondMessages = yield* MessageV2.filterCompactedEffect(organization.id)
+        const secondTools = secondMessages.flatMap((message) => message.parts).filter((part) => part.type === "tool")
+        expect(secondTools.map((part) => part.tool)).toEqual(["ask_options", "create_organization"])
+        const created = secondTools.find((part) => part.tool === "create_organization")
+        if (created?.state.status !== "completed")
+          throw new Error(created?.state.status === "error" ? created.state.error : "The organization was not created.")
+        const target = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ organizationID: Schema.String, agentIDs: Schema.Array(Schema.String) }),
+        )(created.state.metadata).pipe(Effect.orDie)
+        const saved = yield* tasks.list()
+        expect(saved).toHaveLength(baseline.tasks + 3)
+        const workers = target.agentIDs.map((id) => saved.find((item) => item.id === id))
+        expect(workers.map((item) => ({ name: item?.name, access: item?.access, tools: item?.tools }))).toEqual([
+          { name: "Design Lead", access: "brief", tools: ["read"] },
+          { name: "Frontend Builder", access: "full", tools: ["read", "write"] },
+        ])
+        const roster = yield* organizations.list()
+        expect(roster.items).toHaveLength(baseline.organizations + 1)
+        expect(roster.items.find((item) => item.id === target.organizationID)).toMatchObject({
+          name: company.name,
+          purpose: company.purpose,
+          revision: 1,
+          members: [
+            { agentID: workers[0]?.id, role: "Designer", position: 0 },
+            { agentID: workers[1]?.id, role: "Coder", position: 1, supervisorID: workers[0]?.id },
+          ],
+          delegations: [{ senderID: workers[0]?.id, recipientID: workers[1]?.id, position: 0 }],
+        })
+        expect(firstTools.every((part) => part.state.status === "completed")).toBe(true)
+        expect(secondTools.every((part) => part.state.status === "completed")).toBe(true)
+        expect(yield* llm.calls).toBe(6)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  60_000,
+)
 
 it.live(
   "blocks @file content denied by .kilocodeignore",
@@ -961,10 +1240,7 @@ it.live(
         const fs = yield* FSUtil.Service
         yield* fs.ensureDir(folder)
         yield* Effect.promise(() =>
-          Promise.all([
-            Bun.write(path.join(folder, "a.txt"), "alpha"),
-            Bun.write(path.join(folder, "b.txt"), "beta"),
-          ]),
+          Promise.all([Bun.write(path.join(folder, "a.txt"), "alpha"), Bun.write(path.join(folder, "b.txt"), "beta")]),
         )
 
         const prompt = yield* SessionPrompt.Service
@@ -1143,11 +1419,7 @@ it.live(
         const second = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkScoped)
         expect(
           Exit.isSuccess(
-            yield* awaitWithTimeout(
-              Fiber.await(second),
-              "trusted global skill prompted a second time",
-              "15 seconds",
-            ),
+            yield* awaitWithTimeout(Fiber.await(second), "trusted global skill prompted a second time", "15 seconds"),
           ),
         ).toBe(true)
         expect(yield* permission.list()).toEqual([])

@@ -68,6 +68,26 @@ const it = testEffect(
     AppNodeBuilder.build(Git.node),
   ),
 )
+
+const report = {
+  destination: "conversation" as const,
+  description: "Routine report",
+  criteria: [{ id: "evidence", description: "Show the evidence", verification: "Cite the source" }],
+}
+
+function assignment(name: string, objective = "Work") {
+  return {
+    name,
+    role: "generalist",
+    objective,
+    output: report,
+    when: "only when I ask",
+    capabilities: [] as string[],
+    access: "brief" as const,
+    tools: [] as string[],
+  }
+}
+
 it.live(
   "scheduling honors permission policy before persistence and does not reauthorize completed receipts",
   () =>
@@ -107,8 +127,8 @@ it.live(
             }).pipe(Effect.orDie),
         }
         for (const params of [
-          { name: "Editing", objective: "Work", access: "full" as const },
-          { name: "Records", objective: "Work", capabilities: ["money"] },
+          { ...assignment("Editing"), access: "full" as const },
+          { ...assignment("Records"), capabilities: ["money"] },
         ]) {
           const result = yield* tool.execute({ ...params, runNow: true }, ctx).pipe(Effect.exit)
           expect(Exit.isFailure(result)).toBe(true)
@@ -118,9 +138,7 @@ it.live(
         expect(requests[0]?.patterns).toEqual(["access:full"])
         expect(requests[1]?.patterns).toEqual(["access:brief", "capability:money"])
         const params = {
-          name: "Brief",
-          objective: "Summarize the project",
-          when: "manual",
+          ...assignment("Brief", "Summarize the project"),
           output: {
             destination: "conversation" as const,
             description: "Project summary",
@@ -142,6 +160,8 @@ it.live(
           name: "Brief",
           objective: params.objective,
           access: "brief",
+          capabilities: [],
+          tools: [],
           schedule: { kind: "manual" },
           runNow: false,
         })
@@ -189,53 +209,78 @@ it.live(
           metadata: () => Effect.void,
           ask: () => Effect.void,
         }
-        const result = yield* tool.execute(
-          { name: "Invalid", objective: "Work", when: "every 2 hours", runNow: true },
-          ctx,
-        )
+        const incomplete = yield* Schema.decodeUnknownEffect(tool.parameters)({
+          name: "Incomplete",
+          objective: "Work",
+          when: "only when I ask",
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(incomplete)).toBe(true)
+        const duplicate = yield* Schema.decodeUnknownEffect(tool.parameters)({
+          ...assignment("Duplicate scope"),
+          tools: ["read", "read"],
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(duplicate)).toBe(true)
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        for (const params of [
+          { ...assignment("No schedule"), when: undefined },
+          { ...assignment("Two schedules"), cron: "0 9 * * 1" },
+        ]) {
+          const rejected = yield* tool.execute(params, ctx)
+          expect(rejected.title).toBe("Agent not created")
+          expect(rejected.output).toContain("either a plain-English schedule")
+          expect(yield* RayaTask.make(input).list()).toEqual([])
+        }
+        const result = yield* tool.execute({ ...assignment("Invalid"), when: "every 2 hours", runNow: true }, ctx)
         expect(result.title).toBe("Agent not created")
         expect(result.output).toContain("not supported")
         expect(yield* RayaTask.make(input).list()).toEqual([])
         for (const timezone of [undefined, "", "Not/AZone"]) {
-          const rejected = yield* tool.execute(
-            { name: "No zone", objective: "Work", when: "every Monday at 9am", timezone },
-            ctx,
-          )
+          const rejected = yield* tool.execute({ ...assignment("No zone"), when: "every Monday at 9am", timezone }, ctx)
           expect(rejected.title).toBe("Agent not created")
           expect(rejected.output).toContain("timezone")
           expect(yield* RayaTask.make(input).list()).toEqual([])
         }
         const accepted = yield* tool.execute(
-          { name: "Monday", objective: "Work", when: "every Monday at 9am", timezone: "America/Toronto" },
+          { ...assignment("Monday"), when: "every Monday at 9am", timezone: "America/Toronto" },
           ctx,
         )
         expect(accepted.title).toBe("Agent assigned")
         const saved = (yield* RayaTask.make(input).list())[0]
         expect(saved?.schedule).toEqual({ kind: "cron", expr: "0 9 * * 1", tz: "America/Toronto" })
         expect(saved?.access).toBe("brief")
+        expect(saved?.tools).toEqual([])
         expect(accepted.output).toContain("Workspace access: read/notify")
+        expect(accepted.output).toContain("Tool scope: questions only")
         expect(accepted.output).toContain("timezone America/Toronto")
         expect(accepted.output).toContain("Enabled")
         expect(accepted.output).toContain("backend must be running")
         expect(accepted.metadata).toMatchObject({ schedule: saved?.schedule, enabled: true })
         const explicit = yield* tool.execute(
-          { name: "UTC", role: "coder", objective: "Work", cron: "0 9 * * 1", timezone: "UTC", access: "full" },
+          {
+            ...assignment("UTC"),
+            role: "coder",
+            when: undefined,
+            cron: "0 9 * * 1",
+            timezone: "UTC",
+            access: "full",
+            tools: ["read", "browser_*"],
+          },
           ctx,
         )
         expect(explicit.metadata).toMatchObject({ schedule: { kind: "cron", expr: "0 9 * * 1", tz: "UTC" } })
         expect(explicit.metadata).toMatchObject({ access: "full" })
+        expect(explicit.metadata).toMatchObject({ tools: ["read", "browser_*"] })
         expect(explicit.output).toContain("Workspace access: editing allowed")
+        expect(explicit.output).toContain("Tool scope: read, browser_*")
         expect((yield* RayaTask.make(input).list()).find((agent) => agent.name === "UTC")?.access).toBe("full")
-        const rejected = yield* tool.execute(
-          { name: "Delay", objective: "Work", when: "in 2 minutes", timezone: "UTC" },
-          ctx,
-        )
+        expect((yield* RayaTask.make(input).list()).find((agent) => agent.name === "UTC")?.tools).toEqual([
+          "read",
+          "browser_*",
+        ])
+        const rejected = yield* tool.execute({ ...assignment("Delay"), when: "in 2 minutes", timezone: "UTC" }, ctx)
         expect(rejected.title).toBe("Agent not created")
         expect(yield* RayaTask.make(input).list()).toHaveLength(2)
-        const uncertain = yield* tool.execute(
-          { name: "Interrupted", objective: "Original work", when: "manual", runNow: true },
-          ctx,
-        )
+        const uncertain = yield* tool.execute({ ...assignment("Interrupted", "Original work"), runNow: true }, ctx)
         expect(uncertain.title).toBe("Routine saved; startup needs review")
         expect(uncertain.output).toContain("do not create a replacement")
         expect(uncertain.metadata).toMatchObject({ view: "routines", startup: "review" })
@@ -257,25 +302,19 @@ it.live(
           sessions: { ...input.sessions, create: () => Effect.interrupt },
         })
         const cancelled = yield* (yield* cancel.init())
-          .execute({ name: "Cancelled", objective: "Work", runNow: true }, { ...ctx, callID: "cancel" })
+          .execute({ ...assignment("Cancelled"), runNow: true }, { ...ctx, callID: "cancel" })
           .pipe(Effect.exit)
         expect(Exit.isFailure(cancelled) && Cause.hasInterrupts(cancelled.cause)).toBe(true)
         expect((yield* RayaTask.make(input).list()).some((agent) => agent.name === "Cancelled")).toBe(true)
-        const retry = yield* tool.execute(
-          { name: "Cancelled", objective: "Work", runNow: true },
-          { ...ctx, callID: "cancel" },
-        )
+        const retry = yield* tool.execute({ ...assignment("Cancelled"), runNow: true }, { ...ctx, callID: "cancel" })
         expect(retry.title).toBe("Routine request needs review")
         expect((yield* RayaTask.make(input).list()).filter((agent) => agent.name === "Cancelled")).toHaveLength(1)
-        const params = { name: "Deduplicated", objective: "Work", when: "in 2 minutes" }
+        const params = { ...assignment("Deduplicated"), when: "in 2 minutes" }
         const keyed = { ...ctx, callID: "create-once" }
         const first = yield* tool.execute(params, keyed)
         const count = (yield* RayaTask.make(input).list()).length
         const fresh = yield* (yield* scheduleTaskTool(input)).init()
-        const replay = yield* fresh.execute(
-          { when: params.when, objective: params.objective, name: params.name },
-          keyed,
-        )
+        const replay = yield* fresh.execute({ ...params }, keyed)
         expect(replay).toEqual(JSON.parse(JSON.stringify(first)))
         expect((yield* RayaTask.make(input).list()).length).toBe(count)
         const changed = yield* fresh.execute({ ...params, objective: "Changed" }, keyed)

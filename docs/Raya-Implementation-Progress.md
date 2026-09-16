@@ -1,10 +1,18 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `d16e0d35c7`; the installed package source is `d16e0d35c7`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `51b8fd6e8d`; the installed package source is `51b8fd6e8d`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 04:26 America/Toronto - Permission-authority checkpoint pushed and installed
+
+**Status: pushed and installed from `51b8fd6e8d`.** The constrained protected push passed all 29 JavaScript/TypeScript packages plus JetBrains with Turbo concurrency one. The authorized low-memory workflow regenerated the SDK, rebuilt the Windows x64 CLI, passed version, model-catalog and sandbox-worker smoke checks, then ran extension-host and webview typechecks, cached ESLint, production bundling, packaging, vault retention and VS Code installation sequentially.
+
+Installed version: `eden.raya@7.4.23-snapshot+51b8fd6e8d.kamil-oseni.1789546776096`. The retained 435-file package reports 496.13 MB and is `520,230,974` bytes with SHA-256 `0C14712FE73E81F5221A73DDB133760DAC721B934963A029D85173BA7205CC03`. Its installed CLI is `231,276,544` bytes with SHA-256 `06D7C5CFB9F710A866EAF67995B8E6FB2F90C8AD4B1318AB7EB6F23BCB898621`; both match the package-vault manifest. Retention removed one older vault package, one staged package and one installed snapshot. Free disk space is `124,330,745,856` bytes (115.79 GiB), and no Bun, tsgo, tsgolint or Java process remains.
+
+The already-open host was not force-reloaded. Its active pointer remains digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`; a normal reload must move it to `0c14712fe73e81f5221a73ddb133760dac721b934963a029d85173ba7205cc03` before installed-host acceptance.
 
 ## ChatGPT 2026-09-16 04:03 America/Toronto - Permission authority gains a fail-closed Raya alias
 
@@ -16,9 +24,9 @@ The migration ledger adds the dedicated `matching-authority-aliases` policy and 
 
 Evidence passes: pure adverse authority matrix **21 tests**, merged configuration **6**, fresh CLI processes **4**, configuration sources **18**, migration/Admin boundaries **4**, compatibility script **4**, and VS Code launcher utilities **36**. Core, single-threaded OpenCode, SDK and VS Code host/webview typechecks pass. Annotation, Promise-facade, Markdown-table and Kilo-marker guards pass after preserving the required shared-file markers. The final installation receipt follows after commit identity is stable.
 
-The checked inventory is **70,361** total: public 1,654; compatibility 36,120; provenance 5,686; internal 26,901.
+The checked inventory is **70,403** total: public 1,654; compatibility 36,153; provenance 5,686; internal 26,910.
 
-The pinned compatibility digest is `a5defbcf471d69596354f7f1a5724e90786039ead1d147f49d7a85cfa42a89a6`.
+The pinned compatibility digest is `0726013a1433172b2e20c9e6ad5008028f1be8ddb2d7326d7c7de8be33b10458`.
 
 ## ChatGPT 2026-09-16 03:29 America/Toronto - Database and network safety checkpoint installed
 

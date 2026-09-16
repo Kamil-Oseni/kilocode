@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `d16e0d35c7`; the installed package source is `d16e0d35c7`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `51b8fd6e8d`; the installed package source is `51b8fd6e8d`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 04:26 America/Toronto - Continue from installed permission-authority checkpoint
+
+Product and documentation commit `51b8fd6e8d` is on `origin/main`. Its constrained push gate passed all 29 JavaScript/TypeScript packages plus JetBrains with Turbo concurrency one. The authorized sequential low-memory workflow regenerated the SDK, rebuilt and smoke-tested the Windows CLI and model catalog, passed the sandbox mutation-worker smoke, host/webview typechecks, cached lint and production bundle, then packaged, retained and installed the extension.
+
+Installed version is `eden.raya@7.4.23-snapshot+51b8fd6e8d.kamil-oseni.1789546776096`. Preserve vault package `raya.0c14712fe73e81f5221a73ddb133760dac721b934963a029d85173ba7205cc03.vsix`: 435 files, reported 496.13 MB, exact size `520,230,974` bytes, SHA-256 `0C14712FE73E81F5221A73DDB133760DAC721B934963A029D85173BA7205CC03`. The installed CLI is `231,276,544` bytes with SHA-256 `06D7C5CFB9F710A866EAF67995B8E6FB2F90C8AD4B1318AB7EB6F23BCB898621`. Both match the package-vault manifest. Retention removed one older package, one staged package and one installed snapshot. Free disk space is 115.79 GiB and no build process remains.
+
+Do not claim active-host acceptance yet. The open host still points to digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`. After a normal VS Code reload, require pointer `0c14712fe73e81f5221a73ddb133760dac721b934963a029d85173ba7205cc03` before installed-host testing.
 
 ## ChatGPT 2026-09-16 04:03 America/Toronto - Preserve the permission-authority alias boundary
 
@@ -16,9 +24,9 @@ Preserve the `matching-authority-aliases` ledger policy, generated OpenAPI/TypeS
 
 Required regression evidence is now green: pure matrix **21**, merged configuration **6**, fresh processes **4**, source projection **18**, migration/Admin **4**, compatibility script **4**, and launcher utilities **36**. The fresh-process adverse cases must keep asserting nonzero exit, alias-labelled error, secret redaction and no application files; Bun compiler-cache files are the only excluded process artifact. Core, single-threaded OpenCode, SDK and VS Code typechecks pass. Before changing this boundary, rerun these focused suites and the annotation, Promise-facade, inventory, compatibility, Markdown-table, Kilo-marker and diff guards. Update this handoff and the progress document with exact evidence, commit, push and installation state after every coherent checkpoint.
 
-The checked inventory is **70,361** total: public 1,654; compatibility 36,120; provenance 5,686; internal 26,901.
+The checked inventory is **70,403** total: public 1,654; compatibility 36,153; provenance 5,686; internal 26,910.
 
-The pinned compatibility digest is `a5defbcf471d69596354f7f1a5724e90786039ead1d147f49d7a85cfa42a89a6`.
+The pinned compatibility digest is `0726013a1433172b2e20c9e6ad5008028f1be8ddb2d7326d7c7de8be33b10458`.
 
 ## ChatGPT 2026-09-16 03:29 America/Toronto - Continue from installed database and network checkpoint
 

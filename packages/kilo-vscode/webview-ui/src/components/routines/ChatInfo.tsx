@@ -123,6 +123,7 @@ export const ChatInfo: Component<{
   onOutput: () => void
   onInspect: () => void
   onToggle: () => void
+  onLocate: (id: string, label: string) => void
   onTrace: (id: string, name: string) => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -273,6 +274,8 @@ export const ChatInfo: Component<{
                   agentID={props.agentID}
                   file={{ id: item.attachmentID!, name: item.label, mime: item.mime!, size: item.size! }}
                   detail={stamp(item.time)}
+                  locateDisabled={!props.connected}
+                  onLocate={() => props.onLocate(item.messageID, item.label)}
                 />
               )}
             </For>
@@ -310,6 +313,16 @@ export const ChatInfo: Component<{
                     <span>{item.kind === "attachment" ? `${item.mime} · ${bytes(item.size!)}` : item.path}</span>
                     <span>{stamp(item.time)}</span>
                   </button>
+                  <div class="routines-info-item-actions">
+                    <Button
+                      size="small"
+                      variant="ghost"
+                      disabled={!props.connected}
+                      onClick={() => props.onLocate(item.messageID, item.label)}
+                    >
+                      Show in conversation
+                    </Button>
+                  </div>
                 </li>
               )}
             </For>
@@ -331,6 +344,16 @@ export const ChatInfo: Component<{
                     <span>{item.url}</span>
                     <span>{stamp(item.time)}</span>
                   </button>
+                  <div class="routines-info-item-actions">
+                    <Button
+                      size="small"
+                      variant="ghost"
+                      disabled={!props.connected}
+                      onClick={() => props.onLocate(item.messageID, item.label)}
+                    >
+                      Show in conversation
+                    </Button>
+                  </div>
                 </li>
               )}
             </For>

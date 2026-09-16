@@ -606,6 +606,8 @@ export const Inbox: Component<{
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
   const [trail, setTrail] = createSignal<{ id: string; name: string }>()
+  const [locating, setLocating] = createSignal<{ id: string; label: string; phase: "finding" | "showing" }>()
+  const [revision, setRevision] = createSignal(0)
   const removeDisabled = (id: string) =>
     !ready() || !connected() || phase() === "sending" || (!!removing() && removing() !== id)
   const attachDisabled = () =>
@@ -692,6 +694,8 @@ export const Inbox: Component<{
     if (row) {
       pane.scrollTop += row.getBoundingClientRect().top - pane.getBoundingClientRect().top - target.offset
       stick = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 48
+      const item = locating()
+      if (item?.id === target.id) setLocating({ ...item, phase: "showing" })
       target = undefined
       return
     }
@@ -700,6 +704,11 @@ export const Inbox: Component<{
       depth++
       load(next)
       return
+    }
+    const item = locating()
+    if (item?.id === target.id) {
+      setLocating()
+      setError(`The message that shared ${item.label} is no longer available in retained history.`)
     }
     target = undefined
     stick = true
@@ -742,6 +751,7 @@ export const Inbox: Component<{
       setTrees({})
       setFaults({})
       setTrail()
+      setLocating()
       setError("")
       const draft = local()
       setNote(draft?.body ?? "")
@@ -973,6 +983,9 @@ export const Inbox: Component<{
 
   const search = (value: string) => {
     if (!connected()) return
+    setLocating()
+    target = undefined
+    depth = 0
     wait = false
     older = false
     stick = true
@@ -1078,6 +1091,41 @@ export const Inbox: Component<{
     show(id)
   }
 
+  const latest = () => {
+    pageID = crypto.randomUUID()
+    wait = false
+    target = undefined
+    depth = 0
+    stick = true
+    setLocating()
+    setError("")
+    load()
+  }
+
+  const locate = (id: string, label: string) => {
+    setInfo(false)
+    setPassing(false)
+    setTrail()
+    setError("")
+    setPageError("")
+    setLocating({ id, label, phase: "finding" })
+    target = { id, offset: 0 }
+    depth = 0
+    stick = false
+    if (term) {
+      term = ""
+      setSearching(false)
+      setRevision((value) => value + 1)
+      pageID = crypto.randomUUID()
+      wait = false
+      setThread([])
+      setNext()
+      load()
+      return
+    }
+    queueMicrotask(place)
+  }
+
   return (
     <div
       ref={frame}
@@ -1095,6 +1143,11 @@ export const Inbox: Component<{
         }
         if (trail()) {
           setTrail()
+          queueMicrotask(() => infoRef?.focus())
+          return
+        }
+        if (locating()) {
+          latest()
           queueMicrotask(() => infoRef?.focus())
           return
         }
@@ -1150,11 +1203,33 @@ export const Inbox: Component<{
         </Button>
       </header>
       <div class="routines-conversation" hidden={info()}>
-        <ConversationSearch agentID={props.agentID} name={props.name} disabled={!connected()} onSearch={search} />
+        <ConversationSearch
+          agentID={props.agentID}
+          name={props.name}
+          disabled={!connected()}
+          reset={revision()}
+          onSearch={search}
+        />
         <Show when={!connected()}>
           <p class="routines-offline" role="status" aria-live="polite">
             Offline. Your messages and draft stay here. This conversation will refresh when Raya reconnects.
           </p>
+        </Show>
+        <Show when={locating()} keyed>
+          {(item) => (
+            <div class="routines-located" role="status" aria-live="polite">
+              <span>
+                {item.phase === "finding"
+                  ? `Finding where ${item.label} was shared…`
+                  : `Showing where ${item.label} was shared.`}
+              </span>
+              <Show when={item.phase === "showing"}>
+                <Button type="button" size="small" variant="ghost" disabled={!connected()} onClick={latest}>
+                  Return to latest
+                </Button>
+              </Show>
+            </div>
+          )}
         </Show>
         <Show when={trail()} keyed>
           {(item) => (
@@ -1329,6 +1404,7 @@ export const Inbox: Component<{
             onOutput={props.onOutput}
             onInspect={props.onInspect}
             onToggle={props.onToggle}
+            onLocate={locate}
             onTrace={follow}
           />
         </div>

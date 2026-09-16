@@ -1176,6 +1176,17 @@
   color: var(--text-muted, var(--vscode-descriptionForeground));
 }
 
+.routines-located {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+  padding: var(--raya-space-8) var(--raya-space-4);
+  border-bottom: 1px solid var(--border-muted, var(--vscode-panel-border));
+  color: var(--text-muted, var(--vscode-descriptionForeground));
+}
+
 .routines-lineage {
   padding: var(--raya-space-8) var(--raya-space-4);
   border-bottom: 1px solid var(--border-muted, var(--vscode-panel-border));
@@ -1533,6 +1544,10 @@
 
 .routines-info-list > li > button {
   cursor: pointer;
+}
+
+.routines-info-item-actions {
+  padding-bottom: var(--raya-space-8);
 }
 
 .routines-info-list > li > button span,

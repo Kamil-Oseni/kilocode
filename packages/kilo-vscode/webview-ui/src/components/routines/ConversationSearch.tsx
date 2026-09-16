@@ -5,10 +5,12 @@ export const ConversationSearch: Component<{
   agentID: string
   name: string
   disabled?: boolean
+  reset?: number
   onSearch: (query: string) => void
 }> = (props) => {
   const [query, setQuery] = createSignal("")
   let agent = props.agentID
+  let revision = props.reset
   let timer: ReturnType<typeof setTimeout> | undefined
 
   createEffect(() => {
@@ -22,6 +24,15 @@ export const ConversationSearch: Component<{
   createEffect(() => {
     if (!props.disabled || !timer) return
     clearTimeout(timer)
+    timer = undefined
+  })
+
+  createEffect(() => {
+    const next = props.reset
+    if (next === revision) return
+    revision = next
+    setQuery("")
+    if (timer) clearTimeout(timer)
     timer = undefined
   })
 

@@ -281,6 +281,7 @@ try {
     type: "routineInboxPage",
     requestID: again.requestID,
     agentID: agent.id,
+    next: "older-share",
     messages: [
       note,
       { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
@@ -396,6 +397,45 @@ try {
   await Promise.resolve()
   assert.equal(infoToggle.getAttribute("aria-expanded"), "false")
   assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "Keep this draft")
+  infoToggle.click()
+  await new Promise((resolve) => setImmediate(resolve))
+  const linkRow = sharedLink.closest("li")
+  const locate = [...linkRow.querySelectorAll("button")].find((item) => item.textContent.includes("Show in conversation"))
+  assert.ok(locate)
+  locate.click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(infoToggle.getAttribute("aria-expanded"), "false")
+  const older = sent.findLast((msg) => msg.type === "routineInboxPage")
+  assert.equal(older.cursor, "older-share")
+  emit({
+    type: "routineInboxPage",
+    requestID: older.requestID,
+    agentID: agent.id,
+    messages: [
+      {
+        id: "rmg_link",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ2",
+        body: "Read https://example.com/receipt-policy before approving this expense.",
+        time: 3,
+      },
+    ],
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.match(root.textContent, /Showing where https:\/\/example.com\/receipt-policy was shared/)
+  assert.match(root.textContent, /Read https:\/\/example.com\/receipt-policy before approving this expense/)
+  assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "Keep this draft")
+  button("Return to latest").click()
+  const returned = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: returned.requestID,
+    agentID: agent.id,
+    next: "older-share",
+    messages: [note],
+  })
+  await new Promise((resolve) => setImmediate(resolve))
   const legal = {
     id: "legal",
     name: "Counsel",

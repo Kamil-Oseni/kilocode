@@ -19,7 +19,13 @@ export function previewable(mime: string) {
   return media.has(mime)
 }
 
-export const MediaAttachment: Component<{ agentID: string; file: DraftFile; detail?: string }> = (props) => {
+export const MediaAttachment: Component<{
+  agentID: string
+  file: DraftFile
+  detail?: string
+  locateDisabled?: boolean
+  onLocate?: () => void
+}> = (props) => {
   const vscode = useVSCode()
   const [phase, setPhase] = createSignal<"idle" | "loading" | "ready" | "failed">("idle")
   const [src, setSrc] = createSignal("")
@@ -163,6 +169,11 @@ export const MediaAttachment: Component<{ agentID: string; file: DraftFile; deta
       <Show when={phase() === "failed"}>
         <Button type="button" size="small" variant="ghost" title={error()} onClick={load}>
           Retry preview
+        </Button>
+      </Show>
+      <Show when={props.onLocate}>
+        <Button type="button" size="small" variant="ghost" disabled={props.locateDisabled} onClick={props.onLocate}>
+          Show in conversation
         </Button>
       </Show>
     </li>

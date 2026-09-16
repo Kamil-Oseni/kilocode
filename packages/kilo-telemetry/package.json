@@ -4,7 +4,7 @@
   "version": "7.4.23",
   "type": "module",
   "license": "MIT",
-  "description": "Telemetry for Kilo CLI - PostHog analytics integration",
+  "description": "Telemetry for Raya - PostHog analytics integration",
   "exports": {
     ".": "./src/index.ts"
   },

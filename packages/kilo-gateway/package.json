@@ -4,7 +4,7 @@
   "version": "7.4.23",
   "type": "module",
   "license": "MIT",
-  "description": "Unified Kilo Gateway package for OpenCode - authentication, provider, and API integration",
+  "description": "Unified Raya Gateway package for authentication, provider, and API integration",
   "keywords": [
     "kilo",
     "kilocode",

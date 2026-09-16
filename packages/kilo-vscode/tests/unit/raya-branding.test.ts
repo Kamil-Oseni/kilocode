@@ -26,6 +26,24 @@ describe("Raya branding boundary", () => {
     expect(visible).not.toMatch(/\bKilo\b/)
   })
 
+  test("publishes Raya descriptions without changing package identities", async () => {
+    const files = [
+      "../kilo-gateway/package.json",
+      "../kilo-indexing/package.json",
+      "../kilo-memory/package.json",
+      "../kilo-sandbox/package.json",
+      "../kilo-telemetry/package.json",
+      "../plugin-atomic-chat/package.json",
+    ]
+    const packages = await Promise.all(
+      files.map(async (file) => JSON.parse(await read(file)) as { name: string; description: string }),
+    )
+
+    expect(packages.every((pkg) => pkg.name.startsWith("@kilocode/"))).toBe(true)
+    expect(packages.every((pkg) => pkg.description.includes("Raya"))).toBe(true)
+    expect(packages.some((pkg) => /\bKilo(?: Code| CLI| Gateway)?\b/.test(pkg.description))).toBe(false)
+  })
+
   test("identifies every model-facing system prompt as Raya", async () => {
     const dir = path.join(root, "../opencode/src")
     const files = [

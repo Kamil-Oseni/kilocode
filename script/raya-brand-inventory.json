@@ -3,13 +3,13 @@
   "description": "Checked Raya migration baseline. Public defects are fixed in small batches; compatibility keys require dual-read migration; provenance stays attributed; internal names migrate after public contracts stabilize.",
   "categories": {
     "user-visible-defect": {
-      "count": 1100,
-      "digest": "e43d35672ffac393237f6561d1ae10e8465cd5e0028a6f51cfbfee0205fb4fd6",
+      "count": 1094,
+      "digest": "3eb229dfcd6d84ff94182c47dda27bdd9b3bfe271d80d60998e64587ee7c1325",
       "reason": "Potential user-facing Kilo names in extension manifests or rendered webview sources."
     },
     "compatibility-key": {
-      "count": 34355,
-      "digest": "60ead36598aace44e0d6a7baa77a7ccbd53850f4dc16e75b55f6116d096eff6e",
+      "count": 34361,
+      "digest": "8857319970ef305520ac6d06a3c6c46107cc8cccc001f761bd8ceabc50d11e67",
       "reason": "Persisted, protocol, package, command, path, provider, environment or API identity requiring a dual-read migration."
     },
     "upstream-provenance": {
@@ -18,13 +18,13 @@
       "reason": "Legal, attribution, fork documentation, translation process or upstream merge material."
     },
     "internal-migration": {
-      "count": 25972,
-      "digest": "6424747537807181f962f105b644e0339c302d859ce1a5c02c7da799056a6087",
+      "count": 25973,
+      "digest": "ca06d09ea0734ca7217669a1d3d36ffb2683e5e2ff4e1481bd97c0aa35b478fc",
       "reason": "Internal source identity that can migrate after public and stored compatibility contracts stabilize."
     }
   },
   "total": {
-    "count": 67113,
-    "digest": "10b708d4039eec1045569a134c6f7c8a2bd98c26fc7e9d47cc3cc2f80138ca6c"
+    "count": 67114,
+    "digest": "3f9d17d7fba35c3270a2281d614b01a8bcc2e4b392db0e9f3d83cf7fe06a2c61"
   }
 }

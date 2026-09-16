@@ -4,7 +4,7 @@
   "version": "7.4.23",
   "type": "module",
   "license": "MIT",
-  "description": "Standalone indexing engine and host helpers for Kilo Code",
+  "description": "Standalone indexing engine and host helpers for Raya",
   "keywords": [
     "kilo",
     "kilocode",

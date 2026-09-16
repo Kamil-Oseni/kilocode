@@ -4,7 +4,7 @@
   "version": "7.4.23",
   "type": "module",
   "license": "MIT",
-  "description": "Project memory storage, indexing, recall, and command helpers for Kilo Code",
+  "description": "Project memory storage, indexing, recall, and command helpers for Raya",
   "keywords": [
     "kilo",
     "kilocode",

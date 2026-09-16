@@ -3,32 +3,51 @@
  * Centralized configuration for all API endpoints, headers, and settings
  */
 
-/** Environment variable for custom Kilo API URL */
+function alias(raya: string, legacy: string, fallback: string) {
+  const value = process.env[raya]
+  if (value !== undefined) return value
+  return process.env[legacy] || fallback
+}
+
+/** Raya-first environment variable for a custom API URL. */
+export const ENV_RAYA_API_URL = "RAYA_API_URL"
+
+/** Compatibility environment variable for a custom API URL. */
 export const ENV_KILO_API_URL = "KILO_API_URL"
 
 /** Default Kilo API URL */
 export const DEFAULT_KILO_API_URL = "https://api.kilo.ai"
 
-/** Base URL for Kilo API - can be overridden by KILO_API_URL env var */
-export const KILO_API_BASE = process.env[ENV_KILO_API_URL] || DEFAULT_KILO_API_URL
+/** Base URL for the API. Raya input wins when both names are defined. */
+export const KILO_API_BASE = alias(ENV_RAYA_API_URL, ENV_KILO_API_URL, DEFAULT_KILO_API_URL)
 
-/** Environment variable for custom Kilo Chat URL */
+/** Raya-first environment variable for a custom Chat URL. */
+export const RAYA_CHAT_URL_ENV = "RAYA_CHAT_URL"
+
+/** Compatibility environment variable for a custom Chat URL. */
 export const KILO_CHAT_URL_ENV = "KILO_CHAT_URL"
 
 /** Default Kilo Chat URL (REST endpoint for messages, conversations, etc.) */
 export const KILO_DEFAULT_CHAT_URL = "https://chat.kiloapps.io"
 
-/** Base URL for Kilo Chat - can be overridden by KILO_CHAT_URL env var */
-export const KILO_CHAT_URL = process.env[KILO_CHAT_URL_ENV] || KILO_DEFAULT_CHAT_URL
+/** Base URL for Chat. Raya input wins when both names are defined. */
+export const KILO_CHAT_URL = alias(RAYA_CHAT_URL_ENV, KILO_CHAT_URL_ENV, KILO_DEFAULT_CHAT_URL)
 
-/** Environment variable for custom Event Service URL */
+/** Raya-first environment variable for a custom Event Service URL. */
+export const RAYA_EVENT_SERVICE_URL_ENV = "RAYA_EVENT_SERVICE_URL"
+
+/** Compatibility environment variable for a custom Event Service URL. */
 export const KILO_EVENT_SERVICE_URL_ENV = "EVENT_SERVICE_URL"
 
 /** Default Event Service URL (WebSocket endpoint for kilo-chat events) */
 export const KILO_DEFAULT_EVENT_SERVICE_URL = "wss://events.kiloapps.io"
 
-/** Base URL for Event Service - can be overridden by EVENT_SERVICE_URL env var */
-export const KILO_EVENT_SERVICE_URL = process.env[KILO_EVENT_SERVICE_URL_ENV] || KILO_DEFAULT_EVENT_SERVICE_URL
+/** Base URL for Event Service. Raya input wins when both names are defined. */
+export const KILO_EVENT_SERVICE_URL = alias(
+  RAYA_EVENT_SERVICE_URL_ENV,
+  KILO_EVENT_SERVICE_URL_ENV,
+  KILO_DEFAULT_EVENT_SERVICE_URL,
+)
 
 /** Default base URL for OpenRouter-compatible endpoint */
 export const KILO_OPENROUTER_BASE = `${KILO_API_BASE}/api/openrouter`
@@ -100,9 +119,4 @@ export const PROMPTS = [
   "gpt55",
 ] as const
 
-export const AI_SDK_PROVIDERS = [
-  "anthropic",
-  "openai",
-  "openai-compatible",
-  "openrouter",
-] as const
+export const AI_SDK_PROVIDERS = ["anthropic", "openai", "openai-compatible", "openrouter"] as const

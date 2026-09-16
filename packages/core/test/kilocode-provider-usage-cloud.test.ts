@@ -90,4 +90,44 @@ describe("managed provider usage", () => {
     })
     expect(result.windows[0]).not.toHaveProperty("durationMs")
   })
+
+  test("uses the Raya API origin for management links and retains the legacy fallback", async () => {
+    const saved = {
+      raya: process.env.RAYA_API_URL,
+      kilo: process.env.KILO_API_URL,
+    }
+    const usage = async () => ({
+      schemaVersion: 1 as const,
+      fetchedAt: "2026-08-07T12:00:00.000Z",
+      subscription: {
+        id: subscription.id,
+        planName: subscription.planName,
+        providerId: subscription.providerId,
+        providerName: subscription.providerName,
+        windows: [],
+      },
+    })
+    try {
+      process.env.KILO_API_URL = "https://legacy.example/api"
+      delete process.env.RAYA_API_URL
+      expect((await Cloud.managed("token", subscription, usage)).managementUrl).toBe(
+        `https://legacy.example/subscriptions/coding-plans/${subscription.id}`,
+      )
+
+      process.env.RAYA_API_URL = "https://raya.example/api"
+      expect((await Cloud.managed("token", subscription, usage)).managementUrl).toBe(
+        `https://raya.example/subscriptions/coding-plans/${subscription.id}`,
+      )
+
+      process.env.RAYA_API_URL = "invalid"
+      expect((await Cloud.managed("token", subscription, usage)).managementUrl).toBe(
+        `https://app.kilo.ai/subscriptions/coding-plans/${subscription.id}`,
+      )
+    } finally {
+      if (saved.raya === undefined) delete process.env.RAYA_API_URL
+      else process.env.RAYA_API_URL = saved.raya
+      if (saved.kilo === undefined) delete process.env.KILO_API_URL
+      else process.env.KILO_API_URL = saved.kilo
+    }
+  })
 })

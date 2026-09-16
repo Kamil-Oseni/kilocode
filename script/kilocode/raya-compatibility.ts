@@ -77,8 +77,12 @@ export function check(
     "ENABLE_QUESTION_TOOL",
     "AUTO_SHARE",
     "ENABLE_EXPERIMENTAL_MODELS",
+    "API_URL",
+    "CHAT_URL",
+    "WEB_APP_URL",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
+    ["RAYA_EVENT_SERVICE_URL", "EVENT_SERVICE_URL", "raya-wins-legacy-write"],
     ["RAYA_PERMISSION", "KILO_PERMISSION", "matching-authority-aliases"],
     ["RAYA_PURE", "KILO_PURE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE", "safety-monotonic-aliases"],

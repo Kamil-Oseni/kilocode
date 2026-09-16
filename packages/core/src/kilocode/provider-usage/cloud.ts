@@ -7,6 +7,7 @@ import {
   type CodingPlanSubscription,
 } from "@kilocode/kilo-gateway"
 import type { ProviderUsage } from "@opencode-ai/schema/kilocode/provider-usage"
+import { EnvAlias } from "../env-alias"
 
 export { fetchByokEntries, fetchCodingPlanSubscriptions, fetchCodingPlanUsage }
 
@@ -35,9 +36,10 @@ export async function load(
 }
 
 function base() {
-  if (!process.env.KILO_API_URL) return "https://app.kilo.ai"
+  const value = EnvAlias.read("RAYA_API_URL", "KILO_API_URL")
+  if (value === undefined) return "https://app.kilo.ai"
   try {
-    return new URL(process.env.KILO_API_URL).origin
+    return new URL(value).origin
   } catch {
     return "https://app.kilo.ai"
   }

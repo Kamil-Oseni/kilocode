@@ -401,3 +401,7 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `RAYA_ENABLE_QUESTION_TOOL` / `KILO_ENABLE_QUESTION_TOOL` | Enable clarification questions for clients that do not receive the tool automatically. The Raya name takes precedence when both are defined. |
 | `RAYA_AUTO_SHARE` / `KILO_AUTO_SHARE` | Automatically publish newly created root sessions. The Raya name takes precedence when both are defined. Treat this as an explicit opt-in because it creates a public share URL. |
 | `RAYA_ENABLE_EXPERIMENTAL_MODELS` / `KILO_ENABLE_EXPERIMENTAL_MODELS` | Include alpha models in provider catalogs and suggestions. The Raya name takes precedence when both are defined. |
+| `RAYA_API_URL` / `KILO_API_URL` | Override the API origin. The Raya name takes precedence when both are defined. |
+| `RAYA_CHAT_URL` / `KILO_CHAT_URL` | Override the Chat service origin. The Raya name takes precedence when both are defined. |
+| `RAYA_EVENT_SERVICE_URL` / `EVENT_SERVICE_URL` | Override the Event Service endpoint. The Raya name takes precedence when both are defined. |
+| `RAYA_WEB_APP_URL` / `KILO_WEB_APP_URL` | Override links to the web app. The Raya name takes precedence when both are defined. |

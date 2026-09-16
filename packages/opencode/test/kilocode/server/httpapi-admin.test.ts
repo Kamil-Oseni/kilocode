@@ -79,6 +79,18 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
       policy: "raya-wins-legacy-write",
     })
     expect(ledger.entries.find((item) => item.id === "environment-inputs")?.identities).toContainEqual({
+      kind: "environment:api_url",
+      raya: "RAYA_API_URL",
+      legacy: "KILO_API_URL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(ledger.entries.find((item) => item.id === "environment-inputs")?.identities).toContainEqual({
+      kind: "environment:event_service_url",
+      raya: "RAYA_EVENT_SERVICE_URL",
+      legacy: "EVENT_SERVICE_URL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(ledger.entries.find((item) => item.id === "environment-inputs")?.identities).toContainEqual({
       kind: "environment:always_notify_update",
       raya: "RAYA_ALWAYS_NOTIFY_UPDATE",
       legacy: "KILO_ALWAYS_NOTIFY_UPDATE",

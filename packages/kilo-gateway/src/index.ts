@@ -136,10 +136,15 @@ export type {
 // Constants
 // ============================================================================
 export {
+  ENV_RAYA_API_URL,
   ENV_KILO_API_URL,
   DEFAULT_KILO_API_URL,
   KILO_API_BASE,
+  RAYA_CHAT_URL_ENV,
+  KILO_CHAT_URL_ENV,
   KILO_CHAT_URL,
+  RAYA_EVENT_SERVICE_URL_ENV,
+  KILO_EVENT_SERVICE_URL_ENV,
   KILO_EVENT_SERVICE_URL,
   KILO_OPENROUTER_BASE,
   POLL_INTERVAL_MS,

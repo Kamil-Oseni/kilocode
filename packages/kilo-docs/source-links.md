@@ -83,6 +83,7 @@
 - <https://app.kilo.ai/config.json>
   <!-- packages/kilo-vscode/src/kilo-provider/config-file.ts -->
   <!-- packages/opencode/src/config/config.ts -->
+  <!-- packages/opencode/src/kilocode/migration/compatibility.ts -->
 - <https://app.kilo.ai/credits>
   <!-- packages/kilo-vscode/src/services/autocomplete/AutocompleteServiceManager.ts -->
   <!-- packages/kilo-vscode/webview-ui/src/components/profile/ProfileView.tsx -->

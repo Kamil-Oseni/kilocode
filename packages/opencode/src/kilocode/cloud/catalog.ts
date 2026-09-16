@@ -123,13 +123,14 @@ export namespace CloudCatalog {
     })
 
     const base = Effect.fn("CloudCatalog.base")(function* (input: Input) {
-      const raw = env.KILO_API_URL?.trim()
-      const fallback = raw || DEFAULT_KILO_API_URL
+      const selected = env.RAYA_API_URL !== undefined ? env.RAYA_API_URL : env.KILO_API_URL
+      const raw = selected?.trim()
+      const fallback = raw === undefined ? DEFAULT_KILO_API_URL : raw
       const value = getKiloUrlFromToken(fallback, Redacted.value(input.token))
       return yield* Effect.try({
         try: () => {
           const url = new URL(resolveKiloOpenRouterBaseUrl({ baseURL: value }))
-          parseServiceOrigin(url.origin, { allowHttpLoopback: !!raw || value !== fallback })
+          parseServiceOrigin(url.origin, { allowHttpLoopback: selected !== undefined || value !== fallback })
           if (url.username !== "" || url.password !== "") throw new Error("Catalog URL credentials are not allowed")
           return url
         },

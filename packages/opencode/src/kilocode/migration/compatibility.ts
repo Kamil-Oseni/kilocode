@@ -132,12 +132,21 @@ export namespace RayaMigrationLedger {
       "ENABLE_QUESTION_TOOL",
       "AUTO_SHARE",
       "ENABLE_EXPERIMENTAL_MODELS",
+      "API_URL",
+      "CHAT_URL",
+      "WEB_APP_URL",
     ].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
       legacy: `KILO_${name}`,
       policy: "raya-wins-legacy-write" as const,
     })),
+    {
+      kind: "environment:event_service_url",
+      raya: "RAYA_EVENT_SERVICE_URL",
+      legacy: "EVENT_SERVICE_URL",
+      policy: "raya-wins-legacy-write" as const,
+    },
     {
       kind: "environment:permission",
       raya: "RAYA_PERMISSION",
@@ -517,8 +526,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 36_324,
-        digest: "7eff5169cb0f5333952ac159ebbc939f4773e23d6823ff21e26299efea6f6ab5",
+        count: 36_367,
+        digest: "8cc3b9649665a06663f86caef9039f61e3adfa77407e6c299632ce7e8e31dc14",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

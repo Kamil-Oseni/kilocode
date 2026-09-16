@@ -84,7 +84,7 @@ export interface KiloProviderOptions {
 
   /**
    * Base URL for the KiloCode API
-   * Can be overridden by KILO_API_URL environment variable
+   * Can be overridden by RAYA_API_URL; KILO_API_URL remains a compatibility fallback.
    * @default "https://api.kilo.ai"
    */
   baseURL?: string

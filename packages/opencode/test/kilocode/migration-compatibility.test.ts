@@ -146,6 +146,30 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:api_url",
+      raya: "RAYA_API_URL",
+      legacy: "KILO_API_URL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:chat_url",
+      raya: "RAYA_CHAT_URL",
+      legacy: "KILO_CHAT_URL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:web_app_url",
+      raya: "RAYA_WEB_APP_URL",
+      legacy: "KILO_WEB_APP_URL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:event_service_url",
+      raya: "RAYA_EVENT_SERVICE_URL",
+      legacy: "EVENT_SERVICE_URL",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:permission",
       raya: "RAYA_PERMISSION",
       legacy: "KILO_PERMISSION",

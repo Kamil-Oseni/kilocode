@@ -15,6 +15,7 @@ type Call = { type: "subscribe" | "unsubscribe" | "connect" | "disconnect"; cont
 // Ordering log shared across FakeClient instances, so ordering can be asserted
 // across a disconnect on one client and a connect on its replacement.
 const sequence: string[] = []
+const urls: string[] = []
 let clientSeq = 0
 
 class FakeClient {
@@ -56,9 +57,10 @@ mock.module("@/kilo-sessions/kilo-sessions", () => ({
 let current = new FakeClient()
 mock.module("@/kilocode/event-service/client", () => ({
   EventServiceClient: class {
-    constructor() {
+    constructor(opts: { url: string }) {
       // The service constructs one client per layer; expose it for assertions.
       current = new FakeClient()
+      urls.push(opts.url)
     }
     async connect() {
       await current.connect()
@@ -120,6 +122,25 @@ function unsubscribeCalls(): string[][] {
 }
 
 describe("KiloViewers.Service presence contexts", () => {
+  test("Raya Event Service input wins over the Kilo compatibility override", async () => {
+    const saved = {
+      raya: process.env.RAYA_EVENT_SERVICE_URL,
+      kilo: process.env.KILO_EVENT_SERVICE_URL,
+    }
+    urls.length = 0
+    try {
+      process.env.RAYA_EVENT_SERVICE_URL = "wss://raya-presence"
+      process.env.KILO_EVENT_SERVICE_URL = "wss://legacy-presence"
+      await run((v) => v.update({ viewer: { id: uid, active: true }, attached: ["ses_a"], visible: ["ses_a"] }))
+      expect(urls).toEqual(["wss://raya-presence"])
+    } finally {
+      if (saved.raya === undefined) delete process.env.RAYA_EVENT_SERVICE_URL
+      else process.env.RAYA_EVENT_SERVICE_URL = saved.raya
+      if (saved.kilo === undefined) delete process.env.KILO_EVENT_SERVICE_URL
+      else process.env.KILO_EVENT_SERVICE_URL = saved.kilo
+    }
+  })
+
   test("active viewer subscribes platform plus its visible session context", async () => {
     attachedCalls.length = 0
     current = new FakeClient()

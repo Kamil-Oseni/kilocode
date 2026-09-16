@@ -441,6 +441,10 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `RAYA_ENABLE_QUESTION_TOOL=1`: enable clarification questions for clients that do not receive the tool automatically (`KILO_ENABLE_QUESTION_TOOL` remains a fallback; Raya takes precedence when both are defined).
 - `RAYA_AUTO_SHARE=1`: automatically publish newly created root sessions (`KILO_AUTO_SHARE` remains a fallback; Raya takes precedence when both are defined). Treat this as an explicit opt-in because it creates a public share URL.
 - `RAYA_ENABLE_EXPERIMENTAL_MODELS=1`: include alpha models in provider catalogs and suggestions (`KILO_ENABLE_EXPERIMENTAL_MODELS` remains a fallback; Raya takes precedence when both are defined).
+- `RAYA_API_URL=https://api.example`: override the API origin (`KILO_API_URL` remains a fallback; Raya takes precedence when both are defined).
+- `RAYA_CHAT_URL=https://chat.example`: override the Chat service origin (`KILO_CHAT_URL` remains a fallback; Raya takes precedence when both are defined).
+- `RAYA_EVENT_SERVICE_URL=wss://events.example`: override the Event Service endpoint (`EVENT_SERVICE_URL` remains a fallback; Raya takes precedence when both are defined).
+- `RAYA_WEB_APP_URL=https://app.example`: override links to the web app (`KILO_WEB_APP_URL` remains a fallback; Raya takes precedence when both are defined).
 - `RAYA_DISABLE_MODELS_FETCH=1`: prevent remote model-catalog fetches (`KILO_DISABLE_MODELS_FETCH` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_TERMINAL_TITLE=1`: prevent terminal-title updates (`KILO_DISABLE_TERMINAL_TITLE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_EMBEDDED_WEB_UI=1`: disable the embedded web UI (`KILO_DISABLE_EMBEDDED_WEB_UI` remains a compatibility alias; either name set to `true` or `1` enables the safety override).

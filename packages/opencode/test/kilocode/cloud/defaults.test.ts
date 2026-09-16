@@ -113,6 +113,46 @@ it.instance("routes URL-scoped credentials to their catalog origin", () => {
   )
 })
 
+it.instance("prefers the Raya API origin over the Kilo compatibility input", () => {
+  const origins: string[] = []
+  return Effect.gen(function* () {
+    const catalog = yield* CloudCatalog.Service
+    expect(yield* catalog.models({ token: Redacted.make("stored-token") })).toEqual(["anthropic/raya"])
+    expect(origins).toEqual(["https://raya.example"])
+  }).pipe(
+    Effect.provide(
+      CloudCatalog.layer({
+        env: {
+          RAYA_API_URL: "https://raya.example",
+          KILO_API_URL: "https://legacy.example",
+        },
+        fetch: async (request) => {
+          origins.push(new URL(request.url).origin)
+          return Response.json({ data: [{ id: "anthropic/raya", supported_parameters: ["tools"] }] })
+        },
+      }),
+    ),
+  )
+})
+
+it.instance("fails closed on an empty Raya API origin instead of using Kilo input", () =>
+  Effect.gen(function* () {
+    const catalog = yield* CloudCatalog.Service
+    const error = yield* catalog.models({ token: Redacted.make("stored-token") }).pipe(Effect.flip)
+    expect(error).toMatchObject({ _tag: "CloudCatalogError", kind: "schema" })
+  }).pipe(
+    Effect.provide(
+      CloudCatalog.layer({
+        env: {
+          RAYA_API_URL: "",
+          KILO_API_URL: "https://legacy.example",
+        },
+        fetch: () => Promise.reject(new Error("invalid Raya origin must not dispatch")),
+      }),
+    ),
+  ),
+)
+
 it.instance("returns only tool-capable text-output models", () =>
   Effect.gen(function* () {
     const catalog = yield* CloudCatalog.Service

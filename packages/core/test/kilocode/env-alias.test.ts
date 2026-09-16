@@ -244,7 +244,7 @@ describe("Raya environment aliases", () => {
     })
   }
 
-  test("writes and clears the project configuration opt-out through both names", () => {
+  test("writes the project configuration opt-out through both names", () => {
     const names = ["RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG"]
     const env = { ...process.env }
     for (const name of names) delete env[name]
@@ -252,14 +252,14 @@ describe("Raya environment aliases", () => {
       cmd: [
         process.execPath,
         "-e",
-        'import { Flag } from "./src/flag/flag.ts"; Flag.KILO_DISABLE_PROJECT_CONFIG = "1"; const written = [process.env.RAYA_DISABLE_PROJECT_CONFIG, process.env.KILO_DISABLE_PROJECT_CONFIG, Flag.KILO_DISABLE_PROJECT_CONFIG]; Flag.KILO_DISABLE_PROJECT_CONFIG = undefined; console.log(JSON.stringify([...written, process.env.RAYA_DISABLE_PROJECT_CONFIG ?? null, process.env.KILO_DISABLE_PROJECT_CONFIG ?? null, Flag.KILO_DISABLE_PROJECT_CONFIG]))',
+        'import { Flag } from "./src/flag/flag.ts"; Flag.KILO_DISABLE_PROJECT_CONFIG = true; const enabled = [process.env.RAYA_DISABLE_PROJECT_CONFIG, process.env.KILO_DISABLE_PROJECT_CONFIG, Flag.KILO_DISABLE_PROJECT_CONFIG]; Flag.KILO_DISABLE_PROJECT_CONFIG = false; console.log(JSON.stringify([...enabled, process.env.RAYA_DISABLE_PROJECT_CONFIG, process.env.KILO_DISABLE_PROJECT_CONFIG, Flag.KILO_DISABLE_PROJECT_CONFIG]))',
       ],
       cwd: `${import.meta.dir}/../..`,
       env,
     })
 
     expect(child.exitCode).toBe(0)
-    expect(JSON.parse(child.stdout.toString())).toEqual(["1", "1", true, null, null, false])
+    expect(JSON.parse(child.stdout.toString())).toEqual(["1", "1", true, "0", "0", false])
   })
 
   for (const item of [

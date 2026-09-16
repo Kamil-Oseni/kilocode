@@ -186,9 +186,8 @@ export const Flag = {
     const value = EnvAlias.read("RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG")?.toLowerCase()
     return value === "true" || value === "1"
   },
-  set KILO_DISABLE_PROJECT_CONFIG(value: boolean | string | undefined) {
-    const encoded = typeof value === "boolean" ? (value ? "1" : "0") : value
-    EnvAlias.write("RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG", encoded)
+  set KILO_DISABLE_PROJECT_CONFIG(value: boolean) {
+    EnvAlias.write("RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG", value ? "1" : "0")
   },
   // kilocode_change end
   get KILO_EXPERIMENTAL_REFERENCES() {

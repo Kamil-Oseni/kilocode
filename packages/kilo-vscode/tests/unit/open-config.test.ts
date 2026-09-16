@@ -19,6 +19,7 @@ const env = {
   RAYA_CONFIG: process.env.RAYA_CONFIG,
   RAYA_CONFIG_CONTENT: process.env.RAYA_CONFIG_CONTENT,
   RAYA_CONFIG_DIR: process.env.RAYA_CONFIG_DIR,
+  RAYA_DISABLE_PROJECT_CONFIG: process.env.RAYA_DISABLE_PROJECT_CONFIG,
   XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
 }
 
@@ -105,6 +106,8 @@ function clearConfig() {
   delete process.env.RAYA_CONFIG
   delete process.env.RAYA_CONFIG_CONTENT
   delete process.env.RAYA_CONFIG_DIR
+  delete process.env.KILO_DISABLE_PROJECT_CONFIG
+  delete process.env.RAYA_DISABLE_PROJECT_CONFIG
 }
 
 afterEach(async () => {
@@ -232,6 +235,7 @@ describe("config file discovery", () => {
 
   it("marks project files unloaded when project config is disabled", async () => {
     reset()
+    clearConfig()
     const root = await temp()
     process.env.KILO_DISABLE_PROJECT_CONFIG = "1"
     await file(path.join(root, "kilo.json"))
@@ -243,6 +247,71 @@ describe("config file discovery", () => {
     expect(list.some((item) => item.source === "sourceProjectRoot" && item.exists)).toBe(true)
     expect(list.some((item) => item.source === "sourceProjectOpencode" && item.legacy)).toBe(true)
     expect(list.find((item) => item.recommended)?.file).toBe(path.join(root, ".kilo", "kilo.jsonc"))
+  })
+
+  it("marks project files unloaded with the Raya project config alias", async () => {
+    reset()
+    clearConfig()
+    const root = await temp()
+    process.env.RAYA_DISABLE_PROJECT_CONFIG = "1"
+    await file(path.join(root, "kilo.json"))
+
+    const list = localFiles(root)
+
+    expect(list.every((item) => !item.loaded)).toBe(true)
+  })
+
+  it("uses the Raya project config alias before the Kilo alias", async () => {
+    reset()
+    clearConfig()
+    const root = await temp()
+    process.env.RAYA_DISABLE_PROJECT_CONFIG = "1"
+    process.env.KILO_DISABLE_PROJECT_CONFIG = ""
+    await file(path.join(root, "kilo.json"))
+
+    const list = localFiles(root)
+
+    expect(list.every((item) => !item.loaded)).toBe(true)
+  })
+
+  for (const value of ["false", "0"]) {
+    it(`keeps project config enabled when the Kilo alias is ${value}`, async () => {
+      reset()
+      clearConfig()
+      const root = await temp()
+      process.env.KILO_DISABLE_PROJECT_CONFIG = value
+      await file(path.join(root, "kilo.json"))
+
+      const list = localFiles(root)
+
+      expect(list.find((item) => item.exists)?.loaded).toBe(true)
+    })
+  }
+
+  it("lets a false Raya alias override a true Kilo project config alias", async () => {
+    reset()
+    clearConfig()
+    const root = await temp()
+    process.env.RAYA_DISABLE_PROJECT_CONFIG = "0"
+    process.env.KILO_DISABLE_PROJECT_CONFIG = "true"
+    await file(path.join(root, "kilo.json"))
+
+    const list = localFiles(root)
+
+    expect(list.find((item) => item.exists)?.loaded).toBe(true)
+  })
+
+  it("lets an explicit empty Raya alias suppress the Kilo project config alias", async () => {
+    reset()
+    clearConfig()
+    const root = await temp()
+    process.env.RAYA_DISABLE_PROJECT_CONFIG = ""
+    process.env.KILO_DISABLE_PROJECT_CONFIG = "1"
+    await file(path.join(root, "kilo.json"))
+
+    const list = localFiles(root)
+
+    expect(list.find((item) => item.exists)?.loaded).toBe(true)
   })
 })
 

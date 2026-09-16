@@ -100,7 +100,8 @@ export function globalFiles() {
 }
 
 export function localFiles(root: string) {
-  const enabled = !process.env.KILO_DISABLE_PROJECT_CONFIG
+  const value = env("RAYA_DISABLE_PROJECT_CONFIG", "KILO_DISABLE_PROJECT_CONFIG")?.toLowerCase()
+  const enabled = value !== "true" && value !== "1"
   const dirs = [path.join(root, ".kilo"), root, path.join(root, ".kilocode"), path.join(root, ".opencode")]
   const list = dirs.flatMap((dir) => FILES.map((file) => row(path.join(dir, file), localSource(root, dir), enabled)))
   return ensure(

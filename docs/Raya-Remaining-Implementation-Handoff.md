@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f16c3a163c`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `8fb1a4dc46`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 23:51 America/Toronto - Preserve project-config opt-out alias semantics
+
+Preserve product commits `07086b1fb5`, `c4209d7081`, `0785204739` and `8fb1a4dc46`. `RAYA_DISABLE_PROJECT_CONFIG` is the preferred input across Core, OpenCode and VS Code; `KILO_DISABLE_PROJECT_CONFIG` remains the fallback. Selection is based on definition before parsing, so an empty, `0` or `false` Raya value suppresses a conflicting true Kilo value. After selection, only `1` and case-insensitive `true` disable project-local config and instruction discovery.
+
+Keep the legacy `Flag.KILO_DISABLE_PROJECT_CONFIG` getter boolean. Its setter accepts booleans only and dual-writes `1` or `0`; widening the setter to strings or undefined makes TypeScript widen every read and breaks OpenCode consumers. Keep build and release smoke writers synchronized under both names. Configuration-source diagnostics must display `RAYA_DISABLE_PROJECT_CONFIG` when Raya is defined and effective, otherwise the Kilo label. Do not replace this with presence-only extension logic.
+
+Evidence is Core **43 / 138**, focused Core alias **20 / 46**, OpenCode config **8 / 8**, diagnostic sources **3 / 3**, and VS Code **16 / 39**. Core, bounded OpenCode and VS Code typechecks pass with targeted lint/annotation/format checks. One unrelated unfiltered config-source listing test exceeded its existing five-second timeout under concurrent work; the three new filtered cases pass. The ledger contains **19 environment pairs**, with 17 ordinary Raya-first pairs and two strict credentials. `cutoverReady` remains false. Batch the extension change into the next coherent low-memory snapshot; do not force-reload the open host.
+
+After this handoff and progress record, the checked inventory is **69,664** total: public 1,654; compatibility 35,614; provenance 5,686; internal 26,710. The pinned compatibility digest is `1b27090d4e50155e0af3b3d82f902961c7a96becb04f77c63b629a1067751600`.
 
 ## ChatGPT 2026-09-15 23:04 America/Toronto - Continue from the installed pushed checkpoint
 
@@ -862,7 +872,7 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 15 reviewed environment pairs with documented precedence, including closed config readers in Core, both SDK generations and VS Code, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
+| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 19 reviewed environment pairs with documented precedence, including closed config readers in Core, both SDK generations and VS Code, strict server credentials and the project-config opt-out, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |

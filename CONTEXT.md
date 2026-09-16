@@ -185,7 +185,7 @@ _Avoid_: Response envelope
 - A **PTY Environment** adapter observes plugins in the request Location while passing the resolved PTY working directory to the hook; standalone servers use an empty adapter.
 - A **Mid-Conversation System Message** lowers to the provider's native chronological instruction role when supported and to a wrapped chronological fallback otherwise.
 - When the effective aggregate instruction set changes, its **Mid-Conversation System Message** includes the complete current ordered set and supersedes the prior aggregate value; when no ambient instructions remain, the message states that previously loaded instructions no longer apply.
-- Ambient project instruction discovery honors `KILO_DISABLE_PROJECT_CONFIG`; global instructions remain eligible.
+- Ambient project instruction discovery honors `RAYA_DISABLE_PROJECT_CONFIG`, with `KILO_DISABLE_PROJECT_CONFIG` retained as its compatibility fallback; global instructions remain eligible.
 - Oversized textual **Model Tool Output** retains a bounded preview in Session history while its complete text moves to managed tool-output storage. Arbitrary structured-result size is a separate concern.
 - One tool settlement receives one aggregate textual limit, using the configured maximum lines or UTF-8 bytes, whichever is reached first. The limit is provider-independent; token pressure belongs to context assembly and compaction.
 - Generic truncation preserves the beginning and end of textual output. Tools may apply a more meaningful strategy before the Tool Registry enforces the final limit.

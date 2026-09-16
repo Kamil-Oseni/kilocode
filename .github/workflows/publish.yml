@@ -213,6 +213,7 @@ jobs:
               export XDG_STATE_HOME="$root/state"
               export KILO_PTY_SMOKE=1 # kilocode_change
               export KILO_DISABLE_MODELS_FETCH=1
+              export RAYA_DISABLE_PROJECT_CONFIG=1 # kilocode_change
               export KILO_DISABLE_PROJECT_CONFIG=1
               export KILO_CONFIG_CONTENT='{"enabled_providers":["anthropic"]}'
               export ANTHROPIC_API_KEY=dummy
@@ -251,6 +252,7 @@ jobs:
               export XDG_STATE_HOME="$root/state"
               export KILO_PTY_SMOKE=1 # kilocode_change
               export KILO_DISABLE_MODELS_FETCH=1
+              export RAYA_DISABLE_PROJECT_CONFIG=1 # kilocode_change
               export KILO_DISABLE_PROJECT_CONFIG=1
               export KILO_CONFIG_CONTENT='\''{"enabled_providers":["anthropic"]}'\''
               export ANTHROPIC_API_KEY=dummy
@@ -313,6 +315,7 @@ jobs:
             $env:XDG_STATE_HOME = Join-Path $root "state"
             $env:KILO_PTY_SMOKE = "1" # kilocode_change
             $env:KILO_DISABLE_MODELS_FETCH = "1"
+            $env:RAYA_DISABLE_PROJECT_CONFIG = "1" # kilocode_change
             $env:KILO_DISABLE_PROJECT_CONFIG = "1"
             $env:KILO_CONFIG_CONTENT = '{"enabled_providers":["anthropic"]}'
             $env:ANTHROPIC_API_KEY = "dummy"

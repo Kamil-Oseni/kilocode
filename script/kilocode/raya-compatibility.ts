@@ -69,6 +69,7 @@ export function check(
     "LOG_LEVEL",
     "PRINT_LOGS",
     "WEBSEARCH_PROVIDER",
+    "DISABLE_PROJECT_CONFIG",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
     ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],

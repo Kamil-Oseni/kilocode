@@ -6,6 +6,16 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-16 05:31 America/Toronto - Preserve complete Core safety-alias coverage
+
+The current working tree closes two gaps in compatibility pairs that were already declared. `Flag.KILO_DISABLE_EMBEDDED_WEB_UI` must resolve `RAYA_DISABLE_EMBEDDED_WEB_UI` plus its Kilo fallback, and `Flag.KILO_DISABLE_EXTERNAL_SKILLS` must resolve `RAYA_DISABLE_EXTERNAL_SKILLS` plus its Kilo fallback. Preserve safety-monotonic behavior: either alias set case-insensitively to `true` or `1` disables the capability; false, empty or invalid input cannot override a true sibling. Conflict diagnostics must expose only alias labels.
+
+Do not increment the ledger for this repair. It remains at **43 environment pairs** because the Effect runtime and ledger already contained both pairs. Keep the real consumers unchanged: the HTTP UI route receives `disableEmbeddedWebUi` from `RuntimeFlags`, and skill scanning receives `disableExternalSkills` from the same service. The Core `Flag` surface is the remaining exported compatibility reader and now agrees with those boundaries.
+
+Evidence passes sequentially under the memory constraint: Core aliases **95 / 198**, Effect runtime flags **115 / 257**, skill discovery **17 / 48**, HTTP UI **10 / 26**, Core typecheck and single-threaded OpenCode typecheck. Preserve `.changeset/repair-raya-safety-readers.md`. Complete affected guards, refresh the inventory and pinned digest, commit, push with one-worker checks, then use the authorized `RAYA_LOW_MEMORY=1` snapshot workflow. Record exact package and installed-CLI hashes here and in the progress document. The owned editor remains Version 3 work.
+
+The checked inventory is **70,469** total: public 1,654; compatibility 36,215; provenance 5,686; internal 26,914. The pinned compatibility digest is `4eafa6db3de3092a1c06b0c3cbe8929a1de8bf1d81fe09d6291d050e7dbd8954`.
+
 ## ChatGPT 2026-09-16 05:21 America/Toronto - Continue from installed notification-only update checkpoint
 
 Product checkpoint `cdf245aa13` is on `origin/main` and installed. Its constrained push passed all 29 JavaScript/TypeScript packages and JetBrains. The low-memory workflow regenerated the SDK without tracked drift, rebuilt the Windows CLI, passed its version, model-catalog and sandbox-worker smokes, host/webview types, cached lint and production bundle, then packaged, retained and installed Raya.

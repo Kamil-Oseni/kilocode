@@ -85,7 +85,7 @@ export const Flag = {
   KILO_DISABLE_CLAUDE_CODE,
   KILO_DISABLE_CLAUDE_CODE_PROMPT,
   KILO_DISABLE_CLAUDE_CODE_SKILLS,
-  KILO_DISABLE_EXTERNAL_SKILLS: truthy("KILO_DISABLE_EXTERNAL_SKILLS"),
+  KILO_DISABLE_EXTERNAL_SKILLS: EnvAlias.enabled("RAYA_DISABLE_EXTERNAL_SKILLS", "KILO_DISABLE_EXTERNAL_SKILLS"),
   KILO_EXPERIMENTAL_CUSTOMIZE_SKILL: unstableDefault("KILO_EXPERIMENTAL_CUSTOMIZE_SKILL"),
   // kilocode_change end
   KILO_FAKE_VCS: process.env["KILO_FAKE_VCS"],
@@ -156,7 +156,10 @@ export const Flag = {
   },
   // kilocode_change end
 
-  KILO_DISABLE_EMBEDDED_WEB_UI: truthy("KILO_DISABLE_EMBEDDED_WEB_UI"), // kilocode_change
+  KILO_DISABLE_EMBEDDED_WEB_UI: EnvAlias.enabled(
+    "RAYA_DISABLE_EMBEDDED_WEB_UI",
+    "KILO_DISABLE_EMBEDDED_WEB_UI",
+  ), // kilocode_change
 
   // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_DB() {

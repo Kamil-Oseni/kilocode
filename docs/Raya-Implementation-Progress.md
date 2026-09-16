@@ -6,6 +6,16 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-16 05:31 America/Toronto - Close two incomplete Core safety-alias readers
+
+**Status: implemented and verified; commit, protected push and low-memory installation follow this documentation checkpoint.** The 43-pair compatibility ledger already declared `RAYA_DISABLE_EMBEDDED_WEB_UI` and `RAYA_DISABLE_EXTERNAL_SKILLS`, and the Effect runtime plus real HTTP and skill-discovery boundaries already honored them. The exported Core `Flag` compatibility surface still read only `KILO_DISABLE_EMBEDDED_WEB_UI` and `KILO_DISABLE_EXTERNAL_SKILLS`. Both remaining readers now use the same safety-monotonic resolver: either name set case-insensitively to `true` or `1` keeps the capability disabled, and false, empty or invalid input cannot cancel a true sibling.
+
+This is a completeness repair, so the ledger remains at **43 environment pairs**: 20 ordinary Raya-first, 20 safety-monotonic, one matching-authority and two strict credentials. No environment name, public command, persisted identity, package identity or editor distribution changed. The Raya-owned VS Code distribution remains deferred to Version 3.
+
+Evidence passes sequentially: the expanded fresh-process Core matrix **95 tests / 198 assertions**, Effect runtime flags **115 / 257**, real external-skill discovery **17 / 48**, real HTTP UI suppression **10 / 26**, Core typecheck and single-threaded OpenCode typecheck. The matrix covers neither alias, each alias, both, both conflict directions, empty and invalid Raya values, and value-free diagnostics. A patch changeset records the user-visible compatibility correction.
+
+The checked inventory is **70,469** total: public 1,654; compatibility 36,215; provenance 5,686; internal 26,914. The pinned compatibility digest is `4eafa6db3de3092a1c06b0c3cbe8929a1de8bf1d81fe09d6291d050e7dbd8954`.
+
 ## ChatGPT 2026-09-16 05:21 America/Toronto - Notification-only update checkpoint pushed and installed
 
 **Status: pushed and installed from `cdf245aa13`.** The one-worker protected gate passed all 29 JavaScript/TypeScript packages plus JetBrains. The sequential `RAYA_LOW_MEMORY=1` workflow regenerated the SDK without tracked drift, rebuilt and smoke-tested the Windows CLI, passed host/webview typechecks, cached lint, production bundling, packaging, retention and installation.

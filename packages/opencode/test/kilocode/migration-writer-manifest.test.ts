@@ -83,4 +83,41 @@ describe("profile writer manifest", () => {
       "profile.maintenance.uninstall",
     ])
   })
+
+  test("names the audited cache, repository, self-heal and diagnostics mutation owners", () => {
+    const find = (id: string) => ProfileWriterManifest.manifest.writers.find((writer) => writer.id === id)
+
+    expect(find("profile.cache.skills")?.sources).toEqual([
+      "packages/core/src/skill/discovery.ts",
+      "packages/opencode/src/skill/discovery.ts",
+    ])
+    expect(find("profile.cache.skills")?.sources).not.toContain("packages/opencode/src/kilocode/skill-remove.ts")
+
+    expect(find("profile.data.repos")?.roots).toEqual(["repos", "state"])
+    expect(find("profile.data.repos")?.sources).toEqual([
+      "packages/core/src/git.ts",
+      "packages/core/src/repository-cache.ts",
+    ])
+    expect(find("profile.data.repos")?.methods).toContain("reset-hard")
+
+    expect(find("profile.data.self-heal")?.sources).toContain(
+      "packages/opencode/src/kilocode/self-heal/worktree.ts",
+    )
+    expect(find("profile.data.self-heal")?.sources).toContain(
+      "packages/opencode/src/kilocode/self-heal/verification.ts",
+    )
+    expect(find("profile.data.self-heal")?.methods).not.toContain("recover")
+    expect(find("profile.data.self-heal")?.methods).not.toContain("remove")
+
+    expect(find("profile.log.diagnostics")?.sources).toContain("packages/opencode/src/cli/cmd/tui.ts")
+    expect(find("profile.log.diagnostics")?.sources).toContain("packages/opencode/src/cli/tui/worker.ts")
+    expect(find("profile.log.diagnostics")?.methods).toContain("worker-heap-snapshot")
+
+    expect(ProfileWriterManifest.manifest.gaps).toContain(
+      "skill removal can unlink project or externally injected manifests outside profile roots",
+    )
+    expect(ProfileWriterManifest.manifest.gaps).toContain(
+      "independently compiled Core service graphs can bypass an OpenCode-only writer replacement",
+    )
+  })
 })

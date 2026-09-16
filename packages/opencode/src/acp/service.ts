@@ -93,8 +93,8 @@ export function make(input: {
     const started = performance.now()
     // kilocode_change start
     const authMethod: AuthMethod = {
-      description: "Run `kilo auth login` in the terminal",
-      name: "Login with Kilo",
+      description: "Sign in to Raya by running `kilo auth login` in the terminal",
+      name: "Sign in to Raya",
       id: AuthMethodID,
     }
     // kilocode_change end
@@ -104,7 +104,7 @@ export function make(input: {
         "terminal-auth": {
           command: "opencode",
           args: ["auth", "login"],
-          label: "Kilo Login",
+          label: "Sign in to Raya", // kilocode_change
         },
       }
     }
@@ -130,7 +130,7 @@ export function make(input: {
       },
       authMethods: [authMethod],
       agentInfo: {
-        name: "Kilo",
+        name: "Raya", // kilocode_change
         version: InstallationVersion,
       },
     }

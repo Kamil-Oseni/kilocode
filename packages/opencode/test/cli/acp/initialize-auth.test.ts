@@ -21,7 +21,7 @@ describe("opencode acp initialize/auth subprocess", () => {
         expect(initialized.agentCapabilities?.sessionCapabilities?.fork).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.list).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})
-        expect(initialized.agentInfo?.name).toBe("Kilo") // kilocode_change
+        expect(initialized.agentInfo?.name).toBe("Raya") // kilocode_change
       }),
     60_000,
   )
@@ -33,8 +33,20 @@ describe("opencode acp initialize/auth subprocess", () => {
         const acp = yield* createAcpClient({ opencode })
         const initialized = yield* initialize(acp)
 
-        expect(initialized.authMethods?.[0]?.id).toBe("kilo-login") // kilocode_change
-        expect(initialized.authMethods?.[0]?._meta?.["terminal-auth"]).toBeDefined()
+        expect(initialized.authMethods?.[0]).toMatchObject({
+          // kilocode_change start
+          id: "kilo-login",
+          name: "Sign in to Raya",
+          description: "Sign in to Raya by running `kilo auth login` in the terminal",
+          _meta: {
+            "terminal-auth": {
+              command: "opencode",
+              args: ["auth", "login"],
+              label: "Sign in to Raya",
+            },
+          },
+          // kilocode_change end
+        })
         expect(yield* acp.request<AuthenticateResponse>("authenticate", { methodId: "kilo-login" })).toMatchObject({
           // kilocode_change
           result: {},

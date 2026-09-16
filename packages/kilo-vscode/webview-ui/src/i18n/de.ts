@@ -218,7 +218,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Klicken, um Schreibvorgänge im Dateisystem einzuschränken. Der Netzwerkzugriff bleibt gemäß deinen Sandbox-Einstellungen erlaubt.",
 
-  "speechToText.tooltip.start": "Spracheingabe mit Kilo Gateway starten",
+  "speechToText.tooltip.start": "Spracheingabe mit Raya Gateway starten",
   "speechToText.tooltip.shortcut":
     "Tippe oder drücke Cmd/Ctrl+K, um die Aufnahme zu starten oder zu stoppen; halte beim Sprechen gedrückt und lasse los, um zu transkribieren und abzusenden.",
   "speechToText.tooltip.starting": "Mikrofon wird gestartet... Bitte noch nicht sprechen.",
@@ -702,11 +702,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Aufgebraucht",
   "profile.action.dashboard": "Dashboard",
   "profile.action.topUp": "Aufladen",
-  "profile.pass.subscribe": "Hol dir Kilo Pass, um Guthaben hinzuzufügen und Boni zu verdienen",
+  "profile.pass.subscribe": "Hol dir Raya Pass, um Guthaben hinzuzufügen und Boni zu verdienen",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Verbrauch in diesem Monat",
   "profile.pass.paid": "Bezahlt",
-  "profile.pass.meter": "Monatlicher Verbrauch des Kilo Pass",
+  "profile.pass.meter": "Monatlicher Verbrauch des Raya Pass",
   "profile.pass.renews": "Verlängert sich",
   "profile.action.logout": "Abmelden",
 
@@ -882,10 +882,10 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Standard (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Aktivieren Sie den Kilo-Anbieter und melden Sie sich an, um Speech to Text zu verwenden. Speech to Text wird derzeit nur mit Kilo Gateway unterstützt.",
+    "Aktivieren Sie den Kilo-Anbieter und melden Sie sich an, um Speech to Text zu verwenden. Speech to Text wird derzeit nur mit Raya Gateway unterstützt.",
   "settings.models.speechToTextModel.title": "Sprache-zu-Text-Modell",
   "settings.models.speechToTextModel.description":
-    "Wählen Sie das Kilo Gateway-Transkriptionsmodell für die Spracheingabe.",
+    "Wählen Sie das Raya Gateway-Transkriptionsmodell für die Spracheingabe.",
   "settings.experimental.nativeNotebookTools.title": "Native Notebook-Tools",
   "settings.experimental.nativeNotebookTools.description":
     "Experimentelle Tools zum Lesen, Bearbeiten und Ausführen von VS Code-Notebooks aktivieren",
@@ -910,7 +910,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Zeitlimit für MCP-Server-Anfragen in Millisekunden",
   "settings.experimental.remote.title": "Remote-Steuerung",
   "settings.experimental.remote.description":
-    "Aktivieren Sie die Remote-Steuerung von Sitzungen über Kilo Cloud. Dies betrifft auch CLIs auf diesem Computer.",
+    "Aktivieren Sie die Remote-Steuerung von Sitzungen über Raya Cloud. Dies betrifft auch CLIs auf diesem Computer.",
   "settings.experimental.remote.current": "Aktueller Status:",
   "settings.experimental.remote.startup": "Automatisch beim Start aktivieren:",
   "settings.experimental.remote.active": "Aktiv",

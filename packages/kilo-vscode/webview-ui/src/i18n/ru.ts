@@ -207,7 +207,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Нажмите, чтобы ограничить запись в файловую систему. Доступ к сети останется разрешённым согласно настройкам песочницы.",
 
-  "speechToText.tooltip.start": "Начать голосовой ввод с Kilo Gateway",
+  "speechToText.tooltip.start": "Начать голосовой ввод с Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Коснитесь или нажмите Cmd/Ctrl+K, чтобы начать или остановить запись; удерживайте кнопку во время речи, затем отпустите её, чтобы транскрибировать и отправить.",
   "speechToText.tooltip.starting": "Запуск микрофона... Пока не говорите.",
@@ -446,7 +446,7 @@ export const dict = {
     "Модель по умолчанию и уровень рассуждения для субагентов task-tool. Оставьте пустым, чтобы унаследовать модель вызывающего агента.",
   "settings.models.hidePromptTraining.title": "Скрывать модели, обучающиеся на запросах",
   "settings.models.hidePromptTraining.description":
-    "Скрывать модели Kilo Gateway, поставщики которых могут использовать ваши запросы для обучения.",
+    "Скрывать модели Raya Gateway, поставщики которых могут использовать ваши запросы для обучения.",
   "settings.providers.modeModels": "Модель для режима",
   "settings.providers.modeModels.description":
     "Переопределите модель по умолчанию для определённых режимов. Если не задано, используется глобальная модель по умолчанию.",
@@ -663,7 +663,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Тариф: Статус неизвестен",
   "profile.usage.action.manage": "Управлять",
   "profile.usage.action.managePlan": "Управление {{plan}}",
-  "profile.usage.routing": "Оплата тарифа активна. Маршрутизация через Kilo Gateway {{state}}.",
+  "profile.usage.routing": "Оплата тарифа активна. Маршрутизация через Raya Gateway {{state}}.",
   "profile.usage.routingState.disabled": "отключена",
   "profile.usage.routingState.missing": "отсутствует",
   "profile.usage.routingState.replaced": "заменена",
@@ -689,11 +689,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Исчерпано",
   "profile.action.dashboard": "Панель управления",
   "profile.action.topUp": "Пополнить",
-  "profile.pass.subscribe": "Оформите Kilo Pass, чтобы добавить кредиты и получать бонусы",
+  "profile.pass.subscribe": "Оформите Raya Pass, чтобы добавить кредиты и получать бонусы",
   "profile.pass.bonus": "Бонус",
   "profile.pass.usage": "Использование за этот месяц",
   "profile.pass.paid": "Оплачено",
-  "profile.pass.meter": "Ежемесячное использование Kilo Pass",
+  "profile.pass.meter": "Ежемесячное использование Raya Pass",
   "profile.pass.renews": "Продлевается",
   "profile.action.logout": "Выйти",
 
@@ -861,9 +861,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "По умолчанию (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Включите провайдер Kilo и выполните вход, чтобы использовать Speech to Text. В настоящее время Speech to Text поддерживается только с Kilo Gateway.",
+    "Включите провайдер Kilo и выполните вход, чтобы использовать Speech to Text. В настоящее время Speech to Text поддерживается только с Raya Gateway.",
   "settings.models.speechToTextModel.title": "Модель речи в текст",
-  "settings.models.speechToTextModel.description": "Выберите модель транскрипции Kilo Gateway для голосового ввода.",
+  "settings.models.speechToTextModel.description": "Выберите модель транскрипции Raya Gateway для голосового ввода.",
   "settings.experimental.nativeNotebookTools.title": "Нативные инструменты блокнотов",
   "settings.experimental.nativeNotebookTools.description":
     "Включить экспериментальные инструменты для чтения, редактирования и выполнения блокнотов VS Code",
@@ -887,7 +887,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Таймаут запросов MCP-сервера в миллисекундах",
   "settings.experimental.remote.title": "Управление Remote",
   "settings.experimental.remote.description":
-    "Включите управление Remote сеансами через Kilo Cloud. Это также повлияет на CLI на этом компьютере.",
+    "Включите управление Remote сеансами через Raya Cloud. Это также повлияет на CLI на этом компьютере.",
   "settings.experimental.remote.current": "Текущее состояние:",
   "settings.experimental.remote.startup": "Автоматически включать при запуске:",
   "settings.experimental.remote.active": "Активно",

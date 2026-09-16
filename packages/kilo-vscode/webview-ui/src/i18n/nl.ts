@@ -212,7 +212,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Klik om schrijfbewerkingen in het bestandssysteem te beperken. Netwerktoegang blijft toegestaan volgens je sandboxinstellingen.",
 
-  "speechToText.tooltip.start": "Spraakinvoer starten met Kilo Gateway",
+  "speechToText.tooltip.start": "Spraakinvoer starten met Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Tik of druk op Cmd/Ctrl+K om de opname te starten of te stoppen; houd de knop ingedrukt terwijl je spreekt en laat deze los om te transcriberen en te verzenden.",
   "speechToText.tooltip.starting": "Microfoon wordt gestart... Wacht nog even met spreken.",
@@ -618,7 +618,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Abonnement: Status onbekend",
   "profile.usage.action.manage": "Beheren",
   "profile.usage.action.managePlan": "{{plan}} beheren",
-  "profile.usage.routing": "De abonnementsfacturering is actief. Kilo Gateway-routering is {{state}}.",
+  "profile.usage.routing": "De abonnementsfacturering is actief. Raya Gateway-routering is {{state}}.",
   "profile.usage.routingState.disabled": "uitgeschakeld",
   "profile.usage.routingState.missing": "afwezig",
   "profile.usage.routingState.replaced": "vervangen",
@@ -644,11 +644,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Opgebruikt",
   "profile.action.dashboard": "Dashboard",
   "profile.action.topUp": "Opwaarderen",
-  "profile.pass.subscribe": "Schaf Kilo Pass aan om tegoed toe te voegen en bonussen te verdienen",
+  "profile.pass.subscribe": "Schaf Raya Pass aan om tegoed toe te voegen en bonussen te verdienen",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Verbruik deze maand",
   "profile.pass.paid": "Betaald",
-  "profile.pass.meter": "Maandelijks Kilo Pass-verbruik",
+  "profile.pass.meter": "Maandelijks Raya Pass-verbruik",
   "profile.pass.renews": "Vernieuwt",
   "profile.action.logout": "Uitloggen",
 
@@ -862,9 +862,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Standaard (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Schakel de Kilo-provider in en meld u aan om Speech to Text te gebruiken. Speech to Text wordt momenteel alleen ondersteund met Kilo Gateway.",
+    "Schakel de Kilo-provider in en meld u aan om Speech to Text te gebruiken. Speech to Text wordt momenteel alleen ondersteund met Raya Gateway.",
   "settings.models.speechToTextModel.title": "Spraak-naar-tekst-model",
-  "settings.models.speechToTextModel.description": "Kies het Kilo Gateway-transcriptiemodel voor spraakinvoer.",
+  "settings.models.speechToTextModel.description": "Kies het Raya Gateway-transcriptiemodel voor spraakinvoer.",
   "settings.experimental.nativeNotebookTools.title": "Native notebooktools",
   "settings.experimental.nativeNotebookTools.description":
     "Experimentele tools inschakelen voor het lezen, bewerken en uitvoeren van VS Code-notebooks",
@@ -889,7 +889,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Timeout voor MCP-serververzoeken in milliseconden",
   "settings.experimental.remote.title": "Remote-bediening",
   "settings.experimental.remote.description":
-    "Schakel Remote-bediening van sessies in via Kilo Cloud. Dit heeft ook invloed op CLI's op deze machine.",
+    "Schakel Remote-bediening van sessies in via Raya Cloud. Dit heeft ook invloed op CLI's op deze machine.",
   "settings.experimental.remote.current": "Huidige status:",
   "settings.experimental.remote.startup": "Automatisch inschakelen bij opstarten:",
   "settings.experimental.remote.active": "Actief",
@@ -1121,7 +1121,7 @@ export const dict = {
     "Standaardmodel en redeneerinspanning voor task-tool subagenten. Laat leeg om het model van de aanroepende agent over te nemen.",
   "settings.models.hidePromptTraining.title": "Modellen die prompts voor training gebruiken verbergen",
   "settings.models.hidePromptTraining.description":
-    "Verberg Kilo Gateway-modellen waarvan providers je prompts mogelijk voor training gebruiken.",
+    "Verberg Raya Gateway-modellen waarvan providers je prompts mogelijk voor training gebruiken.",
   "settings.providers.modeModels": "Model per Modus",
   "settings.providers.modeModels.description":
     "Overschrijf het standaard model voor specifieke modi. Indien niet ingesteld, wordt het globale standaard model gebruikt.",

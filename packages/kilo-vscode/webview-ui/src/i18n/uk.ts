@@ -209,7 +209,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Натисніть, щоб обмежити запис у файлову систему. Доступ до мережі залишиться дозволеним відповідно до налаштувань пісочниці.",
 
-  "speechToText.tooltip.start": "Почати голосове введення з Kilo Gateway",
+  "speechToText.tooltip.start": "Почати голосове введення з Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Торкніться кнопки або натисніть Cmd/Ctrl+K, щоб почати чи зупинити запис; утримуйте кнопку під час мовлення, а потім відпустіть її, щоб транскрибувати й надіслати.",
   "speechToText.tooltip.starting": "Запуск мікрофона... Поки що не говоріть.",
@@ -616,7 +616,7 @@ export const dict = {
   "profile.usage.plan.unknown": "План: Статус невідомий",
   "profile.usage.action.manage": "Керувати",
   "profile.usage.action.managePlan": "Керування {{plan}}",
-  "profile.usage.routing": "Оплата плану активна. Маршрутизація через Kilo Gateway {{state}}.",
+  "profile.usage.routing": "Оплата плану активна. Маршрутизація через Raya Gateway {{state}}.",
   "profile.usage.routingState.disabled": "вимкнена",
   "profile.usage.routingState.missing": "відсутня",
   "profile.usage.routingState.replaced": "замінена",
@@ -642,11 +642,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Вичерпано",
   "profile.action.dashboard": "Панель керування",
   "profile.action.topUp": "Поповнити",
-  "profile.pass.subscribe": "Отримайте Kilo Pass, щоб додати кредити та заробляти бонуси",
+  "profile.pass.subscribe": "Отримайте Raya Pass, щоб додати кредити та заробляти бонуси",
   "profile.pass.bonus": "Бонус",
   "profile.pass.usage": "Використання за цей місяць",
   "profile.pass.paid": "Оплачено",
-  "profile.pass.meter": "Щомісячне використання Kilo Pass",
+  "profile.pass.meter": "Щомісячне використання Raya Pass",
   "profile.pass.renews": "Поновлюється",
   "profile.action.logout": "Вийти",
 
@@ -855,9 +855,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "За замовчуванням (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Увімкніть провайдер Kilo та виконайте вхід, щоб використовувати Speech to Text. Наразі Speech to Text підтримується лише з Kilo Gateway.",
+    "Увімкніть провайдер Kilo та виконайте вхід, щоб використовувати Speech to Text. Наразі Speech to Text підтримується лише з Raya Gateway.",
   "settings.models.speechToTextModel.title": "Модель мовлення в текст",
-  "settings.models.speechToTextModel.description": "Виберіть модель транскрипції Kilo Gateway для голосового введення.",
+  "settings.models.speechToTextModel.description": "Виберіть модель транскрипції Raya Gateway для голосового введення.",
   "settings.experimental.nativeNotebookTools.title": "Власні інструменти для блокнотів",
   "settings.experimental.nativeNotebookTools.description":
     "Увімкнути експериментальні інструменти для читання, редагування та виконання блокнотів VS Code",
@@ -881,7 +881,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Тайм-аут у мілісекундах для запитів до MCP-сервера",
   "settings.experimental.remote.title": "Керування Remote",
   "settings.experimental.remote.description":
-    "Увімкніть керування Remote сеансами через Kilo Cloud. Це також вплине на CLI на цьому комп'ютері.",
+    "Увімкніть керування Remote сеансами через Raya Cloud. Це також вплине на CLI на цьому комп'ютері.",
   "settings.experimental.remote.current": "Поточний стан:",
   "settings.experimental.remote.startup": "Автоматичне ввімкнення під час запуску:",
   "settings.experimental.remote.active": "Активний",
@@ -1108,7 +1108,7 @@ export const dict = {
     "Модель за замовчуванням та рівень міркування для субагентів task-tool. Залиште порожнім, щоб успадкувати модель агента, що викликає.",
   "settings.models.hidePromptTraining.title": "Приховувати моделі, що навчаються на запитах",
   "settings.models.hidePromptTraining.description":
-    "Приховувати моделі Kilo Gateway, постачальники яких можуть використовувати ваші запити для навчання.",
+    "Приховувати моделі Raya Gateway, постачальники яких можуть використовувати ваші запити для навчання.",
   "settings.providers.modeModels": "Модель для кожного режиму",
   "settings.providers.modeModels.description":
     "Перевизначити стандартну модель для певних режимів. Якщо не встановлено, використовується загальна стандартна модель.",

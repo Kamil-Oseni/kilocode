@@ -504,7 +504,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Piano: Stato sconosciuto",
   "profile.usage.action.manage": "Gestisci",
   "profile.usage.action.managePlan": "Gestisci {{plan}}",
-  "profile.usage.routing": "La fatturazione del piano è attiva. L'instradamento tramite Kilo Gateway è {{state}}.",
+  "profile.usage.routing": "La fatturazione del piano è attiva. L'instradamento tramite Raya Gateway è {{state}}.",
   "profile.usage.routingState.disabled": "disabilitato",
   "profile.usage.routingState.missing": "mancante",
   "profile.usage.routingState.replaced": "sostituito",
@@ -530,11 +530,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Esaurito",
   "profile.action.dashboard": "Dashboard",
   "profile.action.topUp": "Ricarica",
-  "profile.pass.subscribe": "Ottieni Kilo Pass per aggiungere crediti e guadagnare bonus",
+  "profile.pass.subscribe": "Ottieni Raya Pass per aggiungere crediti e guadagnare bonus",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Utilizzo di questo mese",
   "profile.pass.paid": "Pagato",
-  "profile.pass.meter": "Utilizzo mensile di Kilo Pass",
+  "profile.pass.meter": "Utilizzo mensile di Raya Pass",
   "profile.pass.renews": "Si rinnova",
   "profile.action.logout": "Esci",
   "settings.agentBehaviour.title": "Comportamento agente",
@@ -762,7 +762,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Timeout per richieste server MCP in millisecondi",
   "settings.experimental.remote.title": "Controllo remoto",
   "settings.experimental.remote.description":
-    "Abilita controllo remoto delle sessioni tramite Kilo Cloud. Influenzerà anche le CLI su questa macchina.",
+    "Abilita controllo remoto delle sessioni tramite Raya Cloud. Influenzerà anche le CLI su questa macchina.",
   "settings.experimental.remote.current": "Stato corrente:",
   "settings.experimental.remote.startup": "Abilita automaticamente all'avvio:",
   "settings.experimental.remote.active": "Attivo",
@@ -1201,9 +1201,9 @@ export const dict = {
 
   // Speech to Text
   "settings.models.speechToText.disabledDescription":
-    "Abilita e accedi al provider Kilo per usare Da voce a testo. Da voce a testo è attualmente supportato solo tramite Kilo Gateway.",
+    "Abilita e accedi al provider Kilo per usare Da voce a testo. Da voce a testo è attualmente supportato solo tramite Raya Gateway.",
   "settings.models.speechToTextModel.title": "Modello Da voce a testo",
-  "settings.models.speechToTextModel.description": "Scegli il modello di trascrizione Kilo Gateway per l'input vocale.",
+  "settings.models.speechToTextModel.description": "Scegli il modello di trascrizione Raya Gateway per l'input vocale.",
 
   // Compaction limit
   "settings.context.compactionLimit.title": "Limite compattazione automatica",
@@ -1216,7 +1216,7 @@ export const dict = {
     "Modello e sforzo di ragionamento predefiniti per i sub-agent del tool task. Lascia non impostato per ereditare il modello dell'agente chiamante.",
   "settings.models.hidePromptTraining.title": "Nascondi i modelli che usano i prompt per l'addestramento",
   "settings.models.hidePromptTraining.description":
-    "Nascondi i modelli Kilo Gateway i cui provider potrebbero usare i tuoi prompt per l'addestramento.",
+    "Nascondi i modelli Raya Gateway i cui provider potrebbero usare i tuoi prompt per l'addestramento.",
 
   // Autocomplete hint
   "settings.autocomplete.modelsHint":
@@ -1267,7 +1267,7 @@ export const dict = {
     "Accedi di nuovo con ChatGPT, quindi invia di nuovo il tuo messaggio per continuare a usare i modelli Codex.",
 
   // Speech to Text tooltips and errors
-  "speechToText.tooltip.start": "Avvia input vocale con Kilo Gateway",
+  "speechToText.tooltip.start": "Avvia input vocale con Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Tocca o premi Cmd/Ctrl+K per avviare o interrompere la registrazione; tieni premuto mentre parli e rilascia per trascrivere e inviare.",
   "speechToText.tooltip.starting": "Avvio del microfono... Attendi prima di parlare.",

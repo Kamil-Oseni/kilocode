@@ -209,7 +209,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "クリックすると、ファイルシステムへの書き込みを制限します。サンドボックス設定により、ネットワークアクセスは引き続き許可されます。",
 
-  "speechToText.tooltip.start": "Kilo Gatewayで音声入力を開始",
+  "speechToText.tooltip.start": "Raya Gatewayで音声入力を開始",
   "speechToText.tooltip.shortcut":
     "タップまたは Cmd/Ctrl+K を押して録音を開始／停止し、話している間は押し続け、離すと文字起こしして送信します。",
   "speechToText.tooltip.starting": "マイクを起動中... まだ話さないでください。",
@@ -446,7 +446,7 @@ export const dict = {
     "task-tool サブエージェントのデフォルトモデルと推論の労力。呼び出し元のエージェントのモデルを継承する場合は未設定のままにしてください。",
   "settings.models.hidePromptTraining.title": "プロンプトを学習に使用するモデルを非表示",
   "settings.models.hidePromptTraining.description":
-    "プロバイダーがプロンプトを学習に使用する可能性のある Kilo Gateway モデルを非表示にします。",
+    "プロバイダーがプロンプトを学習に使用する可能性のある Raya Gateway モデルを非表示にします。",
   "settings.providers.modeModels": "モードごとのモデル",
   "settings.providers.modeModels.description":
     "特定のモードのデフォルトモデルを上書きします。設定されていない場合、グローバルデフォルトモデルが使用されます。",
@@ -659,7 +659,7 @@ export const dict = {
   "profile.usage.plan.unknown": "プラン：ステータス不明",
   "profile.usage.action.manage": "管理",
   "profile.usage.action.managePlan": "{{plan}} を管理",
-  "profile.usage.routing": "プランの請求は有効です。Kilo Gatewayのルーティングは{{state}}です。",
+  "profile.usage.routing": "プランの請求は有効です。Raya Gatewayのルーティングは{{state}}です。",
   "profile.usage.routingState.disabled": "無効",
   "profile.usage.routingState.missing": "欠落",
   "profile.usage.routingState.replaced": "置換済み",
@@ -685,11 +685,11 @@ export const dict = {
   "profile.usage.status.exhausted": "使い切り",
   "profile.action.dashboard": "ダッシュボード",
   "profile.action.topUp": "チャージ",
-  "profile.pass.subscribe": "Kilo Passに登録してクレジットを追加し、ボーナスを獲得",
+  "profile.pass.subscribe": "Raya Passに登録してクレジットを追加し、ボーナスを獲得",
   "profile.pass.bonus": "ボーナス",
   "profile.pass.usage": "今月の使用量",
   "profile.pass.paid": "有料分",
-  "profile.pass.meter": "Kilo Pass の月間使用量",
+  "profile.pass.meter": "Raya Pass の月間使用量",
   "profile.pass.renews": "更新",
   "profile.action.logout": "ログアウト",
 
@@ -858,9 +858,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "デフォルト (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Speech to Text を使用するには、Kilo プロバイダーを有効にしてサインインしてください。現在、Speech to Text は Kilo Gateway でのみサポートされています。",
+    "Speech to Text を使用するには、Kilo プロバイダーを有効にしてサインインしてください。現在、Speech to Text は Raya Gateway でのみサポートされています。",
   "settings.models.speechToTextModel.title": "音声認識モデル",
-  "settings.models.speechToTextModel.description": "音声入力に使用するKilo Gateway文字起こしモデルを選択します。",
+  "settings.models.speechToTextModel.description": "音声入力に使用するRaya Gateway文字起こしモデルを選択します。",
   "settings.experimental.nativeNotebookTools.title": "ネイティブノートブックツール",
   "settings.experimental.nativeNotebookTools.description":
     "VS Codeノートブックの読み取り、編集、実行を行う実験的なツールを有効にします",
@@ -884,7 +884,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "MCPサーバーリクエストのタイムアウト（ミリ秒）",
   "settings.experimental.remote.title": "Remote コントロール",
   "settings.experimental.remote.description":
-    "Kilo Cloud 経由でのセッションの Remote コントロールを有効にします。これはこのマシンの CLI にも影響します。",
+    "Raya Cloud 経由でのセッションの Remote コントロールを有効にします。これはこのマシンの CLI にも影響します。",
   "settings.experimental.remote.current": "現在の状態:",
   "settings.experimental.remote.startup": "起動時の自動有効化:",
   "settings.experimental.remote.active": "アクティブ",

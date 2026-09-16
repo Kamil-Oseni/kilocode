@@ -212,7 +212,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Cliquez pour restreindre les écritures dans le système de fichiers. L'accès au réseau reste autorisé par vos paramètres de sandbox.",
 
-  "speechToText.tooltip.start": "Démarrer la saisie vocale avec Kilo Gateway",
+  "speechToText.tooltip.start": "Démarrer la saisie vocale avec Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Touchez ou appuyez sur Cmd/Ctrl+K pour démarrer ou arrêter l’enregistrement ; maintenez la touche pendant que vous parlez, puis relâchez-la pour transcrire et envoyer.",
   "speechToText.tooltip.starting": "Démarrage du microphone... Attendez avant de parler.",
@@ -453,7 +453,7 @@ export const dict = {
     "Modèle par défaut et effort de raisonnement pour les sous-agents du task-tool. Laissez vide pour hériter du modèle de l'agent appelant.",
   "settings.models.hidePromptTraining.title": "Masquer les modèles entraînés sur les prompts",
   "settings.models.hidePromptTraining.description":
-    "Masquez les modèles Kilo Gateway dont les fournisseurs peuvent utiliser vos prompts à des fins d'entraînement.",
+    "Masquez les modèles Raya Gateway dont les fournisseurs peuvent utiliser vos prompts à des fins d'entraînement.",
   "settings.providers.modeModels": "Modèle par mode",
   "settings.providers.modeModels.description":
     "Remplacez le modèle par défaut pour des modes spécifiques. Si non défini, le modèle par défaut global est utilisé.",
@@ -677,7 +677,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Forfait : statut inconnu",
   "profile.usage.action.manage": "Gérer",
   "profile.usage.action.managePlan": "Gérer {{plan}}",
-  "profile.usage.routing": "La facturation du forfait est active. Le routage via Kilo Gateway est {{state}}.",
+  "profile.usage.routing": "La facturation du forfait est active. Le routage via Raya Gateway est {{state}}.",
   "profile.usage.routingState.disabled": "désactivé",
   "profile.usage.routingState.missing": "manquant",
   "profile.usage.routingState.replaced": "remplacé",
@@ -703,11 +703,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Épuisé",
   "profile.action.dashboard": "Tableau de bord",
   "profile.action.topUp": "Recharger",
-  "profile.pass.subscribe": "Obtenez Kilo Pass pour ajouter des crédits et gagner des bonus",
+  "profile.pass.subscribe": "Obtenez Raya Pass pour ajouter des crédits et gagner des bonus",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Consommation de ce mois-ci",
   "profile.pass.paid": "Payé",
-  "profile.pass.meter": "Consommation mensuelle du Kilo Pass",
+  "profile.pass.meter": "Consommation mensuelle du Raya Pass",
   "profile.pass.renews": "Renouvelle",
   "profile.action.logout": "Déconnexion",
 
@@ -884,10 +884,10 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Par défaut (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Activez et connectez-vous au fournisseur Kilo pour utiliser Speech to Text. Speech to Text n'est actuellement pris en charge qu'avec Kilo Gateway.",
+    "Activez et connectez-vous au fournisseur Kilo pour utiliser Speech to Text. Speech to Text n'est actuellement pris en charge qu'avec Raya Gateway.",
   "settings.models.speechToTextModel.title": "Modèle de transcription vocale",
   "settings.models.speechToTextModel.description":
-    "Choisissez le modèle de transcription Kilo Gateway pour la saisie vocale.",
+    "Choisissez le modèle de transcription Raya Gateway pour la saisie vocale.",
   "settings.experimental.nativeNotebookTools.title": "Outils de notebook natifs",
   "settings.experimental.nativeNotebookTools.description":
     "Activer les outils expérimentaux pour lire, modifier et exécuter les notebooks VS Code",
@@ -912,7 +912,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Délai des requêtes du serveur MCP en millisecondes",
   "settings.experimental.remote.title": "Contrôle Remote",
   "settings.experimental.remote.description":
-    "Activez le contrôle Remote des sessions via Kilo Cloud. Cela affectera également les CLI sur cette machine.",
+    "Activez le contrôle Remote des sessions via Raya Cloud. Cela affectera également les CLI sur cette machine.",
   "settings.experimental.remote.current": "État actuel :",
   "settings.experimental.remote.startup": "Activation automatique au démarrage :",
   "settings.experimental.remote.active": "Actif",

@@ -207,7 +207,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "คลิกเพื่อจำกัดการเขียนในระบบไฟล์ การตั้งค่า sandbox ของคุณยังคงอนุญาตให้เข้าถึงเครือข่าย",
 
-  "speechToText.tooltip.start": "เริ่มการป้อนข้อมูลด้วยเสียงด้วย Kilo Gateway",
+  "speechToText.tooltip.start": "เริ่มการป้อนข้อมูลด้วยเสียงด้วย Raya Gateway",
   "speechToText.tooltip.shortcut":
     "แตะหรือกด Cmd/Ctrl+K เพื่อเริ่มหรือหยุดบันทึก จากนั้นกดค้างไว้ขณะพูด แล้วปล่อยเพื่อถอดเสียงและส่ง",
   "speechToText.tooltip.starting": "กำลังเริ่มไมโครโฟน... โปรดรอก่อนพูด",
@@ -444,7 +444,7 @@ export const dict = {
   "settings.providers.subagentModel.description":
     "โมเดลเริ่มต้นและระดับการใช้เหตุผลสำหรับตัวแทนย่อยของ task-tool ปล่อยว่างไว้เพื่อรับค่าโมเดลจากตัวแทนที่เรียก",
   "settings.models.hidePromptTraining.title": "ซ่อนโมเดลที่ใช้พรอมต์ในการฝึก",
-  "settings.models.hidePromptTraining.description": "ซ่อนโมเดล Kilo Gateway ที่ผู้ให้บริการอาจใช้พรอมต์ของคุณในการฝึก",
+  "settings.models.hidePromptTraining.description": "ซ่อนโมเดล Raya Gateway ที่ผู้ให้บริการอาจใช้พรอมต์ของคุณในการฝึก",
   "settings.providers.modeModels": "โมเดลต่อโหมด",
   "settings.providers.modeModels.description":
     "แทนที่โมเดลเริ่มต้นสำหรับโหมดที่กำหนด หากไม่ได้ตั้งค่า จะใช้โมเดลเริ่มต้นทั่วไป",
@@ -656,7 +656,7 @@ export const dict = {
   "profile.usage.plan.unknown": "แผน: ไม่ทราบสถานะ",
   "profile.usage.action.manage": "จัดการ",
   "profile.usage.action.managePlan": "จัดการ {{plan}}",
-  "profile.usage.routing": "การเรียกเก็บเงินตามแผนเปิดใช้งานอยู่ การกำหนดเส้นทาง Kilo Gateway {{state}}",
+  "profile.usage.routing": "การเรียกเก็บเงินตามแผนเปิดใช้งานอยู่ การกำหนดเส้นทาง Raya Gateway {{state}}",
   "profile.usage.routingState.disabled": "ปิดใช้งาน",
   "profile.usage.routingState.missing": "ขาดหาย",
   "profile.usage.routingState.replaced": "ถูกแทนที่",
@@ -682,11 +682,11 @@ export const dict = {
   "profile.usage.status.exhausted": "ใช้หมดแล้ว",
   "profile.action.dashboard": "แดชบอร์ด",
   "profile.action.topUp": "เติมเงิน",
-  "profile.pass.subscribe": "รับ Kilo Pass เพื่อเพิ่มเครดิตและรับโบนัส",
+  "profile.pass.subscribe": "รับ Raya Pass เพื่อเพิ่มเครดิตและรับโบนัส",
   "profile.pass.bonus": "โบนัส",
   "profile.pass.usage": "การใช้งานเดือนนี้",
   "profile.pass.paid": "ชำระแล้ว",
-  "profile.pass.meter": "การใช้งาน Kilo Pass รายเดือน",
+  "profile.pass.meter": "การใช้งาน Raya Pass รายเดือน",
   "profile.pass.renews": "ต่ออายุ",
   "profile.action.logout": "ออกจากระบบ",
 
@@ -850,9 +850,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "ค่าเริ่มต้น (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "เปิดใช้งานและลงชื่อเข้าใช้ผู้ให้บริการ Kilo เพื่อใช้ Speech to Text ปัจจุบัน Speech to Text รองรับเฉพาะกับ Kilo Gateway เท่านั้น",
+    "เปิดใช้งานและลงชื่อเข้าใช้ผู้ให้บริการ Kilo เพื่อใช้ Speech to Text ปัจจุบัน Speech to Text รองรับเฉพาะกับ Raya Gateway เท่านั้น",
   "settings.models.speechToTextModel.title": "โมเดลแปลงเสียงเป็นข้อความ",
-  "settings.models.speechToTextModel.description": "เลือกโมเดลการถอดเสียง Kilo Gateway สำหรับการป้อนข้อมูลด้วยเสียง",
+  "settings.models.speechToTextModel.description": "เลือกโมเดลการถอดเสียง Raya Gateway สำหรับการป้อนข้อมูลด้วยเสียง",
   "settings.experimental.nativeNotebookTools.title": "เครื่องมือโน้ตบุ๊กดั้งเดิม",
   "settings.experimental.nativeNotebookTools.description":
     "เปิดใช้งานเครื่องมือทดลองสำหรับการอ่าน แก้ไข และเรียกใช้โน้ตบุ๊ก VS Code",
@@ -876,7 +876,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "หมดเวลาสำหรับคำขอเซิร์ฟเวอร์ MCP เป็นมิลลิวินาที",
   "settings.experimental.remote.title": "การควบคุม Remote",
   "settings.experimental.remote.description":
-    "เปิดใช้งานการควบคุม Remote ของเซสชันผ่าน Kilo Cloud ซึ่งจะส่งผลต่อ CLI บนเครื่องนี้ด้วย",
+    "เปิดใช้งานการควบคุม Remote ของเซสชันผ่าน Raya Cloud ซึ่งจะส่งผลต่อ CLI บนเครื่องนี้ด้วย",
   "settings.experimental.remote.current": "สถานะปัจจุบัน:",
   "settings.experimental.remote.startup": "เปิดใช้งานอัตโนมัติเมื่อเริ่มต้น:",
   "settings.experimental.remote.active": "เปิดใช้งาน",

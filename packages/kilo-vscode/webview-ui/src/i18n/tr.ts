@@ -208,7 +208,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Dosya sistemi yazma işlemlerini kısıtlamak için tıklayın. Sandbox ayarlarınız ağ erişimine izin vermeye devam ediyor.",
 
-  "speechToText.tooltip.start": "Kilo Gateway ile sesli girişi başlatın",
+  "speechToText.tooltip.start": "Raya Gateway ile sesli girişi başlatın",
   "speechToText.tooltip.shortcut":
     "Kaydı başlatmak veya durdurmak için dokunun ya da Cmd/Ctrl+K tuşlarına basın; konuşurken basılı tutun, ardından metne dönüştürüp göndermek için bırakın.",
   "speechToText.tooltip.starting": "Mikrofon başlatılıyor... Henüz konuşmayın.",
@@ -615,7 +615,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Plan: Durum bilinmiyor",
   "profile.usage.action.manage": "Yönet",
   "profile.usage.action.managePlan": "{{plan}} planını yönet",
-  "profile.usage.routing": "Plan faturalandırması etkin. Kilo Gateway yönlendirmesi {{state}}.",
+  "profile.usage.routing": "Plan faturalandırması etkin. Raya Gateway yönlendirmesi {{state}}.",
   "profile.usage.routingState.disabled": "devre dışı",
   "profile.usage.routingState.missing": "eksik",
   "profile.usage.routingState.replaced": "değiştirildi",
@@ -641,11 +641,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Tükendi",
   "profile.action.dashboard": "Kontrol Paneli",
   "profile.action.topUp": "Bakiye yükle",
-  "profile.pass.subscribe": "Kredi eklemek ve bonus kazanmak için Kilo Pass edinin",
+  "profile.pass.subscribe": "Kredi eklemek ve bonus kazanmak için Raya Pass edinin",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Bu ayki kullanım",
   "profile.pass.paid": "Ücretli",
-  "profile.pass.meter": "Aylık Kilo Pass kullanımı",
+  "profile.pass.meter": "Aylık Raya Pass kullanımı",
   "profile.pass.renews": "Yenilenir",
   "profile.action.logout": "Çıkış Yap",
 
@@ -853,9 +853,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Varsayılan (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Speech to Text kullanmak için Kilo sağlayıcısını etkinleştirin ve giriş yapın. Speech to Text şu anda yalnızca Kilo Gateway ile desteklenmektedir.",
+    "Speech to Text kullanmak için Kilo sağlayıcısını etkinleştirin ve giriş yapın. Speech to Text şu anda yalnızca Raya Gateway ile desteklenmektedir.",
   "settings.models.speechToTextModel.title": "Sesten metne modeli",
-  "settings.models.speechToTextModel.description": "Sesli giriş için Kilo Gateway transkripsiyon modelini seçin.",
+  "settings.models.speechToTextModel.description": "Sesli giriş için Raya Gateway transkripsiyon modelini seçin.",
   "settings.experimental.nativeNotebookTools.title": "Yerel Not Defteri Araçları",
   "settings.experimental.nativeNotebookTools.description":
     "VS Code not defterlerini okumak, düzenlemek ve çalıştırmak için deneysel araçları etkinleştir",
@@ -879,7 +879,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "MCP sunucu istekleri için milisaniye cinsinden zaman aşımı",
   "settings.experimental.remote.title": "Remote Kontrolü",
   "settings.experimental.remote.description":
-    "Kilo Cloud üzerinden oturumların Remote kontrolünü etkinleştirin. Bu, bu makinedeki CLI'leri de etkileyecektir.",
+    "Raya Cloud üzerinden oturumların Remote kontrolünü etkinleştirin. Bu, bu makinedeki CLI'leri de etkileyecektir.",
   "settings.experimental.remote.current": "Mevcut durum:",
   "settings.experimental.remote.startup": "Başlangıçta otomatik etkinleştir:",
   "settings.experimental.remote.active": "Aktif",
@@ -1108,7 +1108,7 @@ export const dict = {
     "task-tool alt aracıları için varsayılan model ve akıl yürütme çabası. Çağıran aracının modelini devralmak için boş bırakın.",
   "settings.models.hidePromptTraining.title": "İstemlerle eğitilen modelleri gizle",
   "settings.models.hidePromptTraining.description":
-    "Sağlayıcıları istemlerinizi eğitim için kullanabilecek Kilo Gateway modellerini gizleyin.",
+    "Sağlayıcıları istemlerinizi eğitim için kullanabilecek Raya Gateway modellerini gizleyin.",
   "settings.providers.modeModels": "Mod Başına Model",
   "settings.providers.modeModels.description":
     "Belirli modlar için varsayılan modeli geçersiz kılın. Ayarlanmadıysa genel varsayılan model kullanılır.",

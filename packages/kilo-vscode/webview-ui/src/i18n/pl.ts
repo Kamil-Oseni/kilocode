@@ -210,7 +210,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Kliknij, aby ograniczyć zapisy w systemie plików. Ustawienia sandboxa nadal zezwalają na dostęp do sieci.",
 
-  "speechToText.tooltip.start": "Rozpocznij wprowadzanie głosowe z Kilo Gateway",
+  "speechToText.tooltip.start": "Rozpocznij wprowadzanie głosowe z Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Stuknij lub naciśnij Cmd/Ctrl+K, aby rozpocząć albo zatrzymać nagrywanie; przytrzymaj podczas mówienia, a następnie zwolnij, aby dokonać transkrypcji i wysłać.",
   "speechToText.tooltip.starting": "Uruchamianie mikrofonu... Poczekaj, zanim zaczniesz mówić.",
@@ -407,7 +407,7 @@ export const dict = {
     "Domyślny model i wysiłek wnioskowania dla podagentów task-tool. Pozostaw puste, aby odziedziczyć model agenta wywołującego.",
   "settings.models.hidePromptTraining.title": "Ukryj modele trenujące na promptach",
   "settings.models.hidePromptTraining.description":
-    "Ukryj modele Kilo Gateway, których dostawcy mogą używać Twoich promptów do trenowania.",
+    "Ukryj modele Raya Gateway, których dostawcy mogą używać Twoich promptów do trenowania.",
   "settings.providers.modeModels": "Model na tryb",
   "settings.providers.modeModels.description":
     "Zastąp domyślny model dla określonych trybów. Jeśli nie ustawiono, używany jest globalny domyślny model.",
@@ -622,7 +622,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Plan: Status nieznany",
   "profile.usage.action.manage": "Zarządzaj",
   "profile.usage.action.managePlan": "Zarządzaj {{plan}}",
-  "profile.usage.routing": "Rozliczanie planu jest aktywne. Routing przez Kilo Gateway jest {{state}}.",
+  "profile.usage.routing": "Rozliczanie planu jest aktywne. Routing przez Raya Gateway jest {{state}}.",
   "profile.usage.routingState.disabled": "wyłączony",
   "profile.usage.routingState.missing": "brakujący",
   "profile.usage.routingState.replaced": "zastąpiony",
@@ -648,11 +648,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Wyczerpano",
   "profile.action.dashboard": "Panel",
   "profile.action.topUp": "Doładuj",
-  "profile.pass.subscribe": "Zdobądź Kilo Pass, aby dodać środki i zdobywać bonusy",
+  "profile.pass.subscribe": "Zdobądź Raya Pass, aby dodać środki i zdobywać bonusy",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Zużycie w tym miesiącu",
   "profile.pass.paid": "Opłacone",
-  "profile.pass.meter": "Miesięczne zużycie Kilo Pass",
+  "profile.pass.meter": "Miesięczne zużycie Raya Pass",
   "profile.pass.renews": "Odnawia się",
   "profile.action.logout": "Wyloguj się",
 
@@ -821,10 +821,10 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Domyślny (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Włącz i zaloguj się do dostawcy Kilo, aby korzystać ze Speech to Text. Speech to Text jest obecnie obsługiwane tylko z Kilo Gateway.",
+    "Włącz i zaloguj się do dostawcy Kilo, aby korzystać ze Speech to Text. Speech to Text jest obecnie obsługiwane tylko z Raya Gateway.",
   "settings.models.speechToTextModel.title": "Model mowy na tekst",
   "settings.models.speechToTextModel.description":
-    "Wybierz model transkrypcji Kilo Gateway dla wprowadzania głosowego.",
+    "Wybierz model transkrypcji Raya Gateway dla wprowadzania głosowego.",
   "settings.experimental.nativeNotebookTools.title": "Natywne narzędzia notatników",
   "settings.experimental.nativeNotebookTools.description":
     "Włącz eksperymentalne narzędzia do odczytu, edycji i uruchamiania notatników VS Code",
@@ -848,7 +848,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Limit czasu żądań serwera MCP w milisekundach",
   "settings.experimental.remote.title": "Sterowanie Remote",
   "settings.experimental.remote.description":
-    "Włącz sterowanie Remote sesjami za pośrednictwem Kilo Cloud. Wpłynie to również na CLI na tej maszynie.",
+    "Włącz sterowanie Remote sesjami za pośrednictwem Raya Cloud. Wpłynie to również na CLI na tej maszynie.",
   "settings.experimental.remote.current": "Aktualny stan:",
   "settings.experimental.remote.startup": "Automatyczne włączanie przy starcie:",
   "settings.experimental.remote.active": "Aktywny",

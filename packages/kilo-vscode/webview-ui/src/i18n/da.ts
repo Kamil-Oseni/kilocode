@@ -210,7 +210,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Klik for at begrænse skriveadgang til filsystemet. Netværksadgang er fortsat tilladt ifølge dine sandboxindstillinger.",
 
-  "speechToText.tooltip.start": "Start stemmeinput med Kilo Gateway",
+  "speechToText.tooltip.start": "Start stemmeinput med Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Tryk på knappen eller brug Cmd/Ctrl+K til at starte eller stoppe optagelsen; hold knappen nede, mens du taler, og slip den for at transskribere og sende.",
   "speechToText.tooltip.starting": "Starter mikrofonen... Vent med at tale.",
@@ -449,7 +449,7 @@ export const dict = {
     "Standardmodel og ræsonnementsindsats for task-tool-underagenter. Lad den være tom for at nedarve den kaldende agents model.",
   "settings.models.hidePromptTraining.title": "Skjul modeller, der træner på prompts",
   "settings.models.hidePromptTraining.description":
-    "Skjul Kilo Gateway-modeller, hvis udbydere muligvis bruger dine prompts til træning.",
+    "Skjul Raya Gateway-modeller, hvis udbydere muligvis bruger dine prompts til træning.",
   "settings.providers.modeModels": "Model pr. tilstand",
   "settings.providers.modeModels.description":
     "Tilsidesæt standardmodellen for bestemte tilstande. Hvis ikke angivet, bruges den globale standardmodel.",
@@ -663,7 +663,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Abonnement: Status ukendt",
   "profile.usage.action.manage": "Administrer",
   "profile.usage.action.managePlan": "Administrer {{plan}}",
-  "profile.usage.routing": "Abonnementsfakturering er aktiv. Kilo Gateway-routing er {{state}}.",
+  "profile.usage.routing": "Abonnementsfakturering er aktiv. Raya Gateway-routing er {{state}}.",
   "profile.usage.routingState.disabled": "deaktiveret",
   "profile.usage.routingState.missing": "fraværende",
   "profile.usage.routingState.replaced": "erstattet",
@@ -689,11 +689,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Opbrugt",
   "profile.action.dashboard": "Dashboard",
   "profile.action.topUp": "Fyld op",
-  "profile.pass.subscribe": "Få Kilo Pass for at tilføje kredit og optjene bonusser",
+  "profile.pass.subscribe": "Få Raya Pass for at tilføje kredit og optjene bonusser",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Denne måneds forbrug",
   "profile.pass.paid": "Betalt",
-  "profile.pass.meter": "Månedligt Kilo Pass-forbrug",
+  "profile.pass.meter": "Månedligt Raya Pass-forbrug",
   "profile.pass.renews": "Fornyes",
   "profile.action.logout": "Log ud",
 
@@ -863,9 +863,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Standard (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Aktivér og log ind på Kilo-udbyderen for at bruge Speech to Text. Speech to Text understøttes i øjeblikket kun med Kilo Gateway.",
+    "Aktivér og log ind på Kilo-udbyderen for at bruge Speech to Text. Speech to Text understøttes i øjeblikket kun med Raya Gateway.",
   "settings.models.speechToTextModel.title": "Model til tale til tekst",
-  "settings.models.speechToTextModel.description": "Vælg Kilo Gateway-transskriptionsmodellen til stemmeinput.",
+  "settings.models.speechToTextModel.description": "Vælg Raya Gateway-transskriptionsmodellen til stemmeinput.",
   "settings.experimental.nativeNotebookTools.title": "Indbyggede notebook-værktøjer",
   "settings.experimental.nativeNotebookTools.description":
     "Aktivér eksperimentelle værktøjer til at læse, redigere og køre VS Code-notebooks",
@@ -889,7 +889,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Timeout for MCP-serveranmodninger i millisekunder",
   "settings.experimental.remote.title": "Remote-styring",
   "settings.experimental.remote.description":
-    "Aktivér Remote-styring af sessioner via Kilo Cloud. Dette vil også påvirke CLI'er på denne maskine.",
+    "Aktivér Remote-styring af sessioner via Raya Cloud. Dette vil også påvirke CLI'er på denne maskine.",
   "settings.experimental.remote.current": "Nuværende status:",
   "settings.experimental.remote.startup": "Aktivér automatisk ved opstart:",
   "settings.experimental.remote.active": "Aktiv",

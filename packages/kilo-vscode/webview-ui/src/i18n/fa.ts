@@ -207,7 +207,7 @@ export const dict = {
   "prompt.action.resetModel": "بازنشانی مدل به حالت پیش‌فرض",
   "prompt.action.enhanceDescription":
     "دکمه «بهبود پرامپت» با ارائه زمینه بیشتر، توضیح یا بازنویسی، به بهتر کردن پرامپت شما کمک می‌کند. یک پرامپت تایپ کنید و دوباره روی دکمه کلیک کنید تا نحوه عملکرد آن را ببینید.",
-  "speechToText.tooltip.start": "شروع ورودی صوتی با Kilo Gateway",
+  "speechToText.tooltip.start": "شروع ورودی صوتی با Raya Gateway",
   "speechToText.tooltip.shortcut":
     "برای شروع یا توقف ضبط، روی دکمه ضربه بزنید یا Cmd/Ctrl+K را فشار دهید؛ هنگام صحبت دکمه را نگه دارید و سپس رها کنید تا گفتار به متن تبدیل و ارسال شود.",
   "speechToText.tooltip.starting": "در حال راه‌اندازی میکروفون... منتظر بمانید.",
@@ -577,7 +577,7 @@ export const dict = {
   "profile.usage.plan.unknown": "طرح: وضعیت نامشخص",
   "profile.usage.action.manage": "مدیریت",
   "profile.usage.action.managePlan": "مدیریت {{plan}}",
-  "profile.usage.routing": "صورتحساب طرح فعال است. مسیریابی Kilo Gateway {{state}} است.",
+  "profile.usage.routing": "صورتحساب طرح فعال است. مسیریابی Raya Gateway {{state}} است.",
   "profile.usage.routingState.disabled": "غیرفعال",
   "profile.usage.routingState.missing": "ناموجود",
   "profile.usage.routingState.replaced": "جایگزین‌شده",
@@ -603,11 +603,11 @@ export const dict = {
   "profile.usage.status.exhausted": "تمام‌شده",
   "profile.action.dashboard": "داشبورد",
   "profile.action.topUp": "شارژ کردن",
-  "profile.pass.subscribe": "Kilo Pass را دریافت کنید تا اعتبار اضافه کنید و پاداش کسب کنید",
+  "profile.pass.subscribe": "Raya Pass را دریافت کنید تا اعتبار اضافه کنید و پاداش کسب کنید",
   "profile.pass.bonus": "پاداش",
   "profile.pass.usage": "مصرف این ماه",
   "profile.pass.paid": "پرداخت‌شده",
-  "profile.pass.meter": "مصرف ماهانه Kilo Pass",
+  "profile.pass.meter": "مصرف ماهانه Raya Pass",
   "profile.pass.renews": "تمدید می‌شود",
   "profile.action.logout": "خروج",
 
@@ -848,9 +848,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "پیش‌فرض (مسیریاب خودکار)",
 
   "settings.models.speechToText.disabledDescription":
-    "برای استفاده از تبدیل گفتار به متن، ارائه‌دهنده Kilo را فعال کرده و وارد شوید. تبدیل گفتار به متن در حال حاضر فقط از طریق Kilo Gateway پشتیبانی می‌شود.",
+    "برای استفاده از تبدیل گفتار به متن، ارائه‌دهنده Kilo را فعال کرده و وارد شوید. تبدیل گفتار به متن در حال حاضر فقط از طریق Raya Gateway پشتیبانی می‌شود.",
   "settings.models.speechToTextModel.title": "مدل تبدیل گفتار به متن",
-  "settings.models.speechToTextModel.description": "مدل رونویسی Kilo Gateway را برای ورودی صوتی انتخاب کنید.",
+  "settings.models.speechToTextModel.description": "مدل رونویسی Raya Gateway را برای ورودی صوتی انتخاب کنید.",
   "settings.experimental.nativeNotebookTools.title": "ابزارهای بومی Notebook",
   "settings.experimental.nativeNotebookTools.description":
     "ابزارهای آزمایشی برای خواندن، ویرایش و اجرای VS Code notebooks را فعال کنید",
@@ -876,7 +876,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "زمان‌وقفه برای درخواست‌های سرور MCP بر حسب میلی‌ثانیه",
   "settings.experimental.remote.title": "کنترل از راه دور",
   "settings.experimental.remote.description":
-    "فعال‌سازی کنترل از راه دور جلسات از طریق Kilo Cloud. این تنظیم بر CLIهای این دستگاه نیز تأثیر می‌گذارد.",
+    "فعال‌سازی کنترل از راه دور جلسات از طریق Raya Cloud. این تنظیم بر CLIهای این دستگاه نیز تأثیر می‌گذارد.",
   "settings.experimental.remote.current": "وضعیت فعلی:",
   "settings.experimental.remote.startup": "فعال‌سازی خودکار هنگام راه‌اندازی:",
   "settings.experimental.remote.active": "فعال",
@@ -1133,7 +1133,7 @@ export const dict = {
     "مدل پیش‌فرض و میزان استدلال برای زیرعامل‌های ابزار-وظیفه. برای به ارث بردن مدل عامل فراخواننده، خالی بگذارید.",
   "settings.models.hidePromptTraining.title": "پنهان کردن مدل‌های آموزش پرامپت",
   "settings.models.hidePromptTraining.description":
-    "مدل‌های Kilo Gateway را که ارائه‌دهندگانشان ممکن است از پرامپت‌های شما برای آموزش استفاده کنند پنهان کنید.",
+    "مدل‌های Raya Gateway را که ارائه‌دهندگانشان ممکن است از پرامپت‌های شما برای آموزش استفاده کنند پنهان کنید.",
   "settings.providers.modeModels": "مدل به ازای حالت",
   "settings.providers.modeModels.description":
     "مدل پیش‌فرض را برای حالت‌های خاص بازنویسی کنید. در صورت عدم تنظیم، از مدل پیش‌فرض سراسری استفاده می‌شود.",

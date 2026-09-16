@@ -212,7 +212,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Clique para restringir as operações de escrita no sistema de arquivos. O acesso à rede continua permitido pelas configurações do sandbox.",
 
-  "speechToText.tooltip.start": "Iniciar entrada de voz com o Kilo Gateway",
+  "speechToText.tooltip.start": "Iniciar entrada de voz com o Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Toque ou pressione Cmd/Ctrl+K para iniciar ou parar a gravação; mantenha o botão pressionado enquanto fala e solte-o para transcrever e enviar.",
   "speechToText.tooltip.starting": "Iniciando o microfone... Aguarde antes de falar.",
@@ -410,7 +410,7 @@ export const dict = {
     "Modelo padrão e esforço de raciocínio para subagentes do task-tool. Deixe em branco para herdar o modelo do agente chamador.",
   "settings.models.hidePromptTraining.title": "Ocultar modelos que treinam com prompts",
   "settings.models.hidePromptTraining.description":
-    "Oculte os modelos do Kilo Gateway cujos provedores podem usar seus prompts para treinamento.",
+    "Oculte os modelos do Raya Gateway cujos provedores podem usar seus prompts para treinamento.",
   "settings.providers.modeModels": "Modelo por Modo",
   "settings.providers.modeModels.description":
     "Substitua o modelo padrão para modos específicos. Se não definido, o modelo padrão global é usado.",
@@ -626,7 +626,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Plano: Status desconhecido",
   "profile.usage.action.manage": "Gerenciar",
   "profile.usage.action.managePlan": "Gerenciar {{plan}}",
-  "profile.usage.routing": "A cobrança do plano está ativa. O roteamento do Kilo Gateway está {{state}}.",
+  "profile.usage.routing": "A cobrança do plano está ativa. O roteamento do Raya Gateway está {{state}}.",
   "profile.usage.routingState.disabled": "desativado",
   "profile.usage.routingState.missing": "ausente",
   "profile.usage.routingState.replaced": "substituído",
@@ -652,11 +652,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Esgotado",
   "profile.action.dashboard": "Painel",
   "profile.action.topUp": "Adicionar créditos",
-  "profile.pass.subscribe": "Obtenha o Kilo Pass para adicionar créditos e ganhar bônus",
+  "profile.pass.subscribe": "Obtenha o Raya Pass para adicionar créditos e ganhar bônus",
   "profile.pass.bonus": "Bônus",
   "profile.pass.usage": "Uso deste mês",
   "profile.pass.paid": "Pago",
-  "profile.pass.meter": "Uso mensal do Kilo Pass",
+  "profile.pass.meter": "Uso mensal do Raya Pass",
   "profile.pass.renews": "Renova",
   "profile.action.logout": "Sair",
 
@@ -869,10 +869,10 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Padrão (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Ative e faça login no provedor Kilo para usar o Speech to Text. Atualmente, o Speech to Text é compatível apenas com o Kilo Gateway.",
+    "Ative e faça login no provedor Kilo para usar o Speech to Text. Atualmente, o Speech to Text é compatível apenas com o Raya Gateway.",
   "settings.models.speechToTextModel.title": "Modelo de fala para texto",
   "settings.models.speechToTextModel.description":
-    "Escolha o modelo de transcrição do Kilo Gateway para entrada de voz.",
+    "Escolha o modelo de transcrição do Raya Gateway para entrada de voz.",
   "settings.experimental.nativeNotebookTools.title": "Ferramentas nativas de notebook",
   "settings.experimental.nativeNotebookTools.description":
     "Ativar ferramentas experimentais para ler, editar e executar notebooks do VS Code",
@@ -896,7 +896,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Tempo limite para solicitações do servidor MCP em milissegundos",
   "settings.experimental.remote.title": "Controle Remote",
   "settings.experimental.remote.description":
-    "Habilite o controle Remote de sessões via Kilo Cloud. Isso também afetará as CLIs nesta máquina.",
+    "Habilite o controle Remote de sessões via Raya Cloud. Isso também afetará as CLIs nesta máquina.",
   "settings.experimental.remote.current": "Estado atual:",
   "settings.experimental.remote.startup": "Ativar automaticamente na inicialização:",
   "settings.experimental.remote.active": "Ativo",

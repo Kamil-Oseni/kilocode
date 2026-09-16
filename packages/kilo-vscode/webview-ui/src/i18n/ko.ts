@@ -211,7 +211,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "클릭하면 파일 시스템 쓰기를 제한합니다. 샌드박스 설정에 따라 네트워크 액세스는 계속 허용됩니다.",
 
-  "speechToText.tooltip.start": "Kilo Gateway로 음성 입력 시작",
+  "speechToText.tooltip.start": "Raya Gateway로 음성 입력 시작",
   "speechToText.tooltip.shortcut":
     "탭하거나 Cmd/Ctrl+K를 눌러 녹음을 시작하거나 중지하고, 말하는 동안에는 누르고 있다가 놓으면 음성을 텍스트로 변환해 제출합니다.",
   "speechToText.tooltip.starting": "마이크를 시작하는 중... 잠시 후 말씀해 주세요.",
@@ -408,7 +408,7 @@ export const dict = {
     "task-tool 하위 에이전트의 기본 모델 및 추론 수준입니다. 호출하는 에이전트의 모델을 상속하려면 비워 두세요.",
   "settings.models.hidePromptTraining.title": "프롬프트를 학습에 사용하는 모델 숨기기",
   "settings.models.hidePromptTraining.description":
-    "제공업체가 사용자의 프롬프트를 학습에 사용할 수 있는 Kilo Gateway 모델을 숨깁니다.",
+    "제공업체가 사용자의 프롬프트를 학습에 사용할 수 있는 Raya Gateway 모델을 숨깁니다.",
   "settings.providers.modeModels": "모드별 모델",
   "settings.providers.modeModels.description":
     "특정 모드의 기본 모델을 재정의합니다. 설정하지 않으면 전역 기본 모델이 사용됩니다.",
@@ -620,7 +620,7 @@ export const dict = {
   "profile.usage.plan.unknown": "요금제: 상태 알 수 없음",
   "profile.usage.action.manage": "관리",
   "profile.usage.action.managePlan": "{{plan}} 관리",
-  "profile.usage.routing": "요금제 결제가 활성화되어 있습니다. Kilo Gateway 라우팅은 {{state}}입니다.",
+  "profile.usage.routing": "요금제 결제가 활성화되어 있습니다. Raya Gateway 라우팅은 {{state}}입니다.",
   "profile.usage.routingState.disabled": "비활성화 상태",
   "profile.usage.routingState.missing": "누락된 상태",
   "profile.usage.routingState.replaced": "대체된 상태",
@@ -646,11 +646,11 @@ export const dict = {
   "profile.usage.status.exhausted": "소진됨",
   "profile.action.dashboard": "대시보드",
   "profile.action.topUp": "충전",
-  "profile.pass.subscribe": "Kilo Pass를 구독하여 크레딧을 추가하고 보너스를 받으세요",
+  "profile.pass.subscribe": "Raya Pass를 구독하여 크레딧을 추가하고 보너스를 받으세요",
   "profile.pass.bonus": "보너스",
   "profile.pass.usage": "이번 달 사용량",
   "profile.pass.paid": "유료",
-  "profile.pass.meter": "Kilo Pass 월간 사용량",
+  "profile.pass.meter": "Raya Pass 월간 사용량",
   "profile.pass.renews": "갱신",
   "profile.action.logout": "로그아웃",
 
@@ -855,9 +855,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "기본값 (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Speech to Text를 사용하려면 Kilo 제공자를 활성화하고 로그인하세요. 현재 Speech to Text는 Kilo Gateway에서만 지원됩니다.",
+    "Speech to Text를 사용하려면 Kilo 제공자를 활성화하고 로그인하세요. 현재 Speech to Text는 Raya Gateway에서만 지원됩니다.",
   "settings.models.speechToTextModel.title": "음성 텍스트 변환 모델",
-  "settings.models.speechToTextModel.description": "음성 입력에 사용할 Kilo Gateway 변환 모델을 선택하세요.",
+  "settings.models.speechToTextModel.description": "음성 입력에 사용할 Raya Gateway 변환 모델을 선택하세요.",
   "settings.experimental.nativeNotebookTools.title": "네이티브 노트북 도구",
   "settings.experimental.nativeNotebookTools.description":
     "VS Code 노트북을 읽고, 편집하고, 실행하는 실험적 도구를 활성화합니다",
@@ -881,7 +881,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "MCP 서버 요청의 타임아웃 시간 (밀리초)",
   "settings.experimental.remote.title": "Remote 제어",
   "settings.experimental.remote.description":
-    "Kilo Cloud를 통한 세션의 Remote 제어를 활성화합니다. 이는 이 컴퓨터의 CLI에도 영향을 미칩니다.",
+    "Raya Cloud를 통한 세션의 Remote 제어를 활성화합니다. 이는 이 컴퓨터의 CLI에도 영향을 미칩니다.",
   "settings.experimental.remote.current": "현재 상태:",
   "settings.experimental.remote.startup": "시작 시 자동 활성화:",
   "settings.experimental.remote.active": "활성",

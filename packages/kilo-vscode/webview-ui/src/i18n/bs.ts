@@ -211,7 +211,7 @@ export const dict = {
   "prompt.action.sandbox.description.disabledNetworkAllowed":
     "Kliknite da ograničite pisanje u datotečni sistem. Pristup mreži ostaje dozvoljen prema vašim sandbox postavkama.",
 
-  "speechToText.tooltip.start": "Započni glasovni unos sa Kilo Gateway",
+  "speechToText.tooltip.start": "Započni glasovni unos sa Raya Gateway",
   "speechToText.tooltip.shortcut":
     "Dodirnite dugme ili pritisnite Cmd/Ctrl+K da pokrenete ili zaustavite snimanje; držite dugme pritisnutim dok govorite, a zatim ga otpustite da biste pretvorili govor u tekst i poslali ga.",
   "speechToText.tooltip.starting": "Pokretanje mikrofona... Sačekajte prije nego što progovorite.",
@@ -451,7 +451,7 @@ export const dict = {
     "Zadani model i napor zaključivanja za podagente task-tool-a. Ostavite nepodešeno da naslijedi model pozivnog agenta.",
   "settings.models.hidePromptTraining.title": "Sakrij modele koji treniraju na promptovima",
   "settings.models.hidePromptTraining.description":
-    "Sakrij Kilo Gateway modele čiji pružaoci mogu koristiti vaše promptove za treniranje.",
+    "Sakrij Raya Gateway modele čiji pružaoci mogu koristiti vaše promptove za treniranje.",
   "settings.providers.modeModels": "Model po režimu",
   "settings.providers.modeModels.description":
     "Zamijenite podrazumijevani model za određene režime. Ako nije postavljeno, koristi se globalni podrazumijevani model.",
@@ -666,7 +666,7 @@ export const dict = {
   "profile.usage.plan.unknown": "Plan: Status nepoznat",
   "profile.usage.action.manage": "Upravljaj",
   "profile.usage.action.managePlan": "Upravljaj planom {{plan}}",
-  "profile.usage.routing": "Naplata plana je aktivna. Kilo Gateway usmjeravanje je {{state}}.",
+  "profile.usage.routing": "Naplata plana je aktivna. Raya Gateway usmjeravanje je {{state}}.",
   "profile.usage.routingState.disabled": "onemogućeno",
   "profile.usage.routingState.missing": "odsutno",
   "profile.usage.routingState.replaced": "zamijenjeno",
@@ -692,11 +692,11 @@ export const dict = {
   "profile.usage.status.exhausted": "Iscrpljeno",
   "profile.action.dashboard": "Kontrolna ploča",
   "profile.action.topUp": "Dopuni",
-  "profile.pass.subscribe": "Nabavite Kilo Pass da dodate kredite i zaradite bonuse",
+  "profile.pass.subscribe": "Nabavite Raya Pass da dodate kredite i zaradite bonuse",
   "profile.pass.bonus": "Bonus",
   "profile.pass.usage": "Potrošnja ovog mjeseca",
   "profile.pass.paid": "Plaćeno",
-  "profile.pass.meter": "Mjesečna potrošnja Kilo Passa",
+  "profile.pass.meter": "Mjesečna potrošnja Raya Passa",
   "profile.pass.renews": "Obnavlja se",
   "profile.action.logout": "Odjava",
 
@@ -865,9 +865,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Zadano (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Omogućite i prijavite se na Kilo provajder da biste koristili Speech to Text. Speech to Text je trenutno podržan samo uz Kilo Gateway.",
+    "Omogućite i prijavite se na Kilo provajder da biste koristili Speech to Text. Speech to Text je trenutno podržan samo uz Raya Gateway.",
   "settings.models.speechToTextModel.title": "Model govora u tekst",
-  "settings.models.speechToTextModel.description": "Odaberite Kilo Gateway model za transkripciju za glasovni unos.",
+  "settings.models.speechToTextModel.description": "Odaberite Raya Gateway model za transkripciju za glasovni unos.",
   "settings.experimental.nativeNotebookTools.title": "Izvorni alati za bilježnice",
   "settings.experimental.nativeNotebookTools.description":
     "Omogući eksperimentalne alate za čitanje, uređivanje i izvršavanje VS Code bilježnica",
@@ -891,7 +891,7 @@ export const dict = {
   "settings.experimental.mcpTimeout.description": "Istek vremena za MCP server zahtjeve u milisekundama",
   "settings.experimental.remote.title": "Remote kontrola",
   "settings.experimental.remote.description":
-    "Omogućite Remote kontrolu sesija putem Kilo Cloud. Ovo će također utjecati na CLI-jeve na ovoj mašini.",
+    "Omogućite Remote kontrolu sesija putem Raya Cloud. Ovo će također utjecati na CLI-jeve na ovoj mašini.",
   "settings.experimental.remote.current": "Trenutno stanje:",
   "settings.experimental.remote.startup": "Automatsko uključivanje pri pokretanju:",
   "settings.experimental.remote.active": "Aktivno",

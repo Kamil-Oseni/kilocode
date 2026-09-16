@@ -159,6 +159,18 @@ describe("Raya branding boundary", () => {
     expect(source).not.toContain(["Ki", "lo Pass"].join(""))
   })
 
+  test("stores current Raya product names in every app locale", async () => {
+    const files = [...new Bun.Glob("webview-ui/src/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
+    const source = (await Promise.all(files.map((file) => Bun.file(file).text()))).join("\n")
+
+    expect(source).toContain("Raya Gateway")
+    expect(source).toContain("Raya Cloud")
+    expect(source).toContain("Raya Pass")
+    expect(source).not.toContain("Kilo Gateway")
+    expect(source).not.toContain("Kilo Cloud")
+    expect(source).not.toContain("Kilo Pass")
+  })
+
   test("uses Raya in remote status, memory, and MCP recovery copy", async () => {
     const remote = [...new Bun.Glob("src/services/cli-backend/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
     const locales = [...new Bun.Glob("webview-ui/src/i18n/*.ts").scanSync({ cwd: root, absolute: true })]

@@ -201,6 +201,10 @@ rm -f /tmp/kilo-serve.pid /tmp/kilo-serve.log
 | `RAYA_DISABLE_TERMINAL_TITLE=true` | Prevent terminal-title updates. `KILO_DISABLE_TERMINAL_TITLE` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `RAYA_DISABLE_EMBEDDED_WEB_UI=true` | Disable the embedded web UI. `KILO_DISABLE_EMBEDDED_WEB_UI` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `RAYA_DISABLE_EXTERNAL_SKILLS=true` | Skip `.claude/skills/` and `.agents/skills/`. `KILO_DISABLE_EXTERNAL_SKILLS` is a compatibility alias; either name set to `true` or `1` enables the override. |
+| `RAYA_DISABLE_CLAUDE_CODE=true` | Skip both `CLAUDE.md` instructions and `.claude/skills/`. `KILO_DISABLE_CLAUDE_CODE` is a compatibility alias; either name set to `true` or `1` enables both overrides. |
+| `RAYA_DISABLE_CLAUDE_CODE_PROMPT=true` | Skip `CLAUDE.md` instructions only. `KILO_DISABLE_CLAUDE_CODE_PROMPT` is a compatibility alias; either name set to `true` or `1` enables the override. |
+| `RAYA_DISABLE_CLAUDE_CODE_SKILLS=true` | Skip `.claude/skills/` only. `KILO_DISABLE_CLAUDE_CODE_SKILLS` is a compatibility alias; either name set to `true` or `1` enables the override. |
+| `RAYA_DISABLE_SKILL_SHELL=true` | Disable embedded shell commands in skills. `KILO_DISABLE_SKILL_SHELL` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `KILO_WORKSPACE_ID=<id>` | Single-workspace mode; disables control-plane routes. |
 | `KILO_TELEMETRY_LEVEL=off` | Disable PostHog during tests. |
 | `KILO_CONFIG_CONTENT='{…}'` | Inline JSON config without writing a file. |

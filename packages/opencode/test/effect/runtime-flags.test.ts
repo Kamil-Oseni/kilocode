@@ -115,24 +115,44 @@ describe("RuntimeFlags", () => {
   // kilocode_change start - disable aliases are safety-monotonic
   for (const pair of [
     {
-      field: "disableDefaultPlugins" as const,
+      fields: ["disableDefaultPlugins"] as const,
       raya: "RAYA_DISABLE_DEFAULT_PLUGINS",
       kilo: "KILO_DISABLE_DEFAULT_PLUGINS",
     },
     {
-      field: "disableLspDownload" as const,
+      fields: ["disableLspDownload"] as const,
       raya: "RAYA_DISABLE_LSP_DOWNLOAD",
       kilo: "KILO_DISABLE_LSP_DOWNLOAD",
     },
     {
-      field: "disableEmbeddedWebUi" as const,
+      fields: ["disableEmbeddedWebUi"] as const,
       raya: "RAYA_DISABLE_EMBEDDED_WEB_UI",
       kilo: "KILO_DISABLE_EMBEDDED_WEB_UI",
     },
     {
-      field: "disableExternalSkills" as const,
+      fields: ["disableExternalSkills"] as const,
       raya: "RAYA_DISABLE_EXTERNAL_SKILLS",
       kilo: "KILO_DISABLE_EXTERNAL_SKILLS",
+    },
+    {
+      fields: ["disableSkillShell"] as const,
+      raya: "RAYA_DISABLE_SKILL_SHELL",
+      kilo: "KILO_DISABLE_SKILL_SHELL",
+    },
+    {
+      fields: ["disableClaudeCodePrompt", "disableClaudeCodeSkills"] as const,
+      raya: "RAYA_DISABLE_CLAUDE_CODE",
+      kilo: "KILO_DISABLE_CLAUDE_CODE",
+    },
+    {
+      fields: ["disableClaudeCodePrompt"] as const,
+      raya: "RAYA_DISABLE_CLAUDE_CODE_PROMPT",
+      kilo: "KILO_DISABLE_CLAUDE_CODE_PROMPT",
+    },
+    {
+      fields: ["disableClaudeCodeSkills"] as const,
+      raya: "RAYA_DISABLE_CLAUDE_CODE_SKILLS",
+      kilo: "KILO_DISABLE_CLAUDE_CODE_SKILLS",
     },
   ]) {
     for (const input of [
@@ -145,7 +165,7 @@ describe("RuntimeFlags", () => {
       { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: true, conflict: true },
       { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "true", expected: true, conflict: true },
     ]) {
-      it.effect(`${pair.field} handles ${input.name}`, () =>
+      it.effect(`${pair.fields.join("+")} handles ${input.name}`, () =>
         Effect.gen(function* () {
           const config = {
             ...(input.raya === undefined ? {} : { [pair.raya]: input.raya }),
@@ -153,12 +173,24 @@ describe("RuntimeFlags", () => {
           }
           const flags = yield* readFlags.pipe(Effect.provide(fromConfig(config)))
 
-          expect(flags[pair.field]).toBe(input.expected)
+          for (const field of pair.fields) expect(flags[field]).toBe(input.expected)
           expect(EnvAlias.conflicts()).toEqual(input.conflict ? [`${pair.raya}/${pair.kilo}`] : [])
         }),
       )
     }
   }
+
+  it.effect("keeps the direct Claude prompt and skill switches separate", () =>
+    Effect.gen(function* () {
+      const prompt = yield* readFlags.pipe(Effect.provide(fromConfig({ RAYA_DISABLE_CLAUDE_CODE_PROMPT: "true" })))
+      const skills = yield* readFlags.pipe(Effect.provide(fromConfig({ RAYA_DISABLE_CLAUDE_CODE_SKILLS: "true" })))
+
+      expect(prompt.disableClaudeCodePrompt).toBe(true)
+      expect(prompt.disableClaudeCodeSkills).toBe(false)
+      expect(skills.disableClaudeCodePrompt).toBe(false)
+      expect(skills.disableClaudeCodeSkills).toBe(true)
+    }),
+  )
   // kilocode_change end
 
   it.effect("layer parses KILO_EXPERIMENTAL_LSP_TY", () =>
@@ -224,30 +256,6 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
       expect(flags.experimentalIconDiscovery).toBe(false)
-    }),
-  )
-
-  it.effect("disableClaudeCodePrompt defaults to false", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
-
-      expect(flags.disableClaudeCodePrompt).toBe(false)
-    }),
-  )
-
-  it.effect("disableClaudeCodePrompt reads KILO_DISABLE_CLAUDE_CODE_PROMPT", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_CLAUDE_CODE_PROMPT: "true" })))
-
-      expect(flags.disableClaudeCodePrompt).toBe(true)
-    }),
-  )
-
-  it.effect("disableClaudeCodePrompt inherits KILO_DISABLE_CLAUDE_CODE", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_CLAUDE_CODE: "true" })))
-
-      expect(flags.disableClaudeCodePrompt).toBe(true)
     }),
   )
 
@@ -409,30 +417,6 @@ describe("RuntimeFlags", () => {
       expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBeUndefined()
       expect(flags.client).toBe("cli")
-    }),
-  )
-
-  it.effect("disableClaudeCodeSkills defaults to false", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
-
-      expect(flags.disableClaudeCodeSkills).toBe(false)
-    }),
-  )
-
-  it.effect("disableClaudeCodeSkills reads KILO_DISABLE_CLAUDE_CODE_SKILLS", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_CLAUDE_CODE_SKILLS: "true" })))
-
-      expect(flags.disableClaudeCodeSkills).toBe(true)
-    }),
-  )
-
-  it.effect("disableClaudeCodeSkills inherits KILO_DISABLE_CLAUDE_CODE", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_CLAUDE_CODE: "true" })))
-
-      expect(flags.disableClaudeCodeSkills).toBe(true)
     }),
   )
 })

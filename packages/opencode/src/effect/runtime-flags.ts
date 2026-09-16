@@ -14,6 +14,7 @@ const safety = (raya: string, kilo: string) =>
     ),
   )
 // kilocode_change end
+const claude = safety("RAYA_DISABLE_CLAUDE_CODE", "KILO_DISABLE_CLAUDE_CODE") // kilocode_change
 const positiveInteger = (name: string) =>
   Config.number(name).pipe(
     Config.map((value) => (Number.isInteger(value) && value > 0 ? value : undefined)),
@@ -32,16 +33,16 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   disableChannelDb: bool("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
   disableEmbeddedWebUi: safety("RAYA_DISABLE_EMBEDDED_WEB_UI", "KILO_DISABLE_EMBEDDED_WEB_UI"), // kilocode_change
   disableExternalSkills: safety("RAYA_DISABLE_EXTERNAL_SKILLS", "KILO_DISABLE_EXTERNAL_SKILLS"), // kilocode_change
-  disableSkillShell: bool("KILO_DISABLE_SKILL_SHELL"), // kilocode_change - disable shell injection in skill bodies
+  disableSkillShell: safety("RAYA_DISABLE_SKILL_SHELL", "KILO_DISABLE_SKILL_SHELL"), // kilocode_change
   disableLspDownload: safety("RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD"), // kilocode_change
   skipMigrations: bool("KILO_SKIP_MIGRATIONS"), // kilocode_change
   disableClaudeCodePrompt: Config.all({
-    broad: bool("KILO_DISABLE_CLAUDE_CODE"),
-    direct: bool("KILO_DISABLE_CLAUDE_CODE_PROMPT"),
+    broad: claude, // kilocode_change
+    direct: safety("RAYA_DISABLE_CLAUDE_CODE_PROMPT", "KILO_DISABLE_CLAUDE_CODE_PROMPT"), // kilocode_change
   }).pipe(Config.map((flags) => flags.broad || flags.direct)),
   disableClaudeCodeSkills: Config.all({
-    broad: bool("KILO_DISABLE_CLAUDE_CODE"),
-    direct: bool("KILO_DISABLE_CLAUDE_CODE_SKILLS"),
+    broad: claude, // kilocode_change
+    direct: safety("RAYA_DISABLE_CLAUDE_CODE_SKILLS", "KILO_DISABLE_CLAUDE_CODE_SKILLS"), // kilocode_change
   }).pipe(Config.map((flags) => flags.broad || flags.direct)),
   enableExa: Config.all({
     experimental,

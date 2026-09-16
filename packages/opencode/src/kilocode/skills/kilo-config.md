@@ -386,3 +386,7 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `RAYA_DISABLE_TERMINAL_TITLE` / `KILO_DISABLE_TERMINAL_TITLE` | Prevent terminal-title updates. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_EMBEDDED_WEB_UI` / `KILO_DISABLE_EMBEDDED_WEB_UI` | Disable the embedded web UI. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_EXTERNAL_SKILLS` / `KILO_DISABLE_EXTERNAL_SKILLS` | Skip `.claude/skills/` and `.agents/skills/`. The Raya name is public; either name set to `true` or `1` enables the safety override. |
+| `RAYA_DISABLE_CLAUDE_CODE` / `KILO_DISABLE_CLAUDE_CODE` | Skip both `CLAUDE.md` instructions and `.claude/skills/`. The Raya name is public; either name set to `true` or `1` enables both safety overrides. |
+| `RAYA_DISABLE_CLAUDE_CODE_PROMPT` / `KILO_DISABLE_CLAUDE_CODE_PROMPT` | Skip only `CLAUDE.md` instructions. The Raya name is public; either name set to `true` or `1` enables the safety override. |
+| `RAYA_DISABLE_CLAUDE_CODE_SKILLS` / `KILO_DISABLE_CLAUDE_CODE_SKILLS` | Skip only `.claude/skills/`. The Raya name is public; either name set to `true` or `1` enables the safety override. |
+| `RAYA_DISABLE_SKILL_SHELL` / `KILO_DISABLE_SKILL_SHELL` | Disable embedded shell commands in skills. The Raya name is public; either name set to `true` or `1` enables the safety override. |

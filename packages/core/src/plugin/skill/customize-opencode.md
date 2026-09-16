@@ -439,9 +439,11 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `RAYA_DISABLE_TERMINAL_TITLE=1`: prevent terminal-title updates (`KILO_DISABLE_TERMINAL_TITLE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_EMBEDDED_WEB_UI=1`: disable the embedded web UI (`KILO_DISABLE_EMBEDDED_WEB_UI` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_PURE=1`: skip external plugins entirely (`KILO_PURE` remains a compatibility alias; either name can enable pure mode).
-- `RAYA_DISABLE_EXTERNAL_SKILLS=1` (`KILO_DISABLE_EXTERNAL_SKILLS` remains a compatibility alias; either name set to `true` or `1` enables the safety override),
-  `KILO_DISABLE_CLAUDE_CODE_SKILLS=1`: skip the external skill scans under
-  `~/.claude/` and `~/.agents/`.
+- `RAYA_DISABLE_EXTERNAL_SKILLS=1`: skip the external skill scans under `~/.claude/` and `~/.agents/` (`KILO_DISABLE_EXTERNAL_SKILLS` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_CLAUDE_CODE=1`: skip both `CLAUDE.md` instruction loading and the `~/.claude/skills/` scan (`KILO_DISABLE_CLAUDE_CODE` remains a compatibility alias; either name set to `true` or `1` enables both safety overrides).
+- `RAYA_DISABLE_CLAUDE_CODE_PROMPT=1`: skip only `CLAUDE.md` instruction loading (`KILO_DISABLE_CLAUDE_CODE_PROMPT` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_CLAUDE_CODE_SKILLS=1`: skip only the `~/.claude/skills/` scan (`KILO_DISABLE_CLAUDE_CODE_SKILLS` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_SKILL_SHELL=1`: disable embedded shell commands in skills (`KILO_DISABLE_SKILL_SHELL` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 
 ## When proposing edits
 

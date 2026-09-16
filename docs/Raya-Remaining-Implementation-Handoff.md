@@ -1,10 +1,30 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `cc4f1d2356`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `4c22d6e06b`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 22:55 America/Toronto - Preserve admitted diagnostics and finish cross-process ownership later
+
+Preserve product commit `4c22d6e06b`. Every heap-snapshot entrypoint now delegates to `packages/opencode/src/kilocode/cli/heap-snapshot.ts`, and every direct-trace append runs through `ProfileWriterLive.diagnostics`. Keep root resolution inside admission, keep the lease across native serialization, keep role/PID/time/sequence filenames, and never restore the fixed working-directory TUI/server snapshot names. Main and worker shutdown must continue awaiting `Heap.stop()`.
+
+The automatic monitor must remain single-flight, rearm after a failed write while memory remains high, stop its timer and await its active write. Its lifecycle must share an in-progress stop and reject restart until drain completes. Direct trace must append a generation's first record before publishing `latest.json`; its publisher must use a unique temporary file, atomic rename and cleanup on both write and rename failure. Closed admission may warn and drop the diagnostic, but it must not resolve or mutate an old root.
+
+Evidence is **15 tests / 437 assertions**, bounded single-thread OpenCode typecheck, annotations, Effect Promise-facade and whitespace guards. Coverage is **11 of 32**. This is process-local integration only. Before a profile cutover, the outer controller still has to stop all CLI and worker processes and prove that another process cannot publish to the retired generation.
+
+## ChatGPT 2026-09-15 22:55 America/Toronto - Preserve the web-search alias contract
+
+Preserve product commit `b211afe932`. `RAYA_WEBSEARCH_PROVIDER` wins whenever it is defined and `KILO_WEBSEARCH_PROVIDER` remains the fallback only when Raya is absent. Empty or invalid Raya input suppresses a conflicting Kilo override and returns to ordinary feature/session routing. Do not rename `exa`, `parallel`, `kilo-exa`, Kilo authentication or the compatibility command `kilo auth login` in this slice. Evidence is Core **17 / 29**, OpenCode **15 / 23**, combined migration **18 / 48**, plus Core typecheck and affected guards. The ledger now contains **16 environment pairs**.
+
+After these checkpoints and this handoff/progress record, the checked inventory is **69,476** total: public 1,654; compatibility 35,478; provenance 5,686; internal 26,658. The pinned compatibility digest is `b337b5fc5ef0d7030a85c2eac82adb545af7943ce3cf3869e3b6cb6bdc6f3614`.
+
+## ChatGPT 2026-09-15 22:55 America/Toronto - Implement server-auth aliases as one credential-specific slice
+
+Server authentication is the next reviewed alias boundary, but it must not use the ordinary unconditional Raya-wins policy. Implement `RAYA_SERVER_USERNAME`/`KILO_SERVER_USERNAME` and `RAYA_SERVER_PASSWORD`/`KILO_SERVER_PASSWORD` together across all launchers, readers, sanitizers, help/security documentation and tests. Use this exact precedence: explicit credentials or CLI arguments first; one defined environment value or two identical values second; two different defined Raya/Kilo values must fail closed before any listener or client is created. Error text may contain the variable labels but must never contain either credential value. An empty effective password must preserve the current standalone unauthenticated behavior. Preserve the existing default usernames: `kilo` in OpenCode and `opencode` in the generic server.
+
+Managed launchers in VS Code, JetBrains, the TUI worker and the daemon must write both names from one resolved value and override hostile ambient values. Add both Raya names to the Core PTY, OpenCode process-environment, sandbox-policy, configuration-variable and test-preload sanitizers. Test explicit precedence, Raya-only, Kilo-only, identical aliases, conflicting aliases, empty password, listener refusal before bind, client refusal before connect, child-process equality, redacted errors and sanitizer removal with real boundaries where practical. This slice spans TypeScript and Kotlin and needs the relevant VS Code, CLI/Core and JetBrains focused checks. It does not require SDK regeneration unless the public HTTP schema actually changes.
 
 ## ChatGPT 2026-09-15 22:34 America/Toronto - Preserve localized Work Style branding coverage
 

@@ -605,7 +605,7 @@ export const dict = {
   "feedback.dialog.github": "Ein Problem auf GitHub melden",
   "feedback.dialog.discord": "Unserer Discord-Community beitreten",
   "feedback.dialog.support": "Kundensupport",
-  "workStyle.onboarding.welcome": "Willkommen bei Kilo",
+  "workStyle.onboarding.welcome": "Willkommen bei Raya",
   "workStyle.onboarding.title": "Wähle, wie du arbeiten möchtest",
   "workStyle.onboarding.settingsNote": "Du kannst diese Optionen jederzeit ändern unter",
   "workStyle.onboarding.settings": "Einstellungen.",
@@ -615,7 +615,7 @@ export const dict = {
   "workStyle.choice.visibility": "Sichtbarkeit",
   "workStyle.choice.human-in-the-loop.eyebrow": "Menschliche Kontrolle",
   "workStyle.choice.human-in-the-loop.title": "Zuerst überprüfen",
-  "workStyle.choice.human-in-the-loop.description": "Kilo pausiert und zeigt dir während der Arbeit seinen Plan.",
+  "workStyle.choice.human-in-the-loop.description": "Raya pausiert und zeigt dir während der Arbeit seinen Plan.",
   "workStyle.choice.human-in-the-loop.permissions":
     "Fragt vor dem Bearbeiten von Dateien oder Ausführen von Befehlen nach.",
   "workStyle.choice.human-in-the-loop.bash": "Der Agent fragt bei allen Terminalbefehlen um Erlaubnis.",

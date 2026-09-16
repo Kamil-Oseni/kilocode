@@ -593,7 +593,7 @@ export const dict = {
   "feedback.dialog.github": "Rapportér et problem på GitHub",
   "feedback.dialog.discord": "Deltag i vores Discord-fællesskab",
   "feedback.dialog.support": "Kundesupport",
-  "workStyle.onboarding.welcome": "Velkommen til Kilo",
+  "workStyle.onboarding.welcome": "Velkommen til Raya",
   "workStyle.onboarding.title": "Vælg, hvordan du vil arbejde",
   "workStyle.onboarding.settingsNote": "Du kan til enhver tid ændre disse valg under",
   "workStyle.onboarding.settings": "Indstillinger.",
@@ -603,7 +603,7 @@ export const dict = {
   "workStyle.choice.visibility": "Synlighed",
   "workStyle.choice.human-in-the-loop.eyebrow": "Menneskelig kontrol",
   "workStyle.choice.human-in-the-loop.title": "Gennemgå først",
-  "workStyle.choice.human-in-the-loop.description": "Kilo holder pause og viser dig sin plan undervejs.",
+  "workStyle.choice.human-in-the-loop.description": "Raya holder pause og viser dig sin plan undervejs.",
   "workStyle.choice.human-in-the-loop.permissions":
     "Spørger om tilladelse, før filer redigeres eller kommandoer køres.",
   "workStyle.choice.human-in-the-loop.bash": "Spørger om tilladelse til alle terminalkommandoer.",

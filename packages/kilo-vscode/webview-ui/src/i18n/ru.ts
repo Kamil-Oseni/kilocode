@@ -592,7 +592,7 @@ export const dict = {
   "feedback.dialog.github": "Сообщить о проблеме на GitHub",
   "feedback.dialog.discord": "Присоединиться к нашему Discord",
   "feedback.dialog.support": "Служба поддержки",
-  "workStyle.onboarding.welcome": "Добро пожаловать в Kilo",
+  "workStyle.onboarding.welcome": "Добро пожаловать в Raya",
   "workStyle.onboarding.title": "Выберите, как вы хотите работать",
   "workStyle.onboarding.settingsNote": "Эти параметры можно изменить в любое время в разделе",
   "workStyle.onboarding.settings": "«Настройки».",
@@ -602,7 +602,7 @@ export const dict = {
   "workStyle.choice.visibility": "Видимость",
   "workStyle.choice.human-in-the-loop.eyebrow": "Человек контролирует процесс",
   "workStyle.choice.human-in-the-loop.title": "Сначала проверка",
-  "workStyle.choice.human-in-the-loop.description": "Kilo приостанавливается и показывает свой план по ходу работы.",
+  "workStyle.choice.human-in-the-loop.description": "Raya приостанавливается и показывает свой план по ходу работы.",
   "workStyle.choice.human-in-the-loop.permissions":
     "Запрашивает разрешение перед редактированием файлов или выполнением команд.",
   "workStyle.choice.human-in-the-loop.bash": "Запрашивает разрешение на каждую команду терминала.",

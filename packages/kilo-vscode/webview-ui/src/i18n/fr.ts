@@ -602,7 +602,7 @@ export const dict = {
   "feedback.dialog.github": "Signaler un problème sur GitHub",
   "feedback.dialog.discord": "Rejoindre notre communauté Discord",
   "feedback.dialog.support": "Service client",
-  "workStyle.onboarding.welcome": "Bienvenue dans Kilo",
+  "workStyle.onboarding.welcome": "Bienvenue dans Raya",
   "workStyle.onboarding.title": "Choisissez votre façon de travailler",
   "workStyle.onboarding.settingsNote": "Vous pouvez modifier ces options à tout moment dans les",
   "workStyle.onboarding.settings": "Paramètres.",
@@ -613,7 +613,7 @@ export const dict = {
   "workStyle.choice.human-in-the-loop.eyebrow": "Contrôle humain",
   "workStyle.choice.human-in-the-loop.title": "Vérifier d'abord",
   "workStyle.choice.human-in-the-loop.description":
-    "Kilo s'interrompt et vous présente son plan au fil de son travail.",
+    "Raya s'interrompt et vous présente son plan au fil de son travail.",
   "workStyle.choice.human-in-the-loop.permissions":
     "Demande avant de modifier des fichiers ou d'exécuter des commandes.",
   "workStyle.choice.human-in-the-loop.bash": "L'agent demande l'autorisation pour chaque commande du terminal.",

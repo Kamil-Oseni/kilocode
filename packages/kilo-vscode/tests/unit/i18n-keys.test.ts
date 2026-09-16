@@ -499,3 +499,15 @@ describe("i18n locale completeness — every English key exists in all locales",
     expect(missing).toEqual([])
   })
 })
+
+describe("i18n product branding", () => {
+  it("uses Raya in every localized Work Style introduction", () => {
+    const keys = ["workStyle.onboarding.welcome", "workStyle.choice.human-in-the-loop.description"]
+    for (const [locale, dict] of Object.entries(appLocales)) {
+      for (const key of keys) {
+        expect(dict[key], `[${locale}] ${key}`).toContain("Raya")
+        expect(dict[key], `[${locale}] ${key}`).not.toContain("Kilo")
+      }
+    }
+  })
+})

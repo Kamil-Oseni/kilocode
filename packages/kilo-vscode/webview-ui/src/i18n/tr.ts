@@ -544,7 +544,7 @@ export const dict = {
   "feedback.dialog.github": "GitHub'da sorun bildirin",
   "feedback.dialog.discord": "Discord topluluğumuza katılın",
   "feedback.dialog.support": "Müşteri Desteği",
-  "workStyle.onboarding.welcome": "Kilo'ya hoş geldiniz",
+  "workStyle.onboarding.welcome": "Raya'ya hoş geldiniz",
   "workStyle.onboarding.title": "Nasıl çalışmak istediğinizi seçin",
   "workStyle.onboarding.settingsNote": "Bu seçenekleri istediğiniz zaman şuradan değiştirebilirsiniz:",
   "workStyle.onboarding.settings": "Ayarlar.",
@@ -554,7 +554,7 @@ export const dict = {
   "workStyle.choice.visibility": "Görünürlük",
   "workStyle.choice.human-in-the-loop.eyebrow": "İnsan denetimli",
   "workStyle.choice.human-in-the-loop.title": "Önce inceleyin",
-  "workStyle.choice.human-in-the-loop.description": "Kilo çalışırken duraklar ve planını size gösterir.",
+  "workStyle.choice.human-in-the-loop.description": "Raya çalışırken duraklar ve planını size gösterir.",
   "workStyle.choice.human-in-the-loop.permissions":
     "Dosyaları düzenlemeden veya komutları çalıştırmadan önce izin ister.",
   "workStyle.choice.human-in-the-loop.bash": "Her terminal komutunu çalıştırmadan önce izin ister.",

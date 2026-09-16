@@ -547,7 +547,7 @@ export const dict = {
   "feedback.dialog.github": "Meld een probleem op GitHub",
   "feedback.dialog.discord": "Word lid van onze Discord community",
   "feedback.dialog.support": "Klantenservice",
-  "workStyle.onboarding.welcome": "Welkom bij Kilo",
+  "workStyle.onboarding.welcome": "Welkom bij Raya",
   "workStyle.onboarding.title": "Kies hoe je wilt werken",
   "workStyle.onboarding.settingsNote": "Je kunt deze opties op elk moment wijzigen in",
   "workStyle.onboarding.settings": "Instellingen.",
@@ -557,7 +557,7 @@ export const dict = {
   "workStyle.choice.visibility": "Zichtbaarheid",
   "workStyle.choice.human-in-the-loop.eyebrow": "Menselijke controle",
   "workStyle.choice.human-in-the-loop.title": "Eerst controleren",
-  "workStyle.choice.human-in-the-loop.description": "Kilo pauzeert en toont tijdens het werk zijn plan.",
+  "workStyle.choice.human-in-the-loop.description": "Raya pauzeert en toont tijdens het werk zijn plan.",
   "workStyle.choice.human-in-the-loop.permissions":
     "Vraagt toestemming voordat bestanden worden bewerkt of opdrachten worden uitgevoerd.",
   "workStyle.choice.human-in-the-loop.bash": "Vraagt toestemming voor elke terminalopdracht.",

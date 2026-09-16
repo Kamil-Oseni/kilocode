@@ -599,7 +599,7 @@ export const dict = {
   "feedback.dialog.github": "Reportar un problema en GitHub",
   "feedback.dialog.discord": "Unirse a nuestra comunidad de Discord",
   "feedback.dialog.support": "Atención al cliente",
-  "workStyle.onboarding.welcome": "Te damos la bienvenida a Kilo",
+  "workStyle.onboarding.welcome": "Te damos la bienvenida a Raya",
   "workStyle.onboarding.title": "Elige cómo quieres trabajar",
   "workStyle.onboarding.settingsNote": "Puedes cambiar estas opciones en cualquier momento en",
   "workStyle.onboarding.settings": "Configuración.",
@@ -609,7 +609,7 @@ export const dict = {
   "workStyle.choice.visibility": "Visibilidad",
   "workStyle.choice.human-in-the-loop.eyebrow": "Supervisión humana",
   "workStyle.choice.human-in-the-loop.title": "Revisar primero",
-  "workStyle.choice.human-in-the-loop.description": "Kilo se detiene y te muestra su plan mientras trabaja.",
+  "workStyle.choice.human-in-the-loop.description": "Raya se detiene y te muestra su plan mientras trabaja.",
   "workStyle.choice.human-in-the-loop.permissions": "Pide permiso antes de editar archivos o ejecutar comandos.",
   "workStyle.choice.human-in-the-loop.bash": "Pide permiso para ejecutar todos los comandos del terminal.",
   "workStyle.choice.human-in-the-loop.visibility":

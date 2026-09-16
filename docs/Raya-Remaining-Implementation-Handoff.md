@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `25bc30dd2f`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `25bc30dd2f`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 00:10 America/Toronto - Continue from installed compatibility checkpoint
+
+Local and remote `main` reached `4e5207a6ea`, then the low-memory workflow successfully installed `7.4.23-snapshot+4e5207a6ea.kamil-oseni.1789531801489`. SDK preparation, fresh CLI build and smoke tests, extension/webview typechecks, lint, production bundle, packaging and installation passed. The vault retained rollback VSIX `raya.1e86739694dc2a050dcc5701c640b7528270d18b3dc259d9b2b0424c9aba063c.vsix`; free disk space is 125.20 GB. Do not infer that the already-open host loaded it: no force reload occurred.
+
+Preserve the regenerated v2 SDK member `explicit-or-matching-aliases` in `RayaAdminMigrationResponses`. The strict server credentials changed the Admin migration response schema even though no authentication route changed. The earlier claim that no SDK regeneration was required was incomplete; `snapshot:install` correctly detected the stale generated output. The new SDK changeset covers this additive contract member.
+
+After this handoff and progress record, the checked inventory is **69,698** total: public 1,654; compatibility 35,640; provenance 5,686; internal 26,718. The pinned compatibility digest is `f91d01e09f8acd3b9b68686d250d0f7e9b1ff7c113ee8cbb79df76310822735a`.
 
 ## ChatGPT 2026-09-16 00:05 America/Toronto - Preserve session retry alias semantics
 
@@ -50,7 +58,7 @@ Preserve product commit `f16c3a163c`. `EnvAlias.credential` is the shared sensit
 
 Keep both Effect config layers strict so a conflict fails before route/listener construction. Keep CLI attach/run explicit options above ambient variables. Managed VS Code, JetBrains, TUI-worker and daemon launchers must overwrite inherited aliases with one generated password and one username under all four names. Keep both Raya names in Core PTY cleanup, OpenCode merged-process cleanup, sandbox denial, case-insensitive trusted-config secret blocking and test preload. The real source-CLI regression must continue proving a conflicting process exits nonzero without a listening message, exposes no secret values and leaves its requested port bindable.
 
-Evidence is Core **16 / 38**, generic server **4 / 15**, OpenCode auth **10 / 22**, listener **14 pass / 6 platform skips / 22**, real conflict CLI **1 / 6**, sanitizer/config/process **26 pass / 3 platform skips / 59**, real shell child **1 / 1**, TUI dual-write **1 / 2**, VS Code **34 / 58**, and JetBrains **13 tests**. Relevant TypeScript/Kotlin checks and repository guards pass. The ledger has **18 environment pairs**; only the two credentials use `explicit-or-matching-aliases`. No SDK regeneration is required because the HTTP contract did not change. Batch this extension-source change into a later low-memory snapshot reinstall.
+Evidence is Core **16 / 38**, generic server **4 / 15**, OpenCode auth **10 / 22**, listener **14 pass / 6 platform skips / 22**, real conflict CLI **1 / 6**, sanitizer/config/process **26 pass / 3 platform skips / 59**, real shell child **1 / 1**, TUI dual-write **1 / 2**, VS Code **34 / 58**, and JetBrains **13 tests**. Relevant TypeScript/Kotlin checks and repository guards pass. The ledger has **18 environment pairs**; only the two credentials use `explicit-or-matching-aliases`. Authentication routes did not change, but the Admin migration response schema did; preserve the regenerated v2 SDK enum member. This extension-source change is included in installed snapshot `7.4.23-snapshot+4e5207a6ea.kamil-oseni.1789531801489`.
 
 After this handoff and progress record, the checked inventory is **69,621** total: public 1,654; compatibility 35,584; provenance 5,686; internal 26,697. The pinned compatibility digest is `0980b219f8b1a4b7df8331df12cbc8046e101b0a81ec49b3b2cfe2e9c04ac371`.
 

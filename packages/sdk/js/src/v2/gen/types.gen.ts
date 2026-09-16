@@ -29686,6 +29686,7 @@ export type RayaAdminMigrationResponses = {
         policy:
           | "raya-preferred"
           | "raya-wins-legacy-write"
+          | "explicit-or-matching-aliases"
           | "legacy-canonical"
           | "raya-new-only"
           | "deferred-version-3"

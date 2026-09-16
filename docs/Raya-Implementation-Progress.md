@@ -1,10 +1,20 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `25bc30dd2f`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `25bc30dd2f`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 00:10 America/Toronto - Pushed compatibility checkpoint installed with rollback retained
+
+**Status: pushed and installed.** Local and remote `main` reached `4e5207a6ea`, then the low-memory workflow built and installed `7.4.23-snapshot+4e5207a6ea.kamil-oseni.1789531801489`. SDK preparation, a fresh single-platform CLI build and smoke tests, extension/webview typechecks, lint, production bundling, VSIX packaging and installation all passed. The installer retained rollback artifact `raya.1e86739694dc2a050dcc5701c640b7528270d18b3dc259d9b2b0424c9aba063c.vsix` and removed one older vault package, one staged package and one extension snapshot. Free disk space after installation is 125.20 GB.
+
+SDK preparation also exposed a stale generated type from the earlier strict server-credential ledger change: `RayaAdminMigrationResponses` did not yet include `explicit-or-matching-aliases`, even though the live Admin schema can emit it. The regenerated v2 SDK now includes that additive policy member, and the SDK changeset records it. This corrects the earlier statement that the server-auth slice needed no SDK regeneration; authentication routes did not change, but the Admin migration response schema did.
+
+The already-open VS Code host was not force-reloaded and may continue using its previous active package until the user normally reloads. The installed extension listing confirms the new version. The repository remains otherwise clean apart from the three owner-owned untracked files.
+
+After this progress and handoff record, the checked inventory is **69,698** total: public 1,654; compatibility 35,640; provenance 5,686; internal 26,718. The pinned compatibility digest is `f91d01e09f8acd3b9b68686d250d0f7e9b1ff7c113ee8cbb79df76310822735a`.
 
 ## ChatGPT 2026-09-16 00:05 America/Toronto - Session retry budgets gain a Raya alias
 
@@ -34,7 +44,7 @@ After this progress and handoff record, the checked inventory is **69,664** tota
 
 **Status: implemented, verified and committed in `f16c3a163c`; protected push follows this documentation checkpoint.** `RAYA_SERVER_PASSWORD` and `RAYA_SERVER_USERNAME` are now public credential inputs across Core flags, the generic server, OpenCode listeners and clients, and CLI help/security documentation. Both Kilo variables remain accepted. This pair deliberately differs from ordinary Raya-first aliases: an explicit credential or CLI argument wins; otherwise one defined alias or two identical aliases are accepted; two different defined values fail before client creation or listener bind. Errors name only the variable labels and never include either credential value. Empty effective passwords retain the existing unauthenticated standalone behavior. OpenCode still defaults its username to `kilo`; the generic server still defaults to `opencode`.
 
-VS Code, JetBrains, the TUI worker and the daemon now derive one managed password and username, write them through both names after inherited environment values and therefore override hostile ambient aliases. Core PTY children, OpenCode model-process environments, sandbox policy, trusted config substitution and test preload remove or reject both Raya and Kilo credentials. No credential reaches model shell commands. No HTTP schema changed, so SDK regeneration is unnecessary.
+VS Code, JetBrains, the TUI worker and the daemon now derive one managed password and username, write them through both names after inherited environment values and therefore override hostile ambient aliases. Core PTY children, OpenCode model-process environments, sandbox policy, trusted config substitution and test preload remove or reject both Raya and Kilo credentials. No credential reaches model shell commands. Authentication routes did not change, but the Admin migration response schema did; the regenerated v2 SDK includes the strict alias-policy enum member.
 
 Evidence covers the complete boundary: Core aliases **16 tests / 38 assertions**; generic server **4 / 15**; OpenCode auth **10 / 22**; the listener suite **14 passing / 6 platform skips / 22 assertions**; a real conflicting source-CLI process **1 / 6** proves nonzero exit, redacted output, no listening message and an immediately reusable requested port; sanitizer/config/process suites **26 passing / 3 platform skips / 59 assertions** plus the real shell child **1 / 1**; TUI worker dual-write **1 / 2**; VS Code **34 / 58**; and JetBrains **13 tests**. Stable CLI help snapshots pass. Core, generic-server, bounded single-thread OpenCode and VS Code typechecks pass; focused Kotlin compilation/tests, annotations, Promise-facade, extension marker, Knip, Markdown and whitespace guards pass.
 

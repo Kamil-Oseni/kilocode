@@ -377,3 +377,4 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `KILO_CONFIG_DIR` | Path to an additional config directory (appended to search list) |
 | `KILO_CONFIG_CONTENT` | Inline JSON config string (high precedence, after project dirs) |
 | `RAYA_DISABLE_PROJECT_CONFIG` / `KILO_DISABLE_PROJECT_CONFIG` | Skip all project-level config (files and directories). The Raya name takes precedence when both are defined. |
+| `RAYA_SESSION_RETRY_LIMIT` / `KILO_SESSION_RETRY_LIMIT` | Set the positive-integer provider retry budget (default: 8). The Raya name takes precedence when both are defined. |

@@ -38,6 +38,19 @@ import { testEffect } from "../lib/effect"
 
 Log.init({ print: false })
 
+function retries(value: string) {
+  const raya = process.env.RAYA_SESSION_RETRY_LIMIT
+  const kilo = process.env.KILO_SESSION_RETRY_LIMIT
+  delete process.env.RAYA_SESSION_RETRY_LIMIT
+  process.env.KILO_SESSION_RETRY_LIMIT = value
+  return () => {
+    if (raya === undefined) delete process.env.RAYA_SESSION_RETRY_LIMIT
+    else process.env.RAYA_SESSION_RETRY_LIMIT = raya
+    if (kilo === undefined) delete process.env.KILO_SESSION_RETRY_LIMIT
+    else process.env.KILO_SESSION_RETRY_LIMIT = kilo
+  }
+}
+
 const ref = {
   providerID: ProviderV2.ID.make("test"),
   modelID: ModelV2.ID.make("test-model"),
@@ -552,7 +565,7 @@ describe("session processor incomplete response retry", () => {
     provideTmpdirProject(
       (dir) =>
         Effect.gen(function* () {
-          process.env.KILO_SESSION_RETRY_LIMIT = "2"
+          const restore = retries("2")
           const ctx = yield* setup(dir)
           yield* ctx.test.reply(...empty())
           yield* ctx.test.push(Stream.fail(retryable429()))
@@ -564,7 +577,7 @@ describe("session processor incomplete response retry", () => {
             expect(yield* ctx.handle.process(ctx.input)).toBe("continue")
           } finally {
             delay.mockRestore()
-            delete process.env.KILO_SESSION_RETRY_LIMIT
+            restore()
           }
 
           expect(yield* ctx.test.calls).toBe(4)
@@ -578,7 +591,7 @@ describe("session processor incomplete response retry", () => {
     provideTmpdirProject(
       (dir) =>
         Effect.gen(function* () {
-          process.env.KILO_SESSION_RETRY_LIMIT = "1"
+          const restore = retries("1")
           const ctx = yield* setup(dir)
           yield* ctx.test.push(
             Stream.make(
@@ -594,7 +607,7 @@ describe("session processor incomplete response retry", () => {
             expect(yield* ctx.handle.process(ctx.input)).toBe("stop")
           } finally {
             delay.mockRestore()
-            delete process.env.KILO_SESSION_RETRY_LIMIT
+            restore()
           }
 
           expect(yield* ctx.test.calls).toBe(1)
@@ -609,7 +622,7 @@ describe("session processor incomplete response retry", () => {
     provideTmpdirProject(
       (dir) =>
         Effect.gen(function* () {
-          process.env.KILO_SESSION_RETRY_LIMIT = "2"
+          const restore = retries("2")
           const ctx = yield* setup(dir)
           yield* ctx.test.push(Stream.fail(retryable429()))
           yield* ctx.test.reply(...empty())
@@ -621,7 +634,7 @@ describe("session processor incomplete response retry", () => {
             expect(yield* ctx.handle.process(ctx.input)).toBe("stop")
           } finally {
             delay.mockRestore()
-            delete process.env.KILO_SESSION_RETRY_LIMIT
+            restore()
           }
 
           expect(yield* ctx.test.calls).toBe(4)

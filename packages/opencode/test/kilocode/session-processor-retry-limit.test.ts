@@ -1,9 +1,3 @@
-// Set env before any imports that transitively load flag.ts (e.g. LLM, SessionRetry).
-// This MUST happen before static imports, but ES module imports are hoisted.
-// So we set it here and use mock.module + dynamic imports for modules that
-// transitively load flag.ts to ensure the env is captured at load time.
-process.env.KILO_SESSION_RETRY_LIMIT = "2"
-
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { NodeFileSystem } from "@effect/platform-node"
@@ -30,7 +24,7 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionRetry } from "../../src/session/retry"
-import { MessageID } from "../../src/session/schema"
+import { MessageID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { Snapshot } from "../../src/snapshot"
@@ -39,6 +33,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import * as CrossSpawnSpawner from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirProject } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { KiloSessionProcessor } from "../../src/kilocode/session/processor"
 
 Log.init({ print: false })
 
@@ -151,10 +146,26 @@ const env = LayerNode.compile(root, [
 ]).pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, Bus.layer, SyncEvent.defaultLayer)))
 
 const it = testEffect(env)
+const original = {
+  raya: process.env.RAYA_SESSION_RETRY_LIMIT,
+  kilo: process.env.KILO_SESSION_RETRY_LIMIT,
+}
 
 afterEach(() => {
-  delete process.env.KILO_SESSION_RETRY_LIMIT
+  if (original.raya === undefined) delete process.env.RAYA_SESSION_RETRY_LIMIT
+  else process.env.RAYA_SESSION_RETRY_LIMIT = original.raya
+  if (original.kilo === undefined) delete process.env.KILO_SESSION_RETRY_LIMIT
+  else process.env.KILO_SESSION_RETRY_LIMIT = original.kilo
 })
+
+function limit(used = 0) {
+  return KiloSessionProcessor.retryOpts({
+    sessionID: SessionID.make("ses_retry_limit"),
+    abort: new AbortController().signal,
+    set: () => Effect.void,
+    used,
+  }).limit
+}
 
 describe("session processor retry limit", () => {
   it.live(
@@ -163,7 +174,8 @@ describe("session processor retry limit", () => {
       provideTmpdirProject(
         (dir) =>
           Effect.gen(function* () {
-            process.env.KILO_SESSION_RETRY_LIMIT = "2"
+            delete process.env.KILO_SESSION_RETRY_LIMIT
+            process.env.RAYA_SESSION_RETRY_LIMIT = "2"
             const test = yield* TestLLM
             const processors = yield* SessionProcessor.Service
             const session = yield* Session.Service
@@ -235,10 +247,43 @@ describe("session processor retry limit", () => {
     15000,
   )
 
+  it.effect("uses the Raya retry limit in processor options", () =>
+    Effect.sync(() => {
+      delete process.env.KILO_SESSION_RETRY_LIMIT
+      process.env.RAYA_SESSION_RETRY_LIMIT = "3"
+      expect(limit(1)).toBe(2)
+    }),
+  )
+
+  it.effect("uses the Kilo retry limit as a compatibility fallback", () =>
+    Effect.sync(() => {
+      delete process.env.RAYA_SESSION_RETRY_LIMIT
+      process.env.KILO_SESSION_RETRY_LIMIT = "4"
+      expect(limit(1)).toBe(3)
+    }),
+  )
+
+  it.effect("uses the conflicting Raya retry limit before the Kilo value", () =>
+    Effect.sync(() => {
+      process.env.RAYA_SESSION_RETRY_LIMIT = "2"
+      process.env.KILO_SESSION_RETRY_LIMIT = "6"
+      expect(limit()).toBe(2)
+    }),
+  )
+
+  it.effect("uses the default retry budget when the Raya value is explicitly empty", () =>
+    Effect.sync(() => {
+      process.env.RAYA_SESSION_RETRY_LIMIT = ""
+      process.env.KILO_SESSION_RETRY_LIMIT = "6"
+      expect(limit(1)).toBe(7)
+    }),
+  )
+
   it.effect("only positive integers enable the limit", () =>
     Effect.promise(async () => {
       const { Flag } = await import("@opencode-ai/core/flag/flag")
 
+      delete process.env.RAYA_SESSION_RETRY_LIMIT
       delete process.env.KILO_SESSION_RETRY_LIMIT
       expect(Flag.KILO_SESSION_RETRY_LIMIT).toBeUndefined()
 
@@ -259,6 +304,7 @@ describe("session processor retry limit", () => {
   it.effect("reads env at access time (dynamic getter)", () =>
     Effect.promise(async () => {
       const { Flag } = await import("@opencode-ai/core/flag/flag")
+      delete process.env.RAYA_SESSION_RETRY_LIMIT
       delete process.env.KILO_SESSION_RETRY_LIMIT
       expect(Flag.KILO_SESSION_RETRY_LIMIT).toBeUndefined()
       process.env.KILO_SESSION_RETRY_LIMIT = "5"

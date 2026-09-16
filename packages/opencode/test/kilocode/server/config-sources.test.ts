@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import * as Log from "@opencode-ai/core/util/log"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import { Server } from "../../../src/server/server"
 import { resetDatabase } from "../../fixture/db"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
@@ -30,10 +31,15 @@ const env = {
   KILO_CONFIG_DIR: process.env.KILO_CONFIG_DIR,
   RAYA_DISABLE_PROJECT_CONFIG: process.env.RAYA_DISABLE_PROJECT_CONFIG,
   KILO_DISABLE_PROJECT_CONFIG: process.env.KILO_DISABLE_PROJECT_CONFIG,
+  RAYA_DISABLE_AUTOCOMPACT: process.env.RAYA_DISABLE_AUTOCOMPACT,
+  KILO_DISABLE_AUTOCOMPACT: process.env.KILO_DISABLE_AUTOCOMPACT,
+  RAYA_DISABLE_PRUNE: process.env.RAYA_DISABLE_PRUNE,
+  KILO_DISABLE_PRUNE: process.env.KILO_DISABLE_PRUNE,
   KILO_TEST_MANAGED_CONFIG_DIR: process.env.KILO_TEST_MANAGED_CONFIG_DIR,
 }
 
 afterEach(async () => {
+  EnvAlias.conflicts()
   restore()
   await disposeAllInstances()
   await resetDatabase()
@@ -45,6 +51,10 @@ function restore() {
   set("KILO_CONFIG_DIR", env.KILO_CONFIG_DIR)
   set("RAYA_DISABLE_PROJECT_CONFIG", env.RAYA_DISABLE_PROJECT_CONFIG)
   set("KILO_DISABLE_PROJECT_CONFIG", env.KILO_DISABLE_PROJECT_CONFIG)
+  set("RAYA_DISABLE_AUTOCOMPACT", env.RAYA_DISABLE_AUTOCOMPACT)
+  set("KILO_DISABLE_AUTOCOMPACT", env.KILO_DISABLE_AUTOCOMPACT)
+  set("RAYA_DISABLE_PRUNE", env.RAYA_DISABLE_PRUNE)
+  set("KILO_DISABLE_PRUNE", env.KILO_DISABLE_PRUNE)
   set("KILO_TEST_MANAGED_CONFIG_DIR", env.KILO_TEST_MANAGED_CONFIG_DIR)
 }
 
@@ -162,4 +172,54 @@ describe("config source routes", () => {
       editable: false,
     })
   })
+
+  test.each([
+    ["1", undefined, "RAYA"] as const,
+    [undefined, "1", "KILO"] as const,
+    ["1", "0", "RAYA"] as const,
+    ["0", "1", "KILO"] as const,
+    ["", "1", "KILO"] as const,
+    ["invalid", "1", "KILO"] as const,
+  ])("reports the effective compaction safety aliases without values", async (raya, kilo, prefix) => {
+    await using tmp = await tmpdir()
+    set("RAYA_DISABLE_AUTOCOMPACT", raya)
+    set("KILO_DISABLE_AUTOCOMPACT", kilo)
+    set("RAYA_DISABLE_PRUNE", raya)
+    set("KILO_DISABLE_PRUNE", kilo)
+
+    const body = await sources(tmp.path)
+    const compact = body.sources.find((item) => item.source === `${prefix}_DISABLE_AUTOCOMPACT`)
+    const prune = body.sources.find((item) => item.source === `${prefix}_DISABLE_PRUNE`)
+
+    for (const item of [compact, prune]) {
+      expect(item).toMatchObject({
+        kind: "runtime-env",
+        scope: "env",
+        label: item?.source,
+        exists: true,
+        editable: false,
+      })
+      expect(item).not.toHaveProperty("value")
+    }
+  })
+
+  test.each([["false", undefined] as const, ["false", "0"] as const, [undefined, undefined] as const])(
+    "omits disabled compaction safety aliases",
+    async (raya, kilo) => {
+      await using tmp = await tmpdir()
+      set("RAYA_DISABLE_AUTOCOMPACT", raya)
+      set("KILO_DISABLE_AUTOCOMPACT", kilo)
+      set("RAYA_DISABLE_PRUNE", raya)
+      set("KILO_DISABLE_PRUNE", kilo)
+
+      const body = await sources(tmp.path)
+      expect(
+        body.sources.some((item) =>
+          ["RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT", "RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE"].includes(
+            item.source,
+          ),
+        ),
+      ).toBe(false)
+    },
+  )
 })

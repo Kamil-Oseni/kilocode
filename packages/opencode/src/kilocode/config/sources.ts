@@ -4,6 +4,7 @@ import { unique } from "remeda"
 import z from "zod"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias"
 import { Auth } from "@/auth"
 import { ConfigManaged } from "@/config/managed"
 import { Filesystem } from "@/util/filesystem"
@@ -281,9 +282,15 @@ export namespace KilocodeConfigSources {
   function runtimeSources(): Pending[] {
     return [
       runtimeSource("KILO_PERMISSION", Flag.KILO_PERMISSION, "Runtime permission overlay."),
-      runtimeSource("KILO_DISABLE_AUTOCOMPACT", process.env.KILO_DISABLE_AUTOCOMPACT, "Disables automatic compaction."),
-      runtimeSource("KILO_DISABLE_PRUNE", process.env.KILO_DISABLE_PRUNE, "Disables tool-output pruning."),
+      safetySource("RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT", "Disables automatic compaction."),
+      safetySource("RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE", "Disables tool-output pruning."),
     ].filter((item): item is Pending => item !== undefined)
+  }
+
+  function safetySource(raya: string, kilo: string, reason: string): Pending | undefined {
+    if (!EnvAlias.enabled(raya, kilo)) return undefined
+    const label = EnvAlias.enabledValues(raya, kilo, process.env[raya], undefined) ? raya : kilo
+    return runtimeSource(label, "1", reason)
   }
 
   function runtimeSource(label: string, value: string | undefined, reason: string): Pending | undefined {

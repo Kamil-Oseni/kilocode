@@ -113,8 +113,8 @@ If no compaction agent is set, the current session's model is used.
 
 | Variable | Effect |
 |---|---|
-| `KILO_DISABLE_AUTOCOMPACT=1` | Forces `compaction.auto = false` |
-| `KILO_DISABLE_PRUNE=1` | Forces `compaction.prune = false` |
+| `RAYA_DISABLE_AUTOCOMPACT=1` (`KILO_DISABLE_AUTOCOMPACT` compatibility alias) | Forces `compaction.auto = false` when either name is `true` or `1` |
+| `RAYA_DISABLE_PRUNE=1` (`KILO_DISABLE_PRUNE` compatibility alias) | Forces `compaction.prune = false` when either name is `true` or `1` |
 | `KILO_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | Overrides the 32,000 default output-token ceiling |
 
 {% /tab %}
@@ -212,8 +212,8 @@ If no compaction agent is set, the current session's model is used.
 
 | Variable | Effect |
 |---|---|
-| `KILO_DISABLE_AUTOCOMPACT=1` | Forces `compaction.auto = false` |
-| `KILO_DISABLE_PRUNE=1` | Forces `compaction.prune = false` |
+| `RAYA_DISABLE_AUTOCOMPACT=1` (`KILO_DISABLE_AUTOCOMPACT` compatibility alias) | Forces `compaction.auto = false` when either name is `true` or `1` |
+| `RAYA_DISABLE_PRUNE=1` (`KILO_DISABLE_PRUNE` compatibility alias) | Forces `compaction.prune = false` when either name is `true` or `1` |
 | `KILO_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | Overrides the 32,000 default output-token ceiling |
 
 {% /tab %}

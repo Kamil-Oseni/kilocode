@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `cdf245aa13`; the installed package source is `cdf245aa13`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `5e517b1894`; the installed package source is `5e517b1894`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 05:41 America/Toronto - Continue from installed Core safety-reader checkpoint
+
+Product checkpoint `5e517b1894` is on `origin/main` and installed. Its constrained push passed all 29 JavaScript/TypeScript packages plus JetBrains. The low-memory workflow regenerated the SDK without tracked drift, rebuilt the Windows CLI, passed version, model-catalog and sandbox-worker smokes, host/webview types, cached lint and production bundling, then packaged, retained and installed Raya.
+
+Installed version is `eden.raya@7.4.23-snapshot+5e517b1894.kamil-oseni.1789551451859`. Preserve vault package `raya.b0c54de7573caf25403fde403047713d7c0efdb6099e82b1f0b9e3dfc13aef0c.vsix`: `520,233,075` bytes, SHA-256 `B0C54DE7573CAF25403FDE403047713D7C0EFDB6099E82B1F0B9E3DFC13AEF0C`. The installed CLI is `231,278,592` bytes with SHA-256 `24BA375E66ACE61284FD00F311374C8394D29E182CC6B9C51F4FF62CE9EC56C5`; both match the vault manifest. Free space is 115.55 GiB and no build process remains.
+
+The open host still points to digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`. Require a normal reload and pointer `b0c54de7573caf25403fde403047713d7c0efdb6099e82b1f0b9e3dfc13aef0c` before installed-host acceptance. Continue the compatibility migration through bounded slices; the editor distribution remains Version 3 work.
 
 ## ChatGPT 2026-09-16 05:31 America/Toronto - Preserve complete Core safety-alias coverage
 

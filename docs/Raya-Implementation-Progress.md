@@ -1,10 +1,18 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `cdf245aa13`; the installed package source is `cdf245aa13`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `5e517b1894`; the installed package source is `5e517b1894`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 05:41 America/Toronto - Core safety-reader checkpoint pushed and installed
+
+**Status: pushed and installed from `5e517b1894`.** The protected gate passed all 29 JavaScript/TypeScript packages plus JetBrains with one-worker concurrency. The sequential `RAYA_LOW_MEMORY=1` workflow regenerated the SDK without tracked drift, rebuilt the Windows CLI, passed version, model-catalog and sandbox-worker smokes, host/webview typechecks, cached lint, production bundling, packaging, retention and installation.
+
+Installed version: `eden.raya@7.4.23-snapshot+5e517b1894.kamil-oseni.1789551451859`. Vault package `raya.b0c54de7573caf25403fde403047713d7c0efdb6099e82b1f0b9e3dfc13aef0c.vsix` is `520,233,075` bytes with SHA-256 `B0C54DE7573CAF25403FDE403047713D7C0EFDB6099E82B1F0B9E3DFC13AEF0C`. Its installed CLI is `231,278,592` bytes with SHA-256 `24BA375E66ACE61284FD00F311374C8394D29E182CC6B9C51F4FF62CE9EC56C5`; both match the vault manifest. Retention removed one older vault package, one staged package and one installed snapshot. Free space is `124,066,557,952` bytes (115.55 GiB), and no Bun, tsgo, tsgolint or Java process remains.
+
+The already-open host was not force-reloaded and still points to digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`. A normal reload must move it to `b0c54de7573caf25403fde403047713d7c0efdb6099e82b1f0b9e3dfc13aef0c` before installed-host acceptance.
 
 ## ChatGPT 2026-09-16 05:31 America/Toronto - Close two incomplete Core safety-alias readers
 

@@ -42,6 +42,12 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     const ledger = Schema.decodeUnknownSync(RayaMigrationLedger.Snapshot)(await migration.json())
     expect(ledger.entries.every((item) => item.cutoverReady === false)).toBe(true)
     expect(ledger.entries.find((item) => item.id === "editor-distribution")?.phase).toBe("deferred-version-3")
+    expect(ledger.entries.find((item) => item.id === "environment-inputs")?.identities).toContainEqual({
+      kind: "environment:permission",
+      raya: "RAYA_PERMISSION",
+      legacy: "KILO_PERMISSION",
+      policy: "matching-authority-aliases",
+    })
     expect(JSON.stringify(ledger)).not.toContain(first.path)
 
     const recent = await request("/raya/admin/logs?limit=2")

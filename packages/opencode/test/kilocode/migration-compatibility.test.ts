@@ -116,6 +116,12 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:permission",
+      raya: "RAYA_PERMISSION",
+      legacy: "KILO_PERMISSION",
+      policy: "matching-authority-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:pure",
       raya: "RAYA_PURE",
       legacy: "KILO_PURE",

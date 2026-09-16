@@ -218,9 +218,6 @@ export const Flag = {
     return EnvAlias.enabled("RAYA_PURE", "KILO_PURE")
   },
   // kilocode_change end
-  get KILO_PERMISSION() {
-    return process.env["KILO_PERMISSION"]
-  },
   get KILO_PLUGIN_META_FILE() {
     return process.env["KILO_PLUGIN_META_FILE"]
   },

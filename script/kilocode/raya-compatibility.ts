@@ -74,6 +74,7 @@ export function check(
     "SHOW_TTFD",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
+    ["RAYA_PERMISSION", "KILO_PERMISSION", "matching-authority-aliases"],
     ["RAYA_PURE", "KILO_PURE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT", "safety-monotonic-aliases"],

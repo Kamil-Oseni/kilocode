@@ -393,4 +393,21 @@ describe("server workspace helpers", () => {
     expect(env.RAYA_DISABLE_CLAUDE_CODE).toBeUndefined()
     expect(env.KILO_DISABLE_CLAUDE_CODE).toBeUndefined()
   })
+
+  it("transports permission authority aliases without manufacturing or rewriting a sibling", () => {
+    const raya = resolveManagedServerEnv({ RAYA_PERMISSION: '{"bash":"deny"}' }, "password")
+    expect(raya.RAYA_PERMISSION).toBe('{"bash":"deny"}')
+    expect(raya.KILO_PERMISSION).toBeUndefined()
+
+    const kilo = resolveManagedServerEnv({ KILO_PERMISSION: '{"read":"ask"}' }, "password")
+    expect(kilo.RAYA_PERMISSION).toBeUndefined()
+    expect(kilo.KILO_PERMISSION).toBe('{"read":"ask"}')
+
+    const both = resolveManagedServerEnv(
+      { RAYA_PERMISSION: '{"bash":"allow"}', KILO_PERMISSION: '{"bash":"deny"}' },
+      "password",
+    )
+    expect(both.RAYA_PERMISSION).toBe('{"bash":"allow"}')
+    expect(both.KILO_PERMISSION).toBe('{"bash":"deny"}')
+  })
 })

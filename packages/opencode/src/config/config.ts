@@ -58,6 +58,7 @@ import { unique } from "remeda"
 import { installLocalPluginDependency, needsLocalPluginDependency } from "@/kilocode/config/plugin-deps"
 import * as RepairConfig from "@/kilocode/config/repair"
 import { Storage } from "@/storage/storage"
+import { PermissionEnv } from "@/kilocode/config/permission-env"
 // kilocode_change end
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
@@ -947,13 +948,10 @@ const layer = Layer.effect(
           })
         }
 
-        if (Flag.KILO_PERMISSION) {
-          try {
-            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.KILO_PERMISSION))
-          } catch (err) {
-            yield* Effect.logWarning("KILO_PERMISSION contains invalid JSON, skipping", { err })
-          }
-        }
+        // kilocode_change start - authority aliases must match and fail closed before applying one late overlay
+        const permission = PermissionEnv.resolve()
+        if (permission) result.permission = mergeDeep(result.permission ?? {}, permission.permission)
+        // kilocode_change end
 
         if (result.tools) {
           const perms: Record<string, ConfigPermissionV1.Action> = {}

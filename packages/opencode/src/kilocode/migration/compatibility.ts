@@ -42,6 +42,7 @@ export namespace RayaMigrationLedger {
     "raya-preferred",
     "raya-wins-legacy-write",
     "safety-monotonic-aliases",
+    "matching-authority-aliases",
     "explicit-or-matching-aliases",
     "legacy-canonical",
     "raya-new-only",
@@ -132,6 +133,12 @@ export namespace RayaMigrationLedger {
       legacy: `KILO_${name}`,
       policy: "raya-wins-legacy-write" as const,
     })),
+    {
+      kind: "environment:permission",
+      raya: "RAYA_PERMISSION",
+      legacy: "KILO_PERMISSION",
+      policy: "matching-authority-aliases" as const,
+    },
     {
       kind: "environment:pure",
       raya: "RAYA_PURE",
@@ -499,8 +506,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 36_092,
-        digest: "10c184e13b6d90db67f901e5a08855a264902891994ef9954311c7a7bcc75d17",
+        count: 36_120,
+        digest: "a5defbcf471d69596354f7f1a5724e90786039ead1d147f49d7a85cfa42a89a6",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

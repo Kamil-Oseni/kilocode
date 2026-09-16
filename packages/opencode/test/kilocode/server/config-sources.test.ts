@@ -35,6 +35,8 @@ const env = {
   KILO_DISABLE_AUTOCOMPACT: process.env.KILO_DISABLE_AUTOCOMPACT,
   RAYA_DISABLE_PRUNE: process.env.RAYA_DISABLE_PRUNE,
   KILO_DISABLE_PRUNE: process.env.KILO_DISABLE_PRUNE,
+  RAYA_PERMISSION: process.env.RAYA_PERMISSION,
+  KILO_PERMISSION: process.env.KILO_PERMISSION,
   KILO_TEST_MANAGED_CONFIG_DIR: process.env.KILO_TEST_MANAGED_CONFIG_DIR,
 }
 
@@ -55,6 +57,8 @@ function restore() {
   set("KILO_DISABLE_AUTOCOMPACT", env.KILO_DISABLE_AUTOCOMPACT)
   set("RAYA_DISABLE_PRUNE", env.RAYA_DISABLE_PRUNE)
   set("KILO_DISABLE_PRUNE", env.KILO_DISABLE_PRUNE)
+  set("RAYA_PERMISSION", env.RAYA_PERMISSION)
+  set("KILO_PERMISSION", env.KILO_PERMISSION)
   set("KILO_TEST_MANAGED_CONFIG_DIR", env.KILO_TEST_MANAGED_CONFIG_DIR)
 }
 
@@ -67,11 +71,15 @@ function set(key: keyof typeof process.env, value: string | undefined) {
 }
 
 async function sources(dir: string) {
-  const response = await Server.Default().app.request("/config/sources", {
-    headers: { "x-kilo-directory": dir },
-  })
+  const response = await request(dir)
   expect(response.status).toBe(200)
   return (await response.json()) as Body
+}
+
+function request(dir: string) {
+  return Server.Default().app.request("/config/sources", {
+    headers: { "x-kilo-directory": dir },
+  })
 }
 
 function order(body: Body, file: string) {
@@ -224,4 +232,36 @@ describe("config source routes", () => {
       ).toBe(false)
     },
   )
+
+  test.each([
+    ['{"raya-source-secret":"deny"}', undefined, ["RAYA_PERMISSION"]],
+    [undefined, '{"legacy-source-secret":"deny"}', ["KILO_PERMISSION"]],
+    [
+      '{"matched-source-secret":{"*":"deny"}}',
+      '{ "matched-source-secret": { "*": "deny" } }',
+      ["RAYA_PERMISSION", "KILO_PERMISSION"],
+    ],
+  ] as const)("reports defined permission aliases without their values", async (raya, kilo, labels) => {
+    await using tmp = await tmpdir()
+    set("RAYA_PERMISSION", raya)
+    set("KILO_PERMISSION", kilo)
+
+    const body = await sources(tmp.path)
+    const found = body.sources.filter((item) => labels.some((label) => label === item.source))
+    expect(found.map((item) => item.source)).toEqual([...labels])
+    expect(found.every((item) => item.kind === "runtime-env" && item.scope === "env" && !item.editable)).toBe(true)
+    expect(JSON.stringify(body)).not.toContain("source-secret")
+  })
+
+  test("fails closed and redacts conflicting permission sources", async () => {
+    await using tmp = await tmpdir()
+    set("RAYA_PERMISSION", '{"raya-source-secret":"allow"}')
+    set("KILO_PERMISSION", '{"legacy-source-secret":"deny"}')
+
+    const response = await request(tmp.path)
+    expect(response.status).toBeGreaterThanOrEqual(400)
+    const text = await response.text()
+    expect(text).not.toContain("raya-source-secret")
+    expect(text).not.toContain("legacy-source-secret")
+  })
 })

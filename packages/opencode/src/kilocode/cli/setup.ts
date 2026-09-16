@@ -46,6 +46,7 @@ KiloShutdown.register(async () => {
 // top level, with implementation imports inside their handlers.
 export namespace KiloCli {
   let info = false
+  let active = false
 
   // Register only the Kilo-specific commands. Upstream commands stay in index.ts's chain so
   // upstream merges that add or remove commands keep working without touching this file.
@@ -77,7 +78,12 @@ export namespace KiloCli {
   // it never has to modify upstream's own env assignments.
   export async function bootstrap(opts: { [key: string]: unknown }): Promise<void> {
     info = opts.help === true || opts.version === true
+    active = false
     if (info) return
+
+    const { PermissionEnv } = await import("@/kilocode/config/permission-env")
+    PermissionEnv.resolve()
+    active = true
 
     const { KiloLog } = await import("@/kilocode/log")
     await KiloLog.init({
@@ -136,7 +142,7 @@ export namespace KiloCli {
 
   // Runs from the `finally` block on every exit path.
   export async function shutdown(): Promise<void> {
-    if (info) return
+    if (info || !active) return
     const { Telemetry } = await import("@kilocode/kilo-telemetry")
     const code = typeof process.exitCode === "number" ? process.exitCode : undefined
     Telemetry.trackCliExit(code)

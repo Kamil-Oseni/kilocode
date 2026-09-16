@@ -122,7 +122,7 @@ Agent Manager persists UI, worktree, and session state in `.kilo/agent-manager.j
 
 ## Permissions
 
-Scalar form applies to all patterns. Object form maps glob patterns to actions. Evaluated top-to-bottom; first match wins.
+Scalar form applies to all patterns. Object form maps glob patterns to actions. Rules retain their declared order, and the last matching rule wins.
 
 ```jsonc
 {
@@ -376,6 +376,7 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `KILO_CONFIG` | Path to an additional config file (loaded after global) |
 | `KILO_CONFIG_DIR` | Path to an additional config directory (appended to search list) |
 | `KILO_CONFIG_CONTENT` | Inline JSON config string (high precedence, after project dirs) |
+| `RAYA_PERMISSION` / `KILO_PERMISSION` | Apply a final JSON permission overlay. Either name may be used alone. When both are defined, their decoded ordered overlay structures must match exactly; malformed, schema-invalid, or conflicting input refuses startup without exposing the supplied values. |
 | `RAYA_DISABLE_PROJECT_CONFIG` / `KILO_DISABLE_PROJECT_CONFIG` | Skip all project-level config (files and directories). The Raya name takes precedence when both are defined. |
 | `RAYA_SESSION_RETRY_LIMIT` / `KILO_SESSION_RETRY_LIMIT` | Set the positive-integer provider retry budget (default: 8). The Raya name takes precedence when both are defined. |
 | `RAYA_PURE` / `KILO_PURE` | Disable external plugins. Pure mode is enabled when either name is true; `--pure` sets both names. |

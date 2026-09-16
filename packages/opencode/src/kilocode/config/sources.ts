@@ -9,6 +9,7 @@ import { Auth } from "@/auth"
 import { ConfigManaged } from "@/config/managed"
 import { Filesystem } from "@/util/filesystem"
 import { KilocodeConfig } from "./config"
+import { PermissionEnv } from "./permission-env"
 
 export namespace KilocodeConfigSources {
   export const Scope = z.enum(["global", "project", "env", "managed", "cloud"])
@@ -280,8 +281,17 @@ export namespace KilocodeConfigSources {
   }
 
   function runtimeSources(): Pending[] {
+    const permission = PermissionEnv.resolve()
     return [
-      runtimeSource("KILO_PERMISSION", Flag.KILO_PERMISSION, "Runtime permission overlay."),
+      ...(permission?.labels.map((label) =>
+        runtimeSource(
+          label,
+          "1",
+          permission.labels.length === 2
+            ? "Matching runtime permission authority overlay; both aliases are present."
+            : "Runtime permission authority overlay.",
+        ),
+      ) ?? []),
       safetySource("RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT", "Disables automatic compaction."),
       safetySource("RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE", "Disables tool-output pruning."),
     ].filter((item): item is Pending => item !== undefined)

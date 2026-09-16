@@ -2238,22 +2238,79 @@ describe("KILO_DISABLE_PROJECT_CONFIG", () => {
   )
 })
 
-// Regression for #28206: malformed KILO_PERMISSION JSON used to crash
-// the app on startup with an unhandled SyntaxError. Loading the config with
-// an invalid JSON value in this env var should not throw.
-describe("KILO_PERMISSION env var", () => {
-  it.instance("does not crash when KILO_PERMISSION contains invalid JSON", () =>
-    withProcessEnv(
-      "KILO_PERMISSION",
-      "{invalid",
+// kilocode_change start
+describe("permission environment authority overlay", () => {
+  it.instance("applies a Raya-only overlay at final permission precedence", () =>
+    withProcessEnvs(
+      { RAYA_PERMISSION: '{"bash":{"*":"deny","git status":"allow"}}', KILO_PERMISSION: undefined },
       Effect.gen(function* () {
         const config = yield* Config.use.get()
-        // Regression: load() used to throw before returning anything.
-        expect(config).toBeDefined()
+        expect(config.permission?.bash).toEqual({ "*": "deny", "git status": "allow" })
       }),
     ),
   )
+
+  it.instance("applies a Kilo-only overlay for compatibility", () =>
+    withProcessEnvs(
+      { RAYA_PERMISSION: undefined, KILO_PERMISSION: '{"bash":"deny"}' },
+      Effect.gen(function* () {
+        const config = yield* Config.use.get()
+        expect(config.permission?.bash).toBe("deny")
+      }),
+    ),
+  )
+
+  it.instance("applies matching aliases once", () =>
+    withProcessEnvs(
+      {
+        RAYA_PERMISSION: '{"bash":{"*":"deny","git status":"allow"}}',
+        KILO_PERMISSION: '{ "bash": { "*": "deny", "git status": "allow" } }',
+      },
+      Effect.gen(function* () {
+        const config = yield* Config.use.get()
+        expect(config.permission?.bash).toEqual({ "*": "deny", "git status": "allow" })
+      }),
+    ),
+  )
+
+  for (const item of [
+    {
+      name: "malformed legacy JSON",
+      env: { RAYA_PERMISSION: undefined, KILO_PERMISSION: "{legacy-secret" },
+      path: "KILO_PERMISSION",
+    },
+    {
+      name: "schema-invalid Raya JSON",
+      env: { RAYA_PERMISSION: '{"bash":"raya-secret"}', KILO_PERMISSION: undefined },
+      path: "RAYA_PERMISSION",
+    },
+    {
+      name: "conflicting aliases",
+      env: {
+        RAYA_PERMISSION: '{"raya-secret":"allow"}',
+        KILO_PERMISSION: '{"legacy-secret":"deny"}',
+      },
+      path: "RAYA_PERMISSION/KILO_PERMISSION",
+    },
+  ]) {
+    it.instance(`fails closed for ${item.name} without exposing values`, () =>
+      withProcessEnvs(
+        item.env,
+        Effect.gen(function* () {
+          const exit = yield* Config.use.get().pipe(Effect.exit)
+          expect(Exit.isFailure(exit)).toBe(true)
+          const cause = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+          expect(NamedError.hasName(cause, "ConfigInvalidError")).toBe(true)
+          expect((cause as { data?: { path?: string } }).data?.path).toBe(item.path)
+          const text = `${String(cause)} ${JSON.stringify(cause)}`
+          expect(text).not.toContain("raya-secret")
+          expect(text).not.toContain("legacy-secret")
+        }),
+      ),
+    )
+  }
 })
+// kilocode_change end
 
 describe("KILO_CONFIG_CONTENT token substitution", () => {
   it.instance("substitutes {env:} tokens in KILO_CONFIG_CONTENT", () =>

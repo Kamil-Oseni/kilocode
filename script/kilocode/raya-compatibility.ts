@@ -83,6 +83,7 @@ export function check(
     ["RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_AUTOUPDATE", "KILO_DISABLE_AUTOUPDATE", "safety-monotonic-aliases"],
+    ["RAYA_ALWAYS_NOTIFY_UPDATE", "KILO_ALWAYS_NOTIFY_UPDATE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_MODELS_FETCH", "KILO_DISABLE_MODELS_FETCH", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_TERMINAL_TITLE", "KILO_DISABLE_TERMINAL_TITLE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_EMBEDDED_WEB_UI", "KILO_DISABLE_EMBEDDED_WEB_UI", "safety-monotonic-aliases"],

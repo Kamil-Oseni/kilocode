@@ -54,6 +54,12 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
       legacy: "KILO_DISABLE_CODEBASE_INDEXING",
       policy: "raya-wins-legacy-write",
     })
+    expect(ledger.entries.find((item) => item.id === "environment-inputs")?.identities).toContainEqual({
+      kind: "environment:always_notify_update",
+      raya: "RAYA_ALWAYS_NOTIFY_UPDATE",
+      legacy: "KILO_ALWAYS_NOTIFY_UPDATE",
+      policy: "safety-monotonic-aliases",
+    })
     expect(JSON.stringify(ledger)).not.toContain(first.path)
 
     const recent = await request("/raya/admin/logs?limit=2")

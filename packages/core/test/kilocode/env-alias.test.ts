@@ -275,6 +275,8 @@ describe("Raya environment aliases", () => {
       const names = [
         "RAYA_DISABLE_AUTOUPDATE",
         "KILO_DISABLE_AUTOUPDATE",
+        "RAYA_ALWAYS_NOTIFY_UPDATE",
+        "KILO_ALWAYS_NOTIFY_UPDATE",
         "RAYA_DISABLE_MODELS_FETCH",
         "KILO_DISABLE_MODELS_FETCH",
         "RAYA_DISABLE_TERMINAL_TITLE",
@@ -288,6 +290,7 @@ describe("Raya environment aliases", () => {
       for (const name of names) delete env[name]
       if (item.raya !== undefined) {
         env.RAYA_DISABLE_AUTOUPDATE = item.raya
+        env.RAYA_ALWAYS_NOTIFY_UPDATE = item.raya
         env.RAYA_DISABLE_MODELS_FETCH = item.raya
         env.RAYA_DISABLE_TERMINAL_TITLE = item.raya
         env.RAYA_DISABLE_CHANNEL_DB = item.raya
@@ -295,6 +298,7 @@ describe("Raya environment aliases", () => {
       }
       if (item.kilo !== undefined) {
         env.KILO_DISABLE_AUTOUPDATE = item.kilo
+        env.KILO_ALWAYS_NOTIFY_UPDATE = item.kilo
         env.KILO_DISABLE_MODELS_FETCH = item.kilo
         env.KILO_DISABLE_TERMINAL_TITLE = item.kilo
         env.KILO_DISABLE_CHANNEL_DB = item.kilo
@@ -304,7 +308,7 @@ describe("Raya environment aliases", () => {
         cmd: [
           process.execPath,
           "-e",
-          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify([Flag.KILO_DISABLE_AUTOUPDATE, Flag.KILO_DISABLE_MODELS_FETCH, Flag.KILO_DISABLE_TERMINAL_TITLE, Flag.KILO_DISABLE_CHANNEL_DB, Flag.KILO_SKIP_MIGRATIONS]))',
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify([Flag.KILO_DISABLE_AUTOUPDATE, Flag.KILO_ALWAYS_NOTIFY_UPDATE, Flag.KILO_DISABLE_MODELS_FETCH, Flag.KILO_DISABLE_TERMINAL_TITLE, Flag.KILO_DISABLE_CHANNEL_DB, Flag.KILO_SKIP_MIGRATIONS]))',
         ],
         cwd: `${import.meta.dir}/../..`,
         env,
@@ -312,6 +316,7 @@ describe("Raya environment aliases", () => {
 
       expect(child.exitCode).toBe(0)
       expect(JSON.parse(child.stdout.toString())).toEqual([
+        item.expected,
         item.expected,
         item.expected,
         item.expected,
@@ -325,6 +330,8 @@ describe("Raya environment aliases", () => {
     const names = [
       "RAYA_DISABLE_AUTOUPDATE",
       "KILO_DISABLE_AUTOUPDATE",
+      "RAYA_ALWAYS_NOTIFY_UPDATE",
+      "KILO_ALWAYS_NOTIFY_UPDATE",
       "RAYA_DISABLE_MODELS_FETCH",
       "KILO_DISABLE_MODELS_FETCH",
       "RAYA_DISABLE_TERMINAL_TITLE",
@@ -339,6 +346,8 @@ describe("Raya environment aliases", () => {
     Object.assign(env, {
       RAYA_DISABLE_AUTOUPDATE: "raya-update-secret",
       KILO_DISABLE_AUTOUPDATE: "kilo-update-secret",
+      RAYA_ALWAYS_NOTIFY_UPDATE: "raya-notify-secret",
+      KILO_ALWAYS_NOTIFY_UPDATE: "kilo-notify-secret",
       RAYA_DISABLE_MODELS_FETCH: "raya-model-secret",
       KILO_DISABLE_MODELS_FETCH: "kilo-model-secret",
       RAYA_DISABLE_TERMINAL_TITLE: "raya-terminal-secret",
@@ -352,7 +361,7 @@ describe("Raya environment aliases", () => {
       cmd: [
         process.execPath,
         "-e",
-        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flags: [Flag.KILO_DISABLE_AUTOUPDATE, Flag.KILO_DISABLE_MODELS_FETCH, Flag.KILO_DISABLE_TERMINAL_TITLE, Flag.KILO_DISABLE_CHANNEL_DB, Flag.KILO_SKIP_MIGRATIONS], conflicts: EnvAlias.conflicts() }))',
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flags: [Flag.KILO_DISABLE_AUTOUPDATE, Flag.KILO_ALWAYS_NOTIFY_UPDATE, Flag.KILO_DISABLE_MODELS_FETCH, Flag.KILO_DISABLE_TERMINAL_TITLE, Flag.KILO_DISABLE_CHANNEL_DB, Flag.KILO_SKIP_MIGRATIONS], conflicts: EnvAlias.conflicts() }))',
       ],
       cwd: `${import.meta.dir}/../..`,
       env,
@@ -361,8 +370,9 @@ describe("Raya environment aliases", () => {
     expect(child.exitCode).toBe(0)
     const output = child.stdout.toString()
     expect(JSON.parse(output)).toEqual({
-      flags: [false, false, false, false, false],
+      flags: [false, false, false, false, false, false],
       conflicts: [
+        "RAYA_ALWAYS_NOTIFY_UPDATE/KILO_ALWAYS_NOTIFY_UPDATE",
         "RAYA_DISABLE_AUTOUPDATE/KILO_DISABLE_AUTOUPDATE",
         "RAYA_DISABLE_CHANNEL_DB/KILO_DISABLE_CHANNEL_DB",
         "RAYA_DISABLE_MODELS_FETCH/KILO_DISABLE_MODELS_FETCH",

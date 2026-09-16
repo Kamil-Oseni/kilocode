@@ -69,7 +69,7 @@ export const Flag = {
   },
   // kilocode_change end
   KILO_DISABLE_AUTOUPDATE: EnvAlias.enabled("RAYA_DISABLE_AUTOUPDATE", "KILO_DISABLE_AUTOUPDATE"), // kilocode_change
-  KILO_ALWAYS_NOTIFY_UPDATE: truthy("KILO_ALWAYS_NOTIFY_UPDATE"),
+  KILO_ALWAYS_NOTIFY_UPDATE: EnvAlias.enabled("RAYA_ALWAYS_NOTIFY_UPDATE", "KILO_ALWAYS_NOTIFY_UPDATE"), // kilocode_change
   KILO_DISABLE_PRUNE: EnvAlias.enabled("RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE"), // kilocode_change
   KILO_DISABLE_TERMINAL_TITLE: EnvAlias.enabled("RAYA_DISABLE_TERMINAL_TITLE", "KILO_DISABLE_TERMINAL_TITLE"), // kilocode_change
   KILO_SHOW_TTFD: ttfd === "true" || ttfd === "1", // kilocode_change

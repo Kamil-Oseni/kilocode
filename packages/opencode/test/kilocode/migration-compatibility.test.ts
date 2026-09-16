@@ -170,6 +170,12 @@ describe("Raya migration compatibility ledger", () => {
       policy: "safety-monotonic-aliases",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:always_notify_update",
+      raya: "RAYA_ALWAYS_NOTIFY_UPDATE",
+      legacy: "KILO_ALWAYS_NOTIFY_UPDATE",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:disable_models_fetch",
       raya: "RAYA_DISABLE_MODELS_FETCH",
       legacy: "KILO_DISABLE_MODELS_FETCH",

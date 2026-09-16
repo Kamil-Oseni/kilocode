@@ -383,6 +383,7 @@ Example: `~/.config/kilo/command/*.md` (global), `~/.kilocode/command/*.md` (leg
 | `RAYA_DISABLE_DEFAULT_PLUGINS` / `KILO_DISABLE_DEFAULT_PLUGINS` | Skip bundled default plugins. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_LSP_DOWNLOAD` / `KILO_DISABLE_LSP_DOWNLOAD` | Prevent automatic LSP downloads. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_AUTOUPDATE` / `KILO_DISABLE_AUTOUPDATE` | Disable automatic CLI updates. The Raya name is public; either name set to `true` or `1` enables the safety override. |
+| `RAYA_ALWAYS_NOTIFY_UPDATE` / `KILO_ALWAYS_NOTIFY_UPDATE` | Announce an available update instead of installing a patch automatically. Either name set to `true` or `1` keeps notification-only behavior. |
 | `RAYA_DISABLE_MODELS_FETCH` / `KILO_DISABLE_MODELS_FETCH` | Prevent remote model-catalog fetches. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_TERMINAL_TITLE` / `KILO_DISABLE_TERMINAL_TITLE` | Prevent terminal-title updates. The Raya name is public; either name set to `true` or `1` enables the safety override. |
 | `RAYA_DISABLE_EMBEDDED_WEB_UI` / `KILO_DISABLE_EMBEDDED_WEB_UI` | Disable the embedded web UI. The Raya name is public; either name set to `true` or `1` enables the safety override. |

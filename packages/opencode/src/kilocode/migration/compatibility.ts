@@ -183,6 +183,12 @@ export namespace RayaMigrationLedger {
       policy: "safety-monotonic-aliases" as const,
     },
     {
+      kind: "environment:always_notify_update",
+      raya: "RAYA_ALWAYS_NOTIFY_UPDATE",
+      legacy: "KILO_ALWAYS_NOTIFY_UPDATE",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
       kind: "environment:disable_models_fetch",
       raya: "RAYA_DISABLE_MODELS_FETCH",
       legacy: "KILO_DISABLE_MODELS_FETCH",
@@ -507,8 +513,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 36_172,
-        digest: "ef7de472e6c1c0201eea247898f46aafcbc329f0d561215b9c4fd50dbbc04ffe",
+        count: 36_191,
+        digest: "c104df825c7648f5fdf6da86bf6118adb731722e5c00c546442d36ef45245a71",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

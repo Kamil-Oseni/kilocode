@@ -156,6 +156,18 @@ export namespace RayaMigrationLedger {
       legacy: "KILO_DISABLE_PRUNE",
       policy: "safety-monotonic-aliases" as const,
     },
+    {
+      kind: "environment:disable_default_plugins",
+      raya: "RAYA_DISABLE_DEFAULT_PLUGINS",
+      legacy: "KILO_DISABLE_DEFAULT_PLUGINS",
+      policy: "safety-monotonic-aliases" as const,
+    },
+    {
+      kind: "environment:disable_lsp_download",
+      raya: "RAYA_DISABLE_LSP_DOWNLOAD",
+      legacy: "KILO_DISABLE_LSP_DOWNLOAD",
+      policy: "safety-monotonic-aliases" as const,
+    },
     ...["SERVER_PASSWORD", "SERVER_USERNAME"].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
@@ -409,8 +421,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_810,
-        digest: "259e8dab8474f640b89646c44a9c668dcb89cee11fa53221f61465f4704d4c36",
+        count: 35_851,
+        digest: "fc454c7b877d87fee83475f5e8e3e53da0446db89268da916b0c419cf2eb5aee",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

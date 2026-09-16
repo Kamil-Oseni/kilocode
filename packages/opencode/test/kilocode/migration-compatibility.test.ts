@@ -139,6 +139,18 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_DISABLE_PRUNE",
       policy: "safety-monotonic-aliases",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_default_plugins",
+      raya: "RAYA_DISABLE_DEFAULT_PLUGINS",
+      legacy: "KILO_DISABLE_DEFAULT_PLUGINS",
+      policy: "safety-monotonic-aliases",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_lsp_download",
+      raya: "RAYA_DISABLE_LSP_DOWNLOAD",
+      legacy: "KILO_DISABLE_LSP_DOWNLOAD",
+      policy: "safety-monotonic-aliases",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

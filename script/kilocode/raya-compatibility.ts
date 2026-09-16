@@ -78,6 +78,8 @@ export function check(
     ["RAYA_DISABLE_MOUSE", "KILO_DISABLE_MOUSE", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT", "safety-monotonic-aliases"],
     ["RAYA_DISABLE_PRUNE", "KILO_DISABLE_PRUNE", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS", "safety-monotonic-aliases"],
+    ["RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD", "safety-monotonic-aliases"],
     ["RAYA_SERVER_PASSWORD", "KILO_SERVER_PASSWORD", "explicit-or-matching-aliases"],
     ["RAYA_SERVER_USERNAME", "KILO_SERVER_USERNAME", "explicit-or-matching-aliases"],
   )

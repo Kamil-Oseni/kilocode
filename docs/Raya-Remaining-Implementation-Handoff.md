@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `a9cf1a98a5`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `da6201617e`; the installed package source is `4e5207a6ea`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 01:26 America/Toronto - Preserve plugin and LSP safety aliases
+
+Preserve product commits `6a2bdbc582` and `da6201617e`. `RAYA_DISABLE_DEFAULT_PLUGINS`/`KILO_DISABLE_DEFAULT_PLUGINS` and `RAYA_DISABLE_LSP_DOWNLOAD`/`KILO_DISABLE_LSP_DOWNLOAD` are safety-monotonic pairs: case-insensitive `true` or `1` under either name keeps the corresponding capability disabled. Never replace these with ordinary Raya precedence; false, empty or invalid input under one alias must not reactivate bundled plugins or network downloads disabled by the other.
+
+Keep the Core fields static at module initialization because tests and callers mutate the exported compatibility fields directly. Keep the Effect runtime flags on the same shared `EnvAlias.enabledValues` rule. Both layers are required: Core controls default-plugin injection and public compatibility surfaces, while Effect controls internal plugin loading and all 23 LSP installer guards. Suppressing LSP downloads must continue allowing already installed language servers. Conflict diagnostics may contain only the two labels.
+
+Evidence is Core **67 / 140**, Effect runtime flags **58 / 125**, real plugin loader **29 / 42**, real LSP boundary **1 / 2**, Core and bounded OpenCode typechecks, formatting, annotations, Effect Promise-facade, Markdown-table and whitespace guards. The ledger has **27 environment pairs**: 19 ordinary Raya-first, six safety-monotonic disable pairs and two strict credentials. `cutoverReady` remains false. Installed source remains `4e5207a6ea`; batch this slice into a later coherent low-memory snapshot.
+
+After this handoff and progress record, the checked inventory is **70,010** total: public 1,654; compatibility 35,851; provenance 5,686; internal 26,819. The pinned compatibility digest is `fc454c7b877d87fee83475f5e8e3e53da0446db89268da916b0c419cf2eb5aee`.
 
 ## ChatGPT 2026-09-16 01:09 America/Toronto - Preserve compaction kill-switch aliases
 
@@ -932,7 +942,7 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 25 reviewed environment pairs with documented policies, including the startup timing display and safety-monotonic mouse, automatic-compaction and pruning disables, closed config readers in Core, both SDK generations and VS Code, strict server credentials, safety-monotonic pure mode, the project-config opt-out and session retry budget, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
+| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 27 reviewed environment pairs with documented policies, including the startup timing display and safety-monotonic mouse, automatic-compaction, pruning, bundled-plugin and LSP-download disables, closed config readers in Core, both SDK generations and VS Code, strict server credentials, safety-monotonic pure mode, the project-config opt-out and session retry budget, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |

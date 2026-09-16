@@ -36,7 +36,7 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
     if (hint) return hint // kilocode_change
     // kilocode_change start - surface a branded reauth hint for expired Copilot tokens
     if (providerID.includes("github-copilot") && e.statusCode === 403) {
-      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with Kilo."
+      return "Please reauthenticate with the Copilot provider to ensure your credentials work properly with Raya."
     }
     // kilocode_change end
     const msg = e.message

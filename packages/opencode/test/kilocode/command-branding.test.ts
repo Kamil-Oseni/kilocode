@@ -62,6 +62,13 @@ describe("Kilo command branding", () => {
       "src/kilocode/server/httpapi/handlers/kilo-gateway.ts",
       "src/kilocode/cli/cmd/cloud.ts",
       "src/kilocode/cloud/defaults.ts",
+      "src/kilocode/tool/background-process.txt",
+      "src/kilocode/tool/agent-manager-models.txt",
+      "src/kilocode/tool/agent-manager.txt",
+      "src/kilocode/tool/generate-image.txt",
+      "src/cli/cmd/uninstall.ts",
+      "src/provider/error.ts",
+      "src/provider/provider.ts",
     ]
     const src = (await Promise.all(files.map((file) => Bun.file(path.join(root, file)).text()))).join("\n")
     const legacy = [
@@ -117,6 +124,15 @@ describe("Kilo command branding", () => {
       "Failed to reach KiloClaw",
       'describe: "Kilo organization ID"',
       "The Kilo model catalog has no available default model",
+      "Kilo exits",
+      "Kilo shutdown",
+      "Kilo starts again",
+      "falling back to the Kilo Gateway",
+      "through the Kilo Gateway",
+      "Uninstall Kilo",
+      "Thank you for using Kilo",
+      "work properly with Kilo",
+      "Kilo auth",
     ]
 
     expect(legacy.filter((text) => src.includes(text))).toEqual([])
@@ -147,6 +163,13 @@ describe("Kilo command branding", () => {
     expect(src).toContain("Failed to reach Raya Messenger")
     expect(src).toContain('describe: "Raya organization ID"')
     expect(src).toContain("The Raya model catalog has no available default model")
+    expect(src).toContain("Raya shutdown")
+    expect(src).toContain("falling back to Raya Gateway")
+    expect(src).toContain("through Raya Gateway or OpenRouter")
+    expect(src).toContain("Uninstall Raya")
+    expect(src).toContain("Thank you for using Raya")
+    expect(src).toContain("work properly with Raya")
+    expect(src).toContain("Raya sign-in")
     expect(src).toContain('id: "kilo"')
     expect(src).toContain("`kilo auth login`")
     expect(src).toContain("{highlight}kilo serve{/highlight}")

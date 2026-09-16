@@ -922,7 +922,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           autoload: false,
           async getModel() {
             throw new Error(
-              `Snowflake Cortex: missing credentials (${missing}). Provide a bearer token (OAuth, JWT, or PAT) via env var, Kilo auth, or provider options.`, // kilocode_change
+              `Snowflake Cortex: missing credentials (${missing}). Provide a bearer token (OAuth, JWT, or PAT) through an environment variable, Raya sign-in, or provider options.`, // kilocode_change
             )
           },
         }

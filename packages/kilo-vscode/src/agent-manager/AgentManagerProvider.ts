@@ -131,7 +131,7 @@ export class AgentManagerProvider implements Disposable {
     private readonly connectionService: KiloConnectionService,
     binary: GitExecutable = () => Promise.resolve("git"),
   ) {
-    this.outputChannel = host.createOutput("Kilo Agent Manager")
+    this.outputChannel = host.createOutput("Raya Agent Manager")
     this.terminalManager = new SessionTerminalManager(
       (msg) => this.outputChannel.appendLine(`[SessionTerminal] ${msg}`),
       createTerminalHost(),

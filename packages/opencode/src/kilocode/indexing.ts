@@ -34,7 +34,7 @@ const missing = () => disabledIndexingStatus("Indexing plugin is not enabled for
 const noWorkspace = () =>
   disabledIndexingStatus("Codebase indexing is disabled because no workspace folder is open in VS Code.")
 const noConsent = () =>
-  disabledIndexingStatus("Codebase indexing is disabled until you enable it for this project in Kilo Settings.")
+  disabledIndexingStatus("Codebase indexing is disabled until you enable it for this project in Raya Settings.")
 
 export const IndexingModelError = NamedError.create("IndexingModelError", {
   model: Schema.String,

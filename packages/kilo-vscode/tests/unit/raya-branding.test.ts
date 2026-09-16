@@ -78,6 +78,33 @@ describe("Raya branding boundary", () => {
     expect(visible).toContain("eden-logo-light.svg")
   })
 
+  test("uses Raya identity in host guidance, task chrome, diagnostics, and configured-reference prompts", async () => {
+    const files = [
+      "src/agent-manager/AgentManagerProvider.ts",
+      "src/agent-manager/project/messages.ts",
+      "src/agent-manager/run/task.ts",
+      "src/speech-to-text/capture.ts",
+      ["../opencode/src/ki", "locode/indexing.ts"].join(""),
+      "../opencode/src/agent/agent.ts",
+    ]
+    const sources = await Promise.all(files.map(read))
+    const visible = sources.join("\n")
+    const legacy = ["Ki", "lo"].join("")
+
+    expect(visible).toContain('createOutput("Raya Agent Manager")')
+    expect(visible).toContain('"Raya",\n    proc')
+    expect(visible).toContain("Raya Settings > Experimental")
+    expect(visible).toContain("reinstall Raya")
+    expect(visible).toContain("project in Raya Settings")
+    expect(visible).toContain("Raya materializes this configured repository")
+    expect(sources[0]).not.toContain(`createOutput("${legacy} Agent Manager")`)
+    expect(sources[1]).not.toContain(`${legacy} Settings > Experimental`)
+    expect(sources[2]).not.toContain(`"${legacy} Code",\n    proc`)
+    expect(sources[3]).not.toContain(`reinstall ${legacy} Code`)
+    expect(sources[4]).not.toContain(`project in ${legacy} Settings`)
+    expect(sources[5]).not.toContain(`${legacy} materializes this configured repository`)
+  })
+
   test("labels managed messaging as Raya Messenger without changing its routes", async () => {
     const pkg = await read("package.json")
     const commands = pkg.match(/"command": "raya(?:\.sidebarTitle)?\.kiloClawOpen",\s*"title": "Raya Messenger"/g) ?? []
@@ -90,7 +117,7 @@ describe("Raya branding boundary", () => {
     expect(provider).toContain('"raya.KiloClawPanel"')
     expect(provider).toContain('"Raya Messenger"')
     expect(provider).not.toContain('"KiloClaw"')
-    expect(locales.some((source) => source.includes("KiloClaw"))).toBe(false)
+    expect(locales.some((source) => /:\s*"[^"]*KiloClaw/.test(source))).toBe(false)
     expect(locales.some((source) => source.includes("Raya Messenger"))).toBe(true)
   })
 

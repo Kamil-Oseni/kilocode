@@ -139,7 +139,7 @@ function rememberTarget(projectId: string, target: SidebarTarget, deps: ProjectM
 
 function disabled(deps: ProjectMessageDeps): boolean {
   if (deps.enabled()) return false
-  deps.error("Multi-project Agent Manager is disabled. Enable it in Kilo Settings > Experimental to add projects.")
+  deps.error("Multi-project Agent Manager is disabled. Enable it in Raya Settings > Experimental to add projects.")
   return true
 }
 

@@ -226,6 +226,107 @@ describe("Raya environment aliases", () => {
 
   for (const item of [
     { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "TRUE", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: false },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: false },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: false },
+  ]) {
+    test(`wires automatic session sharing from ${item.name}`, () => {
+      const env = { ...process.env }
+      delete env.RAYA_AUTO_SHARE
+      delete env.KILO_AUTO_SHARE
+      if (item.raya !== undefined) env.RAYA_AUTO_SHARE = item.raya
+      if (item.kilo !== undefined) env.KILO_AUTO_SHARE = item.kilo
+      const child = Bun.spawnSync({
+        cmd: [process.execPath, "-e", 'import { Flag } from "./src/flag/flag.ts"; console.log(Flag.KILO_AUTO_SHARE)'],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(child.stdout.toString().trim()).toBe(String(item.expected))
+    })
+  }
+
+  test("reports the automatic session sharing alias conflict without its values", () => {
+    const env = { ...process.env }
+    env.RAYA_AUTO_SHARE = "raya-secret"
+    env.KILO_AUTO_SHARE = "kilo-secret"
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flag: Flag.KILO_AUTO_SHARE, conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({ flag: false, conflicts: ["RAYA_AUTO_SHARE/KILO_AUTO_SHARE"] })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
+    { name: "Raya true", raya: "TRUE", kilo: undefined, expected: true },
+    { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
+    { name: "both true", raya: "true", kilo: "true", expected: true },
+    { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: false },
+    { name: "Raya true and Kilo false", raya: "1", kilo: "0", expected: true },
+    { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: false },
+    { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "1", expected: false },
+  ]) {
+    test(`wires experimental models from ${item.name}`, () => {
+      const env = { ...process.env }
+      delete env.RAYA_ENABLE_EXPERIMENTAL_MODELS
+      delete env.KILO_ENABLE_EXPERIMENTAL_MODELS
+      if (item.raya !== undefined) env.RAYA_ENABLE_EXPERIMENTAL_MODELS = item.raya
+      if (item.kilo !== undefined) env.KILO_ENABLE_EXPERIMENTAL_MODELS = item.kilo
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(Flag.KILO_ENABLE_EXPERIMENTAL_MODELS)',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(child.stdout.toString().trim()).toBe(String(item.expected))
+    })
+  }
+
+  test("reports the experimental model alias conflict without its values", () => {
+    const env = { ...process.env }
+    env.RAYA_ENABLE_EXPERIMENTAL_MODELS = "raya-secret"
+    env.KILO_ENABLE_EXPERIMENTAL_MODELS = "kilo-secret"
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; import { EnvAlias } from "./src/kilocode/env-alias.ts"; console.log(JSON.stringify({ flag: Flag.KILO_ENABLE_EXPERIMENTAL_MODELS, conflicts: EnvAlias.conflicts() }))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    const output = child.stdout.toString()
+    expect(JSON.parse(output)).toEqual({
+      flag: false,
+      conflicts: ["RAYA_ENABLE_EXPERIMENTAL_MODELS/KILO_ENABLE_EXPERIMENTAL_MODELS"],
+    })
+    expect(output).not.toContain("secret")
+  })
+
+  for (const item of [
+    { name: "neither name", raya: undefined, kilo: undefined, expected: false },
     { name: "Raya true", raya: "true", kilo: undefined, expected: true },
     { name: "Kilo true", raya: undefined, kilo: "1", expected: true },
     { name: "both true", raya: "true", kilo: "true", expected: true },

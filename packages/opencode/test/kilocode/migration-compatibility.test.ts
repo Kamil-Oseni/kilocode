@@ -134,6 +134,18 @@ describe("Raya migration compatibility ledger", () => {
       policy: "raya-wins-legacy-write",
     })
     expect(environment?.identities).toContainEqual({
+      kind: "environment:auto_share",
+      raya: "RAYA_AUTO_SHARE",
+      legacy: "KILO_AUTO_SHARE",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:enable_experimental_models",
+      raya: "RAYA_ENABLE_EXPERIMENTAL_MODELS",
+      legacy: "KILO_ENABLE_EXPERIMENTAL_MODELS",
+      policy: "raya-wins-legacy-write",
+    })
+    expect(environment?.identities).toContainEqual({
       kind: "environment:permission",
       raya: "RAYA_PERMISSION",
       legacy: "KILO_PERMISSION",

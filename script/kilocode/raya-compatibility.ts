@@ -75,6 +75,8 @@ export function check(
     "DISABLE_CODEBASE_INDEXING",
     "AUTO_HEAP_SNAPSHOT",
     "ENABLE_QUESTION_TOOL",
+    "AUTO_SHARE",
+    "ENABLE_EXPERIMENTAL_MODELS",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   expected.push(
     ["RAYA_PERMISSION", "KILO_PERMISSION", "matching-authority-aliases"],

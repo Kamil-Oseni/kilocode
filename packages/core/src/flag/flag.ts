@@ -37,6 +37,8 @@ const fff = process.env["KILO_DISABLE_FFF"]
 const ttfd = EnvAlias.read("RAYA_SHOW_TTFD", "KILO_SHOW_TTFD")?.toLowerCase() // kilocode_change
 const heap = EnvAlias.read("RAYA_AUTO_HEAP_SNAPSHOT", "KILO_AUTO_HEAP_SNAPSHOT")?.toLowerCase() // kilocode_change
 const question = EnvAlias.read("RAYA_ENABLE_QUESTION_TOOL", "KILO_ENABLE_QUESTION_TOOL")?.toLowerCase() // kilocode_change
+const share = EnvAlias.read("RAYA_AUTO_SHARE", "KILO_AUTO_SHARE")?.toLowerCase() // kilocode_change
+const models = EnvAlias.read("RAYA_ENABLE_EXPERIMENTAL_MODELS", "KILO_ENABLE_EXPERIMENTAL_MODELS")?.toLowerCase() // kilocode_change
 
 function enabledByExperimental(key: string) {
   return process.env[key] === undefined ? truthy("KILO_EXPERIMENTAL") : truthy(key)
@@ -46,7 +48,7 @@ export const Flag = {
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
 
-  KILO_AUTO_SHARE: truthy("KILO_AUTO_SHARE"), // kilocode_change
+  KILO_AUTO_SHARE: share === "true" || share === "1", // kilocode_change
   KILO_AUTO_HEAP_SNAPSHOT: heap === "true" || heap === "1", // kilocode_change
   // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_GIT_BASH_PATH() {
@@ -78,7 +80,7 @@ export const Flag = {
   // kilocode_change start
   KILO_DISABLE_DEFAULT_PLUGINS: EnvAlias.enabled("RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS"),
   KILO_DISABLE_LSP_DOWNLOAD: EnvAlias.enabled("RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD"),
-  KILO_ENABLE_EXPERIMENTAL_MODELS: truthy("KILO_ENABLE_EXPERIMENTAL_MODELS"),
+  KILO_ENABLE_EXPERIMENTAL_MODELS: models === "true" || models === "1", // kilocode_change
   // kilocode_change end
   KILO_DISABLE_AUTOCOMPACT: EnvAlias.enabled("RAYA_DISABLE_AUTOCOMPACT", "KILO_DISABLE_AUTOCOMPACT"), // kilocode_change
   KILO_DISABLE_MODELS_FETCH: EnvAlias.enabled("RAYA_DISABLE_MODELS_FETCH", "KILO_DISABLE_MODELS_FETCH"), // kilocode_change

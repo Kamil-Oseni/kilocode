@@ -34,6 +34,57 @@ describe("RuntimeFlags", () => {
   )
   // kilocode_change end
 
+  // kilocode_change start - alpha models require an explicit Raya-first opt-in
+  for (const input of [
+    { name: "neither alias", config: {}, expected: false, conflict: false },
+    { name: "Raya only", config: { RAYA_ENABLE_EXPERIMENTAL_MODELS: "true" }, expected: true, conflict: false },
+    { name: "Kilo fallback", config: { KILO_ENABLE_EXPERIMENTAL_MODELS: "yes" }, expected: true, conflict: false },
+    {
+      name: "matching aliases",
+      config: { RAYA_ENABLE_EXPERIMENTAL_MODELS: "true", KILO_ENABLE_EXPERIMENTAL_MODELS: "true" },
+      expected: true,
+      conflict: false,
+    },
+    {
+      name: "Raya false over Kilo true",
+      config: { RAYA_ENABLE_EXPERIMENTAL_MODELS: "false", KILO_ENABLE_EXPERIMENTAL_MODELS: "true" },
+      expected: false,
+      conflict: true,
+    },
+    {
+      name: "Raya true over invalid Kilo",
+      config: { RAYA_ENABLE_EXPERIMENTAL_MODELS: "true", KILO_ENABLE_EXPERIMENTAL_MODELS: "invalid" },
+      expected: true,
+      conflict: true,
+    },
+  ]) {
+    it.effect(`resolves experimental models from ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+        expect(flags.enableExperimentalModels).toBe(input.expected)
+        expect(EnvAlias.conflicts()).toEqual(
+          input.conflict ? ["RAYA_ENABLE_EXPERIMENTAL_MODELS/KILO_ENABLE_EXPERIMENTAL_MODELS"] : [],
+        )
+      }),
+    )
+  }
+
+  it.effect("does not fall back when the defined Raya experimental-model value is invalid", () =>
+    Effect.gen(function* () {
+      const exit = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({ RAYA_ENABLE_EXPERIMENTAL_MODELS: "invalid", KILO_ENABLE_EXPERIMENTAL_MODELS: "true" }),
+        ),
+        Effect.exit,
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(EnvAlias.conflicts()).toEqual([
+        "RAYA_ENABLE_EXPERIMENTAL_MODELS/KILO_ENABLE_EXPERIMENTAL_MODELS",
+      ])
+    }),
+  )
+  // kilocode_change end
+
   it.effect("layer parses plugin flags from the active ConfigProvider", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -125,6 +176,51 @@ describe("RuntimeFlags", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       expect(EnvAlias.conflicts()).toEqual(["RAYA_ENABLE_QUESTION_TOOL/KILO_ENABLE_QUESTION_TOOL"])
+    }),
+  )
+  // kilocode_change end
+
+  // kilocode_change start - automatic sharing is an explicit Raya-first opt-in
+  for (const input of [
+    { name: "neither alias", config: {}, expected: false, conflict: false },
+    { name: "Raya only", config: { RAYA_AUTO_SHARE: "true" }, expected: true, conflict: false },
+    { name: "Kilo fallback", config: { KILO_AUTO_SHARE: "yes" }, expected: true, conflict: false },
+    {
+      name: "matching aliases",
+      config: { RAYA_AUTO_SHARE: "true", KILO_AUTO_SHARE: "true" },
+      expected: true,
+      conflict: false,
+    },
+    {
+      name: "Raya false over Kilo true",
+      config: { RAYA_AUTO_SHARE: "false", KILO_AUTO_SHARE: "true" },
+      expected: false,
+      conflict: true,
+    },
+    {
+      name: "Raya true over invalid Kilo",
+      config: { RAYA_AUTO_SHARE: "true", KILO_AUTO_SHARE: "invalid" },
+      expected: true,
+      conflict: true,
+    },
+  ]) {
+    it.effect(`resolves automatic sharing from ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+        expect(flags.autoShare).toBe(input.expected)
+        expect(EnvAlias.conflicts()).toEqual(input.conflict ? ["RAYA_AUTO_SHARE/KILO_AUTO_SHARE"] : [])
+      }),
+    )
+  }
+
+  it.effect("does not fall back when the defined Raya automatic-sharing value is invalid", () =>
+    Effect.gen(function* () {
+      const exit = yield* readFlags.pipe(
+        Effect.provide(fromConfig({ RAYA_AUTO_SHARE: "invalid", KILO_AUTO_SHARE: "true" })),
+        Effect.exit,
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(EnvAlias.conflicts()).toEqual(["RAYA_AUTO_SHARE/KILO_AUTO_SHARE"])
     }),
   )
   // kilocode_change end

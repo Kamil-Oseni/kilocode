@@ -45,7 +45,7 @@ const enabledByExperimental = (name: string) =>
   )
 
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
-  autoShare: bool("KILO_AUTO_SHARE"),
+  autoShare: alias("RAYA_AUTO_SHARE", "KILO_AUTO_SHARE"), // kilocode_change
   pure: safety("RAYA_PURE", "KILO_PURE"), // kilocode_change
   disableDefaultPlugins: safety("RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS"), // kilocode_change
   disableChannelDb: safety("RAYA_DISABLE_CHANNEL_DB", "KILO_DISABLE_CHANNEL_DB"), // kilocode_change
@@ -71,7 +71,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
     enabled: bool("KILO_ENABLE_PARALLEL"),
     legacy: bool("KILO_EXPERIMENTAL_PARALLEL"),
   }).pipe(Config.map((flags) => flags.enabled || flags.legacy)),
-  enableExperimentalModels: bool("KILO_ENABLE_EXPERIMENTAL_MODELS"),
+  enableExperimentalModels: alias("RAYA_ENABLE_EXPERIMENTAL_MODELS", "KILO_ENABLE_EXPERIMENTAL_MODELS"), // kilocode_change
   enableQuestionTool: alias("RAYA_ENABLE_QUESTION_TOOL", "KILO_ENABLE_QUESTION_TOOL"), // kilocode_change
   experimentalScout: enabledByExperimental("KILO_EXPERIMENTAL_SCOUT"), // kilocode_change
   experimentalReferences: enabledByExperimental("KILO_EXPERIMENTAL_REFERENCES"),

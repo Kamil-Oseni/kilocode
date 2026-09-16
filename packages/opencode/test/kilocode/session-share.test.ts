@@ -1,28 +1,60 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { expect, spyOn } from "bun:test"
-import { Effect } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect" // kilocode_change
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Auth } from "../../src/auth"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions" // kilocode_change
 import { Session } from "../../src/session/session"
 import { SessionShare } from "../../src/share/session"
 import { Storage } from "../../src/storage/storage"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
+
+const nodes = [
+  SessionShare.node,
+  Session.node,
+  SessionProjector.node,
+  Auth.node,
+  Storage.node,
+  CrossSpawnSpawner.node,
+  RuntimeFlags.node,
+] as const
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([
-      SessionShare.node,
-      Session.node,
-      SessionProjector.node,
-      Auth.node,
-      Storage.node,
-      CrossSpawnSpawner.node,
-      RuntimeFlags.node,
-    ]),
+    LayerNode.group(nodes),
   ),
 )
+
+// kilocode_change start - exercise the Raya alias through the real auto-share consumer
+const flags = RuntimeFlags.Service.layer.pipe(
+  Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ RAYA_AUTO_SHARE: "true" }))),
+  Layer.orDie,
+)
+const auto = testEffect(LayerNode.compile(LayerNode.group(nodes), [[RuntimeFlags.node, flags]]))
+// kilocode_change end
+
+auto.instance("automatically shares a root session from the Raya environment alias", () => {
+  const publish = spyOn(KiloSessions, "share").mockResolvedValue({ url: "https://app.kilo.ai/s/auto-public" })
+
+  return Effect.gen(function* () {
+    const share = yield* SessionShare.Service
+    const session = yield* Session.Service
+
+    const info = yield* share.create({ title: "auto-share-test" })
+    const url = yield* pollWithTimeout(
+      session.get(info.id).pipe(Effect.map((current) => current.share?.url)),
+      "Raya automatic sharing did not publish the session",
+    )
+
+    expect(url).toBe("https://app.kilo.ai/s/auto-public")
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(publish).toHaveBeenCalledWith(info.id)
+  }).pipe(
+    Effect.ensuring(Effect.sync(() => publish.mockRestore())),
+  )
+})
 
 it.instance("shares and unshares sessions through Kilo public URLs", () => {
   const urls: string[] = []

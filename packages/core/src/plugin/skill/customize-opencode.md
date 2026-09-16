@@ -439,6 +439,8 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `RAYA_ALWAYS_NOTIFY_UPDATE=1`: announce an available update instead of installing a patch automatically (`KILO_ALWAYS_NOTIFY_UPDATE` remains a compatibility alias; either name set to `true` or `1` keeps notification-only behavior).
 - `RAYA_AUTO_HEAP_SNAPSHOT=1`: automatically capture a heap snapshot above the diagnostic memory threshold (`KILO_AUTO_HEAP_SNAPSHOT` remains a fallback; Raya takes precedence when both are defined).
 - `RAYA_ENABLE_QUESTION_TOOL=1`: enable clarification questions for clients that do not receive the tool automatically (`KILO_ENABLE_QUESTION_TOOL` remains a fallback; Raya takes precedence when both are defined).
+- `RAYA_AUTO_SHARE=1`: automatically publish newly created root sessions (`KILO_AUTO_SHARE` remains a fallback; Raya takes precedence when both are defined). Treat this as an explicit opt-in because it creates a public share URL.
+- `RAYA_ENABLE_EXPERIMENTAL_MODELS=1`: include alpha models in provider catalogs and suggestions (`KILO_ENABLE_EXPERIMENTAL_MODELS` remains a fallback; Raya takes precedence when both are defined).
 - `RAYA_DISABLE_MODELS_FETCH=1`: prevent remote model-catalog fetches (`KILO_DISABLE_MODELS_FETCH` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_TERMINAL_TITLE=1`: prevent terminal-title updates (`KILO_DISABLE_TERMINAL_TITLE` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_DISABLE_EMBEDDED_WEB_UI=1`: disable the embedded web UI (`KILO_DISABLE_EMBEDDED_WEB_UI` remains a compatibility alias; either name set to `true` or `1` enables the safety override).

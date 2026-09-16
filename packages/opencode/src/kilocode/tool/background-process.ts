@@ -28,7 +28,7 @@ export const Params = Schema.Struct({
     description: "For subagents only: transfer the process to the parent session when this session ends",
   }),
   persistent: Schema.optional(Schema.Boolean).annotate({
-    description: "Keep the process running and manageable after the session or Kilo exits",
+    description: "Keep the process running and manageable after the session or Raya exits",
   }),
 }).check(
   Schema.makeFilter(

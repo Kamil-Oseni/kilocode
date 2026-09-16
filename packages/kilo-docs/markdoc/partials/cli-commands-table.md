@@ -23,8 +23,8 @@
 | `kilo pr` | manage pull requests |
 | `kilo session` | manage sessions |
 | `kilo remote` | enable remote connection for real-time session relay |
-| `kilo daemon` | manage the local kilo daemon |
-| `kilo console` | open or stop the local Kilo Console (deprecated) |
+| `kilo daemon` | manage the local Raya backend |
+| `kilo console` | open or stop the local Raya terminal (deprecated) |
 | `kilo cloud` | run Cloud Agent tasks |
 | `kilo db` | database tools |
 | `kilo config` | configuration tools |

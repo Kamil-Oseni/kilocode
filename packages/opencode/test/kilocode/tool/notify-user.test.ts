@@ -140,7 +140,7 @@ describe("notify_user tool", () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].input.message).toBe("hello world")
     expect(result.metadata.ok).toBe(true)
-    expect(result.output).toContain("Notification sent")
+    expect(result.output).toContain("user's Raya app")
   })
 
   test("returns failure text when not connected", async () => {
@@ -153,7 +153,8 @@ describe("notify_user tool", () => {
     const result = await runNotifyTool({ message: "hello" }, sessions)
 
     expect(result.metadata.ok).toBe(false)
-    expect(result.output).toContain("not connected to Kilo cloud")
+    expect(result.output).toContain("not connected to Raya Cloud")
+    expect(result.output).toContain("`kilo auth login`")
   })
 
   test("does not send when remote is disabled", async () => {

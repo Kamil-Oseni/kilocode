@@ -43,7 +43,7 @@ export const SendFileTool = Tool.define<typeof Params, {}, FSUtil.Service, "send
         Effect.gen(function* () {
           if (!KiloSessions.remoteStatus().connected) {
             return fail(
-              "Cannot send files: this session is not connected to Kilo cloud. Delivery needs an active link.",
+              "Cannot send files: this session is not connected to Raya Cloud. Delivery needs an active link.",
             )
           }
 
@@ -148,7 +148,7 @@ export const SendFileTool = Tool.define<typeof Params, {}, FSUtil.Service, "send
 
               return {
                 title: `Sent file: ${basename}`,
-                output: `File ${basename} (${bytes.byteLength} bytes, ${mime}) delivered to the user's Kilo app. Older app builds ignore non-image file attachments — make sure the user has an up-to-date app to see the delivery.`,
+                output: `File ${basename} (${bytes.byteLength} bytes, ${mime}) delivered to the user's Raya app. Older app builds ignore non-image file attachments — make sure the user has an up-to-date app to see the delivery.`,
                 metadata: {},
                 attachments: [
                   {

@@ -99,7 +99,7 @@ describe("send_file tool", () => {
       await fs.writeFile(path.join(dir, "test.txt"), "hello")
       const result = await runSendTool({ path: "test.txt" }, dir)
       expect(result.title).toBe("Send file failed")
-      expect(result.output).toContain("not connected")
+      expect(result.output).toContain("not connected to Raya Cloud")
     } finally {
       await fs.rm(dir, { recursive: true, force: true })
     }
@@ -114,7 +114,7 @@ describe("send_file tool", () => {
 
       expect(result.title).toBe("Sent file: hello.txt")
       expect(result.output).toContain("hello.txt")
-      expect(result.output).toContain("delivered to the user")
+      expect(result.output).toContain("delivered to the user's Raya app")
       expect(result.attachments).toHaveLength(1)
       const att = result.attachments![0]
       expect(att.type).toBe("file")
@@ -432,6 +432,8 @@ describe("send_file tool", () => {
 
       expect(result.id).toBe("send_file")
       expect(result.description).toContain("Send a file from the local machine")
+      expect(result.description).toContain("user's Raya app")
+      expect(result.description).not.toContain("Kilo app")
       expect(result.description).toContain("Do NOT use this tool")
     } finally {
       await fs.rm(dir, { recursive: true, force: true })

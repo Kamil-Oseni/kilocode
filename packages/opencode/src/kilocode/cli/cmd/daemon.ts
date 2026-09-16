@@ -52,12 +52,12 @@ function print(input: Daemon.Status, json?: boolean) {
     return
   }
   if (!input.running) {
-    console.log(input.stale ? `kilo daemon stale: ${input.reason}` : `kilo daemon not running`)
+    console.log(input.stale ? `Raya backend stale: ${input.reason}` : `Raya backend not running`)
     console.log(`state: ${input.file}`)
     if (input.state?.log) console.log(`log: ${input.state.log}`)
     return
   }
-  console.log(`kilo daemon running`)
+  console.log(`Raya backend running`)
   if (input.state?.urls) {
     const urls = input.state.urls
     console.log(`local:   ${urls.local}`)
@@ -80,7 +80,7 @@ async function hold(enabled: boolean, json: boolean, run: (signal?: AbortSignal)
   const { Daemon } = await import("@/kilocode/daemon/daemon")
   await Daemon.foreground(async (signal) => {
     const state = await run(signal)
-    if (!signal.aborted && !json) console.log("Press Ctrl+C to stop the Kilo daemon.")
+    if (!signal.aborted && !json) console.log("Press Ctrl+C to stop the Raya backend.")
     return state
   })
 }
@@ -93,7 +93,7 @@ async function network(args: { [key: string]: unknown }) {
 function start(command: string) {
   return cmd({
     command,
-    describe: "start the local kilo daemon",
+    describe: "start the local Raya backend",
     builder: (yargs) => withForeground(withJson(withNetworkOptions(yargs))),
     handler: async (args) => {
       await hold(Boolean(args.foreground), Boolean(args.json), async (signal) => {
@@ -102,16 +102,16 @@ function start(command: string) {
         const daemon = await Daemon.ensure(opts, explicitNetworkOptions())
         const result = daemon.result
         const state = result.state
-        if (!state) throw new Error("Kilo daemon did not provide process state")
+        if (!state) throw new Error("Raya backend did not provide process state")
         if (signal?.aborted) return state
         if (args.json) print(result, true)
         if (!args.json) {
           console.log(
             result.reused
-              ? "kilo daemon already running"
+              ? "Raya backend already running"
               : daemon.restarted
-                ? "kilo daemon restarted"
-                : "kilo daemon started",
+                ? "Raya backend restarted"
+                : "Raya backend started",
           )
           print(result)
         }
@@ -126,7 +126,7 @@ const StartCommand = start("start")
 
 const StatusCommand = cmd({
   command: "status",
-  describe: "show local kilo daemon status",
+  describe: "show local Raya backend status",
   builder: (yargs) => withJson(yargs),
   handler: async (args) => {
     const { Daemon } = await import("@/kilocode/daemon/daemon")
@@ -136,7 +136,7 @@ const StatusCommand = cmd({
 
 export const StopCommand = cmd({
   command: "stop",
-  describe: "stop the local kilo daemon",
+  describe: "stop the local Raya backend",
   builder: (yargs) => withJson(yargs),
   handler: async (args) => {
     const { Daemon } = await import("@/kilocode/daemon/daemon")
@@ -145,13 +145,13 @@ export const StopCommand = cmd({
       print(result, true)
       return
     }
-    console.log(result.stopped ? "kilo daemon stopped" : "kilo daemon not running")
+    console.log(result.stopped ? "Raya backend stopped" : "Raya backend not running")
   },
 })
 
 const RestartCommand = cmd({
   command: "restart",
-  describe: "restart the local kilo daemon",
+  describe: "restart the local Raya backend",
   builder: (yargs) => withForeground(withJson(withNetworkOptions(yargs))),
   handler: async (args) => {
     await hold(Boolean(args.foreground), Boolean(args.json), async (signal) => {
@@ -159,11 +159,11 @@ const RestartCommand = cmd({
       const { Daemon } = await import("@/kilocode/daemon/daemon")
       const result = await Daemon.restart(opts)
       const state = result.state
-      if (!state) throw new Error("Kilo daemon did not provide process state")
+      if (!state) throw new Error("Raya backend did not provide process state")
       if (signal?.aborted) return state
       if (args.json) print(result, true)
       if (!args.json) {
-        console.log("kilo daemon restarted")
+        console.log("Raya backend restarted")
         print(result)
       }
       return state
@@ -173,7 +173,7 @@ const RestartCommand = cmd({
 
 export const DaemonCommand = cmd({
   command: "daemon",
-  describe: "manage the local kilo daemon",
+  describe: "manage the local Raya backend",
   builder: (yargs: Argv) =>
     yargs
       .command(DefaultCommand)

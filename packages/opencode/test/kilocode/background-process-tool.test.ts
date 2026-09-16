@@ -14,6 +14,9 @@ describe("BackgroundProcessTool", () => {
     expect(json.properties?.action).toEqual(
       expect.objectContaining({ enum: ["start", "list", "status", "logs", "stop", "restart"] }),
     )
+    expect(json.properties?.persistent).toEqual(
+      expect.objectContaining({ description: "Keep the process running and manageable after the session or Raya exits" }),
+    )
   })
 
   test("validates action-specific required fields", () => {

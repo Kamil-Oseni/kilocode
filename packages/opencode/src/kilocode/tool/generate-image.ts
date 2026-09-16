@@ -299,7 +299,7 @@ export const generateImageTool = (goals?: GoalDeps) =>
               return {
                 title: "Image generation unavailable",
                 output:
-                  "No image generation provider available. Log in to Kilo or set OPENROUTER_API_KEY, then try again.",
+                  "No image generation provider is available. Sign in to Raya with `kilo auth login`, or set OPENROUTER_API_KEY, then try again.",
                 metadata: { error: "no-provider" } as Meta,
               }
             }

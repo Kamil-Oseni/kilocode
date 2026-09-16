@@ -1,6 +1,6 @@
 ---
 title: "CLI Command Reference"
-description: "Complete reference for all Kilo CLI commands and subcommands"
+description: "Complete reference for all Raya CLI commands and subcommands"
 ---
 
 # CLI Command Reference
@@ -898,14 +898,14 @@ Options:
 ## kilo daemon
 
 ```
-manage the local kilo daemon
+manage the local Raya backend
 
 Commands:
-  kilo daemon          start the local kilo daemon  [default]
-  kilo daemon start    start the local kilo daemon
-  kilo daemon status   show local kilo daemon status
-  kilo daemon stop     stop the local kilo daemon
-  kilo daemon restart  restart the local kilo daemon
+  kilo daemon          start the local Raya backend  [default]
+  kilo daemon start    start the local Raya backend
+  kilo daemon status   show local Raya backend status
+  kilo daemon stop     stop the local Raya backend
+  kilo daemon restart  restart the local Raya backend
 
 Options:
       --help         Show help  [boolean]
@@ -922,7 +922,7 @@ Options:
 ### kilo daemon start
 
 ```
-start the local kilo daemon
+start the local Raya backend
 
 Options:
       --help         Show help  [boolean]
@@ -939,7 +939,7 @@ Options:
 ### kilo daemon status
 
 ```
-show local kilo daemon status
+show local Raya backend status
 
 Options:
   --help     Show help  [boolean]
@@ -950,7 +950,7 @@ Options:
 ### kilo daemon stop
 
 ```
-stop the local kilo daemon
+stop the local Raya backend
 
 Options:
   --help     Show help  [boolean]
@@ -961,7 +961,7 @@ Options:
 ### kilo daemon restart
 
 ```
-restart the local kilo daemon
+restart the local Raya backend
 
 Options:
       --help         Show help  [boolean]
@@ -978,11 +978,11 @@ Options:
 ## kilo console
 
 ```
-open or stop the local Kilo Console (deprecated)
+open or stop the local Raya terminal (deprecated)
 
 Commands:
-  kilo console       open the local Kilo Console (deprecated)  [default]
-  kilo console stop  stop the local kilo daemon
+  kilo console       open the local Raya terminal (deprecated)  [default]
+  kilo console stop  stop the local Raya backend
 
 Options:
       --help         Show help  [boolean]
@@ -998,7 +998,7 @@ Options:
 ### kilo console stop
 
 ```
-stop the local kilo daemon
+stop the local Raya backend
 
 Options:
   --help     Show help  [boolean]

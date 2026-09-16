@@ -29,7 +29,7 @@ await Bun.write(
   REFERENCE_PATH,
   `---
 title: "CLI Command Reference"
-description: "Complete reference for all Kilo CLI commands and subcommands"
+description: "Complete reference for all Raya CLI commands and subcommands"
 ---
 
 # CLI Command Reference

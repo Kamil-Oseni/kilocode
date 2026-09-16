@@ -39,7 +39,7 @@ async function launch(url: string) {
 
 const OpenCommand = cmd({
   command: "$0",
-  describe: "open the local Kilo Console (deprecated)",
+  describe: "open the local Raya terminal (deprecated)",
   builder: (yargs) =>
     withNetworkOptions(yargs).option("foreground", {
       alias: "f",
@@ -47,16 +47,16 @@ const OpenCommand = cmd({
       type: "boolean",
     }),
   handler: async (args) => {
-    console.warn("Kilo Console is deprecated and will be removed in a future release.")
+    console.warn("The Raya terminal command is deprecated and will be removed in a future release.")
     const { Daemon } = await import("@/kilocode/daemon/daemon")
     const { warnedNetworkOptions } = await import("@/kilocode/cli/port-warning")
     const run = async (signal?: AbortSignal) => {
       const opts = await warnedNetworkOptions(args)
       const daemon = await Daemon.ensure(opts, explicitNetworkOptions())
       const state = daemon.result.state
-      if (!state) throw new Error("Kilo daemon did not provide connection state")
+      if (!state) throw new Error("Raya backend did not provide connection state")
       if (signal?.aborted) return state
-      if (daemon.restarted) console.warn("Restarted the Kilo daemon to apply the requested network options")
+      if (daemon.restarted) console.warn("Restarted the Raya backend to apply the requested network options")
 
       const urls = state.urls ?? serverUrls(state.hostname, state.port)
       const consoleLocal = withCredentials(urls.local, state)
@@ -67,9 +67,9 @@ const OpenCommand = cmd({
           console.warn(`Could not open browser automatically: ${err instanceof Error ? err.message : String(err)}`)
         })
       } else {
-        console.warn("No display detected; open the Kilo Console URL manually")
+        console.warn("No display detected; open the Raya terminal URL manually")
       }
-      console.log("Kilo Console:")
+      console.log("Raya terminal:")
       console.log(`  Local:   ${consoleLocal}`)
       if (consoleNetwork) console.log(`  Network: ${consoleNetwork}`)
       return state
@@ -80,7 +80,7 @@ const OpenCommand = cmd({
     }
     await Daemon.foreground(async (signal) => {
       const state = await run(signal)
-      if (!signal.aborted) console.log("Press Ctrl+C to stop the Kilo daemon.")
+      if (!signal.aborted) console.log("Press Ctrl+C to stop the Raya backend.")
       return state
     })
   },
@@ -88,7 +88,7 @@ const OpenCommand = cmd({
 
 export const KiloConsoleCommand = cmd({
   command: "console",
-  describe: "open or stop the local Kilo Console (deprecated)",
+  describe: "open or stop the local Raya terminal (deprecated)",
   builder: (yargs: Argv) => yargs.command(OpenCommand).command(StopCommand).demandCommand(),
   handler: async () => {},
 })

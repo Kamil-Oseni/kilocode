@@ -12,11 +12,11 @@ const Params = Schema.Struct({
 type Meta = { notificationId: string; ok: boolean; reason?: string }
 
 const FAILURE_TEXT =
-  "Push notifications are unavailable: this session is not connected to Kilo cloud. " +
-  "Sign in with `kilo auth login` and ensure the session is sharing before retrying."
+  "Push notifications are unavailable: this session is not connected to Raya Cloud. " +
+  "Sign in to Raya with `kilo auth login` and ensure the session is sharing before retrying."
 
 const SUCCESS_TEXT =
-  "Notification sent to the user's Kilo app. Delivery may be suppressed by the user's " +
+  "Notification sent to the user's Raya app. Delivery may be suppressed by the user's " +
   "Agent notifications preference, an active rate limit, or because the user is currently " +
   "viewing this session; the tool receives no delivery feedback."
 

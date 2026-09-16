@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import { ChatInfo } from "./ChatInfo"
+import { ConversationSearch } from "./ConversationSearch"
 import { MediaAttachment, previewable } from "./MediaAttachment"
 import { MessageTime } from "../chat/MessageTime"
 
@@ -575,6 +576,7 @@ export const Inbox: Component<{
   const [error, setError] = createSignal("")
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
   const [look, setLook] = createSignal("")
+  const [searching, setSearching] = createSignal(false)
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
   const removeDisabled = (id: string) => !ready() || phase() === "sending" || (!!removing() && removing() !== id)
@@ -594,6 +596,7 @@ export const Inbox: Component<{
   let depth = 0
   let seen = ""
   let server = ""
+  let term = ""
   let pane: HTMLDivElement | undefined
   let frame: HTMLDivElement | undefined
   let infoRef: HTMLButtonElement | undefined
@@ -622,7 +625,7 @@ export const Inbox: Component<{
     vscode.setState<InboxState>({ ...state, routineInbox: { ...inbox, drafts: Object.fromEntries(kept) } })
   }
 
-  const load = (after?: string) => {
+  const load = (after?: string, search?: string) => {
     if (wait && !after) return
     wait = true
     older = !!after
@@ -632,12 +635,18 @@ export const Inbox: Component<{
       requestID: pageID,
       agentID: props.agentID,
       ...(after ? { cursor: after } : {}),
+      ...(search ? { search } : {}),
     })
   }
 
   const pin = () => {
     if (!stick || !pane) return
     pane.scrollTop = pane.scrollHeight
+  }
+
+  const refresh = (latest?: string) => {
+    if (term || !missing(latest, thread())) return
+    load()
   }
 
   const place = () => {
@@ -692,6 +701,8 @@ export const Inbox: Component<{
       setNext()
       setPhase("idle")
       setHalt("idle")
+      term = ""
+      setSearching(false)
       setLook("")
       setTrees({})
       setFaults({})
@@ -724,7 +735,7 @@ export const Inbox: Component<{
       setFiles(props.box.draftAttachments ?? [])
       rememberDraft(props.box.draft ?? "", props.box.draftAttachments ?? [])
     }
-    if (missing(latest, thread())) load()
+    refresh(latest)
   })
 
   const page = (msg: ExtensionMessage) => {
@@ -757,7 +768,8 @@ export const Inbox: Component<{
       return
     }
     const saved = msg.message as Note | undefined
-    if (saved?.id) setThread((prior) => (prior.some((item) => item.id === saved.id) ? prior : [...prior, saved]))
+    if (saved?.id && (!term || saved.body.toLocaleLowerCase().includes(term.toLocaleLowerCase())))
+      setThread((prior) => (prior.some((item) => item.id === saved.id) ? prior : [...prior, saved]))
     source = `user:${crypto.randomUUID()}`
     setNote("")
     setFiles([])
@@ -804,7 +816,7 @@ export const Inbox: Component<{
     setHalt("idle")
     setError("")
     wait = false
-    load()
+    load(undefined, term || undefined)
   }
 
   const chained = (msg: ExtensionMessage) => {
@@ -875,6 +887,18 @@ export const Inbox: Component<{
     rememberDraft(value, files())
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => persist(value), 400)
+  }
+
+  const search = (value: string) => {
+    wait = false
+    older = false
+    stick = true
+    term = value
+    setSearching(!!value)
+    setThread([])
+    setNext()
+    setError("")
+    load(undefined, term || undefined)
   }
 
   const submit = () => {
@@ -1010,6 +1034,7 @@ export const Inbox: Component<{
         </Button>
       </header>
       <div class="routines-conversation" hidden={info()}>
+        <ConversationSearch agentID={props.agentID} name={props.name} onSearch={search} />
         <div
           ref={pane}
           class="routines-thread-body"
@@ -1025,14 +1050,16 @@ export const Inbox: Component<{
               size="small"
               onClick={() => {
                 const after = cursor()
-                if (after) load(after)
+                if (after) load(after, term || undefined)
               }}
             >
               Earlier messages
             </Button>
           </Show>
           <Show when={!thread().length}>
-            <p class="routines-empty">Reports and follow-ups for this worker will appear here.</p>
+            <p class="routines-empty">
+              {searching() ? "No messages match this search." : "Reports and follow-ups for this worker will appear here."}
+            </p>
           </Show>
           <For each={thread()}>
             {(item) => {
@@ -1118,7 +1145,7 @@ export const Inbox: Component<{
             runID={props.runID}
             onDone={() => {
               wait = false
-              load()
+              load(undefined, term || undefined)
             }}
           />
         </Show>

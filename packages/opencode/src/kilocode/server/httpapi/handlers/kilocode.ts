@@ -761,11 +761,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentInboxPage = Effect.fn("KilocodeHttpApi.agentInboxPage")(function* (ctx: {
       params: { agentID: string }
-      query: { cursor?: string; limit?: number }
+      query: { cursor?: string; limit?: number; search?: string }
     }) {
       yield* remembered(ctx.params.agentID)
       return yield* inbox
-        .page(ctx.params.agentID, ctx.query.cursor, ctx.query.limit ?? 50)
+        .page(ctx.params.agentID, ctx.query.cursor, ctx.query.limit ?? 50, ctx.query.search)
         .pipe(
           Effect.catchTag("RayaTaskInbox.Invalid", (err) =>
             Effect.fail(new InvalidRequestError({ message: err.message })),

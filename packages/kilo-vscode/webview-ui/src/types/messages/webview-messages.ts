@@ -219,6 +219,7 @@ export interface RoutineInboxPageMessage {
   requestID: string
   agentID: string
   cursor?: string
+  search?: string
 }
 
 export interface RoutineInboxSendMessage {

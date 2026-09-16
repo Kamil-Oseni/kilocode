@@ -38,6 +38,7 @@ import {
   DraftState as InboxDraftState,
   Item as InboxItem,
   Page as InboxPage,
+  Search as InboxSearch,
   Read as InboxRead,
   Record as InboxRecord,
   Send as InboxSend,
@@ -974,6 +975,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
             ...WorkspaceRoutingQueryFields,
             cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
             limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50))),
+            search: Schema.optional(InboxSearch),
           }),
           success: described(InboxPage, "Routine conversation page"),
           error: [InvalidRequestError, HttpApiError.NotFound],
@@ -981,7 +983,8 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({
             identifier: "kilocode.routine.inbox.page",
             summary: "List messages in a routine conversation",
-            description: "Return up to 50 persisted inbox messages, newest page first, without starting work.",
+            description:
+              "Return up to 50 persisted inbox messages, newest page first, optionally filtered by literal message text, without starting work.",
           }),
         ),
         HttpApiEndpoint.get("agentInboxInfo", KilocodePaths.agentInboxInfo, {

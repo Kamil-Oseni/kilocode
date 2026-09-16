@@ -12,6 +12,11 @@ import { RayaTask } from "./index"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const text = Schema.String.check(Schema.isMaxLength(8000))
+export const Search = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(200),
+  Schema.makeFilter((value) => (value === value.trim() ? undefined : "Inbox search must not have outer whitespace.")),
+)
 const Kind = Schema.Literals(["user", "worker", "report", "decision", "delegation", "system"])
 export const State = Schema.Literals(["scheduled", "running", "waiting", "needs_input", "paused", "failed"])
 export const Clip = Schema.Struct({
@@ -735,25 +740,33 @@ export namespace RayaTaskInbox {
         return yield* new Conflict({ message: "This inbox message changed before its recovery could finish." })
       return decode(rows[0])
     })
-    const page = Effect.fn("RayaTaskInbox.page")(function* (agentID: string, cursor?: string, limit = 50) {
+    const page = Effect.fn("RayaTaskInbox.page")(function* (
+      agentID: string,
+      cursor?: string,
+      limit = 50,
+      search?: string,
+    ) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
         return yield* new Invalid({ message: "Inbox pages are limited to 50 messages." })
       yield* ensure(agentID)
       const parsed = marker(cursor)
       if (!parsed.ok) return yield* new Invalid({ message: "This inbox page cursor is invalid." })
-      const rows = yield* (
-        "id" in parsed
-          ? db
-              .select()
-              .from(Message)
-              .where(
-                and(
-                  eq(Message.agent_id, agentID),
-                  sql`(${Message.time_created} < ${parsed.time} or (${Message.time_created} = ${parsed.time} and ${Message.id} < ${parsed.id}))`,
-                ),
-              )
-          : db.select().from(Message).where(eq(Message.agent_id, agentID))
-      )
+      const query =
+        search === undefined
+          ? undefined
+          : yield* Schema.decodeUnknownEffect(Search)(search).pipe(
+              Effect.mapError(() => new Invalid({ message: "Inbox search must contain 1 to 200 characters." })),
+            )
+      const filters = [eq(Message.agent_id, agentID)]
+      if (query) filters.push(sql`instr(lower(${Message.body}), lower(${query})) > 0`)
+      if ("id" in parsed)
+        filters.push(
+          sql`(${Message.time_created} < ${parsed.time} or (${Message.time_created} = ${parsed.time} and ${Message.id} < ${parsed.id}))`,
+        )
+      const rows = yield* db
+        .select()
+        .from(Message)
+        .where(and(...filters))
         .orderBy(desc(Message.time_created), desc(Message.id))
         .limit(limit + 1)
         .all()

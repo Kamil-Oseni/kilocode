@@ -1104,6 +1104,24 @@
   display: none;
 }
 
+.routines-search {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-8);
+  padding: var(--raya-space-8) var(--raya-space-4);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-search label {
+  flex: 1;
+  min-width: 0;
+}
+
+.routines-search input {
+  width: 100%;
+  min-height: 2rem;
+}
+
 .routines-thread-body {
   flex: 1;
   min-height: 0;

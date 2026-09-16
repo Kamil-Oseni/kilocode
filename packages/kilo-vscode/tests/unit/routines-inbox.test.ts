@@ -87,7 +87,7 @@ test("routine inbox page send read and draft keep request identity and retry the
     client,
     directory: "workspace",
     post,
-    message: { type: "routineInboxPage", requestID: "page1", agentID: "routine" },
+    message: { type: "routineInboxPage", requestID: "page1", agentID: "routine", search: "expenses" },
   })
   expect(messages.at(-1)).toMatchObject({
     type: "routineInboxPage",
@@ -95,6 +95,7 @@ test("routine inbox page send read and draft keep request identity and retry the
     agentID: "routine",
     messages: [note],
   })
+  expect(new URL(calls.at(-1)!.url).searchParams.get("search")).toBe("expenses")
   await handleRoutineMessage({
     client,
     directory: "workspace",

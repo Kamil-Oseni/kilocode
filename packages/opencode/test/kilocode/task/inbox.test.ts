@@ -268,6 +268,40 @@ test("routine inbox pages return at most 50 messages and refuse a larger limit",
   )
 })
 
+test("routine inbox search filters persisted message text literally and keeps pagination", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const inbox = RayaTaskInbox.make(yield* Database.Service)
+      for (const n of Array.from({ length: 55 }, (_, i) => i)) {
+        yield* inbox.publish({
+          agentID: "agt_search",
+          source: `report:match_${n}`,
+          kind: "report",
+          body: `Friday EXPENSE review ${n} includes %_ literally.`,
+        })
+      }
+      yield* inbox.publish({
+        agentID: "agt_search",
+        source: "report:other",
+        kind: "report",
+        body: "Monday revenue review.",
+      })
+      const first = yield* inbox.page("agt_search", undefined, 50, "expense")
+      expect(first.messages).toHaveLength(50)
+      expect(first.messages.every((item) => item.body.includes("EXPENSE"))).toBe(true)
+      expect(first.next).toBeDefined()
+      const second = yield* inbox.page("agt_search", first.next, 50, "expense")
+      expect(second.messages).toHaveLength(5)
+      expect((yield* inbox.page("agt_search", undefined, 50, "%_")).messages).toHaveLength(50)
+      expect((yield* inbox.page("agt_search", undefined, 50, "revenue")).messages).toHaveLength(1)
+      expect(Exit.isFailure(yield* inbox.page("agt_search", undefined, 50, " ").pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* inbox.page("agt_search", undefined, 50, "x".repeat(201)).pipe(Effect.exit))).toBe(
+        true,
+      )
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("routine draft attachments persist, reorder, promote atomically, and expose content only to their owner", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

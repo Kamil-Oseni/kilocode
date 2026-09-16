@@ -373,11 +373,15 @@ async function page(ctx: Ctx) {
   const cursor = msg.cursor === undefined ? undefined : String(msg.cursor)
   if (cursor !== undefined && (cursor.length < 1 || cursor.length > 256))
     throw new Error("This inbox page cursor is invalid.")
+  const search = msg.search === undefined ? undefined : String(msg.search).trim()
+  if (msg.search !== undefined && (!search || search.length > 200))
+    throw new Error("Search this conversation with 1 to 200 characters.")
   const result = await ctx.kilo.inbox2.page(
     {
       directory: ctx.dir,
       agentID: String(msg.agentID),
       ...(cursor ? { cursor } : {}),
+      ...(search ? { search } : {}),
     },
     { throwOnError: true },
   )

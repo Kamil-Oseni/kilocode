@@ -9315,7 +9315,7 @@ export class Inbox extends HeyApiClient {
   /**
    * List messages in a routine conversation
    *
-   * Return up to 50 persisted inbox messages, newest page first, without starting work.
+   * Return up to 50 persisted inbox messages, newest page first, optionally filtered by literal message text, without starting work.
    */
   public page<ThrowOnError extends boolean = false>(
     parameters: {
@@ -9324,6 +9324,7 @@ export class Inbox extends HeyApiClient {
       workspace?: string
       cursor?: string
       limit?: string
+      search?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -9337,6 +9338,7 @@ export class Inbox extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "cursor" },
             { in: "query", key: "limit" },
+            { in: "query", key: "search" },
           ],
         },
       ],

@@ -24002,6 +24002,7 @@ export type KilocodeRoutineInboxPageData = {
     workspace?: string
     cursor?: string
     limit?: string
+    search?: string
   }
   url: "/kilocode/agent/{agentID}/inbox"
 }

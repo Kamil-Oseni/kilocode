@@ -209,6 +209,7 @@ test("routine inbox HTTP pages refuse a limit above 50", async () => {
   const route = `/kilocode/agent/${agent.id}/inbox`
   expect((await app.request(`${route}?limit=51`, { headers })).status).toBe(400)
   expect((await app.request(`${route}?limit=0`, { headers })).status).toBe(400)
+  expect((await app.request(`${route}?search=${"x".repeat(201)}`, { headers })).status).toBe(400)
   const page = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
   expect(page.messages).toEqual([])
 }, 60_000)

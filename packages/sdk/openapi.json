@@ -36861,6 +36861,16 @@
               "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
             },
             "required": false
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -37011,7 +37021,7 @@
             }
           }
         },
-        "description": "Return up to 50 persisted inbox messages, newest page first, without starting work.",
+        "description": "Return up to 50 persisted inbox messages, newest page first, optionally filtered by literal message text, without starting work.",
         "summary": "List messages in a routine conversation",
         "x-codeSamples": [
           {

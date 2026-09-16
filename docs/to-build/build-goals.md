@@ -4,9 +4,11 @@ This is the single, prioritized source of truth for what to build into Raya next
 
 The order is deliberate. Features are ranked by what is most important to have first, weighing three things at once: how much it changes what Raya can do for you day to day, whether it makes an already-shipped feature actually reliable, and whether other features on the list depend on it. Reliability of things you already touch beats breadth of things you don't, and foundations that unlock several later goals are pulled forward even when they are less glamorous than the ambitious cloud work near the bottom.
 
-## Release staging decision — active Kilo compatibility migration; VS Code distribution in Version 3
+## Release staging decision — product features first; compatibility maintenance only; VS Code distribution in Version 3
 
-Kilo-to-Raya migration is active wherever it can preserve existing installations through additive aliases, dual reads, explicit conflict precedence, journaled copy, exact verification and rollback. Begin with the `raya` CLI alias, `RAYA_*` user-input aliases, `.raya`/`raya.json` config reads and proven rendered branding. Do not rename or delete live Kilo identities in place.
+Broad Kilo-to-Raya migration is low priority until Raya's defining product work is stable. Implementation capacity goes first to durable Routines and organizations, main-chat creation, the Routine messenger, intelligent subagents, Todo and Admin, OpenAI realtime voice, computer use, multimodal vision, and cloud continuity in their dependency order. While building those features, fix visible Kilo leakage when it appears in the same slice and preserve the compatibility contracts below. Do not start standalone inventory or rename work merely to reduce the remaining Kilo reference count.
+
+Existing additive aliases—the `raya` CLI alias, `RAYA_*` user-input aliases, and `.raya`/`raya.json` config reads—remain supported. Further identity migration must be attached to a product need or a compatibility defect and must preserve existing installations through dual reads, explicit conflict precedence, journaled copy, exact verification and rollback. Do not rename or delete live Kilo identities in place.
 
 Existing package IDs, the `kilo` and `kilocode` commands, physical executable, provider IDs, API/event paths, storage/config/environment keys, profile folders, telemetry/auth identities, marketplace/update identities and the `eden.raya` extension architecture remain compatible throughout migration. Change a canonical identity only after its consumers have an additive alias or versioned protocol, a real legacy profile migrates without loss, restart and rollback pass, and its compatibility window is approved.
 

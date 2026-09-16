@@ -6,6 +6,12 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-16 18:09 America/Toronto - Product roadmap takes priority over broad Kilo migration
+
+The master build roadmap now matches the active implementation policy. Broad Kilo reference-reduction and standalone identity migration are explicitly low priority. Work proceeds through Raya's defining product capabilities in dependency order: durable Routines and organizations, main-chat creation, the Routine messenger, intelligent subagents, Todo and Admin, OpenAI realtime voice, computer use, multimodal vision, and cloud continuity. Visible Kilo leakage may be corrected when it is encountered inside one of those feature slices or when it causes a compatibility defect; existing package IDs, commands, storage, provider keys and protocols stay compatible. The Raya-owned VS Code distribution remains Version 3 work.
+
+The active implementation slice remains versioned Routine draft persistence. It closes a real reliability hole in the Routine messenger: rapid saves can currently arrive out of order and allow an older draft to overwrite a newer one. This work belongs to restart-safe agent conversations, not to the deferred identity migration.
+
 ## ChatGPT 2026-09-16 18:00 America/Toronto - Routine shared items return to their exact message
 
 **Status: pushed and installed from `cf2917d829`.** Every persisted file, link and attachment in Routine chat info now offers **Show in conversation**. It closes chat info, uses the item's durable message ID, and scrolls to the exact message. If that message is older than the loaded transcript, Raya follows the existing persisted cursor sequentially for up to 20 pages or 1,000 messages. The current unsent draft remains mounted throughout. A filtered conversation is reset visibly and semantically before the exact lookup, and stale in-flight page identities are retired. The conversation announces whether it is finding or showing the item and offers **Return to latest**. If bounded retained history no longer contains the message, Raya says so instead of landing on an unrelated row. Network-dependent controls remain disabled offline.

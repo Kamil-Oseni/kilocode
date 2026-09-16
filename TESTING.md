@@ -194,7 +194,8 @@ rm -f /tmp/kilo-serve.pid /tmp/kilo-serve.log
 |---|---|
 | `KILO_SERVER_PASSWORD` | Enable Basic auth. Omit for auth-bypassed local testing. |
 | `KILO_DB=":memory:"` | Skip on-disk SQLite — hermetic runs. |
-| `KILO_DISABLE_DEFAULT_PLUGINS=true` | Don't auto-load bundled plugins. |
+| `RAYA_DISABLE_DEFAULT_PLUGINS=true` | Don't auto-load bundled plugins. `KILO_DISABLE_DEFAULT_PLUGINS` is a compatibility alias; either name set to `true` or `1` enables the override. |
+| `RAYA_DISABLE_LSP_DOWNLOAD=true` | Prevent automatic LSP downloads. `KILO_DISABLE_LSP_DOWNLOAD` is a compatibility alias; either name set to `true` or `1` enables the override. |
 | `KILO_WORKSPACE_ID=<id>` | Single-workspace mode; disables control-plane routes. |
 | `KILO_TELEMETRY_LEVEL=off` | Disable PostHog during tests. |
 | `KILO_CONFIG_CONTENT='{…}'` | Inline JSON config without writing a file. |

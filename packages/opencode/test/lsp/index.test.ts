@@ -3,7 +3,7 @@ import { describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Layer } from "effect"
+import { ConfigProvider, Deferred, Effect, Layer } from "effect" // kilocode_change
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -21,10 +21,15 @@ import { TsCheck } from "../../src/kilocode/ts-check" // kilocode_change
 const fakeCtx = {} as InstanceContext
 const fakeFlags = {} as RuntimeFlags.Info
 
-const lspLayer = (flags: Parameters<typeof RuntimeFlags.layer>[0] = {}) =>
+// kilocode_change start - accept config-backed runtime flags for alias integration coverage
+const runtime = (input: Record<string, unknown>) =>
+  RuntimeFlags.Service.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(input))), Layer.orDie)
+
+const lspLayer = (flags: Parameters<typeof RuntimeFlags.layer>[0] = {}, layer = RuntimeFlags.layer(flags)) =>
   LayerNode.compile(LayerNode.group([LSP.node, Config.node, RuntimeFlags.node, EventV2Bridge.node]), [
-    [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+    [RuntimeFlags.node, layer],
   ])
+// kilocode_change end
 
 const it = testEffect(Layer.mergeAll(lspLayer(), LayerNode.compile(CrossSpawnSpawner.node)))
 const experimentalTyIt = testEffect(
@@ -32,7 +37,7 @@ const experimentalTyIt = testEffect(
 )
 const fakeServerPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
 const disabledDownloadIt = testEffect(
-  Layer.mergeAll(lspLayer({ disableLspDownload: true }), LayerNode.compile(CrossSpawnSpawner.node)),
+  Layer.mergeAll(lspLayer({}, runtime({ RAYA_DISABLE_LSP_DOWNLOAD: "1" })), LayerNode.compile(CrossSpawnSpawner.node)), // kilocode_change - exercise Raya alias through the real LSP boundary
 )
 
 describe("lsp.spawn", () => {
@@ -264,7 +269,7 @@ describe("lsp.spawn", () => {
   )
 
   disabledDownloadIt.instance(
-    "passes disableLspDownload to builtin LSP spawn",
+    "passes the Raya LSP-download safety alias to builtin LSP spawn", // kilocode_change
     () =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {

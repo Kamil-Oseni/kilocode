@@ -112,6 +112,45 @@ describe("RuntimeFlags", () => {
   )
   // kilocode_change end
 
+  // kilocode_change start - default-plugin and LSP-download aliases are safety-monotonic
+  for (const pair of [
+    {
+      field: "disableDefaultPlugins" as const,
+      raya: "RAYA_DISABLE_DEFAULT_PLUGINS",
+      kilo: "KILO_DISABLE_DEFAULT_PLUGINS",
+    },
+    {
+      field: "disableLspDownload" as const,
+      raya: "RAYA_DISABLE_LSP_DOWNLOAD",
+      kilo: "KILO_DISABLE_LSP_DOWNLOAD",
+    },
+  ]) {
+    for (const input of [
+      { name: "neither alias", raya: undefined, kilo: undefined, expected: false, conflict: false },
+      { name: "Raya only", raya: "true", kilo: undefined, expected: true, conflict: false },
+      { name: "Kilo only", raya: undefined, kilo: "1", expected: true, conflict: false },
+      { name: "both aliases", raya: "true", kilo: "true", expected: true, conflict: false },
+      { name: "Raya false and Kilo true", raya: "false", kilo: "true", expected: true, conflict: true },
+      { name: "Raya true and Kilo false", raya: "true", kilo: "false", expected: true, conflict: true },
+      { name: "empty Raya and Kilo true", raya: "", kilo: "true", expected: true, conflict: true },
+      { name: "invalid Raya and Kilo true", raya: "invalid", kilo: "true", expected: true, conflict: true },
+    ]) {
+      it.effect(`${pair.field} handles ${input.name}`, () =>
+        Effect.gen(function* () {
+          const config = {
+            ...(input.raya === undefined ? {} : { [pair.raya]: input.raya }),
+            ...(input.kilo === undefined ? {} : { [pair.kilo]: input.kilo }),
+          }
+          const flags = yield* readFlags.pipe(Effect.provide(fromConfig(config)))
+
+          expect(flags[pair.field]).toBe(input.expected)
+          expect(EnvAlias.conflicts()).toEqual(input.conflict ? [`${pair.raya}/${pair.kilo}`] : [])
+        }),
+      )
+    }
+  }
+  // kilocode_change end
+
   it.effect("layer parses KILO_EXPERIMENTAL_LSP_TY", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -191,22 +230,6 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_EXTERNAL_SKILLS: "true" })))
 
       expect(flags.disableExternalSkills).toBe(true)
-    }),
-  )
-
-  it.effect("disableLspDownload defaults to false", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
-
-      expect(flags.disableLspDownload).toBe(false)
-    }),
-  )
-
-  it.effect("disableLspDownload reads KILO_DISABLE_LSP_DOWNLOAD", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ KILO_DISABLE_LSP_DOWNLOAD: "true" })))
-
-      expect(flags.disableLspDownload).toBe(true)
     }),
   )
 

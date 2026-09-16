@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect" // kilocode_change
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -36,8 +36,15 @@ function withTmp<T, A, E, R>(
   })
 }
 
-function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
+// kilocode_change start - accept config-backed runtime flags for real alias integration coverage
+function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0], env?: Record<string, unknown>) {
+  // kilocode_change - env supports real alias integration coverage
   const source = path.join(dir, "opencode.json")
+  // kilocode_change start - allow real environment parsing for alias integration tests
+  const runtime = env
+    ? RuntimeFlags.Service.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))), Layer.orDie)
+    : RuntimeFlags.layer({ disableDefaultPlugins: true, ...flags })
+  // kilocode_change end
   return Effect.gen(function* () {
     const config = yield* Effect.promise(
       () => Bun.file(source).json() as Promise<{ plugin?: Array<string | [string, Record<string, unknown>]> }>,
@@ -45,7 +52,7 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
     const plugins = config.plugin ?? []
     return yield* Effect.gen(function* () {
       const plugin = yield* Plugin.Service
-      yield* plugin.list()
+      return yield* plugin.list() // kilocode_change - expose hooks for default-plugin behavior coverage
     }).pipe(
       Effect.provide(
         LayerNode.compile(Plugin.node, [
@@ -60,7 +67,7 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
               directories: () => Effect.succeed([dir]),
             }),
           ],
-          [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true, ...flags })],
+          [RuntimeFlags.node, runtime], // kilocode_change
         ]),
       ),
       provideInstance(dir),
@@ -69,6 +76,18 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
 }
 
 describe("plugin.loader.shared", () => {
+  // kilocode_change start - verify the Raya safety alias reaches real plugin selection
+  it.live("skips bundled plugins when the Raya safety alias is enabled", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(dir, "opencode.json"), "{}"))
+
+      const plugins = yield* load(dir, undefined, { RAYA_DISABLE_DEFAULT_PLUGINS: "1" })
+      expect(plugins).toEqual([])
+    }),
+  )
+  // kilocode_change end
+
   it.live("loads a file:// plugin function export", () =>
     withTmp(
       async (dir) => {

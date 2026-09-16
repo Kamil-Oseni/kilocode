@@ -432,7 +432,8 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `KILO_CONFIG=/path/to/file.json`: load an additional explicit config.
 - `KILO_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json"}'`:
   inject inline JSON as a final local-scope merge.
-- `KILO_DISABLE_DEFAULT_PLUGINS=1`: skip default plugins.
+- `RAYA_DISABLE_DEFAULT_PLUGINS=1`: skip default plugins (`KILO_DISABLE_DEFAULT_PLUGINS` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
+- `RAYA_DISABLE_LSP_DOWNLOAD=1`: prevent automatic LSP downloads (`KILO_DISABLE_LSP_DOWNLOAD` remains a compatibility alias; either name set to `true` or `1` enables the safety override).
 - `RAYA_PURE=1`: skip external plugins entirely (`KILO_PURE` remains a compatibility alias; either name can enable pure mode).
 - `KILO_DISABLE_EXTERNAL_SKILLS=1`,
   `KILO_DISABLE_CLAUDE_CODE_SKILLS=1`: skip the external skill scans under

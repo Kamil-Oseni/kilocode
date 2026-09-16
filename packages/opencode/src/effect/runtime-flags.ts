@@ -28,12 +28,12 @@ const enabledByExperimental = (name: string) =>
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("KILO_AUTO_SHARE"),
   pure: safety("RAYA_PURE", "KILO_PURE"), // kilocode_change
-  disableDefaultPlugins: bool("KILO_DISABLE_DEFAULT_PLUGINS"),
+  disableDefaultPlugins: safety("RAYA_DISABLE_DEFAULT_PLUGINS", "KILO_DISABLE_DEFAULT_PLUGINS"), // kilocode_change
   disableChannelDb: bool("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
   disableEmbeddedWebUi: bool("KILO_DISABLE_EMBEDDED_WEB_UI"),
   disableExternalSkills: bool("KILO_DISABLE_EXTERNAL_SKILLS"),
   disableSkillShell: bool("KILO_DISABLE_SKILL_SHELL"), // kilocode_change - disable shell injection in skill bodies
-  disableLspDownload: bool("KILO_DISABLE_LSP_DOWNLOAD"),
+  disableLspDownload: safety("RAYA_DISABLE_LSP_DOWNLOAD", "KILO_DISABLE_LSP_DOWNLOAD"), // kilocode_change
   skipMigrations: bool("KILO_SKIP_MIGRATIONS"), // kilocode_change
   disableClaudeCodePrompt: Config.all({
     broad: bool("KILO_DISABLE_CLAUDE_CODE"),

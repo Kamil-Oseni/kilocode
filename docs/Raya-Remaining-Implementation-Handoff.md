@@ -1,10 +1,24 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f641d529fe`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `138064c163`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 22:07 America/Toronto - Preserve normalized log aliases and keep log paths canonical
+
+Preserve product commit `138064c163`. `KiloLog.configure` owns the environment contract for `RAYA_LOG_LEVEL`/`KILO_LOG_LEVEL` and `RAYA_PRINT_LOGS`/`KILO_PRINT_LOGS`. It must read both pairs before mutation so conflicts remain visible without values, choose explicit CLI inputs first, then Raya, then Kilo, and synchronize any resolved value through both names. Do not write a default when neither variable exists: primary development logging and Core Effect logging intentionally retain different existing defaults. `KiloCli.bootstrap` must pass its typed yargs values into `KiloLog.init`; the alternate entrypoint must call the same configurator.
+
+Keep Core `minimumLogLevel()` and `loggers()` on Raya-first fallback. Keep telemetry’s tiny local `print()` helper rather than adding private `@opencode-ai/core` as a runtime dependency. Telemetry historically treats every nonempty Kilo value, including `"0"`, as enabling warnings; the local helper preserves that behavior while allowing an explicitly empty Raya value to override it. Do not silently change this to strict `"1"` in a migration patch. A later consistency change needs its own compatibility decision and tests.
+
+Evidence is exact: OpenCode alias/ledger **8 / 35**, including the real source-CLI conflict and explicit-option case; Core alias/observability **6 / 22**; full telemetry **27 / 73**; repository checker **4 / 8**. All three touched package typechecks pass, with OpenCode bounded to one checker/thread. Affected guards pass. The ledger now contains 15 environment pairs with `raya-wins-legacy-write` policy.
+
+Do not infer writer integration from this input migration. Keep `profile.log.runtime` and `profile.log.diagnostics` unintegrated. No `RAYA_LOG_DIR` exists. A real diagnostics slice must centralize automatic, HTTP, TUI and worker heap snapshots behind admission; give the timer an acknowledged stop; remove fixed working-directory snapshot files; rotate trace targets when the admitted generation changes; settle closed admission without unhandled rejection; and prove no writes return to the old root. Runtime logging separately requires stream flush/close and rotation that cannot reopen an old generation. Cross-process ownership remains required for both.
+
+No extension rebuild is needed for this internal CLI/Core/telemetry slice. Installed source remains `66631de1db`, live writer coverage remains **10 of 32**, and the Raya-owned VS Code distribution remains Version 3 work.
+
+After this handoff and progress record is included, the checked inventory is **69,367** total: public 1,693; compatibility 35,382; provenance 5,686; internal 26,606. The pinned compatibility digest is `44ec39b9bc087cf9805da69a934ffae1fb0588afd8236f264173b906372c5d68`.
 
 ## ChatGPT 2026-09-15 21:30 America/Toronto - Continue safe aliases; do not invent a command-cache writer
 
@@ -794,7 +808,7 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, seven environment aliases, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
+| `FUT-BRAND-01` | Raya public identity plus lossless, rollback-safe Kilo compatibility migration | Public Raya command/configuration vocabulary, 15 reviewed environment pairs with explicit CLI precedence, a shared database path resolver and the fail-closed ledger exist; canonical legacy identities remain | Continue additive aliases and journaled copy/cutover foundations now; preserve every legacy read/write until exact restart, crash-recovery, rollback and compatibility-window evidence permits a later removal |
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |

@@ -5,8 +5,8 @@ import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
-import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
+import { HeapSnapshot } from "@/kilocode/cli/heap-snapshot" // kilocode_change - admitted diagnostics writer
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
@@ -43,6 +43,7 @@ const remoteExit = createWorkerRemoteExit(Rpc.emit) // kilocode_change
 // kilocode_change start - drain ingest before dispose so GlobalBus/remote stay live
 const runShutdown = createWorkerShutdown({
   drain: () => KiloSessions.drainIngestForShutdown(),
+  stopHeap: () => Heap.stop(),
   dispose: () => InstanceRuntime.disposeAllInstances(),
   stopServer: async () => {
     if (server) await server.stop(true)
@@ -80,10 +81,11 @@ export const rpc = {
       body,
     }
   },
-  snapshot() {
-    const result = writeHeapSnapshot("server.heapsnapshot")
-    return result
+  // kilocode_change start - route worker diagnostics through profile admission and the current log root
+  async snapshot() {
+    return HeapSnapshot.write({ role: "worker" })
   },
+  // kilocode_change end
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)
     server = await Server.listen(input)

@@ -15,6 +15,9 @@ describe("createWorkerShutdown", () => {
         await gate
         order.push("drain-end")
       },
+      stopHeap: async () => {
+        order.push("heap")
+      },
       dispose: async () => {
         order.push("dispose")
       },
@@ -29,7 +32,7 @@ describe("createWorkerShutdown", () => {
 
     resolveDrain()
     await pending
-    expect(order).toEqual(["drain-start", "drain-end", "dispose", "stopServer"])
+    expect(order).toEqual(["drain-start", "drain-end", "heap", "dispose", "stopServer"])
   })
 
   test("awaits drain fully before dispose even when drain is slow", async () => {
@@ -40,6 +43,9 @@ describe("createWorkerShutdown", () => {
         await Promise.resolve()
         await Promise.resolve()
       },
+      stopHeap: async () => {
+        order.push("heap")
+      },
       dispose: async () => {
         order.push("dispose")
       },
@@ -49,6 +55,8 @@ describe("createWorkerShutdown", () => {
     })
 
     await run()
+    expect(order.indexOf("drain")).toBeLessThan(order.indexOf("heap"))
+    expect(order.indexOf("heap")).toBeLessThan(order.indexOf("dispose"))
     expect(order.indexOf("drain")).toBeLessThan(order.indexOf("dispose"))
     expect(order.indexOf("dispose")).toBeLessThan(order.indexOf("stop"))
   })

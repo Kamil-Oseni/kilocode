@@ -11,7 +11,7 @@ import { withNetworkOptions, resolveNetworkOptionsNoConfig, hasArg } from "@/cli
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@kilocode/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
-import { writeHeapSnapshot } from "v8"
+import { HeapSnapshot } from "@/kilocode/cli/heap-snapshot" // kilocode_change - admitted diagnostics writer
 import type { StartInput } from "@/kilocode/cli/cmd/tui/thread" // kilocode_change - runtime imports deferred into handlers
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 import { validateSession } from "../tui/validate-session"
@@ -486,7 +486,7 @@ export const TuiThreadCommand = cmd({
             // kilocode_change - shared lazy loader also supports daemon attach
             url: transport.url,
             async onSnapshot() {
-              const tui = writeHeapSnapshot("tui.heapsnapshot")
+              const tui = await HeapSnapshot.write({ role: "tui" })
               const server = await client.call("snapshot", undefined)
               return [tui, server]
             },

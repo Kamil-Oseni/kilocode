@@ -282,9 +282,9 @@ export namespace ProfileWriterManifest {
           "worker-heap-snapshot",
         ],
         lifecycle:
-          "Rotate the trace singleton after a root change, stop or admit the process-wide heap timer, and finish every synchronous native heap serialization; two TUI writers currently target the working directory.",
+          "Process-local admission resolves the log root inside every trace or heap lease, rotates traces by root generation, and drains the automatic heap timer before shutdown; cross-process migration still requires the outer controller to stop every CLI and worker process.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.log.runtime",

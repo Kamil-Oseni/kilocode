@@ -3,11 +3,13 @@
 // assert drain → dispose → stopServer ordering without loading worker.ts side effects.
 export function createWorkerShutdown(input: {
   drain: () => Promise<void>
+  stopHeap: () => Promise<void>
   dispose: () => Promise<void>
   stopServer: () => Promise<void>
 }) {
   return async () => {
     await input.drain()
+    await input.stopHeap()
     await input.dispose()
     await input.stopServer()
   }

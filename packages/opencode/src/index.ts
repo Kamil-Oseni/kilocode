@@ -154,6 +154,7 @@ try {
   }
   process.exitCode = 1
 } finally {
+  await Heap.stop() // kilocode_change - stop and await the admitted automatic diagnostics writer
   await KiloCli.shutdown() // kilocode_change - telemetry/session-export shutdown + instance disposal
 
   // Some subprocesses don't react properly to SIGTERM and similar signals.

@@ -16,6 +16,7 @@ describe("profile writer manifest", () => {
       "profile.credentials.mcp",
       "profile.data.revert-note",
       "profile.data.tool-output",
+      "profile.log.diagnostics",
       "profile.state.plugin-meta",
       "profile.state.sandbox-policy",
       "profile.state.sandbox-preference",

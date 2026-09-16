@@ -135,7 +135,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
 
     const heapSnapshot = Effect.fn("KilocodeHttpApi.heapSnapshot")(function* () {
-      return yield* Effect.sync(() => HeapSnapshot.write())
+      return yield* HeapSnapshot.generate({ role: "http" }).pipe(Effect.orDie)
     })
 
     const commandFiles = Effect.fn("KilocodeHttpApi.commandFiles")(function* () {

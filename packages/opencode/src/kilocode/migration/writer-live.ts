@@ -36,5 +36,6 @@ export namespace ProfileWriterLive {
   export const policy = admission("profile.state.sandbox-policy")
   export const preference = admission("profile.state.sandbox-preference")
   export const pluginMeta = admission("profile.state.plugin-meta")
+  export const diagnostics = admission("profile.log.diagnostics")
   export const snapshot = registry.snapshot
 }

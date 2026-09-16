@@ -55,6 +55,7 @@ const dicts: Record<Locale, Record<string, string>> = {
 
 type LanguageCtx = {
   t: (key: string, params?: Record<string, string | number | boolean | undefined>) => string
+  locale: () => string
 }
 
 const LanguageContext = createContext<LanguageCtx>()
@@ -81,7 +82,11 @@ export function KiloClawLanguageProvider(props: { locale: () => string | undefin
     return resolveTemplate(text, params)
   }
 
-  return <LanguageContext.Provider value={{ t }}>{props.children}</LanguageContext.Provider>
+  return (
+    <LanguageContext.Provider value={{ t, locale: () => localeToBcp47(resolved()) }}>
+      {props.children}
+    </LanguageContext.Provider>
+  )
 }
 
 export function useKiloClawLanguage(): LanguageCtx {

@@ -14,23 +14,7 @@ import { showToast } from "@kilocode/kilo-ui/toast"
 import type { ContentBlock, ExecApprovalDecision, Message } from "../lib/types"
 import { useKiloClawLanguage } from "../context/language"
 import { isEnterKeyCommitNotIme } from "../../src/utils/ime-enter"
-
-const ULID_TIME_LEN = 10
-const ENCODING = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-const ENCODING_LEN = ENCODING.length
-
-/** Decode the time portion of a ULID into a millisecond epoch. */
-function ulidToTimestamp(id: string): number {
-  if (!id || id.length < ULID_TIME_LEN) return Date.now()
-  const time = id.slice(0, ULID_TIME_LEN).toUpperCase()
-  let ts = 0
-  for (const ch of time) {
-    const idx = ENCODING.indexOf(ch)
-    if (idx === -1) return Date.now()
-    ts = ts * ENCODING_LEN + idx
-  }
-  return ts
-}
+import { messageLabel, messageTitle, ulidInstant } from "../../src/utils/message-time"
 
 function contentBlocksToText(content: ContentBlock[]): string {
   let out = ""
@@ -38,11 +22,6 @@ function contentBlocksToText(content: ContentBlock[]): string {
     if (block.type === "text") out += block.text
   }
   return out
-}
-
-function formatTime(epoch: number): string {
-  const d = new Date(epoch)
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 }
 
 type MessageBubbleProps = {
@@ -62,14 +41,16 @@ type MessageBubbleProps = {
 }
 
 export function MessageBubble(props: MessageBubbleProps) {
-  const { t } = useKiloClawLanguage()
+  const { t, locale } = useKiloClawLanguage()
   const [isEditing, setIsEditing] = createSignal(false)
   const [editText, setEditText] = createSignal("")
   const [showReactionPick, setShowReactionPick] = createSignal(false)
 
   const isBot = createMemo(() => props.message.senderId.startsWith("bot:"))
   const isOptimistic = createMemo(() => props.message.id.startsWith("pending-"))
-  const timestamp = createMemo(() => (isOptimistic() ? Date.now() : ulidToTimestamp(props.message.id)))
+  const timestamp = createMemo(() => (isOptimistic() ? new Date() : ulidInstant(props.message.id)))
+  const short = createMemo(() => messageLabel(timestamp(), locale()))
+  const full = createMemo(() => messageTitle(timestamp(), locale()))
   const textContent = createMemo(() => (props.message.deleted ? "" : contentBlocksToText(props.message.content)))
   const empty = createMemo(() => !textContent() || !textContent().trim())
   const isDeleting = createMemo(() => props.pendingDeleteId === props.message.id)
@@ -367,7 +348,19 @@ export function MessageBubble(props: MessageBubbleProps) {
                 <Show when={props.message.clientUpdatedAt && !props.message.deleted}>
                   <span>{t("kiloClaw.message.edited")}</span>
                 </Show>
-                <span>{formatTime(timestamp())}</span>
+                <Show when={timestamp()}>
+                  {(value) => (
+                    <time
+                      data-component="message-time"
+                      data-side={props.isOwn ? "user" : "assistant"}
+                      dateTime={value().toISOString()}
+                      title={full()}
+                      aria-label={full()}
+                    >
+                      {short()}
+                    </time>
+                  )}
+                </Show>
               </div>
             </Show>
           </div>

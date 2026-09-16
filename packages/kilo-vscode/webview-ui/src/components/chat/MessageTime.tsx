@@ -1,6 +1,6 @@
 import { Show, createMemo, type Component } from "solid-js"
 import { useLanguage } from "../../context/language"
-import { messageInstant } from "../../utils/message-time"
+import { messageInstant, messageLabel, messageTitle } from "../../utils/message-time"
 
 type Source = string | number | { createdAt?: string; time?: { created?: number } }
 
@@ -11,18 +11,8 @@ export const MessageTime: Component<{
 }> = (props) => {
   const language = useLanguage()
   const date = createMemo(() => messageInstant(props.value))
-  const short = createMemo(() => {
-    const value = date()
-    if (!value) return ""
-    if (props.detail === "date-time")
-      return new Intl.DateTimeFormat(language.locale(), { dateStyle: "medium", timeStyle: "short" }).format(value)
-    return new Intl.DateTimeFormat(language.locale(), { hour: "numeric", minute: "2-digit" }).format(value)
-  })
-  const full = createMemo(() => {
-    const value = date()
-    if (!value) return ""
-    return new Intl.DateTimeFormat(language.locale(), { dateStyle: "medium", timeStyle: "long" }).format(value)
-  })
+  const short = createMemo(() => messageLabel(date(), language.locale(), props.detail))
+  const full = createMemo(() => messageTitle(date(), language.locale()))
 
   return (
     <Show when={date()}>

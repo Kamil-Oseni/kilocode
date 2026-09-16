@@ -78,11 +78,11 @@ export function registerToggleAutoApprove(
           await client.permission
             .reply({ requestID: req.id, directory: dir, reply: "once" }, { throwOnError: true })
             .catch((err) => {
-              console.error("[Kilo New] toggleAutoApprove: failed to drain pending:", err)
+              console.error("[Raya] toggleAutoApprove: failed to drain pending:", err)
             })
         }
       } catch (err) {
-        console.error("[Kilo New] toggleAutoApprove: failed to list pending permissions:", err)
+        console.error("[Raya] toggleAutoApprove: failed to list pending permissions:", err)
       }
     }
 
@@ -101,7 +101,7 @@ export function registerToggleAutoApprove(
       .then(
         () => true,
         (err) => {
-          console.error("[Kilo New] toggleAutoApprove: failed to auto-reply:", err)
+          console.error("[Raya] toggleAutoApprove: failed to auto-reply:", err)
           return false
         },
       )

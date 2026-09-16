@@ -8,5 +8,5 @@ export async function stopSessionProcesses(
   if (!client) return
   await client.backgroundProcess
     .stopSession({ sessionID, directory })
-    .catch((err: unknown) => console.warn("[Kilo New] KiloProvider: Failed to stop background processes:", err))
+    .catch((err: unknown) => console.warn("[Raya] KiloProvider: Failed to stop background processes:", err))
 }

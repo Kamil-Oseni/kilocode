@@ -124,7 +124,7 @@ function parse(value: string): Reply | undefined {
   try {
     return JSON.parse(value) as Reply
   } catch (err) {
-    console.error("[Kilo New] MiniMax TTS response parsing failed:", err)
+    console.error("[Raya] MiniMax TTS response parsing failed:", err)
     return undefined
   }
 }

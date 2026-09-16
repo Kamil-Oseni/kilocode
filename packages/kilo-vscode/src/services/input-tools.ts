@@ -43,7 +43,7 @@ export async function routeInputToolMessage(message: Msg, ctx: Ctx): Promise<boo
   if (await routeSpeechMessage(message, ctx)) return true // raya_change - Milestone H
 
   if (message.type === "speechToTextPrewarm") {
-    void prewarmSpeechCapture().catch((err: unknown) => console.warn("[Kilo New] Speech capture prewarm failed:", err))
+    void prewarmSpeechCapture().catch((err: unknown) => console.warn("[Raya] Speech capture prewarm failed:", err))
     return true
   }
 

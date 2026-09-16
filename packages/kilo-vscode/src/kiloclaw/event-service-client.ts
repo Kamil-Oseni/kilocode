@@ -339,7 +339,7 @@ export class EventServiceClient {
       return
     }
     if (m.type === "error") {
-      console.warn("[Kilo New] event-service server error", m)
+      console.warn("[Raya] event-service server error", m)
     }
   }
 

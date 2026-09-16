@@ -17,7 +17,7 @@ export function openMcpOAuthUrlOnce(url: string): void {
       )
     },
     (error) => {
-      console.error("[Kilo New] Failed to open MCP OAuth URL:", error)
+      console.error("[Raya] Failed to open MCP OAuth URL:", error)
       void vscode.window.showErrorMessage(
         "MCP sign-in failed to open the browser. Check the Raya logs for the authentication URL.",
       )
@@ -35,7 +35,7 @@ export async function connectMcpServer(
     await client.mcp.connect({ name, directory })
     await refreshStatus()
   } catch (error) {
-    console.error("[Kilo New] Failed to connect MCP:", name, error)
+    console.error("[Raya] Failed to connect MCP:", name, error)
     await refreshStatus()
   }
 }
@@ -50,7 +50,7 @@ export async function disconnectMcpServer(
     await client.mcp.disconnect({ name, directory })
     await refreshStatus()
   } catch (error) {
-    console.error("[Kilo New] Failed to disconnect MCP:", name, error)
+    console.error("[Raya] Failed to disconnect MCP:", name, error)
     await refreshStatus()
   }
 }
@@ -74,7 +74,7 @@ export async function authenticateMcpServer(
       vscode.window.showErrorMessage(status.error || "MCP server requires client registration in config")
     }
   } catch (error) {
-    console.error("[Kilo New] Failed to authenticate MCP:", name, error)
+    console.error("[Raya] Failed to authenticate MCP:", name, error)
     vscode.window.showErrorMessage(getErrorMessage(error) || "MCP sign-in failed")
   } finally {
     await refreshStatus()

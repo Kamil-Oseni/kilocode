@@ -90,7 +90,7 @@ export async function startSpeechCapture(input: Input): Promise<boolean> {
     const file = path.join(os.tmpdir(), `kilo-stt-${process.pid}-${Date.now()}.m4a`)
     if (useMacCapture(process.platform, process.env) && !input.handsFree) {
       const result = await startMac(file, input).catch((err: unknown) => {
-        console.warn("[Kilo New] Native macOS speech capture failed, falling back to FFmpeg", err)
+        console.warn("[Raya] Native macOS speech capture failed, falling back to FFmpeg", err)
         return undefined
       })
       if (result) return !result.stopped
@@ -113,7 +113,7 @@ export async function stopSpeechCapture(requestId: string): Promise<Audio> {
   const size = await stat(state.file)
     .then((info) => info.size)
     .catch((err: unknown) => {
-      console.warn("[Kilo New] Failed to stat speech recording", err)
+      console.warn("[Raya] Failed to stat speech recording", err)
       return 0
     })
 
@@ -547,7 +547,7 @@ async function findFFmpeg(): Promise<string> {
       await exec(bin, ["-version"], { timeout: 3000 })
       return bin
     } catch (err) {
-      console.warn(`[Kilo New] FFmpeg candidate failed: ${bin}`, err)
+      console.warn(`[Raya] FFmpeg candidate failed: ${bin}`, err)
     }
   }
 
@@ -664,6 +664,6 @@ export function cleanOutput(raw: string): string {
 
 async function removeFile(file: string): Promise<void> {
   await unlink(file).catch((err: unknown) => {
-    console.warn("[Kilo New] Failed to remove speech recording", err)
+    console.warn("[Raya] Failed to remove speech recording", err)
   })
 }

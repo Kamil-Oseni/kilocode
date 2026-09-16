@@ -164,7 +164,7 @@ export function useSpeechToText(
         })
         .catch((err: unknown) => {
           if (state() !== "starting") return
-          console.warn("[Kilo New] Webview microphone unavailable; using extension-host capture:", err)
+          console.warn("[Raya] Webview microphone unavailable; using extension-host capture:", err)
           local = false
           startHost(opts)
         })

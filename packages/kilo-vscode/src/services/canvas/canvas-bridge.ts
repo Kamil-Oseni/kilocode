@@ -52,7 +52,7 @@ export class CanvasBridge {
     // instead of silently returning so the cause is visible in the next diagnostic run.
     if (!directory || this.active.has(value.properties.id)) {
       console.warn(
-        "[Kilo New] CanvasBridge: dropping canvas request",
+        "[Raya] CanvasBridge: dropping canvas request",
         value.properties.id,
         !directory ? "(no directory)" : "(already active)",
       )
@@ -72,7 +72,7 @@ export class CanvasBridge {
       if (this.disposed || revision !== this.revision) return
       const response = await this.connection.getClient().kilocode.canvas.list({ directory })
       if (response.error) {
-        console.error("[Kilo New] CanvasBridge: request recovery failed:", response.error)
+        console.error("[Raya] CanvasBridge: request recovery failed:", response.error)
         continue
       }
       for (const request of response.data ?? []) {
@@ -86,7 +86,7 @@ export class CanvasBridge {
     const controller = new AbortController()
     this.active.set(request.id, controller)
     try {
-      console.log("[Kilo New] CanvasBridge: handling", request.operation, request.name, "in", directory)
+      console.log("[Raya] CanvasBridge: handling", request.operation, request.name, "in", directory)
       const result = await this.host.execute(request, directory)
       if (controller.signal.aborted) return
       const response = await this.connection.getClient().kilocode.canvas.reply({
@@ -95,11 +95,11 @@ export class CanvasBridge {
         result,
       })
       if (response.error) throw new Error(String(response.error))
-      console.log("[Kilo New] CanvasBridge: replied", request.name, result.status)
+      console.log("[Raya] CanvasBridge: replied", request.name, result.status)
     } catch (error) {
       if (controller.signal.aborted) return
       const message = error instanceof Error ? error.message : String(error)
-      console.error("[Kilo New] CanvasBridge: canvas request failed:", error)
+      console.error("[Raya] CanvasBridge: canvas request failed:", error)
       const failure: CanvasFailure = {
         code: request.operation === "update" && /ENOENT|not found/i.test(message) ? "not_found" : "invalid_request",
         message: message.slice(0, 100_000),
@@ -112,7 +112,7 @@ export class CanvasBridge {
         directory,
         error: failure,
       })
-      if (rejected.error) console.error("[Kilo New] CanvasBridge: canvas reject also failed:", rejected.error)
+      if (rejected.error) console.error("[Raya] CanvasBridge: canvas reject also failed:", rejected.error)
     } finally {
       this.active.delete(request.id)
     }

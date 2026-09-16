@@ -47,7 +47,7 @@ function createPool() {
     { workerFactory, poolSize: 2 },
     { theme: KILO_DIFF_THEME, lineDiffType: LINE_DIFF_TYPE, preferredHighlighter: ENGINE },
   )
-  void pool.initialize().catch((err) => console.warn("[Kilo New] Failed to initialize Pierre worker pool", err))
+  void pool.initialize().catch((err) => console.warn("[Raya] Failed to initialize Pierre worker pool", err))
   return pool
 }
 

@@ -149,7 +149,7 @@ export const TerminalTab: Component<Props> = (props) => {
   /** Single logger so every error path in this file surfaces in the
    *  webview DevTools console with a consistent prefix. The component
    *  is intricate — we deliberately do not swallow errors silently. */
-  const log = (...args: unknown[]) => console.warn(`[Kilo New][XTerm][${props.terminalId}]`, ...args)
+  const log = (...args: unknown[]) => console.warn(`[Raya][XTerm][${props.terminalId}]`, ...args)
 
   onMount(() => {
     const term = new Terminal({

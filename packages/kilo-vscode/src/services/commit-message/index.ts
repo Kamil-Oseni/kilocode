@@ -101,7 +101,7 @@ export function registerCommitMessageService(
             repository.inputBox.value = message
             lastGeneratedMessage = message
             lastWorkspacePath = path
-            console.log("[Kilo New] Commit message generated successfully")
+            console.log("[Raya] Commit message generated successfully")
           } finally {
             clearTimeout(timer)
           }
@@ -109,16 +109,16 @@ export function registerCommitMessageService(
       )
       .then(undefined, (error: unknown) => {
         if (userCancelled) {
-          console.log("[Kilo New] Commit message generation was cancelled by user")
+          console.log("[Raya] Commit message generation was cancelled by user")
           return
         }
         if (timedOut) {
-          console.log("[Kilo New] Commit message generation timed out")
+          console.log("[Raya] Commit message generation timed out")
           vscode.window.showErrorMessage("Commit message generation timed out. Please try again.")
           return
         }
         const msg = getErrorMessage(error)
-        console.error("[Kilo New] Failed to generate commit message:", msg)
+        console.error("[Raya] Failed to generate commit message:", msg)
         vscode.window.showErrorMessage(msg || "Failed to generate commit message. Please try again.")
       })
   })

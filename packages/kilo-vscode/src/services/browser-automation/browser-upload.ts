@@ -74,7 +74,7 @@ export class BrowserUploads {
         }
         await this.clear(entry)
       } catch (error) {
-        console.error("[Kilo New] Upload receipt could not be restored:", id, error)
+        console.error("[Raya] Upload receipt could not be restored:", id, error)
       }
     }
   }
@@ -169,7 +169,7 @@ export class BrowserUploads {
     })()
     await entry.admission
     entry.task = this.run(entry, transport, select).finally(cleanup)
-    void entry.task.catch((error) => console.error("[Kilo New] Upload execution stopped:", error))
+    void entry.task.catch((error) => console.error("[Raya] Upload execution stopped:", error))
     return this.list(input.origin, input.id)
   }
 
@@ -236,7 +236,7 @@ export class BrowserUploads {
         entry.info.files.map((file) =>
           transport
             .release(file)
-            .catch((error: unknown) => console.error("[Kilo New] Source upload staging cleanup failed:", error)),
+            .catch((error: unknown) => console.error("[Raya] Source upload staging cleanup failed:", error)),
         ),
       )
       if (entry.info.status === "failed" || entry.info.status === "cancelled") await this.clear(entry)

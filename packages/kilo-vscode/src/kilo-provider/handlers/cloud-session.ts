@@ -95,7 +95,7 @@ export async function handleRequestCloudSessions(
       nextCursor: result.data.nextCursor ?? null,
     })
   } catch (error) {
-    console.error("[Kilo New] KiloProvider: Failed to fetch cloud sessions:", error)
+    console.error("[Raya] KiloProvider: Failed to fetch cloud sessions:", error)
     fail("Cloud history could not be loaded. Retry when the connection is available.")
   }
 }
@@ -163,7 +163,7 @@ export async function handleRequestCloudSessionData(
       },
     })
   } catch (err) {
-    console.error("[Kilo New] Failed to load cloud session data:", err)
+    console.error("[Raya] Failed to load cloud session data:", err)
     fail("Failed to load cloud preview. Reopen it to retry.")
   }
 }
@@ -175,7 +175,7 @@ function matches(ctx: CloudSessionContext, selected: Session | null, current: ()
 async function release(ctx: CloudSessionContext, ticket: CloudContinuation) {
   const key = JSON.stringify([ticket.cloud, ticket.directory])
   await ctx.journal.update(key).catch((error) => {
-    console.error("[Kilo New] Could not clear unused import recovery state:", error)
+    console.error("[Raya] Could not clear unused import recovery state:", error)
   })
   ctx.claims.delete(key)
   ticket.status = "preview"
@@ -204,7 +204,7 @@ async function reserve(
   } catch (error) {
     ctx.claims.delete(key)
     ticket.status = "preview"
-    console.error("[Kilo New] Could not save import recovery state:", error)
+    console.error("[Raya] Could not save import recovery state:", error)
     fail("Could not save import recovery state. Nothing was imported.")
     return false
   }
@@ -283,7 +283,7 @@ export async function handleImportAndSend(
     session = result.data as Session | undefined
   } catch (error) {
     ticket.status = "uncertain"
-    console.error("[Kilo New] Cloud session import outcome unknown:", error)
+    console.error("[Raya] Cloud session import outcome unknown:", error)
     return fail("Import outcome unknown. Check Local history; retrying could create another copy.")
   }
   if (!session?.id) {
@@ -293,7 +293,7 @@ export async function handleImportAndSend(
   ticket.status = "imported"
   ticket.session = session
   await ctx.journal.update(JSON.stringify([cloudSessionId, dir]), { sessionID: session.id }).catch((error) => {
-    console.error("[Kilo New] Failed to save known local cloud copy:", error)
+    console.error("[Raya] Failed to save known local cloud copy:", error)
   })
   if (!matches(ctx, selected, current))
     return fail(
@@ -370,7 +370,7 @@ export async function handleImportAndSend(
       ctx.postMessage({ type: "sessionCommandCompleted", messageID })
     }
   } catch (err) {
-    console.error("[Kilo New] Failed to send message after cloud import:", err)
+    console.error("[Raya] Failed to send message after cloud import:", err)
     ctx.postMessage({
       type: "sendMessageFailed",
       error: err instanceof Error ? err.message : "Failed to send message after import",

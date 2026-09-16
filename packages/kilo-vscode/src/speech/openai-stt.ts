@@ -111,7 +111,7 @@ function parse(raw: string): Record<string, unknown> | undefined {
   try {
     return JSON.parse(raw) as Record<string, unknown>
   } catch (err) {
-    console.error("[Kilo New] STT response parsing failed:", err)
+    console.error("[Raya] STT response parsing failed:", err)
     return undefined
   }
 }

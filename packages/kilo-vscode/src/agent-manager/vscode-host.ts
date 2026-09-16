@@ -212,7 +212,7 @@ export class VscodeHost implements Host {
       const res = await client.session.list({ directory: dir, roots: true }, { throwOnError: true })
       return res.data
     } catch (err) {
-      console.warn(`[Kilo New] Agent Manager: failed to list project sessions for ${dir}:`, err)
+      console.warn(`[Raya] Agent Manager: failed to list project sessions for ${dir}:`, err)
       return []
     }
   }

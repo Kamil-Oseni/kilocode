@@ -88,7 +88,7 @@ export function toSessionDiffFile(raw: SnapshotFileDiff): DiffFile {
     try {
       return normalize(raw)
     } catch (err) {
-      console.warn("[Kilo New] Failed to parse session diff", { file, err })
+      console.warn("[Raya] Failed to parse session diff", { file, err })
       return null
     }
   })()

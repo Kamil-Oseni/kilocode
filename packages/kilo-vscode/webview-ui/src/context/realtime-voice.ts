@@ -124,7 +124,7 @@ export class RealtimeVoice {
       this.sink.status("listening")
     } catch (err) {
       if (generation === this.generation) throw err
-      await room.disconnect().catch(() => console.warn("[Kilo New] Superseded voice transport cleanup failed."))
+      await room.disconnect().catch(() => console.warn("[Raya] Superseded voice transport cleanup failed."))
     }
   }
 

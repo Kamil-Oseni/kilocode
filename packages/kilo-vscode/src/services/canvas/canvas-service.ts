@@ -194,7 +194,7 @@ export class CanvasService implements vscode.Disposable {
     try {
       await this.refresh.change(path)
     } catch (error) {
-      console.error("[Kilo New] CanvasService: live refresh failed:", error)
+      console.error("[Raya] CanvasService: live refresh failed:", error)
     }
   }
 

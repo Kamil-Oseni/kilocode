@@ -300,7 +300,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       if (!attempt.recovered) acknowledge(target, key, review, action)
       await attempt.complete()
     } catch (err) {
-      console.error(`[Kilo New] in-editor ${action} failed:`, err)
+      console.error(`[Raya] in-editor ${action} failed:`, err)
       if (!disposed)
         void vscode.window.showErrorMessage(
           failure(
@@ -393,7 +393,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
             return typeof item?.before === "string" ? item.before : UNAVAILABLE
           })
           .catch((err) => {
-            console.error("[Kilo New] deleted review content failed:", err)
+            console.error("[Raya] deleted review content failed:", err)
             return UNAVAILABLE
           })
           .then((content) => {

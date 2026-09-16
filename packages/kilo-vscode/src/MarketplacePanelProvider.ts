@@ -197,7 +197,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
       const client = this.connection.getClient()
       await seedSessionStatuses(client, this.directory(), this.statuses, (msg) => this.post(msg), reconcile)
     } catch (err) {
-      console.warn("[Kilo New] Marketplace session status sync failed:", err)
+      console.warn("[Raya] Marketplace session status sync failed:", err)
     }
   }
 
@@ -262,7 +262,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
     } catch (err) {
       if (generation !== this.generation) return
       const error = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] Marketplace data fetch failed:", err)
+      console.warn("[Raya] Marketplace data fetch failed:", err)
       this.post({
         type: "marketplaceData",
         marketplaceItems: [],
@@ -338,7 +338,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
   private post(msg: unknown): void {
     if (!this.panel || !this.ready) return
     void this.panel.webview.postMessage(msg).then(undefined, (err) => {
-      console.warn("[Kilo New] Marketplace panel postMessage failed:", err)
+      console.warn("[Raya] Marketplace panel postMessage failed:", err)
     })
   }
 

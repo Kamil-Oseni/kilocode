@@ -77,22 +77,22 @@ export class ServerManager {
    * Get or start the server instance
    */
   async getServer(): Promise<ServerInstance> {
-    console.log("[Kilo New] ServerManager: 🔍 getServer called")
+    console.log("[Raya] ServerManager: 🔍 getServer called")
     if (this.instance) {
-      console.log("[Kilo New] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
+      console.log("[Raya] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
       return this.instance
     }
 
     if (this.startupPromise) {
-      console.log("[Kilo New] ServerManager: ⏳ Startup already in progress, waiting...")
+      console.log("[Raya] ServerManager: ⏳ Startup already in progress, waiting...")
       return this.startupPromise
     }
 
-    console.log("[Kilo New] ServerManager: 🚀 Starting new server instance...")
+    console.log("[Raya] ServerManager: 🚀 Starting new server instance...")
     this.startupPromise = this.startServer()
     try {
       this.instance = await this.startupPromise
-      console.log("[Kilo New] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
+      console.log("[Raya] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
       return this.instance
     } finally {
       this.startupPromise = null
@@ -102,8 +102,8 @@ export class ServerManager {
   private async startServer(): Promise<ServerInstance> {
     const password = crypto.randomBytes(32).toString("hex")
     const cliPath = this.getCliPath()
-    console.log("[Kilo New] ServerManager: 📍 CLI path:", cliPath)
-    console.log("[Kilo New] ServerManager: 🔐 Generated password (length):", password.length)
+    console.log("[Raya] ServerManager: 📍 CLI path:", cliPath)
+    console.log("[Raya] ServerManager: 🔐 Generated password (length):", password.length)
 
     // Verify the CLI binary exists
     if (!fs.existsSync(cliPath)) {
@@ -113,11 +113,11 @@ export class ServerManager {
     }
 
     const stat = fs.statSync(cliPath)
-    console.log("[Kilo New] ServerManager: 📄 CLI isFile:", stat.isFile())
-    console.log("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
+    console.log("[Raya] ServerManager: 📄 CLI isFile:", stat.isFile())
+    console.log("[Raya] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
 
     return new Promise((resolve, reject) => {
-      console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, launch)
+      console.log("[Raya] ServerManager: 🎬 Spawning CLI process:", cliPath, launch)
       const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
       const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
       // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
@@ -183,31 +183,31 @@ export class ServerManager {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
       })
-      console.log("[Kilo New] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
+      console.log("[Raya] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
 
       let resolved = false
       const stderrLines: string[] = []
 
       serverProcess.stdout?.on("data", (data: Buffer) => {
         const output = data.toString()
-        console.log("[Kilo New] ServerManager: 📥 CLI Server stdout:", output)
+        console.log("[Raya] ServerManager: 📥 CLI Server stdout:", output)
 
         const port = parseServerPort(output)
         if (port !== null && !resolved) {
           resolved = true
-          console.log("[Kilo New] ServerManager: 🎯 Port detected:", port)
+          console.log("[Raya] ServerManager: 🎯 Port detected:", port)
           resolve({ port, password, process: serverProcess })
         }
       })
 
       serverProcess.stderr?.on("data", (data: Buffer) => {
         const errorOutput = data.toString()
-        console.error("[Kilo New] ServerManager: ⚠️ CLI Server stderr:", errorOutput)
+        console.error("[Raya] ServerManager: ⚠️ CLI Server stderr:", errorOutput)
         stderrLines.push(errorOutput)
       })
 
       serverProcess.on("error", (err: NodeJS.ErrnoException) => {
-        console.error("[Kilo New] ServerManager: ❌ Process error:", err)
+        console.error("[Raya] ServerManager: ❌ Process error:", err)
         if (!resolved) {
           const spawnErr = err as NodeJS.ErrnoException & { spawnargs?: string[] }
           const code = err.code || err.name || "UNKNOWN"
@@ -226,7 +226,7 @@ export class ServerManager {
       })
 
       serverProcess.on("exit", (code, signal) => {
-        console.warn("[Kilo New] ServerManager: 🛑 Process exited:", { code, signal })
+        console.warn("[Raya] ServerManager: 🛑 Process exited:", { code, signal })
         if (this.instance?.process === serverProcess) {
           this.instance = null
           this.onExit?.(code, signal)
@@ -242,7 +242,7 @@ export class ServerManager {
 
       setTimeout(() => {
         if (!resolved) {
-          console.error(`[Kilo New] ServerManager: ⏰ Server startup timeout (${STARTUP_TIMEOUT_SECONDS}s)`)
+          console.error(`[Raya] ServerManager: ⏰ Server startup timeout (${STARTUP_TIMEOUT_SECONDS}s)`)
           ServerManager.killProcess(serverProcess)
           const { userMessage, userDetails } = toErrorMessage(
             t("server.startupTimeout", { seconds: STARTUP_TIMEOUT_SECONDS }),
@@ -259,7 +259,7 @@ export class ServerManager {
     // Always use the bundled binary from the extension directory
     const binName = process.platform === "win32" ? "kilo.exe" : "kilo"
     const cliPath = path.join(this.context.extensionPath, "bin", binName)
-    console.log("[Kilo New] ServerManager: 📦 Using CLI path:", cliPath)
+    console.log("[Raya] ServerManager: 📦 Using CLI path:", cliPath)
     return cliPath
   }
 
@@ -291,14 +291,14 @@ export class ServerManager {
     const proc = this.instance.process
     this.instance = null
 
-    console.log("[Kilo New] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
+    console.log("[Raya] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
     ServerManager.killProcess(proc, "SIGTERM")
 
     // SIGKILL fallback after 5s. Ensures the process tree dies even if SIGTERM is ignored
     // or Instance.disposeAll() hangs past the serve.ts shutdown timeout.
     const timer = setTimeout(() => {
       if (proc.exitCode === null) {
-        console.warn("[Kilo New] ServerManager: ⚠️ Process did not exit after SIGTERM, sending SIGKILL")
+        console.warn("[Raya] ServerManager: ⚠️ Process did not exit after SIGTERM, sending SIGKILL")
         ServerManager.killProcess(proc, "SIGKILL")
       }
     }, 5000)

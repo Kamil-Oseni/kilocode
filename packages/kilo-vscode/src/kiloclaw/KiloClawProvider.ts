@@ -354,7 +354,7 @@ export class KiloClawProvider implements vscode.Disposable {
     } catch (err) {
       if (this.stale(gen)) return null
       const message = err instanceof Error ? err.message : String(err)
-      console.error("[Kilo New] KiloClaw chat token fetch failed:", message)
+      console.error("[Raya] KiloClaw chat token fetch failed:", message)
       // Token fetch typically fails when the instance hasn't been upgraded
       // to support kilo-chat — surface that as the upgrade prompt.
       this.post({ type: "kiloclaw.state", state: { phase: "needsUpgrade", locale: this.locale } })
@@ -393,7 +393,7 @@ export class KiloClawProvider implements vscode.Disposable {
         return false
       }
       const message = err instanceof Error ? err.message : String(err)
-      console.error("[Kilo New] KiloClaw event-service connect failed:", message)
+      console.error("[Raya] KiloClaw event-service connect failed:", message)
       this.post({
         type: "kiloclaw.state",
         state: { phase: "error", locale: this.locale, error: message || "Failed to connect to chat" },
@@ -419,7 +419,7 @@ export class KiloClawProvider implements vscode.Disposable {
       this.hasMoreConversations = list.hasMore
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] KiloClaw listConversations failed:", message)
+      console.warn("[Raya] KiloClaw listConversations failed:", message)
     }
 
     try {
@@ -428,7 +428,7 @@ export class KiloClawProvider implements vscode.Disposable {
       this.botStatus = res.status ?? null
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] KiloClaw getBotStatus failed:", message)
+      console.warn("[Raya] KiloClaw getBotStatus failed:", message)
     }
 
     // Auto-select the most recent conversation so the panel opens straight
@@ -452,7 +452,7 @@ export class KiloClawProvider implements vscode.Disposable {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
-        console.warn("[Kilo New] KiloClaw getConversationStatus failed:", message)
+        console.warn("[Raya] KiloClaw getConversationStatus failed:", message)
       }
 
       void this.markRead(latest.conversationId)
@@ -465,14 +465,14 @@ export class KiloClawProvider implements vscode.Disposable {
         const dir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir()
         await this.connection.connect(dir)
       } catch (err) {
-        console.debug("[Kilo New] KiloClaw connect deferred:", (err as Error)?.message ?? err)
+        console.debug("[Raya] KiloClaw connect deferred:", (err as Error)?.message ?? err)
         return null
       }
     }
     try {
       return this.connection.getClient()
     } catch (err) {
-      console.debug("[Kilo New] KiloClaw getClient deferred:", (err as Error)?.message ?? err)
+      console.debug("[Raya] KiloClaw getClient deferred:", (err as Error)?.message ?? err)
       return null
     }
   }
@@ -752,7 +752,7 @@ export class KiloClawProvider implements vscode.Disposable {
       this.post({ type: "kiloclaw.conversationStatus", status: this.conversationStatus })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] KiloClaw getConversationStatus failed:", message)
+      console.warn("[Raya] KiloClaw getConversationStatus failed:", message)
       return
     }
 
@@ -860,7 +860,7 @@ export class KiloClawProvider implements vscode.Disposable {
       await this.chat.sendMessage({ conversationId, content, clientId, inReplyToMessageId })
       // Server will fire `message.created` — reconciliation happens there.
     } catch (err) {
-      console.error("[Kilo New] KiloClaw sendMessage failed:", err instanceof Error ? err.message : err)
+      console.error("[Raya] KiloClaw sendMessage failed:", err instanceof Error ? err.message : err)
       this.post({ type: "kiloclaw.error", error: this.formatError(err, "Failed to send message") })
       if (conversationId === this.activeConversationId) {
         this.messages = this.messages.filter((m) => m.id !== pendingId)
@@ -1046,7 +1046,7 @@ export class KiloClawProvider implements vscode.Disposable {
       this.broadcastConversations({ replace: true })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] KiloClaw refreshConversations failed:", message)
+      console.warn("[Raya] KiloClaw refreshConversations failed:", message)
     }
   }
 
@@ -1064,7 +1064,7 @@ export class KiloClawProvider implements vscode.Disposable {
       this.broadcastMessages({ replace: true })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] KiloClaw refreshActiveMessages failed:", message)
+      console.warn("[Raya] KiloClaw refreshActiveMessages failed:", message)
     }
   }
 
@@ -1160,7 +1160,7 @@ export class KiloClawProvider implements vscode.Disposable {
     this.botNudge = setInterval(() => {
       if (!this.chat || !this.sandboxId) return
       this.chat.requestBotStatus(this.sandboxId).catch((err) => {
-        console.debug("[Kilo New] KiloClaw requestBotStatus failed:", (err as Error)?.message ?? err)
+        console.debug("[Raya] KiloClaw requestBotStatus failed:", (err as Error)?.message ?? err)
       })
     }, BOT_STATUS_NUDGE_MS)
   }
@@ -1180,7 +1180,7 @@ export class KiloClawProvider implements vscode.Disposable {
         this.post({ type: "kiloclaw.status", data: this.status })
       }
     } catch (err) {
-      console.debug("[Kilo New] KiloClaw poll failed:", (err as Error)?.message ?? err)
+      console.debug("[Raya] KiloClaw poll failed:", (err as Error)?.message ?? err)
     }
   }
 

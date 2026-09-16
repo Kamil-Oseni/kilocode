@@ -194,16 +194,13 @@ describe("Raya branding boundary", () => {
 
   test("presents Raya in webview providers, diagnostics, and visual fixtures", async () => {
     const indexing = await read("webview-ui/src/components/settings/IndexingTab.tsx")
-    const diagnostics = await Promise.all(
-      [
-        "webview-ui/src/App.tsx",
-        "webview-ui/src/components/history/SessionList.tsx",
-        "webview-ui/src/context/server.tsx",
-        "webview-ui/src/context/session.tsx",
-        "webview-ui/src/context/voice.tsx",
-        "webview-ui/src/context/vscode.tsx",
-      ].map(read),
-    )
+    const diagnosticFiles = [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "webview-ui/src/**/*.ts",
+      "webview-ui/src/**/*.tsx",
+    ].flatMap((pattern) => [...new Bun.Glob(pattern).scanSync({ cwd: root, absolute: true })])
+    const diagnostics = await Promise.all(diagnosticFiles.map((file) => Bun.file(file).text()))
     const stories = await Promise.all(
       [
         "webview-ui/src/stories/StoryProviders.tsx",

@@ -75,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock
   context.subscriptions.push(registerUpdateChecker(context)) // raya_change - poll GitHub Releases for newer Raya builds
   void recoverSelfHealInstallation(context).catch((err) => {
-    console.warn("[Kilo New] Self-heal installation recovery failed:", err)
+    console.warn("[Raya] Self-heal installation recovery failed:", err)
     void vscode.window.showErrorMessage("Raya could not read its saved repair installation. The record was retained.")
   })
   const notebookBridge = createNotebookBridge(connectionService)
@@ -133,8 +133,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
       try {
         remoteService.setClient(connectionService.getClient())
-        console.log("[Kilo New] CLI connected, calling remoteService.refresh()")
-        remoteService.refresh().catch((err) => console.warn("[Kilo New] initial remote refresh failed:", err))
+        console.log("[Raya] CLI connected, calling remoteService.refresh()")
+        remoteService.refresh().catch((err) => console.warn("[Raya] initial remote refresh failed:", err))
       } catch {
         remoteService.setClient(null)
       }
@@ -155,7 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
   )
 
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    void markWorkspace(folder.uri.fsPath, (msg) => console.warn(`[Kilo New] ${msg}`))
+    void markWorkspace(folder.uri.fsPath, (msg) => console.warn(`[Raya] ${msg}`))
   }
 
   // Track all open tab panel providers so toolbar button commands can target them.
@@ -214,7 +214,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Create Agent Manager provider for editor panel
   const agentManagerHost = new VscodeHost(context.extensionUri, connectionService, context, remoteService)
   const git = createGitExecutable({
-    log: (message) => console.warn(`[Kilo New] ${message}`),
+    log: (message) => console.warn(`[Raya] ${message}`),
   })
   const agentManagerProvider = new AgentManagerProvider(agentManagerHost, connectionService, git)
   agentManagerProvider.onPanelVisibilityChange((visible) => remember({ agentManager: visible }))
@@ -311,7 +311,7 @@ export function activate(context: vscode.ExtensionContext) {
         tabPanels.set(panel, tabProvider)
         panel.onDidDispose(
           () => {
-            console.log("[Kilo New] Tab panel restored from restart disposed")
+            console.log("[Raya] Tab panel restored from restart disposed")
             tabPanels.delete(panel)
             tabProvider.dispose()
           },
@@ -567,7 +567,7 @@ export function activate(context: vscode.ExtensionContext) {
       provider.postMessage({ type: "triggerTask", text: `Generate a terminal command: ${input}` })
     }),
     vscode.commands.registerCommand("raya.toggleRemote", () => {
-      remoteService.toggle().catch((err) => console.error("[Kilo New] toggleRemote command failed:", err))
+      remoteService.toggle().catch((err) => console.error("[Raya] toggleRemote command failed:", err))
     }),
     vscode.commands.registerCommand("raya.openInTab", () => {
       return openKiloInNewTab(
@@ -672,7 +672,7 @@ export function activate(context: vscode.ExtensionContext) {
         const sessionMatch = uri.path.match(/^\/raya\/s\/([a-zA-Z0-9_-]+)$/)
         const sessionId = sessionMatch?.[1]
         if (sessionId) {
-          console.log("[Kilo New] URI handler: opening cloud session:", sessionId)
+          console.log("[Raya] URI handler: opening cloud session:", sessionId)
           await vscode.commands.executeCommand(`${KiloProvider.viewType}.focus`)
           provider.openCloudSession(sessionId)
           return
@@ -683,7 +683,7 @@ export function activate(context: vscode.ExtensionContext) {
         const modelID = params.get("model") || undefined
         const agent = params.get("agent") || undefined
         if (!modelID && !agent) return
-        console.log("[Kilo New] URI handler: applying linked Kilo selection:", { modelID, agent })
+        console.log("[Raya] URI handler: applying linked Kilo selection:", { modelID, agent })
         await vscode.commands.executeCommand(`${KiloProvider.viewType}.focus`)
         provider.selectKiloModel(modelID, agent)
       },
@@ -700,7 +700,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("raya.reload", () => {
-      provider.reload().catch((e) => console.error("[Kilo New] reload command failed:", e))
+      provider.reload().catch((e) => console.error("[Raya] reload command failed:", e))
     }),
   )
 
@@ -778,7 +778,7 @@ function openKiloInNewTab(
 
   panel.onDidDispose(
     () => {
-      console.log("[Kilo New] Tab panel disposed")
+      console.log("[Raya] Tab panel disposed")
       tabPanels.delete(panel)
       tabProvider.dispose()
     },

@@ -98,7 +98,7 @@ export class BrowserTransfers {
           await this.save(entry)
         }
       } catch (error) {
-        console.error("[Kilo New] Browser download receipt could not be restored:", name, error)
+        console.error("[Raya] Browser download receipt could not be restored:", name, error)
       }
     }
   }
@@ -177,7 +177,7 @@ export class BrowserTransfers {
       entry.info.status = "unknown"
       entry.info.error =
         "No download event observed within 30 seconds. Inspect the page; do not automatically repeat the action."
-      void this.save(entry).catch((error) => console.error("[Kilo New] Download timeout could not be recorded:", error))
+      void this.save(entry).catch((error) => console.error("[Raya] Download timeout could not be recorded:", error))
     }, 30000)
     return entry.info.id
   }
@@ -230,9 +230,9 @@ export class BrowserTransfers {
           await native
             .cancel()
             .catch((failure: unknown) =>
-              console.error("[Kilo New] Unregistered download cancellation failed:", failure),
+              console.error("[Raya] Unregistered download cancellation failed:", failure),
             )
-          console.error("[Kilo New] Browser download capture failed:", error)
+          console.error("[Raya] Browser download capture failed:", error)
         })
         .finally(() => this.registrations.delete(task))
     }
@@ -366,7 +366,7 @@ export class BrowserTransfers {
       entry.info.error =
         "Manual control interrupted download event attribution. Inspect the page and downloads before another action."
       void this.save(entry).catch((error) =>
-        console.error("[Kilo New] Download takeover could not be recorded:", error),
+        console.error("[Raya] Download takeover could not be recorded:", error),
       )
     }
     this.armed.clear()

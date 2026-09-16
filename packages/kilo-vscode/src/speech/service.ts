@@ -518,7 +518,7 @@ export class SpeechService implements vscode.Disposable {
       const openai = await this.openai.dispose()
       if (openai) console.error("[Raya] OpenAI voice disposal failed:", openai)
       const realtime = await this.realtime.dispose()
-      if (realtime) console.error("[Kilo New] Voice disposal failed:", realtime.error)
+      if (realtime) console.error("[Raya] Voice disposal failed:", realtime.error)
       this.tts.dispose()
     })
   }

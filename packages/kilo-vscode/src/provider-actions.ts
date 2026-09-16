@@ -138,7 +138,7 @@ export function buildActionContext(
       // Shared State.dispose() now has a hard per-disposer timeout, so this
       // wait is bounded without needing a client-side timeout here.
       await client.global.dispose().catch((error: unknown) => {
-        console.warn(`[Kilo New] KiloProvider: global.dispose() after ${reason} failed:`, error)
+        console.warn(`[Raya] KiloProvider: global.dispose() after ${reason} failed:`, error)
       })
     },
     fetchAndSendProviders: refresh,
@@ -273,7 +273,7 @@ async function removeAuth(ctx: ActionContext, id: string, configured: boolean) {
   await ctx.secrets?.delete(id) // raya_change - remove the encrypted source with its CLI mirror
   if (!err) return
   if (!configured) throw err
-  console.warn(`[Kilo New] auth.remove failed for configured provider ${id} (non-fatal):`, err)
+  console.warn(`[Raya] auth.remove failed for configured provider ${id} (non-fatal):`, err)
 }
 
 async function removeCustom(ctx: ActionContext, id: string, global: Config, merged: Config) {

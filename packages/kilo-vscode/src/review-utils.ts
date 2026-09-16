@@ -33,7 +33,7 @@ export function openFileInEditor(
 
   void vscode.commands
     .executeCommand("vscode.open", uri, options)
-    .then(undefined, (err) => console.error(`[Kilo New] ${prefix}: Failed to open file:`, uri.fsPath, err))
+    .then(undefined, (err) => console.error(`[Raya] ${prefix}: Failed to open file:`, uri.fsPath, err))
 }
 
 export function openRelativeFile(root: string | undefined, relativePath: string, line?: number, column?: number): void {

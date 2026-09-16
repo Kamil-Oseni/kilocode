@@ -40,7 +40,7 @@ export async function detectMarketplaceRelevance(
         const found = await Promise.all(
           roots.map((root) =>
             source.find(root, pattern).catch((err: unknown) => {
-              console.warn(`[Kilo New] Marketplace relevance scan failed for ${pattern}:`, err)
+              console.warn(`[Raya] Marketplace relevance scan failed for ${pattern}:`, err)
               return false
             }),
           ),

@@ -113,7 +113,7 @@ export class BrowserBridge {
       if (this.disposed || revision !== this.revision) return
       const response = await this.connection.getClient().kilocode.browser.list({ directory })
       if (response.error) {
-        console.error("[Kilo New] BrowserBridge: request recovery failed:", response.error)
+        console.error("[Raya] BrowserBridge: request recovery failed:", response.error)
         continue
       }
       for (const request of response.data ?? []) {

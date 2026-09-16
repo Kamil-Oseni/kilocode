@@ -29,7 +29,7 @@ export function convertToMentionPath(path: string, cwd: string): string {
       cleaned = cleaned.substring(1)
     }
   } catch (err) {
-    console.error("[Kilo New] Failed to decode dropped URI:", err, cleaned)
+    console.error("[Raya] Failed to decode dropped URI:", err, cleaned)
   }
 
   const normalized = cleaned.replace(/\\/g, "/")
@@ -102,7 +102,7 @@ function decodeDrop(value: string): string[] {
           : json
       if (Array.isArray(urls)) return urls.flatMap(fromItem)
     } catch (err) {
-      console.error("[Kilo New] Failed to parse drop payload:", err)
+      console.error("[Raya] Failed to parse drop payload:", err)
     }
   }
   return trimmed

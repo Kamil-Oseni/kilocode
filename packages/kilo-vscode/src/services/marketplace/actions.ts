@@ -97,7 +97,7 @@ export async function removeMarketplaceItemFromAllScopes(
     await invalidate(ctx, global.success ? "global" : "project", global.success ? dir : project!)
     return true
   } catch (err) {
-    console.warn("[Kilo New] Marketplace removal failed:", err)
+    console.warn("[Raya] Marketplace removal failed:", err)
     return false
   }
 }
@@ -108,7 +108,7 @@ async function fetchSkills(ctx: MarketplaceActionContext, dir: string) {
     const { data } = await retry(() => client.app.skills({ directory: dir }, { throwOnError: true }))
     return data
   } catch (err) {
-    console.warn("[Kilo New] Failed to fetch CLI skills for marketplace:", err)
+    console.warn("[Raya] Failed to fetch CLI skills for marketplace:", err)
     return undefined
   }
 }
@@ -119,18 +119,18 @@ async function invalidate(
   dir: string,
 ): Promise<void> {
   const client = await ctx.connection.getClientAsync(dir).catch((err: unknown) => {
-    console.warn("[Kilo New] Marketplace CLI invalidation deferred:", err)
+    console.warn("[Raya] Marketplace CLI invalidation deferred:", err)
     return null
   })
   if (!client) return
 
   if (scope === "global") {
     await client.global.config.update({ config: {} }).catch((err: unknown) => {
-      console.warn("[Kilo New] global.config.update after marketplace change failed:", err)
+      console.warn("[Raya] global.config.update after marketplace change failed:", err)
     })
   }
   await client.instance.dispose({ directory: dir }).catch((err: unknown) => {
-    console.warn("[Kilo New] instance.dispose() after marketplace change failed:", err)
+    console.warn("[Raya] instance.dispose() after marketplace change failed:", err)
   })
 }
 
@@ -164,7 +164,7 @@ async function removeLegacyMcp(
       await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(parsed, null, 2), "utf8"))
       removed = true
     } catch (err) {
-      console.warn("[Kilo New] Failed to remove legacy MCP from", uri.fsPath, err)
+      console.warn("[Raya] Failed to remove legacy MCP from", uri.fsPath, err)
     }
   }
   return removed

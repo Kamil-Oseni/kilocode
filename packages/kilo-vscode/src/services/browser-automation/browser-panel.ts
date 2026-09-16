@@ -148,7 +148,7 @@ export class BrowserPanel implements vscode.Disposable {
   private handle(message: BrowserPanelMessage): void {
     void this.receive(message).catch((error: unknown) => {
       const detail = error instanceof Error ? error.message : String(error)
-      console.error("[Kilo New] BrowserPanel: input failed:", error)
+      console.error("[Raya] BrowserPanel: input failed:", error)
       void vscode.window.showErrorMessage(`Raya Browser: ${detail}`)
     })
   }

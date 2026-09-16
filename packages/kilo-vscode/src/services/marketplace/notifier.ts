@@ -91,7 +91,7 @@ export class MarketplaceNotifier implements vscode.Disposable {
     const generation = ++this.generation
     const data = await fetchMarketplaceData(this.ctx, this.project(), this.directory(), this.roots()).catch(
       (err: unknown) => {
-        console.warn("[Kilo New] Marketplace suggestion scan failed:", err)
+        console.warn("[Raya] Marketplace suggestion scan failed:", err)
         return undefined
       },
     )

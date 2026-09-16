@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `4c22d6e06b`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `4c22d6e06b`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 23:04 America/Toronto - Continue from the installed pushed checkpoint
+
+Local and remote `main` reached `65acc24aae`, then the low-memory workflow successfully installed `7.4.23-snapshot+65acc24aae.kamil-oseni.1789527673255`. SDK preparation, CLI build/smoke tests, extension and webview typechecks, lint, production bundling, packaging and installation passed. The vault retained rollback VSIX `raya.5166313856d85a0fc3aeabeb4bae1695829c942fd70a9567a09b486b2020bf86.vsix`; free disk space remained 116.19 GB. Do not infer that the already-open host loaded it: its pointer remains `6b57cdfb0a` until the user normally reloads VS Code.
 
 ## ChatGPT 2026-09-15 22:55 America/Toronto - Preserve admitted diagnostics and finish cross-process ownership later
 

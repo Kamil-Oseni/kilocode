@@ -1,10 +1,14 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `4c22d6e06b`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `4c22d6e06b`; the installed package source is `65acc24aae`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 23:04 America/Toronto - Pushed checkpoint installed with rollback retained
+
+**Status: pushed and installed.** `origin/main` and local `main` both reached `65acc24aae`. The low-memory snapshot workflow built and installed `7.4.23-snapshot+65acc24aae.kamil-oseni.1789527673255`; SDK preparation, CLI build and smoke tests, extension/webview typechecks, lint, production bundle, VSIX packaging and installation all passed. The package vault retained rollback artifact `raya.5166313856d85a0fc3aeabeb4bae1695829c942fd70a9567a09b486b2020bf86.vsix`. The installer removed one obsolete staged package and no retained vault package. Free space after installation is 116.19 GB. The open host was not force-reloaded and will activate this installed snapshot on the next normal VS Code reload.
 
 ## ChatGPT 2026-09-15 22:55 America/Toronto - Diagnostic writers now honor profile admission and shutdown
 

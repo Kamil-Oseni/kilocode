@@ -15,7 +15,15 @@ import path from "node:path"
 
 const ROOT = path.resolve(import.meta.dir, "..")
 const FILE = "script/raya-brand-inventory.json"
-const OMIT = new Set(["script/check-raya-brand-inventory.ts", "script/global-path-consumers.json", FILE])
+// Exclude control records that describe this baseline; scanning them would make
+// each recorded count or digest mutate the baseline it is documenting.
+const OMIT = new Set([
+  "script/check-raya-brand-inventory.ts",
+  "script/global-path-consumers.json",
+  "docs/Raya-Implementation-Progress.md",
+  "docs/Raya-Remaining-Implementation-Handoff.md",
+  FILE,
+])
 const TOKEN = /kilo(?:-?code)?/gi
 const categories = ["user-visible-defect", "compatibility-key", "upstream-provenance", "internal-migration"] as const
 

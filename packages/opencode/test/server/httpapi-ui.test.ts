@@ -94,7 +94,16 @@ function uiApp(input?: {
   username?: string
   client?: Layer.Layer<HttpClient.HttpClient>
   disableEmbeddedWebUi?: boolean
+  env?: Record<string, unknown> // kilocode_change - allow real runtime-alias coverage
 }) {
+  // kilocode_change start - resolve injected aliases through the production RuntimeFlags service
+  const runtime = input?.env
+    ? RuntimeFlags.Service.layer.pipe(
+        Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(input.env))),
+        Layer.orDie,
+      )
+    : RuntimeFlags.layer({ disableEmbeddedWebUi: input?.disableEmbeddedWebUi ?? false })
+  // kilocode_change end
   const handler = HttpRouter.toWebHandler(
     HttpRouter.use((router) =>
       Effect.gen(function* () {
@@ -110,7 +119,7 @@ function uiApp(input?: {
       Layer.provide([
         fsUtilLayer,
         input?.client ?? httpClient(new Response("ui")),
-        RuntimeFlags.layer({ disableEmbeddedWebUi: input?.disableEmbeddedWebUi ?? false }),
+        runtime, // kilocode_change
         HttpServer.layerServices,
         // kilocode_change start - keep the filewatcher-disable flag visible (see httpapi-instance-route-auth.test.ts)
         ConfigProvider.layer(
@@ -201,7 +210,7 @@ describe("HttpApi UI fallback", () => {
     Effect.gen(function* () {
       let proxied = false
       const response = yield* uiApp({
-        disableEmbeddedWebUi: true,
+        env: { RAYA_DISABLE_EMBEDDED_WEB_UI: "1" }, // kilocode_change - exercise the Raya alias at the HTTP boundary
         client: httpClient(new Response("ui"), () => {
           proxied = true
         }),

@@ -1,10 +1,31 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `55b4f33784`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `6517715617`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 21:05 America/Toronto - Consolidate model state before admitting it
+
+Product commit `6517715617` is on `origin/main`. It corrects `profile.state.model` without changing runtime coverage. Preserve the exact writer list: direct-run `variant.shared.ts`, backend `kilocode/config/model-state.ts`, TUI `context/local.tsx`, VS Code `kilo-provider/model-state.ts`, and JetBrains `KiloBackendModelStateManager.kt`. Keep `kilocode/tool/task.ts` out because it is read-only; the same is true of provider recent-model loading, plan follow-up and cloud defaults.
+
+The mutation contract is whole-state write, per-agent selection set/clear/reset, recent update, favorite add/remove/full replacement, and variant set/remove. Do not mark it integrated while any product writes the file directly. Current hazards are exact:
+
+- TUI captures `paths.state/model.json` for the component lifetime, queues atomic writes in a promise chain, catches failures and exposes `flush()` only for tests. Production shutdown does not drain it.
+- Direct-run CLI owns a module-global runtime. Variant saving is fire-and-forget, failures are swallowed, and independent read-modify-write calls are not serialized.
+- `KilocodeModelState.update` calls `target()` once through `get()` and again before write, so a root change can copy old-generation state into the new generation.
+- VS Code caches `/path` forever at module scope and serializes only within its own module queue. Backend reconnect/profile change does not invalidate the file.
+- JetBrains caches the path until backend start/stop, serializes only with its process-local mutex, performs direct non-atomic `writeText`, and falls back to `~/.local/state/kilo/model.json` when path lookup throws.
+- None of these queues or locks coordinates another CLI/editor process, so concurrent full-file writes can lose unrelated fields.
+
+Implement one Kilo-owned `ModelStateRepository` in the backend. Each mutating operation must acquire `profile.state.model`, resolve one target after admission, take a shared cross-process lock, read, validate, apply one typed mutation, atomically publish and clean temporary state before release. Expose typed HTTP/SDK operations for set/clear/reset model selection, recent update, favorite add/remove/replace and variant set/remove. Route TUI, VS Code and JetBrains through them; route direct-run CLI and `KilocodeModelState` through the repository. Remove cached client paths, JetBrains fallback writes and all direct client filesystem mutation. Track pending work and drain it during every client/backend shutdown. Add a static mutation guard for `model.json`.
+
+Tests must cover concurrent mixed mutations with no lost fields; root selection after admission; one pinned root per read-modify-write; a gated write keeping quiescence draining; closed refusal before mutation; reopen; missing/corrupt state recovery; atomic publication failure cleanup; TUI and direct-run drain acknowledgement; VS Code reconnection selecting the new path; JetBrains path change and path-fetch failure producing no legacy write; and a real multi-process test proving an old process cannot publish after cutover. Add actual HTTP/generated-SDK tests so UI clients cannot silently bypass the repository.
+
+Verification for `6517715617` is **8 tests / 422 assertions**, brand inventory, Kilo-owned source check, Promise-facade guard and the protected all-package push.
+
+With this detailed handoff and progress record included, the checked inventory is **69,271** total: public 1,693; compatibility 35,311; provenance 5,686; internal 26,581; compatibility digest `37778512e0d0f9409a339082bdd4a72309d3260d27fb61c2015ba5d23750290c`. Coverage remains 10 of 33, the manifest remains incomplete and no root switch is exposed.
 
 ## ChatGPT 2026-09-15 20:55 America/Toronto - Preserve branch cache paths and defer unsafe ripgrep admission
 

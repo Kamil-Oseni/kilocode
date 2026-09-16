@@ -1,10 +1,24 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `6517715617`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f641d529fe`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 21:30 America/Toronto - Continue safe aliases; do not invent a command-cache writer
+
+Preserve product commits `b939046464`, `2c2acc74c9` and `f641d529fe`. They add only lossless public-input aliases and correct the writer inventory. `RAYA_COMMAND_TIMEOUT_MAX_MS` and `RAYA_COMMAND_TIMEOUT_MAX_MS_MESSAGE` are preferred by the existing hosted command-timeout implementation; the two `KILO_COMMAND_TIMEOUT_*` names remain fallbacks. `RAYA_NO_DAEMON` is preferred by daemon auto-attach; `KILO_NO_DAEMON` remains its fallback. A defined Raya value wins even when it is empty. Do not change that rule, and do not translate or delete either name at startup. The ledger and repository checker must continue to list all 13 exact pairs in order.
+
+The timeout alias has complete focused evidence: **5 tests / 23 assertions**, with the combined migration-ledger run at **8 / 44**. The daemon precedence matrix passes **1 / 4**. The existing real Kilo escape-hatch test printed **1 / 2** passing assertions, then its Bun harness retained a child pipe after reporting completion; ChatGPT stopped the single test Bun process by exact PID after confirming it was the only Bun process. Repair that harness before using it as clean-exit evidence. Do not weaken the product assertions or replace them with source inspection.
+
+`profile.cache.commands` must remain absent from the writer manifest. There is no tracked producer for the supposed cache. `CommandFiles.remove` can delete discovered project, home, editor-storage or injected Markdown outside profile roots. JetBrains `saveCommands` writes directly through the JVM, can race CLI/editor processes and cannot participate in the process-local Node registry. The manifest’s explicit gaps for the unknown cache producer, out-of-profile command mutations and direct JetBrains writer are the safe representation. A later hardening slice should make cache and `.raya` command paths read-only, reject symlink escapes and known cache targets in JetBrains, and add atomic/locked backend-owned saves before classifying any profile-global command writer.
+
+Current reviewed coverage is **10 of 32 ordinary writers**; 22 remain unintegrated or uncertain. `complete` and `cutoverReady` remain false and production exposes no root switch. The final focused manifest/ledger group passes **8 / 422**, the cross-repository compatibility checker passes **4 / 8**, and bounded single-thread CLI typecheck plus affected guards pass. No extension rebuild is needed; installed source remains `66631de1db`.
+
+For the next easy compatibility slice, additive log-control aliases are possible only as one complete behavior change: every level/print reader must use Raya-first fallback, and `--log-level`/`--print-logs` must dual-write both names so command-line options still override inherited values. Keep `KILO_RUN_ID`, `KILO_LOG_INITIALIZED_RUN_ID` and test-only daemon log roots internal. Do not add `RAYA_LOG_DIR`; it would create a new escaping path and falsely imply log-writer cutover safety. Diagnostics admission is a separate larger slice: centralize all heap snapshots, add timer disposal, rotate trace targets by admitted generation and test root switching before marking `profile.log.diagnostics` integrated.
+
+After this handoff and progress record is included, the checked inventory is **69,296** total: public 1,693; compatibility 35,332; provenance 5,686; internal 26,585. The pinned compatibility digest is `86db6d3a362e5af550ad0d37324d62e937fb52f94001eb514e6e909a696c035e`.
 
 ## ChatGPT 2026-09-15 21:05 America/Toronto - Consolidate model state before admitting it
 

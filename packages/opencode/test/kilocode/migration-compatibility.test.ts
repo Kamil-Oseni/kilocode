@@ -121,6 +121,12 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_PURE",
       policy: "safety-monotonic-aliases",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:disable_mouse",
+      raya: "RAYA_DISABLE_MOUSE",
+      legacy: "KILO_DISABLE_MOUSE",
+      policy: "safety-monotonic-aliases",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

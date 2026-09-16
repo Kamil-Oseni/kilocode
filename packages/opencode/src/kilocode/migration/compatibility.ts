@@ -138,6 +138,12 @@ export namespace RayaMigrationLedger {
       legacy: "KILO_PURE",
       policy: "safety-monotonic-aliases" as const,
     },
+    {
+      kind: "environment:disable_mouse",
+      raya: "RAYA_DISABLE_MOUSE",
+      legacy: "KILO_DISABLE_MOUSE",
+      policy: "safety-monotonic-aliases" as const,
+    },
     ...["SERVER_PASSWORD", "SERVER_USERNAME"].map((name) => ({
       kind: `environment:${name.toLowerCase()}`,
       raya: `RAYA_${name}`,
@@ -391,8 +397,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_730,
-        digest: "6f8d633f400b19414c29a748d3907e30ce5eecbc7651bcc82fffd1182c54e9a3",
+        count: 35_754,
+        digest: "ca4e77298c6a823fe3642c057c38d573715a82a6dd5cc64909572431fc00e7e5",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

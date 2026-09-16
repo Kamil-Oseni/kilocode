@@ -40,6 +40,49 @@ describe("Raya environment aliases", () => {
     expect(EnvAlias.conflicts()).toEqual([])
   })
 
+  for (const item of [
+    { name: "neither name", env: {}, expected: false },
+    { name: "Raya true", env: { RAYA_PURE: "true" }, expected: true },
+    { name: "Kilo true", env: { KILO_PURE: "1" }, expected: true },
+    { name: "both true", env: { RAYA_PURE: "true", KILO_PURE: "true" }, expected: true },
+    { name: "Raya false and Kilo true", env: { RAYA_PURE: "false", KILO_PURE: "true" }, expected: true },
+    { name: "Raya true and Kilo false", env: { RAYA_PURE: "1", KILO_PURE: "0" }, expected: true },
+    { name: "empty Raya and Kilo true", env: { RAYA_PURE: "", KILO_PURE: "true" }, expected: true },
+  ]) {
+    test(`resolves safety-sensitive boolean aliases from ${item.name}`, () => {
+      EnvAlias.conflicts()
+      expect(EnvAlias.enabled("RAYA_PURE", "KILO_PURE", item.env)).toBe(item.expected)
+    })
+  }
+
+  test("reports safety-sensitive boolean conflicts without their values", () => {
+    EnvAlias.conflicts()
+    EnvAlias.enabled("RAYA_PURE", "KILO_PURE", { RAYA_PURE: "raya-secret", KILO_PURE: "legacy-secret" })
+
+    const conflicts = EnvAlias.conflicts()
+    expect(conflicts).toEqual(["RAYA_PURE/KILO_PURE"])
+    expect(JSON.stringify(conflicts)).not.toContain("secret")
+  })
+
+  test("wires safety-sensitive boolean aliases through the legacy Flag property", () => {
+    const names = ["RAYA_PURE", "KILO_PURE"]
+    const env = { ...process.env }
+    for (const name of names) delete env[name]
+    Object.assign(env, { RAYA_PURE: "false", KILO_PURE: "true" })
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify(Flag.KILO_PURE))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env,
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toBe(true)
+  })
+
   test("resolves credentials explicitly and fails closed on conflicting aliases", () => {
     const conflict = { RAYA_SERVER_PASSWORD: "raya-secret", KILO_SERVER_PASSWORD: "legacy-secret" }
 

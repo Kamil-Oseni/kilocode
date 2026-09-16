@@ -209,9 +209,11 @@ export const Flag = {
     EnvAlias.write("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR", value)
   },
   // kilocode_change end
+  // kilocode_change start - either compatibility name can enable safety-sensitive pure mode
   get KILO_PURE() {
-    return truthy("KILO_PURE")
+    return EnvAlias.enabled("RAYA_PURE", "KILO_PURE")
   },
+  // kilocode_change end
   get KILO_PERMISSION() {
     return process.env["KILO_PERMISSION"]
   },

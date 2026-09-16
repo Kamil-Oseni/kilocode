@@ -21,6 +21,17 @@ export namespace EnvAlias {
     return next !== undefined ? next : legacy
   }
 
+  /** Enable a safety-sensitive boolean when either compatibility name is truthy. */
+  export function enabled(raya: string, kilo: string, env: NodeJS.ProcessEnv = process.env) {
+    const next = env[raya]
+    const legacy = env[kilo]
+    if (next !== undefined && legacy !== undefined && next !== legacy) found.add(`${raya}/${kilo}`)
+    return [next, legacy].some((value) => {
+      const normalized = value?.toLowerCase()
+      return normalized === "true" || normalized === "1"
+    })
+  }
+
   /** Resolve sensitive input without silently choosing between conflicting aliases. */
   export function credential(
     explicit: string | undefined,

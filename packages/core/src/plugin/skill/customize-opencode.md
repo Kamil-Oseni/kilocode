@@ -433,7 +433,7 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `KILO_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json"}'`:
   inject inline JSON as a final local-scope merge.
 - `KILO_DISABLE_DEFAULT_PLUGINS=1`: skip default plugins.
-- `KILO_PURE=1`: skip external plugins entirely.
+- `RAYA_PURE=1`: skip external plugins entirely (`KILO_PURE` remains a compatibility alias; either name can enable pure mode).
 - `KILO_DISABLE_EXTERNAL_SKILLS=1`,
   `KILO_DISABLE_CLAUDE_CODE_SKILLS=1`: skip the external skill scans under
   `~/.claude/` and `~/.agents/`.

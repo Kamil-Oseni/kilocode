@@ -1,10 +1,18 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `80b2bc62d4`; the installed package source is `80b2bc62d4`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current repository product source is `cdf245aa13`; the installed package source is `cdf245aa13`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-16 05:21 America/Toronto - Notification-only update checkpoint pushed and installed
+
+**Status: pushed and installed from `cdf245aa13`.** The one-worker protected gate passed all 29 JavaScript/TypeScript packages plus JetBrains. The sequential `RAYA_LOW_MEMORY=1` workflow regenerated the SDK without tracked drift, rebuilt and smoke-tested the Windows CLI, passed host/webview typechecks, cached lint, production bundling, packaging, retention and installation.
+
+Installed version: `eden.raya@7.4.23-snapshot+cdf245aa13.kamil-oseni.1789550252597`. Vault package `raya.107b871e1471d406192c86ad62b2066b574ddc7e46d6bd8d277bf1728922ee61.vsix` is `520,232,563` bytes with SHA-256 `107B871E1471D406192C86AD62B2066B574DDC7E46D6BD8D277BF1728922EE61`. Its installed CLI is `231,278,080` bytes with SHA-256 `997C6647496F5F5B43EF6C47AE894395D024E9F899F25FBA80B3B642595514B2`; both match the vault manifest. Retention removed one older vault package, one staged package and one installed snapshot. Free space is `124,075,016,192` bytes (115.55 GiB), and no Bun, tsgo, tsgolint or Java process remains.
+
+The open host remains on digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`. A normal reload must move it to `107b871e1471d406192c86ad62b2066b574ddc7e46d6bd8d277bf1728922ee61` before installed-host acceptance.
 
 ## ChatGPT 2026-09-16 05:11 America/Toronto - Notification-only updates gain a Raya safety alias
 

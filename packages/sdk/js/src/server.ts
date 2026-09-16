@@ -2,8 +2,8 @@ import launch from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
 import { stop, bindAbort } from "./process.js"
 
-// kilocode_change start - Merge existing KILO_CONFIG_CONTENT with new config
-// This preserves Kilocode-injected modes when spawning nested CLI instances
+// kilocode_change start - Merge existing Raya/Kilo config content with new config
+// This preserves injected modes when spawning nested CLI instances.
 function mergeConfig(existing: Config | undefined, incoming: Config | undefined): Config {
   const base = existing ?? {}
   const override = incoming ?? {}
@@ -20,7 +20,7 @@ function mergeConfig(existing: Config | undefined, incoming: Config | undefined)
 }
 
 function parseExistingConfig(): Config | undefined {
-  const content = process.env.KILO_CONFIG_CONTENT
+  const content = process.env.RAYA_CONFIG_CONTENT ?? process.env.KILO_CONFIG_CONTENT
   if (!content) return undefined
   try {
     return JSON.parse(content)
@@ -65,11 +65,13 @@ export async function createKiloServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
+  const content = buildConfigEnv(options.config) // kilocode_change
   const proc = launch(`kilo`, args, {
     // kilocode_change
     env: {
       ...process.env,
-      KILO_CONFIG_CONTENT: buildConfigEnv(options.config), // kilocode_change
+      RAYA_CONFIG_CONTENT: content, // kilocode_change
+      KILO_CONFIG_CONTENT: content, // kilocode_change
     },
   })
   let clear = () => {}
@@ -151,13 +153,15 @@ export function createKiloTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
+  const content = buildConfigEnv(options?.config) // kilocode_change
   const proc = launch(`kilo`, args, {
     // kilocode_change
     stdio: "inherit",
     windowsHide: true,
     env: {
       ...process.env,
-      KILO_CONFIG_CONTENT: buildConfigEnv(options?.config), // kilocode_change
+      RAYA_CONFIG_CONTENT: content, // kilocode_change
+      KILO_CONFIG_CONTENT: content, // kilocode_change
     },
   })
 

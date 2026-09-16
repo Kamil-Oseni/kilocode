@@ -41,6 +41,12 @@ const SOURCES: Record<string, Source> = {
   ".opencode": "sourceHomeOpencode",
 }
 
+function env(raya: string, kilo: string) {
+  const value = process.env[raya]
+  if (value !== undefined) return value
+  return process.env[kilo]
+}
+
 function row(file: string, source: Source, loaded = true, recommended = false): Entry {
   const name = path.basename(file)
   return {
@@ -67,8 +73,9 @@ export function globalFiles() {
     if (!existsSync(base)) return []
     return FILES.map((file) => row(path.join(base, file), SOURCES[dir])).filter((item) => item.exists)
   })
-  const env = process.env.KILO_CONFIG ? [row(process.env.KILO_CONFIG, "sourceEnvFile")] : []
-  const extra = process.env.KILO_CONFIG_DIR
+  const config = env("RAYA_CONFIG", "KILO_CONFIG")
+  const envfile = config ? [row(config, "sourceEnvFile")] : []
+  const extra = env("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR")
   const dir = extra
     ? ensure(
         FILES.map((file) => row(path.join(extra, file), "sourceEnvDir")).filter((item) => item.exists),
@@ -76,10 +83,11 @@ export function globalFiles() {
         "sourceEnvDir",
       )
     : []
-  const virtual: Entry[] = process.env.KILO_CONFIG_CONTENT
+  const body = env("RAYA_CONFIG_CONTENT", "KILO_CONFIG_CONTENT")
+  const virtual: Entry[] = body
     ? [
         {
-          name: "KILO_CONFIG_CONTENT",
+          name: process.env.RAYA_CONFIG_CONTENT !== undefined ? "RAYA_CONFIG_CONTENT" : "KILO_CONFIG_CONTENT",
           source: "sourceEnvContent",
           exists: true,
           loaded: true,
@@ -88,7 +96,7 @@ export function globalFiles() {
       ]
     : []
 
-  return ensure([...base, ...dirs, ...env, ...dir, ...virtual], path.join(root, "kilo.jsonc"), "sourceXdg")
+  return ensure([...base, ...dirs, ...envfile, ...dir, ...virtual], path.join(root, "kilo.jsonc"), "sourceXdg")
 }
 
 export function localFiles(root: string) {

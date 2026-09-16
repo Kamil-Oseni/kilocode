@@ -1,19 +1,64 @@
-// kilocode_change start - Tests for KILO_CONFIG_CONTENT merging
+// kilocode_change start - Tests for Raya/Kilo config content merging
 import { describe, test, expect, beforeEach, afterEach } from "bun:test"
-import { buildConfigEnv } from "../src/server"
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { delimiter, join } from "node:path"
+import { buildConfigEnv, createKiloServer } from "../src/server"
+import { buildConfigEnv as buildV2ConfigEnv, createKiloServer as createV2KiloServer } from "../src/v2/server"
 
 describe("buildConfigEnv", () => {
-  const originalEnv = process.env.KILO_CONFIG_CONTENT
+  const kilo = process.env.KILO_CONFIG_CONTENT
+  const raya = process.env.RAYA_CONFIG_CONTENT
 
   beforeEach(() => {
     delete process.env.KILO_CONFIG_CONTENT
+    delete process.env.RAYA_CONFIG_CONTENT
   })
 
   afterEach(() => {
-    if (originalEnv === undefined) {
+    if (kilo === undefined) {
       delete process.env.KILO_CONFIG_CONTENT
     } else {
-      process.env.KILO_CONFIG_CONTENT = originalEnv
+      process.env.KILO_CONFIG_CONTENT = kilo
+    }
+    if (raya === undefined) {
+      delete process.env.RAYA_CONFIG_CONTENT
+    } else {
+      process.env.RAYA_CONFIG_CONTENT = raya
+    }
+  })
+
+  test("reads Raya-only config content in both SDK generations", () => {
+    process.env.RAYA_CONFIG_CONTENT = JSON.stringify({ model: "raya-model" })
+
+    for (const build of [buildConfigEnv, buildV2ConfigEnv]) {
+      expect(JSON.parse(build()).model).toBe("raya-model")
+    }
+  })
+
+  test("keeps Kilo-only config content compatible in both SDK generations", () => {
+    process.env.KILO_CONFIG_CONTENT = JSON.stringify({ model: "kilo-model" })
+
+    for (const build of [buildConfigEnv, buildV2ConfigEnv]) {
+      expect(JSON.parse(build()).model).toBe("kilo-model")
+    }
+  })
+
+  test("prefers defined Raya config content when aliases conflict", () => {
+    process.env.RAYA_CONFIG_CONTENT = JSON.stringify({ model: "raya-model" })
+    process.env.KILO_CONFIG_CONTENT = JSON.stringify({ model: "kilo-model" })
+
+    for (const build of [buildConfigEnv, buildV2ConfigEnv]) {
+      expect(JSON.parse(build()).model).toBe("raya-model")
+    }
+  })
+
+  test("treats an explicitly empty Raya value as authoritative", () => {
+    process.env.RAYA_CONFIG_CONTENT = ""
+    process.env.KILO_CONFIG_CONTENT = JSON.stringify({ model: "kilo-model" })
+
+    for (const build of [buildConfigEnv, buildV2ConfigEnv]) {
+      expect(JSON.parse(build()).model).toBeUndefined()
     }
   })
 
@@ -106,6 +151,42 @@ describe("buildConfigEnv", () => {
     const parsed = JSON.parse(result)
 
     expect(parsed.plugin).toEqual(["plugin-a", "plugin-b", "plugin-c"])
+  })
+
+  test("synchronizes computed content into both child aliases in both SDK generations", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "raya-sdk-"))
+    const capture = join(dir, "env.json")
+    const script = join(dir, "kilo.js")
+    const path = process.env.PATH
+    process.env.RAYA_CONFIG_CONTENT = JSON.stringify({ model: "base-model" })
+    process.env.KILO_CONFIG_CONTENT = JSON.stringify({ model: "ignored-model" })
+    process.env.RAYA_SDK_CAPTURE = capture
+    process.env.PATH = `${dir}${delimiter}${path ?? ""}`
+    writeFileSync(
+      script,
+      [
+        `await Bun.write(process.env.RAYA_SDK_CAPTURE, JSON.stringify({ raya: process.env.RAYA_CONFIG_CONTENT, kilo: process.env.KILO_CONFIG_CONTENT }))`,
+        `console.log("kilo server listening on http://127.0.0.1:4096")`,
+      ].join("\n"),
+    )
+    writeFileSync(join(dir, "kilo.cmd"), `@echo off\r\n"${process.execPath}" "%~dp0kilo.js"\r\n`)
+    const bin = join(dir, "kilo")
+    writeFileSync(bin, `#!${process.execPath}\nawait import("./kilo.js")\n`)
+    chmodSync(bin, 0o755)
+
+    for (const create of [createKiloServer, createV2KiloServer]) {
+      const server = await create({ config: { model: "nested-model" } })
+      server.close()
+      const child = await Bun.file(capture).json()
+
+      expect(child.raya).toBe(child.kilo)
+      expect(JSON.parse(child.raya).model).toBe("nested-model")
+    }
+
+    delete process.env.RAYA_SDK_CAPTURE
+    if (path === undefined) delete process.env.PATH
+    else process.env.PATH = path
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 // kilocode_change end

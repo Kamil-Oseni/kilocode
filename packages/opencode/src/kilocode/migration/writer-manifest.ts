@@ -373,10 +373,10 @@ export namespace ProfileWriterManifest {
         id: "profile.tmp.attachments",
         roots: ["tmp"],
         sources: ["packages/opencode/src/kilocode/remote-attachments.ts"],
-        methods: ["mkdir", "write", "remove", "dispose"],
+        methods: ["materialize", "dispose"],
         lifecycle: "Use the existing dispose wait to finish or cancel active scratch writes.",
         copyPolicy: "reconstruct-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
     ],
     maintenance: [

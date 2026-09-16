@@ -20,6 +20,7 @@ describe("profile writer manifest", () => {
       "profile.state.sandbox-policy",
       "profile.state.sandbox-preference",
       "profile.storage.json",
+      "profile.tmp.attachments",
     ])
     expect(manifest.writers.filter((writer) => writer.coverage !== "integrated").length).toBeGreaterThan(0)
     expect(() => ProfileWriterRegistry.fromManifest(manifest)).toThrow("not complete and integrated")

@@ -27,6 +27,7 @@ export namespace ProfileWriterLive {
   }
 
   export const storage = admission("profile.storage.json")
+  export const attachments = admission("profile.tmp.attachments")
   export const auth = admission("profile.credentials.auth")
   export const mcp = admission("profile.credentials.mcp")
   export const uploads = admission("profile.cache.browser-uploads")

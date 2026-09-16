@@ -18,8 +18,10 @@
 // other ingress paths never touch this code (decision 6).
 import path from "node:path"
 import fs from "node:fs/promises"
+import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live"
 import { PartID, type SessionID } from "@/session/schema"
 import type { SessionPrompt } from "@/session/prompt"
 
@@ -83,6 +85,8 @@ export namespace RemoteAttachments {
     tmpRoot?: string
     /** Override `fetch` (used to inject mock responses in tests). */
     fetch?: Fetcher
+    /** Override profile-writer admission in migration tests. */
+    admission?: ProfileWriterLive.Admission
     /** Per-call logger. Defaults to the module logger. */
     log?: {
       warn: (msg: string, meta?: unknown) => void
@@ -270,8 +274,10 @@ export namespace RemoteAttachments {
    */
   export function create(deps: Deps): Result {
     const sessionID = deps.sessionID
-    const root = deps.tmpRoot ?? Global.Path.tmp
-    const scratchDir = path.join(root, SCRATCH_DIRNAME, Buffer.from(sessionID).toString("base64url"))
+    const admission = deps.admission ?? ProfileWriterLive.attachments
+    const scratch = (root: string) => path.join(root, SCRATCH_DIRNAME, Buffer.from(sessionID).toString("base64url"))
+    const mutate = <A>(body: (root: string) => Promise<A>) =>
+      Effect.runPromise(admission.run(Effect.promise(() => body(deps.tmpRoot ?? Global.Path.tmp))))
     const writer = deps.log ?? {
       warn: (msg: string, meta?: unknown) => log.warn(msg, meta as never),
       error: (msg: string, meta?: unknown) => log.error(msg, meta as never),
@@ -282,84 +288,88 @@ export namespace RemoteAttachments {
     const active = new Set<Promise<SessionPrompt.PromptInput["parts"]>>()
     const cleanup = async () => {
       try {
-        await fs.rm(scratchDir, { recursive: true, force: true })
+        await mutate((root) => fs.rm(scratch(root), { recursive: true, force: true }))
       } catch (err) {
         writer.warn("scratch dir cleanup failed", { sessionID, error: String(err) })
       }
     }
-    const run = async (parts: SessionPrompt.PromptInput["parts"]): Promise<SessionPrompt.PromptInput["parts"]> => {
-      const out: SessionPrompt.PromptInput["parts"] = []
-      for (const part of parts) {
-        if (!part || typeof part !== "object" || part.type !== "file") {
-          out.push(part)
-          continue
-        }
-        const url = part.url
-        if (!isFetchable(url)) {
-          out.push(part)
-          continue
-        }
-        const filename = part.filename
-        const { extension } = classify(filename)
-        const id = part.id ?? PartID.make(`prt_${crypto.randomUUID()}`)
-        const basename = `${crypto.randomUUID()}.${extension}`
-        const target = path.join(scratchDir, basename)
-        try {
-          const bytes = await fetchOne(url, { fetch: f })
-          if (extension === "pdf") {
-            // PDF falls through to the existing PDF modality
-            // (`provider/transform.ts`); the helper hands it back as an
-            // application/pdf file part with a data: URL.
+    const run = (parts: SessionPrompt.PromptInput["parts"]): Promise<SessionPrompt.PromptInput["parts"]> =>
+      mutate(async (root) => {
+        const scratchDir = scratch(root)
+        const out: SessionPrompt.PromptInput["parts"] = []
+        for (const part of parts) {
+          if (!part || typeof part !== "object" || part.type !== "file") {
+            out.push(part)
+            continue
+          }
+          const url = part.url
+          if (!isFetchable(url)) {
+            out.push(part)
+            continue
+          }
+          const filename = part.filename
+          const { extension } = classify(filename)
+          const id = part.id ?? PartID.make(`prt_${crypto.randomUUID()}`)
+          const basename = `${crypto.randomUUID()}.${extension}`
+          const target = path.join(scratchDir, basename)
+          try {
+            const bytes = await fetchOne(url, { fetch: f })
+            if (extension === "pdf") {
+              // PDF falls through to the existing PDF modality
+              // (`provider/transform.ts`); the helper hands it back as an
+              // application/pdf file part with a data: URL.
+              out.push({
+                id,
+                type: "file" as const,
+                mime: "application/pdf",
+                filename,
+                url: dataUrl("application/pdf", bytes),
+              })
+              continue
+            }
+            if (mimeFor(extension) === BINARY_MIME) {
+              // Binary fallback — persist to scratch and surface a text part.
+              try {
+                await fs.mkdir(scratchDir, { recursive: true, mode: 0o700 })
+                await fs.writeFile(target, bytes, { mode: 0o600 })
+              } catch (err) {
+                await fs
+                  .rm(target, { force: true })
+                  .catch((cleanupError) =>
+                    writer.warn("partial scratch file cleanup failed", { sessionID, error: String(cleanupError) }),
+                  )
+                writer.error("scratch write failed", { sessionID, error: String(err) })
+                out.push(
+                  failureText(filename, `local write failed: ${err instanceof Error ? err.message : String(err)}`),
+                )
+                continue
+              }
+              out.push({
+                type: "text" as const,
+                text:
+                  `attachment saved to ${target} (filename: ${filename ?? basename}, mime: ${BINARY_MIME}, size: ${bytes.byteLength} bytes). ` +
+                  `Inspect it with the read tool (text content) or shell utilities (binary content).`,
+              })
+              continue
+            }
+            // text or image — re-enter as a data: URL.
+            const mime = mimeFor(extension)
             out.push({
               id,
               type: "file" as const,
-              mime: "application/pdf",
+              mime,
               filename,
-              url: dataUrl("application/pdf", bytes),
+              url: dataUrl(mime, bytes),
             })
-            continue
+          } catch (err) {
+            const reason =
+              err && typeof err === "object" && "message" in err ? String((err as Error).message) : String(err)
+            writer.warn("attachment fetch failed", { sessionID, filename, error: reason })
+            out.push(failureText(filename, reason))
           }
-          if (mimeFor(extension) === BINARY_MIME) {
-            // Binary fallback — persist to scratch and surface a text part.
-            try {
-              await fs.mkdir(scratchDir, { recursive: true, mode: 0o700 })
-              await fs.writeFile(target, bytes, { mode: 0o600 })
-            } catch (err) {
-              await fs
-                .rm(target, { force: true })
-                .catch((cleanupError) =>
-                  writer.warn("partial scratch file cleanup failed", { sessionID, error: String(cleanupError) }),
-                )
-              writer.error("scratch write failed", { sessionID, error: String(err) })
-              out.push(failureText(filename, `local write failed: ${err instanceof Error ? err.message : String(err)}`))
-              continue
-            }
-            out.push({
-              type: "text" as const,
-              text:
-                `attachment saved to ${target} (filename: ${filename ?? basename}, mime: ${BINARY_MIME}, size: ${bytes.byteLength} bytes). ` +
-                `Inspect it with the read tool (text content) or shell utilities (binary content).`,
-            })
-            continue
-          }
-          // text or image — re-enter as a data: URL.
-          const mime = mimeFor(extension)
-          out.push({
-            id,
-            type: "file" as const,
-            mime,
-            filename,
-            url: dataUrl(mime, bytes),
-          })
-        } catch (err) {
-          const reason =
-            err && typeof err === "object" && "message" in err ? String((err as Error).message) : String(err)
-          writer.warn("attachment fetch failed", { sessionID, filename, error: reason })
-          out.push(failureText(filename, reason))
         }
-      }
-      return out
-    }
+        return out
+      })
 
     const materialize = (parts: SessionPrompt.PromptInput["parts"]): Promise<SessionPrompt.PromptInput["parts"]> => {
       if (closed) {

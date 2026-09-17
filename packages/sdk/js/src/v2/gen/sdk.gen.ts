@@ -9273,7 +9273,7 @@ export class Organization2 extends HeyApiClient {
   /**
    * List tracked work in a routine organization
    *
-   * Page durable worker-to-worker requests for one organization with sender, recipient, state, response, and lineage references.
+   * Page durable worker-to-worker requests for one organization with sender, recipient, state, response, lineage references, and authoritative organization-wide spend totals.
    */
   public activity<ThrowOnError extends boolean = false>(
     parameters: {

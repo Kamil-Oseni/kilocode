@@ -6,6 +6,7 @@ import type { ExtensionMessage } from "../../types/messages"
 import { OrganizationAssignment, type Follow } from "./OrganizationAssignment"
 
 type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
+type Summary = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["summary"]
 type Step = Pick<Work, "id" | "state" | "objective" | "organizationID"> & {
   senderID: string
   recipientID: string
@@ -63,6 +64,14 @@ function valid(value: unknown): value is Work {
   )
 }
 
+function validSummary(value: unknown): value is Summary {
+  if (!value || typeof value !== "object") return false
+  const row = value as Record<string, unknown>
+  return ["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost"].every(
+    (key) => typeof row[key] === "number" && Number.isFinite(row[key]) && row[key] >= 0,
+  )
+}
+
 function step(value: unknown): Step | undefined {
   if (!value || typeof value !== "object") return
   const row = value as Record<string, unknown>
@@ -109,6 +118,15 @@ function stamp(value: number) {
   return new Date(value).toLocaleString()
 }
 
+function money(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(value)
+}
+
 export const OrganizationActivity: Component<{
   id: string
   item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
@@ -122,6 +140,7 @@ export const OrganizationActivity: Component<{
   const vscode = useVSCode()
   const dialog = useDialog()
   const [items, setItems] = createSignal<Work[]>([])
+  const [summary, setSummary] = createSignal<Summary>()
   const [next, setNext] = createSignal<string>()
   const [busy, setBusy] = createSignal(true)
   const [error, setError] = createSignal("")
@@ -189,10 +208,15 @@ export const OrganizationActivity: Component<{
       setError(msg.error)
       return
     }
+    if (!validSummary(msg.summary)) {
+      setError("The organization totals could not be verified. Refresh and try again.")
+      return
+    }
     const rows = (msg.items ?? []).filter(valid).filter((item) => item.organizationID === props.id)
     if (!after) setItems(rows)
     else setItems((prior) => [...prior, ...rows.filter((row) => !prior.some((item) => item.id === row.id))])
     setNext(msg.next)
+    setSummary(msg.summary)
   }
 
   const lineage = (msg: Extract<ExtensionMessage, { type: "routineDelegateChain" }>) => {
@@ -257,12 +281,6 @@ export const OrganizationActivity: Component<{
   onCleanup(unsub)
   onMount(() => load())
 
-  const active = createMemo(
-    () => items().filter((item) => ["queued", "accepted", "running", "needs_input"].includes(item.state)).length,
-  )
-  const attention = createMemo(
-    () => items().filter((item) => item.state === "needs_input" || item.state === "failed").length,
-  )
   const workers = createMemo(() => {
     const found = new Map<string, string>()
     for (const item of items()) {
@@ -356,10 +374,29 @@ export const OrganizationActivity: Component<{
       <div class="routines-organization-work-head">
         <div>
           <h3 id={`organization-work-${props.id}`}>Work</h3>
-          <Show when={items().length}>
-            <p>
-              {active()} active{attention() ? ` · ${attention()} need attention` : ""}
-            </p>
+          <Show when={summary()}>
+            {(total) => (
+              <div class="routines-organization-work-summary" aria-label="Organization work totals">
+                <p>
+                  {total().active} active
+                  {total().needsAttention ? ` · ${total().needsAttention} need attention` : ""}
+                  {` · ${total().total} ${total().total === 1 ? "request" : "requests"}`}
+                </p>
+                <p>
+                  <span>{money(total().recordedCost)} spent</span>
+                  <span title="Committed cost includes recorded spend and live work reserved at its saved budget limit.">
+                    {money(total().committedCost)} committed
+                  </span>
+                  <Show when={total().uncertain}>
+                    {(count) => (
+                      <span>
+                        {count()} cost {count() === 1 ? "receipt" : "receipts"} pending
+                      </span>
+                    )}
+                  </Show>
+                </p>
+              </div>
+            )}
           </Show>
         </div>
         <div class="routines-organization-work-actions">

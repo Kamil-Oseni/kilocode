@@ -23849,6 +23849,14 @@ export type KilocodeRoutineOrganizationActivityResponses = {
       occurrenceID?: string
       sessionID?: string
     }>
+    summary: {
+      total: number
+      active: number
+      needsAttention: number
+      uncertain: number
+      recordedCost: number
+      committedCost: number
+    }
     next?: string
   }
 }

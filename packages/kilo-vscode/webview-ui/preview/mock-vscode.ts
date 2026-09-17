@@ -2,6 +2,8 @@
 // without an extension host or a running backend.
 import type { VSCodeAPI, WebviewMessage } from "../src/types/messages"
 
+type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
+
 const emit = (data: object) => window.dispatchEvent(new MessageEvent("message", { data }))
 
 const books = {
@@ -159,8 +161,8 @@ let assignment:
     }
   | undefined
 
-const work = (organizationID: string) => {
-  const items = [
+const work = (organizationID: string): Work[] => {
+  const items: Work[] = [
     {
       id: "rdg_org_preview",
       sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
@@ -219,7 +221,7 @@ const work = (organizationID: string) => {
   ]
 }
 
-const older = (organizationID: string) => ({
+const older = (organizationID: string): Work => ({
   id: "rdg_org_older",
   sender: { id: design.id, name: design.name, role: "Design", archived: false },
   recipient: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
@@ -395,11 +397,38 @@ const preview = (message: WebviewMessage) => {
   if (accessReview(message)) return true
   if (attachment(message)) return true
   if (message.type === "routineOrganizationActivity") {
+    const rows = [...work(message.organizationID), older(message.organizationID)]
+    const recordedCost = rows.reduce((total, item) => total + (item.cost ?? 0), 0)
+    const committedCost = rows.reduce(
+      (total, item) =>
+        total +
+        (item.state === "queued" ||
+        item.state === "accepted" ||
+        item.state === "running" ||
+        item.state === "needs_input"
+          ? (item.budget ?? 0)
+          : (item.cost ?? 0)),
+      0,
+    )
     emit({
       type: "routineOrganizationActivity",
       requestID: message.requestID,
       organizationID: message.organizationID,
       items: message.cursor === "older" ? [older(message.organizationID)] : work(message.organizationID),
+      summary: {
+        total: rows.length,
+        active: rows.filter(
+          (item) =>
+            item.state === "queued" ||
+            item.state === "accepted" ||
+            item.state === "running" ||
+            item.state === "needs_input",
+        ).length,
+        needsAttention: rows.filter((item) => item.state === "needs_input" || item.state === "failed").length,
+        uncertain: 0,
+        recordedCost,
+        committedCost,
+      },
       ...(message.cursor ? {} : { next: "older" }),
     })
     return true

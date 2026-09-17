@@ -746,6 +746,18 @@
   margin: 0;
 }
 
+.routines-organization-work-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-2);
+}
+
+.routines-organization-work-summary p:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-4) var(--raya-space-10);
+}
+
 .routines-organization-work-head p,
 .routines-organization-work-meta {
   margin-top: var(--raya-space-2);

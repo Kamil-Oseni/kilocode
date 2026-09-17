@@ -14,6 +14,7 @@ const Files = Schema.Array(Clip).check(Schema.isMaxLength(8))
 const decoded = Schema.decodeUnknownExit(Files)
 const decodedAttachments = Schema.decodeUnknownExit(Schema.Array(AttachmentMeta).check(Schema.isMaxLength(8)))
 const CAP = 500
+const active = new Set(["queued", "accepted", "running", "needs_input"])
 
 export const Section = Schema.Literals(["shares", "contacts"])
 export const Query = Schema.Struct({
@@ -123,6 +124,14 @@ export const Activity = Schema.Struct({
 })
 export const ActivityPage = Schema.Struct({
   items: Schema.Array(Activity),
+  summary: Schema.Struct({
+    total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    active: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    needsAttention: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    uncertain: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    recordedCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+    committedCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  }),
   next: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
 })
 export type Query = typeof Query.Type
@@ -370,6 +379,42 @@ export namespace RayaTaskInfo {
         .limit(limit + 1)
         .all()
         .pipe(Effect.orDie)
+      const all = yield* db
+        .select()
+        .from(Delegation)
+        .where(eq(Delegation.organization_id, organizationID))
+        .all()
+        .pipe(Effect.orDie)
+      const index = new Map(all.map((row) => [row.id, row]))
+      const children = new Map<string, (typeof Delegation.$inferSelect)[]>()
+      for (const row of all) {
+        if (!row.parent_id || !index.has(row.parent_id)) continue
+        children.set(row.parent_id, [...(children.get(row.parent_id) ?? []), row])
+      }
+      const seen = new Set<string>()
+      const reserve = (row: typeof Delegation.$inferSelect): number => {
+        if (seen.has(row.id)) return 0
+        seen.add(row.id)
+        const below = children.get(row.id) ?? []
+        const child = below.reduce((total, item) => total + reserve(item), 0)
+        if (active.has(row.state)) return Math.max(row.budget ?? 0, child)
+        if (row.cost === null) {
+          if (!row.session_id) return child
+          return Math.max(row.budget ?? 0, child)
+        }
+        return row.cost + child
+      }
+      const roots = all.filter((row) => !row.parent_id || !index.has(row.parent_id))
+      const rooted = roots.reduce((total, row) => total + reserve(row), 0)
+      const committedCost = all.reduce((total, row) => total + (seen.has(row.id) ? 0 : reserve(row)), rooted)
+      const summary = {
+        total: all.length,
+        active: all.filter((row) => active.has(row.state)).length,
+        needsAttention: all.filter((row) => row.state === "needs_input" || row.state === "failed").length,
+        uncertain: all.filter((row) => !active.has(row.state) && row.session_id !== null && row.cost === null).length,
+        recordedCost: all.reduce((total, row) => total + (row.cost ?? 0), 0),
+        committedCost,
+      }
       const slice = rows.slice(0, limit)
       const items: Activity[] = []
       for (const row of slice) {
@@ -403,6 +448,7 @@ export namespace RayaTaskInfo {
       const last = slice.at(-1)
       return {
         items,
+        summary,
         ...(rows.length > limit && last
           ? { next: encode({ section: "activity", time: last.time_created, id: last.id }) }
           : {}),

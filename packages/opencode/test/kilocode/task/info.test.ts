@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
+import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
 import { Effect, Exit } from "effect"
 import type { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -154,7 +155,8 @@ test("routine chat info pages durable sent and received delegation exchanges", a
         books,
       )
       const taken = yield* store.take(books.id)
-      yield* store.attach(taken!.id, "run_books", SessionID.make("ses_books"))
+      const runID = taken!.childRunID!
+      yield* store.attach(taken!.id, runID, SessionID.make("ses_books"))
       yield* store.finish(first.record.id, "completed", books, "Three receipts are missing.", 1.25)
       yield* store.admit(
         { source: "dlg_legal", senderID: legal.id, recipientID: chief.id, objective: "Confirm the expense policy." },
@@ -186,7 +188,7 @@ test("routine chat info pages durable sent and received delegation exchanges", a
         budget: 1000,
         response: "Three receipts are missing.",
         cost: 1.25,
-        occurrenceID: "run_books",
+        occurrenceID: runID,
         sessionID: "ses_books",
       })
       expect(items.find((item) => item.peerID === legal.id)).toMatchObject({
@@ -198,6 +200,136 @@ test("routine chat info pages durable sent and received delegation exchanges", a
       })
       expect(secondPage.next).toBeUndefined()
       expect(Exit.isFailure(yield* info.contacts(chief.id, resolve, firstPage.next, 0).pipe(Effect.exit))).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization activity reports authoritative branch spend across pages without double counting descendants", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const info = RayaTaskInfo.make(database)
+      const organizationID = "org_11111111111111111111111111111111"
+      const base = {
+        sender_id: "chief",
+        recipient_id: "worker",
+        organization_id: organizationID,
+        organization_name: "Website Builders",
+        organization_revision: 1,
+        workspace: null,
+        expected: null,
+        context: null,
+        deadline: null,
+        child_run_id: null,
+        response: null,
+        reason: null,
+      }
+      yield* database.db.insert(Delegation).values([
+        {
+          ...base,
+          id: "root_finished",
+          source: "summary_root_finished",
+          parent_id: null,
+          parent_run_id: "run_one",
+          objective: "Prepare the close.",
+          budget: 20,
+          depth: 1,
+          state: "completed",
+          session_id: "ses_root_finished",
+          cost: 2,
+          time_created: 60,
+          time_updated: 60,
+        },
+        {
+          ...base,
+          id: "child_live",
+          source: "summary_child_live",
+          parent_id: "root_finished",
+          parent_run_id: "run_child_live",
+          objective: "Resolve an exception.",
+          budget: 5,
+          depth: 2,
+          state: "needs_input",
+          session_id: "ses_child_live",
+          cost: null,
+          time_created: 50,
+          time_updated: 50,
+        },
+        {
+          ...base,
+          id: "root_live",
+          source: "summary_root_live",
+          parent_id: null,
+          parent_run_id: "run_two",
+          objective: "Review the campaign.",
+          budget: 10,
+          depth: 1,
+          state: "running",
+          session_id: "ses_root_live",
+          cost: null,
+          time_created: 40,
+          time_updated: 40,
+        },
+        {
+          ...base,
+          id: "child_finished",
+          source: "summary_child_finished",
+          parent_id: "root_live",
+          parent_run_id: "run_child_finished",
+          objective: "Check the audience.",
+          budget: 4,
+          depth: 2,
+          state: "completed",
+          session_id: "ses_child_finished",
+          cost: 3,
+          time_created: 30,
+          time_updated: 30,
+        },
+        {
+          ...base,
+          id: "root_uncertain",
+          source: "summary_root_uncertain",
+          parent_id: null,
+          parent_run_id: "run_three",
+          objective: "Recover an interrupted report.",
+          budget: 7,
+          depth: 1,
+          state: "cancelled",
+          session_id: "ses_root_uncertain",
+          cost: null,
+          time_created: 20,
+          time_updated: 20,
+        },
+        {
+          ...base,
+          id: "root_rejected",
+          source: "summary_root_rejected",
+          parent_id: null,
+          parent_run_id: "run_four",
+          objective: "Rejected before startup.",
+          budget: 20,
+          depth: 1,
+          state: "failed",
+          session_id: null,
+          cost: null,
+          time_created: 10,
+          time_updated: 10,
+        },
+      ])
+      const resolve = (id: string) => Effect.succeed({ name: id, role: "worker", archived: false })
+      const first = yield* info.activity(organizationID, resolve, undefined, 1)
+      const second = yield* info.activity(organizationID, resolve, first.next, 1)
+      expect(first.items).toHaveLength(1)
+      expect(first.next).toBeDefined()
+      expect(first.summary).toEqual({
+        total: 6,
+        active: 2,
+        needsAttention: 2,
+        uncertain: 1,
+        recordedCost: 5,
+        committedCost: 24,
+      })
+      expect(second.summary).toEqual(first.summary)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

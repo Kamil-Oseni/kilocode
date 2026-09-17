@@ -106,6 +106,14 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
     await (await app.request(`${route}/activity`, { headers })).json(),
   )
   expect(activity.items).toHaveLength(1)
+  expect(activity.summary).toEqual({
+    total: 1,
+    active: 0,
+    needsAttention: 1,
+    uncertain: 0,
+    recordedCost: 0,
+    committedCost: 0,
+  })
   expect(activity.items[0]).toMatchObject({
     sender: { id: chief.id, name: "Chief", archived: false },
     recipient: { id: books.id, name: "Books", archived: false },

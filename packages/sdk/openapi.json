@@ -36163,13 +36163,44 @@
                         "additionalProperties": false
                       }
                     },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "active": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "needsAttention": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "uncertain": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "recordedCost": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "committedCost": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost"],
+                      "additionalProperties": false
+                    },
                     "next": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 256
                     }
                   },
-                  "required": ["items"],
+                  "required": ["items", "summary"],
                   "additionalProperties": false,
                   "description": "Tracked organization work"
                 }
@@ -36204,7 +36235,7 @@
             }
           }
         },
-        "description": "Page durable worker-to-worker requests for one organization with sender, recipient, state, response, and lineage references.",
+        "description": "Page durable worker-to-worker requests for one organization with sender, recipient, state, response, lineage references, and authoritative organization-wide spend totals.",
         "summary": "List tracked work in a routine organization",
         "x-codeSamples": [
           {

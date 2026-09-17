@@ -448,6 +448,7 @@ export interface RoutineOrganizationActivityResultMessage {
   requestID: string
   organizationID: string
   items?: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"]
+  summary?: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["summary"]
   next?: string
   error?: string
 }

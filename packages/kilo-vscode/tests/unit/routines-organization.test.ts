@@ -155,7 +155,18 @@ test("organization activity stays scoped and preserves its cursor", async () => 
     baseUrl: "http://localhost:4096",
     fetch: async (input, init) => {
       calls.push(new Request(input, init))
-      return Response.json({ items: [item], next: "next_page" })
+      return Response.json({
+        items: [item],
+        summary: {
+          total: 8,
+          active: 2,
+          needsAttention: 1,
+          uncertain: 1,
+          recordedCost: 4.25,
+          committedCost: 12,
+        },
+        next: "next_page",
+      })
     },
   })
   await handleRoutineMessage({
@@ -181,6 +192,14 @@ test("organization activity stays scoped and preserves its cursor", async () => 
       requestID: "request",
       organizationID: id,
       items: [item],
+      summary: {
+        total: 8,
+        active: 2,
+        needsAttention: 1,
+        uncertain: 1,
+        recordedCost: 4.25,
+        committedCost: 12,
+      },
       next: "next_page",
     },
   ])

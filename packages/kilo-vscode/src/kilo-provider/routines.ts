@@ -695,7 +695,14 @@ async function activity(ctx: Ctx) {
   if (
     !result.data ||
     !Array.isArray(result.data.items) ||
-    !result.data.items.every((item) => item.organizationID === msg.organizationID)
+    !result.data.items.every((item) => item.organizationID === msg.organizationID) ||
+    !result.data.summary ||
+    !["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost"].every(
+      (key) =>
+        typeof result.data?.summary[key as keyof typeof result.data.summary] === "number" &&
+        Number.isFinite(result.data.summary[key as keyof typeof result.data.summary]) &&
+        result.data.summary[key as keyof typeof result.data.summary] >= 0,
+    )
   )
     throw new Error("The organization work response could not be verified. Refresh and try again.")
   ctx.post({
@@ -703,6 +710,7 @@ async function activity(ctx: Ctx) {
     requestID: msg.requestID,
     organizationID: msg.organizationID,
     items: result.data.items,
+    summary: result.data.summary,
     next: result.data.next,
   })
 }

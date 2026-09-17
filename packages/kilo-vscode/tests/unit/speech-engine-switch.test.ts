@@ -9,8 +9,7 @@ import { SpeechService } from "../../src/speech/service"
 
 const sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 
-function memory() {
-  const values = new Map<string, unknown>()
+function memory(values = new Map<string, unknown>()) {
   const secrets = new Map<string, string>()
   return {
     globalState: {
@@ -188,6 +187,7 @@ test("backend drop releases Live and still admits a later start", async () => {
 
 test("an unconfirmed Voice cleanup remains degraded after ownership is released", async () => {
   const stops: string[] = []
+  const values = new Map<string, unknown>()
   const live = {
     active: true,
     async stop() {
@@ -199,12 +199,51 @@ test("an unconfirmed Voice cleanup remains degraded after ownership is released"
       return this.stop()
     },
   }
-  const speech = new SpeechService(memory(), { live: live as unknown as LiveBroker })
+  const speech = new SpeechService(memory(values), { live: live as unknown as LiveBroker })
   speech.drop()
   await speech.ended()
   expect(speech.admin()).toEqual({ available: true, active: 0, failed: 0, incomplete: 1 })
+  expect(new SpeechService(memory(values)).admin()).toEqual({
+    available: true,
+    active: 0,
+    failed: 0,
+    incomplete: 1,
+  })
   speech.dispose()
   await speech.ended()
+})
+
+test("closed Voice health survives service reconstruction and corrupt state fails closed", async () => {
+  const values = new Map<string, unknown>()
+  const first = new SpeechService(memory(values))
+  const posts: Record<string, unknown>[] = []
+  await first.openaiStart(
+    {
+      requestId: "request_missing_key",
+      sessionID: "session_1",
+      sdp,
+      directory: "C:/workspace",
+      connection,
+      current: () => true,
+    },
+    (msg) => posts.push(msg as Record<string, unknown>),
+  )
+  await first.ended()
+  expect(first.admin()).toEqual({ available: true, active: 0, failed: 1, incomplete: 0 })
+  expect(new SpeechService(memory(values)).admin()).toEqual({
+    available: true,
+    active: 0,
+    failed: 1,
+    incomplete: 0,
+  })
+
+  values.set("raya.voice.health.v1", { format: "raya.voice-health", version: 2, status: "ready" })
+  expect(new SpeechService(memory(values)).admin()).toEqual({
+    available: true,
+    active: 0,
+    failed: 0,
+    incomplete: 1,
+  })
 })
 
 test("a mismatched stop leaves the Live call, and host disposal refuses later starts", async () => {

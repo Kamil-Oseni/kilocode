@@ -23,6 +23,8 @@ import type { SpeechKey } from "../shared/speech"
 import type { AdminVoiceSignal } from "../shared/admin"
 
 type Post = (message: unknown) => void
+const healthKey = "raya.voice.health.v1"
+type Health = "ready" | "failed" | "incomplete"
 
 export class SpeechService implements vscode.Disposable {
   readonly settings: SpeechSettingsStore
@@ -32,14 +34,18 @@ export class SpeechService implements vscode.Disposable {
   private readonly realtime: RealtimeBroker
   private readonly openai: OpenAIBroker
   private readonly live: LiveBroker
+  private readonly store: vscode.Memento
   private closed = false
-  private health: "ready" | "failed" | "incomplete" = "ready"
+  private health: Health
+  private healthTail: Promise<void> = Promise.resolve()
   private tail: Promise<void> = Promise.resolve()
 
   constructor(
     context: vscode.ExtensionContext,
     opts?: { live?: LiveBroker; openai?: OpenAIBroker; realtime?: RealtimeBroker },
   ) {
+    this.store = context.globalState
+    this.health = loadHealth(this.store.get<unknown>(healthKey))
     this.settings = new SpeechSettingsStore(context.globalState, context.secrets)
     this.live = opts?.live ?? new LiveBroker()
     this.openai = opts?.openai ?? new OpenAIBroker()
@@ -80,8 +86,9 @@ export class SpeechService implements vscode.Disposable {
     return true
   }
 
-  ended() {
-    return this.tail
+  async ended() {
+    await this.tail
+    await this.healthTail
   }
 
   admin(): AdminVoiceSignal {
@@ -93,16 +100,27 @@ export class SpeechService implements vscode.Disposable {
     }
   }
 
+  private record(health: Health) {
+    if (this.health === health) return
+    this.health = health
+    const saved = { format: "raya.voice-health", version: 1, status: health }
+    this.healthTail = this.healthTail
+      .then(() => this.store.update(healthKey, saved))
+      .catch(() => {
+        if (this.health === "ready") this.health = "incomplete"
+      })
+  }
+
   private healthy() {
-    this.health = "ready"
+    this.record("ready")
   }
 
   private failed() {
-    this.health = "failed"
+    this.record("failed")
   }
 
   private incomplete() {
-    this.health = "incomplete"
+    this.record("incomplete")
   }
 
   private degrade(code: string) {
@@ -612,4 +630,13 @@ function speakable(text: string) {
     .replace(/^[#>*+-]+\s*/gm, "")
     .replace(/\s+/g, " ")
     .trim()
+}
+
+function loadHealth(value: unknown): Health {
+  if (value === undefined) return "ready"
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "incomplete"
+  const saved = value as Record<string, unknown>
+  if (saved.format !== "raya.voice-health" || saved.version !== 1) return "incomplete"
+  if (saved.status === "ready" || saved.status === "failed" || saved.status === "incomplete") return saved.status
+  return "incomplete"
 }

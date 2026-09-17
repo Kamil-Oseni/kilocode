@@ -6,8 +6,10 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
+import { RayaContactOutbox } from "@/kilocode/contact/outbox"
 import { RayaTask } from "@/kilocode/task"
 import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -18,6 +20,7 @@ import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Permission from "@/permission"
 import { MessageID, SessionID } from "@/session/schema"
+import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import type * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
@@ -53,6 +56,25 @@ function context(callID: string): Tool.Context {
     metadata: () => Effect.void,
     ask: () => Effect.void,
   }
+}
+
+function routineSession(agentID: string, runID: string): Session.Info {
+  return {
+    id: SessionID.make("ses_routine_management"),
+    slug: "routine-management",
+    projectID: ProjectV2.ID.global,
+    directory: "/",
+    title: "Routine worker",
+    version: "1",
+    metadata: {
+      rayaRoutine: { version: 1, agentID, runID, scheduleVersion: 1, trigger: { kind: "manual" } },
+    },
+    time: { created: 1, updated: 1 },
+  }
+}
+
+function agent(mode: Agent.Info["mode"]): Agent.Info {
+  return { name: "build", mode, options: {}, permission: [] }
 }
 
 const output = (name: string) => ({
@@ -1209,6 +1231,139 @@ it.live(
         })
         expect(recovered.title).toBe("Routine updated")
         expect((yield* tasks.get(agent.id)).updatedAt).toBe(stamp)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "active routine workers send idempotent reports only through their authorized Raya destinations",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const worker = yield* tasks.create({
+          name: "Books",
+          role: "accountant",
+          objective: "Review the weekly accounts",
+          output: output("Accounts"),
+          capabilities: ["accounting"],
+          access: "brief",
+          tools: ["contact_owner"],
+          schedule: { kind: "manual" },
+        })
+        const other = yield* tasks.create({
+          name: "Growth",
+          role: "marketer",
+          objective: "Review weekly growth",
+          output: output("Growth"),
+          capabilities: [],
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        const runID = "run_contact_owner"
+        yield* tasks.record({
+          id: runID,
+          agentID: worker.id,
+          at: Date.now(),
+          sessionID: SessionID.make("ses_routine_management"),
+          status: "running",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
+        const workerSessions = {
+          ...sessions,
+          get: () => Effect.succeed(routineSession(worker.id, runID)),
+        }
+        const outbox = RayaContactOutbox.make(database)
+        const global = yield* outbox.authorize({
+          source: "routine-owner-global",
+          channel: "raya",
+          address: "owner",
+          label: "Raya inbox",
+          scope: { kind: "global" },
+        })
+        const direct = yield* outbox.authorize({
+          source: "routine-owner-books",
+          channel: "raya",
+          address: "owner",
+          label: "Books inbox",
+          scope: { kind: "agent", id: worker.id },
+        })
+        const unrelated = yield* outbox.authorize({
+          source: "routine-owner-growth",
+          channel: "raya",
+          address: "owner",
+          scope: { kind: "agent", id: other.id },
+        })
+        yield* outbox.authorize({
+          source: "routine-owner-email",
+          channel: "email",
+          address: "owner@example.com",
+          scope: { kind: "agent", id: worker.id },
+        })
+
+        const info = yield* routineManagementTools({ database, storage, sessions: workerSessions }).contactOwner
+        const contact = yield* info.init()
+        const visible = { ...contact, id: info.id }
+        expect(KiloToolRegistry.available(visible, agent("primary"))).toBe(false)
+        expect(KiloToolRegistry.available(visible, agent("subagent"))).toBe(true)
+
+        const listed = yield* contact.execute({ action: "list" }, context("list-owner-destinations"))
+        expect(listed.title).toBe("Owner contact destinations")
+        expect(
+          JSON.parse(listed.output)
+            .destinations.map((item: { id: string }) => item.id)
+            .sort(),
+        ).toEqual([global.id, direct.id].sort())
+        expect(listed.output).not.toContain(unrelated.id)
+        expect(listed.output).not.toContain("owner@example.com")
+
+        const params = {
+          action: "send" as const,
+          destinationID: direct.id,
+          message: "Friday accounting review is ready.",
+        }
+        const sent = yield* contact.execute(params, context("send-owner-report"))
+        expect(sent).toMatchObject({
+          title: "Owner contacted",
+          metadata: {
+            requestStatus: "complete",
+            view: "routines",
+            agentID: worker.id,
+            destinationID: direct.id,
+            state: "delivered",
+            receipt: "delivered",
+          },
+        })
+        expect(JSON.stringify(sent)).not.toContain(params.message)
+        expect(JSON.stringify(sent)).not.toContain("lease")
+        const replay = yield* contact.execute(params, context("send-owner-report"))
+        expect(replay.metadata).toEqual(sent.metadata)
+        const page = yield* RayaTaskInbox.make(database).page(worker.id)
+        expect(page.messages).toHaveLength(1)
+        expect(page.messages[0]).toMatchObject({
+          kind: "report",
+          body: params.message,
+          sessionID: "ses_routine_management",
+        })
+
+        const denied = yield* contact.execute(
+          { ...params, destinationID: unrelated.id },
+          context("send-unrelated-owner-report"),
+        )
+        expect(denied.title).toBe("Owner contact needs review")
+        expect(denied.output).toContain("not authorized")
+        expect(yield* outbox.listMessages(100)).toHaveLength(1)
       }).pipe(
         Effect.provide(
           Layer.mergeAll(

@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from "node:util"
 import { Effect, Schema } from "effect"
 import { english } from "@opencode-ai/core/kilocode/schedule"
 import type { Database } from "@opencode-ai/core/database/database"
+import { Destination, RayaContactOutbox } from "@/kilocode/contact/outbox"
+import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -162,6 +164,14 @@ const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(20))),
 })
+const ContactOwner = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("list") }),
+  Schema.Struct({
+    action: Schema.Literal("send"),
+    destinationID: Destination.fields.id,
+    message: Text,
+  }),
+])
 const SubordinatePlan = Schema.Struct({
   organizationID: Schema.String,
   expectedRevision: Schema.Int,
@@ -337,6 +347,7 @@ export function routineManagementTools(input: {
   const tasks = RayaTask.make({ storage: input.storage, database: input.database })
   const organizations = RayaTaskOrganization.make(input.database, tasks, input.storage)
   const inbox = RayaTaskInbox.make(input.database)
+  const contacts = RayaContactOutbox.make(input.database)
   const errands = RayaTaskDelegation.make(input.database, organizations.authorize, organizations.shares)
   const runner = RayaTaskRunner.make({ ...input, database: input.database })
 
@@ -995,6 +1006,104 @@ export function routineManagementTools(input: {
     }),
   )
 
+  const contactOwner = Tool.define(
+    "contact_owner",
+    Effect.succeed({
+      description:
+        "List the current Routine worker's owner-authorized Raya Messenger destinations, or send one idempotent report to the owner through an exact destination. Use action=list before sending when the destination ID is unknown. This tool currently delivers only to the worker's Raya conversation; email, Telegram, and WhatsApp remain unavailable until their adapters are configured.",
+      parameters: ContactOwner,
+      execute: (params: typeof ContactOwner.Type, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const session = yield* input.sessions.get(ctx.sessionID)
+          const identity = yield* Schema.decodeUnknownEffect(RoutineIdentity)(session.metadata?.rayaRoutine).pipe(
+            Effect.mapError(() => new Error("Only a running Routine worker can contact the owner.")),
+          )
+          const worker = yield* tasks.get(identity.agentID)
+          const run = (yield* tasks.runsFor(worker.id)).find(
+            (item) =>
+              item.id === identity.runID &&
+              item.sessionID === ctx.sessionID &&
+              item.scheduleVersion === identity.scheduleVersion &&
+              isDeepStrictEqual(item.trigger, identity.trigger) &&
+              RayaTask.pending(item),
+          )
+          if (!run) return yield* Effect.fail(new Error("The current Routine run is no longer active."))
+          const destinations = yield* contacts.listDestinations(100)
+          const eligible: Destination[] = []
+          for (const target of destinations) {
+            if (!target.enabled || target.channel !== "raya") continue
+            if (target.scope.kind === "agent" && target.scope.id !== worker.id) continue
+            if (target.scope.kind === "organization" && !(yield* organizations.contains(target.scope.id, [worker.id])))
+              continue
+            eligible.push(target)
+          }
+          if (params.action === "list")
+            return {
+              title: "Owner contact destinations",
+              output: JSON.stringify({
+                worker: { agentID: worker.id, name: worker.name },
+                destinations: eligible.map((target) => ({
+                  id: target.id,
+                  channel: target.channel,
+                  label: target.label,
+                  scope: target.scope,
+                  quiet: target.quiet,
+                })),
+              }),
+              metadata: { requestStatus: "complete", destinationCount: eligible.length },
+            }
+          if (!ctx.callID) return yield* Effect.fail(new Error("Owner contact requires a stable tool call."))
+          const target = eligible.find((item) => item.id === params.destinationID)
+          if (!target)
+            return yield* Effect.fail(
+              new Error("That Raya Messenger destination is not authorized for the current Routine worker."),
+            )
+          const messenger = RayaContactMessenger.make(input.database, {
+            exists: (id) => tasks.get(id).pipe(Effect.map((item) => item.enabled)),
+            permit: (_request, destination) =>
+              destination.scope.kind !== "organization"
+                ? Effect.succeed(true)
+                : organizations.contains(destination.scope.id, [worker.id]),
+          })
+          const message = yield* messenger.send({
+            source: `routine-contact:${digest(
+              JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, target.id]),
+            ).slice(0, 48)}`,
+            destinationID: target.id,
+            agentID: worker.id,
+            ...(target.scope.kind === "organization" ? { organizationID: target.scope.id } : {}),
+            sessionID: ctx.sessionID,
+            body: params.message.trim(),
+          })
+          const complete = message.state === "delivered"
+          return {
+            title: complete ? "Owner contacted" : "Owner contact queued",
+            output: complete
+              ? "Delivered the report to the owner's Raya Messenger conversation."
+              : "Saved the report for delivery under the destination's current policy.",
+            metadata: {
+              requestStatus: message.state === "failed" || message.state === "cancelled" ? "unresolved" : "complete",
+              destinationCount: 1,
+              view: "routines",
+              agentID: worker.id,
+              destinationID: target.id,
+              messageID: message.id,
+              state: message.state,
+              ...(message.receipt ? { receipt: message.receipt.code } : {}),
+            },
+          }
+        }).pipe(
+          Effect.catch((err) =>
+            Effect.succeed({
+              title: "Owner contact needs review",
+              output: `${err instanceof Error ? err.message : String(err)} Inspect the current contact destinations before retrying.`,
+              metadata: { requestStatus: "unresolved", destinationCount: 0, view: "routines" },
+            }),
+          ),
+        ),
+    }),
+  )
+
   const updateRoutine = Tool.define(
     "update_routine",
     Effect.succeed({
@@ -1174,5 +1283,14 @@ export function routineManagementTools(input: {
     }),
   )
 
-  return { inspect, inspectTeam, create, createSubordinate, delegateWork, updateRoutine, updateOrganization }
+  return {
+    inspect,
+    inspectTeam,
+    contactOwner,
+    create,
+    createSubordinate,
+    delegateWork,
+    updateRoutine,
+    updateOrganization,
+  }
 }

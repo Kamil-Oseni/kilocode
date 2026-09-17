@@ -2,4 +2,4 @@
 "@kilocode/cli": minor
 ---
 
-Deliver authenticated Raya contact reports to their exact Routine worker conversation with crash-safe duplicate prevention.
+Let authenticated clients and running Routine workers deliver Raya contact reports to their exact worker conversation with crash-safe duplicate prevention.

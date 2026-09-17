@@ -181,6 +181,7 @@ export namespace KiloToolRegistry {
           scheduleTask: routines?.scheduleTask,
           inspectRoutines: routines?.inspect,
           inspectTeam: routines?.inspectTeam,
+          contactOwner: routines?.contactOwner,
           createOrganization: routines?.create,
           createSubordinate: routines?.createSubordinate,
           delegateWork: routines?.delegateWork,
@@ -218,6 +219,7 @@ export namespace KiloToolRegistry {
         scheduleTask: routines?.scheduleTask,
         inspectRoutines: routines?.inspect,
         inspectTeam: routines?.inspectTeam,
+        contactOwner: routines?.contactOwner,
         createOrganization: routines?.create,
         createSubordinate: routines?.createSubordinate,
         delegateWork: routines?.delegateWork,
@@ -260,6 +262,7 @@ export namespace KiloToolRegistry {
       scheduleTask?: Tool.Info
       inspectRoutines?: Tool.Info
       inspectTeam?: Tool.Info
+      contactOwner?: Tool.Info
       createOrganization?: Tool.Info
       createSubordinate?: Tool.Info
       delegateWork?: Tool.Info
@@ -302,6 +305,7 @@ export namespace KiloToolRegistry {
       const scheduleTask = tools.scheduleTask ? yield* Tool.init(tools.scheduleTask) : undefined
       const inspectRoutines = tools.inspectRoutines ? yield* Tool.init(tools.inspectRoutines) : undefined
       const inspectTeam = tools.inspectTeam ? yield* Tool.init(tools.inspectTeam) : undefined
+      const contactOwner = tools.contactOwner ? yield* Tool.init(tools.contactOwner) : undefined
       const createOrganization = tools.createOrganization ? yield* Tool.init(tools.createOrganization) : undefined
       const createSubordinate = tools.createSubordinate ? yield* Tool.init(tools.createSubordinate) : undefined
       const delegateWork = tools.delegateWork ? yield* Tool.init(tools.delegateWork) : undefined
@@ -351,6 +355,7 @@ export namespace KiloToolRegistry {
         scheduleTask,
         inspectRoutines,
         inspectTeam,
+        contactOwner,
         createOrganization,
         createSubordinate,
         delegateWork,
@@ -407,7 +412,8 @@ export namespace KiloToolRegistry {
       )
     )
       return agent.mode === "primary"
-    if (["inspect_team", "create_subordinate", "delegate_work"].includes(tool.id)) return agent.mode !== "primary"
+    if (["inspect_team", "contact_owner", "create_subordinate", "delegate_work"].includes(tool.id))
+      return agent.mode !== "primary"
     if (tool.id === "refine_self_heal") return agent.mode === "primary" // raya_change - hybrid self-heal reconcile
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
@@ -446,6 +452,7 @@ export namespace KiloToolRegistry {
       scheduleTask?: Tool.Def
       inspectRoutines?: Tool.Def
       inspectTeam?: Tool.Def
+      contactOwner?: Tool.Def
       createOrganization?: Tool.Def
       createSubordinate?: Tool.Def
       delegateWork?: Tool.Def
@@ -496,6 +503,7 @@ export namespace KiloToolRegistry {
       ...(tools.scheduleTask ? [tools.scheduleTask] : []),
       ...(tools.inspectRoutines ? [tools.inspectRoutines] : []),
       ...(tools.inspectTeam ? [tools.inspectTeam] : []),
+      ...(tools.contactOwner ? [tools.contactOwner] : []),
       ...(tools.createOrganization ? [tools.createOrganization] : []),
       ...(tools.createSubordinate ? [tools.createSubordinate] : []),
       ...(tools.delegateWork ? [tools.delegateWork] : []),

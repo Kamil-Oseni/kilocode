@@ -70,7 +70,7 @@ async function owned() {
 test("an engine change waits until the Live call is released before the new engine is saved", async () => {
   const { live, speech, root } = await owned()
   expect(live.active).toBe(true)
-  expect(speech.admin()).toEqual({ available: true, active: 1 })
+  expect(speech.admin()).toEqual({ available: true, active: 1, failed: 0, incomplete: 0 })
   const posts: unknown[] = []
   await speech.openaiStart(
     {
@@ -93,11 +93,11 @@ test("an engine change waits until the Live call is released before the new engi
   expect(live.active).toBe(true)
   await speech.update({ voiceEngine: "openai-realtime" }, root, () => {})
   expect(live.active).toBe(false)
-  expect(speech.admin()).toEqual({ available: true, active: 0 })
+  expect(speech.admin()).toEqual({ available: true, active: 0, failed: 0, incomplete: 0 })
   expect((await speech.settings.load()).voiceEngine).toBe("openai-realtime")
   speech.dispose()
   await speech.ended()
-  expect(speech.admin()).toEqual({ available: false, active: 0 })
+  expect(speech.admin()).toEqual({ available: false, active: 0, failed: 0, incomplete: 0 })
 })
 
 test("a start and host microphone wait until the engine change is saved, then Live is refused", async () => {
@@ -181,6 +181,28 @@ test("backend drop releases Live and still admits a later start", async () => {
       error: "GPT-Live requires an OpenAI API key in Speech settings.",
     },
   ])
+  expect(speech.admin()).toEqual({ available: true, active: 0, failed: 1, incomplete: 0 })
+  speech.dispose()
+  await speech.ended()
+})
+
+test("an unconfirmed Voice cleanup remains degraded after ownership is released", async () => {
+  const stops: string[] = []
+  const live = {
+    active: true,
+    async stop() {
+      live.active = false
+      stops.push("stop")
+      return stops.length === 1 ? "cleanup unconfirmed" : undefined
+    },
+    async dispose() {
+      return this.stop()
+    },
+  }
+  const speech = new SpeechService(memory(), { live: live as unknown as LiveBroker })
+  speech.drop()
+  await speech.ended()
+  expect(speech.admin()).toEqual({ available: true, active: 0, failed: 0, incomplete: 1 })
   speech.dispose()
   await speech.ended()
 })

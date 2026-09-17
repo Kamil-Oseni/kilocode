@@ -22,15 +22,17 @@ function browserRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["brow
 }
 
 function voiceRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["voice"]>>>, at: number): AdminRow {
+  const counts = [value.active, value.failed, value.incomplete]
   if (
     typeof value.available !== "boolean" ||
-    !Number.isSafeInteger(value.active) ||
-    value.active < 0 ||
-    value.active > 3
+    counts.some((count) => !Number.isSafeInteger(count) || count < 0 || count > 3)
   )
     return failed("voice", at)
   if (!value.available) return { id: "voice", status: "offline", reason: "voice-unavailable", observedAt: at }
-  return { id: "voice", status: "healthy", reason: "ready", observedAt: at, metrics: { active: value.active } }
+  const metrics = { active: value.active, failed: value.failed, incomplete: value.incomplete }
+  if (value.failed) return { id: "voice", status: "degraded", reason: "voice-failed", observedAt: at, metrics }
+  if (value.incomplete) return { id: "voice", status: "degraded", reason: "voice-incomplete", observedAt: at, metrics }
+  return { id: "voice", status: "healthy", reason: "ready", observedAt: at, metrics }
 }
 
 async function overlay(health: AdminHealth, host?: AdminHostSignals): Promise<AdminHealth> {

@@ -12,6 +12,8 @@ export type AdminBrowserSignal = {
 export type AdminVoiceSignal = {
   available: boolean
   active: number
+  failed: number
+  incomplete: number
 }
 
 export type AdminHostSignals = {

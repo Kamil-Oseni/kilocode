@@ -127,7 +127,7 @@ describe("admin host bridge", () => {
       message: { type: "requestAdmin", requestID: "req_host" },
       host: {
         browser: () => ({ status: "ready" }),
-        voice: () => ({ available: true, active: 1 }),
+        voice: () => ({ available: true, active: 1, failed: 0, incomplete: 0 }),
       },
       post: (message) => posts.push(message),
     })
@@ -144,7 +144,7 @@ describe("admin host bridge", () => {
       status: "healthy",
       reason: "ready",
       observedAt: 25,
-      metrics: { active: 1 },
+      metrics: { active: 1, failed: 0, incomplete: 0 },
     })
   })
 
@@ -173,7 +173,7 @@ describe("admin host bridge", () => {
         browser: () => {
           throw new Error("C:/private browser token")
         },
-        voice: () => ({ available: true, active: Number.NaN }),
+        voice: () => ({ available: true, active: Number.NaN, failed: 0, incomplete: 0 }),
       },
       post: (message) => posts.push(message),
     })
@@ -191,6 +191,49 @@ describe("admin host bridge", () => {
       status: "unknown",
       reason: "probe-failed",
       observedAt: 30,
+    })
+  })
+
+  it("retains closed Voice failure and incomplete lifecycle states", async () => {
+    const posts: unknown[] = []
+    const health = {
+      format: "raya.admin-health" as const,
+      version: 1 as const,
+      generatedAt: 35,
+      items: ["runtime", "sessions", "routines", "agents", "browser", "voice"].map((id) => ({
+        id: id as "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice",
+        status: "unknown" as const,
+        reason: "not-checked" as const,
+        observedAt: 35,
+      })),
+    }
+    const client = {
+      raya: { admin: { health: async () => ({ data: health }), logs: async () => ({ data: [] }) } },
+    } as unknown as KiloClient
+    const read = async (requestID: string, failed: number, incomplete: number) => {
+      await handleAdminMessage({
+        client,
+        directory: "/workspace",
+        message: { type: "requestAdmin", requestID },
+        host: { voice: () => ({ available: true, active: 0, failed, incomplete }) },
+        post: (message) => posts.push(message),
+      })
+      return (posts.pop() as { health: typeof health }).health.items.find((item) => item.id === "voice")
+    }
+
+    expect(await read("req_failed", 1, 1)).toEqual({
+      id: "voice",
+      status: "degraded",
+      reason: "voice-failed",
+      observedAt: 35,
+      metrics: { active: 0, failed: 1, incomplete: 1 },
+    })
+    expect(await read("req_incomplete", 0, 1)).toEqual({
+      id: "voice",
+      status: "degraded",
+      reason: "voice-incomplete",
+      observedAt: 35,
+      metrics: { active: 0, failed: 0, incomplete: 1 },
     })
   })
 })

@@ -66,6 +66,17 @@ const sources: Record<NonNullable<Fields["source"]>, string> = {
   registry: "Health registry",
   host: "Extension host",
 }
+const channels: Record<NonNullable<Fields["channel"]>, string> = {
+  raya: "Raya inbox",
+  email: "Email",
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
+}
+const scopes: Record<NonNullable<Fields["scope"]>, string> = {
+  global: "All workers",
+  agent: "One worker",
+  organization: "One organization",
+}
 
 export function AdminView(props: { onBack: () => void }) {
   const vscode = useVSCode()
@@ -146,6 +157,8 @@ export function AdminView(props: { onBack: () => void }) {
       fields.reason ? reasons[fields.reason] : undefined,
       fields.source ? sources[fields.source] : undefined,
       fields.version ? `Version ${fields.version}` : undefined,
+      fields.channel ? channels[fields.channel] : undefined,
+      fields.scope ? scopes[fields.scope] : undefined,
     ]
       .filter((value): value is string => Boolean(value))
       .join(", ")

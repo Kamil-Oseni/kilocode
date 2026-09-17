@@ -54905,7 +54905,9 @@
                           "delivery.started",
                           "delivery.completed",
                           "delivery.failed",
-                          "delivery.recovered"
+                          "delivery.recovered",
+                          "contact.authorized",
+                          "contact.revoked"
                         ]
                       },
                       "fields": {
@@ -54987,6 +54989,14 @@
                             "type": "string",
                             "maxLength": 64,
                             "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,8}$"
+                          },
+                          "channel": {
+                            "type": "string",
+                            "enum": ["raya", "email", "telegram", "whatsapp"]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": ["global", "agent", "organization"]
                           }
                         },
                         "additionalProperties": false

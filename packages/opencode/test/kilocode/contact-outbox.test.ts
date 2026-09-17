@@ -10,7 +10,7 @@ test("contact outbox enforces scoped authorization, quiet hours, replay, retry, 
     Effect.gen(function* () {
       const database = yield* Database.Service
       const outbox = RayaContactOutbox.make(database, () => start)
-      const target = yield* outbox.authorize({
+      const created = yield* outbox.authorizeChange({
         source: "contact:books",
         channel: "email",
         address: " OWNER@Example.com ",
@@ -18,6 +18,8 @@ test("contact outbox enforces scoped authorization, quiet hours, replay, retry, 
         scope: { kind: "agent", id: "books" },
         quiet: { start: 22 * 60, end: 7 * 60, timezone: "UTC" },
       })
+      expect(created.changed).toBe(true)
+      const target = created.target
       expect(target).toMatchObject({
         channel: "email",
         address: "owner@example.com",
@@ -26,15 +28,15 @@ test("contact outbox enforces scoped authorization, quiet hours, replay, retry, 
         enabled: true,
       })
       expect(
-        yield* outbox.authorize({
+        (yield* outbox.authorizeChange({
           source: "contact:books",
           channel: "email",
           address: "owner@example.com",
           label: "Owner email",
           scope: { kind: "agent", id: "books" },
           quiet: { start: 22 * 60, end: 7 * 60, timezone: "UTC" },
-        }),
-      ).toEqual(target)
+        })).changed,
+      ).toBe(false)
       expect(
         Exit.isFailure(
           yield* outbox

@@ -30,7 +30,15 @@ const entry = (index) => ({
     version: `1.${index}`,
   },
 })
-const logs = [entry(0), entry(1), entry(2)]
+const logs = [
+  {
+    ...entry(0),
+    code: "contact.authorized",
+    fields: { source: "routines", channel: "raya", scope: "agent" },
+  },
+  entry(1),
+  entry(2),
+]
 
 const emit = (message) => queueMicrotask(() => window.dispatchEvent(new MessageEvent("message", { data: message })))
 const record = (message) => {

@@ -237,7 +237,7 @@ export namespace RayaContactOutbox {
       return message(row, result)
     })
 
-    const authorize = Effect.fn("RayaContactOutbox.authorize")(function* (input: Authorize) {
+    const authorizeChange = Effect.fn("RayaContactOutbox.authorizeChange")(function* (input: Authorize) {
       const value = yield* Schema.decodeUnknownEffect(Authorize)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Provide a valid contact destination and authorization scope." })),
       )
@@ -260,7 +260,7 @@ export namespace RayaContactOutbox {
                 JSON.stringify(item.scope) === JSON.stringify(value.scope) &&
                 JSON.stringify(item.quiet) === JSON.stringify(quiet)
               ) {
-                if (item.enabled) return item
+                if (item.enabled) return { target: item, changed: false as const }
                 const now = clock()
                 yield* tx
                   .update(DestinationRow)
@@ -276,6 +276,7 @@ export namespace RayaContactOutbox {
                     Effect.flatMap((row) =>
                       row ? Effect.succeed(destination(row)) : Effect.die("Destination restore failed."),
                     ),
+                    Effect.map((target) => ({ target, changed: true as const })),
                   )
               }
               return yield* new Conflict({ message: "This destination source already authorizes different details." })
@@ -324,11 +325,16 @@ export namespace RayaContactOutbox {
                 Effect.flatMap((row) =>
                   row ? Effect.succeed(destination(row)) : Effect.die("Destination insert failed."),
                 ),
+                Effect.map((target) => ({ target, changed: true as const })),
               )
           }),
         { behavior: "immediate" },
       )
     })
+
+    const authorize = Effect.fn("RayaContactOutbox.authorize")((input: Authorize) =>
+      authorizeChange(input).pipe(Effect.map((result) => result.target)),
+    )
 
     const enqueue = Effect.fn("RayaContactOutbox.enqueue")(function* (input: Enqueue) {
       const value = yield* Schema.decodeUnknownEffect(Enqueue)(input).pipe(
@@ -702,7 +708,7 @@ export namespace RayaContactOutbox {
       return rows.map((row) => message(row))
     })
 
-    const revoke = Effect.fn("RayaContactOutbox.revoke")(function* (id: string, expectedRevision: number) {
+    const revokeChange = Effect.fn("RayaContactOutbox.revokeChange")(function* (id: string, expectedRevision: number) {
       if (!Schema.is(Revision)(expectedRevision))
         return yield* new Invalid({ message: "Destination revision is invalid." })
       return yield* db.transaction(
@@ -710,7 +716,7 @@ export namespace RayaContactOutbox {
           Effect.gen(function* () {
             const row = yield* tx.select().from(DestinationRow).where(eq(DestinationRow.id, id)).get()
             if (!row) return yield* new NotFound({ message: "Contact destination not found." })
-            if (!row.enabled) return destination(row)
+            if (!row.enabled) return { target: destination(row), changed: false as const }
             if (row.revision !== expectedRevision)
               return yield* new Conflict({ message: "This destination changed. Reload it before revoking access." })
             const now = clock()
@@ -739,11 +745,16 @@ export namespace RayaContactOutbox {
               .get()
               .pipe(
                 Effect.flatMap((saved) => (saved ? Effect.succeed(destination(saved)) : Effect.die("Revoke failed."))),
+                Effect.map((target) => ({ target, changed: true as const })),
               )
           }),
         { behavior: "immediate" },
       )
     })
+
+    const revoke = Effect.fn("RayaContactOutbox.revoke")((id: string, expectedRevision: number) =>
+      revokeChange(id, expectedRevision).pipe(Effect.map((result) => result.target)),
+    )
 
     const destinations = () =>
       db
@@ -811,10 +822,12 @@ export namespace RayaContactOutbox {
 
     return {
       authorize,
+      authorizeChange,
       destinations,
       listDestinations,
       getDestination,
       revoke,
+      revokeChange,
       enqueue,
       get,
       messages,

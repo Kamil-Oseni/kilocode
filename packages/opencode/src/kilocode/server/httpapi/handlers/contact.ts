@@ -4,7 +4,15 @@ import { Database } from "@opencode-ai/core/database/database"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceState } from "@/effect/instance-state"
 import { RayaAdminLog } from "@/kilocode/admin/log"
-import { Conflict, type Enqueue, Invalid, Message, NotFound, RayaContactOutbox } from "@/kilocode/contact/outbox"
+import {
+  Conflict,
+  type Destination,
+  type Enqueue,
+  Invalid,
+  Message,
+  NotFound,
+  RayaContactOutbox,
+} from "@/kilocode/contact/outbox"
 import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
@@ -60,6 +68,23 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
     const outbox = RayaContactOutbox.make(database)
     const tasks = RayaTask.make({ storage, database })
     const organizations = RayaTaskOrganization.make(database, tasks, storage)
+    const report = Effect.fn("RayaContactHttpApi.report")(function* (
+      code: "contact.authorized" | "contact.revoked",
+      target: Destination,
+    ) {
+      const state = yield* InstanceState.context
+      yield* logs
+        .write({
+          subsystem: "routines",
+          severity: "info",
+          code,
+          fields: { source: "routines", channel: target.channel, scope: target.scope.kind },
+        })
+        .pipe(
+          Effect.provideService(InstanceRef, state),
+          Effect.catchCause(() => Effect.void),
+        )
+    })
     const exists = (id: string) =>
       tasks.get(id).pipe(
         Effect.map((item) => item.enabled),
@@ -82,9 +107,19 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
 
     return handlers
       .handle("contactDestinationList", (ctx) => outbox.listDestinations(ctx.query.limit ?? 100, ctx.query.agentID))
-      .handle("contactDestinationAuthorize", (ctx) => api(outbox.authorize(ctx.payload)))
+      .handle("contactDestinationAuthorize", (ctx) =>
+        api(outbox.authorizeChange(ctx.payload)).pipe(
+          Effect.tap((result) => (result.changed ? report("contact.authorized", result.target) : Effect.void)),
+          Effect.map((result) => result.target),
+        ),
+      )
       .handle("contactDestinationGet", (ctx) => api(outbox.getDestination(ctx.params.destinationID)))
-      .handle("contactDestinationRevoke", (ctx) => api(outbox.revoke(ctx.params.destinationID, ctx.payload.revision)))
+      .handle("contactDestinationRevoke", (ctx) =>
+        api(outbox.revokeChange(ctx.params.destinationID, ctx.payload.revision)).pipe(
+          Effect.tap((result) => (result.changed ? report("contact.revoked", result.target) : Effect.void)),
+          Effect.map((result) => result.target),
+        ),
+      )
       .handle("contactMessageList", (ctx) =>
         outbox.listMessages(ctx.query.limit ?? 100).pipe(Effect.map((items) => items.map(view))),
       )

@@ -29609,6 +29609,8 @@ export type RayaAdminLogsResponses = {
       | "delivery.completed"
       | "delivery.failed"
       | "delivery.recovered"
+      | "contact.authorized"
+      | "contact.revoked"
     fields?: {
       durationMs?: number
       count?: number
@@ -29647,6 +29649,8 @@ export type RayaAdminLogsResponses = {
         | "probe-failed"
       source?: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice" | "registry" | "host"
       version?: string
+      channel?: "raya" | "email" | "telegram" | "whatsapp"
+      scope?: "global" | "agent" | "organization"
     }
   }>
 }

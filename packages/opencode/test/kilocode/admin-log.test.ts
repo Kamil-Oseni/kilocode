@@ -14,6 +14,8 @@ describe("Raya admin diagnostic log", () => {
         reason: "storage-unreadable",
         source: "sessions",
         version: "1.2.3",
+        channel: "raya",
+        scope: "agent",
         path: "C:/private/workspace",
         message: "synthetic message body",
         credential: "synthetic-secret",
@@ -37,6 +39,8 @@ describe("Raya admin diagnostic log", () => {
         reason: "storage-unreadable",
         source: "sessions",
         version: "1.2.3",
+        channel: "raya",
+        scope: "agent",
       },
     })
     expect(JSON.stringify(entry)).not.toContain("synthetic")

@@ -131,7 +131,16 @@ it.live("serves authenticated owner contact destination management without dispa
         const logged = yield* request("/raya/admin/logs?limit=10")
         expect(logged.status).toBe(200)
         const events = yield* Effect.promise(() => logged.json())
-        expect(events.map((event: { code: string }) => event.code)).toEqual(["delivery.started", "delivery.completed"])
+        expect(events.map((event: { code: string }) => event.code)).toEqual([
+          "contact.authorized",
+          "contact.authorized",
+          "delivery.started",
+          "delivery.completed",
+        ])
+        expect(events.slice(0, 2).map((event: { fields: unknown }) => event.fields)).toEqual([
+          { source: "routines", channel: "email", scope: "organization" },
+          { source: "routines", channel: "raya", scope: "agent" },
+        ])
         expect(JSON.stringify(events)).not.toContain("Weekly books")
         expect(JSON.stringify(events)).not.toContain(report.id)
         expect(JSON.stringify(events)).not.toContain(worker.id)
@@ -250,6 +259,21 @@ it.live("serves authenticated owner contact destination management without dispa
           revision: 2,
           enabled: false,
         })
+        const final = yield* request("/raya/admin/logs?limit=10")
+        expect(final.status).toBe(200)
+        const audit = yield* Effect.promise(() => final.json())
+        expect(audit.map((event: { code: string }) => event.code)).toEqual([
+          "contact.authorized",
+          "contact.authorized",
+          "delivery.started",
+          "delivery.completed",
+          "contact.revoked",
+          "contact.authorized",
+          "contact.revoked",
+        ])
+        expect(JSON.stringify(audit)).not.toContain("settings.")
+        expect(JSON.stringify(audit)).not.toContain(worker.id)
+        expect(JSON.stringify(audit)).not.toContain(destination.id)
       }),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ),

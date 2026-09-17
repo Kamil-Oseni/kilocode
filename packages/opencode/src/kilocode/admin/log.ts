@@ -18,6 +18,8 @@ export namespace RayaAdminLog {
     "delivery.completed",
     "delivery.failed",
     "delivery.recovered",
+    "contact.authorized",
+    "contact.revoked",
   ])
   export type Code = typeof Code.Type
 
@@ -36,6 +38,8 @@ export namespace RayaAdminLog {
     reason: Schema.optional(RayaAdmin.Reason),
     source: Schema.optional(Source),
     version: Schema.optional(Version),
+    channel: Schema.optional(Schema.Literals(["raya", "email", "telegram", "whatsapp"])),
+    scope: Schema.optional(Schema.Literals(["global", "agent", "organization"])),
   })
   export type Fields = typeof Fields.Type
 

@@ -274,7 +274,8 @@ export interface RoutineInboxInfoMessage {
 export interface RoutineContactDestinationMessage {
   type: "routineContactDestination"
   requestID: string
-  agentID: string
+  agentID?: string
+  organizationID?: string
   action: "load" | "enable" | "disable" | "save"
   quiet?: { start: number; end: number; timezone: string } | null
 }

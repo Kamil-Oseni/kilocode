@@ -151,3 +151,91 @@ test("Routine chat info loads, authorizes, revokes, and restores its exact owner
     error: "Raya is not connected.",
   })
 })
+
+test("Organization report settings authorize and load only their exact owner destination", async () => {
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  const organizationID = "org_accounts"
+  const target = {
+    version: 1 as const,
+    id: `ctd_${"2".repeat(48)}`,
+    source: `routine-owner:organization:${organizationID}`,
+    channel: "raya" as const,
+    address: "owner",
+    label: "Raya inbox",
+    scope: { kind: "organization" as const, id: organizationID },
+    revision: 1,
+    enabled: true,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      if (request.method === "GET") return Response.json(calls.length === 1 ? [] : [target])
+      return Response.json(target)
+    },
+  })
+  const post = (msg: unknown) => messages.push(msg)
+
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineContactDestination", requestID: "empty", organizationID, action: "load" },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineContactDestination", requestID: "enable", organizationID, action: "enable" },
+  })
+
+  expect(messages).toEqual([
+    expect.objectContaining({
+      type: "routineContactDestination",
+      requestID: "empty",
+      organizationID,
+      enabled: false,
+    }),
+    expect.objectContaining({
+      type: "routineContactDestination",
+      requestID: "enable",
+      organizationID,
+      enabled: true,
+    }),
+  ])
+  expect(new URL(calls[0].url).searchParams.get("organizationID")).toBe(organizationID)
+  expect(new URL(calls[0].url).searchParams.has("agentID")).toBe(false)
+  const authorize = calls.find((request) => request.method === "POST")
+  if (!authorize) throw new Error("expected organization destination authorization request")
+  expect(await authorize.clone().json()).toEqual({
+    source: `routine-owner:organization:${organizationID}`,
+    channel: "raya",
+    address: "owner",
+    label: "Raya inbox",
+    scope: { kind: "organization", id: organizationID },
+  })
+
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineContactDestination",
+      requestID: "ambiguous",
+      agentID: "books",
+      organizationID,
+      action: "load",
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineContactDestination",
+    requestID: "ambiguous",
+    agentID: "books",
+    organizationID,
+    error: "Reload this report setting before changing it.",
+  })
+})

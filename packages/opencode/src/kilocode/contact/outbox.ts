@@ -821,15 +821,15 @@ export namespace RayaContactOutbox {
           Effect.orDie,
         )
 
-    const listDestinations = (limit: number, agentID?: string) => {
+    const listDestinations = (limit: number, filter?: { kind: "agent" | "organization"; id: string }) => {
       const query = db.select().from(DestinationRow)
-      const filtered = agentID
+      const filtered = filter
         ? query.where(
             and(
               eq(DestinationRow.channel, "raya"),
               eq(DestinationRow.address, "owner"),
-              eq(DestinationRow.scope, "agent"),
-              eq(DestinationRow.scope_id, agentID),
+              eq(DestinationRow.scope, filter.kind),
+              eq(DestinationRow.scope_id, filter.id),
             ),
           )
         : query

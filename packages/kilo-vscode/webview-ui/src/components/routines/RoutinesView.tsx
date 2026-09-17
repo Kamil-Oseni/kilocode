@@ -30,6 +30,7 @@ import { OutputEditor } from "./OutputEditor"
 import { OutputReview } from "./OutputReview"
 import { Inbox, status, type Anchor, type Box } from "./Inbox"
 import { OrganizationActivity } from "./OrganizationActivity"
+import { ReportSetting } from "./ReportSetting"
 import { Output } from "../../../../src/shared/routine-output"
 import type { RoutinePaths } from "../../../../src/shared/routine-paths"
 
@@ -1917,6 +1918,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       <h3>Operating policy</h3>
                       <p class="routines-organization-policy">{item.policy}</p>
                     </Show>
+                    <ReportSetting organizationID={item.id} connected={connection() === "connected"} />
                     <h3>Team</h3>
                     <ol class="routines-organization-members">
                       <For each={item.members}>

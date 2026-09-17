@@ -1077,72 +1077,88 @@ async function archive(ctx: Ctx) {
   ctx.post({ ...base, ...(await retained(ctx, String(msg.agentID))) })
 }
 
-async function lookup(ctx: Ctx, agentID: string) {
-  const listed = await ctx.contact.destination.list({ directory: ctx.dir, limit: "1", agentID }, { throwOnError: true })
+type Scope = { kind: "agent" | "organization"; id: string }
+
+function scope(msg: Msg): Scope {
+  const agent = token(msg.agentID) ? String(msg.agentID) : undefined
+  const organization = token(msg.organizationID) ? String(msg.organizationID) : undefined
+  if (!!agent === !!organization) throw new Error("Reload this report setting before changing it.")
+  return agent ? { kind: "agent", id: agent } : { kind: "organization", id: organization! }
+}
+
+async function lookup(ctx: Ctx, value: Scope) {
+  const filter = value.kind === "agent" ? { agentID: value.id } : { organizationID: value.id }
+  const listed = await ctx.contact.destination.list(
+    { directory: ctx.dir, limit: "1", ...filter },
+    { throwOnError: true },
+  )
   return listed.data?.[0]
 }
 
-function answer(ctx: Ctx, agentID: string, target: Awaited<ReturnType<typeof lookup>>) {
+function answer(ctx: Ctx, value: Scope, target: Awaited<ReturnType<typeof lookup>>) {
+  const identity = value.kind === "agent" ? { agentID: value.id } : { organizationID: value.id }
   ctx.post({
     type: "routineContactDestination",
     requestID: ctx.message.requestID,
-    agentID,
+    ...identity,
     enabled: target?.enabled ?? false,
     quiet: target?.quiet ?? null,
   })
 }
 
-async function silence(ctx: Ctx, agentID: string) {
-  const target = await lookup(ctx, agentID)
+async function silence(ctx: Ctx, value: Scope) {
+  const target = await lookup(ctx, value)
   const quiet = policy(ctx.message.quiet)
   if (!target?.enabled) throw new Error("Allow reports before changing quiet hours.")
   const result = await ctx.contact.destination.policy.update(
     { directory: ctx.dir, destinationID: target.id, revision: target.revision, ...(quiet ? { quiet } : {}) },
     { throwOnError: true },
   )
-  answer(ctx, agentID, result.data)
+  answer(ctx, value, result.data)
 }
 
-async function revoke(ctx: Ctx, agentID: string) {
-  const target = await lookup(ctx, agentID)
+async function revoke(ctx: Ctx, value: Scope) {
+  const target = await lookup(ctx, value)
   if (!target?.enabled) {
-    answer(ctx, agentID, target)
+    answer(ctx, value, target)
     return
   }
   const result = await ctx.contact.destination.revoke(
     { directory: ctx.dir, destinationID: target.id, revision: target.revision },
     { throwOnError: true },
   )
-  answer(ctx, agentID, result.data)
+  answer(ctx, value, result.data)
 }
 
-async function authorize(ctx: Ctx, agentID: string) {
-  const target = await lookup(ctx, agentID)
+async function authorize(ctx: Ctx, value: Scope) {
+  const target = await lookup(ctx, value)
   const result = await ctx.contact.destination.authorize(
     {
       directory: ctx.dir,
-      source: target?.source ?? `routine-owner:${agentID}`,
+      source:
+        target?.source ??
+        (value.kind === "agent" ? `routine-owner:${value.id}` : `routine-owner:organization:${value.id}`),
       channel: "raya",
       address: "owner",
       label: "Raya inbox",
-      scope: { kind: "agent", id: agentID },
+      scope: value,
       ...(target?.quiet ? { quiet: target.quiet } : {}),
     },
     { throwOnError: true },
   )
-  answer(ctx, agentID, result.data)
+  answer(ctx, value, result.data)
 }
 
 async function destination(ctx: Ctx) {
   const msg = ctx.message
-  if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the worker before changing reports.")
+  if (!token(msg.requestID)) throw new Error("Reload this report setting before changing it.")
   if (msg.action !== "load" && msg.action !== "enable" && msg.action !== "disable" && msg.action !== "save")
     throw new Error("Choose whether this worker can send reports.")
-  const agentID = String(msg.agentID)
-  if (msg.action === "load") return answer(ctx, agentID, await lookup(ctx, agentID))
-  if (msg.action === "save") return silence(ctx, agentID)
-  if (msg.action === "disable") return revoke(ctx, agentID)
-  return authorize(ctx, agentID)
+  const value = scope(msg)
+  if (msg.action === "load") return answer(ctx, value, await lookup(ctx, value))
+  if (msg.action === "save") return silence(ctx, value)
+  if (msg.action === "disable") return revoke(ctx, value)
+  return authorize(ctx, value)
 }
 
 const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
@@ -1259,6 +1275,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
       type: reply(type),
       requestID: input.message.requestID,
       agentID: input.message.agentID,
+      organizationID: input.message.organizationID,
       runID: input.message.runID,
       section: input.message.section,
       error: "Raya is not connected.",
@@ -1283,6 +1300,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
       type: reply(type),
       requestID: ctx.message.requestID,
       agentID: ctx.message.agentID,
+      organizationID: ctx.message.organizationID,
       runID: ctx.message.runID,
       section: ctx.message.section,
       error: reason(err),

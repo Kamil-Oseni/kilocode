@@ -193,6 +193,28 @@ it.live("serves authenticated owner contact destination management without dispa
         expect(scoped.status).toBe(200)
         expect(yield* Effect.promise(() => scoped.json())).toEqual([target])
 
+        const localOrganization = yield* request("/raya/contact/destinations", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "routine-owner:organization:org_accounts",
+            channel: "raya",
+            address: "owner",
+            scope: { kind: "organization", id: "org_accounts" },
+          }),
+        })
+        expect(localOrganization.status).toBe(200)
+        const organizationTarget = yield* Effect.promise(() => localOrganization.json()).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Destination)),
+        )
+        const organization = yield* request("/raya/contact/destinations?limit=1&organizationID=org_accounts")
+        expect(organization.status).toBe(200)
+        expect(yield* Effect.promise(() => organization.json())).toEqual([organizationTarget])
+
+        const ambiguous = yield* request(
+          `/raya/contact/destinations?limit=1&agentID=${worker.id}&organizationID=org_accounts`,
+        )
+        expect(ambiguous.status).toBe(400)
+
         const stopped = yield* request(`/raya/contact/destinations/${target.id}/revoke`, {
           method: "POST",
           body: JSON.stringify({ revision: 1 }),
@@ -287,6 +309,7 @@ it.live("serves authenticated owner contact destination management without dispa
           "contact.authorized",
           "delivery.started",
           "delivery.completed",
+          "contact.authorized",
           "contact.revoked",
           "contact.authorized",
           "contact.revoked",

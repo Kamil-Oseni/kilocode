@@ -246,6 +246,18 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   await expect(
     page.getByText("Do not contact a prospect until the proposed website has passed design and legal review."),
   ).toBeVisible()
+  const reports = page.getByRole("region", { name: "Reports to you" })
+  await expect(
+    reports.getByText("Workers in this organization can send reports to their conversations at any time."),
+  ).toBeVisible()
+  await reports.getByRole("button", { name: "Stop reports" }).click()
+  await expect(
+    reports.getByText("Allow workers in this organization to send reports to their conversations."),
+  ).toBeVisible()
+  await reports.getByRole("button", { name: "Allow reports" }).click()
+  await expect(
+    reports.getByText("Workers in this organization can send reports to their conversations at any time."),
+  ).toBeVisible()
   await expect(page.getByText("Reports to Counsel")).toHaveCount(2)
   await expect(page.getByText("Can create workers", { exact: true })).toBeVisible()
   await expect(page.getByText("Cannot create workers", { exact: true })).toHaveCount(2)

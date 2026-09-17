@@ -14330,7 +14330,7 @@ export class Destination extends HeyApiClient {
   /**
    * List contact destinations
    *
-   * List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker's Raya inbox.
+   * List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker or organization Raya inbox scope.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -14338,6 +14338,7 @@ export class Destination extends HeyApiClient {
       workspace?: string
       agentID?: string
       limit?: string
+      organizationID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -14350,6 +14351,7 @@ export class Destination extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "agentID" },
             { in: "query", key: "limit" },
+            { in: "query", key: "organizationID" },
           ],
         },
       ],

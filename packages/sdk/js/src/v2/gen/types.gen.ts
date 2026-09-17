@@ -29767,6 +29767,7 @@ export type RayaContactDestinationListData = {
     workspace?: string
     agentID?: string
     limit?: string
+    organizationID?: string
   }
   url: "/raya/contact/destinations"
 }

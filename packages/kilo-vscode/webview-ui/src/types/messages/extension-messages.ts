@@ -392,7 +392,8 @@ export interface RoutineInboxInfoResultMessage {
 export interface RoutineContactDestinationResultMessage {
   type: "routineContactDestination"
   requestID: string
-  agentID: string
+  agentID?: string
+  organizationID?: string
   enabled?: boolean
   quiet?: { start: number; end: number; timezone: string } | null
   error?: string

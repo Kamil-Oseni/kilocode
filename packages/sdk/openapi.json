@@ -55291,6 +55291,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "organizationID",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -55477,7 +55486,7 @@
             }
           }
         },
-        "description": "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker's Raya inbox.",
+        "description": "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker or organization Raya inbox scope.",
         "summary": "List contact destinations",
         "x-codeSamples": [
           {

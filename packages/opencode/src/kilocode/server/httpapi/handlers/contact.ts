@@ -106,7 +106,18 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
     })
 
     return handlers
-      .handle("contactDestinationList", (ctx) => outbox.listDestinations(ctx.query.limit ?? 100, ctx.query.agentID))
+      .handle("contactDestinationList", (ctx) => {
+        if (ctx.query.agentID && ctx.query.organizationID)
+          return api(
+            Effect.fail(new Invalid({ message: "Filter contact destinations by one worker or one organization." })),
+          )
+        const filter = ctx.query.agentID
+          ? { kind: "agent" as const, id: ctx.query.agentID }
+          : ctx.query.organizationID
+            ? { kind: "organization" as const, id: ctx.query.organizationID }
+            : undefined
+        return outbox.listDestinations(ctx.query.limit ?? 100, filter)
+      })
       .handle("contactDestinationAuthorize", (ctx) =>
         api(outbox.authorizeChange(ctx.payload)).pipe(
           Effect.tap((result) => (result.changed ? report("contact.authorized", result.target) : Effect.void)),

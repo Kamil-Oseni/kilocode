@@ -142,19 +142,22 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
   time: index + 1,
 }))
 let stopped = false
-let reports = true
-let quiet: { start: number; end: number; timezone: string } | undefined
+const reports = new Map<string, { enabled: boolean; quiet?: { start: number; end: number; timezone: string } }>()
 
 function destination(message: Extract<WebviewMessage, { type: "routineContactDestination" }>) {
-  if (message.action === "enable") reports = true
-  if (message.action === "disable") reports = false
-  if (message.action === "save") quiet = message.quiet ?? undefined
+  const key = message.agentID ?? message.organizationID ?? "invalid"
+  const state = reports.get(key) ?? { enabled: true }
+  if (message.action === "enable") state.enabled = true
+  if (message.action === "disable") state.enabled = false
+  if (message.action === "save") state.quiet = message.quiet ?? undefined
+  reports.set(key, state)
   emit({
     type: "routineContactDestination",
     requestID: message.requestID,
     agentID: message.agentID,
-    enabled: reports,
-    quiet: quiet ?? null,
+    organizationID: message.organizationID,
+    enabled: state.enabled,
+    quiet: state.quiet ?? null,
   })
 }
 

@@ -36,6 +36,11 @@ export const ContactListQuery = Schema.Struct({
   ),
 })
 
+export const ContactDestinationListQuery = Schema.Struct({
+  ...ContactListQuery.fields,
+  organizationID: Schema.optional(AgentID),
+})
+
 export const ContactRevokePayload = Schema.Struct({ revision: Revision })
 
 export const ContactMessageView = Schema.Struct({
@@ -61,7 +66,7 @@ export const ContactApi = HttpApi.make("raya-contact").add(
   HttpApiGroup.make("raya-contact")
     .add(
       HttpApiEndpoint.get("contactDestinationList", ContactPaths.destinations, {
-        query: ContactListQuery,
+        query: ContactDestinationListQuery,
         success: described(Schema.Array(Destination), "Authorized contact destinations"),
         error: errors,
       }).annotateMerge(
@@ -69,7 +74,7 @@ export const ContactApi = HttpApi.make("raya-contact").add(
           identifier: "raya.contact.destination.list",
           summary: "List contact destinations",
           description:
-            "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker's Raya inbox.",
+            "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker or organization Raya inbox scope.",
         }),
       ),
       HttpApiEndpoint.post("contactDestinationAuthorize", ContactPaths.destinations, {

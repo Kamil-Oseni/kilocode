@@ -29605,6 +29605,10 @@ export type RayaAdminLogsResponses = {
       | "storage.checked"
       | "recovery.detected"
       | "host.changed"
+      | "delivery.started"
+      | "delivery.completed"
+      | "delivery.failed"
+      | "delivery.recovered"
     fields?: {
       durationMs?: number
       count?: number

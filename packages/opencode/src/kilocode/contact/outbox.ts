@@ -259,8 +259,25 @@ export namespace RayaContactOutbox {
                 item.label === label &&
                 JSON.stringify(item.scope) === JSON.stringify(value.scope) &&
                 JSON.stringify(item.quiet) === JSON.stringify(quiet)
-              )
-                return item
+              ) {
+                if (item.enabled) return item
+                const now = clock()
+                yield* tx
+                  .update(DestinationRow)
+                  .set({ enabled: true, revision: item.revision + 1, revoked_at: null, time_updated: now })
+                  .where(and(eq(DestinationRow.id, item.id), eq(DestinationRow.revision, item.revision)))
+                  .run()
+                return yield* tx
+                  .select()
+                  .from(DestinationRow)
+                  .where(eq(DestinationRow.id, item.id))
+                  .get()
+                  .pipe(
+                    Effect.flatMap((row) =>
+                      row ? Effect.succeed(destination(row)) : Effect.die("Destination restore failed."),
+                    ),
+                  )
+              }
               return yield* new Conflict({ message: "This destination source already authorizes different details." })
             }
             const duplicate = yield* tx
@@ -739,10 +756,19 @@ export namespace RayaContactOutbox {
           Effect.orDie,
         )
 
-    const listDestinations = (limit: number) =>
-      db
-        .select()
-        .from(DestinationRow)
+    const listDestinations = (limit: number, agentID?: string) => {
+      const query = db.select().from(DestinationRow)
+      const filtered = agentID
+        ? query.where(
+            and(
+              eq(DestinationRow.channel, "raya"),
+              eq(DestinationRow.address, "owner"),
+              eq(DestinationRow.scope, "agent"),
+              eq(DestinationRow.scope_id, agentID),
+            ),
+          )
+        : query
+      return filtered
         .orderBy(desc(DestinationRow.time_created), desc(DestinationRow.id))
         .limit(limit)
         .all()
@@ -750,6 +776,7 @@ export namespace RayaContactOutbox {
           Effect.map((rows) => rows.map(destination)),
           Effect.orDie,
         )
+    }
 
     const messages = () =>
       Effect.gen(function* () {

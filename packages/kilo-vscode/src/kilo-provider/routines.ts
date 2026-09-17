@@ -13,9 +13,11 @@ import { organization } from "./routine-refresh"
 
 type Msg = { type: string } & Record<string, unknown>
 type Kilo = KiloClient["kilocode"]["routine"]
+type Contact = KiloClient["raya"]["contact"]
 type Ctx = {
   message: Msg
   kilo: Kilo
+  contact: Contact
   dir: string
   post: (msg: unknown) => void
   open?: (file: { name: string; mime: string; size: number; data: string }) => void
@@ -135,6 +137,7 @@ const replies: Record<string, string> = {
   routineInboxAttachmentOpen: "routineInboxAttachmentOpened",
   routineInboxAttachmentPreview: "routineInboxAttachmentPreviewed",
   routineInboxInfo: "routineInboxInfo",
+  routineContactDestination: "routineContactDestination",
   routineInboxRead: "routineInboxRead",
   routineInboxDraft: "routineInboxDraft",
   routineDelegate: "routineDelegated",
@@ -257,6 +260,7 @@ const messages = new Set([
   "routineInboxAttachmentOpen",
   "routineInboxAttachmentPreview",
   "routineInboxInfo",
+  "routineContactDestination",
   "routineInboxRead",
   "routineInboxDraft",
   "routineDelegate",
@@ -1059,6 +1063,59 @@ async function archive(ctx: Ctx) {
   ctx.post({ ...base, ...(await retained(ctx, String(msg.agentID))) })
 }
 
+async function destination(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the worker before changing reports.")
+  if (msg.action !== "load" && msg.action !== "enable" && msg.action !== "disable")
+    throw new Error("Choose whether this worker can send reports.")
+  const agentID = String(msg.agentID)
+  const listed = await ctx.contact.destination.list({ directory: ctx.dir, limit: "1", agentID }, { throwOnError: true })
+  const target = listed.data?.[0]
+  if (msg.action === "load") {
+    ctx.post({
+      type: "routineContactDestination",
+      requestID: msg.requestID,
+      agentID,
+      enabled: target?.enabled ?? false,
+    })
+    return
+  }
+  if (msg.action === "disable") {
+    if (!target?.enabled) {
+      ctx.post({ type: "routineContactDestination", requestID: msg.requestID, agentID, enabled: false })
+      return
+    }
+    const result = await ctx.contact.destination.revoke(
+      { directory: ctx.dir, destinationID: target.id, revision: target.revision },
+      { throwOnError: true },
+    )
+    ctx.post({
+      type: "routineContactDestination",
+      requestID: msg.requestID,
+      agentID,
+      enabled: result.data?.enabled ?? false,
+    })
+    return
+  }
+  const result = await ctx.contact.destination.authorize(
+    {
+      directory: ctx.dir,
+      source: target?.source ?? `routine-owner:${agentID}`,
+      channel: "raya",
+      address: "owner",
+      label: "Raya inbox",
+      scope: { kind: "agent", id: agentID },
+    },
+    { throwOnError: true },
+  )
+  ctx.post({
+    type: "routineContactDestination",
+    requestID: msg.requestID,
+    agentID,
+    enabled: result.data?.enabled ?? false,
+  })
+}
+
 const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineOutputUpdate: output,
   routineAccessUpdate: review,
@@ -1071,6 +1128,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineInboxPage: page,
   routineInboxSend: send,
   routineInboxInfo: info,
+  routineContactDestination: destination,
   routineInboxAttachmentOpen: attachment,
   routineInboxAttachmentPreview: preview,
   routineInboxRead: seen,
@@ -1181,6 +1239,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
   const ctx: Ctx = {
     message: input.message,
     kilo: input.client.kilocode.routine,
+    contact: input.client.raya.contact,
     dir: input.directory,
     post: input.post,
     open: input.open,

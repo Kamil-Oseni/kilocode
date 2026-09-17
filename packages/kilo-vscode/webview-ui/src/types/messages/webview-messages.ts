@@ -271,6 +271,13 @@ export interface RoutineInboxInfoMessage {
   cursor?: string
 }
 
+export interface RoutineContactDestinationMessage {
+  type: "routineContactDestination"
+  requestID: string
+  agentID: string
+  action: "load" | "enable" | "disable"
+}
+
 export interface RoutineInboxReadMessage {
   type: "routineInboxRead"
   requestID: string
@@ -2084,6 +2091,7 @@ export type WebviewMessage =
   | RoutineInboxAttachmentOpenMessage
   | RoutineInboxAttachmentPreviewMessage
   | RoutineInboxInfoMessage
+  | RoutineContactDestinationMessage
   | RoutineInboxReadMessage
   | RoutineInboxDraftMessage
   | RoutineDelegateMessage

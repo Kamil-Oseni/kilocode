@@ -216,6 +216,22 @@ test("revocation terminally fences queued and in-flight contact work without rep
             .pipe(Effect.exit),
         ),
       ).toBe(true)
+      const restored = yield* outbox.authorize({
+        source: "contact:owner",
+        channel: "raya",
+        address: "owner",
+        scope: { kind: "global" },
+      })
+      expect(restored).toMatchObject({ id: target.id, enabled: true, revision: 3 })
+      expect(restored.revokedAt).toBeUndefined()
+      expect(
+        yield* outbox.enqueue({
+          source: "message:after-restore",
+          destinationID: restored.id,
+          agentID: "books",
+          body: "Reports are allowed again",
+        }),
+      ).toMatchObject({ destinationRevision: 3, state: "queued" })
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

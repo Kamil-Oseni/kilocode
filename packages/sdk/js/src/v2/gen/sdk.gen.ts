@@ -14277,12 +14277,13 @@ export class Destination extends HeyApiClient {
   /**
    * List contact destinations
    *
-   * List up to 100 owner-authorized contact destinations for this Raya workspace.
+   * List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker's Raya inbox.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
+      agentID?: string
       limit?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -14294,6 +14295,7 @@ export class Destination extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "agentID" },
             { in: "query", key: "limit" },
           ],
         },
@@ -14313,7 +14315,7 @@ export class Destination extends HeyApiClient {
   /**
    * Authorize a contact destination
    *
-   * Save an idempotent, scope-bound destination before Raya can enqueue delivery to it.
+   * Save or restore an idempotent, scope-bound destination before Raya can enqueue delivery to it.
    */
   public authorize<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -14464,6 +14466,7 @@ export class Message extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      agentID?: string
       limit?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -14475,6 +14478,7 @@ export class Message extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "agentID" },
             { in: "query", key: "limit" },
           ],
         },

@@ -55265,6 +55265,15 @@
             "required": false
           },
           {
+            "name": "agentID",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+            },
+            "required": false
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -55457,7 +55466,7 @@
             }
           }
         },
-        "description": "List up to 100 owner-authorized contact destinations for this Raya workspace.",
+        "description": "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker's Raya inbox.",
         "summary": "List contact destinations",
         "x-codeSamples": [
           {
@@ -55668,7 +55677,7 @@
             }
           }
         },
-        "description": "Save an idempotent, scope-bound destination before Raya can enqueue delivery to it.",
+        "description": "Save or restore an idempotent, scope-bound destination before Raya can enqueue delivery to it.",
         "summary": "Authorize a contact destination",
         "requestBody": {
           "content": {
@@ -56254,6 +56263,15 @@
             "in": "query",
             "schema": {
               "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentID",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
             },
             "required": false
           },

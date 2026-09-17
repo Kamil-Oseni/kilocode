@@ -105,6 +105,83 @@ function bytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const ReportSetting: Component<{ agentID: string; connected: boolean }> = (props) => {
+  const vscode = useVSCode()
+  const [busy, setBusy] = createSignal(true)
+  const [enabled, setEnabled] = createSignal(false)
+  const [error, setError] = createSignal("")
+  let id = ""
+  const request = (action: "load" | "enable" | "disable") => {
+    if (!props.connected) {
+      setBusy(false)
+      setError("Reconnect to review report access.")
+      return
+    }
+    id = crypto.randomUUID()
+    setBusy(true)
+    setError("")
+    vscode.postMessage({ type: "routineContactDestination", requestID: id, agentID: props.agentID, action })
+  }
+  const receive = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineContactDestination" || msg.agentID !== props.agentID || msg.requestID !== id) return
+    setBusy(false)
+    if (msg.error) {
+      setError(msg.error)
+      return
+    }
+    setEnabled(msg.enabled === true)
+    setError("")
+  }
+  const unsub = vscode.onMessage(receive)
+  onCleanup(unsub)
+  onMount(() => request("load"))
+  const toggle = () => {
+    if (busy() || !props.connected) return
+    request(enabled() ? "disable" : "enable")
+  }
+  return (
+    <section class="routines-info-section" aria-labelledby="routine-info-reports">
+      <h3 id="routine-info-reports">Reports to you</h3>
+      <div class="routines-info-setting">
+        <div>
+          <strong>Raya inbox</strong>
+          <span>
+            {enabled()
+              ? "This worker can send reports to this conversation."
+              : "Allow this worker to send reports to this conversation."}
+          </span>
+        </div>
+        <Button
+          size="small"
+          variant="secondary"
+          disabled={!props.connected}
+          aria-disabled={busy() || !props.connected}
+          aria-busy={busy()}
+          onClick={toggle}
+        >
+          {busy() ? "Checking..." : enabled() ? "Stop reports" : "Allow reports"}
+        </Button>
+      </div>
+      {error() ? (
+        <div class="routines-info-retry">
+          <p class="routines-error" role="alert">
+            {error()}
+          </p>
+          <Button
+            size="small"
+            variant="ghost"
+            disabled={!props.connected}
+            aria-disabled={busy() || !props.connected}
+            onClick={() => request("load")}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 export const ChatInfo: Component<{
   agentID: string
   name: string
@@ -263,6 +340,8 @@ export const ChatInfo: Component<{
           </Button>
         </div>
       </section>
+
+      <ReportSetting agentID={props.agentID} connected={props.connected} />
 
       <section class="routines-info-section" aria-labelledby="routine-info-media">
         <h3 id="routine-info-media">Media</h3>

@@ -23,11 +23,13 @@ export const ContactPaths = {
 
 const DestinationID = Schema.String.check(Schema.isPattern(/^ctd_[a-f0-9]{48}$/))
 const MessageID = Schema.String.check(Schema.isPattern(/^ctm_[a-f0-9]{48}$/))
+const AgentID = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const Revision = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER))
 const errors = [InvalidRequestError, ApiNotFoundError, ConflictError] as const
 
 export const ContactListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
+  agentID: Schema.optional(AgentID),
   limit: Schema.optional(
     Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
   ),
@@ -65,7 +67,8 @@ export const ContactApi = HttpApi.make("raya-contact").add(
         OpenApi.annotations({
           identifier: "raya.contact.destination.list",
           summary: "List contact destinations",
-          description: "List up to 100 owner-authorized contact destinations for this Raya workspace.",
+          description:
+            "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker's Raya inbox.",
         }),
       ),
       HttpApiEndpoint.post("contactDestinationAuthorize", ContactPaths.destinations, {
@@ -77,7 +80,7 @@ export const ContactApi = HttpApi.make("raya-contact").add(
         OpenApi.annotations({
           identifier: "raya.contact.destination.authorize",
           summary: "Authorize a contact destination",
-          description: "Save an idempotent, scope-bound destination before Raya can enqueue delivery to it.",
+          description: "Save or restore an idempotent, scope-bound destination before Raya can enqueue delivery to it.",
         }),
       ),
       HttpApiEndpoint.get("contactDestinationGet", ContactPaths.destination, {

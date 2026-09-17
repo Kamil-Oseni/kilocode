@@ -142,6 +142,19 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
   time: index + 1,
 }))
 let stopped = false
+let reports = true
+
+function destination(message: Extract<WebviewMessage, { type: "routineContactDestination" }>) {
+  if (message.action === "enable") reports = true
+  if (message.action === "disable") reports = false
+  emit({
+    type: "routineContactDestination",
+    requestID: message.requestID,
+    agentID: message.agentID,
+    enabled: reports,
+  })
+}
+
 let websitePolicy = "Do not contact a prospect until the proposed website has passed design and legal review."
 let websiteBudget: number | undefined = 100
 
@@ -958,7 +971,10 @@ const respond = (message: WebviewMessage) => {
   }
 }
 
-const reply = (message: WebviewMessage) => initial(message) || respond(message)
+const reply = (message: WebviewMessage) => {
+  if (message.type === "routineContactDestination") return destination(message)
+  return initial(message) || respond(message)
+}
 
 export function installMockVsCode() {
   const scope = globalThis as unknown as { acquireVsCodeApi?: () => VSCodeAPI; rayaPreviewMocked?: boolean }

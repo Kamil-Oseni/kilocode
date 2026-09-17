@@ -81,7 +81,7 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
     })
 
     return handlers
-      .handle("contactDestinationList", (ctx) => outbox.listDestinations(ctx.query.limit ?? 100))
+      .handle("contactDestinationList", (ctx) => outbox.listDestinations(ctx.query.limit ?? 100, ctx.query.agentID))
       .handle("contactDestinationAuthorize", (ctx) => api(outbox.authorize(ctx.payload)))
       .handle("contactDestinationGet", (ctx) => api(outbox.getDestination(ctx.params.destinationID)))
       .handle("contactDestinationRevoke", (ctx) => api(outbox.revoke(ctx.params.destinationID, ctx.payload.revision)))

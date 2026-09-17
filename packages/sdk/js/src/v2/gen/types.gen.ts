@@ -29760,6 +29760,7 @@ export type RayaContactDestinationListData = {
   query?: {
     directory?: string
     workspace?: string
+    agentID?: string
     limit?: string
   }
   url: "/raya/contact/destinations"
@@ -30055,6 +30056,7 @@ export type RayaContactMessageListData = {
   query?: {
     directory?: string
     workspace?: string
+    agentID?: string
     limit?: string
   }
   url: "/raya/contact/messages"

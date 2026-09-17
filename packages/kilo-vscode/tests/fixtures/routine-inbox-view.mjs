@@ -354,8 +354,16 @@ try {
   const info = sent.filter((msg) => msg.type === "routineInboxInfo" && msg.agentID === agent.id)
   const shares = info.find((msg) => msg.section === "shares")
   const contacts = info.find((msg) => msg.section === "contacts")
+  const reports = sent.find((msg) => msg.type === "routineContactDestination" && msg.agentID === agent.id)
   assert.ok(shares)
   assert.ok(contacts)
+  assert.ok(reports)
+  emit({
+    type: "routineContactDestination",
+    requestID: reports.requestID,
+    agentID: agent.id,
+    enabled: true,
+  })
   emit({
     type: "routineInboxInfo",
     requestID: shares.requestID,
@@ -416,6 +424,7 @@ try {
     ],
   })
   assert.match(root.textContent, /Chat info for Books|About/)
+  assert.match(root.textContent, /Reports to you|Stop reports/)
   assert.match(root.textContent, /Review the travel receipt policy/)
   const sharedLink = [...root.querySelectorAll(".routines-info-list button")].find((item) =>
     item.textContent.includes("receipt-policy"),

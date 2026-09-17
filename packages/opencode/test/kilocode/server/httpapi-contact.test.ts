@@ -161,6 +161,32 @@ it.live("serves authenticated owner contact destination management without dispa
         expect(listed.status).toBe(200)
         expect(yield* Effect.promise(() => listed.json())).toEqual([target])
 
+        const scoped = yield* request(`/raya/contact/destinations?limit=1&agentID=${worker.id}`)
+        expect(scoped.status).toBe(200)
+        expect(yield* Effect.promise(() => scoped.json())).toEqual([target])
+
+        const stopped = yield* request(`/raya/contact/destinations/${target.id}/revoke`, {
+          method: "POST",
+          body: JSON.stringify({ revision: 1 }),
+        })
+        expect(stopped.status).toBe(200)
+        expect(yield* Effect.promise(() => stopped.json())).toMatchObject({ revision: 2, enabled: false })
+        const resumed = yield* request("/raya/contact/destinations", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "settings.raya.owner",
+            channel: "raya",
+            address: "owner",
+            scope: { kind: "agent", id: worker.id },
+          }),
+        })
+        expect(resumed.status).toBe(200)
+        expect(yield* Effect.promise(() => resumed.json())).toMatchObject({
+          id: target.id,
+          revision: 3,
+          enabled: true,
+        })
+
         const fetched = yield* request(`/raya/contact/destinations/${destination.id}`)
         expect(fetched.status).toBe(200)
         expect(yield* Effect.promise(() => fetched.json())).toEqual(destination)

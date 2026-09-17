@@ -389,6 +389,14 @@ export interface RoutineInboxInfoResultMessage {
   error?: string
 }
 
+export interface RoutineContactDestinationResultMessage {
+  type: "routineContactDestination"
+  requestID: string
+  agentID: string
+  enabled?: boolean
+  error?: string
+}
+
 export interface RoutineInboxReadResultMessage {
   type: "routineInboxRead"
   requestID: string
@@ -2003,6 +2011,7 @@ export type ExtensionMessage =
   | RoutineInboxAttachmentOpenedMessage
   | RoutineInboxAttachmentPreviewedMessage
   | RoutineInboxInfoResultMessage
+  | RoutineContactDestinationResultMessage
   | RoutineInboxReadResultMessage
   | RoutineInboxDraftResultMessage
   | RoutineDelegatedMessage

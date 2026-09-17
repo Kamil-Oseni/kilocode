@@ -1524,6 +1524,34 @@
   margin-top: var(--raya-space-12);
 }
 
+.routines-info-setting {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--raya-space-12);
+}
+
+.routines-info-setting > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--raya-space-2);
+}
+
+.routines-info-setting span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  overflow-wrap: anywhere;
+}
+
+.routines-info-retry {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-8);
+}
+
+.routines-info-retry .routines-error {
+  flex: 1;
+}
+
 .routines-info-list {
   margin: 0;
   padding: 0;
@@ -1603,6 +1631,15 @@
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  .routines-info-setting {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .routines-info-setting button {
+    align-self: flex-start;
   }
 }
 

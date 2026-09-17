@@ -157,6 +157,39 @@ test("Raya Messenger refuses an organization destination before enqueue when mem
   )
 })
 
+test("Raya Messenger rechecks organization authority when delayed work is dispatched", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const outbox = RayaContactOutbox.make(database, () => start)
+      const target = yield* outbox.authorize({
+        source: "contact:raya-delayed-organization",
+        channel: "raya",
+        address: "owner",
+        scope: { kind: "organization", id: "org_accounts" },
+      })
+      const queued = yield* outbox.enqueue({
+        source: "message:raya-former-member",
+        destinationID: target.id,
+        agentID: "former_member",
+        organizationID: "org_accounts",
+        body: "This report must be refused after membership changes.",
+      })
+      const messenger = RayaContactMessenger.make(database, {
+        clock: () => start,
+        permit: () => Effect.succeed(false),
+      })
+
+      expect(yield* messenger.once()).toBe("failed")
+      expect(yield* outbox.get(queued.id)).toMatchObject({
+        state: "failed",
+        receipt: { status: "failed", code: "delivery-failed", attempts: 1 },
+      })
+      expect((yield* RayaTaskInbox.make(database).page("former_member")).messages).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("Raya Messenger safely reconciles a crash after inbox publication without duplicating the report", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

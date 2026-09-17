@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises"
 import { createHash } from "node:crypto"
-import { Cause, Effect, Option, Schema } from "effect"
+import { Cause, Duration, Effect, Option, Schema } from "effect"
 import type { Bus } from "@/bus"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import type { Session } from "@/session/session"
@@ -36,6 +36,7 @@ import { scheduler } from "./scheduler"
 import { reconcile as recovery } from "./reconcile"
 import { RayaTaskSnapshot } from "./snapshot"
 import { RayaTaskOrganization } from "./organization"
+import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import * as Log from "@opencode-ai/core/util/log"
 
 const WAIT = "waiting on you"
@@ -1245,6 +1246,7 @@ export namespace RayaTaskRunner {
     bus: Pick<Bus.Interface, "subscribeCallback">
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
+    contact?: { clock?: () => number; interval?: Duration.Input; batch?: number }
   }) {
     const runner = make(input)
     return Effect.gen(function* () {
@@ -1307,6 +1309,28 @@ export namespace RayaTaskRunner {
             Effect.sync(() => log.error("task revive failed", { err: Cause.squash(cause) })),
           ),
         )
+      if (input.database) {
+        const organizations = RayaTaskOrganization.make(input.database, runner.tasks, input.storage)
+        const messenger = RayaContactMessenger.make(input.database, {
+          clock: input.contact?.clock,
+          exists: (id) =>
+            runner.tasks.get(id).pipe(
+              Effect.map((item) => item.enabled),
+              Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(false)),
+            ),
+          permit: (request, target) =>
+            target.scope.kind !== "organization"
+              ? Effect.succeed(true)
+              : request.agentID
+                ? organizations.contains(target.scope.id, [request.agentID])
+                : Effect.succeed(false),
+        })
+        yield* poll(
+          messenger.drain(input.contact?.batch ?? 50),
+          (cause) => log.error("Raya Messenger poll failed", { err: Cause.squash(cause) }),
+          input.contact?.interval,
+        ).pipe(Effect.forkScoped)
+      }
       const tick = Effect.gen(function* () {
         yield* runner.tick(Date.now())
       })

@@ -80,6 +80,8 @@ export namespace RayaContactMessenger {
       yield* report("delivery.started", { source: "routines", attempt: item.attempts })
       if (!item.agentID) return yield* reject(item, now)
       if (opts.exists && !(yield* opts.exists(item.agentID))) return yield* reject(item, now)
+      if (opts.permit && !(yield* opts.permit(item, yield* outbox.getDestination(item.destinationID))))
+        return yield* reject(item, now)
       const expected = item.sessionID && Schema.is(SessionID)(item.sessionID) ? item.sessionID : undefined
       const prior = yield* find(item.agentID, source(item))
       const saved =

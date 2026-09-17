@@ -35660,12 +35660,10 @@
                   },
                   "purpose": {
                     "type": "string",
-                    "pattern": "\\S",
                     "maxLength": 4000
                   },
                   "policy": {
                     "type": "string",
-                    "pattern": "\\S",
                     "maxLength": 12000
                   },
                   "members": {

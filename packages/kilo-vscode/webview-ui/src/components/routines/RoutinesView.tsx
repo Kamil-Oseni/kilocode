@@ -107,12 +107,19 @@ function OrganizationEditor(props: {
   error?: string
   provisioning?: string
   onClose: () => void
-  onSave: (value: { name: string; purpose: string; members: Member[]; delegations: Delegation[] }) => void
+  onSave: (value: {
+    name: string
+    purpose: string
+    policy: string
+    members: Member[]
+    delegations: Delegation[]
+  }) => void
   onArchive: () => void
   onProvision: (agentID: string, enabled: boolean, expected: boolean) => void
 }) {
   const [name, setName] = createSignal(props.item.name)
   const [purpose, setPurpose] = createSignal(props.item.purpose ?? "")
+  const [policy, setPolicy] = createSignal(props.item.policy ?? "")
   const [members, setMembers] = createSignal<Member[]>(
     props.item.members.map((item) => ({
       agentID: item.agentID,
@@ -176,6 +183,7 @@ function OrganizationEditor(props: {
             props.onSave({
               name: name().trim(),
               purpose: purpose().trim(),
+              policy: policy().trim(),
               members: members(),
               delegations: delegations(),
             })
@@ -203,6 +211,21 @@ function OrganizationEditor(props: {
             placeholder="What this team owns and reports back"
             onInput={(event) => setPurpose(event.currentTarget.value)}
           />
+        </label>
+        <label class="routines-field">
+          Operating policy
+          <textarea
+            value={policy()}
+            maxlength={12000}
+            rows={5}
+            aria-describedby={`policy-help-${props.item.id}`}
+            placeholder="Rules every worker must follow when doing organization work"
+            onInput={(event) => setPolicy(event.currentTarget.value)}
+          />
+          <span id={`policy-help-${props.item.id}`} class="routines-hint">
+            Applied to delegated work in this organization. It cannot grant tools, folders, spending access, or
+            delegation authority.
+          </span>
         </label>
 
         <section class="routines-organization-section" aria-labelledby={`team-${props.item.id}`}>
@@ -924,7 +947,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setOrganizationNotice("")
   }
 
-  const saveOrganization = (value: { name: string; purpose: string; members: Member[]; delegations: Delegation[] }) => {
+  const saveOrganization = (value: {
+    name: string
+    purpose: string
+    policy: string
+    members: Member[]
+    delegations: Delegation[]
+  }) => {
     const item = editingOrganization()
     if (!item || organizationRequest()) return
     const id = crypto.randomUUID()
@@ -1864,6 +1893,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   <div class="routines-thread-body">
                     <Show when={item.purpose}>
                       <p class="routines-organization-purpose">{item.purpose}</p>
+                    </Show>
+                    <Show when={item.policy}>
+                      <h3>Operating policy</h3>
+                      <p class="routines-organization-policy">{item.policy}</p>
                     </Show>
                     <h3>Team</h3>
                     <ol class="routines-organization-members">

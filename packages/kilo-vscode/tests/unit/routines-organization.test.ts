@@ -10,6 +10,7 @@ const saved = {
   id,
   name: "Finance",
   purpose: "Review the books",
+  policy: "Require cited ledger evidence before approval.",
   revision: 4,
   archived: false,
   createdAt: 1,
@@ -56,6 +57,7 @@ test("organization update sends the full explicit graph and verifies the respons
       expectedRevision: 3,
       name: " Finance ",
       purpose: " Review the books ",
+      policy: " Require cited ledger evidence before approval. ",
       members: [
         { agentID: worker, role: " Lead " },
         { agentID: peer, role: "Reviewer", supervisorID: worker },
@@ -70,6 +72,7 @@ test("organization update sends the full explicit graph and verifies the respons
     expectedRevision: 3,
     name: "Finance",
     purpose: "Review the books",
+    policy: "Require cited ledger evidence before approval.",
     members: [
       { agentID: worker, role: "Lead" },
       { agentID: peer, role: "Reviewer", supervisorID: worker },
@@ -79,6 +82,37 @@ test("organization update sends the full explicit graph and verifies the respons
   expect(messages).toEqual([
     { type: "routineOrganizationUpdated", requestID: "request", organizationID: id, organization: saved },
   ])
+})
+
+test("organization update clears empty optional text explicitly", async () => {
+  const calls: Request[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init))
+      return Response.json({ ...saved, policy: undefined })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: () => undefined,
+    message: {
+      type: "routineOrganizationUpdate",
+      requestID: "clear_policy",
+      organizationID: id,
+      expectedRevision: 4,
+      name: "Finance",
+      purpose: "   ",
+      policy: "   ",
+      members: [
+        { agentID: worker, role: "Lead" },
+        { agentID: peer, role: "Reviewer", supervisorID: worker },
+      ],
+      delegations: [{ senderID: worker, recipientID: peer }],
+    },
+  })
+  expect(await calls[0].json()).toMatchObject({ purpose: "", policy: "" })
 })
 
 test("organization update rejects malformed trusted-boundary responses", async () => {
@@ -98,6 +132,7 @@ test("organization update rejects malformed trusted-boundary responses", async (
       expectedRevision: 3,
       name: "Finance",
       purpose: "",
+      policy: "",
       members: [{ agentID: worker, role: "Lead" }],
       delegations: [],
     },

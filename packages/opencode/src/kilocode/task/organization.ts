@@ -61,8 +61,8 @@ export const Create = Schema.Struct({
 export const Update = Schema.Struct({
   expectedRevision: Revision,
   name: Schema.optional(Name),
-  purpose: Schema.optional(Schema.Union([Purpose, Schema.Null])),
-  policy: Schema.optional(Schema.Union([Policy, Schema.Null])),
+  purpose: Schema.optional(Schema.Union([Schema.String.check(Schema.isMaxLength(4000)), Schema.Null])),
+  policy: Schema.optional(Schema.Union([Schema.String.check(Schema.isMaxLength(12_000)), Schema.Null])),
   members: Schema.optional(Members),
   delegations: Schema.optional(Delegations),
 }).check(
@@ -411,8 +411,18 @@ export namespace RayaTaskOrganization {
               const next: Organization = {
                 ...prior,
                 name: value.name?.trim() ?? prior.name,
-                purpose: value.purpose === null ? undefined : (value.purpose?.trim() ?? prior.purpose),
-                policy: value.policy === null ? undefined : (value.policy?.trim() ?? prior.policy),
+                purpose:
+                  value.purpose === null
+                    ? undefined
+                    : value.purpose === undefined
+                      ? prior.purpose
+                      : value.purpose.trim() || undefined,
+                policy:
+                  value.policy === null
+                    ? undefined
+                    : value.policy === undefined
+                      ? prior.policy
+                      : value.policy.trim() || undefined,
                 revision: row.revision + 1,
                 updatedAt: now,
                 members: graph?.members ?? prior.members,

@@ -142,6 +142,7 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
   time: index + 1,
 }))
 let stopped = false
+let websitePolicy = "Do not contact a prospect until the proposed website has passed design and legal review."
 let serviceAttempts = 0
 let accessAttempts = 0
 let assignment:
@@ -699,6 +700,7 @@ const respond = (message: WebviewMessage) => {
           id: "org_11111111111111111111111111111111",
           name: "Website Builders",
           purpose: "Find, design, build, and support better client websites.",
+          policy: websitePolicy,
           revision: 1,
           archived: false,
           createdAt: 1,
@@ -916,6 +918,7 @@ const respond = (message: WebviewMessage) => {
       })
       return
     }
+    websitePolicy = message.policy
     emit({
       type: "routineOrganizationUpdated",
       requestID: message.requestID,
@@ -925,6 +928,7 @@ const respond = (message: WebviewMessage) => {
         id: message.organizationID,
         name: message.name,
         purpose: message.purpose || undefined,
+        policy: websitePolicy,
         revision: message.expectedRevision + 1,
         archived: false,
         createdAt: 1,

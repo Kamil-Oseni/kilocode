@@ -658,6 +658,8 @@ async function revise(ctx: Ctx) {
     throw new Error("Give this organization a name.")
   if (typeof msg.purpose !== "string" || msg.purpose.length > 2000)
     throw new Error("Keep the organization purpose under 2000 characters.")
+  if (typeof msg.policy !== "string" || msg.policy.length > 12_000)
+    throw new Error("Keep the organization policy under 12000 characters.")
   const result = await ctx.kilo.organization.update(
     {
       directory: ctx.dir,
@@ -665,6 +667,7 @@ async function revise(ctx: Ctx) {
       expectedRevision: revision(msg),
       name: msg.name.trim(),
       purpose: msg.purpose.trim(),
+      policy: msg.policy.trim(),
       members: graph(msg.members),
       delegations: authority(msg.delegations),
     },

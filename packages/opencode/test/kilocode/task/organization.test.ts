@@ -197,8 +197,12 @@ test("organization policy is bounded and clearing it is an explicit revisioned c
           yield* organizations.update(item.id, { expectedRevision: 1, policy: "x".repeat(12_001) }).pipe(Effect.exit),
         ),
       ).toBe(true)
-      const cleared = yield* organizations.update(item.id, { expectedRevision: 1, policy: null })
-      expect(cleared).toMatchObject({ revision: 2 })
+      const blank = yield* organizations.update(item.id, { expectedRevision: 1, policy: "   " })
+      expect(blank).toMatchObject({ revision: 2 })
+      expect(blank.policy).toBeUndefined()
+      const restored = yield* organizations.update(item.id, { expectedRevision: 2, policy: "Require proof." })
+      const cleared = yield* organizations.update(item.id, { expectedRevision: restored.revision, policy: null })
+      expect(cleared).toMatchObject({ revision: 4 })
       expect(cleared.policy).toBeUndefined()
       expect((yield* RayaTaskOrganization.make(database, tasks, storage).get(item.id)).policy).toBeUndefined()
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),

@@ -658,11 +658,19 @@
 
 .routines-organization-error,
 .routines-organization-purpose,
+.routines-organization-policy,
 .routines-no-match {
   margin: 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
   font-size: var(--kilo-font-size-12);
   line-height: 1.45;
+}
+
+.routines-organization-policy {
+  max-width: 52rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .routines-no-match {

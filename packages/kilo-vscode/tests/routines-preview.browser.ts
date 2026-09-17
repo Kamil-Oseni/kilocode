@@ -225,6 +225,10 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
   await expect(page.getByText("Find, design, build, and support better client websites.")).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Operating policy" })).toBeVisible()
+  await expect(
+    page.getByText("Do not contact a prospect until the proposed website has passed design and legal review."),
+  ).toBeVisible()
   await expect(page.getByText("Reports to Counsel")).toHaveCount(2)
   await expect(page.getByText("Can create workers", { exact: true })).toBeVisible()
   await expect(page.getByText("Cannot create workers", { exact: true })).toHaveCount(2)
@@ -533,6 +537,12 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   await page.getByRole("button", { name: "Edit organization" }).click()
   await expect(page.getByRole("heading", { name: "Team and reporting" })).toBeVisible()
+  await expect(page.getByLabel("Operating policy")).toHaveValue(
+    "Do not contact a prospect until the proposed website has passed design and legal review.",
+  )
+  await expect(page.getByLabel("Operating policy")).toHaveAccessibleDescription(
+    "Applied to delegated work in this organization. It cannot grant tools, folders, spending access, or delegation authority.",
+  )
   const counsel = page.locator(".routines-organization-edit-members li").filter({ hasText: "Counsel" })
   const authority = counsel.getByRole("checkbox", { name: "Can create workers" }).first()
   await expect(authority).toBeChecked()
@@ -548,8 +558,14 @@ test("routines organization editor separates reporting, delegation, and archive"
   await lead.getByText("Books", { exact: true }).click()
   await expect(lead.getByRole("checkbox", { name: "Books" })).not.toBeChecked()
   await page.getByLabel("Name").fill("Website Studio")
+  await page
+    .getByLabel("Operating policy")
+    .fill("Only contact prospects after design review, legal review, and an approved outreach brief.")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
+  await expect(
+    page.getByText("Only contact prospects after design review, legal review, and an approved outreach brief."),
+  ).toBeVisible()
 
   await page.getByRole("button", { name: "Edit organization" }).click()
   await page.getByRole("button", { name: "Archive", exact: true }).click()

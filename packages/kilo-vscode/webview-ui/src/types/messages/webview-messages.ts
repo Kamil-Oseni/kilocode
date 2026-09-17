@@ -325,6 +325,7 @@ export interface RoutineOrganizationUpdateMessage {
   expectedRevision: number
   name: string
   purpose: string
+  policy: string
   members: { agentID: string; role: string; supervisorID?: string }[]
   delegations: { senderID: string; recipientID: string }[]
 }

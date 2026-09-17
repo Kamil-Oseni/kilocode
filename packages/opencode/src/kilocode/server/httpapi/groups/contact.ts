@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorize, Destination, Message, Receipt } from "@/kilocode/contact/outbox"
+import { Authorize, Destination, Enqueue, Message, Receipt } from "@/kilocode/contact/outbox"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
 import {
@@ -110,6 +110,19 @@ export const ContactApi = HttpApi.make("raya-contact").add(
           identifier: "raya.contact.message.list",
           summary: "List contact messages",
           description: "List up to 100 durable outbox messages without exposing dispatcher lease credentials.",
+        }),
+      ),
+      HttpApiEndpoint.post("contactMessageSend", ContactPaths.messages, {
+        query: WorkspaceRoutingQuery,
+        payload: Enqueue,
+        success: described(ContactMessageView, "Raya Messenger delivery result"),
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.contact.message.send",
+          summary: "Send a Raya Messenger report",
+          description:
+            "Idempotently deliver a report to the exact Routine worker conversation through an authorized Raya destination.",
         }),
       ),
       HttpApiEndpoint.get("contactMessageGet", ContactPaths.message, {

@@ -30109,6 +30109,72 @@ export type RayaContactMessageListResponses = {
 
 export type RayaContactMessageListResponse = RayaContactMessageListResponses[keyof RayaContactMessageListResponses]
 
+export type RayaContactMessageSendData = {
+  body?: {
+    source: string
+    destinationID: string
+    agentID?: string
+    organizationID?: string
+    sessionID?: string
+    body: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/contact/messages"
+}
+
+export type RayaContactMessageSendErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactMessageSendError = RayaContactMessageSendErrors[keyof RayaContactMessageSendErrors]
+
+export type RayaContactMessageSendResponses = {
+  /**
+   * Raya Messenger delivery result
+   */
+  200: {
+    version: 1
+    id: string
+    source: string
+    destinationID: string
+    destinationRevision: number
+    agentID?: string
+    organizationID?: string
+    sessionID?: string
+    body: string
+    state: "queued" | "leased" | "retry" | "delivered" | "failed" | "cancelled"
+    attempts: number
+    availableAt: number
+    leaseUntil?: number
+    createdAt: number
+    updatedAt: number
+    receipt?: {
+      status: "delivered" | "failed" | "cancelled"
+      code: "delivered" | "authorization-revoked" | "delivery-failed" | "delivery-unknown" | "retry-exhausted"
+      providerRef?: string
+      attempts: number
+      time: number
+    }
+  }
+}
+
+export type RayaContactMessageSendResponse = RayaContactMessageSendResponses[keyof RayaContactMessageSendResponses]
+
 export type RayaContactMessageGetData = {
   body?: never
   path: {

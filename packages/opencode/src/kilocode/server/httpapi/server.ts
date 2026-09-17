@@ -64,8 +64,7 @@ export const provide = Layer.provide([
   voiceHandlers, // raya_change - realtime voice async plane
   personalTodoHandlers,
   focusTimerHandlers,
-  adminHandlers.pipe(Layer.provide(RayaAdminLog.layer)),
-  contactHandlers,
+  Layer.merge(adminHandlers, contactHandlers).pipe(Layer.provide(RayaAdminLog.layer)),
 ])
 
 export function provideListener(opts?: CorsOptions) {

@@ -546,6 +546,8 @@ import type {
   RayaContactMessageGetResponses,
   RayaContactMessageListErrors,
   RayaContactMessageListResponses,
+  RayaContactMessageSendErrors,
+  RayaContactMessageSendResponses,
   RayaFocusTimerGetErrors,
   RayaFocusTimerGetResponses,
   RayaFocusTimerPauseErrors,
@@ -14486,6 +14488,57 @@ export class Message extends HeyApiClient {
       url: "/raya/contact/messages",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Send a Raya Messenger report
+   *
+   * Idempotently deliver a report to the exact Routine worker conversation through an authorized Raya destination.
+   */
+  public send<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      source?: string
+      destinationID?: string
+      agentID?: string
+      organizationID?: string
+      sessionID?: string
+      body?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "source" },
+            { in: "body", key: "destinationID" },
+            { in: "body", key: "agentID" },
+            { in: "body", key: "organizationID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaContactMessageSendResponses,
+      RayaContactMessageSendErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/messages",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

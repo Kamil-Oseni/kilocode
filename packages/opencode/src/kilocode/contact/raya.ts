@@ -5,7 +5,7 @@ import { RayaRoutineMessageTable as InboxMessage } from "@opencode-ai/core/kiloc
 import { SessionID } from "@/session/schema"
 import { RayaAdminLog } from "@/kilocode/admin/log"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
-import { Message, RayaContactOutbox } from "./outbox"
+import { Conflict, type Destination, type Enqueue, Message, RayaContactOutbox } from "./outbox"
 
 const Limit = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100))
 
@@ -15,7 +15,8 @@ export namespace RayaContactMessenger {
     opts: {
       owner?: string
       clock?: () => number
-      exists?: (agentID: string) => Effect.Effect<boolean>
+      exists?: (agentID: string) => Effect.Effect<boolean, unknown>
+      permit?: (input: Enqueue, target: Destination) => Effect.Effect<boolean, unknown>
       report?: (event: RayaAdminLog.Input) => Effect.Effect<unknown, unknown>
     } = {},
   ) {
@@ -112,7 +113,7 @@ export namespace RayaContactMessenger {
       return rows.length
     })
 
-    const once = Effect.fn("RayaContactMessenger.once")(function* () {
+    const once = Effect.fn("RayaContactMessenger.once")(function* (id?: string) {
       const now = clock()
       yield* reconcile(now)
       const delivery = yield* outbox.claim({
@@ -121,6 +122,7 @@ export namespace RayaContactMessenger {
         now,
         until: now + 60_000,
         channel: "raya",
+        ...(id ? { id } : {}),
       })
       if (!delivery) return "idle" as const
       return yield* publish(delivery.message, now)
@@ -139,6 +141,17 @@ export namespace RayaContactMessenger {
       return results
     })
 
-    return { once, drain, reconcile }
+    const send = Effect.fn("RayaContactMessenger.send")(function* (input: Enqueue) {
+      const target = yield* outbox.getDestination(input.destinationID)
+      if (target.channel !== "raya")
+        return yield* new Conflict({ message: "Raya Messenger can deliver only to a Raya destination." })
+      if (opts.permit && !(yield* opts.permit(input, target)))
+        return yield* new Conflict({ message: "This destination does not authorize that Routine worker." })
+      const item = yield* outbox.enqueue(input)
+      yield* once(item.id)
+      return yield* outbox.get(item.id)
+    })
+
+    return { once, drain, reconcile, send }
   }
 }

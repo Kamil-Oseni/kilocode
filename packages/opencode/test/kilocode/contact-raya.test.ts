@@ -89,6 +89,74 @@ test("Raya Messenger dispatches only local messages and never exposes a delivery
   )
 })
 
+test("Raya Messenger send claims only the requested idempotent message", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const outbox = RayaContactOutbox.make(database, () => start)
+      const target = yield* outbox.authorize({
+        source: "contact:raya-owner",
+        channel: "raya",
+        address: "owner",
+        scope: { kind: "global" },
+      })
+      const first = yield* outbox.enqueue({
+        source: "message:raya-first",
+        destinationID: target.id,
+        agentID: "books",
+        body: "Earlier queued report.",
+      })
+      const messenger = RayaContactMessenger.make(database, {
+        owner: "messenger",
+        clock: () => start,
+        exists: () => Effect.succeed(true),
+      })
+      const sent = yield* messenger.send({
+        source: "message:raya-requested",
+        destinationID: target.id,
+        agentID: "growth",
+        body: "Requested report.",
+      })
+
+      expect(sent).toMatchObject({ state: "delivered", receipt: { code: "delivered", attempts: 1 } })
+      expect(yield* outbox.get(first.id)).toMatchObject({ state: "queued", attempts: 0 })
+      expect((yield* RayaTaskInbox.make(database).page("growth")).messages).toHaveLength(1)
+      expect((yield* RayaTaskInbox.make(database).page("books")).messages).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("Raya Messenger refuses an organization destination before enqueue when membership is not authorized", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const outbox = RayaContactOutbox.make(database, () => start)
+      const target = yield* outbox.authorize({
+        source: "contact:raya-organization",
+        channel: "raya",
+        address: "owner",
+        scope: { kind: "organization", id: "org_accounts" },
+      })
+      const messenger = RayaContactMessenger.make(database, {
+        clock: () => start,
+        permit: () => Effect.succeed(false),
+      })
+      const denied = yield* messenger
+        .send({
+          source: "message:raya-nonmember",
+          destinationID: target.id,
+          agentID: "outsider",
+          organizationID: "org_accounts",
+          body: "Unauthorized report.",
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(denied)).toBe(true)
+      expect(yield* outbox.listMessages(100)).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("Raya Messenger safely reconciles a crash after inbox publication without duplicating the report", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

@@ -430,12 +430,14 @@ export namespace RayaContactOutbox {
       now: number
       until: number
       channel?: typeof Channel.Type
+      id?: string
     }) {
       if (
         !Schema.is(Token)(input.owner) ||
         !Schema.is(Token)(input.leaseID) ||
         !Schema.is(Stamp)(input.now) ||
-        (input.channel !== undefined && !Schema.is(Channel)(input.channel))
+        (input.channel !== undefined && !Schema.is(Channel)(input.channel)) ||
+        (input.id !== undefined && !Schema.is(ID)(input.id))
       )
         return yield* new Invalid({ message: "Contact delivery lease is invalid." })
       if (!Schema.is(Stamp)(input.until) || input.until <= input.now || input.until - input.now > 5 * 60_000)
@@ -468,6 +470,7 @@ export namespace RayaContactOutbox {
                         ),
                       ]
                     : []),
+                  ...(input.id ? [eq(MessageRow.id, input.id)] : []),
                 ),
               )
               .orderBy(asc(MessageRow.available_at), asc(MessageRow.time_created), asc(MessageRow.id))

@@ -200,6 +200,19 @@ export const kiloScenarios: Scenario[] = [
     .status(404),
   http.protected.get("/raya/contact/messages", "raya.contact.message.list").json(200, array),
   http.protected
+    .post("/raya/contact/messages", "raya.contact.message.send")
+    .at((ctx) => ({
+      path: "/raya/contact/messages",
+      headers: ctx.headers(),
+      body: {
+        source: "httpapi.contact.message",
+        destinationID: `ctd_${"0".repeat(48)}`,
+        agentID: "worker",
+        body: "Status report",
+      },
+    }))
+    .status(404),
+  http.protected
     .get("/raya/contact/messages/{messageID}", "raya.contact.message.get")
     .at((ctx) => ({
       path: route("/raya/contact/messages/{messageID}", { messageID: `ctm_${"0".repeat(48)}` }),

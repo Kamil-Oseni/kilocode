@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { Destination, RayaContactOutbox } from "@/kilocode/contact/outbox"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { Server } from "@/server/server"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 import { resetDatabase } from "../../fixture/db"
@@ -66,6 +67,85 @@ it.live("serves authenticated owner contact destination management without dispa
         expect(replayed.status).toBe(200)
         expect(yield* Effect.promise(() => replayed.json())).toEqual(destination)
 
+        const created = yield* request("/kilocode/agent", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "Books",
+            role: "accountant",
+            objective: "Review the weekly accounts",
+            capabilities: ["accounting"],
+            schedule: { kind: "manual" },
+          }),
+        })
+        expect(created.status).toBe(200)
+        const worker = yield* Effect.promise(() => created.json())
+        const local = yield* request("/raya/contact/destinations", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "settings.raya.owner",
+            channel: "raya",
+            address: "owner",
+            scope: { kind: "agent", id: worker.id },
+          }),
+        })
+        expect(local.status).toBe(200)
+        const target = yield* Effect.promise(() => local.json()).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Destination)),
+        )
+        const sent = yield* request("/raya/contact/messages", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "routine.books.weekly.1",
+            destinationID: target.id,
+            agentID: worker.id,
+            body: "Weekly books are ready.",
+          }),
+        })
+        expect(sent.status).toBe(200)
+        const report = yield* Effect.promise(() => sent.json())
+        expect(report).toMatchObject({
+          state: "delivered",
+          agentID: worker.id,
+          receipt: { status: "delivered", code: "delivered", attempts: 1 },
+        })
+        expect(report).not.toHaveProperty("leaseID")
+        expect(report).not.toHaveProperty("leaseOwner")
+        const repeated = yield* request("/raya/contact/messages", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "routine.books.weekly.1",
+            destinationID: target.id,
+            agentID: worker.id,
+            body: "Weekly books are ready.",
+          }),
+        })
+        expect(repeated.status).toBe(200)
+        expect(yield* Effect.promise(() => repeated.json())).toEqual(report)
+        const inbox = yield* Database.Service.use((database) => RayaTaskInbox.make(database).page(worker.id))
+        expect(inbox.messages).toHaveLength(1)
+        expect(inbox.messages[0]).toMatchObject({
+          kind: "report",
+          source: `contact:${report.id}`,
+          body: "Weekly books are ready.",
+        })
+        const logged = yield* request("/raya/admin/logs?limit=10")
+        expect(logged.status).toBe(200)
+        const events = yield* Effect.promise(() => logged.json())
+        expect(events.map((event: { code: string }) => event.code)).toEqual(["delivery.started", "delivery.completed"])
+        expect(JSON.stringify(events)).not.toContain("Weekly books")
+        expect(JSON.stringify(events)).not.toContain(report.id)
+        expect(JSON.stringify(events)).not.toContain(worker.id)
+        const external = yield* request("/raya/contact/messages", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "routine.books.email.1",
+            destinationID: destination.id,
+            organizationID: "org_accounts",
+            body: "Do not send through an unavailable adapter.",
+          }),
+        })
+        expect(external.status).toBe(409)
+
         const conflict = yield* request("/raya/contact/destinations", {
           method: "POST",
           body: JSON.stringify({
@@ -79,7 +159,7 @@ it.live("serves authenticated owner contact destination management without dispa
 
         const listed = yield* request("/raya/contact/destinations?limit=1")
         expect(listed.status).toBe(200)
-        expect(yield* Effect.promise(() => listed.json())).toEqual([destination])
+        expect(yield* Effect.promise(() => listed.json())).toEqual([target])
 
         const fetched = yield* request(`/raya/contact/destinations/${destination.id}`)
         expect(fetched.status).toBe(200)
@@ -105,9 +185,13 @@ it.live("serves authenticated owner contact destination management without dispa
         const messages = yield* request("/raya/contact/messages?limit=10")
         expect(messages.status).toBe(200)
         const list = yield* Effect.promise(() => messages.json())
-        expect(list).toEqual([
-          expect.objectContaining({ id: queued.id, state: "leased", leaseUntil: 61_000, attempts: 1 }),
-        ])
+        expect(list).toHaveLength(2)
+        expect(list).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: queued.id, state: "leased", leaseUntil: 61_000, attempts: 1 }),
+            expect.objectContaining({ id: report.id, state: "delivered", attempts: 1 }),
+          ]),
+        )
         expect(JSON.stringify(list)).not.toContain("dispatcher-secret")
         expect(JSON.stringify(list)).not.toContain("lease-secret")
 

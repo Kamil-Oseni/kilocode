@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { mkdir, rm } from "fs/promises"
+import { rm } from "fs/promises"
 import path from "path"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
@@ -11,15 +11,6 @@ import { anacondaDesktopScenarios } from "../anaconda-desktop/httpapi-exercise-s
 function directory(ctx: ScenarioContext) {
   if (!ctx.directory) throw new Error("scenario needs a project directory")
   return ctx.directory
-}
-
-function file(ctx: ScenarioContext, name: string, content: string) {
-  const target = path.join(directory(ctx), name)
-  return Effect.promise(async () => {
-    await mkdir(path.dirname(target), { recursive: true })
-    await Bun.write(target, content)
-    return target
-  })
 }
 
 const skill = async (dir: string) => {
@@ -176,6 +167,45 @@ export const kiloScenarios: Scenario[] = [
       "migration status should fail closed before a verified cutover",
     )
   }),
+  http.protected.get("/raya/contact/destinations", "raya.contact.destination.list").json(200, array),
+  http.protected
+    .post("/raya/contact/destinations", "raya.contact.destination.authorize")
+    .at((ctx) => ({
+      path: "/raya/contact/destinations",
+      headers: ctx.headers(),
+      body: {
+        source: "httpapi.contact.raya",
+        channel: "raya",
+        address: "owner",
+        scope: { kind: "global" },
+      },
+    }))
+    .json(200, object),
+  http.protected
+    .get("/raya/contact/destinations/{destinationID}", "raya.contact.destination.get")
+    .at((ctx) => ({
+      path: route("/raya/contact/destinations/{destinationID}", { destinationID: `ctd_${"0".repeat(48)}` }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/raya/contact/destinations/{destinationID}/revoke", "raya.contact.destination.revoke")
+    .at((ctx) => ({
+      path: route("/raya/contact/destinations/{destinationID}/revoke", {
+        destinationID: `ctd_${"0".repeat(48)}`,
+      }),
+      headers: ctx.headers(),
+      body: { revision: 1 },
+    }))
+    .status(404),
+  http.protected.get("/raya/contact/messages", "raya.contact.message.list").json(200, array),
+  http.protected
+    .get("/raya/contact/messages/{messageID}", "raya.contact.message.get")
+    .at((ctx) => ({
+      path: route("/raya/contact/messages/{messageID}", { messageID: `ctm_${"0".repeat(48)}` }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
   http.protected.get("/background-process", "backgroundProcess.list").json(200, array),
   http.protected
     .get("/background-process/{processID}", "backgroundProcess.get")

@@ -534,6 +534,18 @@ import type {
   RayaAdminLogsResponses,
   RayaAdminMigrationErrors,
   RayaAdminMigrationResponses,
+  RayaContactDestinationAuthorizeErrors,
+  RayaContactDestinationAuthorizeResponses,
+  RayaContactDestinationGetErrors,
+  RayaContactDestinationGetResponses,
+  RayaContactDestinationListErrors,
+  RayaContactDestinationListResponses,
+  RayaContactDestinationRevokeErrors,
+  RayaContactDestinationRevokeResponses,
+  RayaContactMessageGetErrors,
+  RayaContactMessageGetResponses,
+  RayaContactMessageListErrors,
+  RayaContactMessageListResponses,
   RayaFocusTimerGetErrors,
   RayaFocusTimerGetResponses,
   RayaFocusTimerPauseErrors,
@@ -14259,6 +14271,271 @@ export class Admin extends HeyApiClient {
   }
 }
 
+export class Destination extends HeyApiClient {
+  /**
+   * List contact destinations
+   *
+   * List up to 100 owner-authorized contact destinations for this Raya workspace.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaContactDestinationListResponses,
+      RayaContactDestinationListErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/destinations",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Authorize a contact destination
+   *
+   * Save an idempotent, scope-bound destination before Raya can enqueue delivery to it.
+   */
+  public authorize<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      source?: string
+      channel?: "raya" | "email" | "telegram" | "whatsapp"
+      address?: string
+      label?: string
+      scope?:
+        | {
+            kind: "global"
+          }
+        | {
+            kind: "agent"
+            id: string
+          }
+        | {
+            kind: "organization"
+            id: string
+          }
+      quiet?: {
+        start: number
+        end: number
+        timezone: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "source" },
+            { in: "body", key: "channel" },
+            { in: "body", key: "address" },
+            { in: "body", key: "label" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "quiet" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaContactDestinationAuthorizeResponses,
+      RayaContactDestinationAuthorizeErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/destinations",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get a contact destination
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      destinationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "destinationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaContactDestinationGetResponses,
+      RayaContactDestinationGetErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/destinations/{destinationID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Revoke a contact destination
+   *
+   * Revoke the exact saved revision and fence its pending delivery work.
+   */
+  public revoke<ThrowOnError extends boolean = false>(
+    parameters: {
+      destinationID: string
+      directory?: string
+      workspace?: string
+      revision?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "destinationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaContactDestinationRevokeResponses,
+      RayaContactDestinationRevokeErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/destinations/{destinationID}/revoke",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Message extends HeyApiClient {
+  /**
+   * List contact messages
+   *
+   * List up to 100 durable outbox messages without exposing dispatcher lease credentials.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaContactMessageListResponses,
+      RayaContactMessageListErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/messages",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a contact message
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      messageID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "messageID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      RayaContactMessageGetResponses,
+      RayaContactMessageGetErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/messages/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Contact extends HeyApiClient {
+  private _destination?: Destination
+  get destination(): Destination {
+    return (this._destination ??= new Destination({ client: this.client }))
+  }
+
+  private _message?: Message
+  get message(): Message {
+    return (this._message ??= new Message({ client: this.client }))
+  }
+}
+
 export class Raya extends HeyApiClient {
   private _personalTodo?: PersonalTodo
   get personalTodo(): PersonalTodo {
@@ -14273,6 +14550,11 @@ export class Raya extends HeyApiClient {
   private _admin?: Admin
   get admin(): Admin {
     return (this._admin ??= new Admin({ client: this.client }))
+  }
+
+  private _contact?: Contact
+  get contact(): Contact {
+    return (this._contact ??= new Contact({ client: this.client }))
   }
 }
 

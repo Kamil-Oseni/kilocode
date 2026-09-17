@@ -29750,6 +29750,422 @@ export type RayaAdminMigrationResponses = {
 
 export type RayaAdminMigrationResponse = RayaAdminMigrationResponses[keyof RayaAdminMigrationResponses]
 
+export type RayaContactDestinationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: string
+  }
+  url: "/raya/contact/destinations"
+}
+
+export type RayaContactDestinationListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactDestinationListError = RayaContactDestinationListErrors[keyof RayaContactDestinationListErrors]
+
+export type RayaContactDestinationListResponses = {
+  /**
+   * Authorized contact destinations
+   */
+  200: Array<{
+    version: 1
+    id: string
+    source: string
+    channel: "raya" | "email" | "telegram" | "whatsapp"
+    address: string
+    label?: string
+    scope:
+      | {
+          kind: "global"
+        }
+      | {
+          kind: "agent"
+          id: string
+        }
+      | {
+          kind: "organization"
+          id: string
+        }
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+    revision: number
+    enabled: boolean
+    revokedAt?: number
+    createdAt: number
+    updatedAt: number
+  }>
+}
+
+export type RayaContactDestinationListResponse =
+  RayaContactDestinationListResponses[keyof RayaContactDestinationListResponses]
+
+export type RayaContactDestinationAuthorizeData = {
+  body?: {
+    source: string
+    channel: "raya" | "email" | "telegram" | "whatsapp"
+    address: string
+    label?: string
+    scope:
+      | {
+          kind: "global"
+        }
+      | {
+          kind: "agent"
+          id: string
+        }
+      | {
+          kind: "organization"
+          id: string
+        }
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/contact/destinations"
+}
+
+export type RayaContactDestinationAuthorizeErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactDestinationAuthorizeError =
+  RayaContactDestinationAuthorizeErrors[keyof RayaContactDestinationAuthorizeErrors]
+
+export type RayaContactDestinationAuthorizeResponses = {
+  /**
+   * Authorized contact destination
+   */
+  200: {
+    version: 1
+    id: string
+    source: string
+    channel: "raya" | "email" | "telegram" | "whatsapp"
+    address: string
+    label?: string
+    scope:
+      | {
+          kind: "global"
+        }
+      | {
+          kind: "agent"
+          id: string
+        }
+      | {
+          kind: "organization"
+          id: string
+        }
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+    revision: number
+    enabled: boolean
+    revokedAt?: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type RayaContactDestinationAuthorizeResponse =
+  RayaContactDestinationAuthorizeResponses[keyof RayaContactDestinationAuthorizeResponses]
+
+export type RayaContactDestinationGetData = {
+  body?: never
+  path: {
+    destinationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/contact/destinations/{destinationID}"
+}
+
+export type RayaContactDestinationGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactDestinationGetError = RayaContactDestinationGetErrors[keyof RayaContactDestinationGetErrors]
+
+export type RayaContactDestinationGetResponses = {
+  /**
+   * Authorized contact destination
+   */
+  200: {
+    version: 1
+    id: string
+    source: string
+    channel: "raya" | "email" | "telegram" | "whatsapp"
+    address: string
+    label?: string
+    scope:
+      | {
+          kind: "global"
+        }
+      | {
+          kind: "agent"
+          id: string
+        }
+      | {
+          kind: "organization"
+          id: string
+        }
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+    revision: number
+    enabled: boolean
+    revokedAt?: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type RayaContactDestinationGetResponse =
+  RayaContactDestinationGetResponses[keyof RayaContactDestinationGetResponses]
+
+export type RayaContactDestinationRevokeData = {
+  body?: {
+    revision: number
+  }
+  path: {
+    destinationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/contact/destinations/{destinationID}/revoke"
+}
+
+export type RayaContactDestinationRevokeErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactDestinationRevokeError =
+  RayaContactDestinationRevokeErrors[keyof RayaContactDestinationRevokeErrors]
+
+export type RayaContactDestinationRevokeResponses = {
+  /**
+   * Revoked contact destination
+   */
+  200: {
+    version: 1
+    id: string
+    source: string
+    channel: "raya" | "email" | "telegram" | "whatsapp"
+    address: string
+    label?: string
+    scope:
+      | {
+          kind: "global"
+        }
+      | {
+          kind: "agent"
+          id: string
+        }
+      | {
+          kind: "organization"
+          id: string
+        }
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+    revision: number
+    enabled: boolean
+    revokedAt?: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type RayaContactDestinationRevokeResponse =
+  RayaContactDestinationRevokeResponses[keyof RayaContactDestinationRevokeResponses]
+
+export type RayaContactMessageListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: string
+  }
+  url: "/raya/contact/messages"
+}
+
+export type RayaContactMessageListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactMessageListError = RayaContactMessageListErrors[keyof RayaContactMessageListErrors]
+
+export type RayaContactMessageListResponses = {
+  /**
+   * Contact outbox messages
+   */
+  200: Array<{
+    version: 1
+    id: string
+    source: string
+    destinationID: string
+    destinationRevision: number
+    agentID?: string
+    organizationID?: string
+    sessionID?: string
+    body: string
+    state: "queued" | "leased" | "retry" | "delivered" | "failed" | "cancelled"
+    attempts: number
+    availableAt: number
+    leaseUntil?: number
+    createdAt: number
+    updatedAt: number
+    receipt?: {
+      status: "delivered" | "failed" | "cancelled"
+      code: "delivered" | "authorization-revoked" | "delivery-failed" | "delivery-unknown" | "retry-exhausted"
+      providerRef?: string
+      attempts: number
+      time: number
+    }
+  }>
+}
+
+export type RayaContactMessageListResponse = RayaContactMessageListResponses[keyof RayaContactMessageListResponses]
+
+export type RayaContactMessageGetData = {
+  body?: never
+  path: {
+    messageID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/contact/messages/{messageID}"
+}
+
+export type RayaContactMessageGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactMessageGetError = RayaContactMessageGetErrors[keyof RayaContactMessageGetErrors]
+
+export type RayaContactMessageGetResponses = {
+  /**
+   * Contact outbox message
+   */
+  200: {
+    version: 1
+    id: string
+    source: string
+    destinationID: string
+    destinationRevision: number
+    agentID?: string
+    organizationID?: string
+    sessionID?: string
+    body: string
+    state: "queued" | "leased" | "retry" | "delivered" | "failed" | "cancelled"
+    attempts: number
+    availableAt: number
+    leaseUntil?: number
+    createdAt: number
+    updatedAt: number
+    receipt?: {
+      status: "delivered" | "failed" | "cancelled"
+      code: "delivered" | "authorization-revoked" | "delivery-failed" | "delivery-unknown" | "retry-exhausted"
+      providerRef?: string
+      attempts: number
+      time: number
+    }
+  }
+}
+
+export type RayaContactMessageGetResponse = RayaContactMessageGetResponses[keyof RayaContactMessageGetResponses]
+
 export type V2HealthGetData = {
   body?: never
   path?: never

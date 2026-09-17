@@ -50,6 +50,7 @@ import { VoiceApi } from "@/kilocode/server/httpapi/groups/voice" // kilocode_ch
 import { PersonalTodoApi } from "@/kilocode/server/httpapi/groups/personal-todo"
 import { FocusTimerApi } from "@/kilocode/server/httpapi/groups/focus-timer"
 import { AdminApi } from "@/kilocode/server/httpapi/groups/admin"
+import { ContactApi } from "@/kilocode/server/httpapi/groups/contact"
 // kilocode_change end
 import { makeApi } from "@opencode-ai/protocol/api"
 import { LocationMiddleware } from "@opencode-ai/server/location"
@@ -125,6 +126,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(PersonalTodoApi)
   .addHttpApi(FocusTimerApi)
   .addHttpApi(AdminApi)
+  .addHttpApi(ContactApi)
   // kilocode_change end
   .middleware(SchemaErrorMiddleware)
 

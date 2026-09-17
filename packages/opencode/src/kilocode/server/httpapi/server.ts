@@ -37,6 +37,7 @@ import { voiceHandlers } from "./handlers/voice" // raya_change - realtime voice
 import { personalTodoHandlers } from "./handlers/personal-todo"
 import { focusTimerHandlers } from "./handlers/focus-timer"
 import { adminHandlers } from "./handlers/admin"
+import { contactHandlers } from "./handlers/contact"
 
 export const provide = Layer.provide([
   agentBuilderHandlers,
@@ -64,6 +65,7 @@ export const provide = Layer.provide([
   personalTodoHandlers,
   focusTimerHandlers,
   adminHandlers.pipe(Layer.provide(RayaAdminLog.layer)),
+  contactHandlers,
 ])
 
 export function provideListener(opts?: CorsOptions) {

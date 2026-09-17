@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, lte } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
@@ -643,6 +643,18 @@ export namespace RayaContactOutbox {
           Effect.orDie,
         )
 
+    const listDestinations = (limit: number) =>
+      db
+        .select()
+        .from(DestinationRow)
+        .orderBy(desc(DestinationRow.time_created), desc(DestinationRow.id))
+        .limit(limit)
+        .all()
+        .pipe(
+          Effect.map((rows) => rows.map(destination)),
+          Effect.orDie,
+        )
+
     const messages = () =>
       Effect.gen(function* () {
         const rows = yield* db.select().from(MessageRow).orderBy(asc(MessageRow.time_created), asc(MessageRow.id)).all()
@@ -651,6 +663,43 @@ export namespace RayaContactOutbox {
         return rows.map((row) => message(row, receipts.get(row.id)))
       }).pipe(Effect.orDie)
 
-    return { authorize, destinations, getDestination, revoke, enqueue, get, messages, recover, claim, deliver, fail }
+    const listMessages = (limit: number) =>
+      Effect.gen(function* () {
+        const rows = yield* db
+          .select()
+          .from(MessageRow)
+          .orderBy(desc(MessageRow.time_created), desc(MessageRow.id))
+          .limit(limit)
+          .all()
+        if (rows.length === 0) return []
+        const results = yield* db
+          .select()
+          .from(ReceiptRow)
+          .where(
+            inArray(
+              ReceiptRow.message_id,
+              rows.map((row) => row.id),
+            ),
+          )
+          .all()
+        const receipts = new Map(results.map((item) => [item.message_id, item]))
+        return rows.map((row) => message(row, receipts.get(row.id)))
+      }).pipe(Effect.orDie)
+
+    return {
+      authorize,
+      destinations,
+      listDestinations,
+      getDestination,
+      revoke,
+      enqueue,
+      get,
+      messages,
+      listMessages,
+      recover,
+      claim,
+      deliver,
+      fail,
+    }
   }
 }

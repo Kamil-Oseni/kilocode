@@ -1,6 +1,6 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current installed package source is `f827d73d93`; this document records the following installation receipt. The open extension host's active-vault pointer is still digest `ae331b7d2d3c7cb5f90bab71ae51d9c1f1525ce9d12af6720597c89cedd89813`, source `51f16b71ca`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current installed package source is `490d4ba8f9`; this document records the following installation receipt. The open extension host's active-vault pointer is still digest `ae331b7d2d3c7cb5f90bab71ae51d9c1f1525ce9d12af6720597c89cedd89813`, source `51f16b71ca`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
@@ -8,11 +8,15 @@
 
 ## ChatGPT 2026-09-16 23:38 America/Toronto - unresolved Voice health survives extension-host restart
 
-**Status: implemented, verified and committed in `fc7df5c357`; protected push and low-memory installation follow.** The extension now persists only the closed `ready`, `failed` or `incomplete` Voice health enum in application-scoped VS Code state. Reconstructing the Speech service after an extension-host restart restores the last unresolved failure or cleanup/settlement uncertainty instead of silently returning System Health to green. A later confirmed connection or fully recorded usage clears the condition. Unknown, malformed or future-version state fails closed as incomplete.
+**Status: pushed and installed from documentation source `490d4ba8f9`, containing product commit `fc7df5c357`; active-host reload acceptance remains.** The extension now persists only the closed `ready`, `failed` or `incomplete` Voice health enum in application-scoped VS Code state. Reconstructing the Speech service after an extension-host restart restores the last unresolved failure or cleanup/settlement uncertainty instead of silently returning System Health to green. A later confirmed connection or fully recorded usage clears the condition. Unknown, malformed or future-version state fails closed as incomplete.
 
 Health writes serialize in event order, duplicate states do not rewrite storage, and `ended()` waits for both broker teardown and the final health write. If persistence fails while clearing an issue, the live service remains incomplete rather than claiming recovery. No error copy, provider data, credentials, call/session/request identity, transcript, path, usage amount or media enters the record.
 
 Focused Admin and Speech evidence passes **12 tests / 44 assertions**, including reconstruction of both failed and incomplete states plus malformed-future-state refusal. Extension-host typecheck, targeted ESLint, Knip, Prettier, Changesets and diff checks pass.
+
+The protected one-worker push passed typecheck for all 29 JavaScript/TypeScript packages plus JetBrains. The authorized low-memory workflow reused the verified CLI, ran both extension typechecks and ESLint sequentially, built the production webview, packaged 436 files and installed `eden.raya@7.4.23-snapshot+490d4ba8f9.kamil-oseni.1789616431210`. Retained vault package `raya.b2643ed249f4fc15ab582e49aaaa74fbe9d747ec31bd1f9d05b546b4943aa15e.vsix` is `520,344,313` bytes with SHA-256 `B2643ED249F4FC15AB582E49AAAA74FBE9D747EC31BD1F9D05B546B4943AA15E`. Its installed `231,345,152`-byte CLI has SHA-256 `39C4DDF34E34246DEC003C7D19841FAE1EF4835B2FE63A168C6065C4B8ACB81F`. C: has 117.74 GiB free.
+
+The already-open VS Code host was not force-reloaded. A normal reload must move its active-vault pointer to `b2643ed249f4fc15ab582e49aaaa74fbe9d747ec31bd1f9d05b546b4943aa15e` before installed-host acceptance.
 
 `FUT-ADM-01` remains **In progress**. Voice health now survives both call teardown and extension-host reconstruction. Remaining Admin work includes other high-value lifecycle codes, installed-host/live-backend acceptance and separately authorized repair controls.
 

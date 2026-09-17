@@ -176,6 +176,7 @@ export function activate(context: vscode.ExtensionContext) {
     snapshotInitialization: "wait", // raya_change - wait out slow first snapshots instead of prompting to disable them for the project
   })
   provider.setRemoteService(remoteService)
+  provider.setAdminBrowser(browserAutomationService)
   context.subscriptions.push(registerCheckpointCommands(connectionService, provider)) // raya_change - named checkpoints
 
   // raya_change start - Canvas Design Mode picks are dropped into the chat composer.
@@ -299,6 +300,7 @@ export function activate(context: vscode.ExtensionContext) {
           snapshotInitialization: "wait", // raya_change - never prompt to disable snapshots for the project
         })
         tabProvider.setRemoteService(remoteService)
+        tabProvider.setAdminBrowser(browserAutomationService)
         tabProvider.setAutoApproveController(autoApprove)
         tabProvider.setContinueInWorktreeHandler((sessionId, progress) =>
           agentManagerProvider.continueFromSidebar(sessionId, progress),
@@ -578,6 +580,7 @@ export function activate(context: vscode.ExtensionContext) {
         diffVirtualProvider,
         remoteService,
         autoApprove,
+        browserAutomationService,
       )
     }),
     vscode.commands.registerCommand(
@@ -746,6 +749,7 @@ function openKiloInNewTab(
   diffVirtualProvider: DiffVirtualProvider,
   remoteService: RemoteStatusService,
   autoApprove: ReturnType<typeof registerToggleAutoApprove>,
+  browser: BrowserAutomationService,
 ) {
   const panel = vscode.window.createWebviewPanel("raya.TabPanel", EXTENSION_DISPLAY_NAME, vscode.ViewColumn.Active, {
     enableScripts: true,
@@ -765,6 +769,7 @@ function openKiloInNewTab(
     snapshotInitialization: "wait", // raya_change - never prompt to disable snapshots for the project
   })
   tabProvider.setRemoteService(remoteService)
+  tabProvider.setAdminBrowser(browser)
   tabProvider.setAutoApproveController(autoApprove)
   tabProvider.setContinueInWorktreeHandler((sessionId, progress) =>
     agentManagerProvider.continueFromSidebar(sessionId, progress),

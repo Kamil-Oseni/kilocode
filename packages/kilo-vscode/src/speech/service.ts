@@ -20,6 +20,7 @@ import { LiveBroker } from "./live-broker"
 import { OpenAIBroker } from "./openai-broker"
 import { loadVoiceContext } from "./openai-context"
 import type { SpeechKey } from "../shared/speech"
+import type { AdminVoiceSignal } from "../shared/admin"
 
 type Post = (message: unknown) => void
 
@@ -79,6 +80,13 @@ export class SpeechService implements vscode.Disposable {
 
   ended() {
     return this.tail
+  }
+
+  admin(): AdminVoiceSignal {
+    return {
+      available: !this.closed,
+      active: [this.live.active, this.openai.active, this.realtime.active].filter(Boolean).length,
+    }
   }
 
   async state(post: Post): Promise<void> {

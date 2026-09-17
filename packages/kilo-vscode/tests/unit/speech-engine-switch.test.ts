@@ -70,6 +70,7 @@ async function owned() {
 test("an engine change waits until the Live call is released before the new engine is saved", async () => {
   const { live, speech, root } = await owned()
   expect(live.active).toBe(true)
+  expect(speech.admin()).toEqual({ available: true, active: 1 })
   const posts: unknown[] = []
   await speech.openaiStart(
     {
@@ -92,9 +93,11 @@ test("an engine change waits until the Live call is released before the new engi
   expect(live.active).toBe(true)
   await speech.update({ voiceEngine: "openai-realtime" }, root, () => {})
   expect(live.active).toBe(false)
+  expect(speech.admin()).toEqual({ available: true, active: 0 })
   expect((await speech.settings.load()).voiceEngine).toBe("openai-realtime")
   speech.dispose()
   await speech.ended()
+  expect(speech.admin()).toEqual({ available: false, active: 0 })
 })
 
 test("a start and host microphone wait until the engine change is saved, then Live is refused", async () => {

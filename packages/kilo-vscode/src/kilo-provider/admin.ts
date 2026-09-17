@@ -1,13 +1,77 @@
 import type { KiloClient } from "@kilocode/sdk/v2/client"
-import type { AdminResult } from "../shared/admin"
+import type { AdminHealth, AdminHostSignals, AdminResult, AdminRow } from "../shared/admin"
 
 type Post = (message: AdminResult) => void
+
+const browser = new Set(["ready", "locked", "auth_expired", "closed", "unavailable", "error"])
+
+function failed(id: "browser" | "voice", at: number): AdminRow {
+  return { id, status: "unknown", reason: "probe-failed", observedAt: at }
+}
+
+function browserRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["browser"]>>>, at: number): AdminRow {
+  if (!browser.has(value.status)) return failed("browser", at)
+  if (value.status === "ready") return { id: "browser", status: "healthy", reason: "ready", observedAt: at }
+  if (value.status === "locked") return { id: "browser", status: "blocked", reason: "browser-locked", observedAt: at }
+  if (value.status === "auth_expired")
+    return { id: "browser", status: "blocked", reason: "browser-auth-expired", observedAt: at }
+  if (value.status === "closed") return { id: "browser", status: "offline", reason: "browser-closed", observedAt: at }
+  if (value.status === "unavailable")
+    return { id: "browser", status: "offline", reason: "browser-unavailable", observedAt: at }
+  return { id: "browser", status: "degraded", reason: "browser-error", observedAt: at }
+}
+
+function voiceRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["voice"]>>>, at: number): AdminRow {
+  if (
+    typeof value.available !== "boolean" ||
+    !Number.isSafeInteger(value.active) ||
+    value.active < 0 ||
+    value.active > 3
+  )
+    return failed("voice", at)
+  if (!value.available) return { id: "voice", status: "offline", reason: "voice-unavailable", observedAt: at }
+  return { id: "voice", status: "healthy", reason: "ready", observedAt: at, metrics: { active: value.active } }
+}
+
+async function overlay(health: AdminHealth, host?: AdminHostSignals): Promise<AdminHealth> {
+  if (!host?.browser && !host?.voice) return health
+  const at = health.generatedAt
+  const rows = new Map(health.items.map((item) => [item.id, item]))
+  const reads = await Promise.all([
+    host.browser
+      ? Promise.resolve()
+          .then(host.browser)
+          .then((value) => browserRow(value, at))
+          .catch(() => failed("browser", at))
+      : undefined,
+    host.voice
+      ? Promise.resolve()
+          .then(host.voice)
+          .then((value) => voiceRow(value, at))
+          .catch(() => failed("voice", at))
+      : undefined,
+  ])
+  for (const row of reads) if (row) rows.set(row.id, row)
+  const items = health.items
+  return {
+    ...health,
+    items: [
+      rows.get(items[0].id) ?? items[0],
+      rows.get(items[1].id) ?? items[1],
+      rows.get(items[2].id) ?? items[2],
+      rows.get(items[3].id) ?? items[3],
+      rows.get(items[4].id) ?? items[4],
+      rows.get(items[5].id) ?? items[5],
+    ],
+  }
+}
 
 export async function handleAdminMessage(input: {
   client: KiloClient | null
   directory: string
   message: { type: string } & Record<string, unknown>
   post: Post
+  host?: AdminHostSignals
 }): Promise<boolean> {
   if (input.message.type !== "requestAdmin") return false
   const requestID = input.message.requestID
@@ -21,8 +85,8 @@ export async function handleAdminMessage(input: {
     return true
   }
   try {
-    const health = await input.client.raya.admin.health({ directory: input.directory })
-    if (!health.data) {
+    const response = await input.client.raya.admin.health({ directory: input.directory })
+    if (!response.data) {
       input.post({
         type: "adminResult",
         requestID,
@@ -30,17 +94,18 @@ export async function handleAdminMessage(input: {
       })
       return true
     }
+    const health = await overlay(response.data, input.host)
     const logs = await input.client.raya.admin.logs({ directory: input.directory, limit: "48" }).catch(() => undefined)
     if (!logs?.data) {
       input.post({
         type: "adminResult",
         requestID,
-        health: health.data,
+        health,
         error: { kind: "error", message: "Health is available, but diagnostics couldn't be loaded." },
       })
       return true
     }
-    input.post({ type: "adminResult", requestID, health: health.data, logs: logs.data })
+    input.post({ type: "adminResult", requestID, health, logs: logs.data })
     return true
   } catch {
     input.post({

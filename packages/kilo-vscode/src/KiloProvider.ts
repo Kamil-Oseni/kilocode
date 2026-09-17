@@ -544,6 +544,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private documentViewerProvider: import("./DocumentViewerProvider").DocumentViewerProvider | undefined
   private remoteService: RemoteStatusService | null = null
   private unsubscribeRemote: (() => void) | null = null
+  private adminBrowser: { admin: () => import("./shared/admin").AdminBrowserSignal } | undefined
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -564,6 +565,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   setRemoteService(service: RemoteStatusService): void {
     this.remoteService = service
     this.unsubscribeRemote = service.onChange(() => this.sendRemoteStatus())
+  }
+
+  setAdminBrowser(service: { admin: () => import("./shared/admin").AdminBrowserSignal }): void {
+    this.adminBrowser = service
   }
 
   setAutoApproveController(ctrl: Parameters<typeof createAutoApproveBridge>[0]): void {
@@ -1665,6 +1670,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       directory: this.getWorkspaceDirectory(),
       message: message as { type: string } & Record<string, unknown>,
       post: (reply: unknown) => this.postMessage(reply),
+      host: {
+        ...(this.adminBrowser ? { browser: () => this.adminBrowser!.admin() } : {}),
+        ...(this.speech ? { voice: () => this.speech!.admin() } : {}),
+      },
     }
     if (await handlePersonalTodoMessage(input)) return true
     if (await handlePersonalTodoProposalMessage(input)) return true

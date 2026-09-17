@@ -6,6 +6,7 @@ import { BrowserSession } from "./browser-session"
 import { BrowserPanel } from "./browser-panel"
 import { BrowserBridge } from "./browser-bridge"
 import { profile } from "./browser-profile"
+import type { AdminBrowserSignal } from "../../shared/admin"
 
 type Entry = { session: BrowserSession; panel: BrowserPanel; close: () => void }
 
@@ -89,6 +90,15 @@ export class BrowserAutomationService implements vscode.Disposable {
       const message = error instanceof Error ? error.message : String(error)
       void vscode.window.showErrorMessage(`Raya Browser: ${message}`)
     })
+  }
+
+  admin(): AdminBrowserSignal {
+    if (this.disposed || !vscode.workspace.getConfiguration("raya.browserAutomation").get<boolean>("enabled", true))
+      return { status: "unavailable" }
+    const states = [...this.entries.values()].map((entry) => entry.session.profileState().status)
+    for (const status of ["error", "locked", "auth_expired", "ready", "closed", "unavailable"] as const)
+      if (states.includes(status)) return { status }
+    return { status: "closed" }
   }
 
   dispose(): void {

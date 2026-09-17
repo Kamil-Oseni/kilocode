@@ -20,6 +20,7 @@ export namespace RayaAdminLog {
     "delivery.recovered",
     "contact.authorized",
     "contact.revoked",
+    "contact.updated",
   ])
   export type Code = typeof Code.Type
 

@@ -16,7 +16,15 @@ test("Routine chat info loads, authorizes, revokes, and restores its exact owner
     scope: { kind: "agent" as const, id: agentID },
     createdAt: 1,
   }
-  let target: (typeof base & { revision: number; enabled: boolean; updatedAt: number; revokedAt?: number }) | undefined
+  let target:
+    | (typeof base & {
+        revision: number
+        enabled: boolean
+        updatedAt: number
+        revokedAt?: number
+        quiet?: { start: number; end: number; timezone: string }
+      })
+    | undefined
   const client = createKiloClient({
     baseUrl: "http://localhost:4096",
     fetch: async (input, init) => {
@@ -24,26 +32,62 @@ test("Routine chat info loads, authorizes, revokes, and restores its exact owner
       calls.push(request)
       const url = new URL(request.url)
       if (request.method === "GET") return Response.json(target ? [target] : [])
-      if (url.pathname.endsWith("/revoke")) {
-        target = { ...target!, revision: 2, enabled: false, revokedAt: 2, updatedAt: 2 }
+      if (url.pathname.endsWith("/policy")) {
+        const payload = (await request.clone().json()) as {
+          revision: number
+          quiet: { start: number; end: number; timezone: string } | null
+        }
+        target = {
+          ...target!,
+          revision: target!.revision + 1,
+          updatedAt: target!.updatedAt + 1,
+          ...(payload.quiet ? { quiet: payload.quiet } : {}),
+        }
         return Response.json(target)
       }
-      target = { ...base, revision: target ? 3 : 1, enabled: true, updatedAt: target ? 3 : 1 }
+      if (url.pathname.endsWith("/revoke")) {
+        target = {
+          ...target!,
+          revision: target!.revision + 1,
+          enabled: false,
+          revokedAt: target!.updatedAt + 1,
+          updatedAt: target!.updatedAt + 1,
+        }
+        return Response.json(target)
+      }
+      target = {
+        ...base,
+        revision: target ? target.revision + 1 : 1,
+        enabled: true,
+        updatedAt: target ? target.updatedAt + 1 : 1,
+        ...(target?.quiet ? { quiet: target.quiet } : {}),
+      }
       return Response.json(target)
     },
   })
   const post = (msg: unknown) => messages.push(msg)
-  const send = (action: "load" | "enable" | "disable", requestID: string) =>
+  const send = (
+    action: "load" | "enable" | "disable" | "save",
+    requestID: string,
+    quiet?: { start: number; end: number; timezone: string } | null,
+  ) =>
     handleRoutineMessage({
       client,
       directory: "workspace",
       post,
-      message: { type: "routineContactDestination", requestID, agentID, action },
+      message: {
+        type: "routineContactDestination",
+        requestID,
+        agentID,
+        action,
+        ...(action === "save" ? { quiet } : {}),
+      },
     })
 
   await send("load", "load-empty")
   await send("enable", "enable")
   await send("load", "load-enabled")
+  await send("save", "quiet", { start: 1320, end: 420, timezone: "America/Toronto" })
   await send("disable", "disable")
   await send("enable", "restore")
 
@@ -51,20 +95,49 @@ test("Routine chat info loads, authorizes, revokes, and restores its exact owner
     expect.objectContaining({ type: "routineContactDestination", requestID: "load-empty", enabled: false }),
     expect.objectContaining({ type: "routineContactDestination", requestID: "enable", enabled: true }),
     expect.objectContaining({ type: "routineContactDestination", requestID: "load-enabled", enabled: true }),
+    expect.objectContaining({
+      type: "routineContactDestination",
+      requestID: "quiet",
+      enabled: true,
+      quiet: { start: 1320, end: 420, timezone: "America/Toronto" },
+    }),
     expect.objectContaining({ type: "routineContactDestination", requestID: "disable", enabled: false }),
-    expect.objectContaining({ type: "routineContactDestination", requestID: "restore", enabled: true }),
+    expect.objectContaining({
+      type: "routineContactDestination",
+      requestID: "restore",
+      enabled: true,
+      quiet: { start: 1320, end: 420, timezone: "America/Toronto" },
+    }),
   ])
   expect(new URL(calls[0].url).searchParams.get("agentID")).toBe(agentID)
   expect(new URL(calls[0].url).searchParams.get("limit")).toBe("1")
-  expect(await calls[2].json()).toEqual({
+  const authorize = calls.find(
+    (request) => request.method === "POST" && new URL(request.url).pathname.endsWith("/raya/contact/destinations"),
+  )
+  if (!authorize) throw new Error("expected destination authorization request")
+  expect(await authorize.clone().json()).toEqual({
     source: `routine-owner:${agentID}`,
     channel: "raya",
     address: "owner",
     label: "Raya inbox",
     scope: { kind: "agent", id: agentID },
   })
-  expect(await calls[5].json()).toEqual({ revision: 1 })
-  expect(target).toMatchObject({ revision: 3, enabled: true })
+  const policy = calls.find((request) => new URL(request.url).pathname.endsWith("/policy"))
+  if (!policy) throw new Error("expected quiet-hours policy request")
+  expect(await policy.clone().json()).toEqual({
+    revision: 1,
+    quiet: { start: 1320, end: 420, timezone: "America/Toronto" },
+  })
+  const revoke = calls.find((request) => new URL(request.url).pathname.endsWith("/revoke"))
+  if (!revoke) throw new Error("expected destination revocation request")
+  expect(await revoke.clone().json()).toEqual({ revision: 2 })
+  const restores = calls.filter(
+    (request) => request.method === "POST" && new URL(request.url).pathname.endsWith("/raya/contact/destinations"),
+  )
+  expect(await restores.at(-1)!.clone().json()).toMatchObject({
+    quiet: { start: 1320, end: 420, timezone: "America/Toronto" },
+  })
+  expect(target).toMatchObject({ revision: 4, enabled: true })
 
   await handleRoutineMessage({
     client: null,

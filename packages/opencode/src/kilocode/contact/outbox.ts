@@ -52,6 +52,10 @@ export const Authorize = Schema.Struct({
   scope: Scope,
   quiet: Schema.optional(Quiet),
 })
+export const Policy = Schema.Struct({
+  revision: Revision,
+  quiet: Schema.optional(Quiet),
+})
 export const Enqueue = Schema.Struct({
   source: Token,
   destinationID: ID,
@@ -99,6 +103,7 @@ export const Delivery = Schema.Struct({ message: Message, destination: Destinati
 
 export type Destination = typeof Destination.Type
 export type Authorize = typeof Authorize.Type
+export type Policy = typeof Policy.Type
 export type Enqueue = typeof Enqueue.Type
 export type Message = typeof Message.Type
 
@@ -756,6 +761,55 @@ export namespace RayaContactOutbox {
       revokeChange(id, expectedRevision).pipe(Effect.map((result) => result.target)),
     )
 
+    const updatePolicyChange = Effect.fn("RayaContactOutbox.updatePolicyChange")(function* (id: string, input: Policy) {
+      const value = yield* Schema.decodeUnknownEffect(Policy)(input).pipe(
+        Effect.mapError(() => new Invalid({ message: "Provide a valid destination revision and quiet-hours policy." })),
+      )
+      const timezone = value.quiet ? yield* zone(value.quiet.timezone) : undefined
+      const quiet = value.quiet ? { ...value.quiet, timezone: timezone! } : undefined
+      return yield* db.transaction(
+        (tx) =>
+          Effect.gen(function* () {
+            const row = yield* tx.select().from(DestinationRow).where(eq(DestinationRow.id, id)).get()
+            if (!row) return yield* new NotFound({ message: "Contact destination not found." })
+            const target = destination(row)
+            if (!target.enabled)
+              return yield* new Conflict({ message: "Enable this destination before changing quiet hours." })
+            if (JSON.stringify(target.quiet) === JSON.stringify(quiet)) return { target, changed: false as const }
+            if (target.revision !== value.revision)
+              return yield* new Conflict({ message: "This destination changed. Reload it before saving quiet hours." })
+            const now = clock()
+            yield* tx
+              .update(DestinationRow)
+              .set({
+                quiet_start: quiet?.start ?? null,
+                quiet_end: quiet?.end ?? null,
+                timezone: quiet?.timezone ?? null,
+                revision: row.revision + 1,
+                time_updated: now,
+              })
+              .where(and(eq(DestinationRow.id, id), eq(DestinationRow.revision, value.revision)))
+              .run()
+            return yield* tx
+              .select()
+              .from(DestinationRow)
+              .where(eq(DestinationRow.id, id))
+              .get()
+              .pipe(
+                Effect.flatMap((saved) =>
+                  saved ? Effect.succeed(destination(saved)) : Effect.die("Quiet-hours update failed."),
+                ),
+                Effect.map((saved) => ({ target: saved, changed: true as const })),
+              )
+          }),
+        { behavior: "immediate" },
+      )
+    })
+
+    const updatePolicy = Effect.fn("RayaContactOutbox.updatePolicy")((id: string, input: Policy) =>
+      updatePolicyChange(id, input).pipe(Effect.map((result) => result.target)),
+    )
+
     const destinations = () =>
       db
         .select()
@@ -828,6 +882,8 @@ export namespace RayaContactOutbox {
       getDestination,
       revoke,
       revokeChange,
+      updatePolicy,
+      updatePolicyChange,
       enqueue,
       get,
       messages,

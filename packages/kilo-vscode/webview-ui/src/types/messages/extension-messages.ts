@@ -394,6 +394,7 @@ export interface RoutineContactDestinationResultMessage {
   requestID: string
   agentID: string
   enabled?: boolean
+  quiet?: { start: number; end: number; timezone: string } | null
   error?: string
 }
 

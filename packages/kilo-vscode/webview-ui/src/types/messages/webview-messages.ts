@@ -275,7 +275,8 @@ export interface RoutineContactDestinationMessage {
   type: "routineContactDestination"
   requestID: string
   agentID: string
-  action: "load" | "enable" | "disable"
+  action: "load" | "enable" | "disable" | "save"
+  quiet?: { start: number; end: number; timezone: string } | null
 }
 
 export interface RoutineInboxReadMessage {

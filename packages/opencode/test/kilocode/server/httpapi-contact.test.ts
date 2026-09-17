@@ -67,6 +67,23 @@ it.live("serves authenticated owner contact destination management without dispa
         expect(replayed.status).toBe(200)
         expect(yield* Effect.promise(() => replayed.json())).toEqual(destination)
 
+        const policy = yield* request(`/raya/contact/destinations/${destination.id}/policy`, {
+          method: "POST",
+          body: JSON.stringify({ revision: destination.revision }),
+        })
+        expect(policy.status).toBe(200)
+        const updated = yield* Effect.promise(() => policy.json()).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Destination)),
+        )
+        expect(updated).toMatchObject({ id: destination.id, revision: 2, enabled: true })
+        expect(updated).not.toHaveProperty("quiet")
+        const policyReplay = yield* request(`/raya/contact/destinations/${destination.id}/policy`, {
+          method: "POST",
+          body: JSON.stringify({ revision: destination.revision }),
+        })
+        expect(policyReplay.status).toBe(200)
+        expect(yield* Effect.promise(() => policyReplay.json())).toEqual(updated)
+
         const created = yield* request("/kilocode/agent", {
           method: "POST",
           body: JSON.stringify({
@@ -133,11 +150,13 @@ it.live("serves authenticated owner contact destination management without dispa
         const events = yield* Effect.promise(() => logged.json())
         expect(events.map((event: { code: string }) => event.code)).toEqual([
           "contact.authorized",
+          "contact.updated",
           "contact.authorized",
           "delivery.started",
           "delivery.completed",
         ])
-        expect(events.slice(0, 2).map((event: { fields: unknown }) => event.fields)).toEqual([
+        expect(events.slice(0, 3).map((event: { fields: unknown }) => event.fields)).toEqual([
+          { source: "routines", channel: "email", scope: "organization" },
           { source: "routines", channel: "email", scope: "organization" },
           { source: "routines", channel: "raya", scope: "agent" },
         ])
@@ -198,7 +217,7 @@ it.live("serves authenticated owner contact destination management without dispa
 
         const fetched = yield* request(`/raya/contact/destinations/${destination.id}`)
         expect(fetched.status).toBe(200)
-        expect(yield* Effect.promise(() => fetched.json())).toEqual(destination)
+        expect(yield* Effect.promise(() => fetched.json())).toEqual(updated)
 
         const queued = yield* Database.Service.use((database) =>
           RayaContactOutbox.make(database, () => 1_000).enqueue({
@@ -245,18 +264,18 @@ it.live("serves authenticated owner contact destination management without dispa
 
         const stale = yield* request(`/raya/contact/destinations/${destination.id}/revoke`, {
           method: "POST",
-          body: JSON.stringify({ revision: 2 }),
+          body: JSON.stringify({ revision: 1 }),
         })
         expect(stale.status).toBe(409)
 
         const revoked = yield* request(`/raya/contact/destinations/${destination.id}/revoke`, {
           method: "POST",
-          body: JSON.stringify({ revision: 1 }),
+          body: JSON.stringify({ revision: 2 }),
         })
         expect(revoked.status).toBe(200)
         expect(yield* Effect.promise(() => revoked.json())).toMatchObject({
           id: destination.id,
-          revision: 2,
+          revision: 3,
           enabled: false,
         })
         const final = yield* request("/raya/admin/logs?limit=10")
@@ -264,6 +283,7 @@ it.live("serves authenticated owner contact destination management without dispa
         const audit = yield* Effect.promise(() => final.json())
         expect(audit.map((event: { code: string }) => event.code)).toEqual([
           "contact.authorized",
+          "contact.updated",
           "contact.authorized",
           "delivery.started",
           "delivery.completed",

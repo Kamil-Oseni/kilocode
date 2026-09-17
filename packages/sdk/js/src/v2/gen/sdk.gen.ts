@@ -540,6 +540,8 @@ import type {
   RayaContactDestinationGetResponses,
   RayaContactDestinationListErrors,
   RayaContactDestinationListResponses,
+  RayaContactDestinationPolicyUpdateErrors,
+  RayaContactDestinationPolicyUpdateResponses,
   RayaContactDestinationRevokeErrors,
   RayaContactDestinationRevokeResponses,
   RayaContactMessageGetErrors,
@@ -14273,6 +14275,57 @@ export class Admin extends HeyApiClient {
   }
 }
 
+export class Policy extends HeyApiClient {
+  /**
+   * Update contact quiet hours
+   *
+   * Update or clear quiet hours on the exact enabled destination revision without changing its authorization scope.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      destinationID: string
+      directory?: string
+      workspace?: string
+      revision?: number
+      quiet?: {
+        start: number
+        end: number
+        timezone: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "destinationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "quiet" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaContactDestinationPolicyUpdateResponses,
+      RayaContactDestinationPolicyUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/raya/contact/destinations/{destinationID}/policy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Destination extends HeyApiClient {
   /**
    * List contact destinations
@@ -14453,6 +14506,11 @@ export class Destination extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _policy?: Policy
+  get policy(): Policy {
+    return (this._policy ??= new Policy({ client: this.client }))
   }
 }
 

@@ -29611,6 +29611,7 @@ export type RayaAdminLogsResponses = {
       | "delivery.recovered"
       | "contact.authorized"
       | "contact.revoked"
+      | "contact.updated"
     fields?: {
       durationMs?: number
       count?: number
@@ -29982,6 +29983,82 @@ export type RayaContactDestinationGetResponses = {
 
 export type RayaContactDestinationGetResponse =
   RayaContactDestinationGetResponses[keyof RayaContactDestinationGetResponses]
+
+export type RayaContactDestinationPolicyUpdateData = {
+  body?: {
+    revision: number
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+  }
+  path: {
+    destinationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/contact/destinations/{destinationID}/policy"
+}
+
+export type RayaContactDestinationPolicyUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type RayaContactDestinationPolicyUpdateError =
+  RayaContactDestinationPolicyUpdateErrors[keyof RayaContactDestinationPolicyUpdateErrors]
+
+export type RayaContactDestinationPolicyUpdateResponses = {
+  /**
+   * Updated contact destination
+   */
+  200: {
+    version: 1
+    id: string
+    source: string
+    channel: "raya" | "email" | "telegram" | "whatsapp"
+    address: string
+    label?: string
+    scope:
+      | {
+          kind: "global"
+        }
+      | {
+          kind: "agent"
+          id: string
+        }
+      | {
+          kind: "organization"
+          id: string
+        }
+    quiet?: {
+      start: number
+      end: number
+      timezone: string
+    }
+    revision: number
+    enabled: boolean
+    revokedAt?: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type RayaContactDestinationPolicyUpdateResponse =
+  RayaContactDestinationPolicyUpdateResponses[keyof RayaContactDestinationPolicyUpdateResponses]
 
 export type RayaContactDestinationRevokeData = {
   body?: {

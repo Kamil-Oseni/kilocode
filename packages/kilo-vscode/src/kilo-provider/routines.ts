@@ -353,6 +353,20 @@ function token(value: unknown) {
   return typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(value)
 }
 
+function policy(value: unknown) {
+  if (value === null) return null
+  if (!value || typeof value !== "object") throw new Error("Choose valid quiet hours.")
+  const row = value as Record<string, unknown>
+  if (!Number.isInteger(row.start) || Number(row.start) < 0 || Number(row.start) >= 1440)
+    throw new Error("Choose valid quiet hours.")
+  if (!Number.isInteger(row.end) || Number(row.end) < 0 || Number(row.end) >= 1440)
+    throw new Error("Choose valid quiet hours.")
+  if (row.start === row.end) throw new Error("Choose valid quiet hours.")
+  if (typeof row.timezone !== "string" || !row.timezone || row.timezone.length > 128)
+    throw new Error("Choose valid quiet hours.")
+  return { start: Number(row.start), end: Number(row.end), timezone: row.timezone }
+}
+
 async function summaries(ctx: Ctx) {
   const listed = await ctx.kilo.inbox({ directory: ctx.dir }, { throwOnError: true }).catch((err: unknown) => {
     ctx.post({ type: "routineInbox", requestID: ctx.message.requestID, error: reason(err) })
@@ -1063,40 +1077,47 @@ async function archive(ctx: Ctx) {
   ctx.post({ ...base, ...(await retained(ctx, String(msg.agentID))) })
 }
 
-async function destination(ctx: Ctx) {
-  const msg = ctx.message
-  if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the worker before changing reports.")
-  if (msg.action !== "load" && msg.action !== "enable" && msg.action !== "disable")
-    throw new Error("Choose whether this worker can send reports.")
-  const agentID = String(msg.agentID)
+async function lookup(ctx: Ctx, agentID: string) {
   const listed = await ctx.contact.destination.list({ directory: ctx.dir, limit: "1", agentID }, { throwOnError: true })
-  const target = listed.data?.[0]
-  if (msg.action === "load") {
-    ctx.post({
-      type: "routineContactDestination",
-      requestID: msg.requestID,
-      agentID,
-      enabled: target?.enabled ?? false,
-    })
+  return listed.data?.[0]
+}
+
+function answer(ctx: Ctx, agentID: string, target: Awaited<ReturnType<typeof lookup>>) {
+  ctx.post({
+    type: "routineContactDestination",
+    requestID: ctx.message.requestID,
+    agentID,
+    enabled: target?.enabled ?? false,
+    quiet: target?.quiet ?? null,
+  })
+}
+
+async function silence(ctx: Ctx, agentID: string) {
+  const target = await lookup(ctx, agentID)
+  const quiet = policy(ctx.message.quiet)
+  if (!target?.enabled) throw new Error("Allow reports before changing quiet hours.")
+  const result = await ctx.contact.destination.policy.update(
+    { directory: ctx.dir, destinationID: target.id, revision: target.revision, ...(quiet ? { quiet } : {}) },
+    { throwOnError: true },
+  )
+  answer(ctx, agentID, result.data)
+}
+
+async function revoke(ctx: Ctx, agentID: string) {
+  const target = await lookup(ctx, agentID)
+  if (!target?.enabled) {
+    answer(ctx, agentID, target)
     return
   }
-  if (msg.action === "disable") {
-    if (!target?.enabled) {
-      ctx.post({ type: "routineContactDestination", requestID: msg.requestID, agentID, enabled: false })
-      return
-    }
-    const result = await ctx.contact.destination.revoke(
-      { directory: ctx.dir, destinationID: target.id, revision: target.revision },
-      { throwOnError: true },
-    )
-    ctx.post({
-      type: "routineContactDestination",
-      requestID: msg.requestID,
-      agentID,
-      enabled: result.data?.enabled ?? false,
-    })
-    return
-  }
+  const result = await ctx.contact.destination.revoke(
+    { directory: ctx.dir, destinationID: target.id, revision: target.revision },
+    { throwOnError: true },
+  )
+  answer(ctx, agentID, result.data)
+}
+
+async function authorize(ctx: Ctx, agentID: string) {
+  const target = await lookup(ctx, agentID)
   const result = await ctx.contact.destination.authorize(
     {
       directory: ctx.dir,
@@ -1105,15 +1126,23 @@ async function destination(ctx: Ctx) {
       address: "owner",
       label: "Raya inbox",
       scope: { kind: "agent", id: agentID },
+      ...(target?.quiet ? { quiet: target.quiet } : {}),
     },
     { throwOnError: true },
   )
-  ctx.post({
-    type: "routineContactDestination",
-    requestID: msg.requestID,
-    agentID,
-    enabled: result.data?.enabled ?? false,
-  })
+  answer(ctx, agentID, result.data)
+}
+
+async function destination(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the worker before changing reports.")
+  if (msg.action !== "load" && msg.action !== "enable" && msg.action !== "disable" && msg.action !== "save")
+    throw new Error("Choose whether this worker can send reports.")
+  const agentID = String(msg.agentID)
+  if (msg.action === "load") return answer(ctx, agentID, await lookup(ctx, agentID))
+  if (msg.action === "save") return silence(ctx, agentID)
+  if (msg.action === "disable") return revoke(ctx, agentID)
+  return authorize(ctx, agentID)
 }
 
 const routes: Record<string, (ctx: Ctx) => Promise<void>> = {

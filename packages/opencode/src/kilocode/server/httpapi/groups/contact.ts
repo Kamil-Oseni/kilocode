@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorize, Destination, Enqueue, Message, Receipt } from "@/kilocode/contact/outbox"
+import { Authorize, Destination, Enqueue, Message, Policy, Receipt } from "@/kilocode/contact/outbox"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
 import {
@@ -16,6 +16,7 @@ const root = "/raya/contact"
 export const ContactPaths = {
   destinations: `${root}/destinations`,
   destination: `${root}/destinations/:destinationID`,
+  policy: `${root}/destinations/:destinationID/policy`,
   revoke: `${root}/destinations/:destinationID/revoke`,
   messages: `${root}/messages`,
   message: `${root}/messages/:messageID`,
@@ -90,6 +91,20 @@ export const ContactApi = HttpApi.make("raya-contact").add(
         error: errors,
       }).annotateMerge(
         OpenApi.annotations({ identifier: "raya.contact.destination.get", summary: "Get a contact destination" }),
+      ),
+      HttpApiEndpoint.post("contactDestinationPolicyUpdate", ContactPaths.policy, {
+        params: { destinationID: DestinationID },
+        query: WorkspaceRoutingQuery,
+        payload: Policy,
+        success: described(Destination, "Updated contact destination"),
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.contact.destination.policy.update",
+          summary: "Update contact quiet hours",
+          description:
+            "Update or clear quiet hours on the exact enabled destination revision without changing its authorization scope.",
+        }),
       ),
       HttpApiEndpoint.post("contactDestinationRevoke", ContactPaths.revoke, {
         params: { destinationID: DestinationID },

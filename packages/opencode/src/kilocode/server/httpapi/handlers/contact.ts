@@ -69,7 +69,7 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
     const tasks = RayaTask.make({ storage, database })
     const organizations = RayaTaskOrganization.make(database, tasks, storage)
     const report = Effect.fn("RayaContactHttpApi.report")(function* (
-      code: "contact.authorized" | "contact.revoked",
+      code: "contact.authorized" | "contact.revoked" | "contact.updated",
       target: Destination,
     ) {
       const state = yield* InstanceState.context
@@ -114,6 +114,12 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
         ),
       )
       .handle("contactDestinationGet", (ctx) => api(outbox.getDestination(ctx.params.destinationID)))
+      .handle("contactDestinationPolicyUpdate", (ctx) =>
+        api(outbox.updatePolicyChange(ctx.params.destinationID, ctx.payload)).pipe(
+          Effect.tap((result) => (result.changed ? report("contact.updated", result.target) : Effect.void)),
+          Effect.map((result) => result.target),
+        ),
+      )
       .handle("contactDestinationRevoke", (ctx) =>
         api(outbox.revokeChange(ctx.params.destinationID, ctx.payload.revision)).pipe(
           Effect.tap((result) => (result.changed ? report("contact.revoked", result.target) : Effect.void)),

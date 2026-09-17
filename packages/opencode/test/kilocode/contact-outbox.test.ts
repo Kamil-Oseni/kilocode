@@ -313,6 +313,58 @@ test("delivery retries use bounded backoff and stop after five dispatched attemp
   )
 })
 
+test("contact quiet hours update by exact revision and replay safely", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const outbox = RayaContactOutbox.make(yield* Database.Service, () => start)
+      const target = yield* outbox.authorize({
+        source: "contact:quiet-policy",
+        channel: "raya",
+        address: "owner",
+        scope: { kind: "agent", id: "books" },
+      })
+      const saved = yield* outbox.updatePolicyChange(target.id, {
+        revision: target.revision,
+        quiet: { start: 22 * 60, end: 7 * 60, timezone: "Etc/UTC" },
+      })
+      expect(saved).toMatchObject({
+        changed: true,
+        target: { revision: 2, quiet: { start: 1320, end: 420, timezone: "Etc/UTC" } },
+      })
+      expect(
+        yield* outbox.updatePolicyChange(target.id, {
+          revision: target.revision,
+          quiet: { start: 1320, end: 420, timezone: "Etc/UTC" },
+        }),
+      ).toEqual({ target: saved.target, changed: false })
+      expect(
+        Exit.isFailure(
+          yield* outbox
+            .updatePolicy(target.id, {
+              revision: target.revision,
+              quiet: { start: 23 * 60, end: 8 * 60, timezone: "UTC" },
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      const cleared = yield* outbox.updatePolicy(target.id, { revision: saved.target.revision })
+      expect(cleared).toMatchObject({ revision: 3 })
+      expect(cleared).not.toHaveProperty("quiet")
+      const revoked = yield* outbox.revoke(target.id, cleared.revision)
+      expect(
+        Exit.isFailure(
+          yield* outbox
+            .updatePolicy(target.id, {
+              revision: revoked.revision,
+              quiet: { start: 1320, end: 420, timezone: "UTC" },
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("contact destinations reject malformed addresses, quiet windows, and timezones", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

@@ -54907,7 +54907,8 @@
                           "delivery.failed",
                           "delivery.recovered",
                           "contact.authorized",
-                          "contact.revoked"
+                          "contact.revoked",
+                          "contact.updated"
                         ]
                       },
                       "fields": {
@@ -56011,6 +56012,268 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.contact.destination.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/contact/destinations/{destinationID}/policy": {
+      "post": {
+        "tags": ["raya-contact"],
+        "operationId": "raya.contact.destination.policy.update",
+        "parameters": [
+          {
+            "name": "destinationID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ctd_[a-f0-9]{48}$"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated contact destination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^ct[dm]_[a-f0-9]{48}$"
+                    },
+                    "source": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                    },
+                    "channel": {
+                      "type": "string",
+                      "enum": ["raya", "email", "telegram", "whatsapp"]
+                    },
+                    "address": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 320
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["global"]
+                            }
+                          },
+                          "required": ["kind"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["agent"]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                            }
+                          },
+                          "required": ["kind", "id"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["organization"]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                            }
+                          },
+                          "required": ["kind", "id"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "quiet": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMaximum": 1440
+                        },
+                        "end": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMaximum": 1440
+                        },
+                        "timezone": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "required": ["start", "end", "timezone"],
+                      "additionalProperties": false
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "revokedAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 8640000000000000
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 8640000000000000
+                    },
+                    "updatedAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 8640000000000000
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "id",
+                    "source",
+                    "channel",
+                    "address",
+                    "scope",
+                    "revision",
+                    "enabled",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Updated contact destination"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update or clear quiet hours on the exact enabled destination revision without changing its authorization scope.",
+        "summary": "Update contact quiet hours",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "quiet": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "exclusiveMaximum": 1440
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "exclusiveMaximum": 1440
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "required": ["start", "end", "timezone"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.contact.destination.policy.update({\n  ...\n})"
           }
         ]
       }

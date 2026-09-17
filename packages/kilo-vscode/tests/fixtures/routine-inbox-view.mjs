@@ -425,6 +425,7 @@ try {
   })
   assert.match(root.textContent, /Chat info for Books|About/)
   assert.match(root.textContent, /Reports to you|Stop reports/)
+  assert.match(root.textContent, /Set quiet hours/)
   assert.match(root.textContent, /Review the travel receipt policy/)
   const sharedLink = [...root.querySelectorAll(".routines-info-list button")].find((item) =>
     item.textContent.includes("receipt-policy"),

@@ -1542,6 +1542,35 @@
   overflow-wrap: anywhere;
 }
 
+.routines-info-quiet {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 8rem));
+  gap: var(--raya-space-8) var(--raya-space-12);
+  margin-top: var(--raya-space-8);
+}
+
+.routines-info-quiet label {
+  display: grid;
+  gap: var(--raya-space-4);
+}
+
+.routines-info-quiet input {
+  min-width: 0;
+}
+
+.routines-info-quiet > span {
+  grid-column: 1 / -1;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  overflow-wrap: anywhere;
+}
+
+.routines-info-quiet-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: var(--raya-space-4);
+}
+
 .routines-info-retry {
   display: flex;
   align-items: center;
@@ -1640,6 +1669,15 @@
 
   .routines-info-setting button {
     align-self: flex-start;
+  }
+
+  .routines-info-quiet {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routines-info-quiet > span,
+  .routines-info-quiet-actions {
+    grid-column: 1;
   }
 }
 

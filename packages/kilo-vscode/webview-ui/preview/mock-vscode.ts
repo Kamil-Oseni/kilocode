@@ -143,15 +143,18 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
 }))
 let stopped = false
 let reports = true
+let quiet: { start: number; end: number; timezone: string } | undefined
 
 function destination(message: Extract<WebviewMessage, { type: "routineContactDestination" }>) {
   if (message.action === "enable") reports = true
   if (message.action === "disable") reports = false
+  if (message.action === "save") quiet = message.quiet ?? undefined
   emit({
     type: "routineContactDestination",
     requestID: message.requestID,
     agentID: message.agentID,
     enabled: reports,
+    quiet: quiet ?? null,
   })
 }
 

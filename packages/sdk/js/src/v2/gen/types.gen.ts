@@ -5696,6 +5696,7 @@ export type RayaGoalUsage = {
   retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   cost?: number
   descendantCost?: number
+  delegatedCost?: number
   tokens?: {
     input: number
     output: number

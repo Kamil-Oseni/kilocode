@@ -246,13 +246,15 @@ export function begun(row: Record): Publish | undefined {
 export function billed(row: Pick<Record, "cost">) {
   const amount = row.cost
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0)
-    return "Child cost was not recorded. No amount was invented."
-  return `Child cost $${amount}. This amount is not added to the requesting worker's standing-job total.`
+    return "Child cost was not recorded. No amount was invented; bounded work remains conservatively reserved."
+  return `Child cost $${amount}. It counts against the branch limit and remains separate from the requesting worker's direct model-cost total.`
 }
 
 export function credited(kids: readonly Record[], name?: (id: string) => string) {
   if (!kids.length) return [] as string[]
-  const lines = ["Contributing worker requests. Their costs are not added to this run's total."]
+  const lines = [
+    "Contributing worker requests. Their costs count against the branch limit and remain separate from this run's direct model-cost total.",
+  ]
   for (const row of kids) {
     const who = name?.(row.recipientID) ?? row.recipientID
     if (row.state === "completed") {
@@ -377,6 +379,7 @@ export namespace RayaTaskDelegation {
       sender: RayaTask.Agent,
       recipient: RayaTask.Agent,
       gone?: boolean,
+      allocation?: { limit: number; spent: number },
     ) {
       const value = yield* Schema.decodeUnknownEffect(Request)(input).pipe(
         Effect.mapError(
@@ -437,14 +440,19 @@ export namespace RayaTaskDelegation {
       const count = yield* outstanding(value.senderID, value.parentID)
       if (count >= FAN)
         return yield* new Invalid({ message: "This worker already has too many outstanding delegated requests." })
-      if (gone) return yield* persist(value, sender, recipient, workspace, depth, "failed", GONE, organization)
+      if (allocation && value.budget === undefined)
+        return yield* new Invalid({ message: "Delegated work from this bounded run requires a model-cost budget." })
+      if (allocation && !value.parentRunID)
+        return yield* new Invalid({ message: "Bounded delegated work requires its parent run identity." })
+      if (gone)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", GONE, organization, allocation)
       if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY, organization)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY, organization, allocation)
       if (!recipient.enabled)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", PAUSED, organization)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", PAUSED, organization, allocation)
       if (recipient.access === undefined)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", ACCESS, organization)
-      return yield* persist(value, sender, recipient, workspace, depth, "queued", undefined, organization)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", ACCESS, organization, allocation)
+      return yield* persist(value, sender, recipient, workspace, depth, "queued", undefined, organization, allocation)
     })
     const persist = Effect.fn("RayaTaskDelegation.persist")(function* (
       value: Request,
@@ -455,11 +463,39 @@ export namespace RayaTaskDelegation {
       state: Record["state"],
       reason?: string,
       organization?: { id: string; name: string; revision: number },
+      allocation?: { limit: number; spent: number },
     ) {
       const row = yield* db
         .transaction(
           (tx) =>
             Effect.gen(function* () {
+              const committed = (rows: readonly (typeof Delegation.$inferSelect)[]): Effect.Effect<number> =>
+                Effect.gen(function* () {
+                  let total = 0
+                  for (const row of rows) {
+                    if (
+                      row.state === "queued" ||
+                      row.state === "accepted" ||
+                      row.state === "running" ||
+                      row.state === "needs_input"
+                    ) {
+                      total += row.budget ?? 0
+                      continue
+                    }
+                    if (row.cost === null) {
+                      total += row.session_id ? (row.budget ?? 0) : 0
+                      continue
+                    }
+                    const children = yield* tx
+                      .select()
+                      .from(Delegation)
+                      .where(eq(Delegation.parent_id, row.id))
+                      .all()
+                      .pipe(Effect.orDie)
+                    total += row.cost + (yield* committed(children))
+                  }
+                  return total
+                })
               if (value.parentID && value.budget !== undefined) {
                 const parent = yield* tx
                   .select({ budget: Delegation.budget })
@@ -470,17 +506,31 @@ export namespace RayaTaskDelegation {
                 if (!parent) return yield* new Invalid({ message: "The parent delegation request was not found." })
                 if (parent.budget !== null) {
                   const siblings = yield* tx
-                    .select({ budget: Delegation.budget })
+                    .select()
                     .from(Delegation)
                     .where(eq(Delegation.parent_id, value.parentID))
                     .all()
                     .pipe(Effect.orDie)
-                  const allocated = siblings.reduce((sum, item) => sum + (item.budget ?? 0), 0)
+                  const allocated = yield* committed(siblings)
                   if (value.budget > parent.budget - allocated)
                     return yield* new Invalid({
                       message: "This delegated follow-on exceeds the parent's remaining delegated-work budget.",
                     })
                 }
+              }
+              if (allocation && value.budget !== undefined) {
+                const siblings = yield* (
+                  value.parentID
+                    ? tx.select().from(Delegation).where(eq(Delegation.parent_id, value.parentID))
+                    : tx.select().from(Delegation).where(eq(Delegation.parent_run_id, value.parentRunID!))
+                )
+                  .all()
+                  .pipe(Effect.orDie)
+                const reserved = yield* committed(siblings)
+                if (allocation.spent + reserved + value.budget > allocation.limit)
+                  return yield* new Invalid({
+                    message: "This request exceeds the run's remaining model-cost budget.",
+                  })
               }
               const now = Date.now()
               const saved = {
@@ -700,11 +750,12 @@ export namespace RayaTaskDelegation {
       id: string,
       recipient: RayaTask.Agent,
       reason: string,
+      cost?: number,
     ) {
       const prior = yield* get(id)
       if (prior.state === "cancelled") return prior
       if (prior.state === "completed" || prior.state === "failed") return prior
-      return yield* finish(id, "cancelled", recipient, undefined, undefined, reason)
+      return yield* finish(id, "cancelled", recipient, undefined, cost, reason)
     })
     const queued = Effect.fn("RayaTaskDelegation.queued")(function* (recipientID: string) {
       const rows = yield* db

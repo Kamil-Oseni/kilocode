@@ -78658,6 +78658,9 @@
           "descendantCost": {
             "type": "number"
           },
+          "delegatedCost": {
+            "type": "number"
+          },
           "tokens": {
             "type": "object",
             "properties": {

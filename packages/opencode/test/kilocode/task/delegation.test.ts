@@ -144,7 +144,8 @@ test("posted replies do not invent a completed worker result", () => {
   )
   expect(done?.kind).toBe("delegation")
   expect(done?.body).toContain("not invented success")
-  expect(done?.body).toContain("Child cost was not recorded. No amount was invented.")
+  expect(done?.body).toContain("Child cost was not recorded. No amount was invented")
+  expect(done?.body).toContain("bounded work remains conservatively reserved")
   const priced = replied(
     {
       id: "rdl_1",
@@ -160,7 +161,8 @@ test("posted replies do not invent a completed worker result", () => {
     books,
   )
   expect(priced?.body).toContain("Child cost $1.5")
-  expect(priced?.body).toContain("not added to the requesting worker's standing-job total")
+  expect(priced?.body).toContain("counts against the branch limit")
+  expect(priced?.body).toContain("separate from the requesting worker's direct model-cost total")
   expect(billed({ cost: Number.NaN })).toContain("No amount was invented")
   const notes = credited(
     [
@@ -188,7 +190,7 @@ test("posted replies do not invent a completed worker result", () => {
     ],
     (id) => (id === "books" ? "Accounting" : "Legal"),
   )
-  expect(notes[0]).toContain("not added to this run's total")
+  expect(notes[0]).toContain("costs count against the branch limit")
   expect(notes.some((line) => line.includes("Accounting: completed") && line.includes("$1.5"))).toBe(true)
   expect(notes.some((line) => line.includes("Legal: queued") && line.includes("not a completed worker result"))).toBe(
     true,
@@ -786,6 +788,47 @@ test("overdue live requests fail with a timeout reply", async () => {
       expect(done.state).toBe("failed")
       expect(done.reason).toContain("timed out")
       expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("timed out"))).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("settled child spend releases unused delegated budget", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const legal = agent("legal", "reviewer")
+      const sales = agent("sales", "seller")
+      const deadline = Date.now() + 60_000
+      const parent = yield* store.admit(
+        request("dlg_release_parent", chief.id, books.id, { deadline, budget: 20 }),
+        chief,
+        books,
+      )
+      const first = yield* store.admit(
+        request("dlg_release_first", books.id, legal.id, {
+          parentID: parent.record.id,
+          deadline,
+          budget: 15,
+        }),
+        books,
+        legal,
+      )
+      const taken = (yield* store.take(legal.id))!
+      yield* store.attach(taken.id, taken.childRunID!, SessionID.make("ses_release_first"))
+      yield* store.finish(first.record.id, "completed", legal, "Reviewed.", 5)
+
+      const second = yield* store.admit(
+        request("dlg_release_second", books.id, sales.id, {
+          parentID: parent.record.id,
+          deadline,
+          budget: 15,
+        }),
+        books,
+        sales,
+      )
+      expect(second.record).toMatchObject({ state: "queued", budget: 15 })
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

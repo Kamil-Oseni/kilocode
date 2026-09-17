@@ -25,6 +25,8 @@ import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import * as Accounting from "./accounting"
 import { collect } from "./evidence-scope"
 import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/verification"
+import type { Database } from "@opencode-ai/core/database/database"
+import * as DelegationAccounting from "./delegation-accounting"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -182,6 +184,7 @@ export namespace RayaGoal {
     retries: Schema.optional(Schema.Number), // consecutive recoveries; reset after success, steering, or resume
     cost: Schema.optional(Schema.Finite), // parent total already includes recursively propagated child cost
     descendantCost: Schema.optional(Schema.Finite), // first-hop child totals already included recursively in cost
+    delegatedCost: Schema.optional(Schema.Finite), // organization-worker branches reserved or billed outside the session tree
     tokens: Schema.optional(
       Schema.Struct({
         input: Schema.Finite,
@@ -392,6 +395,7 @@ export namespace RayaGoal {
   type Deps = {
     storage: Store
     sessions: Sessions
+    database?: Database.Interface
   }
 
   const controls = new Set(["create_goal", "get_goal", "update_goal", "update_goal_plan"])
@@ -584,6 +588,64 @@ export namespace RayaGoal {
       return state
     })
 
+    const spend = Effect.fn("RayaGoal.delegatedSpend")(function* (
+      sessionID: SessionID,
+      state: State,
+      cost = state.usage.cost ?? 0,
+      parentRunID?: string,
+    ) {
+      const session = deps.sessions.get
+        ? yield* deps.sessions.get(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
+      const metadata = session?.metadata?.rayaRoutine
+      const runID =
+        parentRunID ??
+        (typeof metadata === "object" && metadata !== null && "runID" in metadata && typeof metadata.runID === "string"
+          ? metadata.runID
+          : undefined)
+      const observed = yield* DelegationAccounting.sum(deps.database, sessionID, runID).pipe(
+        Effect.mapError(
+          () =>
+            new AuditError({
+              message: "Delegated model-cost accounting is unavailable. Refusing to continue this bounded goal.",
+            }),
+        ),
+      )
+      const delegated = observed ?? state.usage.delegatedCost ?? 0
+      return { delegated, total: cost + delegated }
+    })
+
+    const delegated = Effect.fn("RayaGoal.delegated")(function* (sessionID: SessionID, runID?: string) {
+      const state = yield* requireGoal(sessionID)
+      const usage = yield* spend(sessionID, state, state.usage.cost ?? 0, runID)
+      const now = Date.now()
+      const hit = exhausted(state, now, usage.total)
+      const pause = state.status === "active" && hit !== undefined
+      const resume = state.status === "paused" && state.budgetHit?.kind === "model-cost" && hit === undefined
+      if (!pause && !resume && state.usage.delegatedCost === usage.delegated) return { state, resumed: false }
+      if (state.status === "complete" || state.status === "blocked") return { state, resumed: false }
+      const next = yield* save(sessionID, {
+        ...state,
+        status: pause ? "paused" : resume ? "active" : state.status,
+        budgetHit: pause ? hit : resume ? undefined : state.budgetHit,
+        activeMs: pause ? elapsed(state, now) : state.activeMs,
+        activeAt: pause ? undefined : resume ? now : state.activeAt,
+        updatedAt: now,
+        usage: { ...state.usage, delegatedCost: usage.delegated },
+        progress:
+          pause || resume
+            ? progress(state, {
+                at: now,
+                kind: "status",
+                message: pause
+                  ? `Paused: ${budgetReason(hit!)}`
+                  : "Delegated work settled below the saved model-cost limit. Goal resumed.",
+              })
+            : state.progress,
+      })
+      return { state: next, resumed: resume }
+    })
+
     const save = (
       sessionID: SessionID,
       state: State,
@@ -631,7 +693,8 @@ export namespace RayaGoal {
       )
 
     const pauseBudget = Effect.fn("RayaGoal.pauseBudget")(function* (sessionID: SessionID, state: State, now: number) {
-      const hit = exhausted(state, now)
+      const usage = yield* spend(sessionID, state)
+      const hit = exhausted(state, now, usage.total)
       if (!hit || state.status !== "active") return false
       yield* save(sessionID, {
         ...state,
@@ -641,6 +704,7 @@ export namespace RayaGoal {
         updatedAt: now,
         activeMs: elapsed(state, now),
         activeAt: undefined,
+        usage: { ...state.usage, delegatedCost: usage.delegated },
         progress: progress(state, { at: now, kind: "status", message: `Paused: ${budgetReason(hit)}` }),
       })
       return true
@@ -742,6 +806,7 @@ export namespace RayaGoal {
             retries: 0,
             cost: 0,
             descendantCost: 0,
+            delegatedCost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             descendantTokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           },
@@ -765,7 +830,8 @@ export namespace RayaGoal {
       }
       const now = Date.now()
       if (status === "active") {
-        const hit = exhausted(state, now)
+        const usage = yield* spend(sessionID, state)
+        const hit = exhausted(state, now, usage.total)
         if (hit) return yield* new AuditError({ message: budgetReason(hit) })
       }
       return yield* save(sessionID, {
@@ -909,7 +975,8 @@ export namespace RayaGoal {
       if (!changed && input.status === undefined) return { prior, state: prior }
       const now = Date.now()
       if (status === "active") {
-        const hit = exhausted({ ...prior, budget }, now)
+        const usage = yield* spend(sessionID, prior)
+        const hit = exhausted({ ...prior, budget }, now, usage.total)
         if (hit) return yield* new AuditError({ message: budgetReason(hit) })
       }
       const next = yield* save(sessionID, {
@@ -1274,7 +1341,8 @@ export namespace RayaGoal {
         if (state.status !== "blocked" && state.status !== "paused") {
           return yield* new AuditError({ message: `Only a blocked or paused goal can be marked active.` })
         }
-        const hit = exhausted(state, now)
+        const usage = yield* spend(sessionID, state)
+        const hit = exhausted(state, now, usage.total)
         if (hit) return yield* new AuditError({ message: budgetReason(hit) })
         return yield* save(sessionID, {
           ...state,
@@ -1823,8 +1891,11 @@ export namespace RayaGoal {
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
       const blocked = invalid || repeated || stalled
       const total = Math.max((state.usage.cost ?? 0) + cost, accounting.cost)
+      const spendable = yield* spend(sessionID, state, total)
       const hit =
-        blocked || state.status !== "active" ? undefined : exhausted({ ...state, charges }, now, total, retries)
+        blocked || state.status !== "active"
+          ? undefined
+          : exhausted({ ...state, charges }, now, spendable.total, retries)
       const stopped = blocked || hit !== undefined
       const retry = !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
@@ -1845,6 +1916,7 @@ export namespace RayaGoal {
           retries: stopped ? retries : retry ? retries : 0,
           cost: total,
           descendantCost: accounting.descendantCost,
+          delegatedCost: spendable.delegated,
           tokens: {
             input: Math.max(priorTokens.input + tokens.input, accounting.tokens.input),
             output: Math.max(priorTokens.output + tokens.output, accounting.tokens.output),
@@ -2059,7 +2131,8 @@ export namespace RayaGoal {
       const now = Date.now()
       if (yield* pauseBudget(sessionID, state, now)) return
       const count = (state.usage.retries ?? 0) + 1
-      const hit = exhausted(state, now, state.usage.cost ?? 0, count)
+      const usage = yield* spend(sessionID, state)
+      const hit = exhausted(state, now, usage.total, count)
       const stopped = !hit && count > retryLimit
       const halted = stopped || hit !== undefined
       const reason = `Automatic continuation stopped after ${retryLimit} provider errors. Resume the goal or send a message to continue.`
@@ -2236,6 +2309,7 @@ export namespace RayaGoal {
       retried,
       charged,
       limited,
+      delegated,
       dispatched,
       finished,
       bound,

@@ -184,6 +184,27 @@ export namespace RayaTaskRunner {
       ? RayaTaskDelegation.make(input.database, organizations?.authorize, organizations?.shares)
       : undefined
     const LATE = "This request timed out. It was not completed."
+    const sync = Effect.fn("RayaTaskRunner.syncDelegationBudget")(function* (row: Errand) {
+      if (!row.parentRunID) return
+      const history = yield* tasks.runsFor(row.senderID)
+      const parent = history.find((run) => run.id === row.parentRunID)
+      if (!parent) return
+      const result = yield* goals
+        .delegated(parent.sessionID, parent.id)
+        .pipe(Effect.catchTag("RayaGoal.NotFoundError", () => Effect.succeed(undefined)))
+      if (!result?.resumed) return
+      yield* kick({
+        database: input.database,
+        sessionID: parent.sessionID,
+        storage: input.storage,
+        sessions: input.sessions,
+      })
+    })
+    const spent = Effect.fn("RayaTaskRunner.delegationSpend")(function* (row: Errand) {
+      if (!row.sessionID) return undefined
+      const goal = yield* goals.get(row.sessionID)
+      return goal?.usage.cost
+    })
     const drop = (id: string, sid: SessionID | undefined, rid: string | undefined, reason: string) =>
       Effect.gen(function* () {
         const history = yield* tasks.runsFor(id)
@@ -199,12 +220,16 @@ export namespace RayaTaskRunner {
           .get(row.recipientID)
           .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
         if (!recipient) continue
-        yield* errands.finish(row.id, "failed", recipient, undefined, undefined, LATE).pipe(
+        const failed = yield* errands.finish(row.id, "failed", recipient, undefined, yield* spent(row), LATE).pipe(
           Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.void),
           Effect.catchTag("RayaTaskDelegation.Invalid", (err) =>
             Effect.sync(() => log.error("delegation timeout failed", { err })),
           ),
         )
+        if (failed)
+          yield* sync(failed).pipe(
+            Effect.catch((err) => Effect.sync(() => log.error("delegation budget sync failed", { err }))),
+          )
         yield* drop(row.recipientID, row.sessionID, row.childRunID, LATE)
         if (!row.sessionID || !input.halt) continue
         yield* input
@@ -696,18 +721,25 @@ export namespace RayaTaskRunner {
       const recipient = found.agent
       if (yield* removing(recipient.id))
         return yield* new RayaTask.GuardError({ message: "This worker is being removed and cannot accept new work." })
+      const parent = input.parentRunID
+        ? (yield* tasks.runsFor(sender.id)).find((run) => run.id === input.parentRunID)
+        : undefined
       if (input.parentRunID) {
-        const history = yield* tasks.runsFor(sender.id)
-        if (!history.some((run) => run.id === input.parentRunID))
-          return yield* new Invalid({ message: "The parent run was not found for this worker." })
+        if (!parent) return yield* new Invalid({ message: "The parent run was not found for this worker." })
       }
+      const goal = parent ? yield* goals.get(parent.sessionID) : undefined
+      const allocation = goal?.budget?.modelCost
+        ? { limit: goal.budget.modelCost, spent: goal.usage.cost ?? 0 }
+        : undefined
       yield* lapse(Date.now())
-      const admitted = yield* errands.admit(input, sender, recipient, found.gone)
+      const admitted = yield* errands.admit(input, sender, recipient, found.gone, allocation)
+      if (parent && goal?.budget?.modelCost !== undefined)
+        yield* sync(admitted.record).pipe(Effect.mapError((err) => new RayaTask.GuardError({ message: err.message })))
       const available = yield* tasks
         .get(recipient.id)
         .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
-      if ((!available || (yield* removing(recipient.id))) && admitted.record.state !== "failed")
-        return yield* errands.finish(
+      if ((!available || (yield* removing(recipient.id))) && admitted.record.state !== "failed") {
+        const failed = yield* errands.finish(
           admitted.record.id,
           "failed",
           recipient,
@@ -715,6 +747,9 @@ export namespace RayaTaskRunner {
           undefined,
           "This worker was removed before the request could start.",
         )
+        yield* sync(failed)
+        return failed
+      }
       if ((yield* busy(recipient.id)) || admitted.record.state !== "queued") return admitted.record
       const taken = yield* errands.take(recipient.id)
       if (!taken) return admitted.record
@@ -732,10 +767,17 @@ export namespace RayaTaskRunner {
       const row = yield* errands.get(id)
       const kids = yield* errands.descendants(id)
       const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
-      const record = yield* errands.stop(row.id, recipient, "Stopped by the user.")
+      const record = yield* errands.stop(row.id, recipient, "Stopped by the user.", yield* spent(row))
+      yield* sync(record)
       for (const child of kids) {
         const other = (yield* fetch(child.recipientID))?.agent ?? absent(child.recipientID)
-        yield* errands.stop(child.id, other, "Stopped because the parent request was stopped.")
+        const stopped = yield* errands.stop(
+          child.id,
+          other,
+          "Stopped because the parent request was stopped.",
+          yield* spent(child),
+        )
+        yield* sync(stopped)
       }
       const listed = [row, ...kids]
       for (const item of listed) {
@@ -774,7 +816,7 @@ export namespace RayaTaskRunner {
                 ? ("failed" as const)
                 : undefined
         if (!state) return
-        yield* errands
+        const settled = yield* errands
           .finish(row.id, state, recipient, run.outcome?.summary, run.outcome?.cost, run.blockedReason)
           .pipe(
             Effect.catch((error) =>
@@ -785,6 +827,10 @@ export namespace RayaTaskRunner {
                 ? Effect.void
                 : Effect.die(error),
             ),
+          )
+        if (settled)
+          yield* sync(settled).pipe(
+            Effect.catch((err) => Effect.sync(() => log.error("delegation budget settlement failed", { err }))),
           )
       }
       if (yield* busy(recipient.id)) return

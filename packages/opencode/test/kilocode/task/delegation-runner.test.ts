@@ -163,6 +163,114 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
   )
 })
 
+test("a bounded worker cannot allocate more than its unspent branch budget", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const sessions = {
+        create: () =>
+          Effect.sync(() => {
+            starts.push("start")
+            return session("ses_budget_child")
+          }),
+        get: (id: SessionID) =>
+          Effect.succeed({
+            ...session(id),
+            ...(id === SessionID.make("ses_budget_parent")
+              ? { metadata: { rayaRoutine: { runID: "run_budget_parent" } } }
+              : {}),
+          }),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const goals = RayaGoal.make({ database, storage, sessions })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        role: "generalist",
+        objective: "Coordinate bounded work.",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        role: "accountant",
+        objective: "Review the ledger.",
+        capabilities: ["money"],
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const parent = SessionID.make("ses_budget_parent")
+      yield* runner.tasks.record({
+        id: "run_budget_parent",
+        agentID: chief.id,
+        sessionID: parent,
+        at: Date.now(),
+        status: "running",
+      })
+      const created = yield* goals.create(
+        parent,
+        "Coordinate bounded work.",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          modelCost: 10,
+        },
+      )
+      yield* storage.write(["raya", "goal", parent], {
+        ...created,
+        usage: { ...created.usage, cost: 4 },
+      })
+
+      const over = yield* runner
+        .delegate({
+          source: "dlg_budget_over",
+          senderID: chief.id,
+          recipientID: books.id,
+          parentRunID: "run_budget_parent",
+          objective: "Spend beyond the remaining branch budget.",
+          budget: 7,
+        })
+        .pipe(Effect.flip)
+      expect(over.message).toContain("remaining model-cost budget")
+      expect(starts).toEqual([])
+
+      const child = yield* runner.delegate({
+        source: "dlg_budget_exact",
+        senderID: chief.id,
+        recipientID: books.id,
+        parentRunID: "run_budget_parent",
+        objective: "Use the remaining branch budget.",
+        budget: 6,
+      })
+      expect(child.state).toBe("running")
+      expect(starts).toEqual(["start"])
+      const saved = yield* goals.get(parent)
+      expect(saved?.status).toBe("paused")
+      expect(saved?.usage).toMatchObject({ cost: 4, delegatedCost: 6 })
+      expect(saved?.budgetHit).toMatchObject({ kind: "model-cost", limit: 10, observed: 10 })
+
+      const childGoal = (yield* goals.get(child.sessionID!))!
+      yield* storage.write(["raya", "goal", child.sessionID!], {
+        ...childGoal,
+        status: "complete",
+        updatedAt: Date.now(),
+        activeAt: undefined,
+        audit: { summary: "The bounded review completed.", verifiedAt: Date.now(), requirements: [] },
+      })
+      yield* runner.settle(child.sessionID!)
+      const resumed = yield* goals.get(parent)
+      expect(resumed?.status).toBe("active")
+      expect(resumed?.usage).toMatchObject({ cost: 4, delegatedCost: 0 })
+      expect(resumed?.budgetHit).toBeUndefined()
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("queued organization work cannot start under a later company revision", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -1256,7 +1364,8 @@ test("parent run cost stays independent of a completed child request", async () 
       expect(report?.body).toContain("Friday close used the accounting reply.")
       expect(report?.body).toContain("Accounting: completed")
       expect(report?.body).toContain("Child cost $1.5")
-      expect(report?.body).toContain("not added to this run's total")
+      expect(report?.body).toContain("counts against the branch limit")
+      expect(report?.body).toContain("separate from this run's direct model-cost total")
       expect(report?.body).not.toContain("consensus")
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )

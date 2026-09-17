@@ -1,6 +1,6 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current verified package source is `3caa22fb9b`; snapshot installation follows this documentation checkpoint. The open extension host's active-vault pointer is still digest `ae331b7d2d3c7cb5f90bab71ae51d9c1f1525ce9d12af6720597c89cedd89813`, source `51f16b71ca`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current installed package source is `f827d73d93`; this document records the following installation receipt. The open extension host's active-vault pointer is still digest `ae331b7d2d3c7cb5f90bab71ae51d9c1f1525ce9d12af6720597c89cedd89813`, source `51f16b71ca`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
@@ -8,11 +8,15 @@
 
 ## ChatGPT 2026-09-16 23:28 America/Toronto - System Health retains failed and incomplete Voice calls
 
-**Status: implemented, verified and committed in `3caa22fb9b`; protected push and low-memory snapshot installation follow.** System Health now preserves the current extension host's last failed or incomplete Voice lifecycle instead of reporting every available Voice service as healthy. GPT-Live, OpenAI Realtime and the legacy realtime engine share one closed health state. A failed setup or call reports `voice-failed`; an unconfirmed admission, cleanup, provider settlement or duration receipt reports `voice-incomplete`; a later confirmed connection or fully recorded usage clears the retained condition. An ordinary busy rejection does not falsely degrade the subsystem.
+**Status: pushed and installed from documentation source `f827d73d93`, containing product commit `3caa22fb9b`; active-host reload acceptance remains.** System Health now preserves the current extension host's last failed or incomplete Voice lifecycle instead of reporting every available Voice service as healthy. GPT-Live, OpenAI Realtime and the legacy realtime engine share one closed health state. A failed setup or call reports `voice-failed`; an unconfirmed admission, cleanup, provider settlement or duration receipt reports `voice-incomplete`; a later confirmed connection or fully recorded usage clears the retained condition. An ordinary busy rejection does not falsely degrade the subsystem.
 
 The host bridge validates all active, failed and incomplete counts as bounded safe integers before overlaying the backend row. It emits only the existing schema vocabulary and aggregate counts, with failure taking precedence when both closed indicators are present. Invalid signals still become `unknown / probe-failed`, and no provider error, credential, path, transcript or request identity can enter Admin.
 
 Focused evidence passes **11 tests / 40 assertions** across the Admin bridge and real Speech service lifecycle. It covers healthy active calls, failure retention after a rejected setup, incomplete retention after unconfirmed cleanup, ownership release, host disposal, precedence, malformed values and raw-error isolation. Extension-host typecheck, targeted ESLint, Knip, Changesets, the Kilo-marker guard and diff checks pass. The package-wide formatter could not traverse a protected `.vscode-test` local endpoint on Windows; Prettier passed on every touched source and test file instead.
+
+The protected one-worker push passed typecheck for all 29 JavaScript/TypeScript packages plus JetBrains. The authorized low-memory workflow reused the verified CLI, ran both extension typechecks and ESLint sequentially, built the production webview, packaged 436 files and installed `eden.raya@7.4.23-snapshot+f827d73d93.kamil-oseni.1789615902893`. Retained vault package `raya.4efc82067c94ec632ea3cf872bc9ab531dda26dab638b266a1fd8b8287564a5e.vsix` is `520,343,540` bytes with SHA-256 `4EFC82067C94EC632EA3CF872BC9AB531DDA26DAB638B266A1FD8B8287564A5E`. Its installed `231,345,152`-byte CLI has SHA-256 `39C4DDF34E34246DEC003C7D19841FAE1EF4835B2FE63A168C6065C4B8ACB81F`. C: has 117.75 GiB free.
+
+The already-open VS Code host was not force-reloaded. A normal reload must move its active-vault pointer to `4efc82067c94ec632ea3cf872bc9ab531dda26dab638b266a1fd8b8287564a5e` before installed-host acceptance.
 
 `FUT-ADM-01` remains **In progress**. Browser and Voice now have live host probes and Voice retains its closed failure and incomplete lifecycle. Remaining Admin work includes other high-value lifecycle codes, installed-host/live-backend acceptance and separately authorized repair controls.
 

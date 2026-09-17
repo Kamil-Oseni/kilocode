@@ -333,6 +333,7 @@ export namespace RayaTaskRunner {
           guard?: Effect.Effect<Organization | undefined, RayaTask.GuardError>
           runID?: string
           delegationID?: string
+          budget?: RayaGoal.Budget
           bind?: { source: string; sessionID: SessionID }
         },
       ) =>
@@ -415,6 +416,7 @@ export namespace RayaTaskRunner {
                     undefined,
                     undefined,
                     note ? undefined : item.output?.criteria,
+                    opts?.budget,
                   )
                   const run: RayaTask.Run = {
                     id: owner.id,
@@ -597,12 +599,15 @@ export namespace RayaTaskRunner {
         objective: taken.objective,
         expected: taken.expected,
         context: taken.context,
+        deadline: taken.deadline,
+        budget: taken.budget,
       })
       const run = yield* fire(recipient.id, undefined, note, {
         follow: false,
         view: ceiling(sender, recipient),
         runID: taken.childRunID,
         delegationID: taken.id,
+        budget: taken.budget === undefined ? undefined : { modelCost: taken.budget },
         guard: Effect.gen(function* () {
           const organization = taken.organizationID
             ? organizations

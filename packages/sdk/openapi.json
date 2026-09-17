@@ -36117,7 +36117,7 @@
                           },
                           "budget": {
                             "type": "integer",
-                            "minimum": 0,
+                            "exclusiveMinimum": 0,
                             "maximum": 1000000
                           },
                           "time": {
@@ -37625,7 +37625,7 @@
                               },
                               "budget": {
                                 "type": "integer",
-                                "minimum": 0,
+                                "exclusiveMinimum": 0,
                                 "maximum": 1000000
                               },
                               "time": {
@@ -38251,7 +38251,7 @@
                     },
                     "budget": {
                       "type": "integer",
-                      "minimum": 0,
+                      "exclusiveMinimum": 0,
                       "maximum": 1000000
                     },
                     "depth": {
@@ -38430,7 +38430,7 @@
                   },
                   "budget": {
                     "type": "integer",
-                    "minimum": 0,
+                    "exclusiveMinimum": 0,
                     "maximum": 1000000
                   }
                 },
@@ -38559,7 +38559,7 @@
                     },
                     "budget": {
                       "type": "integer",
-                      "minimum": 0,
+                      "exclusiveMinimum": 0,
                       "maximum": 1000000
                     },
                     "depth": {
@@ -38791,7 +38791,7 @@
                         },
                         "budget": {
                           "type": "integer",
-                          "minimum": 0,
+                          "exclusiveMinimum": 0,
                           "maximum": 1000000
                         },
                         "depth": {
@@ -38937,7 +38937,7 @@
                           },
                           "budget": {
                             "type": "integer",
-                            "minimum": 0,
+                            "exclusiveMinimum": 0,
                             "maximum": 1000000
                           },
                           "depth": {
@@ -39084,7 +39084,7 @@
                           },
                           "budget": {
                             "type": "integer",
-                            "minimum": 0,
+                            "exclusiveMinimum": 0,
                             "maximum": 1000000
                           },
                           "depth": {
@@ -39318,7 +39318,7 @@
                     },
                     "budget": {
                       "type": "integer",
-                      "minimum": 0,
+                      "exclusiveMinimum": 0,
                       "maximum": 1000000
                     },
                     "depth": {

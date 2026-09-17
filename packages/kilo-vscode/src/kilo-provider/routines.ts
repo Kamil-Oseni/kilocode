@@ -181,8 +181,8 @@ function future(value: unknown) {
 function allowance(value: unknown) {
   if (value === undefined) return
   const budget = Number(value)
-  if (!Number.isSafeInteger(budget) || budget < 0 || budget > 1_000_000)
-    throw new Error("Choose a whole-number budget from 0 to 1000000.")
+  if (!Number.isSafeInteger(budget) || budget < 1 || budget > 1_000_000)
+    throw new Error("Choose a whole-number budget from 1 to 1000000.")
   return budget
 }
 

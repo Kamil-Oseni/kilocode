@@ -30,7 +30,7 @@ export const Request = Schema.Struct({
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ),
-  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
 }).check(
   Schema.makeFilter((value) =>
     (value.organizationID === undefined) === (value.organizationRevision === undefined)
@@ -135,6 +135,8 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
     `Request objective:\n${request.objective}`,
     request.expected ? `Expected result:\n${request.expected}` : undefined,
     request.context ? `Permitted context:\n${request.context}` : undefined,
+    request.deadline !== undefined ? `Deadline: ${new Date(request.deadline).toISOString()}` : undefined,
+    request.budget !== undefined ? `Maximum model cost: $${request.budget}` : undefined,
     `Your standing assignment:\n${recipient.objective}`,
     "Do not invent a worker reply that has not arrived. Attribute findings to this request.",
   ]
@@ -288,7 +290,7 @@ export function replied(row: Record, recipient: RayaTask.Agent): Publish | undef
   if (!body.trim()) return
   return {
     agentID: row.senderID,
-    source: origin("reply", row.source),
+    source: origin("reply", row.state === "needs_input" ? `needs_input:${row.source}` : row.source),
     kind: "delegation",
     body,
     sessionID: row.sessionID,
@@ -417,6 +419,14 @@ export namespace RayaTaskDelegation {
         return yield* new Invalid({
           message: "A delegated follow-on must stay in its parent organization's authority graph.",
         })
+      if (parent?.deadline !== undefined && value.deadline === undefined)
+        return yield* new Invalid({ message: "A delegated follow-on must keep its parent deadline." })
+      if (parent?.deadline !== undefined && value.deadline !== undefined && value.deadline > parent.deadline)
+        return yield* new Invalid({ message: "A delegated follow-on cannot extend its parent deadline." })
+      if (parent?.budget !== undefined && value.budget === undefined)
+        return yield* new Invalid({ message: "A delegated follow-on must keep a bounded model-cost budget." })
+      if (parent?.budget !== undefined && value.budget !== undefined && value.budget > parent.budget)
+        return yield* new Invalid({ message: "A delegated follow-on cannot exceed its parent model-cost budget." })
       const depth = lineage.length + 1
       if (depth > DEPTH) return yield* new Invalid({ message: "This delegation chain is too deep." })
       const ids = new Set(lineage.flatMap((item) => [item.senderID, item.recipientID]))
@@ -446,34 +456,65 @@ export namespace RayaTaskDelegation {
       reason?: string,
       organization?: { id: string; name: string; revision: number },
     ) {
-      const now = Date.now()
-      const row = {
-        id: key(value.source),
-        source: value.source,
-        sender_id: value.senderID,
-        recipient_id: value.recipientID,
-        parent_id: value.parentID ?? null,
-        parent_run_id: value.parentRunID ?? null,
-        organization_id: organization?.id ?? null,
-        organization_name: organization?.name ?? null,
-        organization_revision: organization?.revision ?? null,
-        workspace: workspace ?? null,
-        objective: value.objective,
-        expected: value.expected ?? null,
-        context: value.context ?? null,
-        deadline: value.deadline ?? null,
-        budget: value.budget ?? null,
-        depth,
-        state,
-        child_run_id: null,
-        session_id: null,
-        response: null,
-        cost: null,
-        reason: reason ?? null,
-        time_created: now,
-        time_updated: now,
-      }
-      yield* db.insert(Delegation).values(row).run().pipe(Effect.orDie)
+      const row = yield* db
+        .transaction(
+          (tx) =>
+            Effect.gen(function* () {
+              if (value.parentID && value.budget !== undefined) {
+                const parent = yield* tx
+                  .select({ budget: Delegation.budget })
+                  .from(Delegation)
+                  .where(eq(Delegation.id, value.parentID))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (!parent) return yield* new Invalid({ message: "The parent delegation request was not found." })
+                if (parent.budget !== null) {
+                  const siblings = yield* tx
+                    .select({ budget: Delegation.budget })
+                    .from(Delegation)
+                    .where(eq(Delegation.parent_id, value.parentID))
+                    .all()
+                    .pipe(Effect.orDie)
+                  const allocated = siblings.reduce((sum, item) => sum + (item.budget ?? 0), 0)
+                  if (value.budget > parent.budget - allocated)
+                    return yield* new Invalid({
+                      message: "This delegated follow-on exceeds the parent's remaining delegated-work budget.",
+                    })
+                }
+              }
+              const now = Date.now()
+              const saved = {
+                id: key(value.source),
+                source: value.source,
+                sender_id: value.senderID,
+                recipient_id: value.recipientID,
+                parent_id: value.parentID ?? null,
+                parent_run_id: value.parentRunID ?? null,
+                organization_id: organization?.id ?? null,
+                organization_name: organization?.name ?? null,
+                organization_revision: organization?.revision ?? null,
+                workspace: workspace ?? null,
+                objective: value.objective,
+                expected: value.expected ?? null,
+                context: value.context ?? null,
+                deadline: value.deadline ?? null,
+                budget: value.budget ?? null,
+                depth,
+                state,
+                child_run_id: null,
+                session_id: null,
+                response: null,
+                cost: null,
+                reason: reason ?? null,
+                time_created: now,
+                time_updated: now,
+              }
+              yield* tx.insert(Delegation).values(saved).run().pipe(Effect.orDie)
+              return saved
+            }),
+          { behavior: "immediate" },
+        )
+        .pipe(Effect.catchTag("SqlError", Effect.die))
       const record = decode(row)
       yield* publish(admission(record, sender, recipient))
       return { record, created: true }

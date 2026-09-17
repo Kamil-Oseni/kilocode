@@ -39,7 +39,7 @@ function amount(value: string) {
   if (!value) return
   if (!/^\d+$/.test(value)) return Number.NaN
   const parsed = Number(value)
-  return Number.isSafeInteger(parsed) && parsed <= 1_000_000 ? parsed : Number.NaN
+  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 1_000_000 ? parsed : Number.NaN
 }
 
 function matches(value: unknown, pending: Sent, item: Organization) {
@@ -337,7 +337,7 @@ export const OrganizationAssignment: Component<{
                 <input
                   id={`${uid}-budget`}
                   type="number"
-                  min="0"
+                  min="1"
                   max="1000000"
                   step="1"
                   value={budget()}

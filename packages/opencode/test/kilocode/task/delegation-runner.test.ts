@@ -78,19 +78,20 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
       const database = yield* Database.Service
       const storage = memory()
       const starts: string[] = []
+      const sessions = {
+        create: () =>
+          Effect.sync(() => {
+            starts.push("start")
+            return session("ses_books")
+          }),
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
-          create: () =>
-            Effect.sync(() => {
-              starts.push("start")
-              return session("ses_books")
-            }),
-          get: () => Effect.die("unused"),
-          messages: () => Effect.succeed([]),
-          children: () => Effect.succeed([]),
-        },
+        sessions,
       })
       const snapshots = RayaTaskSnapshot.make({ storage })
       const chief = yield* runner.tasks.create({
@@ -116,6 +117,8 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
         recipientID: books.id,
         objective: "List missing Friday receipts.",
         expected: "Named missing receipts, not a payment.",
+        deadline: Date.now() + 60_000,
+        budget: 25,
       })
       expect(first.state).toBe("running")
       expect(starts).toEqual(["start"])
@@ -124,6 +127,8 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
       expect(saved?.definition.objective).toBe("Reconcile receipts.")
       expect(saved?.objective).toContain("List missing Friday receipts.")
       expect(saved?.objective).toContain("unchanged")
+      expect(saved?.objective).toContain("Maximum model cost: $25")
+      expect((yield* RayaGoal.make({ storage, sessions }).get(first.sessionID!))?.budget).toEqual({ modelCost: 25 })
       expect((yield* runner.tasks.get(chief.id)).objective).toBe("Coordinate Friday close.")
       expect((yield* runner.tasks.get(books.id)).objective).toBe("Reconcile receipts.")
       expect(
@@ -133,6 +138,8 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
           recipientID: books.id,
           objective: "List missing Friday receipts.",
           expected: "Named missing receipts, not a payment.",
+          deadline: first.deadline,
+          budget: 25,
         })).state,
       ).toBe("running")
       expect(starts).toEqual(["start"])
@@ -947,6 +954,11 @@ test("waiting for the user survives restart and holds the next delegation", asyn
       yield* runner.settle(firstSessionID)
       const store = RayaTaskDelegation.make(database)
       expect(yield* store.get(first.id)).toMatchObject({ state: "needs_input", sessionID: first.sessionID })
+      expect(
+        (yield* RayaTaskInbox.make(database).page(chief.id)).messages.some(
+          (item) => item.source === "reply:needs_input:dlg_wait_first" && item.body.includes("needs_input"),
+        ),
+      ).toBe(true)
       expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === first.childRunID)).toMatchObject({
         status: "blocked",
         blockedReason: "waiting on you",
@@ -974,6 +986,11 @@ test("waiting for the user survives restart and holds the next delegation", asyn
       expect(running.state).toBe("running")
       expect(starts).toEqual(["ses_wait_restart_1", "ses_wait_restart_2"])
       expect(halted).toEqual([firstSessionID])
+      expect(
+        (yield* RayaTaskInbox.make(database).page(chief.id)).messages.some(
+          (item) => item.source === "reply:dlg_wait_first" && item.body.includes("cancelled"),
+        ),
+      ).toBe(true)
       expect((yield* reopened.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )

@@ -276,6 +276,117 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
         .admit(request("dlg_loop", books.id, chief.id, { parentID: first.record.id }), books, chief)
         .pipe(Effect.exit)
       expect(Exit.isFailure(loop)).toBe(true)
+      const extra = agent("legal", "reviewer")
+      expect(
+        Exit.isFailure(
+          yield* store
+            .admit(request("dlg_zero_budget", chief.id, extra.id, { budget: 0 }), chief, extra)
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      const bounded = yield* store.admit(
+        request("dlg_bounded", chief.id, books.id, { deadline: Date.now() + 60_000, budget: 20 }),
+        chief,
+        books,
+      )
+      const missing = yield* store
+        .admit(
+          request("dlg_missing_deadline", books.id, extra.id, { parentID: bounded.record.id, budget: 10 }),
+          books,
+          extra,
+        )
+        .pipe(Effect.flip)
+      expect(missing.message).toContain("keep its parent deadline")
+      const late = yield* store
+        .admit(
+          request("dlg_late_child", books.id, extra.id, {
+            parentID: bounded.record.id,
+            deadline: bounded.record.deadline! + 1,
+            budget: 10,
+          }),
+          books,
+          extra,
+        )
+        .pipe(Effect.flip)
+      expect(late.message).toContain("cannot extend its parent deadline")
+      const unbounded = yield* store
+        .admit(
+          request("dlg_missing_budget", books.id, extra.id, {
+            parentID: bounded.record.id,
+            deadline: bounded.record.deadline,
+          }),
+          books,
+          extra,
+        )
+        .pipe(Effect.flip)
+      expect(unbounded.message).toContain("bounded model-cost budget")
+      const costly = yield* store
+        .admit(
+          request("dlg_costly_child", books.id, extra.id, {
+            parentID: bounded.record.id,
+            deadline: bounded.record.deadline,
+            budget: 21,
+          }),
+          books,
+          extra,
+        )
+        .pipe(Effect.flip)
+      expect(costly.message).toContain("cannot exceed its parent model-cost budget")
+      expect(
+        (yield* store.admit(
+          request("dlg_bounded_child", books.id, extra.id, {
+            parentID: bounded.record.id,
+            deadline: bounded.record.deadline,
+            budget: 10,
+          }),
+          books,
+          extra,
+        )).record,
+      ).toMatchObject({ parentID: bounded.record.id, deadline: bounded.record.deadline, budget: 10 })
+      const sales = agent("sales", "seller")
+      const over = yield* store
+        .admit(
+          request("dlg_overallocated_child", books.id, sales.id, {
+            parentID: bounded.record.id,
+            deadline: bounded.record.deadline,
+            budget: 11,
+          }),
+          books,
+          sales,
+        )
+        .pipe(Effect.flip)
+      expect(over.message).toContain("remaining delegated-work budget")
+      const ops = agent("ops", "operator")
+      const raced = yield* Effect.all(
+        [
+          store
+            .admit(
+              request("dlg_budget_race_sales", books.id, sales.id, {
+                parentID: bounded.record.id,
+                deadline: bounded.record.deadline,
+                budget: 6,
+              }),
+              books,
+              sales,
+            )
+            .pipe(Effect.exit),
+          store
+            .admit(
+              request("dlg_budget_race_ops", books.id, ops.id, {
+                parentID: bounded.record.id,
+                deadline: bounded.record.deadline,
+                budget: 6,
+              }),
+              books,
+              ops,
+            )
+            .pipe(Effect.exit),
+        ],
+        { concurrency: "unbounded" },
+      )
+      expect(raced.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(raced.filter(Exit.isFailure)).toHaveLength(1)
+      yield* store.finish(bounded.record.id, "completed", books, "Delegation boundary checked.")
       const paused = agent("quiet", "reviewer", { enabled: false })
       const denied = yield* store.admit(request("dlg_pause", chief.id, paused.id), chief, paused)
       expect(denied.record.state).toBe("failed")
@@ -285,7 +396,6 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
           (item) => item.body.includes("paused") && item.body.includes("not a completed worker reply"),
         ),
       ).toBe(true)
-      const extra = agent("legal", "reviewer")
       for (const n of [2, 3, 4, 5]) {
         const item = yield* store.admit(request(`dlg_root_${n}`, chief.id, extra.id), chief, extra)
         expect(item.record.state).toBe("queued")
@@ -305,9 +415,9 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
           (item) => item.body.includes("cannot leave") && item.body.includes("not a completed worker reply"),
         ),
       ).toBe(true)
-      const missing = yield* store.admit(request("dlg_gone", books.id, extra.id), books, extra, true)
-      expect(missing.record.state).toBe("failed")
-      expect(missing.record.reason).toContain("no longer available")
+      const gone = yield* store.admit(request("dlg_gone", books.id, extra.id), books, extra, true)
+      expect(gone.record.state).toBe("failed")
+      expect(gone.record.reason).toContain("no longer available")
       expect(
         (yield* inbox.page(books.id)).messages.some(
           (item) => item.body.includes("no longer available") && item.body.includes("not a completed worker reply"),

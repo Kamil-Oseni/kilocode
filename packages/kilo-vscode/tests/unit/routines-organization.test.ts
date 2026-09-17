@@ -307,6 +307,42 @@ test("organization follow-on rejects a response attached to another parent", asy
   expect(messages[0].error).toContain("could not be verified")
 })
 
+test("organization assignment rejects a zero model-cost budget before dispatch", async () => {
+  const messages: Record<string, unknown>[] = []
+  let calls = 0
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () => {
+      calls++
+      return Response.json({})
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineDelegate",
+      requestID: "zero-budget",
+      agentID: worker,
+      recipientID: peer,
+      source: "organization:finance:zero-budget",
+      organizationID: id,
+      organizationRevision: 4,
+      objective: "Prepare the close package.",
+      budget: 0,
+    },
+  })
+  expect(calls).toBe(0)
+  expect(messages).toEqual([
+    expect.objectContaining({
+      type: "routineDelegated",
+      requestID: "zero-budget",
+      error: "Choose a whole-number budget from 1 to 1000000.",
+    }),
+  ])
+})
+
 test("organization assignment rejects a response from another organization", async () => {
   const messages: Record<string, unknown>[] = []
   const client = createKiloClient({

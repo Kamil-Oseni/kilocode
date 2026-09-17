@@ -337,6 +337,10 @@ export namespace RayaContactOutbox {
             if (!row) return yield* new NotFound({ message: "Contact destination not found." })
             const target = destination(row)
             if (!target.enabled) return yield* new Conflict({ message: "This contact destination was revoked." })
+            if (target.channel === "raya" && !value.agentID)
+              return yield* new Conflict({
+                message: "Raya Messenger delivery needs the exact Routine worker conversation.",
+              })
             if (!allowed(target, value))
               return yield* new Conflict({
                 message: "This worker or organization is not authorized for that destination.",
@@ -425,19 +429,47 @@ export namespace RayaContactOutbox {
       leaseID: string
       now: number
       until: number
+      channel?: typeof Channel.Type
     }) {
-      if (!Schema.is(Token)(input.owner) || !Schema.is(Token)(input.leaseID) || !Schema.is(Stamp)(input.now))
+      if (
+        !Schema.is(Token)(input.owner) ||
+        !Schema.is(Token)(input.leaseID) ||
+        !Schema.is(Stamp)(input.now) ||
+        (input.channel !== undefined && !Schema.is(Channel)(input.channel))
+      )
         return yield* new Invalid({ message: "Contact delivery lease is invalid." })
       if (!Schema.is(Stamp)(input.until) || input.until <= input.now || input.until - input.now > 5 * 60_000)
         return yield* new Invalid({ message: "Contact delivery leases must last at most five minutes." })
       yield* recover(input.now)
+      const targets = input.channel
+        ? yield* db
+            .select({ id: DestinationRow.id })
+            .from(DestinationRow)
+            .where(eq(DestinationRow.channel, input.channel))
+            .all()
+            .pipe(Effect.orDie)
+        : undefined
+      if (targets?.length === 0) return undefined
       return yield* db.transaction(
         (tx) =>
           Effect.gen(function* () {
             const row = yield* tx
               .select()
               .from(MessageRow)
-              .where(and(inArray(MessageRow.state, ["queued", "retry"]), lte(MessageRow.available_at, input.now)))
+              .where(
+                and(
+                  inArray(MessageRow.state, ["queued", "retry"]),
+                  lte(MessageRow.available_at, input.now),
+                  ...(targets
+                    ? [
+                        inArray(
+                          MessageRow.destination_id,
+                          targets.map((item) => item.id),
+                        ),
+                      ]
+                    : []),
+                ),
+              )
               .orderBy(asc(MessageRow.available_at), asc(MessageRow.time_created), asc(MessageRow.id))
               .limit(1)
               .get()
@@ -589,6 +621,67 @@ export namespace RayaContactOutbox {
       )
     })
 
+    const reject = Effect.fn("RayaContactOutbox.reject")(function* (input: {
+      id: string
+      leaseID: string
+      now: number
+    }) {
+      if (!Schema.is(Stamp)(input.now)) return yield* new Invalid({ message: "Contact rejection time is invalid." })
+      return yield* db.transaction(
+        (tx) =>
+          Effect.gen(function* () {
+            const row = yield* tx.select().from(MessageRow).where(eq(MessageRow.id, input.id)).get()
+            if (!row) return yield* new NotFound({ message: "Contact message not found." })
+            if (row.state !== "leased" || row.lease_id !== input.leaseID)
+              return yield* new Conflict({ message: "This dispatcher no longer owns the contact message." })
+            yield* terminal(tx, row, "failed", "delivery-failed", input.now)
+            const saved = yield* tx.select().from(ReceiptRow).where(eq(ReceiptRow.message_id, row.id)).get()
+            return receipt(saved)!
+          }),
+        { behavior: "immediate" },
+      )
+    })
+
+    const expired = Effect.fn("RayaContactOutbox.expired")(function* (
+      channel: typeof Channel.Type,
+      now: number,
+      limit = 50,
+    ) {
+      if (
+        !Schema.is(Channel)(channel) ||
+        !Schema.is(Stamp)(now) ||
+        !Number.isSafeInteger(limit) ||
+        limit < 1 ||
+        limit > 100
+      )
+        return yield* new Invalid({ message: "Expired contact delivery query is invalid." })
+      const targets = yield* db
+        .select({ id: DestinationRow.id })
+        .from(DestinationRow)
+        .where(eq(DestinationRow.channel, channel))
+        .all()
+        .pipe(Effect.orDie)
+      if (!targets.length) return []
+      const rows = yield* db
+        .select()
+        .from(MessageRow)
+        .where(
+          and(
+            eq(MessageRow.state, "leased"),
+            lte(MessageRow.lease_until, now),
+            inArray(
+              MessageRow.destination_id,
+              targets.map((item) => item.id),
+            ),
+          ),
+        )
+        .orderBy(asc(MessageRow.lease_until), asc(MessageRow.id))
+        .limit(limit)
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map((row) => message(row))
+    })
+
     const revoke = Effect.fn("RayaContactOutbox.revoke")(function* (id: string, expectedRevision: number) {
       if (!Schema.is(Revision)(expectedRevision))
         return yield* new Invalid({ message: "Destination revision is invalid." })
@@ -700,6 +793,8 @@ export namespace RayaContactOutbox {
       claim,
       deliver,
       fail,
+      reject,
+      expired,
     }
   }
 }

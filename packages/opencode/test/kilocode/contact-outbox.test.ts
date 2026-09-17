@@ -168,11 +168,13 @@ test("revocation terminally fences queued and in-flight contact work without rep
       const first = yield* outbox.enqueue({
         source: "message:first",
         destinationID: target.id,
+        agentID: "books",
         body: "First update",
       })
       const second = yield* outbox.enqueue({
         source: "message:second",
         destinationID: target.id,
+        agentID: "books",
         body: "Second update",
       })
       const claimed = yield* outbox.claim({
@@ -205,7 +207,12 @@ test("revocation terminally fences queued and in-flight contact work without rep
       expect(
         Exit.isFailure(
           yield* outbox
-            .enqueue({ source: "message:after-revoke", destinationID: target.id, body: "Do not send" })
+            .enqueue({
+              source: "message:after-revoke",
+              destinationID: target.id,
+              agentID: "books",
+              body: "Do not send",
+            })
             .pipe(Effect.exit),
         ),
       ).toBe(true)

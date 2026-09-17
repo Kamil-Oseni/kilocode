@@ -14,6 +14,10 @@ export namespace RayaAdminLog {
     "storage.checked",
     "recovery.detected",
     "host.changed",
+    "delivery.started",
+    "delivery.completed",
+    "delivery.failed",
+    "delivery.recovered",
   ])
   export type Code = typeof Code.Type
 

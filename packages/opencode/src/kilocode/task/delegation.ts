@@ -2,8 +2,12 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or } from "drizzle-o
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
-import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
+import {
+  RayaRoutineDelegationTable as Delegation,
+  RayaRoutineOrganizationTable as Organization,
+} from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
+import { commitment } from "./commitment"
 import { RayaTask } from "./index"
 import { RayaTaskInbox, type Publish } from "./inbox"
 
@@ -308,7 +312,7 @@ export namespace RayaTaskDelegation {
       revision?: number
       senderID: string
       recipientID: string
-    }) => Effect.Effect<{ id: string; name: string; revision: number }, unknown>,
+    }) => Effect.Effect<{ id: string; name: string; revision: number; budget?: number }, unknown>,
     shares?: (senderID: string, recipientID: string) => Effect.Effect<boolean, unknown>,
   ) {
     const db = database.db
@@ -462,7 +466,7 @@ export namespace RayaTaskDelegation {
       depth: number,
       state: Record["state"],
       reason?: string,
-      organization?: { id: string; name: string; revision: number },
+      organization?: { id: string; name: string; revision: number; budget?: number },
       allocation?: { limit: number; spent: number },
     ) {
       const row = yield* db
@@ -496,6 +500,38 @@ export namespace RayaTaskDelegation {
                   }
                   return total
                 })
+              if (organization) {
+                const owner = yield* tx
+                  .select({
+                    revision: Organization.revision,
+                    budget: Organization.budget,
+                    archived: Organization.archived_at,
+                  })
+                  .from(Organization)
+                  .where(eq(Organization.id, organization.id))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (!owner || owner.archived !== null || owner.revision !== organization.revision)
+                  return yield* new Invalid({
+                    message: "This organization changed. Reload it before delegating work.",
+                  })
+                if (!value.parentID && owner.budget !== null) {
+                  if (value.budget === undefined)
+                    return yield* new Invalid({
+                      message: "Work in this organization requires a model-cost budget.",
+                    })
+                  const rows = yield* tx
+                    .select()
+                    .from(Delegation)
+                    .where(eq(Delegation.organization_id, organization.id))
+                    .all()
+                    .pipe(Effect.orDie)
+                  if (commitment(rows) + value.budget > owner.budget)
+                    return yield* new Invalid({
+                      message: "This request exceeds the organization's remaining model-cost budget.",
+                    })
+                }
+              }
               if (value.parentID && value.budget !== undefined) {
                 const parent = yield* tx
                   .select({ budget: Delegation.budget })

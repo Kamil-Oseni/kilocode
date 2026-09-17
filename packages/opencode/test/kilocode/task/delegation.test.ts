@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { Context, Effect, Exit, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { RayaRoutineOrganizationTable as Organization } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
 import {
   RayaTaskDelegation,
@@ -66,6 +67,20 @@ test("organization-scoped delegation persists admission provenance and revalidat
     Effect.gen(function* () {
       const database = yield* Database.Service
       const organizationID = "org_11111111111111111111111111111111"
+      yield* database.db
+        .insert(Organization)
+        .values({
+          id: organizationID,
+          name: "Website Builders",
+          purpose: null,
+          policy: null,
+          budget: null,
+          revision: 3,
+          archived_at: null,
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
       const allowed = { current: true }
       const revisions: Array<number | undefined> = []
       const policy = (input: { id: string; revision?: number; senderID: string; recipientID: string }) =>
@@ -108,6 +123,83 @@ test("organization-scoped delegation persists admission provenance and revalidat
             .pipe(Effect.exit),
         ),
       ).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization budget serializes independent work admission and releases unused commitment", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const id = "org_22222222222222222222222222222222"
+      yield* database.db
+        .insert(Organization)
+        .values({
+          id,
+          name: "Website Builders",
+          purpose: null,
+          policy: null,
+          budget: 20,
+          revision: 1,
+          archived_at: null,
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+      const policy = () => Effect.succeed({ id, name: "Website Builders", revision: 1, budget: 20 })
+      const store = RayaTaskDelegation.make(database, policy, () => Effect.succeed(true))
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const design = agent("design", "designer")
+      const missing = yield* store
+        .admit(
+          request("org_missing_budget", chief.id, books.id, { organizationID: id, organizationRevision: 1 }),
+          chief,
+          books,
+        )
+        .pipe(Effect.flip)
+      expect(missing.message).toContain("requires a model-cost budget")
+      const raced = yield* Effect.all(
+        [
+          store
+            .admit(
+              request("org_budget_books", chief.id, books.id, {
+                organizationID: id,
+                organizationRevision: 1,
+                budget: 12,
+              }),
+              chief,
+              books,
+            )
+            .pipe(Effect.exit),
+          store
+            .admit(
+              request("org_budget_design", chief.id, design.id, {
+                organizationID: id,
+                organizationRevision: 1,
+                budget: 12,
+              }),
+              chief,
+              design,
+            )
+            .pipe(Effect.exit),
+        ],
+        { concurrency: "unbounded" },
+      )
+      expect(raced.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(raced.filter(Exit.isFailure)).toHaveLength(1)
+      const first = raced.find(Exit.isSuccess)!.value.record
+      yield* store.finish(first.id, "completed", first.recipientID === books.id ? books : design, "Finished.", 5)
+      const last = yield* store.admit(
+        request("org_budget_released", chief.id, books.id, {
+          organizationID: id,
+          organizationRevision: 1,
+          budget: 15,
+        }),
+        chief,
+        books,
+      )
+      expect(last.record.budget).toBe(15)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

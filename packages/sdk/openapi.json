@@ -34851,6 +34851,11 @@
                             "pattern": "\\S",
                             "maxLength": 12000
                           },
+                          "budget": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000
+                          },
                           "revision": {
                             "type": "integer",
                             "minimum": 1,
@@ -35039,6 +35044,11 @@
                       "pattern": "\\S",
                       "maxLength": 12000
                     },
+                    "budget": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 1,
@@ -35189,6 +35199,11 @@
                     "pattern": "\\S",
                     "maxLength": 12000
                   },
+                  "budget": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
                   "members": {
                     "type": "array",
                     "items": {
@@ -35313,6 +35328,11 @@
                       "type": "string",
                       "pattern": "\\S",
                       "maxLength": 12000
+                    },
+                    "budget": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
                     },
                     "revision": {
                       "type": "integer",
@@ -35503,6 +35523,11 @@
                       "pattern": "\\S",
                       "maxLength": 12000
                     },
+                    "budget": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 1,
@@ -35666,6 +35691,11 @@
                     "type": "string",
                     "maxLength": 12000
                   },
+                  "budget": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
                   "members": {
                     "type": "array",
                     "items": {
@@ -35788,6 +35818,11 @@
                       "type": "string",
                       "pattern": "\\S",
                       "maxLength": 12000
+                    },
+                    "budget": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
                     },
                     "revision": {
                       "type": "integer",

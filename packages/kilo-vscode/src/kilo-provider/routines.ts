@@ -660,6 +660,10 @@ async function revise(ctx: Ctx) {
     throw new Error("Keep the organization purpose under 2000 characters.")
   if (typeof msg.policy !== "string" || msg.policy.length > 12_000)
     throw new Error("Keep the organization policy under 12000 characters.")
+  if (typeof msg.budget !== "string") throw new Error("Choose a valid organization budget.")
+  const budget = msg.budget.trim()
+  if (budget && (!/^\d+$/.test(budget) || Number(budget) < 1 || Number(budget) > 1_000_000))
+    throw new Error("Choose a whole-number organization budget from 1 to 1000000.")
   const result = await ctx.kilo.organization.update(
     {
       directory: ctx.dir,
@@ -668,6 +672,7 @@ async function revise(ctx: Ctx) {
       name: msg.name.trim(),
       purpose: msg.purpose.trim(),
       policy: msg.policy.trim(),
+      budget: budget ? Number(budget) : 0,
       members: graph(msg.members),
       delegations: authority(msg.delegations),
     },

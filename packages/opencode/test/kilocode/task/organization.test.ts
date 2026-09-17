@@ -78,6 +78,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
         name: "Website Builders",
         purpose: "Build and operate client websites.",
         policy: "Cite the source for every client claim.",
+        budget: 500,
         members: [
           { agentID: chief.id, role: "CEO" },
           { agentID: books.id, role: "Accounting", supervisorID: chief.id },
@@ -104,6 +105,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
         name: "Website Builders",
         revision: 1,
         policy: "Cite the source for every client claim.",
+        budget: 500,
       })
       expect(
         Exit.isFailure(
@@ -123,6 +125,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
         expectedRevision: 1,
         purpose: null,
         policy: null,
+        budget: null,
         members: [
           { agentID: chief.id, role: "CEO" },
           { agentID: design.id, role: "Design", supervisorID: chief.id },
@@ -133,6 +136,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       expect(updated.revision).toBe(2)
       expect(updated.purpose).toBeUndefined()
       expect(updated.policy).toBeUndefined()
+      expect(updated.budget).toBeUndefined()
       expect(updated.members.map((member) => member.agentID)).toEqual([chief.id, design.id, books.id])
       expect(updated.delegations).toEqual([{ senderID: chief.id, recipientID: design.id, position: 0 }])
       expect(
@@ -151,9 +155,11 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       expect(revisions.map((row) => row.revision)).toEqual([1, 2])
       expect(JSON.parse(revisions[0]!.definition).members[1].role).toBe("Accounting")
       expect(JSON.parse(revisions[0]!.definition).policy).toBe("Cite the source for every client claim.")
+      expect(JSON.parse(revisions[0]!.definition).budget).toBe(500)
 
       const restarted = RayaTaskOrganization.make(database, tasks, storage)
       expect((yield* restarted.get(created.id)).policy).toBeUndefined()
+      expect((yield* restarted.get(created.id)).budget).toBeUndefined()
 
       const archived = yield* organizations.archive(created.id, { expectedRevision: 2 })
       expect(archived).toMatchObject({ archived: true, revision: 3 })
@@ -205,6 +211,49 @@ test("organization policy is bounded and clearing it is an explicit revisioned c
       expect(cleared).toMatchObject({ revision: 4 })
       expect(cleared.policy).toBeUndefined()
       expect((yield* RayaTaskOrganization.make(database, tasks, storage).get(item.id)).policy).toBeUndefined()
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization budget cannot undercut committed work and zero clears it", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const tasks = RayaTask.make({ storage, database })
+      const organizations = RayaTaskOrganization.make(database, tasks, storage)
+      const chief = yield* tasks.create({ name: "Chief", objective: "Lead", schedule: { kind: "manual" } })
+      const books = yield* tasks.create({ name: "Books", objective: "Review", schedule: { kind: "manual" } })
+      const item = yield* organizations.create({
+        name: "Bounded",
+        budget: 20,
+        members: [
+          { agentID: chief.id, role: "Chief" },
+          { agentID: books.id, role: "Books" },
+        ],
+        delegations: [{ senderID: chief.id, recipientID: books.id }],
+      })
+      const work = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
+      yield* work.admit(
+        {
+          source: "org_budget_commitment",
+          senderID: chief.id,
+          recipientID: books.id,
+          organizationID: item.id,
+          organizationRevision: item.revision,
+          objective: "Review the books.",
+          budget: 12,
+        },
+        chief,
+        books,
+      )
+      const low = yield* organizations.update(item.id, { expectedRevision: 1, budget: 11 }).pipe(Effect.flip)
+      expect(low.message).toContain("cannot be lower than its current committed model cost")
+      const exact = yield* organizations.update(item.id, { expectedRevision: 1, budget: 12 })
+      expect(exact).toMatchObject({ revision: 2, budget: 12 })
+      const cleared = yield* organizations.update(item.id, { expectedRevision: 2, budget: 0 })
+      expect(cleared).toMatchObject({ revision: 3 })
+      expect(cleared.budget).toBeUndefined()
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

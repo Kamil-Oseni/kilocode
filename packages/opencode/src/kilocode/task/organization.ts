@@ -7,8 +7,10 @@ import {
   RayaRoutineOrganizationMemberTable as MemberRow,
   RayaRoutineOrganizationRevisionTable as RevisionRow,
   RayaRoutineOrganizationTable as OrganizationRow,
+  RayaRoutineDelegationTable as WorkRow,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import type { Storage } from "@/storage/storage"
+import { commitment } from "./commitment"
 import { mutate } from "./mutation"
 
 const MAX = 50
@@ -16,6 +18,7 @@ const EDGES = 500
 const Name = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const Purpose = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
 const Policy = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(12_000))
+const Budget = Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))
 const Role = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const AgentID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))
 const Revision = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER))
@@ -43,6 +46,7 @@ export const Organization = Schema.Struct({
   name: Name,
   purpose: Schema.optional(Purpose),
   policy: Schema.optional(Policy),
+  budget: Schema.optional(Budget),
   revision: Revision,
   archived: Schema.Boolean,
   archivedAt: Schema.optional(Stamp),
@@ -55,6 +59,7 @@ export const Create = Schema.Struct({
   name: Name,
   purpose: Schema.optional(Purpose),
   policy: Schema.optional(Policy),
+  budget: Schema.optional(Budget),
   members: Members,
   delegations: Schema.optional(Delegations),
 })
@@ -63,6 +68,12 @@ export const Update = Schema.Struct({
   name: Schema.optional(Name),
   purpose: Schema.optional(Schema.Union([Schema.String.check(Schema.isMaxLength(4000)), Schema.Null])),
   policy: Schema.optional(Schema.Union([Schema.String.check(Schema.isMaxLength(12_000)), Schema.Null])),
+  budget: Schema.optional(
+    Schema.Union([
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000)),
+      Schema.Null,
+    ]),
+  ),
   members: Schema.optional(Members),
   delegations: Schema.optional(Delegations),
 }).check(
@@ -70,10 +81,11 @@ export const Update = Schema.Struct({
     value.name !== undefined ||
     value.purpose !== undefined ||
     value.policy !== undefined ||
+    value.budget !== undefined ||
     value.members !== undefined ||
     value.delegations !== undefined
       ? undefined
-      : "Change the organization name, purpose, policy, membership, or delegation graph.",
+      : "Change the organization name, purpose, policy, budget, membership, or delegation graph.",
   ),
 )
 export const Archive = Schema.Struct({ expectedRevision: Revision })
@@ -94,7 +106,12 @@ export type Archive = typeof Archive.Type
 export type Query = typeof Query.Type
 
 export function matchesDefinition(item: Organization, input: Create) {
-  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim() || item.policy !== input.policy?.trim())
+  if (
+    item.name !== input.name.trim() ||
+    item.purpose !== input.purpose?.trim() ||
+    item.policy !== input.policy?.trim() ||
+    item.budget !== input.budget
+  )
     return false
   if (!isDeepStrictEqual(item.members, normalize(input.members))) return false
   return isDeepStrictEqual(
@@ -188,6 +205,7 @@ function decoded(
     name: row.name,
     ...(row.purpose ? { purpose: row.purpose } : {}),
     ...(row.policy ? { policy: row.policy } : {}),
+    ...(row.budget !== null ? { budget: row.budget } : {}),
     revision: row.revision,
     archived: row.archived_at !== null,
     ...(row.archived_at !== null ? { archivedAt: row.archived_at } : {}),
@@ -280,6 +298,7 @@ export namespace RayaTaskOrganization {
             name: value.name.trim(),
             ...(value.purpose ? { purpose: value.purpose.trim() } : {}),
             ...(value.policy ? { policy: value.policy.trim() } : {}),
+            ...(value.budget !== undefined ? { budget: value.budget } : {}),
             revision: 1,
             archived: false,
             createdAt: existing.createdAt,
@@ -301,6 +320,7 @@ export namespace RayaTaskOrganization {
         name: value.name.trim(),
         ...(value.purpose ? { purpose: value.purpose.trim() } : {}),
         ...(value.policy ? { policy: value.policy.trim() } : {}),
+        ...(value.budget !== undefined ? { budget: value.budget } : {}),
         revision: 1,
         archived: false,
         createdAt: now,
@@ -319,6 +339,7 @@ export namespace RayaTaskOrganization {
                   name: item.name,
                   purpose: item.purpose ?? null,
                   policy: item.policy ?? null,
+                  budget: item.budget ?? null,
                   revision: item.revision,
                   archived_at: null,
                   time_created: now,
@@ -392,6 +413,18 @@ export namespace RayaTaskOrganization {
                 return yield* new Conflict({ message: "This organization changed. Reload it before editing." })
               if (row.revision === Number.MAX_SAFE_INTEGER)
                 return yield* new Conflict({ message: "This organization reached its revision limit." })
+              if (value.budget !== undefined && value.budget !== null && value.budget > 0) {
+                const work = yield* tx
+                  .select()
+                  .from(WorkRow)
+                  .where(eq(WorkRow.organization_id, id))
+                  .all()
+                  .pipe(Effect.orDie)
+                if (value.budget < commitment(work))
+                  return yield* new Invalid({
+                    message: "The organization budget cannot be lower than its current committed model cost.",
+                  })
+              }
               const stored = yield* tx
                 .select()
                 .from(MemberRow)
@@ -423,6 +456,12 @@ export namespace RayaTaskOrganization {
                     : value.policy === undefined
                       ? prior.policy
                       : value.policy.trim() || undefined,
+                budget:
+                  value.budget === null || value.budget === 0
+                    ? undefined
+                    : value.budget === undefined
+                      ? prior.budget
+                      : value.budget,
                 revision: row.revision + 1,
                 updatedAt: now,
                 members: graph?.members ?? prior.members,
@@ -434,6 +473,7 @@ export namespace RayaTaskOrganization {
                   name: next.name,
                   purpose: next.purpose ?? null,
                   policy: next.policy ?? null,
+                  budget: next.budget ?? null,
                   revision: next.revision,
                   time_updated: now,
                 })
@@ -719,7 +759,13 @@ export namespace RayaTaskOrganization {
         return yield* new Invalid({ message: "Both workers must be active members of this organization." })
       if (!item.delegations.some((edge) => edge.senderID === input.senderID && edge.recipientID === input.recipientID))
         return yield* new Invalid({ message: "This organization does not permit that worker-to-worker delegation." })
-      return { id: item.id, name: item.name, revision: item.revision, ...(item.policy ? { policy: item.policy } : {}) }
+      return {
+        id: item.id,
+        name: item.name,
+        revision: item.revision,
+        ...(item.policy ? { policy: item.policy } : {}),
+        ...(item.budget !== undefined ? { budget: item.budget } : {}),
+      }
     })
 
     return {

@@ -13,6 +13,7 @@ export type Follow = {
   objective: string
   recipient: { id: string; name: string; role: string }
   used: string[]
+  budget?: number
 }
 type Sent = {
   request: string
@@ -42,6 +43,10 @@ function amount(value: string) {
   return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 1_000_000 ? parsed : Number.NaN
 }
 
+function money(value: number) {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value)
+}
+
 function matches(value: unknown, pending: Sent, item: Organization) {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
@@ -68,6 +73,7 @@ export const OrganizationAssignment: Component<{
   item: Organization
   agents: Agent[]
   parent?: Follow
+  available?: number
   onEdit: () => void
   onAssigned: (worker: { id: string; name: string }) => void
 }> = (props) => {
@@ -121,6 +127,8 @@ export const OrganizationAssignment: Component<{
 
   const due = createMemo(() => (deadline() ? Date.parse(deadline()) : undefined))
   const cost = createMemo(() => amount(budget()))
+  const ceiling = createMemo(() => (props.parent ? props.parent.budget : props.available))
+  const bounded = createMemo(() => ceiling() !== undefined)
   const valid = createMemo(
     () =>
       !!recipient() &&
@@ -128,7 +136,8 @@ export const OrganizationAssignment: Component<{
       !!objective().trim() &&
       objective().length <= 8000 &&
       (due() === undefined || (Number.isSafeInteger(due()) && due()! > Date.now())) &&
-      (cost() === undefined || Number.isSafeInteger(cost())),
+      (bounded() ? Number.isSafeInteger(cost()) : cost() === undefined || Number.isSafeInteger(cost())) &&
+      (ceiling() === undefined || (cost() ?? Number.POSITIVE_INFINITY) <= ceiling()!),
   )
 
   const receive = (msg: ExtensionMessage) => {
@@ -295,7 +304,7 @@ export const OrganizationAssignment: Component<{
               onInput={(event) => setObjective(event.currentTarget.value)}
             />
           </label>
-          <details class="routines-assignment-details">
+          <details class="routines-assignment-details" open={bounded()}>
             <summary>Details</summary>
             <label class="routines-field" for={`${uid}-expected`}>
               Expected result
@@ -338,13 +347,24 @@ export const OrganizationAssignment: Component<{
                   id={`${uid}-budget`}
                   type="number"
                   min="1"
-                  max="1000000"
+                  max={(ceiling() ?? 1_000_000).toString()}
                   step="1"
                   value={budget()}
                   disabled={!!sent()}
-                  aria-invalid={budget() !== "" && !Number.isSafeInteger(cost())}
+                  aria-invalid={
+                    bounded()
+                      ? !Number.isSafeInteger(cost()) || (cost() ?? Infinity) > ceiling()!
+                      : budget() !== "" && !Number.isSafeInteger(cost())
+                  }
                   onInput={(event) => setBudget(event.currentTarget.value)}
                 />
+                <Show when={ceiling() !== undefined}>
+                  <span class="routines-hint">
+                    {props.parent
+                      ? `This follow-on must stay within its parent's ${money(ceiling()!)} budget.`
+                      : `${money(ceiling()!)} remains available across organization work.`}
+                  </span>
+                </Show>
               </label>
             </div>
           </details>

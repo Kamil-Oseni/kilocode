@@ -250,8 +250,9 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   await expect(page.locator('[data-dialog-layer="0"]')).toHaveCSS("z-index", "50")
   await expect(assignment.getByLabel("Responsible worker")).toHaveValue("routine")
   await expect(assignment.getByLabel("Assigned by")).toHaveValue("legal")
+  await expect(assignment.getByText("$99.58 remains available across organization work.")).toBeVisible()
   await assignment.getByLabel("Outcome").fill("Prepare the September close package.")
-  await assignment.getByText("Details", { exact: true }).click()
+  await expect(assignment.getByRole("button", { name: "Assign work" })).toBeDisabled()
   await assignment.getByLabel("Expected result").fill("A reconciled close package.")
   await assignment.getByLabel("Context").fill("Use the approved finance workspace.")
   await assignment.getByLabel("Budget (USD)").fill("40")
@@ -543,6 +544,10 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByLabel("Operating policy")).toHaveAccessibleDescription(
     "Applied to delegated work in this organization. It cannot grant tools, folders, spending access, or delegation authority.",
   )
+  await expect(page.getByLabel("Organization model budget ($)")).toHaveValue("100")
+  await expect(page.getByLabel("Organization model budget ($)")).toHaveAccessibleDescription(
+    "Caps committed model cost across all work in this organization. Leave blank for no limit.",
+  )
   const counsel = page.locator(".routines-organization-edit-members li").filter({ hasText: "Counsel" })
   const authority = counsel.getByRole("checkbox", { name: "Can create workers" }).first()
   await expect(authority).toBeChecked()
@@ -561,11 +566,13 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page
     .getByLabel("Operating policy")
     .fill("Only contact prospects after design review, legal review, and an approved outreach brief.")
+  await page.getByLabel("Organization model budget ($)").fill("250")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
   await expect(
     page.getByText("Only contact prospects after design review, legal review, and an approved outreach brief."),
   ).toBeVisible()
+  await expect(page.getByText(/available of \$250\.00/)).toBeVisible()
 
   await page.getByRole("button", { name: "Edit organization" }).click()
   await page.getByRole("button", { name: "Archive", exact: true }).click()

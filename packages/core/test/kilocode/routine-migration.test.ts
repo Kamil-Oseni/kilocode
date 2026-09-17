@@ -12,6 +12,7 @@ import organization from "@opencode-ai/core/database/migration/20260912210000_ki
 import delegation from "@opencode-ai/core/database/migration/20260912231306_kilocode-routine-organization-delegation"
 import policy from "@opencode-ai/core/database/migration/20260915143138_kilocode-routine-organization-policy"
 import draft from "@opencode-ai/core/database/migration/20260916221534_kilocode-routine-draft-revision"
+import budget from "@opencode-ai/core/database/migration/20260917021944_kilocode-routine-organization-budget"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -264,6 +265,32 @@ test("organization policy migration preserves existing organizations with no inf
       })
       yield* DatabaseMigration.applyOnly(db, [policy])
       expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${policy.id}`)).toEqual({ count: 1 })
+    }),
+  )
+})
+
+test("organization budget migration preserves existing organizations with no inferred limit", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === budget.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization (id, name, purpose, policy, revision, time_created, time_updated) VALUES ('org_budget', 'Budget', 'Keep purpose', 'Keep policy', 2, 1, 2)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [budget])
+      expect(
+        yield* db.get(
+          sql`SELECT name, purpose, policy, budget, revision FROM raya_routine_organization WHERE id = 'org_budget'`,
+        ),
+      ).toEqual({ name: "Budget", purpose: "Keep purpose", policy: "Keep policy", budget: null, revision: 2 })
+      yield* db.run(sql`UPDATE raya_routine_organization SET budget = 250 WHERE id = 'org_budget'`)
+      expect(yield* db.get(sql`SELECT budget FROM raya_routine_organization WHERE id = 'org_budget'`)).toEqual({
+        budget: 250,
+      })
+      yield* DatabaseMigration.applyOnly(db, [budget])
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${budget.id}`)).toEqual({ count: 1 })
     }),
   )
 })

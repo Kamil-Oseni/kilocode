@@ -11,6 +11,7 @@ const saved = {
   name: "Finance",
   purpose: "Review the books",
   policy: "Require cited ledger evidence before approval.",
+  budget: 500,
   revision: 4,
   archived: false,
   createdAt: 1,
@@ -58,6 +59,7 @@ test("organization update sends the full explicit graph and verifies the respons
       name: " Finance ",
       purpose: " Review the books ",
       policy: " Require cited ledger evidence before approval. ",
+      budget: "500",
       members: [
         { agentID: worker, role: " Lead " },
         { agentID: peer, role: "Reviewer", supervisorID: worker },
@@ -73,6 +75,7 @@ test("organization update sends the full explicit graph and verifies the respons
     name: "Finance",
     purpose: "Review the books",
     policy: "Require cited ledger evidence before approval.",
+    budget: 500,
     members: [
       { agentID: worker, role: "Lead" },
       { agentID: peer, role: "Reviewer", supervisorID: worker },
@@ -105,6 +108,7 @@ test("organization update clears empty optional text explicitly", async () => {
       name: "Finance",
       purpose: "   ",
       policy: "   ",
+      budget: "",
       members: [
         { agentID: worker, role: "Lead" },
         { agentID: peer, role: "Reviewer", supervisorID: worker },
@@ -112,7 +116,38 @@ test("organization update clears empty optional text explicitly", async () => {
       delegations: [{ senderID: worker, recipientID: peer }],
     },
   })
-  expect(await calls[0].json()).toMatchObject({ purpose: "", policy: "" })
+  expect(await calls[0].json()).toMatchObject({ purpose: "", policy: "", budget: 0 })
+})
+
+test("organization update rejects an invalid shared budget before dispatch", async () => {
+  const calls: Request[] = []
+  const messages: Record<string, unknown>[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init))
+      return Response.json(saved)
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineOrganizationUpdate",
+      requestID: "invalid_budget",
+      organizationID: id,
+      expectedRevision: 4,
+      name: "Finance",
+      purpose: "",
+      policy: "",
+      budget: "12.5",
+      members: [{ agentID: worker, role: "Lead" }],
+      delegations: [],
+    },
+  })
+  expect(calls).toHaveLength(0)
+  expect(messages[0]?.error).toContain("whole-number organization budget")
 })
 
 test("organization update rejects malformed trusted-boundary responses", async () => {
@@ -133,6 +168,7 @@ test("organization update rejects malformed trusted-boundary responses", async (
       name: "Finance",
       purpose: "",
       policy: "",
+      budget: "",
       members: [{ agentID: worker, role: "Lead" }],
       delegations: [],
     },

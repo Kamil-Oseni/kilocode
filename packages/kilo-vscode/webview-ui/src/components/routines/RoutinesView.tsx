@@ -111,6 +111,7 @@ function OrganizationEditor(props: {
     name: string
     purpose: string
     policy: string
+    budget: string
     members: Member[]
     delegations: Delegation[]
   }) => void
@@ -120,6 +121,7 @@ function OrganizationEditor(props: {
   const [name, setName] = createSignal(props.item.name)
   const [purpose, setPurpose] = createSignal(props.item.purpose ?? "")
   const [policy, setPolicy] = createSignal(props.item.policy ?? "")
+  const [budget, setBudget] = createSignal(props.item.budget?.toString() ?? "")
   const [members, setMembers] = createSignal<Member[]>(
     props.item.members.map((item) => ({
       agentID: item.agentID,
@@ -184,6 +186,7 @@ function OrganizationEditor(props: {
               name: name().trim(),
               purpose: purpose().trim(),
               policy: policy().trim(),
+              budget: budget().trim(),
               members: members(),
               delegations: delegations(),
             })
@@ -225,6 +228,21 @@ function OrganizationEditor(props: {
           <span id={`policy-help-${props.item.id}`} class="routines-hint">
             Applied to delegated work in this organization. It cannot grant tools, folders, spending access, or
             delegation authority.
+          </span>
+        </label>
+        <label class="routines-field">
+          Organization model budget ($)
+          <input
+            value={budget()}
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength={7}
+            placeholder="No shared limit"
+            aria-describedby={`budget-help-${props.item.id}`}
+            onInput={(event) => setBudget(event.currentTarget.value)}
+          />
+          <span id={`budget-help-${props.item.id}`} class="routines-hint">
+            Caps committed model cost across all work in this organization. Leave blank for no limit.
           </span>
         </label>
 
@@ -951,6 +969,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     name: string
     purpose: string
     policy: string
+    budget: string
     members: Member[]
     delegations: Delegation[]
   }) => {

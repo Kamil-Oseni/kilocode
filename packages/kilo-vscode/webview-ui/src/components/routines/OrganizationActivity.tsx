@@ -156,12 +156,19 @@ export const OrganizationActivity: Component<{
   let request = ""
   let after: string | undefined
 
+  const available = () => {
+    const total = summary()
+    if (props.item.budget === undefined || !total) return
+    return Math.max(props.item.budget - total.committedCost, 0)
+  }
+
   const assign = (parent?: Follow) =>
     dialog.show(() => (
       <OrganizationAssignment
         item={props.item}
         agents={props.agents}
         parent={parent}
+        {...(available() === undefined ? {} : { available: available() })}
         onEdit={props.onEdit}
         onAssigned={(worker) => {
           props.onAssigned(worker)
@@ -183,6 +190,7 @@ export const OrganizationActivity: Component<{
     ...(item.occurrenceID ? { run: item.occurrenceID } : {}),
     objective: item.objective,
     recipient: item.recipient,
+    ...(item.budget !== undefined ? { budget: item.budget } : {}),
     used: [...new Set([tree.record, ...tree.above].flatMap((row) => [row.senderID, row.recipientID]))],
   })
 
@@ -387,6 +395,12 @@ export const OrganizationActivity: Component<{
                   <span title="Committed cost includes recorded spend and live work reserved at its saved budget limit.">
                     {money(total().committedCost)} committed
                   </span>
+                  <Show when={props.item.budget !== undefined}>
+                    <span>
+                      {money(Math.max((props.item.budget ?? 0) - total().committedCost, 0))} available of{" "}
+                      {money(props.item.budget ?? 0)}
+                    </span>
+                  </Show>
                   <Show when={total().uncertain}>
                     {(count) => (
                       <span>

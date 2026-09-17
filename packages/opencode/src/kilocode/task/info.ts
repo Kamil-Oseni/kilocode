@@ -6,6 +6,7 @@ import {
   RayaRoutineMessageTable as Message,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
+import { commitment } from "./commitment"
 import { AttachmentMeta, Clip, Record as MessageRecord } from "./inbox"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
@@ -385,28 +386,7 @@ export namespace RayaTaskInfo {
         .where(eq(Delegation.organization_id, organizationID))
         .all()
         .pipe(Effect.orDie)
-      const index = new Map(all.map((row) => [row.id, row]))
-      const children = new Map<string, (typeof Delegation.$inferSelect)[]>()
-      for (const row of all) {
-        if (!row.parent_id || !index.has(row.parent_id)) continue
-        children.set(row.parent_id, [...(children.get(row.parent_id) ?? []), row])
-      }
-      const seen = new Set<string>()
-      const reserve = (row: typeof Delegation.$inferSelect): number => {
-        if (seen.has(row.id)) return 0
-        seen.add(row.id)
-        const below = children.get(row.id) ?? []
-        const child = below.reduce((total, item) => total + reserve(item), 0)
-        if (active.has(row.state)) return Math.max(row.budget ?? 0, child)
-        if (row.cost === null) {
-          if (!row.session_id) return child
-          return Math.max(row.budget ?? 0, child)
-        }
-        return row.cost + child
-      }
-      const roots = all.filter((row) => !row.parent_id || !index.has(row.parent_id))
-      const rooted = roots.reduce((total, row) => total + reserve(row), 0)
-      const committedCost = all.reduce((total, row) => total + (seen.has(row.id) ? 0 : reserve(row)), rooted)
+      const committedCost = commitment(all)
       const summary = {
         total: all.length,
         active: all.filter((row) => active.has(row.state)).length,

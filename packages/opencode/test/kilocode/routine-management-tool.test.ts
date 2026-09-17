@@ -81,6 +81,7 @@ it.live(
         const params = {
           name: "Website Builders",
           purpose: "Find, design, build, and sell better business websites.",
+          budget: 500,
           workers: [
             {
               kind: "new" as const,
@@ -129,7 +130,7 @@ it.live(
           definition: { enabled: false },
           desiredEnabled: true,
           organizationRevision: 1,
-          organization: { name: params.name, purpose: params.purpose },
+          organization: { name: params.name, purpose: params.purpose, budget: params.budget },
         })
         expect(
           (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
@@ -187,6 +188,7 @@ it.live(
           ["read", "browser_*"],
         ])
         expect(organizations.items).toHaveLength(1)
+        expect(organizations.items[0]?.budget).toBe(params.budget)
         expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
         yield* storage.replace(["raya", "agent-stage", worker.id], {
           ...binding,
@@ -1163,10 +1165,11 @@ it.live(
           organizationID: organization.id,
           expectedRevision: organization.revision,
           purpose: "Keep the company books current and report every Friday.",
+          budget: 750,
         }
         const revised = yield* updateOrganization.execute(organizationParams, context("update-organization"))
         expect(revised.title).toBe("Organization updated")
-        expect((yield* organizations.get(organization.id)).revision).toBe(2)
+        expect(yield* organizations.get(organization.id)).toMatchObject({ revision: 2, budget: 750 })
         expect(
           yield* updateOrganization.execute(organizationParams, {
             ...context("update-organization"),
@@ -1178,6 +1181,7 @@ it.live(
         const listing = yield* inspect.execute({}, context("inspect"))
         expect(listing.output).toContain(agent.id)
         expect(listing.output).toContain(organization.id)
+        expect(JSON.parse(listing.output).organizations[0]).toMatchObject({ id: organization.id, budget: 750 })
 
         const failed = { pending: true }
         const unreliable = {

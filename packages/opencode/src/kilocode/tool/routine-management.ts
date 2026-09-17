@@ -24,6 +24,7 @@ import { workflow } from "./workflow-request"
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
 const Policy = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(12_000))
+const Budget = Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))
 const Label = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const ToolName = Schema.String.check(Schema.isPattern(/^\S+$/), Schema.isMaxLength(128))
 const Tools = Schema.Array(ToolName).check(
@@ -67,6 +68,7 @@ const CreateOrganization = Schema.Struct({
   name: Label,
   purpose: Text,
   policy: Schema.optional(Policy),
+  budget: Schema.optional(Budget),
   workers: Schema.Array(Schema.Union([Existing, New])).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
 })
 const RoutinePatch = Schema.Struct({
@@ -89,6 +91,7 @@ const UpdateOrganization = Schema.Struct({
   name: Schema.optional(Label),
   purpose: Schema.optional(Schema.Union([Text, Schema.Null])),
   policy: Schema.optional(Schema.Union([Policy, Schema.Null])),
+  budget: Schema.optional(Schema.Union([Budget, Schema.Null])),
   members: Schema.optional(
     Schema.Array(Schema.Struct({ agentID: Schema.String, role: Label, supervisorID: Schema.optional(Schema.String) })),
   ),
@@ -245,6 +248,7 @@ function matchesOrganization(item: typeof Organization.Type, patch: typeof Organ
   if (patch.name !== undefined && item.name !== patch.name) return false
   if (patch.purpose !== undefined && (item.purpose ?? null) !== patch.purpose) return false
   if (patch.policy !== undefined && (item.policy ?? null) !== patch.policy) return false
+  if (patch.budget !== undefined && (item.budget ?? null) !== patch.budget) return false
   if (
     patch.members !== undefined &&
     !isDeepStrictEqual(
@@ -270,7 +274,12 @@ function matchesOrganization(item: typeof Organization.Type, patch: typeof Organ
 
 function matchesCreation(item: typeof Organization.Type, input: typeof OrganizationCreate.Type) {
   if (item.revision !== 1 || item.archived) return false
-  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim() || item.policy !== input.policy?.trim())
+  if (
+    item.name !== input.name.trim() ||
+    item.purpose !== input.purpose?.trim() ||
+    item.policy !== input.policy?.trim() ||
+    item.budget !== input.budget
+  )
     return false
   if (
     !isDeepStrictEqual(
@@ -385,6 +394,7 @@ export function routineManagementTools(input: {
                 name: item.name,
                 purpose: item.purpose,
                 policy: item.policy,
+                budget: item.budget,
                 revision: item.revision,
                 members: item.members,
                 delegations: item.delegations,
@@ -407,7 +417,7 @@ export function routineManagementTools(input: {
     "create_organization",
     Effect.succeed({
       description:
-        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, optional organization policy, worker role/job, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Organization policy constrains delegated work but cannot grant tools or permissions. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
+        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, optional organization policy, shared model-cost budget or an explicit choice of no shared limit, worker role/job, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Organization policy constrains delegated work but cannot grant tools or permissions. A shared budget caps committed model cost across independent organization work. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
       parameters: CreateOrganization,
       execute: (params: typeof CreateOrganization.Type, ctx: Tool.Context) => {
         const patterns = [
@@ -495,6 +505,7 @@ export function routineManagementTools(input: {
                 name: params.name,
                 purpose: params.purpose,
                 ...(params.policy ? { policy: params.policy } : {}),
+                ...(params.budget ? { budget: params.budget } : {}),
                 members: params.workers.map((item) => ({
                   agentID: ids.get(item.key)!,
                   role: item.role,
@@ -1081,7 +1092,7 @@ export function routineManagementTools(input: {
     "update_organization",
     Effect.succeed({
       description:
-        "Update an active organization's name, purpose, policy, membership, reporting lines, or directional delegation permissions. Use its ID and current revision from inspect_routines. Ask with ask_options whenever policy, membership, roles, supervisor relationships, or delegation authority is ambiguous. Organization policy constrains delegated work but cannot grant tools or permissions. Reporting lines never imply delegation permission.",
+        "Update an active organization's name, purpose, policy, shared model-cost budget, membership, reporting lines, or directional delegation permissions. Use its ID and current revision from inspect_routines. Ask with ask_options whenever policy, budget, membership, roles, supervisor relationships, or delegation authority is ambiguous. Set budget to null to remove the shared limit. Organization policy constrains delegated work but cannot grant tools or permissions. Reporting lines never imply delegation permission.",
       parameters: UpdateOrganization,
       execute: (params: typeof UpdateOrganization.Type, ctx: Tool.Context) =>
         workflow({
@@ -1099,6 +1110,7 @@ export function routineManagementTools(input: {
                       name: params.name,
                       purpose: params.purpose,
                       policy: params.policy,
+                      budget: params.budget,
                       members: params.members,
                       delegations: params.delegations,
                     },

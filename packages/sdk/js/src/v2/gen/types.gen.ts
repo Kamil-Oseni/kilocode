@@ -23491,6 +23491,7 @@ export type KilocodeRoutineOrganizationListResponses = {
       name: string
       purpose?: string
       policy?: string
+      budget?: number
       revision: number
       archived: boolean
       archivedAt?: number
@@ -23520,6 +23521,7 @@ export type KilocodeRoutineOrganizationCreateData = {
     name: string
     purpose?: string
     policy?: string
+    budget?: number
     members: Array<{
       agentID: string
       role: string
@@ -23562,6 +23564,7 @@ export type KilocodeRoutineOrganizationCreateResponses = {
     name: string
     purpose?: string
     policy?: string
+    budget?: number
     revision: number
     archived: boolean
     archivedAt?: number
@@ -23626,6 +23629,7 @@ export type KilocodeRoutineOrganizationArchiveResponses = {
     name: string
     purpose?: string
     policy?: string
+    budget?: number
     revision: number
     archived: boolean
     archivedAt?: number
@@ -23684,6 +23688,7 @@ export type KilocodeRoutineOrganizationGetResponses = {
     name: string
     purpose?: string
     policy?: string
+    budget?: number
     revision: number
     archived: boolean
     archivedAt?: number
@@ -23712,6 +23717,7 @@ export type KilocodeRoutineOrganizationUpdateData = {
     name?: string
     purpose?: string
     policy?: string
+    budget?: number
     members?: Array<{
       agentID: string
       role: string
@@ -23760,6 +23766,7 @@ export type KilocodeRoutineOrganizationUpdateResponses = {
     name: string
     purpose?: string
     policy?: string
+    budget?: number
     revision: number
     archived: boolean
     archivedAt?: number

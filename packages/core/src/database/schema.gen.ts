@@ -197,6 +197,7 @@ export default {
           \`name\` text NOT NULL,
           \`purpose\` text,
           \`policy\` text,
+          \`budget\` integer,
           \`revision\` integer NOT NULL,
           \`archived_at\` integer,
           \`time_created\` integer NOT NULL,

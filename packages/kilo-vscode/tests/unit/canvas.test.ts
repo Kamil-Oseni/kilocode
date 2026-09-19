@@ -296,7 +296,11 @@ export default function Report({ data }: Props) {
       `export default function Report({ data }: { data: { value: number } }) { return <p>After {data.value}</p> }`,
       "utf8",
     )
-    await refresh.change(first.path)
+    const event =
+      process.platform === "win32"
+        ? first.path.replace(/^([A-Z]):/, (_, drive) => `${drive.toLowerCase()}:`)
+        : first.path
+    await refresh.change(event)
     await writeFile(compiler.data(root, "live-report"), JSON.stringify({ value: 9 }), "utf8")
     await refresh.change(compiler.data(root, "live-report"))
 

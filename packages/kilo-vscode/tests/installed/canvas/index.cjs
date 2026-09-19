@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict")
-const { existsSync, readFileSync, writeFileSync } = require("node:fs")
+const { existsSync, readFileSync, watch, writeFileSync } = require("node:fs")
 const { join } = require("node:path")
 const vscode = require("vscode")
 
@@ -66,10 +66,27 @@ async function matrix() {
 async function crash() {
   const build = await open("crash")
   assert.equal(build?.status, "ready")
-  const large = `export default function Crash() { return <main>Crash recovered</main> }\n/* ${"x".repeat(8_000_000)} */`
-  await vscode.workspace.fs.writeFile(vscode.Uri.file(source("crash")), Buffer.from(large))
   const journal = path("crash", "transaction")
-  await wait(() => existsSync(journal), "Canvas save never reached its durable transaction checkpoint", 45_000)
+  const durable = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      watcher.close()
+      reject(new Error("Canvas save never reached its durable transaction checkpoint"))
+    }, 45_000)
+    const watcher = watch(cache, (_event, file) => {
+      if (file !== "crash.transaction.json" || !existsSync(journal)) return
+      clearTimeout(timer)
+      watcher.close()
+      resolve()
+    })
+  })
+  const large = `export default function Crash() { return <main>Crash recovered</main> }\n/* ${"x".repeat(2_000_000)} */`
+  const uri = vscode.Uri.file(source("crash"))
+  const document = await vscode.workspace.openTextDocument(uri)
+  const edit = new vscode.WorkspaceEdit()
+  edit.replace(uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), large)
+  assert.equal(await vscode.workspace.applyEdit(edit), true)
+  assert.equal(await document.save(), true)
+  await durable
   writeFileSync(marker, "extension host terminated after the transaction became durable")
   process.exit(86)
 }

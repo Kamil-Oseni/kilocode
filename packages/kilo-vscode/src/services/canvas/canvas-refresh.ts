@@ -1,6 +1,12 @@
 // raya_change - Milestone E testable live-refresh coordinator
+import { resolve } from "node:path"
 import type { CanvasBuild } from "./canvas-compiler"
 import { CanvasCompiler } from "./canvas-compiler"
+
+function normalize(path: string) {
+  const value = resolve(path)
+  return process.platform === "win32" ? value.toLowerCase() : value
+}
 
 export class CanvasRefresh {
   private active: { root: string; name: string } | undefined
@@ -19,7 +25,8 @@ export class CanvasRefresh {
     if (!active) return
     const source = this.compiler.source(active.root, active.name)
     const data = this.compiler.data(active.root, active.name)
-    if (path !== source && path !== data) return
+    const changed = normalize(path)
+    if (changed !== normalize(source) && changed !== normalize(data)) return
     return this.render(await this.compiler.rebuild(source))
   }
 }

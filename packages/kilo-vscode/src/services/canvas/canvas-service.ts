@@ -97,20 +97,17 @@ export class CanvasService implements vscode.Disposable {
     )
       return
     try {
-      const build = await this.compiler.restore(state.root, state.name, (path) => this.writable(path))
-      if (!build || this.disposed || ticket !== this.generation) return
-      this.watch(state.root)
-      this.refresh.use(state.root, state.name)
-      const rendered = await this.panel.show(build)
-      if (rendered.status === "error" && ticket === this.generation && this.panel.owns(build))
-        await this.repair(rendered, ticket)
-      if (rendered.status === "ready" && build.warning && ticket === this.generation && this.panel.owns(build))
-        void vscode.window.showWarningMessage(build.warning)
+      await this.reopen(state.root, state.name, ticket, true)
     } catch (error) {
       console.error("[Raya] Could not restore the saved canvas:", error)
       const detail = error instanceof Error ? error.message.slice(0, 600) : "The saved record could not be read."
       void vscode.window.showErrorMessage(`Canvas couldn't reopen. Your saved files are still available. ${detail}`)
     }
+  }
+
+  async open(root: string, name: string): Promise<CanvasBuild> {
+    this.assertRoot(root)
+    return this.reopen(root, name, ++this.generation, false)
   }
 
   // raya_change - route Design Mode element picks to the chat composer.
@@ -154,6 +151,20 @@ export class CanvasService implements vscode.Disposable {
       version: rendered.version,
       error: rendered.error,
     }
+  }
+
+  private async reopen(root: string, name: string, ticket: number, preserveFocus: boolean): Promise<CanvasBuild> {
+    const build = await this.compiler.restore(root, name, (path) => this.writable(path))
+    if (!build) throw new Error(`No saved canvas named "${name}" was found in this workspace.`)
+    if (this.disposed || ticket !== this.generation) throw new Error("Canvas reopen was superseded.")
+    this.watch(root)
+    this.refresh.use(root, name)
+    const rendered = await this.panel.show(build, preserveFocus)
+    if (rendered.status === "error" && ticket === this.generation && this.panel.owns(build))
+      await this.repair(rendered, ticket)
+    if (rendered.status === "ready" && build.warning && ticket === this.generation && this.panel.owns(build))
+      void vscode.window.showWarningMessage(build.warning)
+    return rendered
   }
 
   private async render(build: CanvasBuild): Promise<CanvasBuild> {

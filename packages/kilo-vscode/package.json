@@ -165,6 +165,12 @@
         "icon": "$(globe)"
       },
       {
+        "command": "raya.openCanvas",
+        "title": "Open saved canvas",
+        "category": "Raya",
+        "icon": "$(preview)"
+      },
+      {
         "command": "raya.kiloClawOpen",
         "title": "Raya Messenger",
         "category": "Raya",
@@ -1470,6 +1476,7 @@
     "test": "vscode-test",
     "test:unit": "bun script/test-unit.ts",
     "test:browser-smoke-live": "bun script/test-browser-smoke-live.ts",
+    "test:canvas-installed": "bun script/test-installed-canvas.ts",
     "test:self-redesign-smoke": "bun script/test-self-redesign-smoke.ts",
     "test:voice-live": "bun script/test-voice-live.ts",
     "test:voice-stt-live": "bun script/test-voice-stt-live.ts",

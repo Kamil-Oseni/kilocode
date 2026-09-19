@@ -102,6 +102,9 @@ const mockVscode = {
     ) {}
   },
   window: {
+    createWebviewPanel: () => {
+      throw new Error("Unexpected createWebviewPanel call")
+    },
     createTextEditorDecorationType: () => ({ dispose: noop }),
     onDidChangeVisibleTextEditors: () => ({ dispose: noop }),
     onDidChangeActiveTextEditor: () => ({ dispose: noop }),

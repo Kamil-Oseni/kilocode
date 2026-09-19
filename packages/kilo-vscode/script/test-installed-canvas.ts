@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { basename, join, resolve } from "node:path"
+import { basename, join, resolve, sep } from "node:path"
 import { runTests } from "@vscode/test-electron"
 
 const packageRoot = resolve(import.meta.dir, "..")
@@ -75,6 +75,35 @@ async function phase(
   }
 }
 
+async function clean(path: string) {
+  const base = resolve(tmpdir())
+  const target = resolve(path)
+  if (!target.startsWith(`${base}${sep}`))
+    throw new Error(`Refusing to remove Canvas test path outside temp: ${target}`)
+  await rm(target, { recursive: true, force: true, maxRetries: 60, retryDelay: 250 }).catch((error) => {
+    console.warn(`Canvas acceptance cleanup is still locked; deferring removal of ${target}`, error)
+    const child = Bun.spawn(
+      [
+        "powershell.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
+        "-Command",
+        "Start-Sleep -Seconds 5; Remove-Item -LiteralPath $env:RAYA_CANVAS_TEST_TEMP -Recurse -Force",
+      ],
+      {
+        env: { ...process.env, RAYA_CANVAS_TEST_TEMP: target },
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+        windowsHide: true,
+      },
+    )
+    child.unref()
+  })
+}
+
 async function main() {
   if (process.platform !== "win32") throw new Error("Installed Canvas acceptance currently targets the Windows package")
   const candidates = await extensions()
@@ -117,7 +146,7 @@ async function main() {
     console.log(`Installed Canvas acceptance passed: ${basename(extension)}`)
   } finally {
     await new Promise((resolve) => setTimeout(resolve, 3_000))
-    await rm(temp, { recursive: true, force: true, maxRetries: 60, retryDelay: 250 })
+    await clean(temp)
   }
 }
 

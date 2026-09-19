@@ -45,6 +45,8 @@ test("only the current canvas render can acknowledge its candidate", async () =>
     expect(panel.webview.html.indexOf('window.addEventListener("message"')).toBeLessThan(
       panel.webview.html.indexOf("frame.srcdoc ="),
     )
+    expect(panel.webview.html).toContain("script-src 'nonce-")
+    expect(panel.webview.html).toContain("https://canvas.test; frame-src 'self'")
     const next = { ...build, version: 2, revision: "next", data: { value: 2 } }
     let done = false
     const second = view.show(next).then((result) => {

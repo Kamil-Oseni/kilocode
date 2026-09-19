@@ -116,7 +116,8 @@ async function main() {
     await phase("recover", extension, root, profile, cache, marker)
     console.log(`Installed Canvas acceptance passed: ${basename(extension)}`)
   } finally {
-    await rm(temp, { recursive: true, force: true })
+    await new Promise((resolve) => setTimeout(resolve, 3_000))
+    await rm(temp, { recursive: true, force: true, maxRetries: 60, retryDelay: 250 })
   }
 }
 

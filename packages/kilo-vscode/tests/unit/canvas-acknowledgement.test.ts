@@ -42,6 +42,9 @@ test("only the current canvas render can acknowledge its candidate", async () =>
   try {
     const first = view.show(build)
     const old = token()
+    expect(panel.webview.html.indexOf('window.addEventListener("message"')).toBeLessThan(
+      panel.webview.html.indexOf("frame.srcdoc ="),
+    )
     const next = { ...build, version: 2, revision: "next", data: { value: 2 } }
     let done = false
     const second = view.show(next).then((result) => {

@@ -262,7 +262,6 @@ export class CanvasPanel implements vscode.Disposable {
     const vscode = acquireVsCodeApi();
     vscode.setState(${JSON.stringify({ root: dirname(dirname(dirname(build.path))), name: build.name }).replaceAll("<", "\\u003c")});
     const frame = document.getElementById("raya-canvas-frame");
-    frame.srcdoc = ${src};
     const toInner = (message) => frame.contentWindow?.postMessage({ source: "raya-canvas-host", ...message }, "*");
     let design = false;
     const designBtn = document.getElementById("raya-design");
@@ -281,6 +280,7 @@ export class CanvasPanel implements vscode.Disposable {
       if (event.data?.type !== "data") return;
       toInner({ type: "data", data: event.data.data });
     });
+    frame.srcdoc = ${src};
 `
     // A raw closing-script sequence anywhere in this hand-written bridge would let the
     // HTML parser end the inline script early and dump the rest as visible text (this bug

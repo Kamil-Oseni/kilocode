@@ -6,7 +6,7 @@ import { basename, join, resolve } from "node:path"
 import { runTests } from "@vscode/test-electron"
 
 const packageRoot = resolve(import.meta.dir, "..")
-const runner = join(packageRoot, "tests", "installed", "canvas")
+const runner = join(packageRoot, "tests", "installed", "canvas", "index.cjs")
 const vscode = join(packageRoot, ".vscode-test", "vscode-win32-x64-archive-1.134.0", "Code.exe")
 
 function saved(name: string, value: number) {
@@ -49,23 +49,30 @@ async function phase(
   cache: string,
   marker: string,
 ) {
-  return runTests({
-    vscodeExecutablePath: vscode,
-    extensionDevelopmentPath: extension,
-    extensionTestsPath: runner,
-    launchArgs: [
-      root,
-      `--user-data-dir=${profile}`,
-      `--extensions-dir=${join(profile, "extensions")}`,
-      "--disable-telemetry",
-    ],
-    extensionTestsEnv: {
-      RAYA_CANVAS_PHASE: name,
-      RAYA_CANVAS_ROOT: root,
-      RAYA_CANVAS_CACHE: cache,
-      RAYA_CANVAS_MARKER: marker,
-    },
-  })
+  const electron = process.env.ELECTRON_RUN_AS_NODE
+  delete process.env.ELECTRON_RUN_AS_NODE
+  try {
+    return await runTests({
+      vscodeExecutablePath: vscode,
+      extensionDevelopmentPath: extension,
+      extensionTestsPath: runner,
+      launchArgs: [
+        root,
+        `--user-data-dir=${profile}`,
+        `--extensions-dir=${join(profile, "extensions")}`,
+        "--disable-telemetry",
+      ],
+      extensionTestsEnv: {
+        RAYA_CANVAS_PHASE: name,
+        RAYA_CANVAS_ROOT: root,
+        RAYA_CANVAS_CACHE: cache,
+        RAYA_CANVAS_MARKER: marker,
+      },
+    })
+  } finally {
+    if (electron === undefined) delete process.env.ELECTRON_RUN_AS_NODE
+    else process.env.ELECTRON_RUN_AS_NODE = electron
+  }
 }
 
 async function main() {

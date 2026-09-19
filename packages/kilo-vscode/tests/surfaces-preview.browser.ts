@@ -3,6 +3,70 @@ import { expect, test } from "@playwright/test"
 
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {
+    test(`${theme} goal progress decisions at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+
+      await page.goto(`/?state=${theme}-default`)
+      const goal = page.getByRole("region", { name: "Goal status" })
+      await expect(goal.getByText("Latest result", { exact: true })).toBeVisible()
+      await expect(goal.getByText("Verified the preview serves cleanly on localhost.", { exact: true })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+
+      await page.goto(`/?state=${theme}-expanded`)
+      await expect(goal).toHaveAttribute("data-status", "active")
+      await expect(goal.getByText("Current work", { exact: true })).toBeVisible()
+      await expect(
+        goal.getByText("Plan task in progress: Verify every state in both themes", { exact: true }),
+      ).toBeVisible()
+      await expect(goal.locator(".goal-banner__usage")).toContainText("Plan: 1/3 tasks completed")
+      await expect(goal.getByRole("button", { name: "Steer" })).toBeVisible()
+      await expect(goal.getByRole("button", { name: "Pause" })).toBeVisible()
+      await expect(goal.getByRole("button", { name: "Stop goal" })).toBeVisible()
+      const activity = goal.locator(".goal-banner__activity")
+      await expect(
+        activity.getByText("12 turns · 87 tool calls. These counts describe activity, not goal completion."),
+      ).toBeHidden()
+      await activity.locator("summary").click()
+      await expect(
+        activity.getByText("12 turns · 87 tool calls. These counts describe activity, not goal completion."),
+      ).toBeVisible()
+
+      await page.goto(`/?state=${theme}-disabled`)
+      await expect(goal).toHaveAttribute("aria-busy", "true")
+      await expect(goal.getByText("Current work", { exact: true })).toBeVisible()
+      await expect(goal.getByRole("button", { name: "Pause" })).toBeDisabled()
+
+      await page.goto(`/?state=${theme}-paused`)
+      await expect(goal).toHaveAttribute("data-status", "paused")
+      await expect(goal.getByText("Paused", { exact: true })).toBeVisible()
+      await expect(goal.getByText("Next decision", { exact: true })).toBeVisible()
+      await expect(goal.getByText("Paused. Resume when ready, or steer the goal before continuing.")).toBeVisible()
+      await expect(goal.getByRole("button", { name: "Resume" })).toBeVisible()
+
+      await page.goto(`/?state=${theme}-waiting`)
+      await expect(goal.getByText("Ready for review", { exact: true })).toBeVisible()
+      await expect(goal.getByText("Next decision", { exact: true })).toBeVisible()
+      await expect(
+        goal.getByText("Your review is needed. Inspect the result, then accept it or request changes."),
+      ).toBeVisible()
+
+      await page.goto(`/?state=${theme}-blocked`)
+      await expect(goal).toHaveAttribute("data-status", "blocked")
+      await expect(goal.getByText("Blocked", { exact: true })).toBeVisible()
+      await expect(goal.getByText("Next decision", { exact: true })).toBeVisible()
+      await expect(
+        goal.getByText("Compile failed. Fix the type errors, then run the smoke run again.").first(),
+      ).toBeVisible()
+      await expect(goal.getByRole("button", { name: "Resume" })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      expect((await new AxeBuilder({ page }).include(".goal-banner").analyze()).violations).toEqual([])
+      await page.screenshot({ path: info.outputPath("goal-decisions.png"), fullPage: true })
+    })
+  }
+}
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [320, 760]) {
     test(`${theme} composer at ${width}px`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto(`/?state=${theme}-composer`)

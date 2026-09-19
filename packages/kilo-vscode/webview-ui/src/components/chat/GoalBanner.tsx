@@ -135,14 +135,27 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
     if (archive()) return
     if (props.goal?.status === "complete") return props.goal.audit?.summary ?? latest()
     if (props.goal?.status === "blocked")
-      return `Blocked: ${props.goal.blockedReason ?? "Review the latest result and steer or resume when the blocker is resolved."}`
+      return props.goal.blockedReason ?? "Review the latest result and steer or resume when the blocker is resolved."
     if (props.goal?.status === "paused") return paused(props.goal)
     if (props.goal?.plan && (props.goal.plan.review || props.goal.plan.objective !== props.goal.objective))
       return "The saved work plan needs review after the requirements changed."
     const tasks = current()
     if (!tasks.length) return latest()
-    if (tasks.length === 1) return `Plan: ${tasks[0].content} is marked in progress.`
-    return `Plan: ${tasks[0].content} and ${plural(tasks.length - 1, "other task")} are marked in progress.`
+    if (tasks.length === 1) return `Plan task in progress: ${tasks[0].content}`
+    return `Plan tasks in progress: ${tasks[0].content} and ${plural(tasks.length - 1, "other task")}.`
+  }
+  const progressLabel = () => {
+    const goal = props.goal
+    if (!goal || archive()) return
+    if (goal.status === "complete") return "Result"
+    if (
+      goal.status === "paused" ||
+      goal.status === "blocked" ||
+      (goal.plan && (goal.plan.review || goal.plan.objective !== goal.objective))
+    )
+      return "Next decision"
+    if (current().length) return "Current work"
+    if (latest()) return "Latest result"
   }
   let editor: HTMLTextAreaElement | undefined
   let trigger: HTMLButtonElement | undefined
@@ -400,7 +413,10 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                 <Show when={progress()}>
                   {(line) => (
                     <div class="goal-banner__progress" role="status" data-expanded={props.expanded ? "" : undefined}>
-                      {line()}
+                      <Show when={progressLabel()}>
+                        {(text) => <span class="goal-banner__progress-label">{text()}</span>}
+                      </Show>
+                      <span>{line()}</span>
                     </div>
                   )}
                 </Show>

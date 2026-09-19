@@ -126,8 +126,14 @@ const dispose = render(
 )
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 const page = (name) => root.querySelector(`button[aria-label="${name}"]`).click()
+const progress = () => root.querySelector(".goal-banner__progress")
+const label = () => progress().querySelector(".goal-banner__progress-label").textContent
 await tick()
-assert.ok(root.textContent.includes("Plan: Inspect source and 1 other task are marked in progress."))
+assert.equal(label(), "Current work")
+assert.ok(
+  progress().textContent.includes("Plan tasks in progress: Inspect source and 1 other task."),
+  `Unexpected active progress: ${progress().textContent}`,
+)
 assert.deepEqual(
   [...root.querySelectorAll(".goal-banner__task-status")].map((item) => item.textContent),
   ["in progress", "in progress", "pending"],
@@ -135,20 +141,27 @@ assert.deepEqual(
 update({ ...goal, status: "paused" })
 await tick()
 assert.ok(!root.textContent.includes("Now:"))
-assert.equal(
-  root.querySelector(".goal-banner__progress").textContent,
-  "Paused. Resume when ready, or steer the goal before continuing.",
+assert.equal(label(), "Next decision")
+assert.ok(
+  progress().textContent.includes("Paused. Resume when ready, or steer the goal before continuing."),
+  `Unexpected paused progress: ${progress().textContent}`,
 )
 update({ ...goal, status: "blocked", blockedReason: "Waiting for approved source files" })
 await tick()
-assert.equal(root.querySelector(".goal-banner__progress").textContent, "Blocked: Waiting for approved source files")
+assert.equal(label(), "Next decision")
+assert.ok(
+  progress().textContent.includes("Waiting for approved source files"),
+  `Unexpected blocked progress: ${progress().textContent}`,
+)
 update({ ...goal, status: "paused", review: { status: "pending", at: 1, criteria: [] } })
 await tick()
-assert.ok(root.querySelector(".goal-banner__progress").textContent.includes("Your review is needed"))
+assert.equal(label(), "Next decision")
+assert.ok(progress().textContent.includes("Your review is needed"), `Unexpected review progress: ${progress().textContent}`)
 update({ ...goal, status: "complete", audit: { summary: "Accepted result summary", requirements: [], verifiedAt: 2 } })
 await tick()
-assert.ok(root.querySelector(".goal-banner__progress").textContent.includes("Accepted result summary"))
-assert.ok(!root.querySelector(".goal-banner__progress").textContent.includes("marked in progress"))
+assert.equal(label(), "Result")
+assert.ok(progress().textContent.includes("Accepted result summary"), `Unexpected result progress: ${progress().textContent}`)
+assert.ok(!progress().textContent.includes("in progress"))
 update(goal)
 await tick()
 assert.ok(root.textContent.includes("Completion rejected"))
@@ -281,7 +294,7 @@ await tick()
 assert.equal(root.querySelectorAll(".goal-banner__plan-task").length, 2)
 assert.equal(root.querySelectorAll(".goal-banner__task-status").length, 0)
 assert.equal(root.querySelector('[role="progressbar"]').getAttribute("aria-valuenow"), "50")
-assert.ok(root.textContent.includes("Plan: Verify goal output is marked in progress."))
+assert.ok(root.textContent.includes("Plan task in progress: Verify goal output"))
 assert.ok(root.textContent.includes("Source findings"))
 assert.ok(root.textContent.includes("Run actual checks"))
 assert.ok(root.textContent.includes("Dependenciesinspect"))

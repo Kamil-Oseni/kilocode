@@ -51,6 +51,7 @@ type PvState =
   | "memory"
   | "memory-legacy"
   | "paused"
+  | "waiting"
   | "complete"
   | "blocked"
   | "notice"
@@ -84,6 +85,7 @@ const states: PvState[] = [
   "memory",
   "memory-legacy",
   "paused",
+  "waiting",
   "complete",
   "blocked",
   "notice",
@@ -274,7 +276,7 @@ const propsFor = (state: PvState): GoalBannerProps => {
   if (state === "hover") return { goal: goal("active"), pv: "hover" }
   if (state === "focus") return { goal: goal("active"), pv: "focus" }
   if (state === "pressed") return { goal: goal("active"), pv: "active" }
-  if (state === "disabled") return { goal: goal("active"), disabled: true }
+  if (state === "disabled") return { goal: goal("active"), todos, expanded: true, disabled: true }
   if (state === "expanded") return { goal: goal("active"), todos, expanded: true }
   if (state === "editing") {
     return {
@@ -296,12 +298,20 @@ const propsFor = (state: PvState): GoalBannerProps => {
       confirmingStop: true,
     }
   }
-  if (state === "paused") return { goal: goal("paused") }
+  if (state === "paused") return { goal: goal("paused"), todos, expanded: true }
+  if (state === "waiting")
+    return {
+      goal: goal("paused", { review: { status: "pending", at: now - 30_000, criteria: [] } }),
+      todos,
+      expanded: true,
+    }
   if (state === "complete") return { goal: goal("complete") }
   if (state === "result") return { goal: pack("complete"), todos, expanded: true }
   if (state === "blocked") {
     return {
       goal: goal("blocked", { blockedReason: "Compile failed. Fix the type errors, then run the smoke run again." }),
+      todos,
+      expanded: true,
     }
   }
   if (state === "notice") {
@@ -324,6 +334,7 @@ const banners = new Set<PvState>([
   "discard",
   "discard-busy",
   "paused",
+  "waiting",
   "complete",
   "blocked",
   "notice",

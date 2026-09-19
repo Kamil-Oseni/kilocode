@@ -19,6 +19,7 @@ const states = [
   "discard-busy",
   "usage",
   "paused",
+  "waiting",
   "complete",
   "blocked",
   "notice",

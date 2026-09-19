@@ -1,5 +1,6 @@
 // raya_change - Milestone E sandboxed live canvas webview panel
 import { dirname, join } from "node:path"
+import { readFile } from "node:fs/promises"
 import * as vscode from "vscode"
 import type { CanvasBuild } from "./canvas-compiler"
 
@@ -14,6 +15,10 @@ type CanvasPanelMessage = (
 
 function escape(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")
+}
+
+function inline(value: string) {
+  return value.replaceAll(/<(?=\/script)/gi, "\\x3c")
 }
 
 export class CanvasPanel implements vscode.Disposable {
@@ -32,6 +37,7 @@ export class CanvasPanel implements vscode.Disposable {
   constructor(
     private readonly runtime: vscode.Uri,
     private readonly extension: vscode.Uri,
+    private readonly read: (path: string) => Promise<string> = (path) => readFile(path, "utf8"),
   ) {}
 
   // raya_change - let the extension route Design Mode picks into the chat input.
@@ -69,8 +75,8 @@ export class CanvasPanel implements vscode.Disposable {
       enableScripts: true,
       localResourceRoots: [this.extension, vscode.Uri.file(dirname(build.bundle))],
     }
-    panel.webview.html = this.html(panel.webview, build)
-    return new Promise<CanvasBuild>((resolve) => {
+    const [runtime, artifact] = await Promise.all([this.read(this.runtime.fsPath), this.read(build.bundle)])
+    const pending = new Promise<CanvasBuild>((resolve) => {
       this.finish()
       this.settle = resolve
       this.timer = setTimeout(() => {
@@ -81,6 +87,8 @@ export class CanvasPanel implements vscode.Disposable {
         })
       }, 5_000)
     })
+    panel.webview.html = this.html(build, runtime, artifact)
+    return pending
   }
 
   restore(panel: vscode.WebviewPanel): void {
@@ -229,16 +237,15 @@ export class CanvasPanel implements vscode.Disposable {
     if (choice === open) void vscode.commands.executeCommand("vscode.open", vscode.Uri.file(file))
   }
 
-  private html(webview: vscode.Webview, build: CanvasBuild) {
-    const runtime = webview.asWebviewUri(this.runtime)
-    const artifact = webview.asWebviewUri(vscode.Uri.file(build.bundle!))
+  private html(build: CanvasBuild, runtime: string, artifact: string) {
     const nonce = crypto.randomUUID().replaceAll("-", "")
+    const sandbox = crypto.randomUUID().replaceAll("-", "")
     const frame = `<!doctype html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src ${webview.cspSource};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${sandbox}';">
   <style>
     * { box-sizing: border-box; }
     html, body, #raya-canvas-root { min-width: 100%; min-height: 100%; margin: 0; }
@@ -249,8 +256,8 @@ export class CanvasPanel implements vscode.Disposable {
 <body>
   <div id="raya-canvas-root"></div>
   <pre id="raya-canvas-error" role="alert" hidden></pre>
-  <script src="${runtime}"></script>
-  <script src="${artifact}"></script>
+  <script nonce="${sandbox}">${inline(runtime)}</script>
+  <script nonce="${sandbox}">${inline(artifact)}</script>
 </body>
 </html>`
     // Escape every less-than char as \u003c so a closing script tag inside the embedded
@@ -292,7 +299,7 @@ export class CanvasPanel implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource}; frame-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}' 'nonce-${sandbox}'; frame-src 'self';">
   <style>
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; }

@@ -1,5 +1,5 @@
 import { afterAll, expect, spyOn, test } from "bun:test"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as vscode from "vscode"
@@ -13,6 +13,8 @@ test.each(["clean", "dirty", "both-fail", "divergent"])("extension restoration h
   const dirty = mode === "dirty"
   const root = await mkdtemp(join(tmpdir(), "raya-restore-"))
   const output = join(root, "canvas-bundles")
+  await mkdir(join(root, "dist"), { recursive: true })
+  await writeFile(join(root, "dist", "canvas-runtime.js"), "window.RayaCanvas = {}")
   const compiler = new CanvasCompiler(output)
   const documents = vscode.workspace.textDocuments as vscode.TextDocument[]
   const document = { isDirty: dirty, uri: vscode.Uri.file(compiler.source(root, "report")) } as vscode.TextDocument

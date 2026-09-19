@@ -1,5 +1,5 @@
 import { afterAll, expect, spyOn, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import * as vscode from "vscode"
@@ -12,6 +12,8 @@ afterAll(stop)
 test("open restores a committed Canvas without a serialized editor tab", async () => {
   const root = await mkdtemp(join(tmpdir(), "raya-open-"))
   const storage = join(root, "storage")
+  await mkdir(join(root, "dist"), { recursive: true })
+  await writeFile(join(root, "dist", "canvas-runtime.js"), "window.RayaCanvas = {}")
   const compiler = new CanvasCompiler(join(storage, "canvas-bundles"))
   const build = await compiler.create(root, "report", "export default function Report() { return <p>Saved</p> }", {
     value: 1,

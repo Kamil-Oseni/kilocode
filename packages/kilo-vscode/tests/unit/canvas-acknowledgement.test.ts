@@ -25,7 +25,9 @@ test("only the current canvas render can acknowledge its candidate", async () =>
       },
     },
   }
-  const view = new CanvasPanel(vscode.Uri.file("runtime.js"), vscode.Uri.file("extension"))
+  const view = new CanvasPanel(vscode.Uri.file("runtime.js"), vscode.Uri.file("extension"), async (path) =>
+    path === "runtime.js" ? "window.RayaCanvas = {}" : "window.RayaCanvas.mount(() => null)",
+  )
   const failures: CanvasBuild[] = []
   view.onFailure((build) => failures.push(build))
   view.restore(panel as unknown as vscode.WebviewPanel)
@@ -41,18 +43,21 @@ test("only the current canvas render can acknowledge its candidate", async () =>
   const token = () => JSON.parse(/token: ("[^"]+")/.exec(panel.webview.html)![1]) as string
   try {
     const first = view.show(build)
+    await new Promise((resolve) => setImmediate(resolve))
     const old = token()
     expect(panel.webview.html.indexOf('window.addEventListener("message"')).toBeLessThan(
       panel.webview.html.indexOf("frame.srcdoc ="),
     )
     expect(panel.webview.html).toContain("script-src 'nonce-")
-    expect(panel.webview.html).toContain("https://canvas.test; frame-src 'self'")
+    expect(panel.webview.html).toContain("frame-src 'self'")
+    expect(panel.webview.html).toContain("window.RayaCanvas.mount(() => null)")
     const next = { ...build, version: 2, revision: "next", data: { value: 2 } }
     let done = false
     const second = view.show(next).then((result) => {
       done = true
       return result
     })
+    await new Promise((resolve) => setImmediate(resolve))
     const current = token()
     expect((await first).status).toBe("error")
     receive({ type: "ready", token: old })
@@ -74,12 +79,14 @@ test("only the current canvas render can acknowledge its candidate", async () =>
     expect(failures[0]).toMatchObject({ revision: "next", status: "error", error: "interaction failed" })
 
     const third = view.show({ ...next, revision: "third" })
+    await new Promise((resolve) => setImmediate(resolve))
     const pending = token()
     receive({ type: "runtimeError", token: pending, error: "initial render failed" })
     expect((await third).error).toBe("initial render failed")
     expect(failures).toHaveLength(1)
 
     const fourth = view.show({ ...next, revision: "fourth" })
+    await new Promise((resolve) => setImmediate(resolve))
     const last = token()
     receive({ type: "rendered", token: last })
     await fourth

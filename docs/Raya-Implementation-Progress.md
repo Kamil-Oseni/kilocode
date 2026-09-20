@@ -14,6 +14,14 @@ Each instance now retains a bounded 128-entry tombstone set for settled recovery
 
 The authorized low-memory installer regenerated the SDK, rebuilt and smoke-tested the Windows CLI, passed sequential extension and webview typechecks plus ESLint, built the production bundle, packaged 437 files and installed `eden.raya@7.4.23-snapshot+ff6dab7dfa.kamil-oseni.1789877607411`. Retained rollback package `raya.198733a3eb4430c19f51df07ecbd3cdcf5b616f50fb6758a0993f75182901710.vsix` is **520,640,465 bytes**, SHA-256 `198733A3EB4430C19F51DF07ECBD3CDCF5B616F50FB6758A0993F75182901710`. Its installed CLI is **231,604,224 bytes**, SHA-256 `4C227FFF7AA1334C6D49CC1A84AA6DB2273C9B2987643144B3BBB96AEBDF9D4A`. C: has **146,347,626,496 bytes free**. The installer removed one older vault package, one staged package and one old snapshot extension. The open VS Code host was not force-reloaded. This closes logged issue `S-06`.
 
+## ChatGPT 2026-09-20 00:27 America/Toronto - Session issue S-05 model catalog fallback verified
+
+**Status: current product behavior verified; strengthened regression proof committed and pushed as `16972cb5d5`.** Raya reads the last on-disk model catalog before attempting a remote fetch, caches that result for the running service, refreshes stale data in the background and never blocks core operation on an unavailable `models.dev`. Each request has a ten-second deadline and transient failures receive two jittered retries. A failed refresh is retained in diagnostics while the previous catalog stays authoritative.
+
+The complete catalog service suite passes **9 tests / 26 assertions** across disk startup, disabled-fetch fallback, corrupt-cache recovery, concurrent single-flight reads, memory caching, successful refresh, fresh/stale TTL behavior and failed refresh. The HTTP 500 case now proves exactly **three total attempts**, exact preservation of the prior catalog bytes and a successful catalog read afterward. Core typecheck and formatting pass; focused lint is clean. The protected one-worker push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains.
+
+The installed product remains `eden.raya@7.4.23-snapshot+ff6dab7dfa.kamil-oseni.1789877607411`, which contains the verified cache, timeout, retry and background-refresh implementation. No package rebuild was needed for this test-only checkpoint. This closes logged issue `S-05`; remote catalog availability remains an external condition rather than a Raya failure.
+
 ## ChatGPT 2026-09-19 23:55 America/Toronto - Session issue R-12 vanished snapshot candidate fixed
 
 **Status: verified, committed, pushed and installed from product commit `0ff5aae8b3`.** Snapshot capture could enumerate a short-lived untracked replacement file and then pass that stale path to Git after the file disappeared. Git rejected the complete pathspec batch, so an unrelated temporary-file race could prevent the real workspace changes from entering the snapshot.

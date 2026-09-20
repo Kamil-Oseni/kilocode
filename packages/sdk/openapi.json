@@ -81265,6 +81265,9 @@
           "message": {
             "type": "string"
           },
+          "code": {
+            "type": "string"
+          },
           "ref": {
             "type": "string"
           }

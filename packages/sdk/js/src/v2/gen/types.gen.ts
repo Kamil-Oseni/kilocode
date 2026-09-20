@@ -5840,6 +5840,7 @@ export type RayaGoalDeliverable =
 export type UnknownError1 = {
   _tag: "UnknownError"
   message: string
+  code?: string
   ref?: string
 }
 

@@ -13,7 +13,7 @@ const it = testEffect(Layer.mergeAll(NodeHttpServer.layerTest, NodeServices.laye
 function expectUnknownErrorBody(body: unknown) {
   expect(body).toMatchObject({
     name: "UnknownError",
-    data: { message: "Unexpected server error. Check server logs for details." },
+    data: { message: "Unexpected server error. Check server logs for details.", code: "server.unexpected" }, // kilocode_change
   })
   expect((body as { data?: { ref?: unknown } }).data?.ref).toMatch(/^err_[0-9a-f-]{8}$/)
 }

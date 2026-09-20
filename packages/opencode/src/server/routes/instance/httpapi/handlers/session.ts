@@ -1,5 +1,6 @@
 import { Image } from "@/image/image" // kilocode_change - classify user image validation defects
 import { busyMessage, isBusy } from "@/kilocode/database/sqlite-error" // kilocode_change
+import { DiagnosticError } from "@/kilocode/diagnostic-error" // kilocode_change
 import { KiloSessionHttpApi } from "@/kilocode/server/httpapi/session-fork" // kilocode_change
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue" // kilocode_change
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -20,7 +21,6 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect/instance-state"
@@ -334,18 +334,29 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
             if (Cause.hasInterruptsOnly(cause)) return Effect.void // kilocode_change - Stop is not an error
             return Effect.gen(function* () {
               const error = Cause.squash(cause)
+              const busy = isBusy(error) // kilocode_change
+              const receipt = DiagnosticError.make({
+                code: busy ? "database.busy" : "session.prompt_async.failed",
+                message: busy ? busyMessage : "Unexpected session failure. Check server logs for details.",
+              }) // kilocode_change
               // kilocode_change start - keep SQLite lock failures out of local CLI logs
-              const busy = isBusy(error)
               if (busy) {
-                yield* Effect.logWarning("prompt_async database busy", { sessionID: ctx.params.sessionID })
+                yield* Effect.logWarning("prompt_async database busy", {
+                  sessionID: ctx.params.sessionID,
+                  ref: receipt.ref,
+                })
               }
-              if (!busy) yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
+              if (!busy)
+                yield* Effect.logError("prompt_async failed", {
+                  sessionID: ctx.params.sessionID,
+                  code: "session.prompt_async.failed",
+                  ref: receipt.ref,
+                  cause,
+                })
               // kilocode_change end
               yield* events.publish(Session.Event.Error, {
                 sessionID: ctx.params.sessionID,
-                error: busy // kilocode_change
-                  ? new NamedError.Unknown({ message: busyMessage }).toObject() // kilocode_change
-                  : new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(), // kilocode_change
+                error: receipt.error, // kilocode_change
               })
             })
           }),

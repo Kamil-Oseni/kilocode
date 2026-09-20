@@ -65,6 +65,7 @@ export abstract class NamedError extends Error {
 
   public static readonly Unknown = NamedError.create("UnknownError", {
     message: Schema.String,
+    code: Schema.optional(Schema.String), // kilocode_change - stable secret-safe diagnostic category
     ref: Schema.optional(Schema.String),
   })
 }

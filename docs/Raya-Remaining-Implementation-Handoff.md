@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `dc0910ddc9`; the installed and active package is `eden.raya@7.4.23-snapshot+dc0910ddc9.kamil-oseni.1789943164895`, digest `6d84173654535debe8576e8af98bc29a52c37065a557e324d6c1d8dfc75475e0`. The owner confirmed that Agent Manager now renders normally after reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `5c4459d385`; the installed package is `eden.raya@7.4.23-snapshot+5c4459d385.kamil-oseni.1789945885270`, digest `a237d65cc71424e296e3be615185b0be4225737f8d38ea0edc257545a50e758d`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 19:16 America/Toronto - EN-01 closure retained
+
+EN-01 is Verified in product commit `5c4459d385`, which is on `origin/main` and installed. Preserve the six corrected SQLite release boundaries and their SHA-pinned tag fixtures. The release migration gate passes **48 / 207** and the focused policy/recovery subset passes **15 / 90**. Do not restore the discarded JSON-bootstrap grouping or infer database generation from session versions.
+
+Installed receipt: VSIX `raya.a237d65cc71424e296e3be615185b0be4225737f8d38ea0edc257545a50e758d.vsix`, **521,369,638 bytes**, SHA-256 `A237D65CC71424E296E3BE615185B0BE4225737F8D38EA0EDC257545A50E758D`; bundled CLI **231,657,472 bytes**, SHA-256 `C3F86CCB1F237CB29E808789015F5C622970B3F174C36343DDCBF338C3AA6140`. The open host was not force-reloaded, so the package-vault active pointer still identifies accepted source `dc0910ddc9`.
+
+Continue with the next autonomously closable row in `docs/Order.txt`. Do not reopen EN-01 unless a new destructive migration is added, a retained fixture or boundary changes, or recovery evidence fails.
 
 ## ChatGPT 2026-09-20 19:03 America/Toronto - Finish EN-01 installation from complete released lineage evidence
 

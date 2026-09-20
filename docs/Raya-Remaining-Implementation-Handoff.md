@@ -1,10 +1,29 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f65a72b918`; the installed package source is `f65a72b918`. The open extension host's active-vault pointer is digest `b700ba883ca4887d99f3297d629c65ef7b46de801ecae6b95f355bf1454948ec`, source `eeb9a9de18`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f52622afa6`; the installed package source is `f52622afa6`. The open extension host's active-vault pointer is digest `b700ba883ca4887d99f3297d629c65ef7b46de801ecae6b95f355bf1454948ec`, source `eeb9a9de18`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 17:40 America/Toronto - Continue FUT-AGENT-02 from installed restart acceptance
+
+Product commit `f52622afa6` is on `origin/main` and installed as `eden.raya@7.4.23-snapshot+f52622afa6.kamil-oseni.1789940173262`. Agent Manager child tabs and the selected child are no longer transient. Preserve the versioned bounded state in `webview-ui/agent-manager/subagent-tabs.ts`, its per-project/parent context key, exact parent resynchronization and fail-closed parsing. Do not replace it with one global selected child or persist unvalidated arbitrary state. Retain the 120 px subagent-tab minimum: the earlier 72 px layout reduced twelve worker names to one letter.
+
+The real production panel preview uncovered and fixed a critical `tablist` semantics defect. A close icon inside an ARIA tablist is visual/mouse-only; keyboard and assistive-technology users retain the existing tab context menu and close shortcut. Do not make that nested close control independently focusable again unless the DOM is restructured so it is outside the tablist. The focused suites pass **9 / 32** and the adjacent monitor/restore/steer matrix passes **46 / 101**. Chromium passes **2 / 2** at 320 px and 760 px with twelve tabs, exact selected-child persistence through reload, keyboard selection, Axe and overflow. Webview typecheck, scoped ESLint, Knip, preview build, marker/diff guards and all 29 push-time package typechecks pass.
+
+Installed receipt: VSIX `raya.01aac975ee9f05908f5089e86c114521a41bcbd2e22f290ea9a7c59edb029730.vsix`, **520,727,701 bytes**, SHA-256 `01AAC975EE9F05908F5089E86C114521A41BCBD2E22F290EA9A7C59EDB029730`; installed CLI **231,648,768 bytes**, SHA-256 `440DC2BBF53FAB41A93E0A0AFFBB13E0EFF4301A7A4601E8097559C320D81A26`. The package-vault active pointer remains source `eeb9a9de18` because the open host was not force-reloaded.
+
+To close `FUT-AGENT-02`, ask the owner for one controlled installed observation after a normal reload:
+
+1. open or create one real parent with at least ten children spanning running, waiting, completed, failed and cancelled states;
+2. open several children in Agent Manager, select a non-first child and record its exact name and role;
+3. steer one active direct child with a unique harmless sentence and confirm it appears once in only that child;
+4. normally restart or reload the extension, reopen the same parent and verify the twelve-or-more child tabs and exact selected child return;
+5. confirm the unique instruction remains once, no replacement child exists, and disclosure plus dismissed completed rows behave truthfully after restart;
+6. capture the visible result and update both documents before changing the canonical row to Verified.
+
+Windows Computer Use still cannot connect to its native pipe, so do not claim this installed visual workflow from source or Chromium evidence. `FUT-CHAT-01` and `FUT-AGENT-01` also retain their separate owner observations below.
 
 ## ChatGPT 2026-09-20 17:15 America/Toronto - FUT-AGENT-01 fixture repaired; close with installed restart
 

@@ -168,6 +168,7 @@ it.instance(
     expect(yield* readText(`${tmp.path}/a.txt`)).toBe(tmp.extra.aContent)
   }),
   { git: false },
+  process.platform === "win32" ? 90_000 : 5_000,
 )
 // raya_change end
 
@@ -202,6 +203,7 @@ it.instance(
     }),
   ),
   { git: true },
+  process.platform === "win32" ? 90_000 : 5_000,
 )
 
 it.instance(

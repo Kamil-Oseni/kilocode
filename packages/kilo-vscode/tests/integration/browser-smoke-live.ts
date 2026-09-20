@@ -51,7 +51,6 @@ async function main() {
   const root = await mkdtemp(join(tmpdir(), "raya-smoke-live-"))
   const artifacts = join(root, "artifacts")
   const authSession = new BrowserSession(join(root, "auth-profile"), undefined, artifacts)
-  const runSession = new BrowserSession(join(root, "fresh-profile"), undefined, artifacts)
 
   try {
     await authSession.execute({ operation: "navigate", url: `${origin}/login` })
@@ -60,8 +59,14 @@ async function main() {
     assert.equal(auth.operation, "auth_capture")
     if (auth.operation !== "auth_capture") throw new Error("Expected auth capture result")
     assert.ok(auth.cookies > 0)
-    await access(auth.path)
-    await authSession.dispose()
+    assert.equal(auth.capture.status, "available")
+    assert.ok(auth.capture.bytes > 0)
+    await authSession.execute({
+      operation: "auth",
+      action: "restore",
+      profileID: auth.capture.profileID,
+      captureID: auth.capture.id,
+    })
 
     const flow = {
       operation: "smoke" as const,
@@ -88,16 +93,16 @@ async function main() {
       ],
     }
 
-    const passing = await runSession.execute(flow)
+    const passing = await authSession.execute(flow)
     assert.equal(passing.operation, "smoke")
     if (passing.operation !== "smoke") throw new Error("Expected smoke result")
-    assert.equal(passing.passed, true)
+    assert.equal(passing.passed, true, JSON.stringify(passing))
     assert.equal(passing.steps.length, 2)
     for (const step of passing.steps) await access(step.screenshot)
     await access(passing.artifact)
 
     app.broken = true
-    const broken = await runSession.execute(flow)
+    const broken = await authSession.execute(flow)
     assert.equal(broken.operation, "smoke")
     if (broken.operation !== "smoke") throw new Error("Expected smoke result")
     assert.equal(broken.passed, false)
@@ -112,7 +117,6 @@ async function main() {
     )
   } finally {
     await authSession.dispose()
-    await runSession.dispose()
     await new Promise<void>((resolve, reject) =>
       server.close((error) => {
         if (error) reject(error)

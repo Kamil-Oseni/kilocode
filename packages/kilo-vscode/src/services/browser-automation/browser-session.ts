@@ -780,7 +780,7 @@ export class BrowserSession {
     if (["snapshot", "click", "type", "select", "scroll", "evaluate"].includes(action.operation)) {
       const registry = this.documents.get(this.resolve(action.tabID))
       if (action.frameID && !registry) throw new TargetError("Browser host does not support frame identity")
-      if (registry) action = { ...action, frameID: registry.lease(action.frameID).id }
+      if (registry && action.frameID) action = { ...action, frameID: registry.lease(action.frameID).id }
     } else if (action.frameID)
       throw new TargetError("This operation is tab-scoped and does not accept a frame identity")
     const result = pending<BrowserResult>()

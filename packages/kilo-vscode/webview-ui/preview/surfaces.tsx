@@ -11,6 +11,9 @@ import { SessionContext, useSession } from "../src/context/session"
 import { VoiceProvider } from "../src/context/voice"
 import { BackgroundAgents } from "../src/components/chat/BackgroundAgents"
 import { SubagentViewer } from "../src/components/chat/SubagentViewer"
+import { StartupErrorBanner } from "../src/components/chat/StartupErrorBanner"
+import { ErrorDisplay } from "../src/components/chat/ErrorDisplay"
+import { TurnOutcome } from "../src/components/shared/TurnOutcome"
 import { useVSCode } from "../src/context/vscode"
 import type { SessionInfo } from "../src/types/messages"
 
@@ -154,6 +157,69 @@ export const ChildViewerPreview: Component = () =>
         <ChildViewer />
       </div>
     </AgentSession>
+  ))
+
+const Outcome: Component<{ reason: "interrupted" | "error"; finish?: string }> = (props) => {
+  const session = useSession()
+  const value = {
+    ...session,
+    status: () => "idle",
+    closeReason: () => props.reason,
+    visibleMessages: () => [
+      {
+        id: "recovery-assistant",
+        sessionID: "recovery",
+        role: "assistant",
+        time: { created: Date.now() },
+        parentID: "recovery-user",
+        modelID: "preview",
+        providerID: "preview",
+        mode: "build",
+        path: { cwd: "C:/Workspace", root: "C:/Workspace" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: props.finish,
+      },
+    ],
+    todos: () => [],
+    isErrorHidden: () => false,
+  }
+  return <SessionContext.Provider value={value as never}><TurnOutcome /></SessionContext.Provider>
+}
+
+export const RecoveryPreview: Component = () =>
+  wrap("recovery", () => (
+    <div class="tool-call-lab-stack" data-recovery-preview>
+      <section>
+        <h2>Connection recovery</h2>
+        <StartupErrorBanner
+          errorMessage="Failed to start the Raya CLI"
+          errorDetails="spawn C:/Raya/bin/kilo.exe ENOENT"
+        />
+      </section>
+      <section>
+        <h2>Interrupted work</h2>
+        <Outcome reason="interrupted" />
+      </section>
+      <section>
+        <h2>Provider failure</h2>
+        <ErrorDisplay
+          error={{ name: "UnknownError", data: { message: "Provider request failed before Raya could finish." } }}
+        />
+        <ErrorDisplay
+          error={{
+            name: "APIError",
+            data: {
+              message: "Unauthorized",
+              statusCode: 401,
+              isRetryable: false,
+              responseBody: '{"error":{"code":"PAID_MODEL_AUTH_REQUIRED"}}',
+            },
+          }}
+          onLogin={() => undefined}
+        />
+      </section>
+    </div>
   ))
 
 export const ReviewPreview: Component<{ confirming?: boolean }> = (props) => (

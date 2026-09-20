@@ -95,6 +95,11 @@ test("structured preview messages bypass phrase guessing and reject malformed sc
     type: "routineForecast",
     requestID: "invalid-structured",
     error: "Choose a valid schedule and preview it again.",
+    recovery: {
+      kind: "schedule",
+      field: "schedule",
+      next: expect.stringContaining("Review the schedule and timezone"),
+    },
   })
 })
 

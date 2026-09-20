@@ -67,6 +67,7 @@ import { removeAgent } from "./services/agent-removal"
 import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "./services/cli-backend/sdk-sse-adapter"
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
+import { recovery } from "./shared/routine-error"
 import { encode as encodeRoutineFile, MAX_ROUTINE_FILE_BYTES } from "./kilo-provider/routine-files"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
 import { editGoal, start as startGoal, stopGoal, stopResult } from "./kilo-provider/goal"
@@ -1823,6 +1824,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           agentID: message.agentID,
           runID: message.runID,
           error: "Could not connect to read the saved instructions. Try again.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1832,6 +1834,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to read the routine archive. Try again.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1841,6 +1844,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to save output requirements. Reconnect and reload the routine.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1850,6 +1854,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to save routine access. Reconnect and reload the routine.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1861,6 +1866,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           agentID: message.agentID,
           section: message.section,
           error: "Could not connect to the routine inbox. Reconnect and try again.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1870,6 +1876,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           requestID: message.requestID,
           organizationID: message.organizationID,
           error: "Could not connect to organization work. Reconnect and try again.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1900,6 +1907,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to the routine inbox. Reconnect and try again.",
+          recovery: recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -1913,7 +1921,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       ) {
         return false
       }
-      this.postMessage({ type: "routineState", error: reason(err) || "Could not update routines." })
+      this.postMessage({
+        type: "routineState",
+        error: reason(err) || "Could not update routines.",
+        recovery: recovery(err) ?? recovery({ kind: "unavailable" }),
+      })
       return true
     }
   }

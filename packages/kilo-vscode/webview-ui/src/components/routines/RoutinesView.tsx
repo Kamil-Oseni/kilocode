@@ -16,6 +16,7 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Select } from "@kilocode/kilo-ui/select"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useVSCode } from "../../context/vscode"
+import { routineFailure } from "../../utils/routine-recovery"
 import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { runPresence } from "../../utils/run-presence"
@@ -1138,7 +1139,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const receive = (msg: Extract<ExtensionMessage, { type: "routineForecast" }>) => {
     if (msg.requestID !== request()?.id || request()?.key !== key()) return
     setPreview(msg)
-    if (msg.error) setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+    if (msg.error) setError(routineFailure(msg.error, msg.recovery))
   }
 
   const updated = (msg: Extract<ExtensionMessage, { type: "routineScheduleUpdated" }>) => {
@@ -1149,7 +1150,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setPreview(undefined)
     setRequest(undefined)
     if (msg.error) {
-      setNotice([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+      setNotice(routineFailure(msg.error, msg.recovery))
       return
     }
     setEditing(undefined)
@@ -1211,7 +1212,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const history = (msg: Extract<ExtensionMessage, { type: "routineRuns" }>) => {
-    if (msg.error) setStale((prior) => ({ ...prior, [msg.agentID]: msg.error! }))
+    if (msg.error) setStale((prior) => ({ ...prior, [msg.agentID]: routineFailure(msg.error, msg.recovery) }))
     if (Array.isArray(msg.runs)) {
       setRuns((prior) => ({ ...prior, [msg.agentID]: msg.runs as Run[] }))
       setStale((prior) => {
@@ -1249,7 +1250,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const received = (msg: Extract<ExtensionMessage, { type: "routineState" }>) => {
     if (msg.error) {
       if (msg.requestID === correlation) setRefreshing(false)
-      setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+      setError(routineFailure(msg.error, msg.recovery))
       if (!editing()) {
         hold = false
         setSaving(false)
@@ -1287,7 +1288,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (request.action === "archive" && msg.type !== "routineOrganizationArchived") return
     setOrganizationRequest()
     if (msg.error) {
-      setOrganizationNotice([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+      setOrganizationNotice(routineFailure(msg.error, msg.recovery))
       load()
       return
     }
@@ -1311,7 +1312,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setAuthorityRequest()
     if (msg.error || !msg.agent) {
       setOrganizationNotice(
-        [msg.error ?? "Raya could not update this authority.", msg.recovery?.next].filter(Boolean).join(" "),
+        routineFailure(msg.error ?? "Raya could not update this authority.", msg.recovery),
       )
       load()
       return

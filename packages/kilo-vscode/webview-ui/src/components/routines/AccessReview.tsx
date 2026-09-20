@@ -3,6 +3,7 @@ import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { For, Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages/extension-messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import { normalizeRoutinePaths, type RoutinePaths } from "../../../../src/shared/routine-paths"
 
 const reads = [
@@ -228,7 +229,7 @@ export function AccessReview(props: {
       clearTimeout(catalogTimer)
       setCatalogRequest("")
       if (msg.error) {
-        setCatalogError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+        setCatalogError(routineFailure(msg.error, msg.recovery))
         return
       }
       setCatalog(msg.services ?? [])
@@ -244,7 +245,7 @@ export function AccessReview(props: {
       return
     clearTimeout(timer)
     setRequest("")
-    if (msg.error) return setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+    if (msg.error) return setError(routineFailure(msg.error, msg.recovery, "Your access choices are unchanged."))
     if (
       msg.access !== (choice() === "brief" ? "brief" : "full") ||
       !same(msg.tools, tools()) ||

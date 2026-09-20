@@ -78,12 +78,16 @@ test("snapshot messages use the generated read API and preserve correlation on a
     post: (msg) => messages.push(msg),
     message: { type: "routineSnapshot", requestID: "offline", agentID: "routine", runID: "saved" },
   })
-  expect(messages.at(-1)).toEqual({
+  expect(messages.at(-1)).toMatchObject({
     type: "routineSnapshot",
     requestID: "offline",
     agentID: "routine",
     runID: "saved",
     error: "Raya is not connected.",
+    recovery: {
+      kind: "unavailable",
+      next: expect.stringContaining("Reconnect"),
+    },
   })
 })
 

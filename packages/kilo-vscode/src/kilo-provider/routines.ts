@@ -46,10 +46,14 @@ const previews = new Map<
   { kilo: Kilo; dir: string; data: KilocodeRoutineForecastResponse; expires: number; submitted?: boolean; edit?: Edit }
 >()
 
+function issue(kind: "schedule" | "output" | "access" | "unavailable", message: string, field?: string) {
+  return Object.assign(new Error(message), { kind, field })
+}
+
 function schedule(msg: Msg) {
   if (msg.schedule !== undefined) {
     const result = Schedule.safeParse(msg.schedule)
-    if (!result.success) throw new Error("Choose a valid schedule and preview it again.")
+    if (!result.success) throw issue("schedule", "Choose a valid schedule and preview it again.", "schedule")
     return result.data
   }
   const parsed =
@@ -58,22 +62,25 @@ function schedule(msg: Msg) {
       : english(typeof msg.when === "string" ? msg.when : undefined)
   if (parsed.kind !== "cron") return parsed
   const tz = typeof msg.tz === "string" ? msg.tz.trim() : undefined
-  if (tz === "") throw new Error("Choose a timezone for this routine.")
+  if (tz === "") throw issue("schedule", "Choose a timezone for this routine.", "timezone")
   return { ...parsed, tz }
 }
 
 async function forecast(ctx: Ctx) {
   const id = ctx.message.requestID
-  if (typeof id !== "string" || !id || id.length > 128) throw new Error("Request a new schedule preview.")
+  if (typeof id !== "string" || !id || id.length > 128)
+    throw issue("schedule", "Request a new schedule preview.", "requestID")
   const edit = ctx.message.edit === undefined ? undefined : Edit.safeParse(ctx.message.edit)
-  if (edit && !edit.success) throw new Error("Reload the routine before previewing its schedule.")
+  if (edit && !edit.success)
+    throw issue("schedule", "Reload the routine before previewing its schedule.", "schedule")
   const proposal = ctx.message.schedule === undefined ? undefined : Proposal.safeParse(ctx.message.schedule)
-  if (proposal && !proposal.success) throw new Error("Choose a valid schedule and preview it again.")
+  if (proposal && !proposal.success)
+    throw issue("schedule", "Choose a valid schedule and preview it again.", "schedule")
   const result = await ctx.kilo.forecast(
     { directory: ctx.dir, body: proposal?.data ?? schedule(ctx.message) },
     { throwOnError: true },
   )
-  if (!result.data) throw new Error("No schedule preview was returned. Try again.")
+  if (!result.data) throw issue("schedule", "No schedule preview was returned. Try again.", "schedule")
   const token = crypto.randomUUID()
   previews.set(token, {
     kilo: ctx.kilo,
@@ -93,28 +100,28 @@ function confirmed(ctx: Ctx) {
   if (ctx.message.forecastID === undefined) return schedule(ctx.message)
   const item = previews.get(String(ctx.message.forecastID))
   if (!item || item.kilo !== ctx.kilo || item.dir !== ctx.dir || item.expires <= Date.now())
-    throw new Error("This schedule preview has expired. Preview it again before saving.")
+    throw issue("schedule", "This schedule preview has expired. Preview it again before saving.", "schedule")
   if (
     ctx.message.type === "routineScheduleUpdate" ? item.edit?.agentID !== ctx.message.agentID : item.edit !== undefined
   )
-    throw new Error("This preview belongs to a different routine or action. Preview the schedule again.")
+    throw issue("schedule", "This preview belongs to a different routine or action. Preview the schedule again.", "schedule")
   if (item.submitted && ctx.message.type !== "routineCreate")
-    throw new Error("This assignment was already submitted. Check the routine list before trying again.")
+    throw issue("schedule", "This assignment was already submitted. Check the routine list before trying again.", "schedule")
   if (item.submitted) return item.data.schedule
   if (item.data.schedule.kind === "once" && Number(item.data.schedule.at) <= Date.now())
-    throw new Error("The previewed time has passed. Preview a new time before saving.")
+    throw issue("schedule", "The previewed time has passed. Preview a new time before saving.", "schedule")
   if (item.data.schedule.kind === "cron" && Number(item.data.occurrences[0]) <= Date.now())
-    throw new Error("The first previewed time has passed. Preview the schedule again before saving.")
+    throw issue("schedule", "The first previewed time has passed. Preview the schedule again before saving.", "schedule")
   return item.data.schedule
 }
 
 async function reschedule(ctx: Ctx) {
   const msg = ctx.message
   if (typeof msg.requestID !== "string" || !msg.requestID || typeof msg.forecastID !== "string")
-    throw new Error("Preview the schedule before saving.")
+    throw issue("schedule", "Preview the schedule before saving.", "schedule")
   const schedule = confirmed(ctx)
   const item = previews.get(msg.forecastID)
-  if (!item?.edit) throw new Error("Preview this routine's schedule before saving.")
+  if (!item?.edit) throw issue("schedule", "Preview this routine's schedule before saving.", "schedule")
   item.submitted = true
   await ctx.kilo.update({ directory: ctx.dir, ...item.edit, schedule }, { throwOnError: true })
   previews.delete(msg.forecastID)
@@ -320,7 +327,7 @@ function reviewInput(msg: Msg) {
       ? msg.expectedAccess
       : undefined
   if (!requestID || !agentID || !access || !prior || !selected || !expected || !paths || !expectedPaths)
-    throw new Error("Reload the routine before reviewing access.")
+    throw issue("access", "Reload the routine before reviewing access.", "access")
   return {
     requestID,
     agentID,
@@ -369,7 +376,7 @@ function policy(value: unknown) {
 
 async function summaries(ctx: Ctx) {
   const listed = await ctx.kilo.inbox({ directory: ctx.dir }, { throwOnError: true }).catch((err: unknown) => {
-    ctx.post({ type: "routineInbox", requestID: ctx.message.requestID, error: reason(err) })
+    ctx.post({ type: "routineInbox", requestID: ctx.message.requestID, error: reason(err), recovery: recovery(err) })
     return undefined
   })
   if (!listed) return
@@ -378,6 +385,7 @@ async function summaries(ctx: Ctx) {
       type: "routineInbox",
       requestID: ctx.message.requestID,
       error: "The routine inbox could not be read.",
+      recovery: recovery({ kind: "unavailable" }),
     })
     return
   }
@@ -806,7 +814,11 @@ async function create(ctx: Ctx) {
   confirmed(ctx)
   const parsed = msg.output === undefined ? undefined : Output.safeParse(msg.output)
   if (parsed && !parsed.success)
-    throw new Error("Describe the required output and provide 1–20 distinct criteria with verification instructions.")
+    throw issue(
+      "output",
+      "Describe the required output and provide 1–20 distinct criteria with verification instructions.",
+      "output",
+    )
   const output = parsed?.data
   const capabilities = Array.isArray(msg.capabilities)
     ? msg.capabilities.filter((item): item is string => typeof item === "string")
@@ -911,7 +923,7 @@ async function review(ctx: Ctx) {
 async function services(ctx: Ctx) {
   const msg = ctx.message
   if (typeof msg.requestID !== "string" || !msg.requestID || msg.requestID.length > 128)
-    throw new Error("Reload the routine before reviewing connected services.")
+    throw issue("access", "Reload the routine before reviewing connected services.", "services")
   const result = await ctx.kilo.authorityServices({ directory: ctx.dir }, { throwOnError: true })
   const data = result.data
   if (
@@ -941,11 +953,15 @@ async function services(ctx: Ctx) {
 async function output(ctx: Ctx) {
   const msg = ctx.message
   if ([msg.requestID, msg.agentID].some((id) => typeof id !== "string" || !id || id.length > 256))
-    throw new Error("Reload the routine before editing its output requirements.")
+    throw issue("output", "Reload the routine before editing its output requirements.", "output")
   const contract = Output.safeParse(msg.output)
   const expected = msg.expectedOutput === "unset" ? "unset" : Output.safeParse(msg.expectedOutput)
   if (!contract.success || (expected !== "unset" && !expected.success))
-    throw new Error("Provide valid output requirements and reload the saved version before editing.")
+    throw issue(
+      "output",
+      "Provide valid output requirements and reload the saved version before editing.",
+      "output",
+    )
   const result = await ctx.kilo.update(
     {
       directory: ctx.dir,
@@ -1215,7 +1231,7 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
     return true
   }
   try {
-    if (!input.client) throw new Error("Raya is not connected.")
+    if (!input.client) throw issue("unavailable", "Raya is not connected.")
     const revision = draftVersion(msg)
     const ids = attachmentIDs(msg.attachmentIDs)
     const draft = msg.draft === null || msg.draft === undefined ? "" : String(msg.draft)
@@ -1254,6 +1270,7 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
       requestID: msg.requestID,
       agentID: msg.agentID,
       error: reason(err),
+      recovery: recovery(err),
     })
   }
   return true
@@ -1279,6 +1296,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
       runID: input.message.runID,
       section: input.message.section,
       error: "Raya is not connected.",
+      recovery: recovery({ kind: "unavailable" }),
     })
     return true
   }

@@ -1,7 +1,9 @@
 import { Button } from "@kilocode/kilo-ui/button"
 import { For, Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
 import { Output } from "../../../../src/shared/routine-output"
+import type { RoutineRecovery } from "../../../../src/shared/routine-error"
 import { useVSCode } from "../../context/vscode"
+import { routineFailure } from "../../utils/routine-recovery"
 import { OutputEditor } from "./OutputEditor"
 
 export function OutputReview(props: { item: { id: string; name: string; output?: Output }; onClose: () => void }) {
@@ -28,11 +30,11 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
   let root: HTMLElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   onMount(() => root?.focus())
-  const receive = (msg: { error?: string; agents?: unknown[] }) => {
+  const receive = (msg: { error?: string; recovery?: RoutineRecovery; agents?: unknown[] }) => {
     if (!msg.error && !Array.isArray(msg.agents)) return
     clearTimeout(timer)
     setLoading("")
-    if (msg.error) return setError(msg.error)
+    if (msg.error) return setError(routineFailure(msg.error, msg.recovery, "Your requirements draft is unchanged."))
     const item = msg.agents?.find(
       (value) => value && typeof value === "object" && Reflect.get(value, "id") === props.item.id,
     )
@@ -57,7 +59,7 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
       return
     clearTimeout(timer)
     setRequest("")
-    if (msg.error) return setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+    if (msg.error) return setError(routineFailure(msg.error, msg.recovery, "Your requirements draft is unchanged."))
     const result = Output.safeParse(msg.output)
     if (!result.success || JSON.stringify(result.data) !== JSON.stringify(Output.parse(draft())))
       return setError("The saved requirements did not match your changes. Close and reload the routine.")

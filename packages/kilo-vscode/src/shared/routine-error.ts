@@ -1,6 +1,7 @@
 const guidance = {
   schedule: "Review the schedule and timezone, then preview again. Your draft is still available.",
   capability: "Review the requested capabilities before submitting again. Your draft is still available.",
+  output: "Review the output requirements and verification criteria before submitting again. Your draft is still available.",
   conflict: "Reload the current routine and compare it with your draft before submitting again.",
   paused: "Review why this routine is paused before resuming it.",
   access: "Review this routine's workspace access before starting it.",

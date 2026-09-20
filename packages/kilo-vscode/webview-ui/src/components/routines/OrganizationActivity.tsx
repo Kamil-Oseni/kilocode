@@ -3,6 +3,7 @@ import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import { OrganizationAssignment, type Follow } from "./OrganizationAssignment"
 
 type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
@@ -109,7 +110,7 @@ function live(state: Work["state"]) {
 }
 
 function label(state: Work["state"]) {
-  if (state === "needs_input") return "Needs input"
+  if (state === "needs_input") return "Waiting for your answer"
   if (state === "accepted") return "Starting"
   return state[0]!.toUpperCase() + state.slice(1)
 }
@@ -213,7 +214,7 @@ export const OrganizationActivity: Component<{
     setStopping()
     setConfirm("")
     if (msg.error) {
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery))
       return
     }
     if (!validSummary(msg.summary)) {
@@ -236,7 +237,7 @@ export const OrganizationActivity: Component<{
     if (msg.error || !found) {
       setFaults((prior) => ({
         ...prior,
-        [active.id]: msg.error || "The stored request chain could not be verified.",
+        [active.id]: routineFailure(msg.error, msg.recovery) || "The stored request chain could not be verified.",
       }))
       return
     }
@@ -264,7 +265,9 @@ export const OrganizationActivity: Component<{
     ) {
       setFaults((prior) => ({
         ...prior,
-        [active.id]: msg.error || "The stopped work response could not be verified. Refresh before trying again.",
+        [active.id]:
+          routineFailure(msg.error, msg.recovery) ||
+          "The stopped work response could not be verified. Refresh before trying again.",
       }))
       setStopping()
       setConfirm("")

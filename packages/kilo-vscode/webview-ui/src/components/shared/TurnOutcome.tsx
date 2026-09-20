@@ -3,6 +3,7 @@ import { type Component, Show, createMemo } from "solid-js"
 import { useSession } from "../../context/session"
 import { terminal, type TerminalState } from "../../context/session-outcome"
 import { useLanguage } from "../../context/language"
+import { recoveryCopy } from "../../utils/recovery-copy"
 
 export const TurnOutcome: Component = () => {
   const session = useSession()
@@ -27,6 +28,12 @@ export const TurnOutcome: Component = () => {
     return language.t("session.outcome.incomplete", { count: String(value.remaining) })
   }
 
+  const next = (value: TerminalState) => {
+    if (value.kind === "filtered") return recoveryCopy.turn.filtered
+    if (value.kind === "error") return recoveryCopy.turn.error
+    return recoveryCopy.turn.continue
+  }
+
   return (
     <Show when={session.status() === "idle" && state()}>
       {(value) => (
@@ -37,6 +44,9 @@ export const TurnOutcome: Component = () => {
         >
           <Card variant={value().tone === "critical" ? "error" : "warning"}>
             <div>{label(value())}</div>
+            <CardDescription>
+              {recoveryCopy.turn.preserved} {next(value())}
+            </CardDescription>
             <Show when={value().vercelID}>{(id) => <code>Request ID: {id()}</code>}</Show>
             <Show when={value().generationID}>
               {(id) => <CardDescription>{language.t("session.outcome.generationId", { id: id() })}</CardDescription>}

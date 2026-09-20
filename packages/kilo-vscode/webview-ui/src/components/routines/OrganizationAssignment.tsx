@@ -4,6 +4,7 @@ import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { Component, For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
 type Agent = { id: string; name: string; enabled: boolean }
@@ -146,7 +147,7 @@ export const OrganizationAssignment: Component<{
     if (!pending || msg.requestID !== pending.request || msg.agentID !== pending.sender) return
     if (msg.error) {
       setSent()
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery, "Your assignment draft is still here."))
       return
     }
     if (!matches(msg.record, pending, props.item)) {

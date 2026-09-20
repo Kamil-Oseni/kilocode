@@ -7,6 +7,7 @@ import { Component, createSignal, Show } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
+import { recoveryCopy } from "../../utils/recovery-copy"
 
 interface StartupErrorBannerProps {
   errorMessage: string
@@ -24,19 +25,27 @@ export const StartupErrorBanner: Component<StartupErrorBannerProps> = (props) =>
 
   return (
     <div class="startup-error-banner">
-      <div class="startup-error-header" onClick={() => setExpanded((v) => !v)} role="button" aria-expanded={expanded()}>
-        <span class={`startup-error-chevron${expanded() ? " startup-error-chevron-expanded" : ""}`}>
-          <Icon name="chevron-right" size="small" />
-        </span>
-        <span class="startup-error-title">
-          {language.t("error.startup.title")}: <span class="startup-error-firstline">{props.errorMessage}</span>
-        </span>
+      <div class="startup-error-header">
         <button
+          type="button"
+          class="startup-error-disclosure"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded()}
+        >
+          <span class={`startup-error-chevron${expanded() ? " startup-error-chevron-expanded" : ""}`}>
+            <Icon name="chevron-right" size="small" />
+          </span>
+          <span class="startup-error-title">
+            {language.t("error.startup.title")}: <span class="startup-error-firstline">{props.errorMessage}</span>
+            <span class="startup-error-recovery">
+              {recoveryCopy.startup.preserved} {recoveryCopy.startup.next}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
           class="startup-error-retry"
-          onClick={(e) => {
-            e.stopPropagation()
-            retry()
-          }}
+          onClick={retry}
           aria-label={language.t("common.retry")}
         >
           {language.t("common.retry")}

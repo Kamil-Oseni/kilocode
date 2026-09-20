@@ -2,6 +2,7 @@ import { Component, For, Show, createEffect, createSignal, onCleanup } from "sol
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ConnectionState, ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import { ChatInfo } from "./ChatInfo"
 import { ConversationSearch } from "./ConversationSearch"
 import { ConversationState } from "./ConversationState"
@@ -407,7 +408,7 @@ export const Attachments: Component<{ agentID: string; items?: DraftFile[] }> = 
 }
 
 export function status(state: Box["state"]) {
-  if (state === "needs_input") return "Needs input"
+  if (state === "needs_input") return "Waiting for your answer"
   if (state === "waiting") return "Waiting"
   if (state === "paused") return "Paused"
   if (state === "failed") return "Failed"
@@ -466,7 +467,7 @@ const Pass: Component<{
     if (msg.type !== "routineDelegated" || msg.requestID !== sendID || msg.agentID !== props.agentID) return
     if (msg.error) {
       setPhase("failed")
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
       setNews("")
       return
     }
@@ -858,7 +859,7 @@ export const Inbox: Component<{
     wait = false
     setLoading(false)
     if (msg.error) {
-      setPageError(msg.error)
+      setPageError(routineFailure(msg.error, msg.recovery, "Messages already loaded are still here."))
       return
     }
     const rows = Array.isArray(msg.messages) ? (msg.messages as Note[]) : []
@@ -881,7 +882,7 @@ export const Inbox: Component<{
     if (msg.type !== "routineInboxSent" || msg.requestID !== sendID || msg.agentID !== props.agentID) return
     if (msg.error) {
       setPhase("failed")
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
       return
     }
     const saved = msg.message as Note | undefined
@@ -924,7 +925,7 @@ export const Inbox: Component<{
     if (msg.error) {
       if (removal) setRemoveFailed(removal)
       else setPickFailed(true)
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
       return
     }
     const rows = attachments(msg.files)
@@ -949,14 +950,18 @@ export const Inbox: Component<{
     }
     if (!msg.error) return
     dirty = true
-    setError("This draft changed in another Raya window. Your text is still here; refresh before saving again.")
+    setError(
+      msg.recovery?.kind === "conflict"
+        ? "This draft changed in another Raya window. Your text and attachments are still here; refresh before saving again."
+        : routineFailure(msg.error, msg.recovery, "Your text and attachments are still here."),
+    )
   }
 
   const halted = (msg: ExtensionMessage) => {
     if (msg.type !== "routineDelegateStopped" || msg.requestID !== haltID || msg.agentID !== props.agentID) return
     if (msg.error) {
       setHalt("failed")
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery))
       return
     }
     setHalt("idle")
@@ -969,7 +974,11 @@ export const Inbox: Component<{
     if (msg.type !== "routineDelegateChain" || msg.requestID !== lookID || msg.agentID !== props.agentID) return
     const id = typeof msg.id === "string" ? msg.id : look()
     if (msg.error) {
-      if (id) setFaults((prior) => ({ ...prior, [id]: msg.error || "The request chain could not be read." }))
+      if (id)
+        setFaults((prior) => ({
+          ...prior,
+          [id]: routineFailure(msg.error, msg.recovery) || "The request chain could not be read.",
+        }))
       setLook("")
       return
     }
@@ -995,7 +1004,8 @@ export const Inbox: Component<{
     saved(msg)
     halted(msg)
     chained(msg)
-    if (msg.type === "routineInboxAttachmentOpened" && msg.agentID === props.agentID && msg.error) setError(msg.error)
+    if (msg.type === "routineInboxAttachmentOpened" && msg.agentID === props.agentID && msg.error)
+      setError(routineFailure(msg.error, msg.recovery))
   }
 
   const persist = (value: string) => {

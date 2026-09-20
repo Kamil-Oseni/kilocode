@@ -22,6 +22,7 @@ import {
   HistoryPreview,
   ReviewPreview,
   EditReviewPreview,
+  RecoveryPreview,
 } from "./surfaces"
 import { ConversationPreview, SlashPreview, TopNavPreview, TranscriptPreview } from "./chrome"
 import { render } from "solid-js/web"
@@ -69,6 +70,7 @@ type PvState =
   | "child-viewer"
   | "routines"
   | "result"
+  | "recovery"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -103,6 +105,7 @@ const states: PvState[] = [
   "child-viewer",
   "routines",
   "result",
+  "recovery",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -389,6 +392,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "child-viewer"}>
         <ChildViewerPreview />
+      </Show>
+      <Show when={props.state === "recovery"}>
+        <RecoveryPreview />
       </Show>
       <Show when={props.state === "routines"}>
         <RoutinesPreview />

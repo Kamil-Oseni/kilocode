@@ -3,6 +3,30 @@ import { expect, test } from "@playwright/test"
 
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {
+    test(`${theme} recovery vocabulary at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?state=${theme}-recovery`)
+      await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+      await expect(page.locator(".startup-error-recovery")).toContainText("Your conversations and drafts remain saved.")
+      await expect(page.locator(".startup-error-recovery")).toContainText(
+        "Retry the connection. Open technical details if it fails again.",
+      )
+      await expect(page.getByText("Turn interrupted.", { exact: true })).toBeVisible()
+      await expect(page.getByText("Your prompt, conversation, and completed work remain available.")).toHaveCount(2)
+      await expect(page.getByText("Review the partial result, then continue the conversation when ready.")).toBeVisible()
+      await expect(page.getByText("Review the technical details, then retry or choose another configured model.")).toBeVisible()
+      await expect(page.getByText("Your prompt and conversation remain available while you reconnect.")).toBeVisible()
+      await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible()
+      await page.getByRole("button", { name: "Details", exact: true }).click()
+      await expect(page.locator(".error-detail-pre")).toContainText("UnknownError")
+      await expect(page.getByText("spawn C:/Raya/bin/kilo.exe ENOENT", { exact: true })).toBeHidden()
+      await page.locator(".startup-error-disclosure").click()
+      await expect(page.getByText("spawn C:/Raya/bin/kilo.exe ENOENT", { exact: true })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      expect((await new AxeBuilder({ page }).include("[data-recovery-preview]").analyze()).violations).toEqual([])
+      await page.screenshot({ path: info.outputPath("recovery-vocabulary.png"), fullPage: true })
+    })
+
     test(`${theme} goal progress decisions at ${width}px`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: 900 })
 

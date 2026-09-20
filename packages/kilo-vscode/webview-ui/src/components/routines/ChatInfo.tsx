@@ -2,6 +2,7 @@ import { Component, For, createMemo, createSignal, onCleanup, onMount } from "so
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import { MediaAttachment, previewable } from "./MediaAttachment"
 import { ReportSetting } from "./ReportSetting"
 
@@ -172,7 +173,7 @@ export const ChatInfo: Component<{
       if (msg.requestID !== shareID) return
       setShareBusy(false)
       if (msg.error) {
-        setShareError(msg.error)
+        setShareError(routineFailure(msg.error, msg.recovery))
         return
       }
       const rows = (msg.items ?? []).filter(validShare)
@@ -191,7 +192,7 @@ export const ChatInfo: Component<{
     if (msg.requestID !== contactID) return
     setContactBusy(false)
     if (msg.error) {
-      setContactError(msg.error)
+      setContactError(routineFailure(msg.error, msg.recovery))
       return
     }
     const rows = (msg.items ?? []).filter(validContact)

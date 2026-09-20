@@ -694,7 +694,7 @@ export const dict = {
   "session.prompts.latest": "Latest prompt",
   "session.prompts.overflow": "{{count}} earlier prompts",
   "session.status.writingResponse": "Writing response...",
-  "session.status.retry": "Retrying…",
+  "session.status.retry": "Retrying connection…",
   "session.status.working": "Working...",
   "session.status.offline": "Network disconnected — reconnecting...",
   "session.outcome.incomplete": "Turn ended with {{count}} to-dos remaining.",

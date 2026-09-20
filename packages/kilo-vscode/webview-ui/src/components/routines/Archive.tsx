@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, createUniqueId, onCleanup } from "
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import { RunReview } from "./RunReview"
 import { Files, type Note } from "./Inbox"
 
@@ -123,7 +124,7 @@ export function Archive(props: { onOpenSession?: (id: string) => void }) {
     setRequest("")
     setLoading(false)
     if (msg.error) {
-      setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+      setError(routineFailure(msg.error, msg.recovery))
       return
     }
     if (target()) {

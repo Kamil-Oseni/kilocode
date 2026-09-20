@@ -55,6 +55,7 @@ test("access review sends only a conditional update and correlates confirmation 
     type: "routineAccessUpdated",
     requestID: "review",
     error: "Reload the routine before reviewing access.",
+    recovery: { kind: "access", field: "access", next: expect.stringContaining("workspace access") },
   })
   await handleRoutineMessage({
     client,
@@ -85,6 +86,7 @@ test("access review sends only a conditional update and correlates confirmation 
     type: "routineAccessUpdated",
     requestID: "review",
     error: "Raya is not connected.",
+    recovery: { kind: "unavailable", next: expect.stringContaining("Reconnect") },
   })
   await handleRoutineMessage({
     client,

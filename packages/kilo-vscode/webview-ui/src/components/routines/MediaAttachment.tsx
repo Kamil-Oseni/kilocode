@@ -2,6 +2,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Component, Show, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import type { DraftFile } from "./Inbox"
 
 const images = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"])
@@ -61,7 +62,7 @@ export const MediaAttachment: Component<{
       return
     const file = msg.file
     if (msg.error) {
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery))
       setPhase("failed")
       return
     }

@@ -2,6 +2,7 @@ import { Component, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 
 type Quiet = { start: number; end: number; timezone: string }
 
@@ -74,7 +75,7 @@ export const ReportSetting: Component<{ agentID?: string; organizationID?: strin
       return
     setBusy(false)
     if (msg.error) {
-      setError(msg.error)
+      setError(routineFailure(msg.error, msg.recovery))
       return
     }
     setEnabled(msg.enabled === true)

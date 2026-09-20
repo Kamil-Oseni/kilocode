@@ -34,12 +34,17 @@ test("output editing sends a conditional PATCH and rejects missing preconditions
   expect(messages[0]).toMatchObject({ type: "routineOutputUpdated", requestID: "edit", agentID: "routine", output })
   await handleRoutineMessage({ ...context, message: { ...message, expectedOutput: undefined } })
   expect(calls).toHaveLength(1)
-  expect(messages.at(-1)).toMatchObject({ type: "routineOutputUpdated", error: expect.any(String) })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineOutputUpdated",
+    error: expect.any(String),
+    recovery: { kind: "output", field: "output", next: expect.stringContaining("output requirements") },
+  })
   await handleRoutineMessage({ ...context, client: null, message })
   expect(messages.at(-1)).toMatchObject({
     type: "routineOutputUpdated",
     requestID: "edit",
     error: "Raya is not connected.",
+    recovery: { kind: "unavailable", next: expect.stringContaining("Reconnect") },
   })
   await handleRoutineMessage({
     ...context,

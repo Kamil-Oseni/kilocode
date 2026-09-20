@@ -256,6 +256,7 @@ export interface RoutineRunsLoadedMessage {
   viewID?: string
   refreshID?: number
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
   agentID: string
   runs?: unknown[]
 }
@@ -335,6 +336,7 @@ export interface RoutineInboxMessage {
   refreshID?: number
   items?: unknown[]
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxPageResultMessage {
@@ -344,6 +346,7 @@ export interface RoutineInboxPageResultMessage {
   messages?: unknown[]
   next?: string
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxSentMessage {
@@ -352,6 +355,7 @@ export interface RoutineInboxSentMessage {
   agentID: string
   message?: unknown
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxFilesMessage {
@@ -362,6 +366,7 @@ export interface RoutineInboxFilesMessage {
   files?: { id: string; name: string; mime: string; size: number }[]
   revision?: number
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxAttachmentOpenedMessage {
@@ -369,6 +374,7 @@ export interface RoutineInboxAttachmentOpenedMessage {
   requestID: string
   agentID: string
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxAttachmentPreviewedMessage {
@@ -377,6 +383,7 @@ export interface RoutineInboxAttachmentPreviewedMessage {
   agentID: string
   file?: { id: string; name: string; mime: string; size: number; data: string }
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxInfoResultMessage {
@@ -387,6 +394,7 @@ export interface RoutineInboxInfoResultMessage {
   items?: unknown[]
   next?: string
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineContactDestinationResultMessage {
@@ -397,6 +405,7 @@ export interface RoutineContactDestinationResultMessage {
   enabled?: boolean
   quiet?: { start: number; end: number; timezone: string } | null
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxReadResultMessage {
@@ -405,6 +414,7 @@ export interface RoutineInboxReadResultMessage {
   agentID: string
   at?: number
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineInboxDraftResultMessage {
@@ -415,6 +425,7 @@ export interface RoutineInboxDraftResultMessage {
   files?: { id: string; name: string; mime: string; size: number }[]
   revision?: number
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineDelegatedMessage {
@@ -423,6 +434,7 @@ export interface RoutineDelegatedMessage {
   agentID: string
   record?: unknown
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineDelegateStoppedMessage {
@@ -431,6 +443,7 @@ export interface RoutineDelegateStoppedMessage {
   agentID: string
   record?: unknown
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineDelegateChainResultMessage {
@@ -442,6 +455,7 @@ export interface RoutineDelegateChainResultMessage {
   above?: unknown
   below?: unknown
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineOrganizationUpdatedMessage {
@@ -461,6 +475,7 @@ export interface RoutineOrganizationActivityResultMessage {
   summary?: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["summary"]
   next?: string
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineOrganizationArchivedMessage {

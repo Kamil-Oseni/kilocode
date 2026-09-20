@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount }
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { routineFailure } from "../../utils/routine-recovery"
 import { reason } from "./run"
 import { Verification } from "./Verification"
 
@@ -69,7 +70,7 @@ export function RunReview(props: {
     ) {
       setClosing("")
       if (msg.error || !msg.receipt) {
-        setFailure([msg.error, msg.recovery?.next].filter(Boolean).join(" ") || "The interrupted start stayed open.")
+        setFailure(routineFailure(msg.error, msg.recovery) || "The interrupted start stayed open.")
         return
       }
       setFailure("")
@@ -254,7 +255,7 @@ export function RunReview(props: {
       </Show>
       <Show when={reply()?.error}>
         <p class="routines-error" role="alert">
-          {[reply()?.error, reply()?.recovery?.next].filter(Boolean).join(" ")}
+          {routineFailure(reply()?.error, reply()?.recovery)}
         </p>
         <Button size="small" variant="secondary" onClick={load}>
           Try again

@@ -4,6 +4,7 @@ import { recovery } from "../../src/shared/routine-error"
 test("uses explicit backend causes and preserves the affected field", () => {
   expect(recovery({ kind: "schedule", field: "timezone" })).toMatchObject({ kind: "schedule", field: "timezone" })
   expect(recovery({ data: { kind: "capability", field: "capabilities" } })).toMatchObject({ kind: "capability" })
+  expect(recovery({ kind: "output", field: "output" })?.next).toContain("output requirements")
   expect(recovery({ kind: "conflict" })?.next).toContain("compare it with your draft")
   expect(recovery({ kind: "paused" })?.next).toContain("before resuming")
 })

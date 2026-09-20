@@ -1,5 +1,5 @@
 import { Component, createMemo, Switch, Match } from "solid-js"
-import { Card } from "@kilocode/kilo-ui/card"
+import { Card, CardDescription } from "@kilocode/kilo-ui/card"
 import { Collapsible } from "@kilocode/kilo-ui/collapsible"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { ErrorDetails } from "@kilocode/kilo-ui/error-details"
@@ -8,6 +8,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import type { AssistantMessage } from "@kilocode/sdk/v2"
 import { useLanguage } from "../../context/language"
 import { useProvider } from "../../context/provider"
+import { recoveryCopy } from "../../utils/recovery-copy"
 import {
   unwrapError,
   parseAssistantError,
@@ -66,7 +67,12 @@ export const ErrorDisplay: Component<ErrorDisplayProps> = (props) => {
         <Card variant="error" class="error-card" role="alert">
           <div class="error-card-body">
             <Icon name="warning" size="small" />
-            <div class="error-card-message">{errorText()}</div>
+            <div>
+              <div class="error-card-message">{errorText()}</div>
+              <CardDescription>
+                {recoveryCopy.assistant.preserved} {recoveryCopy.assistant.next}
+              </CardDescription>
+            </div>
           </div>
           <Collapsible variant="ghost">
             <Collapsible.Trigger class="error-details-trigger">
@@ -87,6 +93,7 @@ export const ErrorDisplay: Component<ErrorDisplayProps> = (props) => {
             <span data-slot="auth-prompt-title">{t("error.paidModel.title")}</span>
           </div>
           <p data-slot="auth-prompt-description">{t("error.paidModel.description")}</p>
+          <p data-slot="auth-prompt-description">{recoveryCopy.assistant.auth}</p>
           <Button variant="primary" onClick={() => props.onLogin?.()}>
             {t("error.paidModel.action")}
           </Button>
@@ -99,6 +106,7 @@ export const ErrorDisplay: Component<ErrorDisplayProps> = (props) => {
             <span data-slot="auth-prompt-title">{t("error.promotionLimit.title")}</span>
           </div>
           <p data-slot="auth-prompt-description">{t("error.promotionLimit.description")}</p>
+          <p data-slot="auth-prompt-description">{recoveryCopy.assistant.auth}</p>
           <Button variant="primary" onClick={() => props.onLogin?.()}>
             {t("error.promotionLimit.action")}
           </Button>
@@ -121,6 +129,7 @@ export const ErrorDisplay: Component<ErrorDisplayProps> = (props) => {
                   provider: authProvider()?.name ?? auth()?.providerID ?? "provider",
                 })}
           </p>
+          <p data-slot="auth-prompt-description">{recoveryCopy.assistant.auth}</p>
           <Button variant="primary" onClick={connectProvider}>
             {oauth() ? t("settings.providers.action.signInChatGPT") : t("common.connect")}
           </Button>

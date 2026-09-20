@@ -12,9 +12,21 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  cursor: pointer;
-  user-select: none;
   min-width: 0;
+}
+
+.startup-error-disclosure {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .startup-error-title {
@@ -24,6 +36,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+
+.startup-error-recovery {
+  display: block;
+  margin-top: 2px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .startup-error-firstline {

@@ -448,7 +448,7 @@ test("routine folder review fails closed on stale access and recovers after relo
   ).toBeVisible()
   await review.getByRole("button", { name: "Save access" }).click()
   await expect(review.getByRole("alert")).toHaveText(
-    "This routine's folder access changed. Reload it before reviewing access again.",
+    "This routine's folder access changed. Reload it before reviewing access again. Your access choices are unchanged.",
   )
   await expect(review.getByRole("status")).toHaveCount(0)
 

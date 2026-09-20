@@ -97,6 +97,14 @@ export const BackgroundJobInfo = Schema.Struct({
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
 
+export const BackgroundJobMetadata = {
+  clean(value: Record<string, unknown> | undefined) {
+    if (!value) return undefined
+    const result = Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined))
+    return Object.keys(result).length > 0 ? result : undefined
+  },
+}
+
 export const BackgroundJobsQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   sessionID: SessionID,

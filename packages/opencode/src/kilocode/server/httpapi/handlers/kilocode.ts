@@ -67,6 +67,7 @@ import {
   RemoveCommandPayload,
   RemoveSkillPayload,
   BackgroundJobInfo,
+  BackgroundJobMetadata,
   BackgroundJobsQuery,
   ProjectUsageQuery, // raya_change - historical project usage
   GoalCreatePayload, // raya_change - Milestone A goal API
@@ -381,7 +382,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           started_at: job.started_at,
           completed_at: job.completed_at,
           error: job.error,
-          metadata: job.metadata,
+          // Keep the HTTP JSON contract valid even for jobs created by older or third-party producers.
+          metadata: BackgroundJobMetadata.clean(job.metadata),
         })) satisfies (typeof BackgroundJobInfo.Type)[]
     })
 

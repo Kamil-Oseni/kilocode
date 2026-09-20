@@ -416,10 +416,10 @@ export const TaskTool = Tool.define(
         selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
         displayName, // raya_change
         selection, // raya_change
-        stepCap: limit, // raya_change
+        ...(limit === undefined ? {} : { stepCap: limit }), // kilocode_change // raya_change - keep background metadata JSON-safe
         model,
-        provenance: selected.provenance, // kilocode_change - retain the selection source for this invocation
-        variant, // kilocode_change
+        ...(selected.provenance === undefined ? {} : { provenance: selected.provenance }), // kilocode_change - retain the selection source without serializing undefined
+        ...(variant === undefined ? {} : { variant }), // kilocode_change - optional JSON fields must be absent, not undefined
         ...(runInBackground ? { background: true } : {}),
       }
 

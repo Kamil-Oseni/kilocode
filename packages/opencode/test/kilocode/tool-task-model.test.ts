@@ -227,6 +227,7 @@ function run(input: {
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ onPrompt: (value) => (seen = value) })
         const sessions = yield* Session.Service
+        const jobs = yield* BackgroundJob.Service
         const resumed = input.resume
           ? yield* sessions.create({ parentID: chat.id, agent: input.agent, title: "Existing child" })
           : undefined
@@ -297,12 +298,15 @@ function run(input: {
         expect(provenance.variant).toBe(seen?.variant)
         expect(provenance.stage).toBe("selected")
         expect(provenance.capability).toBe("normalized-provider-flag")
+        const job = yield* jobs.get(result.metadata.sessionId)
         return {
           provenance,
           prompt: seen?.model,
           variant: seen?.variant,
           model: result.metadata.model,
           metadataVariant: result.metadata.variant,
+          metadataHasVariant: Object.hasOwn(result.metadata, "variant"),
+          jobHasVariant: Object.hasOwn(job?.metadata ?? {}, "variant"),
         }
       }),
     {
@@ -435,6 +439,8 @@ describe("tool.task model resolution", () => {
           expect(result.variant).toBeUndefined()
           expect(result.model).toEqual(saved)
           expect(result.metadataVariant).toBeUndefined()
+          expect(result.metadataHasVariant).toBe(false)
+          expect(result.jobHasVariant).toBe(false)
         }),
       ),
     ),

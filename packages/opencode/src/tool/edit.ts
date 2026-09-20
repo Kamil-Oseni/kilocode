@@ -775,7 +775,7 @@ export function replace(content: string, oldString: string, newString: string, r
 
   if (notFound) {
     throw new Error(
-      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
+      "Could not find oldString in the file. The file may have changed since it was read. Re-read the narrow target region before retrying, then use the current exact text including whitespace and indentation. Do not retry the same stale oldString.", // kilocode_change
     )
   }
   throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")

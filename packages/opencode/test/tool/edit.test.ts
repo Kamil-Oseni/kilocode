@@ -310,9 +310,12 @@ describe("tool.edit", () => {
         const filepath = path.join(test.directory, "file.txt")
         yield* put(filepath, "actual content")
 
-        expect(yield* fail({ filePath: filepath, oldString: "not in file", newString: "replacement" })).toBeInstanceOf(
-          Error,
-        )
+        // kilocode_change start
+        const error = yield* fail({ filePath: filepath, oldString: "stale content", newString: "replacement" })
+        expect(error.message).toContain("Re-read the narrow target region")
+        expect(error.message).toContain("Do not retry the same stale oldString")
+        expect(yield* load(filepath)).toBe("actual content")
+        // kilocode_change end
       }),
     )
 

@@ -71,6 +71,49 @@ describe("provider tool schema sanitization", () => {
     expect(await KiloToolSchema.sanitize(input)).toBe(input)
   })
 
+  test("adds the object root required by function calling providers", async () => {
+    const seen: unknown[] = []
+    const validate = (value: unknown) => {
+      seen.push(value)
+      return { success: true as const, value }
+    }
+    const input = {
+      lookup: tool({
+        inputSchema: jsonSchema(
+          { type: undefined, properties: { slug: { type: "string" } }, required: ["slug"] },
+          { validate },
+        ),
+      }),
+    }
+
+    const output = await KiloToolSchema.sanitize(input)
+    const result = await asSchema(output.lookup.inputSchema).jsonSchema
+
+    expect(output).not.toBe(input)
+    expect(result).toEqual({
+      type: "object",
+      properties: { slug: { type: "string" } },
+      required: ["slug"],
+    })
+    await asSchema(output.lookup.inputSchema).validate?.({ slug: "raya" })
+    expect(seen).toEqual([{ slug: "raya" }])
+  })
+
+  test("normalizes unconstrained and non-object tool schemas", async () => {
+    const input = {
+      empty: tool({ inputSchema: jsonSchema({}) }),
+      text: tool({ inputSchema: jsonSchema({ type: "string" }) }),
+    }
+
+    const output = await KiloToolSchema.sanitize(input)
+
+    expect(await asSchema(output.empty.inputSchema).jsonSchema).toEqual({ type: "object" })
+    expect(await asSchema(output.text.inputSchema).jsonSchema).toEqual({
+      type: "object",
+      additionalProperties: true,
+    })
+  })
+
   test("keeps strict dynamic properties available when their key pattern is removed", async () => {
     const schema: JSONSchema7 = {
       type: "object",

@@ -22,6 +22,13 @@ function record(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input)
 }
 
+function root(input: unknown): { value: JSONSchema7; changed: boolean } {
+  if (!record(input)) return { value: { type: "object", additionalProperties: true }, changed: true }
+  if (input.type === "object") return { value: input as JSONSchema7, changed: false }
+  if (input.type === undefined) return { value: { ...input, type: "object" } as JSONSchema7, changed: true }
+  return { value: { type: "object", additionalProperties: true }, changed: true }
+}
+
 function lookaround(input: string) {
   let inside = false
 
@@ -130,13 +137,13 @@ export async function sanitize(input: Record<string, Tool>): Promise<Record<stri
       const source = asSchema(item.inputSchema)
       const original = await source.jsonSchema
       const result = walk(original)
-      if (!result.changed) return { name, tool: item, changed: false }
       // Tool inputs are object-root schemas. Complex widening falls back to accepting any object.
       const fallback = result.dynamic || result.hazard || reference(original)
-      const schema = fallback ? { type: "object" as const, additionalProperties: true } : result.value
+      const schema = root(fallback ? { type: "object", additionalProperties: true } : result.value)
+      if (!result.changed && !schema.changed) return { name, tool: item, changed: false }
       return {
         name,
-        tool: { ...item, inputSchema: jsonSchema(schema as JSONSchema7, { validate: source.validate }) },
+        tool: { ...item, inputSchema: jsonSchema(schema.value, { validate: source.validate }) },
         changed: true,
       }
     }),

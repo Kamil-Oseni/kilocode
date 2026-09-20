@@ -72,7 +72,13 @@ async function clean(path: string) {
   const target = resolve(path)
   if (!target.startsWith(`${base}${sep}`))
     throw new Error(`Refusing to remove update test path outside temp: ${target}`)
-  await rm(target, { recursive: true, force: true, maxRetries: 60, retryDelay: 250 })
+  const remove = (attempt = 0): Promise<void> =>
+    rm(target, { recursive: true, force: true }).catch(async (err) => {
+      if (attempt >= 120) throw err
+      await Bun.sleep(500)
+      return remove(attempt + 1)
+    })
+  await remove()
 }
 
 async function main() {

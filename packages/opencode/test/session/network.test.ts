@@ -1,5 +1,6 @@
 // kilocode_change - new file
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import * as Log from "@opencode-ai/core/util/log"
 import { Bus } from "../../src/bus"
 import { provideTestInstance, tmpdir } from "../fixture/fixture"
 import { SessionNetwork } from "../../src/session/network"
@@ -102,6 +103,39 @@ describe("session.network", () => {
         await expect(promise).resolves.toBeUndefined()
       },
     })
+  })
+
+  test("classifies replies after cancellation without warning", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const logger = Log.create({ service: "session.network" })
+    const warn = spyOn(logger, "warn").mockImplementation(() => {})
+    const debug = spyOn(logger, "debug").mockImplementation(() => {})
+    try {
+      await provideTestInstance({
+        directory: tmp.path,
+        fn: async () => {
+          const abort = new AbortController()
+          const { id, promise } = await SessionNetwork.ask({
+            sessionID: SessionID.make("ses_test"),
+            message: "Connection refused",
+            abort: abort.signal,
+          })
+          abort.abort()
+          expect(await promise.catch((err) => err)).toBeInstanceOf(DOMException)
+
+          await SessionNetwork.reply({ requestID: id })
+          await SessionNetwork.reject({ requestID: id })
+
+          expect(warn).not.toHaveBeenCalledWith("reply for unknown request", { requestID: id })
+          expect(warn).not.toHaveBeenCalledWith("reject for unknown request", { requestID: id })
+          expect(debug).toHaveBeenCalledWith("late reply ignored", { requestID: id, outcome: "abort" })
+          expect(debug).toHaveBeenCalledWith("late rejection ignored", { requestID: id, outcome: "abort" })
+        },
+      })
+    } finally {
+      warn.mockRestore()
+      debug.mockRestore()
+    }
   })
 
   test("restore auto-resumes pending request after cancellation window", async () => {

@@ -36,6 +36,7 @@ export namespace SessionNetwork {
   const POLL_MS = 3_000
   const PROBE_MS = 5_000
   const RESUME_MS = 10_000
+  const RECENT_MAX = 128
 
   function chain(err: unknown, seen = new Set<unknown>()): unknown[] {
     if (err === undefined) return []
@@ -107,6 +108,7 @@ export namespace SessionNetwork {
 
   interface StateShape {
     context: InstanceContext
+    settled: Map<QuestionID, "reply" | "reject" | "abort">
     pending: Map<
       QuestionID,
       {
@@ -127,7 +129,7 @@ export namespace SessionNetwork {
     Effect.gen(function* () {
       const is = yield* InstanceState.make(
         Effect.fn("SessionNetwork.state")(function* (ctx) {
-          return { context: ctx, pending: new Map() } as StateShape
+          return { context: ctx, pending: new Map(), settled: new Map() } as StateShape
         }),
       )
       return StateService.of({
@@ -141,6 +143,15 @@ export namespace SessionNetwork {
     const ctx = capture()
     if (!ctx) return Promise.reject(new Error("Instance context not available"))
     return stateRuntime.runPromise((svc) => svc.get().pipe(Effect.provideService(InstanceRef, ctx)))
+  }
+
+  function settle(state: StateShape, requestID: QuestionID, outcome: "reply" | "reject" | "abort") {
+    state.pending.delete(requestID)
+    state.settled.delete(requestID)
+    state.settled.set(requestID, outcome)
+    if (state.settled.size <= RECENT_MAX) return
+    const oldest = state.settled.keys().next().value
+    if (oldest) state.settled.delete(oldest)
   }
 
   export function code(err: unknown) {
@@ -279,7 +290,7 @@ export namespace SessionNetwork {
       const onAbort = () => {
         if (!s.pending.has(id)) return
         input.abort.removeEventListener("abort", onAbort)
-        s.pending.delete(id)
+        settle(s, id, "abort")
         void Bus.publish(s.context, Event.Rejected, {
           sessionID: input.sessionID,
           requestID: id,
@@ -345,10 +356,15 @@ export namespace SessionNetwork {
       const requestID = input.requestID as QuestionID
       const req = s.pending.get(requestID)
       if (!req) {
+        const outcome = s.settled.get(requestID)
+        if (outcome) {
+          log.debug("late reply ignored", { requestID, outcome })
+          return
+        }
         log.warn("reply for unknown request", { requestID })
         return
       }
-      s.pending.delete(requestID)
+      settle(s, requestID, "reply")
       // kilocode_change start - reconnect failed remote MCP servers after network recovery
       void import("@/effect/app-runtime")
         .then(({ AppRuntime }) =>
@@ -394,10 +410,15 @@ export namespace SessionNetwork {
       const requestID = input.requestID as QuestionID
       const req = s.pending.get(requestID)
       if (!req) {
+        const outcome = s.settled.get(requestID)
+        if (outcome) {
+          log.debug("late rejection ignored", { requestID, outcome })
+          return
+        }
         log.warn("reject for unknown request", { requestID })
         return
       }
-      s.pending.delete(requestID)
+      settle(s, requestID, "reject")
       await Bus.publish(s.context, Event.Rejected, {
         sessionID: req.info.sessionID,
         requestID: req.info.id,

@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-20 17:15 America/Toronto - FUT-AGENT-01 fixture repaired; close with installed restart
+
+`packages/opencode/test/tool/task.test.ts` now overrides its compiled `Provider.node` with the existing in-process `ProviderTest` catalog. Preserve both exact fixture models: `test/test-model` with the `xhigh` variant for task execution, and `kilo/kilo-auto/small` for the configured Auto capability-card assertion. Do not restore the real remote catalog dependency and do not weaken production model or variant validation.
+
+The complete Task integration suite passes **39 / 186** under the 2 GB cap. It now reaches the identity assertions for automatic selection, two concurrent children and legacy resume, and retains all background, permission, cancellation and cost cases. One aggregate run after many prior test invocations had three fixed five-second setup timeouts; all three passed unchanged in isolation. Thirteen stale Bun processes were then identified by exact command line as old `opencode-test-*`, background-runner and provider cooldown test processes, stopped, and the complete unchanged file passed in 46.87 seconds. No test process remains. One-thread Oxlint has zero errors and three pre-existing warnings; annotation and diff guards pass.
+
+This is test-only and requires no snapshot. Close `FUT-AGENT-01` by using the installed host to create one named delegated child, record its displayed name and actual role, reload or restart the extension, reopen the same parent and child, and confirm the exact name and role persist and the child resumes rather than creating a replacement. The current Windows Computer Use native pipe is unavailable, so this observation currently needs the owner unless that helper returns.
+
 ## ChatGPT 2026-09-20 16:57 America/Toronto - Close FUT-CHAT-01 with one installed observation
 
 Current-head verification is green: `bun test ./tests/unit/message-time.test.ts` passes **5 / 18**, and the production preview passes the ordinary 760 px conversation case plus light Routine DM cases at 320 px and 900 px with one Playwright worker and a 2 GB Node cap. The first preview attempts failed only at sandboxed esbuild startup on denied ancestor traversal; the identical authorized sequential runs passed. Do not rerun Storybook for this row.

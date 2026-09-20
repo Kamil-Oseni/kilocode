@@ -30,6 +30,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { RayaChief } from "../../src/kilocode/chief" // kilocode_change // raya_change - Milestone B
 import { ChiefRouteTool } from "../../src/kilocode/tool/chief-route" // kilocode_change // raya_change - Milestone B
 import { Question } from "../../src/question" // kilocode_change // raya_change - Milestone B option prompt
+import { ProviderTest } from "../fake/provider" // kilocode_change - keep task integration independent of the remote model catalog
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -39,6 +40,28 @@ const ref = {
   providerID: ProviderV2.ID.make("test"),
   modelID: ModelV2.ID.make("test-model"),
 }
+
+// kilocode_change start - keep task integration independent of the remote model catalog
+const model = ProviderTest.model({ providerID: ref.providerID, id: ref.modelID, variants: { xhigh: {} } })
+const auto = ProviderTest.model({ providerID: ProviderV2.ID.make("kilo"), id: ModelV2.ID.make("kilo-auto/small") })
+const catalog = {
+  [model.providerID]: ProviderTest.info({}, model),
+  [auto.providerID]: ProviderTest.info({}, auto),
+}
+const provider = ProviderTest.fake({
+  model,
+  list: () => Effect.succeed(catalog),
+  getProvider: (id) =>
+    catalog[id] ? Effect.succeed(catalog[id]) : Effect.die(new Error(`Unknown test provider: ${id}`)),
+  getModel: (providerID, modelID) => {
+    const found = catalog[providerID]?.models[modelID]
+    return found ? Effect.succeed(found) : Effect.die(new Error(`Unknown test model: ${providerID}/${modelID}`))
+  },
+  closest: (id) =>
+    Effect.succeed(id === auto.providerID ? { providerID: auto.providerID, modelID: auto.id } : undefined),
+  getSmallModel: (id) => Effect.succeed(id === auto.providerID ? auto : undefined),
+})
+// kilocode_change end
 
 const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -60,7 +83,12 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
-    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+    // kilocode_change start - the prompt path is stubbed; use its matching in-process model
+    [
+      [Provider.node, provider.layer],
+      [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+    ],
+    // kilocode_change end
   )
 
 const it = testEffect(layer())
@@ -251,6 +279,7 @@ describe("tool.task", () => {
       expect((yield* agents.get("engineer")).mode).toBe("all")
       expect((yield* agents.get("designer")).mode).toBe("all")
     }),
+    { config: { small_model: "kilo/kilo-auto/small" } }, // kilocode_change - make the asserted Auto model explicit
   )
 
   it.instance("auto-selects the best specialist and sends a bounded structured brief to an isolated child", () =>

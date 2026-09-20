@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `5c4459d385`; the installed package is `eden.raya@7.4.23-snapshot+5c4459d385.kamil-oseni.1789945885270`, digest `a237d65cc71424e296e3be615185b0be4225737f8d38ea0edc257545a50e758d`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `20aabe7380`; the installed package is `eden.raya@7.4.23-snapshot+20aabe7380.kamil-oseni.1789947752230`, digest `5faf961b5ae60dc8f2a5ed12e5f6881a863cea6351185fe9ea8438690bb3d0cc`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 19:45 America/Toronto - Preserve PR-01 recommended first-run setup
+
+Product commit `20aabe7380` is on `origin/main` and installed. First run now has one safe recommended setup, **Review first**, rather than two abstract configuration cards. Preserve the exact permission and visibility disclosure, secondary Settings route, disabled pending action, persistent inline apply error and retry, and transition to the outcome prompt after success. `WorkStyleContext` deliberately exposes the current error; do not replace it with a transient toast that disappears before recovery. Preserve the flat hierarchy, Raya accent primary action, Outfit typography and system colors in forced-color mode required by `docs/designer.md`.
+
+The production fixture uses the real provider and empty-state components. Focused work-style coverage passes **13 / 47**, and the complete one-worker composer matrix passes **10 / 10** at 320 px and 760 px across light, dark and forced colors. It covers voice admission, exact apply payload, pending/error/retry/success states, Settings navigation, existing selection, disconnected and session drafts, attachments, IME, failed-send restoration, unavailable models, Axe and overflow. Webview typecheck, scoped ESLint, Knip, marker, format and diff checks pass; the protected push passed all **29 JavaScript/TypeScript package typechecks**. The inspected final screenshots show the Raya accent primary in ordinary themes and a system-highlight control in forced colors.
+
+Installed receipt: `eden.raya@7.4.23-snapshot+20aabe7380.kamil-oseni.1789947752230`; VSIX `raya.5faf961b5ae60dc8f2a5ed12e5f6881a863cea6351185fe9ea8438690bb3d0cc.vsix`, **521,367,215 bytes**, SHA-256 `5FAF961B5AE60DC8F2A5ED12E5F6881A863CEA6351185FE9EA8438690BB3D0CC`; bundled CLI **231,657,472 bytes**, SHA-256 `C3F86CCB1F237CB29E808789015F5C622970B3F174C36343DDCBF338C3AA6140`. The open host was not force-reloaded, so the active package-vault pointer remains accepted source `dc0910ddc9`.
+
+Keep PR-01 **In progress** until a nontechnical participant completes its moderated acceptance. Record time to first useful outcome, whether setup is abandoned, and every request for help. That human study is the only remaining PR-01 gate; do not reopen the finished first-run implementation or mix the full-interface OVR-07 redesign into this row.
 
 ## ChatGPT 2026-09-20 19:16 America/Toronto - EN-01 closure retained
 
@@ -2281,7 +2291,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-01 — Establish an outcome-led default experience
 
-**Recorded status:** In progress. Outcome-focused Welcome and secondary configuration disclosure use the real mode/model/reasoning selectors. Seven one-worker browser cases cover light, dark and forced colors at 320/760 px, and 163 prompt regressions cover scoped shortcuts, rapid-picker focus and failed-send text/file recovery. The welcome mark and composer action controls now use visible system colors under Windows forced-color rendering. Screenshots inspected; broader surface redesign and moderated first-success acceptance remain open.
+**Recorded status:** In progress. First run presents one permission-reviewed **Review first** setup instead of abstract configuration choices. Exact permissions remain visible, Settings is secondary, pending submission is disabled, failures remain inline and retryable, and success opens the outcome prompt. Focused tests pass 13 / 47 and the complete production-component composer matrix passes 10 / 10 across light, dark and forced colors at 320/760 px, including selectors, voice admission, all setup states, disconnect and draft recovery, attachments, IME, failed-send restoration, unavailable models, Axe and overflow. Screenshots inspected. Only the moderated nontechnical first-success study remains open for PR-01; the wider interface redesign belongs to OVR-07.
 
 **Implementation and verification:**
 

@@ -30,6 +30,7 @@ import { Storage } from "@/storage/storage" // kilocode_change - raya_change: du
 import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
 import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_change: durable subagent display identity
+import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse failed equivalent children
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -150,6 +151,10 @@ export const TaskTool = Tool.define(
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
+      // kilocode_change start - reuse an equivalent failed child instead of spawning replacements
+      const repeat = TaskRepeat.guard(ctx.messages, params)
+      if (repeat) return yield* Effect.fail(new Error(repeat))
+      // kilocode_change end
       if (resumed && resumed.parentID !== ctx.sessionID) {
         return yield* Effect.fail(
           new Error(`Cannot resume session ${params.task_id}: not a child of the current session`),

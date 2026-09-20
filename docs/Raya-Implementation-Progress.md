@@ -6,6 +6,12 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-20 11:10 America/Toronto - Session issue M-08 provider balance retry containment verified
+
+**Status: verified and pushed in regression commit `30e3aba067`; the installed product remains source `1845ba7a27` because this checkpoint changes tests only.** Raya's existing billing classifier already treats insufficient balance, suspended account, payment and authentication failures as terminal, and the session retry boundary checks that classifier before accepting a provider SDK's retry flag. The reported provider-credit condition cannot be repaired locally, but it cannot consume more requests by repeatedly retrying the same unfunded account. Raya does not silently fail over because doing so could select a provider or billing source the person did not authorize.
+
+The prior regression combined suspension and balance wording in one synthetic string. It now covers the three concrete forms recorded in the session log: `account has been suspended for insufficient balance`, `insufficient balance (1008)`, and a nested API response body whose error is `Insufficient Balance` with code `1008`. Every case is constructed as an API error that the provider explicitly marks retryable, and every case returns no retry decision. The complete retry suite passes **36 tests / 50 assertions**, including adjacent rate-limit, transport, decompression, server-error and context-overflow behavior. The capped single-thread CLI typecheck, Prettier and shared-source annotation guard pass. The protected one-worker push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains. This closes the locally actionable part of logged issue `M-08`; restoring provider credit remains an external account action.
+
 ## ChatGPT 2026-09-20 10:54 America/Toronto - Session issue M-06 provider moderation handling fixed
 
 **Status: verified, committed, pushed and installed from product commit `1845ba7a27`.** Standard provider finishes already produced a typed `ContentFilterError`, but Qwen/Aliyun's recorded `data_inspection_failed` HTTP response remained a generic API error. Its raw provider message and response body could contain rejected prompt material, and a provider SDK that marked the 400 retryable could cause a blind retry.

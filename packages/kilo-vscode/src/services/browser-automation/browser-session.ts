@@ -240,6 +240,10 @@ class OutcomeError extends Error {
     )
   }
 }
+
+class ActionTimeoutError extends Error {
+  readonly name = "BrowserActionTimeoutError"
+}
 // raya_change end
 
 const launch: BrowserLaunch = async (profile) =>
@@ -285,6 +289,7 @@ export class BrowserSession {
   private seen = 0
   private capturing = false
   private queue: Promise<void> = Promise.resolve()
+  private queued = 0
   private last = 0
   private revision = 0
   private running = 0
@@ -303,6 +308,7 @@ export class BrowserSession {
       profileID: createHash("sha256").update(profile).digest("hex"),
       directory: profile,
     },
+    private readonly timeout = 30_000,
   ) {
     this.transfers = new BrowserTransfers(join(profile, "raya-downloads"), profile)
     this.uploads = new BrowserUploads(join(profile, "raya-uploads"))
@@ -766,6 +772,8 @@ export class BrowserSession {
     await this.ready()
     if (action.operation === "download") return this.download(action)
     if (action.operation === "dialog") return this.dialog(action)
+    if (this.queued >= 8)
+      throw new TargetError("Browser action queue is full. Wait for recovery before sending another action.")
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
     if (action.operation !== "tabs") action = { ...action, tabID: this.identity(this.resolve(action.tabID)) }
@@ -776,6 +784,7 @@ export class BrowserSession {
     } else if (action.frameID)
       throw new TargetError("This operation is tab-scoped and does not accept a frame identity")
     const result = pending<BrowserResult>()
+    this.queued += 1
     const revision = this.revision
     const settled = this.queue.then(() => {
       if (this.revision !== revision)
@@ -821,7 +830,40 @@ export class BrowserSession {
         result.reject(error)
       },
     )
-    return result.promise
+    return this.bounded(action, result.promise).finally(() => {
+      this.queued -= 1
+    })
+  }
+
+  private async bounded(action: BrowserAction, result: Promise<BrowserResult>): Promise<BrowserResult> {
+    const limit = action.operation === "smoke" ? this.timeout * 3 : this.timeout
+    const expired = new Promise<never>((_resolve, reject) => {
+      const timer = setTimeout(() => reject(new ActionTimeoutError()), limit)
+      void result.finally(() => clearTimeout(timer)).catch(() => undefined)
+    })
+    try {
+      return await Promise.race([result, expired])
+    } catch (error) {
+      if (!(error instanceof ActionTimeoutError)) throw error
+      const reason = `The ${action.operation} action timed out. Raya replaced the unresponsive browser runtime.`
+      this.takeControl(reason)
+      const closed = await Promise.race([
+        this.dispose(true).then(
+          () => true,
+          () => false,
+        ),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), 5_000)),
+      ])
+      void result.catch(() => undefined)
+      this.update({ control: "manual", busy: false, reason })
+      if (!closed)
+        throw new TargetError(
+          `The ${action.operation} action timed out and browser shutdown was not confirmed. Use browser profile retry before continuing.`,
+        )
+      throw new TargetError(
+        `The ${action.operation} action timed out and its outcome is unknown. Raya restarted the browser runtime and preserved its profile. List tabs and inspect the destination before repeating the action.`,
+      )
+    }
   }
 
   dialogsState() {
@@ -1042,7 +1084,7 @@ export class BrowserSession {
     const revision = this.revision
     this.running += 1
     return this.attempt(action, 1, revision).finally(() => {
-      this.running -= 1
+      this.running = Math.max(0, this.running - 1)
       if (this.state.control === "agent") this.update({ control: "agent", busy: false })
       if (this.state.control === "manual" && this.state.busy) this.update({ ...this.state, busy: false })
     })
@@ -1513,6 +1555,7 @@ export class BrowserSession {
     this.page = undefined
     this.cdp = undefined
     this.start = undefined
+    this.running = 0
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
     if (this.hold) clearTimeout(this.hold)
@@ -1531,6 +1574,7 @@ export class BrowserSession {
     for (const registry of this.documents.values()) registry.dispose()
     this.documents.clear()
     this.openers.clear()
+    this.queue = Promise.resolve()
     if (context)
       await context.close().catch(() => {
         this.context = context

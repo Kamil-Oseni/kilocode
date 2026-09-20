@@ -43,6 +43,7 @@ class FakePage implements BrowserPage {
   failNavigations = 0
   delay = 0
   pause: Promise<void> | undefined
+  evaluation: Promise<unknown> | undefined
   active = 0
   maxActive = 0
   readonly fills: Array<{ selector: string; text: string }> = []
@@ -126,6 +127,7 @@ class FakePage implements BrowserPage {
   }
 
   async evaluate<R>(fn: (source: unknown) => R, source: unknown): Promise<R> {
+    if (this.evaluation) return (await this.evaluation) as R
     const input = typeof source === "string" ? source.replace(/^\(([\s\S]*)\)$/, "$1") : source
     const value = typeof input === "string" ? input.match(/^document\.cookie\s*=\s*["'](.+)["']$/)?.[1] : undefined
     if (value) {
@@ -444,6 +446,31 @@ describe("Raya browser session", () => {
     expect(fake.pages[0]!.current).toBe("http://example.test/")
     expect(fake.pages[0]!.waitUntil).toBe("commit")
     await session.dispose()
+  })
+
+  it("replaces a runtime whose evaluation never settles and releases the action queue", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-timeout-"))
+    const fake = harness()
+    const session = new BrowserSession(dir, fake.launch, undefined, undefined, 500)
+    try {
+      await session.ready()
+      fake.pages[0]!.evaluation = new Promise(() => undefined)
+
+      await expect(session.execute({ operation: "evaluate", expression: "new Promise(() => {})" })).rejects.toThrow(
+        /outcome is unknown.*restarted/i,
+      )
+      expect(session.current()).toEqual(
+        expect.objectContaining({ control: "manual", busy: false, reason: expect.stringContaining("timed out") }),
+      )
+
+      await session.execute({ operation: "navigate", url: "https://example.test/recovered" })
+      expect(fake.pages).toHaveLength(2)
+      expect(fake.pages[1]!.current).toBe("https://example.test/recovered")
+      expect(session.current()).toEqual({ control: "agent", busy: false })
+    } finally {
+      await session.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it("does not reset the host when a click times out", async () => {

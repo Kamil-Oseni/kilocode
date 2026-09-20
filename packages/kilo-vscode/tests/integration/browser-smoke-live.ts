@@ -6,7 +6,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { BrowserSession } from "../../src/services/browser-automation/browser-session"
 
-const app = { broken: false }
+const app = { broken: false, authenticated: false }
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", "http://127.0.0.1")
   if (url.pathname === "/login") {
@@ -15,9 +15,10 @@ const server = createServer((request, response) => {
     return
   }
   if (url.pathname === "/auth") {
+    app.authenticated = true
     response.statusCode = 302
     response.setHeader("location", "/app")
-    response.setHeader("set-cookie", "raya_auth=eden; Path=/; HttpOnly; SameSite=Lax")
+    response.setHeader("set-cookie", "raya_auth=eden; Path=/; Max-Age=3600; HttpOnly; SameSite=Lax")
     response.end()
     return
   }
@@ -28,7 +29,7 @@ const server = createServer((request, response) => {
     return
   }
   if (url.pathname === "/app") {
-    if (!request.headers.cookie?.includes("raya_auth=eden")) {
+    if (!app.authenticated || !request.headers.cookie?.includes("raya_auth=eden")) {
       response.statusCode = 401
       response.end('<h1 id="signed-out">Sign in required</h1>')
       return
@@ -50,23 +51,13 @@ async function main() {
   const origin = `http://127.0.0.1:${address.port}`
   const root = await mkdtemp(join(tmpdir(), "raya-smoke-live-"))
   const artifacts = join(root, "artifacts")
-  const authSession = new BrowserSession(join(root, "auth-profile"), undefined, artifacts)
+  const profile = join(root, "profile")
+  const first = new BrowserSession(profile, undefined, artifacts)
+  let restarted: BrowserSession | undefined
 
   try {
-    await authSession.execute({ operation: "navigate", url: `${origin}/login` })
-    await authSession.execute({ operation: "click", selector: "#login" })
-    const auth = await authSession.execute({ operation: "auth_capture", name: "sample-app" })
-    assert.equal(auth.operation, "auth_capture")
-    if (auth.operation !== "auth_capture") throw new Error("Expected auth capture result")
-    assert.ok(auth.cookies > 0)
-    assert.equal(auth.capture.status, "available")
-    assert.ok(auth.capture.bytes > 0)
-    await authSession.execute({
-      operation: "auth",
-      action: "restore",
-      profileID: auth.capture.profileID,
-      captureID: auth.capture.id,
-    })
+    await first.execute({ operation: "navigate", url: `${origin}/login` })
+    await first.execute({ operation: "click", selector: "#login" })
 
     const flow = {
       operation: "smoke" as const,
@@ -93,7 +84,7 @@ async function main() {
       ],
     }
 
-    const passing = await authSession.execute(flow)
+    const passing = await first.execute(flow)
     assert.equal(passing.operation, "smoke")
     if (passing.operation !== "smoke") throw new Error("Expected smoke result")
     assert.equal(passing.passed, true, JSON.stringify(passing))
@@ -102,21 +93,55 @@ async function main() {
     await access(passing.artifact)
 
     app.broken = true
-    const broken = await authSession.execute(flow)
+    const broken = await first.execute(flow)
     assert.equal(broken.operation, "smoke")
     if (broken.operation !== "smoke") throw new Error("Expected smoke result")
     assert.equal(broken.passed, false)
     assert.equal(broken.failingStep, "dashboard")
     assert.equal(broken.steps[0]?.assertions.find((item) => item.kind === "network")?.passed, false)
+    app.broken = false
+    await first.dispose()
+
+    restarted = new BrowserSession(profile, undefined, artifacts)
+    const persisted = await restarted.execute({ operation: "navigate", url: `${origin}/app` })
+    assert.equal(persisted.operation, "navigate")
+    const welcome = await restarted.execute({ operation: "evaluate", expression: "document.querySelector('h1')?.id" })
+    assert.equal(welcome.operation, "evaluate")
+    if (welcome.operation !== "evaluate") throw new Error("Expected persisted-login evaluation")
+    assert.equal(welcome.output, "welcome", "persistent site authentication must survive a fresh browser session")
+
+    app.authenticated = false
+    await restarted.execute({ operation: "navigate", url: `${origin}/app` })
+    const expired = await restarted.execute({ operation: "evaluate", expression: "document.querySelector('h1')?.id" })
+    assert.equal(expired.operation, "evaluate")
+    if (expired.operation !== "evaluate") throw new Error("Expected expired-login evaluation")
+    assert.equal(expired.output, "signed-out", "fresh destination evidence must expose an expired server session")
+
+    await restarted.execute({ operation: "navigate", url: `${origin}/login` })
+    await restarted.execute({ operation: "click", selector: "#login" })
+    const recovered = await restarted.execute({ operation: "evaluate", expression: "document.querySelector('h1')?.id" })
+    assert.equal(recovered.operation, "evaluate")
+    if (recovered.operation !== "evaluate") throw new Error("Expected recovered-login evaluation")
+    assert.equal(recovered.output, "welcome")
+
+    restarted.takeControl()
+    assert.equal(restarted.current().control, "manual")
+    restarted.resume()
+    assert.equal(restarted.current().control, "agent")
+
     console.log(
       JSON.stringify({
-        authenticated: auth.cookies > 0,
+        persistedAfterRestart: welcome.output,
+        expiredAtDestination: expired.output,
+        recoveredAfterSignIn: recovered.output,
+        manualControlRecovered: restarted.current().control === "agent",
         passing: { passed: passing.passed, artifact: passing.artifact },
         broken: { passed: broken.passed, failingStep: broken.failingStep, artifact: broken.artifact },
       }),
     )
   } finally {
-    await authSession.dispose()
+    await first.dispose()
+    await restarted?.dispose()
     await new Promise<void>((resolve, reject) =>
       server.close((error) => {
         if (error) reject(error)

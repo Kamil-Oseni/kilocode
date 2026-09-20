@@ -91,6 +91,32 @@ export namespace KiloSessionOverflow {
     )
   }
 
+  export function preflight(input: {
+    cfg: Config.Info
+    model: Provider.Model
+    usable: number
+    messages: ModelMessage[]
+    tools: Payload["tools"]
+    reported?: number
+  }) {
+    const usage = measure(input)
+    const tokens = Math.max(usage.normalized, input.reported ?? 0)
+    const hard = input.model.limit.input || input.model.limit.context
+    return {
+      usage,
+      tokens,
+      compact:
+        (hard > 0 && tokens >= hard) ||
+        shouldCompact({
+          cfg: input.cfg,
+          model: input.model,
+          usable: input.usable,
+          tokens,
+          continuation: usage.continuation,
+        }),
+    }
+  }
+
   export function shouldCompact(
     input: {
       cfg: Config.Info

@@ -257,6 +257,39 @@ describe("Kilo request estimation", () => {
 })
 
 describe("Kilo preflight compaction", () => {
+  test("uses authoritative provider context before another dispatch", () => {
+    const conf = cfg({ threshold_percent: 75 })
+    const mdl = model({ context: 262_144, output: 32_000 })
+    const result = KiloSessionOverflow.preflight({
+      cfg: conf,
+      model: mdl,
+      usable: usable({ cfg: conf, model: mdl }),
+      messages: [{ role: "user", content: "Continue the work." }],
+      tools: {},
+      reported: 519_485,
+    })
+
+    expect(result.usage.normalized).toBeLessThan(100)
+    expect(result.tokens).toBe(519_485)
+    expect(result.compact).toBe(true)
+  })
+
+  test("keeps the larger local estimate when provider usage is stale", () => {
+    const conf = cfg({ threshold_percent: 75 })
+    const mdl = model({ context: 200_000, output: 32_000 })
+    const result = KiloSessionOverflow.preflight({
+      cfg: conf,
+      model: mdl,
+      usable: usable({ cfg: conf, model: mdl }),
+      messages: [{ role: "user", content: "x".repeat(600_000) }],
+      tools: {},
+      reported: 1_000,
+    })
+
+    expect(result.tokens).toBe(result.usage.normalized)
+    expect(result.compact).toBe(true)
+  })
+
   test("triggers from estimated outgoing context without provider usage", () => {
     const conf = cfg({ threshold_percent: 75 })
     const mdl = model({ context: 200_000, output: 32_000 })

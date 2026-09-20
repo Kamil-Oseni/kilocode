@@ -141,7 +141,17 @@ const live: Layer.Layer<
           : base.messages
       const preflight = input.preflight === true && input.model.limit.context !== 0
       const cap = KiloLLM.needsEstimate({ model: input.model, configured: base.params.maxOutputTokens })
-      const usage = cap || preflight ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined
+      const checked = preflight
+        ? KiloSessionOverflow.preflight({
+            cfg,
+            model: input.model,
+            usable: usable({ cfg, model: input.model, outputTokenMax: flags.outputTokenMax }),
+            messages: estimated,
+            tools,
+            reported: input.reportedContextTokens,
+          })
+        : undefined
+      const usage = checked?.usage ?? (cap ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined)
       const maxOutputTokens = KiloLLM.capOutputTokens({
         model: input.model,
         messages: estimated,
@@ -150,18 +160,7 @@ const live: Layer.Layer<
         usage,
         reported: input.reportedContextTokens,
       })
-      if (
-        preflight &&
-        usage &&
-        (usage.normalized >= (input.model.limit.input || input.model.limit.context) ||
-          KiloSessionOverflow.shouldCompact({
-            cfg,
-            model: input.model,
-            usable: usable({ cfg, model: input.model, outputTokenMax: flags.outputTokenMax }), // kilocode_change
-            tokens: usage.normalized,
-            continuation: usage.continuation,
-          }))
-      ) {
+      if (checked?.compact) {
         return yield* Effect.fail(new KiloSessionOverflow.PreflightError())
       }
       const prepared = { ...base, tools, params: { ...base.params, maxOutputTokens } }

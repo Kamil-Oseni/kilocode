@@ -18,6 +18,14 @@ Retained rollback package `raya.ea16d71b920b77b8583337845f6349fdaba28bfcbbde49e5
 
 This closes logged issue `R-12`. Continue the owner-reported issue list with the smallest independently testable remaining issue before returning to `docs/Order.txt`.
 
+## ChatGPT 2026-09-20 00:04 America/Toronto - Session issue S-02 non-Git snapshot cleanup verified
+
+**Status: current product behavior verified on Windows; regression proof committed and pushed as `f359fb0a7b`.** The historical cleanup warning came from treating a non-Git project's synthetic `global` worktree as a child of the active workspace. Current snapshot state replaces `/`, `global` and every non-absolute synthetic worktree with the authoritative absolute workspace directory before deriving the private snapshot Git directory. Cleanup also requires both that Git directory and the resolved worktree to exist before pruning or running `git gc`.
+
+A cold real Git-backed Windows integration now initializes a non-Git workspace with the foreground wait contract, runs snapshot cleanup with an isolated logger, asserts that no `cleanup failed` warning occurred and proves that no `global` child path was resolved or created: **1 test / 3 assertions**. Focused formatting and lint pass with zero warnings or errors, the capped CLI typecheck passes, and the protected push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains.
+
+The installed product remains `eden.raya@7.4.23-snapshot+0ff5aae8b3.kamil-oseni.1789876182950`, which already contains the verified worktree normalization and cleanup guards. No package rebuild was needed for this test-only checkpoint. This closes logged issue `S-02`.
+
 ## ChatGPT 2026-09-19 23:32 America/Toronto - Session issue S-01 Windows snapshot restore verified
 
 **Status: current product behavior verified on Windows; integration-budget correction committed and pushed as `2f7c34119f`.** The historical restore failure used a drive-stripped Unix-style absolute path as a Git checkout pathspec, which Windows interpreted outside the snapshot worktree. Current snapshot source converts every retained file to a path relative to the authoritative workspace root, normalizes separators only for Git, validates snapshot trees before mutation and fails rather than reporting a restore that Git did not perform.

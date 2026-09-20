@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `e11354ec77`; the installed package source is `e11354ec77`. The open extension host's active-vault pointer is still digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da`, source `18e8e12f51`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f65a72b918`; the installed package source is `f65a72b918`. The open extension host's active-vault pointer is digest `b700ba883ca4887d99f3297d629c65ef7b46de801ecae6b95f355bf1454948ec`, source `eeb9a9de18`, until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 16:57 America/Toronto - Close FUT-CHAT-01 with one installed observation
+
+Current-head verification is green: `bun test ./tests/unit/message-time.test.ts` passes **5 / 18**, and the production preview passes the ordinary 760 px conversation case plus light Routine DM cases at 320 px and 900 px with one Playwright worker and a 2 GB Node cap. The first preview attempts failed only at sandboxed esbuild startup on denied ancestor traversal; the identical authorized sequential runs passed. Do not rerun Storybook for this row.
+
+The active host is source `eeb9a9de18`, a descendant of timestamp commit `7bc677b389`, so a reload is not required merely to observe this feature. Windows Computer Use could not connect because its native pipe is absent even after the required retry and reset. Ask the owner to inspect one ordinary Raya chat and one Routine DM: every persisted user/assistant/Routine message should show a plausible compact local clock; hovering each clock should expose a full date, time and timezone. Record the result in both ledgers, then mark `FUT-CHAT-01` Verified if both surfaces pass. If either surface is missing or wrong, capture only the surface, message role and visible/hovered value, then repair that exact production renderer before moving on.
+
+Do not use the retained browser self-heal item for OVR-09 acceptance. The owner explicitly parked it. OVR-09's deterministic implementation remains complete, but real review/install/replay/rollback/cleanup acceptance must wait for a different explicitly authorized repair item.
 
 ## ChatGPT 2026-09-16 07:42 America/Toronto - Continue from installed Raya service endpoints
 

@@ -13,8 +13,12 @@ for (const theme of ["light", "dark"]) {
       )
       await expect(page.getByText("Turn interrupted.", { exact: true })).toBeVisible()
       await expect(page.getByText("Your prompt, conversation, and completed work remain available.")).toHaveCount(2)
-      await expect(page.getByText("Review the partial result, then continue the conversation when ready.")).toBeVisible()
-      await expect(page.getByText("Review the technical details, then retry or choose another configured model.")).toBeVisible()
+      await expect(
+        page.getByText("Review the partial result, then continue the conversation when ready."),
+      ).toBeVisible()
+      await expect(
+        page.getByText("Review the technical details, then retry or choose another configured model."),
+      ).toBeVisible()
       await expect(page.getByText("Your prompt and conversation remain available while you reconnect.")).toBeVisible()
       await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible()
       await page.getByRole("button", { name: "Details", exact: true }).click()
@@ -99,9 +103,7 @@ test("uncertain cloud continuation requires an explicit duplicate-risk acknowled
   await expect(card).toContainText("The earlier import may have succeeded")
   await page.getByRole("button", { name: "Confirm new copy" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-preview-message", "reset-cloud")
-  expect((await new AxeBuilder({ page }).include('[data-slot="cloud-continuation"]').analyze()).violations).toEqual(
-    [],
-  )
+  expect((await new AxeBuilder({ page }).include('[data-slot="cloud-continuation"]').analyze()).violations).toEqual([])
 })
 
 for (const theme of ["light", "dark"]) {
@@ -261,6 +263,41 @@ test("background agent disclosure and dismissal survive reload without hiding a 
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
   await expect(page.getByText("Worker 10", { exact: true })).toBeVisible()
 })
+
+for (const width of [320, 760]) {
+  test(`Agent Manager restores twelve child tabs and selection at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-agent-manager-subagents")
+    const panel = page.getByRole("region", { name: "Subagents" })
+    const tabs = page.getByRole("tablist", { name: "Subagent sessions" })
+    await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+    await expect(tabs.getByRole("tab")).toHaveCount(12)
+    await expect(tabs.getByRole("tab", { name: "Worker 7" })).toHaveAttribute("aria-selected", "true")
+
+    await tabs.getByRole("tab", { name: "Worker 10" }).click()
+    await expect(tabs.getByRole("tab", { name: "Worker 10" })).toHaveAttribute("aria-selected", "true")
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const raw = sessionStorage.getItem("raya-preview-webview-state")
+          if (!raw) return undefined
+          const state = JSON.parse(raw) as { rayaSubagents?: { active?: Record<string, string> } }
+          return state.rayaSubagents?.active?.["single:parent"]
+        }),
+      )
+      .toBe("child-10")
+
+    await page.reload()
+    await expect(tabs.getByRole("tab")).toHaveCount(12)
+    await expect(tabs.getByRole("tab", { name: "Worker 10" })).toHaveAttribute("aria-selected", "true")
+    await tabs.getByRole("tab", { name: "Worker 10" }).focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(tabs.getByRole("tab", { name: "Worker 11" })).toHaveAttribute("aria-selected", "true")
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+    expect((await new AxeBuilder({ page }).include(".am-subagent-panel").analyze()).violations).toEqual([])
+    await panel.screenshot({ path: info.outputPath("agent-manager-subagents.png") })
+  })
+}
 
 for (const width of [320, 760]) {
   test(`standalone child steering remains usable at ${width}px`, async ({ page }, info) => {

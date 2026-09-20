@@ -13,10 +13,12 @@ import "../src/styles/chat-layout.css" // raya_change - preview conversation lan
 import "../src/styles/memory-provenance.css"
 import "../src/styles/routines.css"
 import "../src/styles/chat.css"
+import "../agent-manager/agent-manager.css"
 import "./preview.css"
 import { RoutinesPreview } from "./routines"
 import {
   BackgroundAgentsPreview,
+  AgentManagerSubagentsPreview,
   ChildViewerPreview,
   ComposerPreview,
   CloudRecoveryPreview,
@@ -74,6 +76,7 @@ type PvState =
   | "conversation"
   | "background-agents"
   | "child-viewer"
+  | "agent-manager-subagents"
   | "routines"
   | "result"
   | "recovery"
@@ -111,6 +114,7 @@ const states: PvState[] = [
   "conversation",
   "background-agents",
   "child-viewer",
+  "agent-manager-subagents",
   "routines",
   "result",
   "recovery",
@@ -375,7 +379,12 @@ function ContextPreview() {
         directory="C:\\work\\raya-feature"
         root="C:\\work\\raya-feature\\.kilo\\memory"
         scope="project"
-        index={{ message: "Index is stale after the worktree changed.", label: "IDX Error", tone: "error", loading: false }}
+        index={{
+          message: "Index is stale after the worktree changed.",
+          label: "IDX Error",
+          tone: "error",
+          loading: false,
+        }}
       />
       <Card>
         <MemoryActions memory={memory} />
@@ -445,6 +454,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "child-viewer"}>
         <ChildViewerPreview />
+      </Show>
+      <Show when={props.state === "agent-manager-subagents"}>
+        <AgentManagerSubagentsPreview />
       </Show>
       <Show when={props.state === "recovery"}>
         <RecoveryPreview />

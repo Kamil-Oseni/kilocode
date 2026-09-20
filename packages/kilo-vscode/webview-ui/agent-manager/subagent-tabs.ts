@@ -9,13 +9,60 @@ export interface SubagentTab {
   parentID?: string
 }
 
+export interface SubagentState {
+  version: 1
+  tabs: Record<string, SubagentTab[]>
+  active: Record<string, string>
+}
+
 interface Options {
   current: Accessor<string | undefined>
   context?: (parentID?: string) => string
+  initial?: unknown
+  persist?: (state: SubagentState) => void
   sync: (id: string, parentID?: string) => void
   unsync: (id: string) => void
   show: () => void
   hide: () => void
+}
+
+const contexts = 50
+const children = 100
+const length = 512
+
+function text(value: unknown, max = length) {
+  return typeof value === "string" && value.length > 0 && value.length <= max ? value : undefined
+}
+
+export function restoreSubagents(value: unknown): SubagentState {
+  const empty = { version: 1 as const, tabs: {}, active: {} }
+  if (!value || typeof value !== "object" || (value as { version?: unknown }).version !== 1) return empty
+  const source = value as { tabs?: unknown; active?: unknown }
+  if (!source.tabs || typeof source.tabs !== "object" || Array.isArray(source.tabs)) return empty
+  const tabs: Record<string, SubagentTab[]> = {}
+  for (const [scope, raw] of Object.entries(source.tabs).slice(0, contexts)) {
+    if (!text(scope) || !Array.isArray(raw)) continue
+    const seen = new Set<string>()
+    const list = raw.slice(0, children).flatMap((item): SubagentTab[] => {
+      if (!item || typeof item !== "object") return []
+      const input = item as { id?: unknown; title?: unknown; parentID?: unknown }
+      const id = text(input.id)
+      const title = text(input.title, 200)
+      const parentID = input.parentID === undefined ? undefined : text(input.parentID)
+      if (!id || !title || seen.has(id) || (input.parentID !== undefined && !parentID)) return []
+      seen.add(id)
+      return [{ id, title, ...(parentID ? { parentID } : {}) }]
+    })
+    if (list.length > 0) tabs[scope] = list
+  }
+  const active: Record<string, string> = {}
+  if (source.active && typeof source.active === "object" && !Array.isArray(source.active)) {
+    for (const [scope, raw] of Object.entries(source.active).slice(0, contexts)) {
+      const id = text(raw)
+      if (id && tabs[scope]?.some((tab) => tab.id === id)) active[scope] = id
+    }
+  }
+  return { version: 1, tabs, active }
 }
 
 export function createSubagentContext(opts: {
@@ -30,17 +77,41 @@ export function createSubagentContext(opts: {
 }
 
 export function createSubagentTabs(opts: Options) {
-  const [tabs, setTabs] = createSignal<Record<string, SubagentTab[]>>({})
-  const [active, setActive] = createSignal<Record<string, string | undefined>>({})
+  const saved = restoreSubagents(opts.initial)
+  const [tabs, setTabs] = createSignal<Record<string, SubagentTab[]>>(saved.tabs)
+  const [active, setActive] = createSignal<Record<string, string | undefined>>(saved.active)
+  const synced = new Set<string>()
   const key = (parentID?: string) => opts.context?.(parentID) ?? "default"
   const list = () => tabs()[key()] ?? []
   const selected = () => active()[key()]
+  const receipt = (scope: string, id: string) => JSON.stringify([scope, id])
+  const resume = () => {
+    const scope = key()
+    for (const tab of list()) {
+      const id = receipt(scope, tab.id)
+      if (synced.has(id)) continue
+      synced.add(id)
+      opts.sync(tab.id, tab.parentID ?? opts.current())
+    }
+  }
+  const save = () => {
+    const next = tabs()
+    const current = Object.fromEntries(
+      Object.entries(active()).flatMap(([scope, id]) =>
+        id && next[scope]?.some((tab) => tab.id === id) ? [[scope, id]] : [],
+      ),
+    )
+    opts.persist?.({ version: 1, tabs: next, active: current })
+  }
+  resume()
+  createEffect(resume)
 
   const open = (id: string, title?: string, parentID?: string) => {
     if (!id) return
-    const label = title?.trim() || "Sub-agent"
+    const label = title?.trim().slice(0, 200) || "Sub-agent"
     const scope = key(parentID)
     const existing = (tabs()[scope] ?? []).some((tab) => tab.id === id)
+    if (!existing) synced.add(receipt(scope, id))
     batch(() => {
       setTabs((prev) => {
         const current = prev[scope] ?? []
@@ -60,12 +131,14 @@ export function createSubagentTabs(opts: Options) {
       opts.show()
     })
     if (!existing) opts.sync(id, parentID ?? opts.current())
+    save()
   }
 
   const select = (id: string) => {
     if (!list().some((tab) => tab.id === id)) return
     setActive((prev) => ({ ...prev, [key()]: id }))
     opts.show()
+    save()
   }
 
   const close = (id: string) => {
@@ -75,15 +148,21 @@ export function createSubagentTabs(opts: Options) {
     if (index < 0) return
     const next = current.filter((tab) => tab.id !== id)
     opts.unsync(id)
+    synced.delete(receipt(scope, id))
     setTabs((prev) => ({ ...prev, [scope]: next }))
-    if (selected() !== id) return
+    if (selected() !== id) {
+      save()
+      return
+    }
     const replacement = next[Math.min(index, next.length - 1)]
     if (replacement) {
       setActive((prev) => ({ ...prev, [scope]: replacement.id }))
+      save()
       return
     }
     setActive((prev) => ({ ...prev, [scope]: undefined }))
     opts.hide()
+    save()
   }
 
   const closeOthers = (id: string) => {
@@ -91,11 +170,14 @@ export function createSubagentTabs(opts: Options) {
     const current = tabs()[scope] ?? []
     if (!current.some((tab) => tab.id === id)) return
     for (const tab of current) {
-      if (tab.id !== id) opts.unsync(tab.id)
+      if (tab.id === id) continue
+      opts.unsync(tab.id)
+      synced.delete(receipt(scope, tab.id))
     }
     setTabs((prev) => ({ ...prev, [scope]: current.filter((tab) => tab.id === id) }))
     setActive((prev) => ({ ...prev, [scope]: id }))
     opts.show()
+    save()
   }
 
   const reorder = (from: string, to: string) => {
@@ -116,14 +198,19 @@ export function createSubagentTabs(opts: Options) {
         }),
       }
     })
+    save()
   }
 
   const reset = () => {
     const scope = key()
-    for (const tab of tabs()[scope] ?? []) opts.unsync(tab.id)
+    for (const tab of tabs()[scope] ?? []) {
+      opts.unsync(tab.id)
+      synced.delete(receipt(scope, tab.id))
+    }
     setTabs((prev) => ({ ...prev, [scope]: [] }))
     setActive((prev) => ({ ...prev, [scope]: undefined }))
     opts.hide()
+    save()
   }
 
   return { tabs: list, active: selected, open, select, close, closeOthers, reorder, reset }
@@ -197,6 +284,8 @@ export function createSubagentController(opts: {
   selection: Accessor<string | null>
   parts: (id: string) => ToolPart[]
   visible: Accessor<boolean>
+  initial?: unknown
+  persist?: (state: SubagentState) => void
   show: () => void
   sync: (id: string, parentID?: string) => void
   unsync: (id: string) => void
@@ -206,6 +295,8 @@ export function createSubagentController(opts: {
   const tabs = createSubagentTabs({
     current: opts.current,
     context,
+    initial: opts.initial,
+    persist: opts.persist,
     sync: opts.sync,
     unsync: opts.unsync,
     show: opts.show,

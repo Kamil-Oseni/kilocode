@@ -199,7 +199,7 @@ import { clampPanelWidth, createPanelResize, maxPanelWidth, minPanelWidth, SideP
 import { SubagentPanel } from "./SubagentPanel"
 import { DocumentPanelHost } from "./documents/DocumentPanelHost"
 import { createDocumentInspector } from "../documents/state"
-import { attachSubagentEvent, createSubagentController } from "./subagent-tabs"
+import { attachSubagentEvent, createSubagentController, type SubagentState } from "./subagent-tabs"
 import { EditPreviewPanel } from "./EditPreviewPanel"
 import {
   createAgentManagerEditPreview,
@@ -277,7 +277,12 @@ const AgentManagerContent: Component = () => {
   const MIN_SIDEBAR_WIDTH = 200
   const MAX_SIDEBAR_WIDTH_RATIO = 0.4
   const persisted = vscode.getState<
-    PersistedProjectTabs & { sidebarWidth?: number; sidePanelWidth?: number; sidebarCollapsed?: boolean }
+    PersistedProjectTabs & {
+      sidebarWidth?: number
+      sidePanelWidth?: number
+      sidebarCollapsed?: boolean
+      rayaSubagents?: SubagentState
+    }
   >()
   const registry = createProjectRegistry({
     persisted: persisted ?? {},
@@ -361,6 +366,8 @@ const AgentManagerContent: Component = () => {
     selection,
     parts: session.getSessionToolParts,
     visible: () => sidePanel() === SidePanel.Subagents,
+    initial: persisted?.rayaSubagents,
+    persist: (value) => vscode.setState({ ...vscode.getState<Record<string, unknown>>(), rayaSubagents: value }),
     sync: (id, parentID) => session.syncSession(id, parentID, "inspector"),
     unsync: (id) => session.unsyncSession(id, "inspector"),
     show: () => {

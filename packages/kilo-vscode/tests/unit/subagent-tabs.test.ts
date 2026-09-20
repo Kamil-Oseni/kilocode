@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { availableSubagents, createSubagentTabs } from "../../webview-ui/agent-manager/subagent-tabs"
+import {
+  availableSubagents,
+  createSubagentTabs,
+  restoreSubagents,
+  type SubagentState,
+} from "../../webview-ui/agent-manager/subagent-tabs"
 
 function scene() {
   const [current] = createSignal<string | undefined>("parent")
@@ -139,6 +144,77 @@ describe("Agent Manager subagent tabs", () => {
       ])
       dispose()
     })
+  })
+
+  it("restores twelve child tabs, the selected child, and exact parent sync after restart", () => {
+    const state: SubagentState = {
+      version: 1,
+      tabs: {
+        "single:parent": Array.from({ length: 12 }, (_, index) => ({
+          id: `child-${index + 1}`,
+          title: `Worker ${index + 1}`,
+          parentID: "parent",
+        })),
+      },
+      active: { "single:parent": "child-7" },
+    }
+    createRoot((dispose) => {
+      const calls: Array<[string, string | undefined]> = []
+      const tabs = createSubagentTabs({
+        current: () => "parent",
+        context: (parent) => `single:${parent ?? "parent"}`,
+        initial: state,
+        sync: (id, parent) => calls.push([id, parent]),
+        unsync: () => undefined,
+        show: () => undefined,
+        hide: () => undefined,
+      })
+
+      expect(tabs.tabs()).toHaveLength(12)
+      expect(tabs.active()).toBe("child-7")
+      expect(calls).toEqual(state.tabs["single:parent"].map((tab) => [tab.id, "parent"]))
+      dispose()
+    })
+  })
+
+  it("persists a bounded restart record and rejects malformed selected children", () => {
+    const writes: SubagentState[] = []
+    createRoot((dispose) => {
+      const tabs = createSubagentTabs({
+        current: () => "parent",
+        initial: { version: 1, tabs: { default: [{ id: "kept", title: "Kept" }] }, active: { default: "lost" } },
+        persist: (state) => writes.push(structuredClone(state)),
+        sync: () => undefined,
+        unsync: () => undefined,
+        show: () => undefined,
+        hide: () => undefined,
+      })
+
+      expect(tabs.tabs()).toEqual([{ id: "kept", title: "Kept" }])
+      expect(tabs.active()).toBeUndefined()
+      tabs.open("next", "Next", "parent")
+      tabs.select("kept")
+      expect(writes.at(-1)).toEqual({
+        version: 1,
+        tabs: {
+          default: [
+            { id: "kept", title: "Kept" },
+            { id: "next", title: "Next", parentID: "parent" },
+          ],
+        },
+        active: { default: "kept" },
+      })
+      dispose()
+    })
+
+    expect(restoreSubagents({ version: 2, tabs: {}, active: {} })).toEqual({ version: 1, tabs: {}, active: {} })
+    expect(
+      restoreSubagents({
+        version: 1,
+        tabs: { default: [{ id: "same", title: "First" }, { id: "same", title: "Duplicate" }, { id: 3 }] },
+        active: { default: "missing" },
+      }),
+    ).toEqual({ version: 1, tabs: { default: [{ id: "same", title: "First" }] }, active: {} })
   })
 
   it("finds direct subagent sessions in task tool parts", () => {

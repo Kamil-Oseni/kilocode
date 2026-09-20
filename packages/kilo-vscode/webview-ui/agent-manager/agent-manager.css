@@ -5012,7 +5012,8 @@ body.vscode-high-contrast-light {
    top bar's 240px because the panel is narrow. */
 .am-inspector-tablist {
   --am-tab-max-width: 180px;
-  --am-tab-width: clamp(72px, calc(100% / var(--tab-count, 1)), var(--am-tab-max-width));
+  --am-tab-min-width: 72px;
+  --am-tab-width: clamp(var(--am-tab-min-width), calc(100% / var(--tab-count, 1)), var(--am-tab-max-width));
   display: flex;
   align-items: stretch;
   /* No gap, like .am-tab-list: equal-share tab widths already consume
@@ -5024,6 +5025,10 @@ body.vscode-high-contrast-light {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+}
+
+.am-subagent-panel .am-inspector-tablist {
+  --am-tab-min-width: 120px;
 }
 
 .am-inspector-tablist::-webkit-scrollbar {

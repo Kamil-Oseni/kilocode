@@ -16,6 +16,8 @@ import { ErrorDisplay } from "../src/components/chat/ErrorDisplay"
 import { TurnOutcome } from "../src/components/shared/TurnOutcome"
 import { useVSCode } from "../src/context/vscode"
 import type { SessionInfo } from "../src/types/messages"
+import { SubagentPanel } from "../agent-manager/SubagentPanel"
+import { createSubagentTabs, type SubagentState } from "../agent-manager/subagent-tabs"
 
 const now = Date.now()
 const listed: SessionInfo[] = [
@@ -191,6 +193,58 @@ export const ChildViewerPreview: Component = () =>
     </AgentSession>
   ))
 
+const childState: SubagentState = {
+  version: 1,
+  tabs: {
+    "single:parent": Array.from({ length: 12 }, (_, index) => ({
+      id: `child-${index + 1}`,
+      title: index === 0 ? "Review authentication boundaries" : `Worker ${index + 1}`,
+      parentID: "parent",
+    })),
+  },
+  active: { "single:parent": "child-7" },
+}
+
+const AgentManagerSubagents: Component = () => {
+  const vscode = useVSCode()
+  const saved = vscode.getState<Record<string, unknown>>()
+  const tabs = createSubagentTabs({
+    current: () => "parent",
+    context: () => "single:parent",
+    initial: saved?.rayaSubagents ?? childState,
+    persist: (value) => vscode.setState({ ...vscode.getState<Record<string, unknown>>(), rayaSubagents: value }),
+    sync: () => undefined,
+    unsync: () => undefined,
+    show: () => undefined,
+    hide: () => undefined,
+  })
+  return (
+    <div class="am-layout" style={{ height: "32rem", width: "100%", position: "relative" }}>
+      <SubagentPanel
+        tabs={tabs.tabs}
+        active={tabs.active}
+        visible={() => true}
+        nextKeybind="Ctrl+PageDown"
+        closeKeybind="Ctrl+W"
+        onSelect={tabs.select}
+        onClose={tabs.close}
+        onCloseOthers={tabs.closeOthers}
+        onReorder={tabs.reorder}
+        parentTitle={() => "Ship delegated-agent monitoring"}
+        onOpenParent={() => undefined}
+        onClosePanel={() => undefined}
+      />
+    </div>
+  )
+}
+
+export const AgentManagerSubagentsPreview: Component = () =>
+  wrap("parent", () => (
+    <AgentSession>
+      <AgentManagerSubagents />
+    </AgentSession>
+  ))
+
 const Outcome: Component<{ reason: "interrupted" | "error"; finish?: string }> = (props) => {
   const session = useSession()
   const value = {
@@ -216,7 +270,11 @@ const Outcome: Component<{ reason: "interrupted" | "error"; finish?: string }> =
     todos: () => [],
     isErrorHidden: () => false,
   }
-  return <SessionContext.Provider value={value as never}><TurnOutcome /></SessionContext.Provider>
+  return (
+    <SessionContext.Provider value={value as never}>
+      <TurnOutcome />
+    </SessionContext.Provider>
+  )
 }
 
 export const RecoveryPreview: Component = () =>

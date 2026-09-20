@@ -103,7 +103,8 @@ export const ClosableTabChrome: Component<ClosableTabProps> = (props) => {
             size="small"
             variant="ghost"
             aria-label={t("agentManager.tab.closeTab")}
-            tabIndex={props.active ? 0 : -1}
+            aria-hidden={props.role === "tab" ? true : undefined}
+            tabIndex={props.role === "tab" ? -1 : props.active ? 0 : -1}
             class="am-tab-close"
             data-tab-close="true"
             onClick={(event) => {

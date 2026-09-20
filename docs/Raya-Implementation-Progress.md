@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-19 23:32 America/Toronto - Session issue S-01 Windows snapshot restore verified
+
+**Status: current product behavior verified on Windows; integration-budget correction committed and pushed as `2f7c34119f`.** The historical restore failure used a drive-stripped Unix-style absolute path as a Git checkout pathspec, which Windows interpreted outside the snapshot worktree. Current snapshot source converts every retained file to a path relative to the authoritative workspace root, normalizes separators only for Git, validates snapshot trees before mutation and fails rather than reporting a restore that Git did not perform.
+
+Two real Git-backed Windows integrations now complete. A modified file in a non-Git workspace is tracked, edited and restored to its exact original bytes: **1 test / 3 assertions**. A mixed batch deletes one tracked file, creates two paths and modifies another, then restores both original files and removes both creations: **1 test / 4 assertions**. The product was already correct; both tests had inherited Bun's five-second default even though Windows snapshot seeding and materialization can take 9–10 seconds. Only those Windows integration budgets now allow up to 90 seconds, while other platforms retain the five-second ceiling. The protected push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains with one-worker limits.
+
+The installed product remains `eden.raya@7.4.23-snapshot+68e4f2e9c0.kamil-oseni.1789874464983`, which contains the verified restore implementation and the latest browser fixes. No new package was built for a test-only timeout correction. This closes logged issue `S-01`. Continue with the independently reproducible snapshot temporary-file race `R-12` before lower-impact storage diagnostics.
+
 ## ChatGPT 2026-09-19 23:24 America/Toronto - Browser startup and post-navigation contract verified
 
 **Status: verified, committed, pushed and installed from product source `68e4f2e9c0`; logged issues `R-02` through `R-05` reconciled against the current native browser.** The 15 historical `kilo-playwright` MCP “server unavailable” warnings came from an architecture that current Raya no longer registers. The extension now owns Playwright directly, launches the installed system Chrome, exposes explicit profile info/retry/reset operations and reports unavailable, locked and failed launch states through the browser profile contract. A real source-host startup against `C:\Program Files\Google\Chrome\Application\chrome.exe` succeeded, so no current MCP startup service exists to retry.

@@ -6,6 +6,7 @@ import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { migrations } from "./migration.gen"
 import schema from "./schema.gen"
 import { capture } from "../kilocode/migration-backup" // kilocode_change - preserve a recoverable snapshot before destructive upgrades
+import { validate } from "../kilocode/migration-policy" // kilocode_change - bind destructive transitions to reviewed release lineage
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -17,6 +18,7 @@ export type Migration = {
 }
 
 export function apply(db: Database) {
+  validate(migrations) // kilocode_change - fail before opening a database when the release policy is inconsistent
   return lock.withPermit(
     Effect.gen(function* () {
       const tables = yield* db.all<{ name: string }>(

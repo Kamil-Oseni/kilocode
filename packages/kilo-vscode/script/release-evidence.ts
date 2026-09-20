@@ -29,6 +29,7 @@ const checks = [
       "./test/database-migration.test.ts",
       "./test/kilocode/database-migration-compat.test.ts",
       "./test/kilocode/migration-backup.test.ts",
+      "./test/kilocode/migration-policy.test.ts",
       "./test/kilocode/routine-migration.test.ts",
     ],
     cwd: path.join(root, "packages/core"),

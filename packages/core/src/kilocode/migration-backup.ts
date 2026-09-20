@@ -1,23 +1,12 @@
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import type { Database } from "../database/database"
+import { find } from "./migration-policy"
 
 type Db = Database.Interface["db"]
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
 
 const prefix = "kilo_migration_backup"
-const destructive = new Set([
-  "20260303231226_add_workspace_fields",
-  "20260309230000_move_org_to_state",
-  "20260427172553_slow_nightmare",
-  "20260601202201_amazing_prowler",
-  "20260603040000_session_message_projection_order",
-  "20260604172448_event_sourced_session_input",
-  "20260611192811_lush_chimera",
-  "20260622142730_simplify_session_context_epoch",
-  "20260622170816_reset_v2_session_state",
-  "20260622202450_simplify_session_input",
-])
 
 const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
@@ -32,7 +21,7 @@ const value = (name: string) => {
 /** Called inside the same immediate transaction as the destructive migration. */
 export function capture(tx: Tx, id: string) {
   return Effect.gen(function* () {
-    if (!destructive.has(id)) return
+    if (!find(id)) return
     const objects = yield* tx.all<{ type: string; name: string; sql: string }>(
       "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
     )

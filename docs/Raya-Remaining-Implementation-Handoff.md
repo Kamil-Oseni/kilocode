@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-20 19:03 America/Toronto - Finish EN-01 installation from complete released lineage evidence
+
+The destructive migration list is now an executable release policy in `packages/core/src/kilocode/migration-policy.ts`. Preserve the ten exact migration identities, mandatory `atomic-recovery-snapshot-before-reset` action and `export-and-open-with-compatible-pre-reset-runtime` recovery rule. A complete retained-tag audit corrected the earlier draft: every boundary is a SQLite upgrade. The true first-release edges are `7.0.47 → 7.0.48`, `7.2.3 → 7.2.4`, `7.3.1 → 7.3.2`, `7.4.7 → 7.4.8`, `7.4.15 → 7.4.16` and `7.4.20 → 7.4.21`. Do not restore the discarded JSON-bootstrap claim.
+
+Six predecessor application-schema fixtures are SHA-pinned to retained tag commits. The focused run passes **15 tests / 90 assertions** and proves all lineages upgrade, the declared destructive transitions create recovery snapshots, exports restore the relevant historical state, and restored databases remain integral. The populated `v7.0.47` adverse path intentionally cannot run its historical `ADD NOT NULL`; it proves the immediate transaction leaves the original workspace configuration and migration journal untouched. `release-evidence.ts` now runs both migration recovery and policy tests, and its bounded plan output includes the new suite.
+
+Finish only the mechanical closure for this row: format and lint the touched files, run the annotation, release-plan, Markdown-table and diff guards, commit and push, install one low-memory snapshot, record the package receipt in both implementation documents, and then mark EN-01 Verified. The rollout contract remains a recoverable reset; never describe it as direct semantic preservation in the current runtime.
+
 ## ChatGPT 2026-09-20 18:08 America/Toronto - Agent Manager startup acceptance complete
 
 The real extension-host startup blocker is closed. Agent Manager initially appeared blank; a bounded startup diagnostic exposed `useVoice must be used within VoiceProvider`. `PromptInput` is shared, but `VoiceProvider` was mounted only by the sidebar. Product commit `dc0910ddc9` moves the provider into shared `ProviderShell.Session` inside `SessionProvider`, removes the duplicate sidebar wrapper and retains the diagnostic boundary for future startup faults. Focused evidence passes **73 / 279**, both extension typechecks and scoped ESLint pass, and the protected push completed.

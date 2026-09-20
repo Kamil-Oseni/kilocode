@@ -19,6 +19,7 @@ import { DiffFull } from "../kilocode/snapshot/diff-full"
 import { KiloSnapshotTrack } from "../kilocode/snapshot/track"
 import { KiloSnapshotSeed } from "../kilocode/snapshot/seed"
 import { KiloSnapshotMaterialize } from "../kilocode/snapshot/materialize"
+import { present } from "../kilocode/snapshot/stage"
 import { internal } from "../kilocode/snapshot/internal"
 import { matches as verify, WorkspaceConflict } from "../kilocode/snapshot/verify"
 import type { MessageID, SessionID } from "../session/schema"
@@ -212,7 +213,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             opts?: { env?: Record<string, string>; root?: boolean },
           ) {
             // kilocode_change end
-            if (!files.length) return
+            if (!files.length) return undefined // kilocode_change
             // kilocode_change start
             // A new root snapshot covers the full worktree, so a single pathspec avoids
             // quadratic matching against every tracked path in very large repositories.
@@ -226,11 +227,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               stdin: opts?.root ? undefined : literal(files),
             })
             // kilocode_change end
-            if (result.code === 0) return
-            yield* Effect.logWarning("failed to add snapshot files", {
-              exitCode: result.code,
-              stderr: result.stderr,
-            })
+            return result // kilocode_change
           })
 
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
@@ -374,10 +371,32 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             yield* sync(Array.from(block))
             // Stage only the allowed candidate paths so snapshot updates stay scoped.
             // kilocode_change start - initial seeded writes stay protected by the source pin
-            yield* stage(
-              allow.filter((item) => !block.has(item)),
-              opts,
-            )
+            const volatile = new Set(untracked)
+            let files = allow.filter((item) => !block.has(item))
+            let result = yield* stage(files, opts)
+            if (!opts?.root) {
+              for (let attempt = 1; result && result.code !== 0 && attempt < 3; attempt++) {
+                const existing = new Set(
+                  (yield* Effect.all(
+                    files
+                      .filter((item) => volatile.has(item))
+                      .map((item) =>
+                        exists(path.join(state.worktree, item)).pipe(Effect.map((found) => (found ? item : undefined))),
+                      ),
+                    { concurrency: 8 },
+                  )).filter((item): item is string => Boolean(item)),
+                )
+                const next = present(files, volatile, existing)
+                if (next.length === files.length) break
+                files = next
+                result = yield* stage(files, opts)
+              }
+            }
+            if (!result || result.code === 0) return
+            yield* Effect.logWarning("failed to add snapshot files", {
+              exitCode: result.code,
+              stderr: result.stderr,
+            })
           })
 
           const materialize = Effect.fnUntraced(function* () {

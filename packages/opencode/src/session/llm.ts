@@ -29,6 +29,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { KiloSession } from "@/kilocode/session"
 import { KiloLLM } from "@/kilocode/session/llm"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
+import { ToolInputRepair } from "@/kilocode/session/tool-input-repair"
 import { KiloToolSchema } from "@/kilocode/session/tool-schema"
 import { SessionExport } from "@/kilocode/session-export"
 import { getActiveOrg } from "@/kilocode/session-export/eligibility"
@@ -379,11 +380,16 @@ const live: Layer.Layer<
         async experimental_repairToolCall(failed) {
           const lower = failed.toolCall.toolName.trim().toLowerCase() // kilocode_change
           // kilocode_change start
-          if (lower !== "invalid" && lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-            l.info("repairing tool call", { tool: failed.toolCall.toolName, repaired: lower }) // kilocode_change
-            return { ...failed.toolCall, toolName: lower }
-          }
           if (lower === "invalid" || !prepared.tools[lower]) return null
+          const fixed = ToolInputRepair.complete(failed.toolCall.input)
+          if (lower !== failed.toolCall.toolName || fixed) {
+            l.info("repairing tool call", {
+              tool: failed.toolCall.toolName,
+              repaired: lower,
+              input: fixed ? "completed-delimiters" : "unchanged",
+            })
+            return { ...failed.toolCall, toolName: lower, input: fixed ?? failed.toolCall.input }
+          }
           // kilocode_change end
           if (input.agent.name === "auto") return null // kilocode_change - preserve the original error instead of inventing delegation or an unavailable invalid-tool call
           return {

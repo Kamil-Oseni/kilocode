@@ -2384,6 +2384,8 @@ describe("session.llm.stream", () => {
           "user",
           "schema",
           "json",
+          "delimiter",
+          "string",
           "unknown",
           "reserved",
         ] as const) {
@@ -2392,7 +2394,11 @@ describe("session.llm.stream", () => {
           const input =
             scenario === "json"
               ? '{"path":'
-              : JSON.stringify(scenario === "schema" ? { ...payload, path: 42 } : payload)
+              : scenario === "delimiter"
+                ? JSON.stringify(payload).slice(0, -1)
+                : scenario === "string"
+                  ? '{"path":"./reports/Quarterly Summary.md","note":"Read only.'
+                  : JSON.stringify(scenario === "schema" ? { ...payload, path: 42 } : payload)
           const request = waitRequest(
             "/chat/completions",
             createEventResponse(
@@ -2487,7 +2493,7 @@ describe("session.llm.stream", () => {
           expect(state.queue).toHaveLength(0)
           expect(events.filter((event) => event.type === "provider-error")).toEqual([])
           expect(events.filter((event) => event.type === "tool-call").every((event) => event.id === id)).toBe(true)
-          if (scenario === "allowed") {
+          if (scenario === "allowed" || scenario === "delimiter") {
             expect(calls).toEqual([{ name: "read", id, input: payload }])
             expect(events.filter((event) => event.type === "tool-call")).toEqual([
               expect.objectContaining({ id, name: "read", input: payload }),

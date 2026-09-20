@@ -40,6 +40,7 @@ import { SessionNetwork } from "./network" // kilocode_change
 import { CodexAuthExpiredError } from "@/kilocode/provider/codex-refresh" // kilocode_change
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order" // kilocode_change
 import * as TextStream from "@/kilocode/text-stream" // kilocode_change
+import { KiloModelHistory } from "@/kilocode/session/model-history" // kilocode_change - validate reconstructed provider history
 import { Effect, Schema } from "effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
@@ -539,7 +540,8 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 
   const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-  return yield* Effect.promise(() =>
+  // kilocode_change start - repair malformed persisted history before it reaches the provider adapter
+  const converted = yield* Effect.promise(() =>
     convertToModelMessages(
       result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
       {
@@ -548,6 +550,16 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       },
     ),
   )
+  const checked = KiloModelHistory.repair(converted)
+  if (checked.repairs.length > 0) {
+    yield* Effect.logWarning("repaired invalid model history", {
+      count: checked.repairs.length,
+      repairs: checked.repairs.slice(0, 8),
+      omitted: Math.max(checked.repairs.length - 8, 0),
+    })
+  }
+  return checked.messages
+  // kilocode_change end
 })
 
 export function toModelMessages(

@@ -1497,6 +1497,29 @@ describe("session.message-v2.toModelMessage", () => {
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
     expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
   })
+
+  // kilocode_change start - reject malformed reconstructed metadata before provider dispatch
+  test("repairs invalid provider metadata after converting persisted history", async () => {
+    const assistantID = "m-assistant-invalid-metadata"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "p1"),
+            type: "text",
+            text: "safe answer",
+            metadata: { provider: { invalid: () => "private-provider-payload" } },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      { role: "assistant", content: [{ type: "text", text: "safe answer" }] },
+    ])
+  })
+  // kilocode_change end
 })
 
 describe("session.message-v2.fromError", () => {

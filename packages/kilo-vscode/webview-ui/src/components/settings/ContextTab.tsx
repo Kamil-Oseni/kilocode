@@ -7,8 +7,120 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 
 import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
-import { useMemory } from "../../context/memory"
+import { useMemory, type MemoryContextValue } from "../../context/memory"
+import { useIndexing } from "../../context/indexing"
+import { useServer } from "../../context/server"
 import SettingsRow from "./SettingsRow"
+
+export function MemoryActions(props: { memory: MemoryContextValue }) {
+  const [correction, setCorrection] = createSignal("")
+  const [forgotten, setForgotten] = createSignal("")
+  return (
+    <>
+      <SettingsRow
+        title="Correct remembered context"
+        description="Save the current fact for this project. The historical receipt stays read-only."
+      >
+        <div style={{ display: "flex", gap: "8px", "align-items": "center", width: "min(100%, 420px)" }}>
+          <div style={{ flex: 1 }}>
+            <TextField
+              value={correction()}
+              onChange={setCorrection}
+              placeholder="What should Raya remember instead?"
+              label="Correct remembered context"
+              hideLabel
+            />
+          </div>
+          <Button
+            intent="primary"
+            scale="compact"
+            pending={props.memory.pending()}
+            disabled={!props.memory.enabled() || !correction().trim()}
+            onClick={() => props.memory.correct(correction())}
+          >
+            Save correction
+          </Button>
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        title="Remove remembered context"
+        description="Describe the stale fact to remove from this project. Raya will report if nothing matched."
+        last
+      >
+        <div style={{ display: "flex", gap: "8px", "align-items": "center", width: "min(100%, 420px)" }}>
+          <div style={{ flex: 1 }}>
+            <TextField
+              value={forgotten()}
+              onChange={setForgotten}
+              placeholder="Which remembered fact is stale?"
+              label="Remove remembered context"
+              hideLabel
+            />
+          </div>
+          <Button
+            intent="destructive"
+            scale="compact"
+            pending={props.memory.pending()}
+            disabled={!props.memory.enabled() || !forgotten().trim()}
+            onClick={() => props.memory.forget(forgotten())}
+          >
+            Remove
+          </Button>
+        </div>
+      </SettingsRow>
+    </>
+  )
+}
+
+export function WorkLocation(props: {
+  directory?: string
+  root?: string
+  scope?: string
+  index: { message: string; label: string; tone: "muted" | "warning" | "success" | "error"; loading: boolean }
+}) {
+  return (
+    <>
+      <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>Work location and indexed context</h4>
+      <Card>
+        <SettingsRow
+          title="Active work location"
+          description={props.directory ?? "No project directory is connected."}
+        >
+          <span>{props.directory ? "Connected" : "Unavailable"}</span>
+        </SettingsRow>
+        <SettingsRow
+          title="Memory scope"
+          description={props.root ?? "Memory scope has not been loaded for this project."}
+        >
+          <span>{props.scope ?? "Unknown"}</span>
+        </SettingsRow>
+        <SettingsRow title="Codebase index" description={props.index.message} last>
+          <span class={`indexing-status-badge indexing-status-badge--${props.index.tone}`}>
+            {props.index.loading ? "Loading" : props.index.label}
+          </span>
+        </SettingsRow>
+      </Card>
+    </>
+  )
+}
+
+function ContextScope(props: { memory: MemoryContextValue }) {
+  const indexing = useIndexing()
+  const server = useServer()
+  return (
+    <WorkLocation
+      directory={server.workspaceDirectory() || undefined}
+      root={props.memory.status()?.root}
+      scope={props.memory.status()?.state.scope}
+      index={{
+        message: indexing.status().message,
+        label: indexing.label(),
+        tone: indexing.tone(),
+        loading: indexing.loading(),
+      }}
+    />
+  )
+}
 
 const ContextTab: Component = () => {
   const { config, updateConfig } = useConfig()
@@ -95,7 +207,6 @@ const ContextTab: Component = () => {
               ? language.t("settings.context.memory.storage.path", { path: memory.status()!.root })
               : language.t("settings.context.memory.storage.enable")
           }
-          last
         >
           <Button
             variant="secondary"
@@ -107,6 +218,7 @@ const ContextTab: Component = () => {
             {language.t("settings.context.memory.inspect")}
           </Button>
         </SettingsRow>
+        <MemoryActions memory={memory} />
         <Show when={memory.error()}>
           {(err) => (
             <div
@@ -121,6 +233,8 @@ const ContextTab: Component = () => {
           )}
         </Show>
       </Card>
+
+      <ContextScope memory={memory} />
 
       {/* Compaction settings */}
       <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>

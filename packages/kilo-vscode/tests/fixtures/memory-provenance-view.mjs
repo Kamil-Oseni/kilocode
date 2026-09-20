@@ -178,6 +178,10 @@ try {
   assert.match(root.textContent, /does not establish whether the stored facts are still current/)
   assert.match(root.textContent, /reused from the session's prepared snapshot/)
   assert.match(root.textContent, /historical receipt is read-only/)
+  const review = cards()[0].querySelectorAll("button")[1]
+  assert.equal(review.textContent.trim(), "Review current project context")
+  review.click()
+  assert.equal(sent.some((item) => item.type === "openSettingsPanel" && item.tab === "context"), true)
   assert.doesNotMatch(root.textContent, /PRIVATE|unrelated-current-project/)
   assert.equal(root.querySelectorAll("a").length, 0)
   assert.equal(

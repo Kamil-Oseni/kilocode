@@ -1,8 +1,13 @@
 import { For, Show } from "solid-js"
 import { Collapsible } from "@kilocode/kilo-ui/collapsible"
 import type { provenance } from "../../../../src/shared/memory-provenance"
+import { Button } from "@kilocode/kilo-ui/button"
 
-export function MemoryProvenance(props: { receipt: NonNullable<ReturnType<typeof provenance>>; partID: string }) {
+export function MemoryProvenance(props: {
+  receipt: NonNullable<ReturnType<typeof provenance>>
+  partID: string
+  onReview: () => void
+}) {
   const title = () =>
     props.receipt.type === "startup" ? "Memory prepared for this step" : "Memory retrieved during this step"
   return (
@@ -60,6 +65,15 @@ export function MemoryProvenance(props: { receipt: NonNullable<ReturnType<typeof
               then use Context settings or the /memory command. This view does not verify that the current workspace
               owns these sources.
             </p>
+            <div>
+              <Button
+                intent="secondary"
+                scale="compact"
+                onClick={props.onReview}
+              >
+                Review current project context
+              </Button>
+            </div>
           </div>
         </Collapsible.Content>
       </Collapsible>

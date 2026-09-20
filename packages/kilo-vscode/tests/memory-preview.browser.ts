@@ -10,7 +10,7 @@ for (const theme of ["light", "dark"]) {
         const fixture = page.locator("[data-fixture]")
         await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
         const receipt = fixture.locator('[data-component="memory-provenance"]')
-        const trigger = receipt.getByRole("button")
+        const trigger = receipt.getByRole("button", { name: /Memory (prepared|retrieved)/ })
         await expect(trigger).toHaveAttribute("aria-expanded", "false")
         await page.keyboard.press("Tab")
         await expect(trigger).toBeFocused()
@@ -24,6 +24,7 @@ for (const theme of ["light", "dark"]) {
         await page.keyboard.press("Enter")
         await expect(trigger).toHaveAttribute("aria-expanded", "true")
         await expect(receipt.getByText("This historical receipt is read-only.", { exact: false })).toBeVisible()
+        await expect(receipt.getByRole("button", { name: "Review current project context" })).toBeVisible()
         await expect(
           receipt.getByText(state === "memory" ? "720 estimated tokens recorded." : "Token estimate was not recorded."),
         ).toBeVisible()

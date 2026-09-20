@@ -296,6 +296,7 @@ function ThroughputBadge(props: { metrics: { generation?: number } }) {
 export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   const data = useData()
   const session = useSession()
+  const vscode = useVSCode()
   const display = useDisplay()
   const language = useLanguage()
   const { config } = useConfig()
@@ -511,7 +512,13 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
     const receipt = createMemo(() => provenance(rp.part))
     return (
       <Show when={receipt()} fallback={<ContentRow part={rp.part} />}>
-        {(value) => <MemoryProvenance receipt={value()} partID={rp.part.id} />}
+        {(value) => (
+          <MemoryProvenance
+            receipt={value()}
+            partID={rp.part.id}
+            onReview={() => vscode.postMessage({ type: "openSettingsPanel", tab: "context" })}
+          />
+        )}
       </Show>
     )
   }

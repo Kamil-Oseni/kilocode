@@ -20,6 +20,8 @@ export interface MemoryContextValue {
   enable: () => void
   disable: () => void
   auto: (mode: "on" | "off") => void
+  correct: (text: string) => boolean
+  forget: (query: string) => boolean
 }
 
 export const MemoryContext = createContext<MemoryContextValue>()
@@ -83,6 +85,19 @@ export const MemoryProvider: ParentComponent = (props) => {
     setPending(key(id()))
     setError(undefined)
     vscode.postMessage({ type: "memoryOperation", operation: "inspect", sessionID: id() })
+  }
+
+  const mutate = (operation: "correct" | "forget", value: string) => {
+    if (!server.isConnected() || !value.trim()) return false
+    setPending(key(id()))
+    setError(undefined)
+    vscode.postMessage({
+      type: "memoryOperation",
+      operation,
+      sessionID: id(),
+      ...(operation === "correct" ? { text: value.trim() } : { query: value.trim() }),
+    })
+    return true
   }
 
   const event = (message: Extract<ExtensionMessage, { type: "memoryEvent" }>) => {
@@ -178,6 +193,8 @@ export const MemoryProvider: ParentComponent = (props) => {
     enable: () => operation("enable"),
     disable: () => operation("disable"),
     auto,
+    correct: (text) => mutate("correct", text),
+    forget: (query) => mutate("forget", query),
   }
 
   return <MemoryContext.Provider value={value}>{props.children}</MemoryContext.Provider>

@@ -26,13 +26,16 @@ import {
 } from "./surfaces"
 import { ConversationPreview, SlashPreview, TopNavPreview, TranscriptPreview } from "./chrome"
 import { render } from "solid-js/web"
-import { For, Show, type Component } from "solid-js"
+import { For, Show, createSignal, type Component } from "solid-js"
 import { installMockVsCode } from "./mock-vscode"
+import { Card } from "@kilocode/kilo-ui/card"
 import { GoalBannerView } from "../src/components/chat/GoalBanner"
 import type { GoalBannerProps } from "../src/components/chat/GoalBanner"
 import type { GoalState, GoalStatus } from "../../src/shared/goal"
 import { UsageHistoryView } from "../src/components/chat/UsageHistory"
 import { MemoryProvenance } from "../src/components/chat/MemoryProvenance"
+import { MemoryActions, WorkLocation } from "../src/components/settings/ContextTab"
+import type { MemoryContextValue } from "../src/context/memory"
 import { provenance } from "../../src/shared/memory-provenance"
 import type { ProjectUsage } from "../src/types/messages"
 
@@ -51,6 +54,7 @@ type PvState =
   | "usage"
   | "memory"
   | "memory-legacy"
+  | "context"
   | "paused"
   | "waiting"
   | "complete"
@@ -86,6 +90,7 @@ const states: PvState[] = [
   "usage",
   "memory",
   "memory-legacy",
+  "context",
   "paused",
   "waiting",
   "complete",
@@ -344,6 +349,41 @@ const banners = new Set<PvState>([
   "result",
 ])
 
+function ContextPreview() {
+  const [outcome, setOutcome] = createSignal("No context change submitted")
+  const memory = {
+    status: () => undefined,
+    loading: () => false,
+    pending: () => false,
+    error: () => undefined,
+    enabled: () => true,
+    totalTokens: () => 420,
+    refresh: () => undefined,
+    inspect: () => undefined,
+    enable: () => undefined,
+    disable: () => undefined,
+    auto: () => undefined,
+    correct: (text: string) => (setOutcome(`Correction saved: ${text}`), true),
+    forget: (query: string) => (setOutcome(`Removal requested: ${query}`), true),
+  } satisfies MemoryContextValue
+  return (
+    <section aria-label="Context provenance">
+      <WorkLocation
+        directory="C:\\work\\raya-feature"
+        root="C:\\work\\raya-feature\\.kilo\\memory"
+        scope="project"
+        index={{ message: "Index is stale after the worktree changed.", label: "IDX Error", tone: "error", loading: false }}
+      />
+      <Card>
+        <MemoryActions memory={memory} />
+      </Card>
+      <p aria-live="polite" data-testid="context-outcome">
+        {outcome()}
+      </p>
+    </section>
+  )
+}
+
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
   <figure class="pv-fixture" data-fixture={props.id} data-preview-kind="production-view">
     <figcaption class="pv-fixture__label">
@@ -355,7 +395,14 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
         <UsageHistoryView range="7d" usage={usage} locale="en" providers={{}} />
       </Show>
       <Show when={props.state === "memory" || props.state === "memory-legacy"}>
-        <MemoryProvenance receipt={props.state === "memory" ? memory : legacy} partID={props.id} />
+        <MemoryProvenance
+          receipt={props.state === "memory" ? memory : legacy}
+          partID={props.id}
+          onReview={() => undefined}
+        />
+      </Show>
+      <Show when={props.state === "context"}>
+        <ContextPreview />
       </Show>
       <Show when={props.state === "slash"}>
         <SlashPreview />

@@ -2,7 +2,12 @@ import { defineConfig } from "@playwright/test"
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: ["memory-preview.browser.ts", "routines-preview.browser.ts", "surfaces-preview.browser.ts"],
+  testMatch: [
+    "context-provenance.browser.ts",
+    "memory-preview.browser.ts",
+    "routines-preview.browser.ts",
+    "surfaces-preview.browser.ts",
+  ],
   workers: 1,
   reporter: "list",
   use: {

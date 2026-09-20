@@ -1,6 +1,7 @@
 import { Button } from "@kilocode/kilo-web-ui/button"
 import { Input } from "@kilocode/kilo-web-ui/input"
 import { createUniqueId, Show } from "solid-js"
+import { focus } from "./dialog-focus"
 
 type Props = {
   open: boolean
@@ -18,10 +19,15 @@ type Props = {
 }
 
 export function PromptDialog(props: Props) {
+  let field: HTMLInputElement | undefined
   const id = createUniqueId()
   const title = `${id}-title`
   const message = `${id}-message`
   const input = `${id}-input`
+  focus(
+    () => props.open,
+    () => field,
+  )
 
   return (
     <Show when={props.open}>
@@ -48,20 +54,20 @@ export function PromptDialog(props: Props) {
               <label class="prompt-field" for={input}>
                 <span>{props.label}</span>
                 <Input
+                  ref={(node) => (field = node)}
                   id={input}
                   value={props.value}
                   placeholder={props.placeholder}
                   disabled={props.busy}
-                  autofocus
                   onInput={(event) => props.onInput(event.currentTarget.value)}
                 />
               </label>
             </div>
             <footer class="confirm-actions">
-              <Button type="button" variant="ghost" disabled={props.busy} onClick={props.onCancel}>
+              <Button type="button" intent="quiet" disabled={props.busy} onClick={props.onCancel}>
                 {props.cancel ?? "Cancel"}
               </Button>
-              <Button type="submit" variant="primary" disabled={props.busy}>
+              <Button type="submit" intent="primary" pending={props.busy}>
                 {props.confirm ?? "Confirm"}
               </Button>
             </footer>

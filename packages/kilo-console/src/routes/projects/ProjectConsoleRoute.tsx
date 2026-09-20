@@ -990,10 +990,10 @@ export function ProjectConsoleRoute() {
           </code>
           <Show when={canManage(current())}>
             <div class="project-info-actions">
-              <Button variant="secondary" size="small" onClick={resetSelected} disabled={!!saving()}>
+              <Button intent="secondary" scale="compact" onClick={resetSelected} disabled={!!saving()}>
                 Reset
               </Button>
-              <Button variant="destructive" size="small" onClick={removeSelected} disabled={!!saving()}>
+              <Button intent="destructive" scale="compact" onClick={removeSelected} pending={!!saving()}>
                 Delete
               </Button>
             </div>

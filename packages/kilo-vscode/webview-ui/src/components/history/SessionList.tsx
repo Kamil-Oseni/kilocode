@@ -113,12 +113,12 @@ const SessionList: Component<SessionListProps> = (props) => {
           <div class="dialog-confirm-body">
             <span>{language.t("session.delete.confirm", { name: name(s) })}</span>
             <div class="dialog-confirm-actions">
-              <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
+              <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
                 {language.t("common.cancel")}
               </Button>
               <Button
-                variant="destructive"
-                size="large"
+                intent="destructive"
+                scale="large"
                 onClick={() => {
                   session.deleteSession(s.id)
                   dialog.close()

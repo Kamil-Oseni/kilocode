@@ -5,6 +5,7 @@
   "license": "MIT",
   "exports": {
     "./font": "./src/components/font.tsx",
+    "./action": "./src/components/action.ts",
     "./button": "./src/components/button.tsx",
     "./chart": "./src/components/chart.tsx",
     "./code": "./src/components/code.tsx",

@@ -222,10 +222,10 @@ export function RunReview(props: {
                   followup() ? "Confirm closing follow-up without resending" : "Confirm closing interrupted start"
                 }
               >
-                <Button size="small" variant="ghost" disabled={!!closing()} onClick={() => setConfirm(false)}>
+                <Button scale="compact" intent="quiet" disabled={!!closing()} onClick={() => setConfirm(false)}>
                   Keep reviewing
                 </Button>
-                <Button size="small" variant="destructive" disabled={!!closing()} onClick={closeRecovery}>
+                <Button scale="compact" intent="destructive" pending={!!closing()} onClick={closeRecovery}>
                   {closing() ? "Closing" : followup() ? "Close without resending" : "Close start"}
                 </Button>
               </div>

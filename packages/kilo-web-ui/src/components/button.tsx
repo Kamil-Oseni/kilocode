@@ -1,4 +1,10 @@
 import { Button as Kobalte } from "@kobalte/core/button"
+import {
+  size as actionSize,
+  variant as actionVariant,
+  type ActionIntent,
+  type ActionScale,
+} from "@kilocode/kilo-ui/action"
 import { Show, splitProps, type ComponentProps } from "solid-js"
 import { Icon, type IconProps } from "./icon"
 
@@ -11,6 +17,9 @@ export interface ButtonProps
   size?: Size
   variant?: Variant
   icon?: IconProps["name"]
+  intent?: ActionIntent
+  scale?: ActionScale
+  pending?: boolean
 }
 
 function size(value: Size | undefined) {
@@ -26,14 +35,31 @@ function variant(value: Variant | undefined) {
 }
 
 export function Button(props: ButtonProps) {
-  const [local, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList", "children"])
+  const [local, rest] = splitProps(props, [
+    "variant",
+    "size",
+    "icon",
+    "class",
+    "classList",
+    "children",
+    "intent",
+    "scale",
+    "pending",
+    "disabled",
+    "aria-busy",
+  ])
+  const intent = () => local.intent ?? (local.variant === "destructive" ? "destructive" : undefined)
   return (
     <Kobalte
       {...rest}
       data-component="button"
-      data-size={size(local.size)}
-      data-variant={variant(local.variant)}
+      data-size={local.scale ? actionSize(local.scale, "web") : size(local.size)}
+      data-variant={local.intent ? actionVariant(local.intent) : variant(local.variant)}
+      data-intent={intent()}
+      data-pending={local.pending || undefined}
       data-icon={local.icon ? "inline-start" : undefined}
+      aria-busy={local.pending ? "true" : local["aria-busy"]}
+      disabled={local.pending || local.disabled}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,

@@ -539,10 +539,16 @@ export const OrganizationActivity: Component<{
                   <div class="routines-organization-work-confirm" role="group" aria-label="Confirm stopping work">
                     <p>This stops this request and live follow-on work. Completed results stay saved.</p>
                     <div>
-                      <Button variant="ghost" size="small" disabled={!!stopping()} onClick={() => setConfirm("")}>
+                      <Button intent="quiet" scale="compact" disabled={!!stopping()} onClick={() => setConfirm("")}>
                         Keep running
                       </Button>
-                      <Button variant="destructive" size="small" disabled={!!stopping()} onClick={() => stop(item)}>
+                      <Button
+                        intent="destructive"
+                        scale="compact"
+                        disabled={!!stopping() && stopping()?.id !== item.id}
+                        pending={stopping()?.id === item.id}
+                        onClick={() => stop(item)}
+                      >
                         {stopping()?.id === item.id ? "Stopping" : "Stop work and follow-ons"}
                       </Button>
                     </div>

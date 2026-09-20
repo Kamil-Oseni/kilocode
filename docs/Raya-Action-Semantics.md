@@ -1,23 +1,23 @@
-# Action semantics: first UI-03 slice
+# Action semantics
 
-This slice standardizes destructive confirmation buttons in four extension surfaces. It preserves the existing shared primitives and each host's default appearance. It does not establish complete cross-client loading, status, or recovery semantics.
+Raya defines action meaning once and lets each client map that meaning to its own tokens and layout. The contract covers the extension and web component packages without imposing one shared CSS layer. Existing `variant` and `size` calls remain compatible while consumers migrate.
 
 ## Component contract
 
-`@kilocode/kilo-ui/button` continues to export the upstream button module. Its Kilo-owned `Button` adapter adds `variant="destructive"` without inserting a DOM wrapper. Existing properties, children, refs, events, sizes and native disabled behavior pass through to the upstream component using reactive props.
+`@kilocode/kilo-ui/action` owns the shared vocabulary. Both Button adapters accept `intent`, `scale`, and `pending`; existing properties, children, refs, events, `variant`, `size`, and native disabled behavior still pass through reactively.
 
-| Meaning | Kilo UI API | Rendered behavior | Web UI mapping |
+| Meaning | Shared API | Extension mapping | Web mapping |
 |---|---|---|---|
-| Omitted variant | No `variant` | Existing secondary default | Existing primary default; intentionally unchanged |
-| Primary action | `variant="primary"` | Existing primary button | `variant="primary"` |
-| Secondary action | `variant="secondary"` | Existing secondary button | `variant="secondary"` |
-| Low-emphasis action | `variant="ghost"` | Existing ghost button | `variant="ghost"` |
-| Destructive action | `variant="destructive"` | Upstream secondary behavior with `data-intent="destructive"` | Existing `variant="destructive"` |
-| Disabled action | `disabled` | Native upstream disabled behavior | Native host component behavior |
+| Primary action | `intent="primary"` | Primary host variant | Primary host variant |
+| Secondary action | `intent="secondary"` | Secondary host variant | Secondary host variant |
+| Quiet action | `intent="quiet"` | Ghost host variant | Ghost host variant |
+| Destructive action | `intent="destructive"` | Secondary mechanics plus critical intent tokens | Destructive host variant |
+| Compact/default/large | `scale` | `small` / `normal` / `large` | `sm` / `default` / `lg` |
+| Pending action | `pending` | Native disabled plus `aria-busy` and `data-pending` | Native disabled plus `aria-busy` and `data-pending` |
 
 The adapter deliberately preserves the upstream `data-variant="secondary"` implementation for destructive buttons. Kilo styles select `data-intent="destructive"`; consumers should use the public variant rather than recreate class-based overrides. Switching to another variant removes destructive intent reactively.
 
-Kilo UI retains `small`, `normal` and `large` sizes and the `normal` default. Web UI retains its broader size vocabulary and its `default` mapping. Changing those defaults across unrelated screens is outside this increment.
+Legacy omitted defaults remain unchanged to prevent an unrelated restyle: extension defaults remain secondary and web defaults remain primary. Equivalent actions use explicit semantic intent. Pending prevents repeat activation, exposes a busy state to assistive technology, and retains the caller's visible label so layout does not jump. Errors remain a consumer-owned live-region message because the action cannot know the failed operation or preserved work.
 
 ## Host appearance
 
@@ -40,7 +40,7 @@ The first real browser run exposed an existing focus gap: imperative dialogs hav
 
 An abrupt-provider-removal browser case also reproduced an orphaned dialog: the provider created detached Solid roots but did not dispose them during its own cleanup. One marked shared cleanup line now disposes the provider's active dialog roots. It does not replay confirm or close callbacks. Existing animation and close behavior remain unchanged.
 
-## Verification and remaining work
+## First-slice verification
 
 The paired component fixture uses the real Button, Dialog provider, marketplace removal dialog and production styles. Its acceptance covers reactive variant/disabled forwarding, normal button semantics, focused Enter/Space activation, initial Cancel focus, Escape restoration, light/dark/forced-color rendering and 320/460-pixel layouts. The initial six-case run failed at Escape restoration after the native button and initial-focus assertions passed. That failure is retained; the corrected run is recorded after the coordinated validation batch.
 
@@ -57,7 +57,16 @@ Run the suite from `packages/kilo-vscode` with `bunx playwright test --config pl
 
 The independent nested-provider setup revealed a separate limitation: opening a second provider's modal inside an already-modal outer provider does not reliably transfer initial autofocus. That setup uses visibility and a real click to exercise teardown; it does not claim to fix cross-provider autofocus. Initial Cancel focus and same-provider nested focus remain strict assertions in their own cases.
 
-Agent-behaviour skill/mode/MCP removal dialogs, other confirmation layouts, application-wide pending/error presentation, other clients and manual assistive-technology acceptance remain outside this first slice. Their migration should reuse this explicit semantic role rather than changing global defaults.
-
-
 Final consolidated checkpoint: the complete nine-case suite passed on frozen final source in 1.5 minutes with native exit 0 (.tmp/destructive-controls-checkpoint.log). Screenshots are retained under .tmp/ui03-checkpoint-results. This supersedes the earlier scoped acceptance runs without erasing their failure evidence.
+
+## Cross-client closure
+
+The final UI-03 slice migrates every current destructive action in the extension and console to the shared intent. It also migrates their paired safe actions and replaces ad hoc `disabled` loading states with `pending` where an operation is actually in flight. The console ConfirmDialog and PromptDialog now capture the opener, focus Cancel or the input after dynamic mount, and restore the opener after Escape or close. The initial web Chromium run proved that the old dynamic `autofocus` attribute did not move focus; the failure was fixed in the production dialog rather than relaxed in the test.
+
+| Matrix | Result |
+|---|---|
+| Extension host | 9/9 real Chromium cases across light, dark and forced colors at 320/460 px; semantic intent/scale/pending, native disabled behavior, keyboard activation, focus visibility/return, long labels, nested ownership, Axe and overflow pass. |
+| Web host | 4/4 real Chromium cases across light/dark at 320/760 px; all intents and scales, production confirmation focus, Escape restoration, pending/disabled, announced error, long label, Axe and overflow pass. |
+| Compile and static gates | Extension, Kilo Web UI and console typechecks pass; production console build, extension ESLint, focused browser-test ESLint and Knip pass. |
+
+Run the host matrices from `packages/kilo-vscode` with `bunx playwright test --config playwright.destructive-controls.config.ts` and `bunx playwright test --config playwright.action-semantics.config.ts`. UI-03 is complete against its stated acceptance. Manual screen-reader coverage across whole workflows remains tracked by UI-02 rather than reopening this component-contract row.

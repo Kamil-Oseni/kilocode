@@ -87,7 +87,8 @@ function Fixture() {
   const [actions, setActions] = createSignal(0)
   const [submits, setSubmits] = createSignal(0)
   const [disabled, setDisabled] = createSignal(true)
-  const [variant, setVariant] = createSignal("destructive")
+  const [intent, setIntent] = createSignal("destructive")
+  const [pending, setPending] = createSignal(true)
   const item = {
     id: "fixture",
     name: "Quarterly reporting skill",
@@ -193,24 +194,27 @@ function Fixture() {
         style={{ display: "flex", "flex-wrap": "wrap", gap: "12px" }}
       >
         <Button data-testid="default">Default</Button>
-        <Button variant="primary">Primary</Button>
-        <Button variant="secondary">Secondary</Button>
-        <Button variant="ghost">Ghost</Button>
-        <Button
-          variant={variant()}
-          disabled={disabled()}
-          data-testid="reactive"
-          onClick={() => setActions((n) => n + 1)}
-        >
+        <Button intent="primary" scale="compact">
+          Primary
+        </Button>
+        <Button intent="secondary">Secondary</Button>
+        <Button intent="quiet" scale="large">
+          Ghost
+        </Button>
+        <Button intent={intent()} disabled={disabled()} data-testid="reactive" onClick={() => setActions((n) => n + 1)}>
           Destructive action
         </Button>
         <Button type="submit">Submit form</Button>
+        <Button intent="primary" pending={pending()} data-testid="pending" onClick={() => setActions((n) => n + 1)}>
+          Save translated configuration changes
+        </Button>
       </form>
       <div style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", "margin-top": "16px" }}>
         <Button onClick={() => setDisabled(!disabled())}>Toggle disabled</Button>
-        <Button onClick={() => setVariant(variant() === "destructive" ? "primary" : "destructive")}>
+        <Button onClick={() => setIntent(intent() === "destructive" ? "primary" : "destructive")}>
           Toggle variant
         </Button>
+        <Button onClick={() => setPending(!pending())}>Toggle pending</Button>
         <Button onClick={open}>Review removal</Button>
         <Button onClick={translated}>Review long labels</Button>
         <Button onClick={caller}>Review caller focus</Button>

@@ -369,7 +369,7 @@ function OrganizationEditor(props: {
             <h4 id={`archive-${props.item.id}`}>Archive organization</h4>
             <p>Workers, conversations, reports, and organization history stay saved.</p>
           </div>
-          <Button variant="destructive" size="small" disabled={props.saving} onClick={props.onArchive}>
+          <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
             Archive
           </Button>
         </section>
@@ -1014,12 +1014,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             saved. Scheduled workers keep their current schedules until you pause or remove them separately.
           </span>
           <div class="dialog-confirm-actions">
-            <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
+            <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
               Keep organization
             </Button>
             <Button
-              variant="destructive"
-              size="large"
+              intent="destructive"
+              scale="large"
               onClick={() => {
                 const id = crypto.randomUUID()
                 setOrganizationNotice("")
@@ -1311,9 +1311,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (!request || msg.requestID !== request.id || msg.agentID !== request.agentID) return
     setAuthorityRequest()
     if (msg.error || !msg.agent) {
-      setOrganizationNotice(
-        routineFailure(msg.error ?? "Raya could not update this authority.", msg.recovery),
-      )
+      setOrganizationNotice(routineFailure(msg.error ?? "Raya could not update this authority.", msg.recovery))
       load()
       return
     }
@@ -1599,12 +1597,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             unfinished work first; restoration is not available.
           </span>
           <div class="dialog-confirm-actions">
-            <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
+            <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
               Keep
             </Button>
             <Button
-              variant="destructive"
-              size="large"
+              intent="destructive"
+              scale="large"
               onClick={() => {
                 drop(ids)
                 dialog.close()

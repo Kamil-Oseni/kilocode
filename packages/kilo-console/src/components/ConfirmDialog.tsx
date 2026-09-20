@@ -1,6 +1,7 @@
 import { createUniqueId, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-web-ui/button"
 import { Icon } from "@kilocode/kilo-web-ui/icon"
+import { focus } from "./dialog-focus"
 
 type Props = {
   open: boolean
@@ -14,9 +15,14 @@ type Props = {
 }
 
 export function ConfirmDialog(props: Props) {
+  let cancel: HTMLButtonElement | undefined
   const id = createUniqueId()
   const title = `${id}-title`
   const message = `${id}-message`
+  focus(
+    () => props.open,
+    () => cancel,
+  )
 
   return (
     <Show when={props.open}>
@@ -38,10 +44,15 @@ export function ConfirmDialog(props: Props) {
             </div>
           </div>
           <footer class="confirm-actions">
-            <Button variant="ghost" disabled={props.busy} onClick={props.onCancel} autofocus>
+            <Button
+              ref={(node: HTMLButtonElement) => (cancel = node)}
+              intent="quiet"
+              disabled={props.busy}
+              onClick={props.onCancel}
+            >
               {props.cancel ?? "Cancel"}
             </Button>
-            <Button variant="primary" disabled={props.busy} onClick={props.onConfirm}>
+            <Button intent="destructive" pending={props.busy} onClick={props.onConfirm}>
               {props.confirm ?? "Confirm"}
             </Button>
           </footer>

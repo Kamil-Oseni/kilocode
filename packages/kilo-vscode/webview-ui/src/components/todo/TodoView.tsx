@@ -809,13 +809,13 @@ export const TodoView: Component<{
                           role="group"
                           aria-label={`Confirm deleting ${item.title}`}
                         >
-                          <Button variant="ghost" size="small" onClick={() => setConfirming()}>
+                          <Button intent="quiet" scale="compact" onClick={() => setConfirming()}>
                             Cancel
                           </Button>
                           <Button
-                            variant="destructive"
-                            size="small"
-                            disabled={pending()[item.id] === true}
+                            intent="destructive"
+                            scale="compact"
+                            pending={pending()[item.id] === true}
                             onClick={() => send({ operation: "delete", todoID: item.id })}
                           >
                             Delete

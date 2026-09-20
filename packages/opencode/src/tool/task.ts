@@ -143,8 +143,9 @@ export const TaskTool = Tool.define(
       // kilocode_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
       const chief = ctx.agent === "auto" ? RayaChief.pending(parent.metadata) : undefined
       const follow = ctx.agent === "auto" ? RayaChief.follow(parent.metadata) : undefined
-      if (ctx.agent === "auto" && !follow) {
-        return yield* Effect.fail(new Error("Auto must call chief_route before delegating with task"))
+      const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
+      if (ctx.agent === "auto" && !follow && !continued) {
+        return yield* Effect.fail(new Error("Auto must call chief_route on a new request before delegating with task"))
       }
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
@@ -165,37 +166,36 @@ export const TaskTool = Tool.define(
       )
       const explicit = params.subagent_type && params.subagent_type !== "auto" ? params.subagent_type : undefined
       // kilocode_change start
+      const request = [
+        params.description,
+        params.prompt ?? "",
+        params.brief?.objective ?? "",
+        params.brief?.context ?? "",
+        ...(params.brief?.constraints ?? []),
+        params.brief?.expected_return ?? "",
+      ].join("\n")
       const routed =
         chief?.agent ??
         follow?.agent ??
-        explicit ??
         resumed?.agent ??
-        KiloTask.route({
-          request: [
-            params.description,
-            params.prompt ?? "",
-            params.brief?.objective ?? "",
-            params.brief?.context ?? "",
-            ...(params.brief?.constraints ?? []),
-            params.brief?.expected_return ?? "",
-          ].join("\n"),
-          agents: candidates,
-        }).name
+        (continued ? RayaChief.route({ request: continued, agents: candidates }).agent : undefined) ??
+        explicit ??
+        KiloTask.route({ request, agents: candidates }).name
       // kilocode_change end
       const limit = KiloTask.cap(params.step_cap)
       // kilocode_change start - /canvas must survive Auto → designer delegation
       const canvas =
         parent.metadata?.["raya.canvas.command"] === true ||
         /create_canvas|\/canvas\b|live, interactive canvas/i.test(
-          [chief?.request, params.prompt, params.brief?.objective].filter(Boolean).join("\n"),
+          [chief?.request, continued, params.prompt, params.brief?.objective].filter(Boolean).join("\n"),
         )
       const canvasRule =
         "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
       const extras = canvas ? [canvasRule] : []
       const handoff = KiloTask.brief({
-        prompt: chief?.request ?? params.prompt,
+        prompt: chief?.request ?? continued ?? params.prompt,
         brief: {
-          objective: chief?.request ?? params.brief?.objective ?? params.prompt ?? "",
+          objective: chief?.request ?? continued ?? params.brief?.objective ?? params.prompt ?? "",
           context: chief
             ? [params.brief?.context, chief.needs_plan ? "Plan the approach before execution." : undefined]
                 .filter(Boolean)
@@ -317,7 +317,7 @@ export const TaskTool = Tool.define(
       // kilocode_change end // raya_change end
       // kilocode_change start - create a child session with inherited Kilo restrictions
       // raya_change start - allocate a durable, collision-safe identity only for a new child
-      const selection = explicit ? "explicit" : "auto"
+      const selection = explicit && !continued ? "explicit" : "auto"
       const created = yield* TaskName.gate
         .withLock(ctx.sessionID)(
           Effect.gen(function* () {

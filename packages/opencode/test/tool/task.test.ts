@@ -511,6 +511,73 @@ describe("tool.task", () => {
       expect(result.output).toContain("done")
     }),
   )
+
+  // kilocode_change start - persisted Auto continuations delegate without inventing a Chief decision
+  it.instance(
+    "Auto continuation delegates from its saved objective while a new request still requires Chief",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const ctx = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: {
+            [RayaChief.modelKey]: ref,
+            [RayaChief.requestKey]: "Implement a typed API endpoint and tests",
+            [RayaChief.phaseKey]: "route",
+          },
+        })
+        const blocked = yield* def
+          .execute({ description: "Continue", subagent_type: "designer" }, ctx)
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(blocked)).toBe(true)
+        if (Exit.isFailure(blocked)) expect(Cause.pretty(blocked.cause)).toContain("chief_route on a new request")
+
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: {
+            [RayaChief.modelKey]: ref,
+            [RayaChief.requestKey]: "Implement a typed API endpoint and tests",
+            [RayaChief.phaseKey]: "task",
+          },
+        })
+        const result = yield* def.execute({ description: "Continue", subagent_type: "designer" }, ctx)
+        expect(result.metadata.selectedAgent).toBe("coder")
+        expect(result.metadata.selection).toBe("auto")
+        expect(seen?.agent).toBe("coder")
+        const part = seen?.parts[0]
+        expect(part?.type).toBe("text")
+        if (part?.type !== "text") throw new Error("expected structured text brief")
+        expect(part.text).toContain("Objective: Implement a typed API endpoint and tests")
+        expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toEqual([])
+      }),
+    {
+      config: {
+        enabled_providers: ["test"],
+        provider: {
+          test: {
+            npm: "@ai-sdk/openai-compatible",
+            models: { "test-model": { variants: { xhigh: {} } } },
+            options: { apiKey: "fixture", baseURL: "http://127.0.0.1:1/v1" },
+          },
+        },
+      },
+    },
+  )
+  // kilocode_change end
   // raya_change end
 
   it.instance("runs two auto-routed children concurrently and joins both synthesized results", () =>

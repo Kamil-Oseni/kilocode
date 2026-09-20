@@ -44,6 +44,11 @@ export namespace RayaChief {
     return typeof value === "string" && value.trim() ? value : undefined
   }
 
+  export function continuation(metadata: Record<string, unknown> | undefined) {
+    if (phase(metadata) !== "task") return undefined
+    return request(metadata)
+  } // raya_change - continuation prompts skip Chief only when the runtime persisted the exact objective and task phase
+
   export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {
     // raya_change start - Auto's prompt tells it to call ask_options when a genuine choice
     // only the user can make is blocking, so those clarification tools must survive the

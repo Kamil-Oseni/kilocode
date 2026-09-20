@@ -196,6 +196,19 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "route" }, true)).toBe("task")
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "done" }, true)).toBe("task")
     expect(
+      RayaChief.continuation({
+        [RayaChief.phaseKey]: "task",
+        [RayaChief.requestKey]: "Finish the saved objective",
+      }),
+    ).toBe("Finish the saved objective")
+    expect(
+      RayaChief.continuation({
+        [RayaChief.phaseKey]: "route",
+        [RayaChief.requestKey]: "This new request still needs Chief",
+      }),
+    ).toBeUndefined()
+    expect(RayaChief.continuation({ [RayaChief.phaseKey]: "task" })).toBeUndefined()
+    expect(
       RayaChief.follow({
         [RayaChief.logKey]: [
           {

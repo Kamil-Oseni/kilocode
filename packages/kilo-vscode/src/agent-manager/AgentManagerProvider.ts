@@ -509,6 +509,12 @@ export class AgentManagerProvider implements Disposable {
   // Message interceptor
 
   private async onMessage(msg: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    if (msg.type === "agentManager.webviewError") {
+      const source = typeof msg.source === "string" ? msg.source.slice(0, 32) : "unknown"
+      const message = typeof msg.message === "string" ? msg.message.slice(0, 4_000) : "No diagnostic was provided."
+      this.log(`Webview ${source} failure: ${message}`)
+      return null
+    }
     if (this.prBridge.handleMessage(msg)) return null
     if (msg.type === "requestFileSearch" && typeof msg.sessionID !== "string" && this.activeSessionId) {
       return { ...msg, sessionID: this.activeSessionId }

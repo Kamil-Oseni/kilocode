@@ -590,6 +590,12 @@ export interface AgentManagerFocusChangedRequest {
   target: "prompt" | "mainTerminal" | "sideTerminal" | "other"
 }
 
+export interface AgentManagerWebviewErrorRequest {
+  type: "agentManager.webviewError"
+  source: string
+  message: string
+}
+
 export interface SelectSourceRequest {
   type: "selectSource"
   id: string
@@ -2149,6 +2155,7 @@ export type WebviewMessage =
   | WebviewReadyRequest
   | WebviewFocusChangedRequest
   | AgentManagerFocusChangedRequest
+  | AgentManagerWebviewErrorRequest
   | SelectSourceRequest
   | RequestProvidersMessage
   | CompactRequest

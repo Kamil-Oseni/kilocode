@@ -119,6 +119,9 @@ test.describe("history session accessibility", () => {
     await expect(rows.filter({ hasText: "Refactor authentication module" })).toBeVisible()
     await expect(rows.filter({ hasText: "Fix TypeScript errors in webview" })).toBeVisible()
     await expect(rows.filter({ hasText: "Add screenshot test coverage" })).toHaveCount(0)
+    await expect(page.getByRole("alert")).toContainText("A worktree task is unavailable")
+    await expect(page.getByRole("alert")).toContainText("ses_retained_unavailable")
+    await expect(page.getByRole("alert")).toContainText("Reopen or refresh the worktree")
 
     await rows.filter({ hasText: "Refactor authentication module" }).click()
     await expect(page.locator('[data-slot="selected-session"]')).toHaveText("s1")

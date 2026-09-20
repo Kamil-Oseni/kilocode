@@ -19,6 +19,7 @@ import {
   BackgroundAgentsPreview,
   ChildViewerPreview,
   ComposerPreview,
+  CloudRecoveryPreview,
   HistoryPreview,
   ReviewPreview,
   EditReviewPreview,
@@ -65,6 +66,7 @@ type PvState =
   | "review-undo"
   | "composer"
   | "composer-focus"
+  | "cloud-recovery"
   | "topnav"
   | "transcript"
   | "edit-review"
@@ -101,6 +103,7 @@ const states: PvState[] = [
   "review-undo",
   "composer",
   "composer-focus",
+  "cloud-recovery",
   "topnav",
   "transcript",
   "edit-review",
@@ -418,6 +421,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "composer-focus"}>
         <ComposerPreview focus />
+      </Show>
+      <Show when={props.state === "cloud-recovery"}>
+        <CloudRecoveryPreview />
       </Show>
       <Show when={props.state === "topnav"}>
         <TopNavPreview />

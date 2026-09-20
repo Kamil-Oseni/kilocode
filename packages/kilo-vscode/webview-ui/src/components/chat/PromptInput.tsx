@@ -631,6 +631,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const speechModel = () => voice.settings().sttModel || selectedSpeechToTextModel(config(), speechModels.models()) // raya_change - Milestone H
   const hasInput = () => text().trim().length > 0 || imageAttach.images().length > 0 || reviewComments().length > 0
   const continuation = () => session.cloudContinuation?.()
+  const [confirmCopy, setConfirmCopy] = createSignal(false)
   const cloudBlocked = () =>
     !!session.cloudPreviewId() && (!continuation() || continuation()!.status !== "preview" || !!continuation()!.error)
   const canSend = () =>
@@ -1486,6 +1487,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <p>
                     Local copy: <code>{entry().sessionID}</code>
                   </p>
+                </Show>
+                <Show when={entry().status === "imported" && entry().sessionID}>
+                  <Button size="small" variant="secondary" onClick={() => session.selectSession(entry().sessionID!)}>
+                    Open local copy
+                  </Button>
+                </Show>
+                <Show when={entry().status === "uncertain"}>
+                  <Show
+                    when={confirmCopy()}
+                    fallback={
+                      <Button size="small" variant="secondary" onClick={() => setConfirmCopy(true)}>
+                        Allow a new copy
+                      </Button>
+                    }
+                  >
+                    <p>The earlier import may have succeeded. Continuing can create a duplicate local session.</p>
+                    <div class="cloud-continuation-actions">
+                      <Button size="small" variant="secondary" onClick={() => setConfirmCopy(false)}>
+                        Keep recovery block
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="primary"
+                        onClick={() => {
+                          setConfirmCopy(false)
+                          session.resetCloudContinuation()
+                        }}
+                      >
+                        Confirm new copy
+                      </Button>
+                    </div>
+                  </Show>
                 </Show>
                 <Show when={entry().error}>
                   <p>{entry().error}</p>

@@ -650,6 +650,7 @@ export interface CloudSessionDataLoadedMessage {
   continuation: {
     id: string
     directory: string
+    revision: number
     status: "preview" | "pending" | "uncertain" | "imported"
     sessionID?: string
   }

@@ -89,6 +89,21 @@ for (const theme of ["light", "dark"]) {
   }
 }
 
+test("uncertain cloud continuation requires an explicit duplicate-risk acknowledgement", async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 900 })
+  await page.goto("/?state=light-cloud-recovery")
+  const card = page.locator('[data-slot="cloud-continuation"]')
+  await expect(card).toContainText("Import pending or outcome unknown")
+  await expect(card).toContainText("C:/work/raya")
+  await page.getByRole("button", { name: "Allow a new copy" }).click()
+  await expect(card).toContainText("The earlier import may have succeeded")
+  await page.getByRole("button", { name: "Confirm new copy" }).click()
+  await expect(page.locator("html")).toHaveAttribute("data-preview-message", "reset-cloud")
+  expect((await new AxeBuilder({ page }).include('[data-slot="cloud-continuation"]').analyze()).violations).toEqual(
+    [],
+  )
+})
+
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {
     test(`${theme} composer at ${width}px`, async ({ page }, info) => {
@@ -113,7 +128,11 @@ for (const theme of ["light", "dark"]) {
       await expect(page.getByRole("tab", { name: "Local" })).toBeVisible()
       await expect(page.getByPlaceholder("Search sessions...")).toBeVisible()
       await expect(page.getByText("Inline edit-review chrome")).toBeVisible()
+      await expect(page.getByText("2 files changed")).toBeVisible()
+      await expect(page.getByText("Open here")).toBeVisible()
+      await expect(page.getByText("Continue task")).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      expect((await new AxeBuilder({ page }).include(".history-view").analyze()).violations).toEqual([])
       await page.screenshot({ path: info.outputPath("history.png"), fullPage: true })
     })
 

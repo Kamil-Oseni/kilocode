@@ -22,12 +22,16 @@ const listed: SessionInfo[] = [
   {
     id: "s1",
     title: "Reskin the composer and goal bar",
+    directory: "C:/work/raya",
+    summary: { additions: 128, deletions: 14, files: 4 },
     createdAt: new Date(now - 7_200_000).toISOString(),
     updatedAt: new Date(now - 7_200_000).toISOString(),
   },
   {
     id: "s2",
     title: "Inline edit-review chrome",
+    directory: "C:/work/raya",
+    summary: { additions: 42, deletions: 8, files: 2 },
     createdAt: new Date(now - 18_000_000).toISOString(),
     updatedAt: new Date(now - 18_000_000).toISOString(),
   },
@@ -92,6 +96,34 @@ export const ComposerPreview: Component<{ focus?: boolean }> = (props) =>
       },
     }),
   )
+
+const CloudRecovery: Component = () => {
+  const session = useSession()
+  const value = {
+    ...session,
+    cloudPreviewId: () => "ses_cloud",
+    cloudContinuation: () => ({
+      id: "11111111-1111-4111-8111-111111111111",
+      directory: "C:/work/raya",
+      revision: 7,
+      status: "uncertain" as const,
+      error: "Import outcome unknown. Check Local history; retrying could create another copy.",
+    }),
+    resetCloudContinuation: () => document.documentElement.setAttribute("data-preview-message", "reset-cloud"),
+  }
+  return (
+    <SessionContext.Provider value={value as never}>
+      <PromptInput boxId="cloud-recovery" />
+    </SessionContext.Provider>
+  )
+}
+
+export const CloudRecoveryPreview: Component = () =>
+  wrap("cloud:ses_cloud", () => (
+    <VoiceProvider>
+      <CloudRecovery />
+    </VoiceProvider>
+  ))
 
 export const HistoryPreview: Component = () =>
   wrap("s2", () =>

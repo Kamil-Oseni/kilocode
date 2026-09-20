@@ -14,6 +14,7 @@ import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import { formatRelativeDate } from "../../utils/date"
 import type { CloudSessionInfo, ExtensionMessage } from "../../types/messages"
+import { repository } from "./history-task"
 
 const DATE_GROUP_KEYS = ["time.today", "time.yesterday", "time.thisWeek", "time.thisMonth", "time.older"] as const
 
@@ -40,6 +41,7 @@ interface DisplaySession {
   title: string
   updatedAt: string
   createdAt: string
+  version: number
 }
 
 function toDisplay(s: CloudSessionInfo): DisplaySession {
@@ -48,6 +50,7 @@ function toDisplay(s: CloudSessionInfo): DisplaySession {
     title: s.title ?? "Untitled",
     updatedAt: s.updated_at,
     createdAt: s.created_at,
+    version: s.version,
   }
 }
 
@@ -233,8 +236,15 @@ const CloudSessionList: Component<CloudSessionListProps> = (props) => {
       >
         {(s) => (
           <>
-            <span data-slot="list-item-title" dir="auto">
-              {s.title}
+            <span data-slot="list-item-title" class="history-task" dir="auto">
+              <span class="history-task-heading">
+                <span class="history-task-name">{s.title}</span>
+              </span>
+              <span class="history-task-meta">
+                <span>{repoOnly() ? repository(gitUrl()) : "Project shown in preview"}</span>
+                <span>Cloud preview</span>
+                <span>Import into the disclosed folder to resume</span>
+              </span>
             </span>
             <span data-slot="list-item-description">{formatRelativeDate(s.updatedAt)}</span>
           </>

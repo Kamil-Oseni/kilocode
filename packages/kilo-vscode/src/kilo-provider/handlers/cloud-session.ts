@@ -11,6 +11,7 @@ import { sessionToWebview, mapCloudSessionMessageToWebviewMessage } from "../../
 import type { MessageFile } from "../message-files"
 import { reviewMetadata, type ReviewMessageData } from "../../shared/review-comments"
 import { completesWithoutStatus } from "../command-completion"
+import type { CloudContinuationRecord } from "../../services/cloud-continuation-journal"
 
 export interface CloudContinuation {
   cloud: string
@@ -19,6 +20,7 @@ export interface CloudContinuation {
   directory: string
   client: KiloClient
   generation: number
+  revision: number
   status: "preview" | "pending" | "uncertain" | "imported"
   session?: Session
   sessionID?: string
@@ -29,10 +31,14 @@ const TIMEOUT = 30_000
 export interface CloudSessionContext {
   readonly client: KiloClient | null
   readonly journal: {
-    get(key: string): { sessionID?: string } | undefined
-    update(key: string, record?: { sessionID?: string }): Promise<void>
+    get(key: string): Promise<CloudContinuationRecord | undefined>
+    claim(
+      key: string,
+      record: CloudContinuationRecord,
+    ): Promise<{ acquired: boolean; record: CloudContinuationRecord }>
+    complete(key: string, claim: string, sessionID: string): Promise<void>
+    clear(key: string, claim: string): Promise<boolean>
   }
-  readonly claims: Set<string>
   readonly generation: number
   readonly continuations: Map<string, CloudContinuation>
   currentSession: Session | null
@@ -48,6 +54,23 @@ export interface CloudSessionContext {
     label: string,
     run: () => Promise<T>,
   ): Promise<T | undefined>
+}
+
+function retained(
+  previous: CloudContinuation | undefined,
+  directory: string,
+  client: KiloClient,
+  generation: number,
+  saved: CloudContinuationRecord | undefined,
+) {
+  return (
+    !!previous &&
+    previous.directory === directory &&
+    previous.client === client &&
+    previous.generation === generation &&
+    previous.status !== "preview" &&
+    saved !== undefined
+  )
 }
 
 /** Fetch cloud sessions list and send to webview. */
@@ -78,6 +101,8 @@ export async function handleRequestCloudSessions(
           !!item.session_id &&
           typeof item.updated_at === "string" &&
           typeof item.created_at === "string" &&
+          typeof item.version === "number" &&
+          Number.isFinite(item.version) &&
           (item.title === null || item.title === undefined || typeof item.title === "string"),
       ) ||
       (result.data.nextCursor !== null &&
@@ -122,23 +147,45 @@ export async function handleRequestCloudSessionData(
     directory,
     client,
     generation,
+    revision: 0,
     status: "preview",
   }
-  const saved = ctx.journal.get(JSON.stringify([sessionId, directory]))
+  const read = await ctx.journal.get(JSON.stringify([sessionId, directory])).then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  )
+  if ("error" in read) {
+    console.error("[Raya] Could not read cloud import recovery state:", read.error)
+    return fail("Cloud continuation recovery data could not be read. Nothing was imported.")
+  }
+  const saved = read.value
   if (saved) {
+    entry.id = saved.claim
+    entry.revision = saved.revision
     entry.status = saved.sessionID ? "imported" : "uncertain"
     entry.sessionID = saved.sessionID
   }
   const previous = ctx.continuations.get(sessionId)
   // Never erase an unresolved mutation when a preview is reopened.
-  const reusable =
-    previous &&
-    previous.directory === directory &&
-    previous.client === client &&
-    previous.generation === generation &&
-    previous.status !== "preview" &&
-    (saved !== undefined || ctx.claims.has(JSON.stringify([sessionId, directory])))
+  const reusable = retained(previous, directory, client, generation, saved)
   if (!reusable) ctx.continuations.set(sessionId, entry)
+  if (saved) {
+    const ticket = ctx.continuations.get(sessionId)!
+    ctx.postMessage({
+      type: "cloudSessionDataLoaded",
+      cloudSessionId: sessionId,
+      requestID,
+      title: "Cloud session recovery",
+      messages: [],
+      continuation: {
+        id: ticket.id,
+        directory: ticket.directory,
+        revision: ticket.revision,
+        status: ticket.status,
+        sessionID: ticket.session?.id ?? ticket.sessionID,
+      },
+    })
+  }
   const current = () =>
     ctx.client === client && ctx.generation === generation && ctx.getWorkspaceDirectory() === directory
   try {
@@ -147,6 +194,9 @@ export async function handleRequestCloudSessionData(
     if (!reusable && ctx.continuations.get(sessionId) !== entry) return
     const data = result.data as CloudSessionData | undefined
     if (!data) return fail("Failed to fetch cloud session")
+    if (!Number.isFinite(data.info.time?.updated))
+      return fail("Cloud preview has no stable revision. Refresh it before continuing.")
+    entry.revision = data.info.time.updated
     const messages = (data.messages ?? []).filter((m) => m.info).map(mapCloudSessionMessageToWebviewMessage)
     const ticket = ctx.continuations.get(sessionId)!
     ctx.postMessage({
@@ -158,6 +208,7 @@ export async function handleRequestCloudSessionData(
       continuation: {
         id: ticket.id,
         directory: ticket.directory,
+        revision: ticket.revision,
         status: ticket.status,
         sessionID: ticket.session?.id ?? ticket.sessionID,
       },
@@ -168,16 +219,67 @@ export async function handleRequestCloudSessionData(
   }
 }
 
+export async function handleResetCloudContinuation(
+  ctx: CloudSessionContext,
+  cloud: string,
+  continuationID: string,
+  requestID: string,
+): Promise<void> {
+  const ticket = ctx.continuations.get(cloud)
+  const fail = (error: string) =>
+    ctx.postMessage({
+      type: "cloudSessionImportFailed",
+      cloudSessionId: cloud,
+      continuationID,
+      requestID,
+      status: ticket?.status,
+      sessionID: ticket?.sessionID,
+      error,
+    })
+  if (!ticket || ticket.id !== continuationID || ticket.status !== "uncertain") {
+    fail("This recovery state changed. Reopen the cloud preview before allowing a new copy.")
+    return
+  }
+  if (
+    ctx.client !== ticket.client ||
+    ctx.generation !== ticket.generation ||
+    ctx.getWorkspaceDirectory() !== ticket.directory
+  ) {
+    fail("The destination changed. The recovery reservation was retained; reopen the cloud preview.")
+    return
+  }
+  const key = JSON.stringify([ticket.cloud, ticket.directory])
+  const cleared = await ctx.journal.clear(key, ticket.id).catch((error) => {
+    console.error("[Raya] Could not reset cloud continuation recovery state:", error)
+    return false
+  })
+  if (!cleared) {
+    fail("The recovery reservation changed and was retained. Reopen the cloud preview.")
+    return
+  }
+  ctx.continuations.delete(cloud)
+  await handleRequestCloudSessionData(ctx, cloud, requestID)
+}
+
+export function handleCloudSessionRequest(
+  ctx: CloudSessionContext,
+  cloud: string,
+  requestID: string,
+  continuationID?: string,
+) {
+  if (continuationID) return handleResetCloudContinuation(ctx, cloud, continuationID, requestID)
+  return handleRequestCloudSessionData(ctx, cloud, requestID)
+}
+
 function matches(ctx: CloudSessionContext, selected: Session | null, current: () => boolean) {
   return current() && ctx.currentSession === selected
 }
 
 async function release(ctx: CloudSessionContext, ticket: CloudContinuation) {
   const key = JSON.stringify([ticket.cloud, ticket.directory])
-  await ctx.journal.update(key).catch((error) => {
+  await ctx.journal.clear(key, ticket.id).catch((error) => {
     console.error("[Raya] Could not clear unused import recovery state:", error)
   })
-  ctx.claims.delete(key)
   ticket.status = "preview"
 }
 
@@ -189,29 +291,45 @@ async function reserve(
   fail: (error: string) => void,
 ) {
   const key = JSON.stringify([ticket.cloud, ticket.directory])
-  const saved = ctx.journal.get(key)
-  if (ctx.claims.has(key) || saved) {
-    ticket.status = saved?.sessionID ? "imported" : "uncertain"
-    ticket.sessionID = saved?.sessionID
-    fail("A continuation was already requested for this destination. Check Local history before creating another copy.")
+  ticket.status = "pending"
+  const result = await ctx.journal
+    .claim(key, { claim: ticket.id, revision: ticket.revision, created: Date.now() })
+    .catch((error) => {
+      console.error("[Raya] Could not save import recovery state:", error)
+      return undefined
+    })
+  if (!result) {
+    ticket.status = "preview"
+    fail("Could not save import recovery state. Nothing was imported.")
     return false
   }
-  // Reserve synchronously across every view in this extension host before awaiting storage.
-  ctx.claims.add(key)
-  ticket.status = "pending"
-  try {
-    await ctx.journal.update(key, {})
-  } catch (error) {
-    ctx.claims.delete(key)
-    ticket.status = "preview"
-    console.error("[Raya] Could not save import recovery state:", error)
-    fail("Could not save import recovery state. Nothing was imported.")
+  if (!result.acquired) {
+    ticket.status = result.record.sessionID ? "imported" : "uncertain"
+    ticket.sessionID = result.record.sessionID
+    fail("A continuation was already requested for this destination. Check Local history before creating another copy.")
     return false
   }
   if (matches(ctx, selected, current)) return true
   await release(ctx, ticket)
   fail("The destination changed before import. Nothing was imported. Reopen the preview.")
   return false
+}
+
+async function rejectImport(
+  ctx: CloudSessionContext,
+  ticket: CloudContinuation,
+  result: { error?: unknown; response: { status: number } },
+  fail: (error: string) => void,
+) {
+  if (!result.error) return false
+  if (result.response.status === 409) {
+    await release(ctx, ticket)
+    fail("The cloud session changed after this preview. Reopen it before creating a local copy.")
+    return true
+  }
+  ticket.status = "uncertain"
+  fail("Import outcome unknown. Check Local history; retrying could create another copy.")
+  return true
 }
 
 /**
@@ -277,9 +395,10 @@ export async function handleImportAndSend(
   let session: Session | undefined
   try {
     const result = await client.kilo.cloud.session.import(
-      { sessionId: cloudSessionId, directory: dir },
+      { sessionId: cloudSessionId, expectedUpdated: ticket.revision, directory: dir },
       { signal: AbortSignal.timeout(TIMEOUT) },
     )
+    if (await rejectImport(ctx, ticket, result, fail)) return
     session = result.data as Session | undefined
   } catch (error) {
     ticket.status = "uncertain"
@@ -292,7 +411,7 @@ export async function handleImportAndSend(
   }
   ticket.status = "imported"
   ticket.session = session
-  await ctx.journal.update(JSON.stringify([cloudSessionId, dir]), { sessionID: session.id }).catch((error) => {
+  await ctx.journal.complete(JSON.stringify([cloudSessionId, dir]), ticket.id, session.id).catch((error) => {
     console.error("[Raya] Failed to save known local cloud copy:", error)
   })
   if (!matches(ctx, selected, current))

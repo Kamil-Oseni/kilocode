@@ -191,7 +191,7 @@ export const Sources: Story = {
 
 const WorktreeSourcesDemo = () => {
   const [selected, setSelected] = createSignal("")
-  const ids = new Set(["s1", "s3"])
+  const ids = new Set(["s1", "s3", "ses_retained_unavailable"])
 
   return (
     <WithSessions sessions={mockSessions as any}>

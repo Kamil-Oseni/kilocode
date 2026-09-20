@@ -15331,6 +15331,16 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          },
           "500": {
             "description": "CloudSessionImportError",
             "content": {
@@ -15352,9 +15362,12 @@
                 "properties": {
                   "sessionId": {
                     "type": "string"
+                  },
+                  "expectedUpdated": {
+                    "type": "number"
                   }
                 },
-                "required": ["sessionId"],
+                "required": ["sessionId", "expectedUpdated"],
                 "additionalProperties": false
               }
             }

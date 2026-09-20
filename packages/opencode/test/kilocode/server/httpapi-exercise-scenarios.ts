@@ -582,7 +582,11 @@ export const kiloScenarios: Scenario[] = [
     .status(401),
   http.protected
     .post("/kilo/cloud/session/import", "kilo.cloud.session.import")
-    .at((ctx) => ({ path: "/kilo/cloud/session/import", headers: ctx.headers(), body: { sessionId: "missing" } }))
+    .at((ctx) => ({
+      path: "/kilo/cloud/session/import",
+      headers: ctx.headers(),
+      body: { sessionId: "missing", expectedUpdated: 0 },
+    }))
     .status(401),
   http.protected.get("/network", "network.list").json(200, array),
   http.protected

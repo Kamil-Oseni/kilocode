@@ -3,14 +3,25 @@ import { createKiloClient } from "@kilocode/sdk/v2/client"
 import {
   handleImportAndSend,
   handleRequestCloudSessionData,
+  handleResetCloudContinuation,
   type CloudSessionContext,
 } from "../../src/kilo-provider/handlers/cloud-session"
+import type { CloudContinuationRecord } from "../../src/services/cloud-continuation-journal"
 
 function fixture() {
   const calls: { path: string; directory: string | null; body: unknown }[] = []
   const sent: Record<string, unknown>[] = []
-  const journal = new Map<string, { sessionID?: string }>()
-  const state = { directory: "/repo", generation: 0, fail: false, sending: false, imported: () => {}, saving: () => {} }
+  const journal = new Map<string, CloudContinuationRecord>()
+  const state = {
+    directory: "/repo",
+    generation: 0,
+    fail: false,
+    conflict: false,
+    previewFail: false,
+    sending: false,
+    imported: () => {},
+    saving: () => {},
+  }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -23,12 +34,15 @@ function fixture() {
       })
       if (path.endsWith("/import")) {
         state.imported()
+        if (state.conflict) return Response.json({ error: "changed" }, { status: 409 })
         return state.fail
           ? Response.json({ error: "lost acknowledgement" }, { status: 503 })
           : Response.json({ id: "local", title: "Copy", time: { created: 1, updated: 1 } })
       }
       if (path.includes("/session/local/")) return new Response(null, { status: state.sending ? 503 : 204 })
-      return Response.json({ info: { title: "Cloud original" }, messages: [] })
+      return state.previewFail
+        ? Response.json({ error: "offline" }, { status: 503 })
+        : Response.json({ info: { title: "Cloud original", time: { created: 1, updated: 7 } }, messages: [] })
     },
   })
   const ctx: CloudSessionContext = {
@@ -37,15 +51,27 @@ function fixture() {
       return state.generation
     },
     continuations: new Map(),
-    claims: new Set(),
     currentSession: null,
     trackedSessionIds: new Set(),
     journal: {
-      get: (key) => journal.get(key),
-      update: async (key, record) => {
+      get: async (key) => journal.get(key),
+      claim: async (key, record) => {
         state.saving()
-        if (record) journal.set(key, record)
-        else journal.delete(key)
+        const found = journal.get(key)
+        if (found) return { acquired: false, record: found }
+        journal.set(key, record)
+        return { acquired: true, record }
+      },
+      complete: async (key, claim, sessionID) => {
+        const found = journal.get(key)
+        if (!found || found.claim !== claim) throw new Error("claim changed")
+        journal.set(key, { ...found, sessionID })
+      },
+      clear: async (key, claim) => {
+        const found = journal.get(key)
+        if (!found || found.claim !== claim) return false
+        journal.delete(key)
+        return true
       },
     },
     connectionService: { recordMessageSessionId() {} },
@@ -86,7 +112,11 @@ describe("cloud continuation through the real SDK HTTP transport", () => {
       await f.send()
       await f.send()
       expect(f.calls.filter((call) => call.path.endsWith("/import"))).toEqual([
-        { path: "/kilo/cloud/session/import", directory: "/repo", body: { sessionId: "cloud" } },
+        {
+          path: "/kilo/cloud/session/import",
+          directory: "/repo",
+          body: { sessionId: "cloud", expectedUpdated: 7 },
+        },
       ])
       expect(f.calls.filter((call) => call.path.includes("prompt_async"))).toHaveLength(1)
       expect(f.ctx.currentSession?.id).toBe("local")
@@ -112,6 +142,24 @@ describe("cloud continuation through the real SDK HTTP transport", () => {
         text: "Continue",
         files: [{ filename: "draft.png" }],
       })
+    } finally {
+      f.close()
+    }
+  })
+
+  it("rejects a cloud revision conflict before treating an import as ambiguous", async () => {
+    const f = fixture()
+    try {
+      await f.preview()
+      f.state.conflict = true
+      await f.send()
+      expect(f.calls.filter((call) => call.path.endsWith("/import"))).toHaveLength(1)
+      expect(f.ctx.continuations.get("cloud")?.status).toBe("preview")
+      expect(f.sent.at(-1)).toMatchObject({
+        type: "sendMessageFailed",
+        error: "The cloud session changed after this preview. Reopen it before creating a local copy.",
+      })
+      expect(await f.ctx.journal.get(JSON.stringify(["cloud", "/repo"]))).toBeUndefined()
     } finally {
       f.close()
     }
@@ -147,6 +195,67 @@ describe("cloud continuation through the real SDK HTTP transport", () => {
       await f.send()
       expect(f.calls.filter((call) => call.path.endsWith("/import"))).toHaveLength(1)
       expect(f.ctx.continuations.get("cloud")?.status).toBe("uncertain")
+    } finally {
+      f.close()
+    }
+  })
+
+  it("retains recovery actions when the cloud preview cannot be refreshed", async () => {
+    const f = fixture()
+    try {
+      await f.preview()
+      f.state.fail = true
+      await f.send()
+      f.ctx.continuations.clear()
+      f.state.previewFail = true
+      await f.preview()
+      expect(f.sent.at(-2)).toMatchObject({
+        type: "cloudSessionDataLoaded",
+        title: "Cloud session recovery",
+        continuation: { status: "uncertain", revision: 7 },
+      })
+      expect(f.sent.at(-1)).toMatchObject({ type: "cloudSessionImportFailed" })
+    } finally {
+      f.close()
+    }
+  })
+
+  it("requires an explicit reset before a user can create a new copy after an uncertain import", async () => {
+    const f = fixture()
+    try {
+      await f.preview()
+      f.state.fail = true
+      await f.send()
+      const ticket = f.ctx.continuations.get("cloud")!
+      f.state.fail = false
+      await handleResetCloudContinuation(f.ctx, "cloud", ticket.id, "reset-request")
+      expect(f.sent.at(-1)).toMatchObject({
+        type: "cloudSessionDataLoaded",
+        requestID: "reset-request",
+        continuation: { status: "preview", revision: 7 },
+      })
+      await f.send()
+      expect(f.calls.filter((call) => call.path.endsWith("/import"))).toHaveLength(2)
+      expect(f.ctx.currentSession?.id).toBe("local")
+    } finally {
+      f.close()
+    }
+  })
+
+  it("retains an uncertain reservation when the destination changes before reset", async () => {
+    const f = fixture()
+    try {
+      await f.preview()
+      f.state.fail = true
+      await f.send()
+      const ticket = f.ctx.continuations.get("cloud")!
+      f.state.directory = "/different"
+      await handleResetCloudContinuation(f.ctx, "cloud", ticket.id, "reset-request")
+      expect(await f.ctx.journal.get(JSON.stringify(["cloud", "/repo"]))).toMatchObject({ claim: ticket.id })
+      expect(f.sent.at(-1)).toMatchObject({
+        type: "cloudSessionImportFailed",
+        error: "The destination changed. The recovery reservation was retained; reopen the cloud preview.",
+      })
     } finally {
       f.close()
     }
@@ -277,8 +386,7 @@ describe("cloud continuation through the real SDK HTTP transport", () => {
         )
       await f.send()
       expect(f.calls).toHaveLength(1)
-      expect(f.ctx.claims.size).toBe(0)
-      expect(f.ctx.journal.get(JSON.stringify(["cloud", "/repo"]))).toBeUndefined()
+      expect(await f.ctx.journal.get(JSON.stringify(["cloud", "/repo"]))).toBeUndefined()
       expect(f.ctx.continuations.get("cloud")?.status).toBe("preview")
     } finally {
       f.close()

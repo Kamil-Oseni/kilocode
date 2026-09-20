@@ -120,6 +120,7 @@ export const CloudSessions = Schema.Struct({
 
 export const CloudSessionImportBody = Schema.Struct({
   sessionId: Schema.String,
+  expectedUpdated: Schema.Finite,
 })
 
 export class CloudSessionImportError extends Schema.ErrorClass<CloudSessionImportError>("CloudSessionImportError")(
@@ -465,7 +466,13 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           query: WorkspaceRoutingQuery,
           payload: CloudSessionImportBody,
           success: described(CloudSessionData.fields.info, "Imported session info"),
-          error: [HttpApiError.BadRequest, HttpApiError.Unauthorized, HttpApiError.NotFound, CloudSessionImportError],
+          error: [
+            HttpApiError.BadRequest,
+            HttpApiError.Unauthorized,
+            HttpApiError.NotFound,
+            HttpApiError.Conflict,
+            CloudSessionImportError,
+          ],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.cloud.session.import",

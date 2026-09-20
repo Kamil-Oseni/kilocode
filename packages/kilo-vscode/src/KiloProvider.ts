@@ -146,7 +146,7 @@ import {
 } from "./kilo-provider/handlers/auth"
 import {
   handleRequestCloudSessions,
-  handleRequestCloudSessionData,
+  handleCloudSessionRequest,
   handleImportAndSend,
   type CloudSessionContext,
   type CloudContinuation,
@@ -166,6 +166,7 @@ import { nativeTitle } from "./kilo-provider/native-tab-title"
 import { parseReview, reviewMetadata, type ReviewMessageData } from "./shared/review-comments"
 import { completesWithoutStatus } from "./kilo-provider/command-completion"
 import { KiloProviderMemory } from "./kilo-provider/memory"
+import { CloudContinuationJournal } from "./services/cloud-continuation-journal"
 
 import {
   buildActionContext,
@@ -360,8 +361,6 @@ type ContextRequestMessage =
   | { type: "requestFolderPicker"; requestId: string }
   | { type: "requestTerminalContext"; requestId: string; sessionID?: string; agentManagerContext?: string }
 
-const cloudClaims = new Set<string>()
-
 export class KiloProvider implements vscode.WebviewViewProvider, TelemetryPropertiesProvider {
   public static readonly viewType = "raya.SidebarProvider"
   private readonly instanceId = crypto.randomUUID()
@@ -389,6 +388,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private storedProviderKeys: Record<string, StoredProviderKey> = {}
   private readonly providerSecrets: ProviderSecrets | undefined // raya_change - encrypted BYOK source
   private readonly speech: SpeechService | undefined // raya_change - Milestone H encrypted speech and streaming audio
+  private readonly cloudJournal: CloudContinuationJournal | undefined
   /** Coalesce provider refreshes — at most one follow-up rerun when a request lands mid-flight. */
   private providersRefresh: Promise<void> | null = null
   private providersQueued = false
@@ -557,6 +557,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.slimEditMetadata = opts.slimEditMetadata ?? true
     this.providerSecrets = extensionContext ? new ProviderSecretStore(extensionContext.secrets) : undefined // raya_change
     this.speech = extensionContext ? new SpeechService(extensionContext) : undefined // raya_change - Milestone H
+    this.cloudJournal = extensionContext
+      ? new CloudContinuationJournal(path.join(extensionContext.globalStorageUri.fsPath, "cloud-continuations"))
+      : undefined
     this.unsubscribeSandboxPreference = this.connectionService.sandboxPreference?.onChange(() => {
       if (this.connectionState === "connected") void this.fetchAndSendSandboxDefault()
     })
@@ -1570,7 +1573,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           })
           break
         case "requestCloudSessionData":
-          void handleRequestCloudSessionData(this.cloudSessionCtx, message.sessionId, message.requestID)
+          void handleCloudSessionRequest(
+            this.cloudSessionCtx,
+            message.sessionId,
+            message.requestID,
+            message.continuationID,
+          )
           break
         case "importAndSend": {
           const files = parseMessageFiles(message.files)
@@ -5349,14 +5357,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         return self.connectionGeneration
       },
       continuations: this.cloudContinuations,
-      claims: cloudClaims,
-      journal: {
-        get: (key) => this.extensionContext?.globalState.get<{ sessionID?: string }>(`cloudContinuation:${key}`),
-        update: async (key, record) => {
-          if (!this.extensionContext) throw new Error("Extension storage is unavailable")
-          await this.extensionContext.globalState.update(`cloudContinuation:${key}`, record)
-        },
-      },
+      journal:
+        this.cloudJournal ??
+        (() => {
+          throw new Error("Extension storage is unavailable")
+        })(),
       get currentSession() {
         return self.currentSession
       },

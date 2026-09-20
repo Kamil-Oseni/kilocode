@@ -6,12 +6,17 @@ mock.module("@/cli/ui", () => ({ UI: { error: errorMock } }))
 
 type ImportResult = { data?: unknown; error?: unknown }
 
-const client = (imp: (params: { sessionId: string }) => Promise<ImportResult>) =>
-  ({ kilo: { cloud: { session: { import: imp } } } }) as Parameters<typeof importCloudSession>[0]
+const client = (
+  imp: (params: { sessionId: string; expectedUpdated: number }) => Promise<ImportResult>,
+  get: () => Promise<ImportResult> = async () => ({ data: { info: { time: { updated: 7 } } } }),
+) => ({ kilo: { cloud: { session: { get, import: imp } } } }) as Parameters<typeof importCloudSession>[0]
 
 describe("importCloudSession", () => {
   test("returns local id on success", async () => {
-    const c = client(async () => ({ data: { id: "ses_local" } }))
+    const c = client(async (input) => {
+      expect(input).toEqual({ sessionId: "ses_cloud", expectedUpdated: 7 })
+      return { data: { id: "ses_local" } }
+    })
     const id = await importCloudSession(c, "ses_cloud")
     expect(id).toBe("ses_local")
   })
@@ -35,6 +40,13 @@ describe("importCloudSession", () => {
   test("throws when data.id is missing", async () => {
     const c = client(async () => ({ data: {} }))
     await expect(importCloudSession(c, "ses_cloud")).rejects.toThrow()
+  })
+
+  test("rejects a preview without a stable revision before import", async () => {
+    const imp = mock(async () => ({ data: { id: "ses_local" } }))
+    const c = client(imp, async () => ({ data: { info: {} } }))
+    await expect(importCloudSession(c, "ses_cloud")).rejects.toThrow("requires a stable revision")
+    expect(imp).not.toHaveBeenCalled()
   })
 
   test("propagates thrown fetch exceptions", async () => {

@@ -37,14 +37,23 @@ export async function importCloudSession(
     kilo: {
       cloud: {
         session: {
-          import: (params: { sessionId: string }) => Promise<{ data?: unknown; error?: unknown }>
+          get: (params: { id: string }) => Promise<{ data?: unknown; error?: unknown }>
+          import: (params: {
+            sessionId: string
+            expectedUpdated: number
+          }) => Promise<{ data?: unknown; error?: unknown }>
         }
       }
     }
   },
   sessionId: string,
 ): Promise<string> {
-  const result = await client.kilo.cloud.session.import({ sessionId })
+  const preview = await client.kilo.cloud.session.get({ id: sessionId })
+  if (preview.error) throw new Error(importErrorReason(preview.error))
+  const revision = (preview.data as { info?: { time?: { updated?: unknown } } })?.info?.time?.updated
+  if (typeof revision !== "number" || !Number.isFinite(revision))
+    throw new Error("cloud session import requires a stable revision")
+  const result = await client.kilo.cloud.session.import({ sessionId, expectedUpdated: revision })
   if (result.error) throw new Error(importErrorReason(result.error))
   const id = (result.data as Record<string, unknown>)?.id
   if (typeof id !== "string") throw new Error("cloud session import returned no session id")

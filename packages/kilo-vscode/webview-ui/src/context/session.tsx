@@ -301,6 +301,7 @@ interface SessionContextValue {
   cloudContinuation?: Accessor<(CloudSessionDataLoadedMessage["continuation"] & { error?: string }) | undefined>
   cloudPreviewId: Accessor<string | null>
   selectCloudSession: (cloudSessionId: string) => void
+  resetCloudContinuation: () => void
   draftSessionID: Accessor<string | undefined>
   setDraftSessionID: (id: string | undefined) => void
   userClearedSession: Accessor<boolean>
@@ -2683,6 +2684,19 @@ export const SessionProvider: ParentComponent = (props) => {
     vscode.postMessage({ type: "requestCloudSessionData", sessionId: cloudSessionId, requestID })
   }
 
+  function resetCloudContinuation() {
+    const id = cloudPreviewId()
+    const entry = cloudContinuation()
+    if (!id || !entry || entry.status !== "uncertain") return
+    const requestID = cloud.request(id)
+    vscode.postMessage({
+      type: "requestCloudSessionData",
+      sessionId: id,
+      continuationID: entry.id,
+      requestID,
+    })
+  }
+
   function deleteSession(id: string) {
     if (!server.isConnected()) {
       console.warn("[Raya] Cannot delete session: not connected")
@@ -3070,6 +3084,7 @@ export const SessionProvider: ParentComponent = (props) => {
     cloudPreviewId,
     cloudContinuation,
     selectCloudSession,
+    resetCloudContinuation,
     draftSessionID,
     setDraftSessionID,
     userClearedSession,

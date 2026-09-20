@@ -503,6 +503,8 @@ export const kiloGatewayHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilo",
       if (!fetched) return yield* Effect.fail(new CloudSessionImportError({ error: "Internal error" }))
       if (!fetched.ok) return jsonError(fetched.error, fetched.status)
       if (!fetched.data?.info?.id) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      if (fetched.data.info.time?.updated !== ctx.payload.expectedUpdated)
+        return yield* Effect.fail(new HttpApiError.Conflict({}))
 
       const diffs = extractSessionDiffs(fetched.data)
       const workspaceID = yield* WorkspaceRef

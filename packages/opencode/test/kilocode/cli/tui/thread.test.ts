@@ -219,6 +219,8 @@ describe("kilo tui thread", () => {
       fetch(request) {
         const route = `${request.method} ${new URL(request.url).pathname}`
         calls.push(route)
+        if (route === `GET /kilo/cloud/session/${cloud}`)
+          return Response.json({ info: { id: cloud, time: { created: 1, updated: 7 } }, messages: [] })
         if (route === "POST /kilo/cloud/session/import") return Response.json({ id: local })
         if (route === `GET /session/${local}`) return Response.json({ id: local })
         return new Response(null, { status: 404 })
@@ -254,7 +256,11 @@ describe("kilo tui thread", () => {
         start,
       })
 
-      expect(calls).toEqual(["POST /kilo/cloud/session/import", `GET /session/${local}`])
+      expect(calls).toEqual([
+        `GET /kilo/cloud/session/${cloud}`,
+        "POST /kilo/cloud/session/import",
+        `GET /session/${local}`,
+      ])
       expect(opened).toEqual([local])
     } finally {
       daemon.mockRestore()
@@ -270,8 +276,9 @@ describe("kilo tui thread", () => {
         kilo: {
           cloud: {
             session: {
-              import: async (input: { sessionId: string }) => {
-                expect(input.sessionId).toBe("ses_cloud")
+              get: async () => ({ data: { info: { time: { updated: 7 } } } }),
+              import: async (input: { sessionId: string; expectedUpdated: number }) => {
+                expect(input).toEqual({ sessionId: "ses_cloud", expectedUpdated: 7 })
                 return { data: { id: "ses_local" } }
               },
             },

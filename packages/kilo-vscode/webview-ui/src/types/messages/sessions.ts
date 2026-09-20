@@ -43,6 +43,8 @@ export interface SessionFileDiff {
 // Session info (simplified for webview)
 export interface SessionInfo {
   id: string
+  projectID?: string
+  directory?: string
   parentID?: string | null
   title?: string
   createdAt: string
@@ -74,6 +76,7 @@ export interface CloudSessionInfo {
   title: string | null
   created_at: string
   updated_at: string
+  version: number
 }
 
 export type MessageLoadMode = "replace" | "prepend" | "focus" | "reconcile"

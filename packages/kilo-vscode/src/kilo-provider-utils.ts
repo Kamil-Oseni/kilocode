@@ -194,9 +194,14 @@ export async function runWithMessageConfirmation<T>(
   }
 }
 
-export function sessionToWebview(session: Pick<Session, "id" | "parentID" | "title" | "time" | "summary" | "revert">) {
+export function sessionToWebview(
+  session: Pick<Session, "id" | "parentID" | "title" | "time" | "summary" | "revert"> &
+    Partial<Pick<Session, "projectID" | "directory">>,
+) {
   return {
     id: session.id,
+    projectID: session.projectID,
+    directory: session.directory,
     parentID: session.parentID ?? null,
     title: session.title,
     createdAt: new Date(session.time.created).toISOString(),

@@ -19027,6 +19027,7 @@ export type KiloCloudSessionGetResponse = KiloCloudSessionGetResponses[keyof Kil
 export type KiloCloudSessionImportData = {
   body?: {
     sessionId: string
+    expectedUpdated: number
   }
   path?: never
   query?: {
@@ -19045,6 +19046,10 @@ export type KiloCloudSessionImportErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
   /**
    * CloudSessionImportError
    */

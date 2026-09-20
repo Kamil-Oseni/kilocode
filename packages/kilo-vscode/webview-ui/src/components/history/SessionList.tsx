@@ -5,7 +5,7 @@
  * Header/back button are owned by the parent HistoryView.
  */
 
-import { Component, Show, createMemo, createSignal, onMount, type Accessor, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, onMount, type Accessor, type JSX } from "solid-js"
 import { List } from "@kilocode/kilo-ui/list"
 import { ContextMenu } from "@kilocode/kilo-ui/context-menu"
 import { Dialog } from "@kilocode/kilo-ui/dialog"
@@ -20,6 +20,7 @@ import type { SessionInfo } from "../../types/messages"
 import { SessionRenameEditor } from "../shared/SessionRenameEditor"
 import { PresenceBadge } from "../chat/PresenceBadge"
 import { runPresence } from "../../utils/run-presence"
+import { describe, type HistoryTaskState } from "./history-task"
 
 const DATE_GROUP_KEYS = ["time.today", "time.yesterday", "time.thisWeek", "time.thisMonth", "time.older"] as const
 
@@ -58,6 +59,12 @@ const SessionList: Component<SessionListProps> = (props) => {
     const ids = props.sessionIds?.()
     if (!ids) return session.sessions()
     return session.sessions().filter((item) => ids.has(item.id))
+  })
+  const missing = createMemo(() => {
+    const ids = props.sessionIds?.()
+    if (!ids) return []
+    const loaded = new Set(session.sessions().map((item) => item.id))
+    return [...ids].filter((id) => !loaded.has(id))
   })
 
   onMount(() => {
@@ -104,6 +111,17 @@ const SessionList: Component<SessionListProps> = (props) => {
       const current = session.currentSessionID() === s.id ? `. ${language.t("session.current")}` : ""
       setNotice(`${name(s)}${current}`)
     })
+  }
+
+  function state(s: SessionInfo): HistoryTaskState {
+    if (
+      session.permissions().some((item) => item.sessionID === s.id) ||
+      session.questions().some((item) => item.sessionID === s.id)
+    )
+      return "waiting"
+    if (session.allStatusMap()[s.id]?.type === "busy" || session.allStatusMap()[s.id]?.type === "retry")
+      return "working"
+    return "idle"
   }
 
   function confirmDelete(s: SessionInfo, restore?: HTMLElement) {
@@ -199,6 +217,13 @@ const SessionList: Component<SessionListProps> = (props) => {
 
   return (
     <div class="session-list">
+      <Show when={missing().length > 0}>
+        <div class="history-unavailable" role="alert">
+          <strong>{missing().length === 1 ? "A worktree task is unavailable" : `${missing().length} worktree tasks are unavailable`}</strong>
+          <p>The task references are retained. Reopen or refresh the worktree before trying to resume them.</p>
+          <For each={missing()}>{(id) => <code>{id}</code>}</For>
+        </div>
+      </Show>
       <List<SessionInfo>
         items={items()}
         key={(s) => s.id}
@@ -221,16 +246,22 @@ const SessionList: Component<SessionListProps> = (props) => {
       >
         {(s) => (
           <>
-            <span data-slot="list-item-title" dir="auto">
-              {name(s)}
-              <PresenceBadge
-                state={runPresence({
-                  busy: session.allStatusMap()[s.id]?.type === "busy" || session.allStatusMap()[s.id]?.type === "retry",
-                  waiting:
-                    session.permissions().some((item) => item.sessionID === s.id) ||
-                    session.questions().some((item) => item.sessionID === s.id),
-                })}
-              />
+            <span data-slot="list-item-title" class="history-task" dir="auto">
+              <span class="history-task-heading">
+                <span class="history-task-name">{name(s)}</span>
+                <PresenceBadge state={runPresence({ busy: state(s) === "working", waiting: state(s) === "waiting" })} />
+              </span>
+              {(() => {
+                const meta = describe(s, state(s), session.currentSessionID() === s.id)
+                return (
+                  <span class="history-task-meta">
+                    <span>{meta.project}</span>
+                    <span>{meta.result}</span>
+                    <span>{meta.status}</span>
+                    <span>{meta.action}</span>
+                  </span>
+                )
+              })()}
             </span>
             <span data-slot="list-item-description">{formatRelativeDate(s.updatedAt)}</span>
             <Show when={session.currentSessionID() === s.id}>

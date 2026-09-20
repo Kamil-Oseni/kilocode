@@ -7506,6 +7506,7 @@ export class Session3 extends HeyApiClient {
       directory?: string
       workspace?: string
       sessionId?: string
+      expectedUpdated?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7517,6 +7518,7 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "sessionId" },
+            { in: "body", key: "expectedUpdated" },
           ],
         },
       ],

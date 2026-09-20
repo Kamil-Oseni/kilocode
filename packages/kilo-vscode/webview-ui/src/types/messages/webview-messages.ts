@@ -503,6 +503,7 @@ export interface RequestCloudSessionDataMessage {
   type: "requestCloudSessionData"
   requestID: string
   sessionId: string
+  continuationID?: string
 }
 
 export interface ImportAndSendMessage {

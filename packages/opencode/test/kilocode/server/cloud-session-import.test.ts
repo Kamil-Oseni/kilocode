@@ -104,7 +104,7 @@ function data(diff = false) {
   }
 }
 
-async function request(directory: string, body: unknown) {
+async function request(directory: string, body: unknown, expectedUpdated = 20) {
   const auth = process.env.KILO_AUTH_CONTENT
   const fetcher = globalThis.fetch
   const token = `test-${crypto.randomUUID()}`
@@ -124,7 +124,7 @@ async function request(directory: string, body: unknown) {
       new Request(`http://localhost${KiloGatewayPaths.cloudSessionImport}`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-kilo-directory": directory },
-        body: JSON.stringify({ sessionId: "ses_cloud" }),
+        body: JSON.stringify({ sessionId: "ses_cloud", expectedUpdated }),
       }),
       HttpApiApp.context,
     )
@@ -180,6 +180,15 @@ afterEach(async () => {
 })
 
 describe("cloud session import", () => {
+  test("rejects a changed cloud revision before persistence", async () => {
+    await using dir = await tmpdir({ git: true })
+    const before = await counts()
+    const response = await request(dir.path, data(), 19)
+
+    expect(response.status).toBe(409)
+    expect(await counts()).toEqual(before)
+  })
+
   test("rejects an invalid export before persistence", async () => {
     await using dir = await tmpdir({ git: true })
     const response = await request(dir.path, {

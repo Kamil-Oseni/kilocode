@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import type { ModelMessage } from "ai"
+import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -12,6 +12,7 @@ import type { Provider } from "@/provider/provider"
 import { LLMRequestPrep } from "@/session/llm/request"
 import { MessageID, SessionID } from "@/session/schema"
 import { SystemPrompt } from "@/session/system"
+import { TurnTools } from "@/kilocode/capability/turn-tools"
 
 const model: Provider.Model = {
   id: ModelV2.ID.make("test-model"),
@@ -67,7 +68,7 @@ function user(name: string): SessionV1.User {
   }
 }
 
-async function prepare(name: string, oauth = false) {
+async function prepare(name: string, oauth = false, tools: Record<string, Tool> = {}) {
   const auth: Auth.Info | undefined = oauth
     ? { type: "oauth", refresh: "refresh", access: "access", expires: Date.now() + 60_000 }
     : undefined
@@ -90,7 +91,7 @@ async function prepare(name: string, oauth = false) {
       agent: agent(name),
       system: [],
       messages: [{ role: "user", content: "Generate a name" }] satisfies ModelMessage[],
-      tools: {},
+      tools,
       provider,
       auth,
       plugin,
@@ -123,5 +124,32 @@ describe("Kilo persona in generated metadata requests", () => {
 
     expect(result.system[0]).toContain(SystemPrompt.soul())
     expect(oauth.params.options.instructions).toContain(SystemPrompt.soul())
+  })
+})
+
+describe("current turn tool registry", () => {
+  const executable = aiTool({
+    description: "Fixture tool",
+    inputSchema: jsonSchema({ type: "object", properties: {} }),
+    execute: async () => "ok",
+  })
+
+  test("adds the sorted final registry to ordinary and OAuth prompts", async () => {
+    const tools = { write: executable, read: executable }
+    const result = await prepare("code", false, tools)
+    const oauth = await prepare("code", true, tools)
+
+    expect(result.system.at(-1)).toContain("Current turn tool registry (authoritative): read, write.")
+    expect(oauth.params.options.instructions).toContain("Current turn tool registry (authoritative): read, write.")
+    expect(result.system.at(-1)).toContain("earlier in the conversation")
+  })
+
+  test("makes an empty registry explicit and gives bounded local rejection guidance", async () => {
+    const result = await prepare("code")
+
+    expect(result.system.at(-1)).toContain("no tools are available")
+    expect(TurnTools.unavailable("bash", ["write", "_noop", "read", "read"])).toBe(
+      'Tool "bash" is unavailable in the current turn. Available tools: read, write. Do not retry the unavailable tool name.',
+    )
   })
 })

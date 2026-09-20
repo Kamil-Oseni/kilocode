@@ -34,6 +34,7 @@ import { KiloToolSchema } from "@/kilocode/session/tool-schema"
 import { SessionExport } from "@/kilocode/session-export"
 import { getActiveOrg } from "@/kilocode/session-export/eligibility"
 import { normalizeUsageForExport, observeFullStreamForExport } from "@/kilocode/session-export/llm"
+import { TurnTools } from "@/kilocode/capability/turn-tools"
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -182,7 +183,8 @@ const live: Layer.Layer<
         workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
           const t = prepared.tools[toolName]
           if (!t || !t.execute) {
-            return { result: "", error: `Unknown tool: ${toolName}` }
+            // kilocode_change - report the current registry so stale tool assumptions are not retried
+            return { result: "", error: TurnTools.unavailable(toolName, Object.keys(prepared.tools)) } // kilocode_change
           }
           try {
             const result = await t.execute!(JSON.parse(argsJson), {

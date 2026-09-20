@@ -29,6 +29,7 @@ import { Identity } from "@kilocode/kilo-telemetry"
 import { KiloSession } from "@/kilocode/session"
 import { stripInternalOptions } from "@/kilocode/agent/options"
 import { KilocodeSystemPrompt } from "@/kilocode/system-prompt"
+import { TurnTools } from "@/kilocode/capability/turn-tools"
 // kilocode_change end
 
 type PrepareInput = {
@@ -69,6 +70,7 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
+  const tools = resolveTools(input) // kilocode_change - resolve the authoritative registry before composing the prompt
   const includePersona = KilocodeSystemPrompt.shouldIncludePersona(input.agent.name) // kilocode_change
   const system = [
     [
@@ -94,6 +96,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.length = 0
     system.push(header, rest.join("\n"))
   }
+  system.push(TurnTools.prompt(Object.keys(tools))) // kilocode_change - stale history and provider examples never grant tools
 
   const variant =
     !input.small && input.model.variants && input.user.model.variant
@@ -192,7 +195,6 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   const attr = KiloSession.attribution(input.sessionID)
   // kilocode_change end
 
-  const tools = resolveTools(input)
   // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
   // on every function tool so MCP-sourced and dynamic schemas that don't
   // satisfy OpenAI's structured-outputs constraints still register.

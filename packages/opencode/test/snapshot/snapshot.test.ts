@@ -5,7 +5,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Fiber, Layer } from "effect"
+import { Effect, Fiber, Layer, Logger } from "effect"
 import { Snapshot } from "../../src/snapshot"
 import {
   disposeAllInstances,
@@ -166,6 +166,24 @@ it.instance(
     expect(patch.files.some((file) => file.replaceAll("\\", "/").endsWith("/a.txt"))).toBe(true)
     yield* snapshot.revert([patch])
     expect(yield* readText(`${tmp.path}/a.txt`)).toBe(tmp.extra.aContent)
+  }),
+  { git: false },
+  process.platform === "win32" ? 90_000 : 5_000,
+)
+
+it.instance(
+  "cleans a non-git workspace without resolving a global child path",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    expect(yield* snapshot.track({ snapshotInitialization: "wait" })).toBeTruthy()
+
+    const logs: string[] = []
+    const logger = Logger.make(({ message }) => logs.push(String(message)))
+    yield* snapshot.cleanup().pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })))
+
+    expect(logs.some((message) => message.includes("cleanup failed"))).toBe(false)
+    expect(yield* exists(path.join(tmp.path, "global"))).toBe(false)
   }),
   { git: false },
   process.platform === "win32" ? 90_000 : 5_000,

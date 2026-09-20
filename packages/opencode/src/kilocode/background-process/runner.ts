@@ -3,7 +3,7 @@ import { PowerShell } from "@/kilocode/shell/shell"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { isRecord } from "@/util/record"
-import { mkdir, open, rm } from "fs/promises"
+import { mkdir, open, readFile, rm } from "fs/promises"
 import { spawn } from "child_process"
 import path from "path"
 
@@ -21,6 +21,10 @@ export namespace BackgroundProcessRunner {
     cwd: string
     log: string
     control: string
+  }
+
+  export function sidecars(control: string) {
+    return { probe: `${control}.probe`, ack: `${control}.ack` }
   }
 
   function encode(input: Input) {
@@ -142,6 +146,18 @@ export namespace BackgroundProcessRunner {
   // window lets us capture it before concluding the tree is empty.
   const GRACE = 1_000
 
+  async function respond(control: string, signal: AbortSignal) {
+    const files = sidecars(control)
+    while (!signal.aborted) {
+      const nonce = await readFile(files.probe, "utf8").catch(() => undefined)
+      if (nonce) {
+        await Filesystem.write(files.ack, nonce, MODE)
+        await rm(files.probe, { force: true })
+      }
+      await Bun.sleep(50)
+    }
+  }
+
   async function windows(input: Input, child: ReturnType<typeof spawn>, done: Promise<number>) {
     const pid = child.pid
     if (!pid) throw new Error("Background process runner child did not provide a pid")
@@ -149,6 +165,26 @@ export namespace BackgroundProcessRunner {
     let exited: number | undefined
     let failure: unknown
     let seen = new Map<number, string>()
+    const abort = new AbortController()
+    const response = respond(input.control, abort.signal)
+    const stopped = Promise.withResolvers<number>()
+    const halt = (async () => {
+      while (!abort.signal.aborted) {
+        if (!(await Bun.file(input.control).exists())) {
+          await Bun.sleep(50)
+          continue
+        }
+        child.kill("SIGKILL")
+        await Promise.all(
+          [...seen.keys()].map((item) =>
+            Process.run(["taskkill", "/pid", String(item), "/f", "/t"], { nothrow: true }),
+          ),
+        )
+        await rm(input.control, { force: true })
+        stopped.resolve(await done)
+        return
+      }
+    })().catch(stopped.reject)
     void done.then(
       (value) => {
         code = value
@@ -158,34 +194,35 @@ export namespace BackgroundProcessRunner {
         failure = err
       },
     )
-    while (true) {
-      if (failure) throw failure
-      const active = code === undefined || (exited !== undefined && Date.now() - exited < GRACE)
-      seen = await descendants(pid, seen, active)
-      if (await Bun.file(input.control).exists()) {
-        await Promise.all(
-          [pid, ...seen.keys()].map((item) =>
-            Process.run(["taskkill", "/pid", String(item), "/f", "/t"], { nothrow: true }),
-          ),
-        )
-        await rm(input.control, { force: true })
-        const end = Date.now() + 5_000
-        while (Date.now() < end) {
-          seen = await descendants(pid, seen, false)
-          if (code !== undefined && seen.size === 0) return code
-          await Bun.sleep(100)
-        }
-        throw new Error("Background process runner could not terminate its Windows process tree")
+    try {
+      while (true) {
+        if (failure) throw failure
+        const active = code === undefined || (exited !== undefined && Date.now() - exited < GRACE)
+        const next = await Promise.race([
+          descendants(pid, seen, active).then((value) => ({ type: "scan" as const, value })),
+          stopped.promise.then((value) => ({ type: "stop" as const, value })),
+        ])
+        if (next.type === "stop") return next.value
+        seen = next.value
+        if (code !== undefined && !active && seen.size === 0) return code
+        await Bun.sleep(100)
       }
-      if (code !== undefined && !active && seen.size === 0) return code
-      await Bun.sleep(100)
+    } finally {
+      abort.abort()
+      await Promise.all([response, halt])
     }
   }
 
   async function run(input: Input) {
     process.stdout.on("error", () => process.stdout.destroy())
     await mkdir(path.dirname(input.log), { recursive: true, mode: 0o700 })
-    await Promise.all([Filesystem.write(input.log, "", MODE), rm(input.control, { force: true })])
+    const files = sidecars(input.control)
+    await Promise.all([
+      Filesystem.write(input.log, "", MODE),
+      rm(input.control, { force: true }),
+      rm(files.probe, { force: true }),
+      rm(files.ack, { force: true }),
+    ])
     const output = await writer(input)
     const child = spawn(input.shell, input.args, {
       cwd: input.cwd,

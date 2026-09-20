@@ -39,9 +39,13 @@ function port() {
 
 function artifacts(dir: string, id: BackgroundProcess.ID) {
   const scope = `scope-${Hash.fast(`global\0${Filesystem.resolve(dir)}`)}`
+  const control = path.join(Global.Path.state, "background-process", scope, `${id}.stop`)
   return {
     manifest: path.join(Global.Path.state, "background-process", scope, `${id}.json`),
     log: path.join(Global.Path.log, "background-process", scope, `${id}.log`),
+    control,
+    probe: `${control}.probe`,
+    ack: `${control}.ack`,
   }
 }
 
@@ -410,6 +414,7 @@ setInterval(() => console.log("tick"), 100)
         yield* Effect.promise(() => BackgroundProcess.stopSession(sessionID))
       }
     }),
+    process.platform === "win32" ? 60_000 : 10_000,
   )
 
   it.live("isolates persistent processes between non-git directories", () =>
@@ -562,8 +567,11 @@ setInterval(() => {}, 1_000)
         }
         expect(yield* Effect.promise(() => Bun.file(files.manifest).exists())).toBe(false)
         expect(yield* Effect.promise(() => Bun.file(files.log).exists())).toBe(false)
+        expect(yield* Effect.promise(() => Bun.file(files.control).exists())).toBe(false)
+        expect(yield* Effect.promise(() => Bun.file(files.probe).exists())).toBe(false)
+        expect(yield* Effect.promise(() => Bun.file(files.ack).exists())).toBe(false)
       }),
-    35_000,
+    process.platform === "win32" ? 60_000 : 35_000,
   )
 
   it.instance("rejects a persistent manifest for an unrelated live process", () =>

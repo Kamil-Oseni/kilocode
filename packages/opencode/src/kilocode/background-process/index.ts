@@ -163,6 +163,7 @@ export namespace BackgroundProcess {
     file?: string
     saved?: boolean
     saving?: Promise<void>
+    identity?: Promise<Probe>
     disposed?: boolean
   }
 
@@ -313,12 +314,13 @@ export namespace BackgroundProcess {
     await active.saving?.catch((err) =>
       log.warn("failed to finish persistent process metadata", { err, id: active.info.id }),
     )
+    const control = controlfile(shared, active.info.id)
+    const files = BackgroundProcessRunner.sidecars(control)
     await Promise.all(
-      [manifest(shared, active.info.id), logfile(shared, active.info.id), controlfile(shared, active.info.id)].map(
-        (file) =>
-          rm(file, { force: true }).catch((err) =>
-            log.warn("failed to remove persistent process artifact", { err, file }),
-          ),
+      [manifest(shared, active.info.id), logfile(shared, active.info.id), control, files.probe, files.ack].map((file) =>
+        rm(file, { force: true }).catch((err) =>
+          log.warn("failed to remove persistent process artifact", { err, file }),
+        ),
       ),
     )
   }
@@ -670,6 +672,25 @@ export namespace BackgroundProcess {
     const pid = active.info.pid
     const token = active.token
     if (!pid || !token) return "unknown"
+    if (active.proc?.pid === pid && !stopped(active.proc)) return "owned"
+    if (!alive(pid)) return "gone"
+    if (active.control) {
+      const files = BackgroundProcessRunner.sidecars(active.control)
+      const nonce = randomUUID()
+      await Promise.all([rm(files.probe, { force: true }), rm(files.ack, { force: true })])
+      await Filesystem.write(files.probe, nonce, 0o600)
+      const end = Date.now() + 1_500
+      while (Date.now() < end) {
+        const ack = await readFile(files.ack, "utf8").catch(() => undefined)
+        if (ack === nonce) {
+          await Promise.all([rm(files.probe, { force: true }), rm(files.ack, { force: true })])
+          return "owned"
+        }
+        if (!alive(pid)) return "gone"
+        await Bun.sleep(50)
+      }
+      await Promise.all([rm(files.probe, { force: true }), rm(files.ack, { force: true })])
+    }
     const query = `$p=Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($p) { [Console]::Out.Write($p.CommandLine) }`
     const out = await Process.text([pwsh, "-NoProfile", "-NonInteractive", "-Command", query], {
       nothrow: true,
@@ -681,11 +702,20 @@ export namespace BackgroundProcess {
     return out.text.includes(token) ? "owned" : "foreign"
   }
 
-  async function probe(active: Active): Promise<Probe> {
+  async function inspect(active: Active): Promise<Probe> {
     if (process.platform === "linux") return linux(active)
     if (process.platform === "win32") return windows(active)
     if (process.platform === "darwin" || process.platform === "freebsd") return unix(active)
     return "unknown"
+  }
+
+  async function probe(active: Active): Promise<Probe> {
+    if (active.identity) return active.identity
+    const pending = inspect(active).finally(() => {
+      if (active.identity === pending) active.identity = undefined
+    })
+    active.identity = pending
+    return pending
   }
 
   function waitExit(proc: ChildProcess, ms: number) {
@@ -725,6 +755,13 @@ export namespace BackgroundProcess {
         await waitGone(active)
         const stopped = await probe(active)
         if (stopped === "gone" || stopped === "foreign") return
+        if (stopped !== "owned")
+          throw new Error(`Cannot reverify persistent process before taskkill: ${active.info.id}`)
+        const out = await Process.run(["taskkill", "/pid", String(pid), "/f", "/t"], { nothrow: true })
+        await waitGone(active)
+        const forced = await probe(active)
+        if (forced === "gone" || forced === "foreign") return
+        if (out.code !== 0) throw new Error(`Verified persistent process could not be terminated: ${active.info.id}`)
         throw new Error(`Persistent process runner did not stop safely: ${active.info.id}`)
       }
       try {
@@ -1032,9 +1069,11 @@ export namespace BackgroundProcess {
 
   async function cleanup(shared: Shared, file: string, name: string) {
     const id = name.endsWith(".json") ? name.slice(0, -5) : ""
+    const control = path.join(root(shared), `${id}.stop`)
+    const sidecars = BackgroundProcessRunner.sidecars(control)
     const files = [
       file,
-      ...(id.startsWith("bgp") ? [path.join(logroot(shared), `${id}.log`), path.join(root(shared), `${id}.stop`)] : []),
+      ...(id.startsWith("bgp") ? [path.join(logroot(shared), `${id}.log`), control, sidecars.probe, sidecars.ack] : []),
     ]
     await Promise.all(files.map((item) => rm(item, { force: true })))
   }

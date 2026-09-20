@@ -18,6 +18,70 @@ test("OpenAI voice admission preserves the task agent and displays missing-key r
   )
 })
 
+for (const [theme, width] of [
+  ["light", 320],
+  ["dark", 760],
+  ["contrast", 320],
+] as const) {
+  test(`${theme} first run offers one recommended setup at ${width}px`, async ({ page }, info) => {
+    const failures: string[] = []
+    page.on("pageerror", (error) => failures.push(error.stack ?? error.message))
+    await page.setViewportSize({ width, height: 800 })
+    if (theme === "contrast") await page.emulateMedia({ forcedColors: "active" })
+    await page.goto(`/?theme=${theme}&onboarding=1`)
+
+    const setup = page.locator(".work-style-picker")
+    const action = setup.getByRole("button", { name: "Review first", exact: true })
+    await expect(page.getByRole("heading", { name: "Welcome to Raya" })).toBeVisible()
+    await expect(setup.getByRole("heading", { name: "Choose how you want to work" })).toBeVisible()
+    await expect(action).toBeVisible()
+    await expect(setup.getByRole("button")).toHaveCount(1)
+    await expect(setup).not.toContainText("High autonomy")
+    await expect(setup).toContainText("Asks before editing files or running commands")
+    await page.screenshot({ path: info.outputPath("recommended-setup.png"), fullPage: true })
+
+    await action.click()
+    await expect(action).toBeDisabled()
+    expect(
+      await page.evaluate(() =>
+        (window as Window & { __composerMessages: { type: string; style?: string }[] }).__composerMessages.some(
+          (message) => message.type === "applyWorkStyle" && message.style === "human-in-the-loop",
+        ),
+      ),
+    ).toBe(true)
+
+    await page.evaluate(() =>
+      window.postMessage(
+        { type: "workStyleApplyFailed", message: "Your setup was not saved. Try again.", rollbackFailed: false },
+        "*",
+      ),
+    )
+    await expect(setup.getByRole("alert")).toContainText("Your setup was not saved. Try again.")
+    await expect(action).toBeEnabled()
+    await page.screenshot({ path: info.outputPath("setup-error.png"), fullPage: true })
+
+    await setup.getByRole("link", { name: "Settings." }).click()
+    expect(
+      await page.evaluate(() =>
+        (window as Window & { __composerMessages: { type: string; tab?: string }[] }).__composerMessages.some(
+          (message) => message.type === "openSettingsPanel" && message.tab === "autoApprove",
+        ),
+      ),
+    ).toBe(true)
+
+    await action.click()
+    await page.evaluate(() => window.postMessage({ type: "workStyleApplied", style: "human-in-the-loop" }, "*"))
+    await expect(page.getByRole("heading", { name: "What would you like to get done?" })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    if (theme === "contrast") await page.emulateMedia({ forcedColors: "none" })
+    const audit = await new AxeBuilder({ page }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()
+    expect(audit.violations).toEqual([])
+    if (theme === "contrast") await page.emulateMedia({ forcedColors: "active" })
+    expect(failures).toEqual([])
+    await page.screenshot({ path: info.outputPath("outcome-entry.png"), fullPage: true })
+  })
+}
+
 for (const theme of ["light", "dark", "contrast"])
   for (const width of [320, 760]) {
     test(`${theme} outcome entry and real configuration controls at ${width}px`, async ({ page }, info) => {
@@ -55,7 +119,7 @@ for (const theme of ["light", "dark", "contrast"])
       }
       await expect(summary).toContainText("Preferred model")
       await expect(summary).toContainText("Claude Sonnet 4.6")
-      await expect(summary).toContainText("Kilo")
+      await expect(summary).toContainText("Raya Gateway")
       await page.locator(".prompt-input-container").screenshot({ path: info.outputPath("collapsed.png") })
       await expect(summary).toHaveAttribute("aria-expanded", "false")
       await prompt.fill("Review this material and return a concise summary with caveats.")

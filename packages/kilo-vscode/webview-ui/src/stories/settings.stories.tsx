@@ -183,6 +183,7 @@ const work: WorkStyleContextValue = {
   style: () => "unset",
   loading: () => false,
   applying: () => false,
+  error: () => undefined,
   shouldShowOnboarding: () => true,
   apply: noop,
 }

@@ -1,9 +1,7 @@
 import { createContext, useContext, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import type { Accessor, ParentComponent } from "solid-js"
 import { useVSCode } from "./vscode"
-import { useLanguage } from "./language"
 import { resolveWorkStyleOnboarding } from "./work-style-state"
-import { createWorkStyleToasts } from "./onboarding/work-style-toasts"
 import type { ExtensionMessage } from "../types/messages"
 import { TelemetryEventName } from "../../../src/services/telemetry/types"
 import type { WorkStyle, WorkStyleState } from "../../../src/shared/work-style-presets"
@@ -12,6 +10,7 @@ export interface WorkStyleContextValue {
   style: Accessor<WorkStyleState>
   loading: Accessor<boolean>
   applying: Accessor<boolean>
+  error: Accessor<string | undefined>
   shouldShowOnboarding: Accessor<boolean>
   apply: (style: WorkStyle) => void
 }
@@ -20,18 +19,18 @@ export const WorkStyleContext = createContext<WorkStyleContextValue>()
 
 export const WorkStyleProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
-  const language = useLanguage()
   const [style, setStyle] = createSignal<WorkStyleState>("unset")
   const [loading, setLoading] = createSignal(true)
   const [applying, setApplying] = createSignal(false)
   const [display, setDisplay] = createSignal(false)
-  const toast = createWorkStyleToasts(language.t)
+  const [error, setError] = createSignal<string>()
 
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
     if (message.type === "workStyleLoaded") {
       if (applying()) return
       setStyle(message.style)
       setDisplay((current) => resolveWorkStyleOnboarding(current, message.style))
+      setError(undefined)
       setLoading(false)
       return
     }
@@ -39,12 +38,12 @@ export const WorkStyleProvider: ParentComponent = (props) => {
       setApplying(false)
       setStyle(message.style)
       setDisplay(false)
-      toast.saved()
+      setError(undefined)
       return
     }
     if (message.type !== "workStyleApplyFailed") return
     setApplying(false)
-    toast.failed(message.message, message.rollbackFailed)
+    setError(message.message)
   })
 
   const request = () => vscode.postMessage({ type: "requestWorkStyle" })
@@ -73,6 +72,7 @@ export const WorkStyleProvider: ParentComponent = (props) => {
 
   function apply(style: WorkStyle) {
     if (applying()) return
+    setError(undefined)
     setApplying(true)
     vscode.postMessage({
       type: "telemetry",
@@ -103,6 +103,7 @@ export const WorkStyleProvider: ParentComponent = (props) => {
     style,
     loading: () => !ready(),
     applying,
+    error,
     shouldShowOnboarding: onboarding,
     apply,
   }

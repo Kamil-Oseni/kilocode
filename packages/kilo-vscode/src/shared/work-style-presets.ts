@@ -58,8 +58,6 @@ const BASH: Record<string, PermissionLevel> = {
   "*>*": "ask",
 }
 
-export const WORK_STYLE_CHOICES: WorkStyle[] = ["human-in-the-loop", "autonomous"]
-
 export const WORK_STYLE_PRESETS: Record<WorkStyle, WorkStylePreset> = {
   "human-in-the-loop": {
     style: "human-in-the-loop",

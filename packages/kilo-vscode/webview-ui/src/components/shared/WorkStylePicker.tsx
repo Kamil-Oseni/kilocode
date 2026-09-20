@@ -1,14 +1,13 @@
-import { For } from "solid-js"
+import { For, Show } from "solid-js"
 import type { Component } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
-import { Card } from "@kilocode/kilo-ui/card"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { useWorkStyle } from "../../context/work-style"
-import { WORK_STYLE_CHOICES } from "../../../../src/shared/work-style-presets"
 
 const details = ["permissions", "visibility"] as const
+const recommended = "human-in-the-loop" as const
 
 export const WorkStylePicker: Component = () => {
   const language = useLanguage()
@@ -20,29 +19,34 @@ export const WorkStylePicker: Component = () => {
   }
 
   return (
-    <Card class="work-style-picker">
-      <h2 data-slot="work-style-title">{language.t("workStyle.onboarding.title")}</h2>
+    <section class="work-style-picker" aria-labelledby="work-style-title">
+      <h2 id="work-style-title" data-slot="work-style-title">
+        {language.t("workStyle.onboarding.title")}
+      </h2>
 
-      <div data-slot="work-style-options">
-        <For each={WORK_STYLE_CHOICES}>
-          {(choice) => (
-            <Button
-              class="work-style-mode"
-              variant="ghost"
-              disabled={work.applying()}
-              onClick={() => work.apply(choice)}
-            >
-              <div data-slot="work-style-mode-copy">
-                <h3 data-slot="work-style-mode-title">{language.t(`workStyle.choice.${choice}.title`)}</h3>
-                <p data-slot="work-style-mode-description">{language.t(`workStyle.choice.${choice}.description`)}</p>
-              </div>
-              <ul data-slot="work-style-mode-details">
-                <For each={details}>{(detail) => <li>{language.t(`workStyle.choice.${choice}.${detail}`)}</li>}</For>
-              </ul>
-            </Button>
-          )}
-        </For>
+      <div data-slot="work-style-recommendation">
+        <p data-slot="work-style-mode-description">{language.t(`workStyle.choice.${recommended}.description`)}</p>
+        <ul data-slot="work-style-mode-details">
+          <For each={details}>{(detail) => <li>{language.t(`workStyle.choice.${recommended}.${detail}`)}</li>}</For>
+        </ul>
       </div>
+
+      <Show when={work.error()}>
+        {(error) => (
+          <p class="work-style-error" role="alert">
+            <strong>{language.t("common.requestFailed")}.</strong> {error()}
+          </p>
+        )}
+      </Show>
+
+      <Button
+        class="work-style-mode"
+        variant="primary"
+        disabled={work.applying()}
+        onClick={() => work.apply(recommended)}
+      >
+        {language.t(`workStyle.choice.${recommended}.title`)}
+      </Button>
 
       <p data-slot="work-style-settings-note">
         <span>{language.t("workStyle.onboarding.settingsNote")}</span>
@@ -51,6 +55,6 @@ export const WorkStylePicker: Component = () => {
           <span>{language.t("workStyle.onboarding.settings")}</span>
         </a>
       </p>
-    </Card>
+    </section>
   )
 }

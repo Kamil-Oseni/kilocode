@@ -4,7 +4,7 @@ import "../../webview-ui/src/styles/chat.css"
 import "../../webview-ui/src/styles/prompt-input.css"
 import "../../webview-ui/src/styles/welcome.css"
 import "../../webview-ui/preview/preview.css"
-import { createSignal } from "solid-js"
+import { createSignal, onMount } from "solid-js"
 import { render } from "solid-js/web"
 import { StoryProviders, mockSessionValue } from "../../webview-ui/src/stories/StoryProviders"
 import { ProviderContext, useProvider } from "../../webview-ui/src/context/provider"
@@ -17,6 +17,8 @@ import { LiveVoice } from "../../webview-ui/src/context/live-voice"
 import { VoiceProvider } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { WelcomeEmptyState } from "../../webview-ui/src/components/chat/WelcomeEmptyState"
+import { SidebarEmptyState } from "../../webview-ui/src/components/chat/SidebarEmptyState"
+import { WorkStyleProvider } from "../../webview-ui/src/context/work-style"
 import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
 
 const messages = []
@@ -116,7 +118,14 @@ if (new URLSearchParams(location.search).has("live")) {
   LiveVoice.prototype.start = async function (input, exchange) {
     window.__voiceStarts++
     window.__liveTransport = this
-    this.operation = { id: input.requestID, closed: false, started: false, capture: false, muted: false, audio: { muted: false } }
+    this.operation = {
+      id: input.requestID,
+      closed: false,
+      started: false,
+      capture: false,
+      muted: false,
+      audio: { muted: false },
+    }
     this.sink.status("connecting")
     await this.acquire()
     await exchange("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n")
@@ -314,10 +323,25 @@ function Fixture() {
     </ServerContext.Provider>
   )
 }
+
+function Onboarding() {
+  onMount(() => {
+    queueMicrotask(() => window.postMessage({ type: "workStyleLoaded", style: "unset" }, "*"))
+  })
+  return (
+    <WorkStyleProvider>
+      <main style={{ height: "100vh", overflow: "auto" }}>
+        <SidebarEmptyState />
+      </main>
+    </WorkStyleProvider>
+  )
+}
+
+const onboarding = new URLSearchParams(location.search).has("onboarding")
 render(
   () => (
     <StoryProviders noPadding config={{}}>
-      <Fixture />
+      {onboarding ? <Onboarding /> : <Fixture />}
     </StoryProviders>
   ),
   document.getElementById("root"),

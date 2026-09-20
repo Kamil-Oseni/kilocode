@@ -59,12 +59,12 @@ const MODERATION = new Set([
 const LOCATION = /^(?:input|messages|attachments|tools|tool_outputs)(?:\[\d+\]|\.[A-Za-z_][\w-]*)*$/
 
 /** Classify only explicit provider moderation codes and never echo rejected content. */
-export function moderation(input: unknown) {
+export function moderation(input: unknown): { code: string; message: string } | undefined {
   const body = frame(input)
   const raw = [body.error?.code, body.error?.type].find(
     (value): value is string => typeof value === "string" && MODERATION.has(value.toLowerCase()),
   )
-  if (!raw) return
+  if (!raw) return undefined
   const code = raw.toLowerCase()
   const param = body.error?.param
   const location = typeof param === "string" && LOCATION.test(param) ? param : undefined

@@ -8,7 +8,6 @@ import { useProvider } from "./context/provider"
 import { WorkStyleProvider } from "./context/work-style"
 import { useSession } from "./context/session"
 import { LocalTabsProvider, useLocalTabs } from "./context/local-tabs"
-import { VoiceProvider } from "./context/voice" // raya_change - Milestone H spoken round trips
 import { ProviderShell } from "./context/provider-shell"
 import { ChatView, SubagentViewer, type SubagentTarget } from "./components/chat"
 import { SidebarEmptyState } from "./components/chat/SidebarEmptyState"
@@ -547,15 +546,13 @@ const App: Component = () => {
     <ProviderShell.Root>
       <WorkStyleProvider>
         <ProviderShell.Session>
-          <VoiceProvider>
-            <LocalTabsProvider>
-              <ProviderShell.Chat>
-                <DataBridge>
-                  <AppContent />
-                </DataBridge>
-              </ProviderShell.Chat>
-            </LocalTabsProvider>
-          </VoiceProvider>
+          <LocalTabsProvider>
+            <ProviderShell.Chat>
+              <DataBridge>
+                <AppContent />
+              </DataBridge>
+            </ProviderShell.Chat>
+          </LocalTabsProvider>
         </ProviderShell.Session>
       </WorkStyleProvider>
     </ProviderShell.Root>

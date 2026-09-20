@@ -22,6 +22,7 @@ const CSS_FILES = [
   path.join(ROOT, "webview-ui/agent-manager/agent-manager-review.css"),
 ]
 const TSX_FILES = [
+  path.join(ROOT, "webview-ui/agent-manager/index.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/AgentManagerApp.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/SubagentPanel.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/EditPreviewPanel.tsx"),
@@ -73,7 +74,7 @@ const TSX_FILES = [
   path.join(ROOT, "webview-ui/src/components/chat/TabDnd.tsx"),
   path.join(ROOT, "webview-ui/diff-viewer/BaseBranchPicker.tsx"),
 ]
-const TSX_FILE = TSX_FILES[0]!
+const TSX_FILE = TSX_FILES[1]!
 const KEYBIND_DEFAULTS_FILE = path.join(ROOT, "webview-ui/agent-manager/keybind-defaults.ts")
 const PROVIDER_FILE = path.join(ROOT, "src/agent-manager/AgentManagerProvider.ts")
 const DIFF_CONTROLLER_FILE = path.join(ROOT, "src/agent-manager/worktree-diff-controller.ts")
@@ -1118,6 +1119,7 @@ describe("Shared webview provider shell", () => {
       "ImageModelsProvider",
       "NotificationsProvider",
       "SessionProvider",
+      "VoiceProvider",
       "MemoryProvider",
       "FeedbackProvider",
     ])
@@ -1136,6 +1138,7 @@ describe("Shared webview provider shell", () => {
       "AppContent",
     ])
     expect(fs.readFileSync(PROVIDER_SHELL_FILE, "utf-8")).not.toMatch(/WorkStyleProvider|LocalTabsProvider/)
+    expect(source).not.toContain("VoiceProvider")
   })
 
   it("keeps worktree mode in the Agent Manager root", () => {

@@ -80,6 +80,7 @@ import { ProjectScope } from "./project/scope"
 import type { AgentManagerOutMessage, AgentManagerInMessage } from "./types"
 import type { Host, PanelContext, OutputHandle, Disposable } from "./host"
 import { focusPanelPrompt, revealPanel } from "./focus-panel"
+import { report as reportWebviewError } from "./webview-error"
 export class AgentManagerProvider implements Disposable {
   public static readonly viewType = "raya.AgentManagerPanel"
   private panel: PanelContext | undefined
@@ -506,15 +507,8 @@ export class AgentManagerProvider implements Disposable {
       .catch((err) => this.log("Failed to initialize expanded project:", err))
   }
 
-  // Message interceptor
-
   private async onMessage(msg: Record<string, unknown>): Promise<Record<string, unknown> | null> {
-    if (msg.type === "agentManager.webviewError") {
-      const source = typeof msg.source === "string" ? msg.source.slice(0, 32) : "unknown"
-      const message = typeof msg.message === "string" ? msg.message.slice(0, 4_000) : "No diagnostic was provided."
-      this.log(`Webview ${source} failure: ${message}`)
-      return null
-    }
+    if (reportWebviewError(msg, (message) => this.log(message))) return null
     if (this.prBridge.handleMessage(msg)) return null
     if (msg.type === "requestFileSearch" && typeof msg.sessionID !== "string" && this.activeSessionId) {
       return { ...msg, sessionID: this.activeSessionId }

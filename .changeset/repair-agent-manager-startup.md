@@ -2,4 +2,4 @@
 "kilo-code": patch
 ---
 
-Show a recoverable error with diagnostic details when Agent Manager cannot start instead of leaving a blank panel.
+Restore Agent Manager startup when the shared composer needs voice context, and show recoverable diagnostic details instead of a blank panel if startup fails again.

@@ -24,6 +24,7 @@ import { KiloEmbeddingModelsProvider } from "./kilo-embedding-models"
 import { ImageModelsProvider } from "./image-models"
 import { SpeechToTextModelsProvider } from "./speech-to-text-models"
 import { SpeechToTextPrewarm } from "../components/speech-to-text/SpeechToTextPrewarm"
+import { VoiceProvider } from "./voice"
 
 type MermaidImageEvent = CustomEvent<{ dataUrl: string; filename: string }>
 
@@ -81,7 +82,9 @@ const Session: ParentComponent = (props) => (
       <ImageModelsProvider>
         <SpeechToTextModelsProvider>
           <NotificationsProvider>
-            <SessionProvider>{props.children}</SessionProvider>
+            <SessionProvider>
+              <VoiceProvider>{props.children}</VoiceProvider>
+            </SessionProvider>
           </NotificationsProvider>
         </SpeechToTextModelsProvider>
       </ImageModelsProvider>

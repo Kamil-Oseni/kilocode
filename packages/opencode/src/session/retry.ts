@@ -4,6 +4,7 @@ import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { isKiloError } from "@/kilocode/kilo-errors" // kilocode_change
 import { KiloLlmError } from "@/kilocode/llm-error" // kilocode_change
+import { ProviderCooldown } from "@/kilocode/provider/cooldown" // kilocode_change
 import { SessionNetwork } from "./network" // kilocode_change
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
@@ -201,6 +202,7 @@ export function policy(opts: {
         }
         // kilocode_change end
         const now = yield* Clock.currentTimeMillis
+        if (KiloLlmError.tpm(error)) ProviderCooldown.block(opts.provider, now + pause) // kilocode_change
         yield* opts.set({
           attempt: meta.attempt,
           message: retry.message,

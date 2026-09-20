@@ -27,6 +27,7 @@ import { PermissionProvenance } from "@/kilocode/permission/provenance" // kiloc
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import { KiloRoutedModel } from "@/kilocode/session/routed-model"
 import { KiloResponseMetadata } from "@/kilocode/session/response-metadata"
+import { ProviderCooldown } from "@/kilocode/provider/cooldown"
 import { Suggestion } from "@/kilocode/suggestion"
 // kilocode_change end
 import { errorMessage } from "@/util/error"
@@ -938,6 +939,7 @@ const layer = Layer.effect(
             Effect.gen(function* () {
               ctx.currentText = undefined
               ctx.reasoningMap = {}
+              yield* ProviderCooldown.wait(input.model.providerID) // kilocode_change - share TPM cooldown across sessions
               yield* status.set(ctx.sessionID, { type: "busy" })
               ctx.step = { reasoning: false, text: false, tool: false }
               const stream = llm.stream({

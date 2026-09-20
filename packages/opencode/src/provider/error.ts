@@ -106,6 +106,12 @@ export type ParsedStreamError =
       isRetryable: boolean
       responseBody: string
     }
+  // kilocode_change start - typed terminal moderation result
+  | {
+      type: "content_filter"
+      message: string
+    }
+// kilocode_change end
 
 export function parseStreamError(input: unknown): ParsedStreamError | undefined {
   const raw = json(input)
@@ -117,6 +123,11 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   const body = KiloError.frame(original)
   // kilocode_change end
   if (body.type !== "error") return
+
+  // kilocode_change start - provider moderation is terminal and response bodies may contain rejected input
+  const moderation = KiloError.moderation(body)
+  if (moderation) return { type: "content_filter", message: moderation.message }
+  // kilocode_change end
 
   switch (body?.error?.code) {
     case "context_length_exceeded":
@@ -185,6 +196,12 @@ export type ParsedAPICallError =
       responseBody?: string
       metadata?: Record<string, string>
     }
+  // kilocode_change start - typed terminal moderation result
+  | {
+      type: "content_filter"
+      message: string
+    }
+// kilocode_change end
 
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
@@ -196,6 +213,11 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
       responseBody: input.error.responseBody,
     }
   }
+
+  // kilocode_change start - normalize explicit moderation failures without retaining the rejected provider body
+  const moderation = KiloError.moderation(body)
+  if (moderation) return { type: "content_filter", message: moderation.message }
+  // kilocode_change end
 
   const metadata = input.error.url ? { url: input.error.url } : undefined
   return {

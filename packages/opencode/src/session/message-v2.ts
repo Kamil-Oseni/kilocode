@@ -832,6 +832,11 @@ export function fromError(
           { cause: e },
         ).toObject()
       }
+      // kilocode_change start - moderation failures are terminal typed errors, never retryable API errors
+      if (parsed.type === "content_filter") {
+        return new SessionV1.ContentFilterError({ message: parsed.message }, { cause: e }).toObject()
+      }
+      // kilocode_change end
 
       return new APIError(
         {
@@ -859,6 +864,11 @@ export function fromError(
               { cause: e },
             ).toObject()
           }
+          // kilocode_change start - do not retain or retry rejected provider payloads
+          if (parsed.type === "content_filter") {
+            return new SessionV1.ContentFilterError({ message: parsed.message }, { cause: e }).toObject()
+          }
+          // kilocode_change end
           return new APIError(
             {
               message: parsed.message,

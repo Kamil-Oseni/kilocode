@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "@/session/message-v2"
+import { SessionRetry } from "@/session/retry"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const googleAuthError =
@@ -37,6 +38,31 @@ function apiError(message = googleAuthError, reason?: string) {
 }
 
 describe("provider stream errors", () => {
+  test("classifies moderation frames without retaining rejected content", () => {
+    const result = MessageV2.fromError(
+      {
+        message: JSON.stringify({
+          type: "error",
+          error: {
+            code: "data_inspection_failed",
+            message: "rejected secret prompt contents",
+            param: "attachments[2]",
+          },
+        }),
+      },
+      { providerID: ProviderV2.ID.make("qwen") },
+    )
+
+    expect(result).toStrictEqual({
+      name: "ContentFilterError",
+      data: {
+        message:
+          "Provider moderation blocked this request (data_inspection_failed). The provider identified input location attachments[2]. Review the latest user text, attachment, or tool output, then try again.",
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain("rejected secret prompt contents")
+  })
+
   test("normalizes empty rate-limit messages", () => {
     const body = {
       type: "error",
@@ -75,6 +101,51 @@ describe("provider stream errors", () => {
     if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.message).toBe(body.error.message)
     expect(result.data.isRetryable).toBe(true)
+  })
+})
+
+describe("provider API moderation errors", () => {
+  test("classifies Qwen inspection rejection as terminal and redacted", () => {
+    const error = new APICallError({
+      message: "Bad Request",
+      url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({
+        error: {
+          code: "data_inspection_failed",
+          message: "Input text data may contain inappropriate content: private rejected text",
+          param: "messages[4].content",
+        },
+      }),
+      isRetryable: true,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("qwen") })
+
+    expect(result).toStrictEqual({
+      name: "ContentFilterError",
+      data: {
+        message:
+          "Provider moderation blocked this request (data_inspection_failed). The provider identified input location messages[4].content. Review the latest user text, attachment, or tool output, then try again.",
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain("private rejected text")
+    expect(SessionRetry.retryable(result, "qwen")).toBeUndefined()
+  })
+
+  test("does not treat moderation prose without an explicit code as a content filter", () => {
+    const error = new APICallError({
+      message: "Request mentions moderation but failed for another reason",
+      url: "https://example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({ error: { code: "invalid_request", message: "content filter configuration" } }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("qwen") })
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
   })
 })
 

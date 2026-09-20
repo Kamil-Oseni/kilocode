@@ -49,7 +49,38 @@ export function frame(body: unknown): Frame {
   return { ...body, error: isRecord(body.error) ? body.error : undefined }
 }
 
-const RETRYABLE = /rate.?limit|too.?many.?requests|rate increased too quickly|exhausted|overload|server|unavailable|timeout/i
+const MODERATION = new Set([
+  "content_filter",
+  "content_policy_violation",
+  "data_inspection_failed",
+  "moderation_blocked",
+  "safety_violation",
+])
+const LOCATION = /^(?:input|messages|attachments|tools|tool_outputs)(?:\[\d+\]|\.[A-Za-z_][\w-]*)*$/
+
+/** Classify only explicit provider moderation codes and never echo rejected content. */
+export function moderation(input: unknown) {
+  const body = frame(input)
+  const raw = [body.error?.code, body.error?.type].find(
+    (value): value is string => typeof value === "string" && MODERATION.has(value.toLowerCase()),
+  )
+  if (!raw) return
+  const code = raw.toLowerCase()
+  const param = body.error?.param
+  const location = typeof param === "string" && LOCATION.test(param) ? param : undefined
+  const source = location
+    ? ` The provider identified input location ${location}.`
+    : " The provider did not identify a specific input location."
+  return {
+    code,
+    message:
+      `Provider moderation blocked this request (${code}).${source}` +
+      " Review the latest user text, attachment, or tool output, then try again.",
+  }
+}
+
+const RETRYABLE =
+  /rate.?limit|too.?many.?requests|rate increased too quickly|exhausted|overload|server|unavailable|timeout/i
 // Keep free-form message matching narrow: Session.retryable only applied
 // rate-limit phrases to prose; the wider pattern above is for structured
 // code/type fields only

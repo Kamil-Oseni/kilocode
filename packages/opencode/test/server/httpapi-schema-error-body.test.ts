@@ -16,6 +16,7 @@ import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
+import { header as requestIDHeader } from "../../src/kilocode/server/httpapi/request-id" // kilocode_change
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([Session.node, Database.node])), httpApiLayer))
 
@@ -67,6 +68,54 @@ const seedCorruptStepFinishPart = Effect.gen(function* () {
 })
 
 describe("schema-rejection wire shape", () => {
+  // kilocode_change start
+  it.instance(
+    "malformed JSON returns a correlated typed 400",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ref = "req_client-malformed-json"
+        const res = yield* requestInDirectory(SyncPaths.history, test.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json", [requestIDHeader]: ref },
+          body: '{"aggregate":"unterminated',
+        })
+        const parsed = JSON.parse(yield* text(res))
+
+        expect(res.status).toBe(400)
+        expect(res.headers[requestIDHeader]).toBe(ref)
+        expect(parsed).toMatchObject({
+          name: "BadRequest",
+          data: { kind: expect.stringMatching(/^(Body|Payload)$/) },
+        })
+        expect(parsed.data.message).toEqual(expect.any(String))
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "v2 malformed JSON returns a generated correlation id and typed 400",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const res = yield* requestInDirectory("/api/session", test.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json", [requestIDHeader]: "bad request id" },
+          body: "{\\broken",
+        })
+
+        expect(res.status).toBe(400)
+        expect(res.headers[requestIDHeader]).toMatch(/^req_[0-9a-f-]{36}$/)
+        expect(JSON.parse(yield* text(res))).toMatchObject({
+          _tag: "InvalidRequestError",
+          message: "Malformed JSON request body",
+          kind: "Body",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+  // kilocode_change end
+
   it.instance(
     "Payload schema rejection returns NamedError-shaped JSON, not empty",
     () =>

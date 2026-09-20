@@ -138,6 +138,7 @@ import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { layer as requestIDLayer } from "@/kilocode/server/httpapi/request-id" // kilocode_change
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -316,6 +317,7 @@ export function createRoutes(
       errorLayer,
       compressionLayer,
       corsVaryFix,
+      requestIDLayer, // kilocode_change
       fenceLayer,
       cors(corsOptions),
       MemoryService.layer, // kilocode_change

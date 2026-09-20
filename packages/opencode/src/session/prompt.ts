@@ -1126,6 +1126,10 @@ export const layer = Layer.effect(
 
               const { read } = yield* registry.named()
               // kilocode_change start - authorize prompt attachments like model-issued read calls
+              // raya_change start - Auto delegates workspace reads, so ingest its user-attached files through the
+              // built-in read specialist instead of predictably failing against Auto's own deny-only tool boundary.
+              const reader = ag.name === "auto" ? ((yield* agents.get("explore")) ?? ag) : ag
+              // raya_change end
               const controller = new AbortController()
               const ask: Tool.Context["ask"] = (request) =>
                 Effect.gen(function* () {
@@ -1134,7 +1138,7 @@ export const layer = Layer.effect(
                     permission,
                     agents,
                     sessions,
-                    agent: ag,
+                    agent: reader,
                     session,
                     origins: (yield* config.get()).permission_origins,
                     request: {
@@ -1146,7 +1150,7 @@ export const layer = Layer.effect(
               const ctx = (extra?: Tool.Context["extra"]): Tool.Context => ({
                 sessionID: input.sessionID,
                 abort: controller.signal,
-                agent: ag.name,
+                agent: reader.name,
                 messageID: info.id,
                 extra: { ...extra, referenceRoot: reference?.root, includeInstructions: false, denyDirectory: true },
                 messages: [],

@@ -2823,6 +2823,74 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+// kilocode_change start - Auto attachments use an authorized reader before the routing turn
+noLLMServer.instance(
+  "ingests an Auto file attachment through the read specialist without granting Auto the read tool",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const file = path.join(dir, "attached-report.md")
+      yield* writeText(file, "attachment evidence")
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const agents = yield* AgentSvc.Service
+      const session = yield* sessions.create({})
+
+      const auto = yield* agents.get("auto")
+      const explore = yield* agents.get("explore")
+      if (!auto || !explore) throw new Error("expected native Auto and explore agents")
+      expect(Permission.evaluate("read", "*", auto.permission).action).toBe("deny")
+      expect(Permission.evaluate("read", "*", explore.permission).action).not.toBe("deny")
+
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "auto",
+        model: ref,
+        noReply: true,
+        parts: [
+          { type: "text", text: "Review the attached report" },
+          { type: "file", mime: "text/plain", url: pathToFileURL(file).href, filename: "attached-report.md" },
+        ],
+      })
+      const text = message.parts.flatMap((part) => (part.type === "text" ? [part.text] : []))
+      expect(text.some((part) => part.includes("attachment evidence"))).toBe(true)
+      expect(text.some((part) => part.includes("Read tool failed"))).toBe(false)
+      expect(Permission.evaluate("read", "*", auto.permission).action).toBe("deny")
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "keeps user read denials authoritative for Auto file attachments",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const file = path.join(dir, "denied-report.md")
+      yield* writeText(file, "must remain unread")
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "auto",
+        model: ref,
+        noReply: true,
+        parts: [
+          { type: "text", text: "Review the attached report" },
+          { type: "file", mime: "text/plain", url: pathToFileURL(file).href, filename: "denied-report.md" },
+        ],
+      })
+      const text = message.parts.flatMap((part) => (part.type === "text" ? [part.text] : []))
+      expect(text.some((part) => part.includes("must remain unread"))).toBe(false)
+      expect(text.some((part) => part.includes("Read tool failed"))).toBe(true)
+      yield* sessions.remove(session.id)
+    }),
+  { config: { ...cfg, permission: { read: "deny" as const } } },
+)
+// kilocode_change end
+
 noLLMServer.instance(
   "resolves configured reference mentions to one root directory attachment",
   () =>

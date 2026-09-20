@@ -271,10 +271,27 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, "kilo")).toBeUndefined()
   })
 
-  test("does not retry billing or suspended-account errors", () => {
+  test.each([
+    {
+      name: "suspended account",
+      message: "Your account has been suspended for insufficient balance",
+      responseBody: undefined,
+    },
+    {
+      name: "provider code 1008",
+      message: "insufficient balance (1008)",
+      responseBody: undefined,
+    },
+    {
+      name: "nested API response",
+      message: "Provider request failed",
+      responseBody: JSON.stringify({ error: { code: 1008, message: "Insufficient Balance" } }),
+    },
+  ])("does not retry $name billing errors", ({ message, responseBody }) => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({
-        message: "account suspended / insufficient balance",
+        message,
+        responseBody,
         isRetryable: true,
         statusCode: 402,
       }).toObject(),

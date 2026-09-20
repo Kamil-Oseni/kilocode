@@ -2366,7 +2366,7 @@ describe("session.llm.stream", () => {
     ]),
   )
   repair.instance(
-    "Auto name correction preserves call identity and final tool authority",
+    "name correction preserves call identity and final tool authority",
     () =>
       Effect.gen(function* () {
         const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
@@ -2377,9 +2377,18 @@ describe("session.llm.stream", () => {
         const sessionID = SessionID.make("session-auto-correction")
         const payload = { path: "./reports/Quarterly Summary.md", note: "Read only.\nKeep trailing spaces  " }
         const denied = [{ permission: "read", pattern: "*", action: "deny" }] satisfies PermissionV1.Ruleset
-        for (const scenario of ["allowed", "agent", "session", "user", "schema", "json", "unknown"] as const) {
+        for (const scenario of [
+          "allowed",
+          "agent",
+          "session",
+          "user",
+          "schema",
+          "json",
+          "unknown",
+          "reserved",
+        ] as const) {
           const id = `call-correction-${scenario}`
-          const name = scenario === "unknown" ? " NONEXISTENT " : " READ "
+          const name = scenario === "unknown" ? " NONEXISTENT " : scenario === "reserved" ? " INVALID " : " READ "
           const input =
             scenario === "json"
               ? '{"path":'
@@ -2412,7 +2421,7 @@ describe("session.llm.stream", () => {
             ),
           )
           const agent = {
-            name: "auto",
+            name: scenario === "unknown" || scenario === "reserved" ? "build" : "auto",
             mode: "primary",
             options: {},
             permission: scenario === "agent" ? denied : [],
@@ -2494,6 +2503,11 @@ describe("session.llm.stream", () => {
           expect(events.filter((event) => event.type === "tool-error")).toEqual([
             expect.objectContaining({ id, message: expect.any(String) }),
           ])
+          if (scenario === "unknown" || scenario === "reserved") {
+            expect(events.filter((event) => event.type === "tool-error")).toEqual([
+              expect.objectContaining({ id, name }),
+            ])
+          }
         }
       }),
     {

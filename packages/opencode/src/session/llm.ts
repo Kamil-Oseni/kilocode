@@ -378,10 +378,13 @@ const live: Layer.Layer<
         includeRawChunks: input.model.providerID.includes("github-copilot"),
         async experimental_repairToolCall(failed) {
           const lower = failed.toolCall.toolName.trim().toLowerCase() // kilocode_change
-          if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
+          // kilocode_change start
+          if (lower !== "invalid" && lower !== failed.toolCall.toolName && prepared.tools[lower]) {
             l.info("repairing tool call", { tool: failed.toolCall.toolName, repaired: lower }) // kilocode_change
             return { ...failed.toolCall, toolName: lower }
           }
+          if (lower === "invalid" || !prepared.tools[lower]) return null
+          // kilocode_change end
           if (input.agent.name === "auto") return null // kilocode_change - preserve the original error instead of inventing delegation or an unavailable invalid-tool call
           return {
             ...failed.toolCall,

@@ -86,6 +86,23 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
   })
 
+  // kilocode_change start - desynchronize provider transport recovery without overriding provider windows
+  test("jitters transport retries without changing provider retry hints", () => {
+    const failed = wrap("RequestExecutor.execute: HTTP transport failed")
+    expect(SessionRetry.wait(2, failed, () => 0)).toBe(3200)
+    expect(SessionRetry.wait(2, failed, () => 1)).toBe(4000)
+
+    const hinted = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "stream closed unexpectedly",
+        isRetryable: true,
+        responseHeaders: { "retry-after-ms": "4750" },
+      }).toObject(),
+    )
+    expect(SessionRetry.wait(2, hinted, () => 0)).toBe(4750)
+  })
+  // kilocode_change end
+
   it.instance("policy updates retry status and increments attempts", () =>
     Effect.gen(function* () {
       const sessionID = SessionID.make("session-retry-test")
@@ -181,6 +198,19 @@ describe("session.retry.retryable", () => {
       message: "WebSocket closed before response.completed (code 1006: Connection ended)",
     })
   })
+
+  // kilocode_change start - cover the transport failure forms captured in Raya session diagnostics
+  test.each([
+    "RequestExecutor.execute: HTTP transport failed",
+    "Provider stream closed unexpectedly",
+    "The operation was timed out",
+    "ProviderShared.stream: Failed to read deepseek-byok/openai-compatible-chat stream",
+  ])("retries recorded provider transport failure: %s", (message) => {
+    expect(SessionRetry.retryable(wrap(message), retryProvider)).toEqual({
+      message: "Provider stream dropped, retrying",
+    })
+  })
+  // kilocode_change end
 
   test("does not retry context overflow errors", () => {
     const error = new SessionV1.ContextOverflowError({
@@ -299,14 +329,6 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
-  test("retries provider stream-read failures", () => {
-    expect(
-      SessionRetry.retryable(
-        wrap("ProviderShared.stream: Failed to read deepseek-byok/openai-compatible-chat stream"),
-        retryProvider,
-      ),
-    ).toEqual({ message: "Provider stream dropped, retrying" })
-  })
   // kilocode_change end
 })
 

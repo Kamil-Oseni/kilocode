@@ -83,12 +83,13 @@ function hinted(error: SessionV1.APIError | undefined) {
   return !Number.isNaN(date) && date > 0
 }
 
-export function wait(attempt: number, error: Err) {
+export function wait(attempt: number, error: Err, random = Math.random) {
   const api = SessionV1.APIError.isInstance(error) ? error : undefined
   const ms = delay(attempt, api)
-  if (!KiloLlmError.tpm(error)) return ms
-  if (hinted(api)) return ms
-  return Math.max(ms, 60_000)
+  if (KiloLlmError.tpm(error)) return hinted(api) ? ms : Math.max(ms, 60_000)
+  if (!KiloLlmError.stream(error) || hinted(api)) return ms
+  const value = Math.min(1, Math.max(0, random()))
+  return Math.round(ms * (0.8 + value * 0.2))
 }
 // kilocode_change end
 

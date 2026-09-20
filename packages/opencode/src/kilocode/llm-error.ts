@@ -17,7 +17,9 @@ export namespace KiloLlmError {
   }
 
   export function stream(error: unknown) {
-    return /Failed to read \S+ stream|TypeError: terminated|ECONNRESET|socket hang up|TimeoutError/i.test(text(error))
+    return /Failed to read \S+ stream|HTTP transport failed|stream (?:closed|ended) unexpectedly|(?:operation|response headers) (?:was )?timed out|TypeError: terminated|ECONNRESET|socket hang up|TimeoutError/i.test(
+      text(error),
+    )
   }
 
   export function tpm(error: unknown) {

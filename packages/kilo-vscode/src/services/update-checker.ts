@@ -5,7 +5,7 @@ import * as vscode from "vscode"
 import { compare } from "./update-version"
 import { configure, UpdateCredentials } from "./update-credentials"
 import { select, stage } from "./update-artifact"
-import { latest, scan } from "./update-release"
+import { latest, remote } from "./update-release"
 import { verify } from "./update-vsix"
 import { UpdateRun } from "./update-run"
 import { Installation } from "./update-installation"
@@ -15,7 +15,6 @@ import { join } from "node:path"
 const INTERVAL_MS = 6 * 60 * 60 * 1000 // re-check every 6 hours while the window stays open
 const FIRST_DELAY_MS = 30 * 1000 // let activation settle before the first background check
 const DISMISS_KEY = "raya.update.dismissedVersion"
-const REQUEST_TIMEOUT_MS = 15 * 1000
 
 type Release = NonNullable<ReturnType<typeof latest>>
 
@@ -39,25 +38,8 @@ function currentTarget(): string {
   return `${process.platform}-${process.arch}`
 }
 
-function headers(token: string, accept: string): Record<string, string> {
-  const base: Record<string, string> = {
-    Accept: accept,
-    "User-Agent": "raya-update-checker",
-    "X-GitHub-Api-Version": "2022-11-28",
-  }
-  if (token) base["Authorization"] = `Bearer ${token}`
-  return base
-}
-
 async function latestRelease(cfg: Config): Promise<Release | undefined> {
-  const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  return scan(cfg.repo, cfg.includePrereleases, (url) =>
-    fetch(url, {
-      headers: headers(cfg.token, "application/vnd.github+json"),
-      signal,
-      redirect: "error",
-    }),
-  )
+  return remote(cfg.repo, cfg.includePrereleases, cfg.token)
 }
 
 async function installFrom(
@@ -65,6 +47,7 @@ async function installFrom(
   release: Release,
   cfg: Config,
   version: string,
+  previous: string,
   active: () => boolean,
 ): Promise<void> {
   if (!active()) return
@@ -79,13 +62,18 @@ async function installFrom(
     return
   }
   const result: { value?: Awaited<ReturnType<Installation["run"]>> } = {}
+  const vault = new PackageVault(join(context.globalStorageUri.fsPath, "package-vault"))
+  const binary = join(context.extensionUri.fsPath, "bin", process.platform === "win32" ? "kilo.exe" : "kilo")
+  const rollback = await vault.activate(previous, target, binary)
+  if (!rollback)
+    throw new Error(`Raya ${previous} has no verified rollback package for ${target}. The update was not installed.`)
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: `Installing Raya ${version}…` },
     async () => {
       await stage(asset, cfg.repo, cfg.token, async (path) => {
         if (!active()) return
         await verify(path, { name: "raya", publisher: "eden", version, target })
-        const retained = await new PackageVault(join(context.globalStorageUri.fsPath, "package-vault")).retain(path, {
+        const retained = await vault.retain(path, {
           name: "raya",
           publisher: "eden",
           version,
@@ -94,9 +82,9 @@ async function installFrom(
         if (!active()) return
         result.value = await new Installation(context.globalState, context.globalStorageUri.fsPath).run(
           {
-            schema: 2,
+            schema: 3,
             version,
-            previous: String(context.extension.packageJSON.version),
+            previous,
             repo: cfg.repo,
             target,
             asset: {
@@ -106,7 +94,15 @@ async function installFrom(
               digest: asset.digest,
             },
             artifact: retained.artifact,
+            binary: retained.binary,
             package: retained.package,
+            rollback: {
+              version: rollback.version,
+              target: rollback.target,
+              package: rollback.package,
+              artifact: rollback.artifact,
+              binary: rollback.binary,
+            },
           },
           async () => {
             if (!active()) throw new Error("Update installation was canceled before dispatch.")
@@ -227,7 +223,7 @@ async function offer(
   )
   if (!active()) return
   if (choice === "Install")
-    await installFrom(context, release, cfg, version, active).catch((err) => {
+    await installFrom(context, release, cfg, version, current, active).catch((err) => {
       if (!active()) return
       log.appendLine(`[install] ${err instanceof Error ? err.message : String(err)}`)
       void vscode.window.showErrorMessage(`Raya update failed: ${String(err)}`)
@@ -244,23 +240,14 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
     context.globalStorageUri.fsPath,
   )
   const recovered = runner
-    .run(async (active) => {
-      const current = String(context.extension.packageJSON.version)
-      const record = await new Installation(context.globalState, context.globalStorageUri.fsPath).recover(current)
-      if (!record || !active()) return
-      const choice = await vscode.window.showWarningMessage(
-        `Raya recorded an update to ${record.version}, but this extension host is running ${current}. Reload to verify the installation, or use Check for Updates to retry.`,
-        "Reload",
-        "Later",
+    .run((active) => reconcile(context, active))
+    .catch(() => {
+      log.appendLine("[recovery] Could not reconcile the saved update installation record.")
+      void vscode.window.showErrorMessage(
+        "Raya could not verify its saved update recovery state. The record was retained and no installer was replayed.",
       )
-      if (choice === "Reload" && active()) await vscode.commands.executeCommand("workbench.action.reloadWindow")
     })
-    .catch(() => log.appendLine("[recovery] Could not reconcile the saved update installation record."))
   void recovered
-  const binary = join(context.extensionUri.fsPath, "bin", process.platform === "win32" ? "kilo.exe" : "kilo")
-  void new PackageVault(join(context.globalStorageUri.fsPath, "package-vault"))
-    .activate(String(context.extension.packageJSON.version), currentTarget(), binary)
-    .catch((err) => log.appendLine(`[vault] ${err instanceof Error ? err.message : String(err)}`))
   const run = (manual: boolean) =>
     runner
       .run((active) => check(context, credentials, manual, active))
@@ -269,12 +256,76 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
       })
   const command = vscode.commands.registerCommand("raya.checkForUpdates", () => run(true))
   const token = vscode.commands.registerCommand("raya.setUpdateToken", () => configure(credentials))
+  const acceptance =
+    process.env.RAYA_UPDATE_SECRET_ACCEPTANCE === "1"
+      ? vscode.commands.registerCommand("raya.internal.updateCredentialAcceptance", async (input: unknown) => {
+          const parsed = input as { action?: unknown; token?: unknown }
+          if (
+            !parsed ||
+            !["store", "read-clear"].includes(String(parsed.action)) ||
+            typeof parsed.token !== "string" ||
+            parsed.token.length < 16 ||
+            parsed.token.length > 256
+          )
+            throw new Error("Invalid update credential acceptance request.")
+          if (parsed.action === "store") {
+            await credentials.set(parsed.token)
+            return { saved: (await credentials.get()) === parsed.token }
+          }
+          const saved = (await credentials.get()) === parsed.token
+          await credentials.set("")
+          return { saved, cleared: (await credentials.get()) === "" }
+        })
+      : new vscode.Disposable(() => undefined)
   const first = setTimeout(() => void run(false), FIRST_DELAY_MS)
   const interval = setInterval(() => void run(false), INTERVAL_MS)
-  return vscode.Disposable.from(command, token, runner, log, {
+  return vscode.Disposable.from(command, token, acceptance, runner, log, {
     dispose: () => {
       clearTimeout(first)
       clearInterval(interval)
     },
   })
+}
+
+export async function reconcile(context: vscode.ExtensionContext, active: () => boolean) {
+  const current = String(context.extension.packageJSON.version)
+  const target = currentTarget()
+  const binary = join(context.extensionUri.fsPath, "bin", process.platform === "win32" ? "kilo.exe" : "kilo")
+  const vault = new PackageVault(join(context.globalStorageUri.fsPath, "package-vault"))
+  const verified = await vault.activate(current, target, binary)
+  const journal = new Installation(context.globalState, context.globalStorageUri.fsPath)
+  const record = await journal.recover(verified)
+  if (!record || !active()) return
+  const rolling = "schema" in record && record.schema === 3 && record.phase.startsWith("rollback-")
+  const choices = rolling ? (["Reload", "Later"] as const) : (["Reload", "Restore previous", "Later"] as const)
+  const choice = await vscode.window.showWarningMessage(
+    rolling
+      ? `Raya dispatched rollback to ${record.previous}, but this extension host is running ${current}. Reload to verify the restored version.`
+      : `Raya recorded an update to ${record.version}, but this extension host is running ${current}. Reload to verify it, or restore the retained ${record.previous} package.`,
+    ...choices,
+  )
+  if (choice === "Reload" && active()) await vscode.commands.executeCommand("workbench.action.reloadWindow")
+  if (choice !== "Restore previous" || !active()) return
+  if (!("schema" in record) || record.schema !== 3) {
+    await vscode.window.showErrorMessage("This older update record has no verified rollback package.")
+    return
+  }
+  const result = await journal
+    .rollback(async (path) => {
+      if (!active()) throw new Error("Update rollback was canceled before dispatch.")
+      await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(path))
+    })
+    .catch(async () => {
+      if (active())
+        await vscode.window.showErrorMessage(
+          "Raya could not confirm rollback. The exact recovery record was retained and the installer will not be replayed.",
+        )
+      return undefined
+    })
+  if (!result || !active()) return
+  const notice = result.dispatched
+    ? `Raya ${record.previous} was restored. Reload the window to activate and verify it.`
+    : `Rollback to Raya ${record.previous} was already dispatched. Reload the window to verify it.`
+  const reload = await vscode.window.showInformationMessage(notice, "Reload", "Later")
+  if (reload === "Reload" && active()) await vscode.commands.executeCommand("workbench.action.reloadWindow")
 }

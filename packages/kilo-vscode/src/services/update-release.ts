@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { compare, eligible } from "./update-version"
 
+const timeout = 15 * 1000
+
 const schema = z
   .array(
     z.object({
@@ -71,5 +73,27 @@ export async function scan(repo: string, previews: boolean, request: (url: strin
   }
   throw new Error(
     "The release history exceeded 1,000 entries. Check the repository's releases manually; update eligibility is incomplete.",
+  )
+}
+
+/** Fetch private release metadata without ever including the credential in errors or response-derived navigation. */
+export function remote(
+  repo: string,
+  previews: boolean,
+  token: string,
+  request: (input: string | URL, init?: RequestInit) => Promise<Response> = fetch,
+) {
+  const signal = AbortSignal.timeout(timeout)
+  return scan(repo, previews, (url) =>
+    request(url, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "raya-update-checker",
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal,
+      redirect: "error",
+    }),
   )
 }

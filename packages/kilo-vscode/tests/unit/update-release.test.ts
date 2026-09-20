@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
-import { latest, read, repository, scan } from "../../src/services/update-release"
+import { once } from "node:events"
+import { createServer } from "node:http"
+import { latest, read, remote, repository, scan } from "../../src/services/update-release"
 
 test("selects the newest eligible release and derives its link from the configured repository", () => {
   const base = { draft: false, prerelease: false, assets: [], html_url: "https://untrusted.example/redirect" }
@@ -96,4 +98,29 @@ test("an incomplete paginated search cannot report an available update or up-to-
       )
     }),
   ).rejects.toThrow("HTTP 401")
+})
+
+test.each([401, 403])("a live HTTP %i revocation stays actionable without exposing credentials", async (status) => {
+  const token = "private-update-token-that-must-not-escape"
+  let authorization = ""
+  const server = createServer((request, response) => {
+    authorization = String(request.headers.authorization ?? "")
+    response.writeHead(status).end()
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("The test HTTP server did not expose a port.")
+  try {
+    const result = remote("owner/raya", false, token, (_url, init) => fetch(`http://127.0.0.1:${address.port}`, init))
+    await expect(result).rejects.toThrow(`HTTP ${status}`)
+    await result.catch((error) => {
+      expect(String(error)).not.toContain(token)
+      expect(String(error)).not.toContain("Bearer")
+    })
+    expect(authorization).toBe(`Bearer ${token}`)
+  } finally {
+    server.close()
+    await once(server, "close")
+  }
 })

@@ -66,6 +66,32 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
+// kilocode_change start - queue TPM retries for the provider window and never shorten Retry-After
+function hinted(error: SessionV1.APIError | undefined) {
+  const headers = error?.data.responseHeaders
+  if (!headers) return false
+  const milliseconds = headers["retry-after-ms"]
+  if (milliseconds) {
+    const parsed = Number.parseFloat(milliseconds)
+    if (!Number.isNaN(parsed) && parsed >= 0) return true
+  }
+  const seconds = headers["retry-after"]
+  if (!seconds) return false
+  const parsed = Number.parseFloat(seconds)
+  if (!Number.isNaN(parsed)) return parsed >= 0
+  const date = Date.parse(seconds) - Date.now()
+  return !Number.isNaN(date) && date > 0
+}
+
+export function wait(attempt: number, error: Err) {
+  const api = SessionV1.APIError.isInstance(error) ? error : undefined
+  const ms = delay(attempt, api)
+  if (!KiloLlmError.tpm(error)) return ms
+  if (hinted(api)) return ms
+  return Math.max(ms, 60_000)
+}
+// kilocode_change end
+
 // kilocode_change - Kilo does not emit OpenCode Go actions
 export function retryable(error: Err, _provider?: string): Retryable | undefined {
   // context overflow errors should not be retried
@@ -167,9 +193,8 @@ export function policy(opts: {
         }
         // kilocode_change end
 
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
-        // kilocode_change start - TPM must not sit on ~60s forever
-        const capped = KiloLlmError.tpm(error) ? Math.min(wait, 30_000) : wait
+        const pause = wait(meta.attempt, error) // kilocode_change - queue TPM retries for the provider window
+        // kilocode_change start - bound repeated TPM attempts
         if (KiloLlmError.tpm(error) && meta.attempt > 4) {
           return yield* Cause.done(meta.attempt)
         }
@@ -179,9 +204,9 @@ export function policy(opts: {
           attempt: meta.attempt,
           message: retry.message,
           action: retry.action,
-          next: now + capped, // kilocode_change
+          next: now + pause, // kilocode_change
         })
-        return [meta.attempt, Duration.millis(capped)] as [number, Duration.Duration] // kilocode_change
+        return [meta.attempt, Duration.millis(pause)] as [number, Duration.Duration] // kilocode_change
       })
     }),
   )

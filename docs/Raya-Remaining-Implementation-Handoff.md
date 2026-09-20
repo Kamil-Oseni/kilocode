@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `f52622afa6`; the installed package source is `f52622afa6`. The open extension host's active-vault pointer is digest `b700ba883ca4887d99f3297d629c65ef7b46de801ecae6b95f355bf1454948ec`, source `eeb9a9de18`, until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `dc0910ddc9`; the installed and active package is `eden.raya@7.4.23-snapshot+dc0910ddc9.kamil-oseni.1789943164895`, digest `6d84173654535debe8576e8af98bc29a52c37065a557e324d6c1d8dfc75475e0`. The owner confirmed that Agent Manager now renders normally after reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 18:08 America/Toronto - Agent Manager startup acceptance complete
+
+The real extension-host startup blocker is closed. Agent Manager initially appeared blank; a bounded startup diagnostic exposed `useVoice must be used within VoiceProvider`. `PromptInput` is shared, but `VoiceProvider` was mounted only by the sidebar. Product commit `dc0910ddc9` moves the provider into shared `ProviderShell.Session` inside `SessionProvider`, removes the duplicate sidebar wrapper and retains the diagnostic boundary for future startup faults. Focused evidence passes **73 / 279**, both extension typechecks and scoped ESLint pass, and the protected push completed.
+
+The active retained package is `raya.6d84173654535debe8576e8af98bc29a52c37065a557e324d6c1d8dfc75475e0.vsix`, **521,360,934 bytes**, SHA-256 `6D84173654535DEBE8576E8AF98BC29A52C37065A557E324D6C1D8DFC75475E0`; bundled CLI **231,648,768 bytes**, SHA-256 `440DC2BBF53FAB41A93E0A0AFFBB13E0EFF4301A7A4601E8097559C320D81A26`. The owner reloaded and supplied a screenshot of the real Agent Manager toolbar and expected empty **New Worktree** state. That is sufficient acceptance for the startup repair. Do not ask the owner to create a worktree merely to prove mounting.
+
+Continue `FUT-AGENT-02` from its distinct lifecycle gate below. A real parent with actual children is still needed to prove retained selection, exact-once child steering and the running/waiting/completed/failed/cancelled projections across restart. That remaining gate is product acceptance, not a continuation of the blank-screen defect.
 
 ## ChatGPT 2026-09-20 17:40 America/Toronto - Continue FUT-AGENT-02 from installed restart acceptance
 

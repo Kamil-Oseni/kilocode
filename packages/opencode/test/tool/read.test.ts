@@ -149,6 +149,32 @@ const asks = () => {
 }
 
 describe("tool.read external_directory permission", () => {
+  // kilocode_change start - a duplicated absolute segment gets an exact safe recovery hint, never a silent redirect
+  it.live("suggests an existing in-worktree path after a duplicated directory segment", () =>
+    Effect.gen(function* () {
+      const parent = yield* tmpdirScoped()
+      const name = path.basename(parent)
+      const target = path.join(parent, "src", "test.txt")
+      yield* put(target, "correct target")
+
+      const error = yield* fail(parent, { filePath: path.join(parent, name, "src", "test.txt") })
+      expect(error.message).toContain("path repeats a directory name")
+      expect(error.message).toContain(full(target))
+    }),
+  )
+
+  it.live("reads an intentionally repeated directory when that exact path exists", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const target = path.join(dir, "same", "same", "test.txt")
+      yield* put(target, "intentional duplicate")
+
+      const result = yield* exec(dir, { filePath: target })
+      expect(result.output).toContain("intentional duplicate")
+    }),
+  )
+  // kilocode_change end
+
   it.live("allows reading absolute path inside project directory", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()

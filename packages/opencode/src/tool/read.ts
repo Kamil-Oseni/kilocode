@@ -20,6 +20,7 @@ import { KiloReadObject } from "@/kilocode/tool/read-object"
 import * as Extract from "../kilocode/tool/read-extract"
 import * as TextStream from "../kilocode/text-stream"
 import * as Artifact from "@/kilocode/goal/read-artifact"
+import { PathHint } from "@/kilocode/tool/path-hint"
 // kilocode_change end
 
 const DEFAULT_READ_LIMIT = 2000
@@ -230,6 +231,15 @@ export const ReadTool = Tool.define<
         ),
       )
       if (!info) {
+        // kilocode_change start - suggest an existing in-worktree target when an absolute path repeats one segment
+        for (const candidate of PathHint.duplicates(requested)) {
+          if (!FSUtil.contains(instance.worktree, candidate)) continue
+          if (!(yield* fs.existsSafe(candidate))) continue
+          return yield* Effect.fail(
+            new Error(`File not found: ${requested}. The path repeats a directory name; retry with: ${candidate}`),
+          )
+        }
+        // kilocode_change end
         return yield* miss(requested, instance.worktree, ctx)
       }
       // kilocode_change end

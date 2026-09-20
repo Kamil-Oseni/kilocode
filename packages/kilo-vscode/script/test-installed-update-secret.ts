@@ -1,11 +1,10 @@
 import { randomBytes } from "node:crypto"
-import { mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises"
+import { spawn } from "node:child_process"
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, join, resolve, sep } from "node:path"
-import { runTests } from "@vscode/test-electron"
 
 const root = resolve(import.meta.dir, "..")
-const runner = join(root, "tests", "installed", "update-secret", "index.cjs")
 const vscode = join(root, ".vscode-test", "vscode-win32-x64-archive-1.134.0", "Code.exe")
 
 async function extensions() {
@@ -24,25 +23,44 @@ async function phase(
   profile: string,
   token: string,
 ) {
+  const result = join(profile, `${name}.json`)
   const electron = process.env.ELECTRON_RUN_AS_NODE
   delete process.env.ELECTRON_RUN_AS_NODE
   try {
-    await runTests({
-      vscodeExecutablePath: vscode,
-      extensionDevelopmentPath: extension,
-      extensionTestsPath: runner,
-      launchArgs: [
+    const code = spawn(
+      vscode,
+      [
         workspace,
         `--user-data-dir=${profile}`,
         `--extensions-dir=${join(profile, "extensions")}`,
+        `--shared-data-dir=${join(profile, "shared")}`,
+        `--extensionDevelopmentPath=${extension}`,
+        "--new-window",
+        "--no-sandbox",
+        "--disable-gpu-sandbox",
+        "--disable-updates",
+        "--skip-welcome",
+        "--skip-release-notes",
+        "--disable-workspace-trust",
         "--disable-telemetry",
       ],
-      extensionTestsEnv: {
+      {
+        stdio: "inherit",
+        env: {
+          ...process.env,
         RAYA_UPDATE_SECRET_ACCEPTANCE: "1",
         RAYA_UPDATE_SECRET_PHASE: name,
         RAYA_UPDATE_SECRET_TOKEN: token,
+          RAYA_UPDATE_SECRET_RESULT: result,
+        },
       },
+    )
+    const exit = await new Promise<number | null>((resolve, reject) => {
+      code.once("error", reject)
+      code.once("exit", resolve)
     })
+    if (exit !== 0) throw new Error(`VS Code update credential acceptance exited with ${exit}`)
+    return JSON.parse(await readFile(result, "utf8")) as unknown
   } finally {
     if (electron === undefined) delete process.env.ELECTRON_RUN_AS_NODE
     else process.env.ELECTRON_RUN_AS_NODE = electron
@@ -68,8 +86,11 @@ async function main() {
   const token = randomBytes(24).toString("base64url")
   try {
     await mkdir(workspace, { recursive: true })
-    await phase("store", extension, workspace, profile, token)
-    await phase("read-clear", extension, workspace, profile, token)
+    const stored = await phase("store", extension, workspace, profile, token)
+    if (JSON.stringify(stored) !== JSON.stringify({ saved: true })) throw new Error("SecretStorage store failed")
+    const cleared = await phase("read-clear", extension, workspace, profile, token)
+    if (JSON.stringify(cleared) !== JSON.stringify({ saved: true, cleared: true }))
+      throw new Error("SecretStorage restart verification failed")
     console.log(`Installed SecretStorage acceptance passed: ${basename(extension)}`)
   } finally {
     await clean(temp)

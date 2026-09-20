@@ -10,6 +10,7 @@ import { verify } from "./update-vsix"
 import { UpdateRun } from "./update-run"
 import { Installation } from "./update-installation"
 import { PackageVault } from "./package-vault"
+import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
 const INTERVAL_MS = 6 * 60 * 60 * 1000 // re-check every 6 hours while the window stays open
@@ -277,6 +278,16 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
           return { saved, cleared: (await credentials.get()) === "" }
         })
       : new vscode.Disposable(() => undefined)
+  const phase = process.env.RAYA_UPDATE_SECRET_PHASE
+  const secret = process.env.RAYA_UPDATE_SECRET_TOKEN
+  const output = process.env.RAYA_UPDATE_SECRET_RESULT
+  if (process.env.RAYA_UPDATE_SECRET_ACCEPTANCE === "1" && phase && secret && output)
+    void Promise.resolve(
+      vscode.commands.executeCommand("raya.internal.updateCredentialAcceptance", { action: phase, token: secret }),
+    )
+      .then((result) => writeFile(output, JSON.stringify(result), { flag: "wx" }))
+      .catch(() => writeFile(output, JSON.stringify({ error: true }), { flag: "wx" }))
+      .finally(() => vscode.commands.executeCommand("workbench.action.quit"))
   const first = setTimeout(() => void run(false), FIRST_DELAY_MS)
   const interval = setInterval(() => void run(false), INTERVAL_MS)
   return vscode.Disposable.from(command, token, acceptance, runner, log, {

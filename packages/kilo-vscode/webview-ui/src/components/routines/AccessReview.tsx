@@ -383,7 +383,7 @@ export function AccessReview(props: {
           </Show>
         </fieldset>
       </Show>
-      <Show when={choice() !== "brief" && props.item.dir?.trim() && paths().grants.length === 0}>
+      <Show when={paths().grants.length === 0 && choice() !== "brief" && props.item.dir?.trim()}>
         {(folder) => (
           <p class="routines-hint">File changes stay in {folder()}. Commands aren't confined to this folder.</p>
         )}

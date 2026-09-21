@@ -64,7 +64,7 @@ const dispose = render(
     createComponent(VSCodeProvider, {
       get children() {
         return createComponent(LanguageContext.Provider, {
-          value: { t: (key) => key },
+          value: { locale: () => "en", setLocale: () => {}, userOverride: () => "", t: (key) => key },
           get children() {
             return createComponent(SessionContext.Provider, {
               value: { agents: () => [] },
@@ -246,8 +246,10 @@ try {
       "update_goal_plan",
       "inspect_team",
     ],
+    paths: { version: 1, grants: [] },
     expectedAccess: "unset",
     expectedTools: "unset",
+    expectedPaths: "unset",
   })
   emit({ type: "routineAccessUpdated", requestID: "stale", agentID: "routine", access: "brief" })
   assert.ok(button("Saving access").disabled)
@@ -531,12 +533,14 @@ try {
   emit({ type: "routineState", agents: [agent] })
   button("Edit schedule").click()
   assert.match(root.textContent, /Saving keeps it paused/)
-  assert.equal(button("Save assignment").disabled, true)
-  button("Preview schedule").click()
-  const first = sent.findLast((msg) => msg.type === "routineForecast")
-  assert.deepEqual(first.edit, { agentID: "routine", expectedSchedule: agent.schedule, expectedScheduleVersion: 4 })
+  assert.equal(button("Save assignment").disabled, false)
   const time = root.querySelector('input[type="time"]')
   time.value = "10:00"
+  time.dispatchEvent(new window.Event("input", { bubbles: true }))
+  button("Review schedule").click()
+  const first = sent.findLast((msg) => msg.type === "routineForecast")
+  assert.deepEqual(first.edit, { agentID: "routine", expectedSchedule: agent.schedule, expectedScheduleVersion: 4 })
+  time.value = "11:00"
   time.dispatchEvent(new window.Event("input", { bubbles: true }))
   emit({
     type: "routineForecast",
@@ -545,8 +549,8 @@ try {
     schedule: first.schedule,
     occurrences: [],
   })
-  assert.equal(button("Save assignment").disabled, true)
-  button("Preview schedule").click()
+  assert.equal(button("Review schedule").disabled, false)
+  button("Review schedule").click()
   const second = sent.findLast((msg) => msg.type === "routineForecast")
   emit({
     type: "routineForecast",
@@ -555,8 +559,8 @@ try {
     schedule: second.schedule,
     occurrences: [Date.now() + 3600_000],
   })
-  assert.equal(button("Confirm schedule change").disabled, false)
-  button("Confirm schedule change").click()
+  assert.equal(button("Confirm changes").disabled, false)
+  button("Confirm changes").click()
   const save = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
   assert.equal(save.agentID, "routine")
   assert.equal(save.forecastID, "current")
@@ -573,7 +577,7 @@ try {
   })
   emit({ type: "routineState", agents: [agent] })
   assert.match(root.textContent, /Schedule version changed/)
-  assert.equal(button("Save assignment").disabled, true)
+  assert.equal(button("Review schedule").disabled, false)
   button("Back to routines to reload").click()
   assert.ok(sent.findLast((msg) => msg.type === "routineList"))
   {
@@ -598,7 +602,10 @@ try {
     assert.match(root.textContent, /Existing runs continue/)
     assert.match(root.textContent, /after unfinished work settles/)
     assert.doesNotMatch(root.textContent, /Saving keeps it paused/)
-    button("Preview schedule").click()
+    const activeTime = root.querySelector('input[type="time"]')
+    activeTime.value = "10:30"
+    activeTime.dispatchEvent(new window.Event("input", { bubbles: true }))
+    button("Review schedule").click()
     const preview = sent.findLast((msg) => msg.type === "routineForecast")
     emit({
       type: "routineForecast",
@@ -607,7 +614,7 @@ try {
       schedule: preview.schedule,
       occurrences: [Date.now() + 3600_000],
     })
-    button("Confirm schedule change").click()
+    button("Confirm changes").click()
     const change = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
     assert.equal(change.agentID, "routine")
     assert.equal(
@@ -626,7 +633,7 @@ try {
   }
   {
     button("Edit schedule").click()
-    assert.match(root.textContent, /Earlier reports stay in this conversation/)
+    assert.match(root.textContent, /Earlier reports stay in its conversation/)
     const named = [...root.querySelectorAll("label")]
       .find((item) => item.textContent.trim().startsWith("Name"))
       .querySelector("input")
@@ -665,10 +672,10 @@ try {
   }
   {
     button("Edit schedule").click()
-    assert.match(root.textContent, /Role/)
-    assert.match(root.textContent, /Write folder/)
-    assert.match(root.textContent, /Role, write folder, agent, and plan file/)
-    assert.match(root.textContent, /cannot write in parent folders/)
+    assert.match(root.textContent, /Worker role/)
+    assert.match(root.textContent, /Workspace folder/)
+    assert.match(root.textContent, /result, worker, access, and files/)
+    assert.match(root.textContent, /New files are kept inside this folder/)
     const dest = root.querySelector(".routines-pick input")
     assert.equal(dest.value, "")
     dest.value = "C:/tmp/review-writes"
@@ -695,7 +702,7 @@ try {
     button("Edit schedule").click()
     assert.match(root.textContent, /Agent/)
     assert.match(root.textContent, /Plan file/)
-    assert.match(root.textContent, /agent, and plan file/)
+    assert.match(root.textContent, /Uses the same agent as chat/)
     const file = [...root.querySelectorAll("label")]
       .find((item) => item.textContent.trim().startsWith("Plan file"))
       .querySelector("input")
@@ -743,13 +750,12 @@ try {
     .querySelector("input")
   assert.equal(zone.value, "")
   const before = sent.filter((msg) => msg.type === "routineForecast").length
-  button("Preview schedule").click()
+  button("Save assignment").click()
   assert.equal(sent.filter((msg) => msg.type === "routineForecast").length, before)
-  assert.match(root.textContent, /Choose a timezone/)
-  assert.equal(button("Save assignment").disabled, true)
+  assert.match(root.textContent, /choose the intended timezone/)
   zone.value = "America/Toronto"
   zone.dispatchEvent(new window.Event("input", { bubbles: true }))
-  button("Preview schedule").click()
+  button("Review schedule").click()
   const reviewed = sent.findLast((msg) => msg.type === "routineForecast")
   assert.equal(reviewed.schedule.tz, "America/Toronto")
   assert.deepEqual(reviewed.edit.expectedSchedule, legacy.schedule)
@@ -760,9 +766,10 @@ try {
     schedule: reviewed.schedule,
     occurrences: [Date.now() + 3600_000],
   })
-  assert.match(root.textContent, /Recurring work not already queued is skipped once it is a minute late/)
-  assert.match(root.textContent, /repeated local times can produce two occurrences/)
-  button("Confirm schedule change").click()
+  assert.match(root.textContent, /Ready to save/)
+  assert.match(root.textContent, /Timezone: America\/Toronto/)
+  assert.match(root.textContent, /Raya must be running at the scheduled time/)
+  button("Confirm changes").click()
   const zoned = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
   assert.equal(zoned.forecastID, "zone-reviewed")
   emit({ type: "routineScheduleUpdated", requestID: zoned.requestID, agentID: legacy.id })
@@ -774,12 +781,11 @@ try {
   assert.ok(date.value)
   date.value = ""
   date.dispatchEvent(new window.Event("input", { bubbles: true }))
-  button("Preview schedule").click()
+  button("Review schedule").click()
   assert.equal(sent.filter((msg) => msg.type === "routineForecast").length, count)
-  assert.match(root.textContent, /calendar date and time/)
   date.value = "2027-07-10T09:00"
   date.dispatchEvent(new window.Event("input", { bubbles: true }))
-  button("Preview schedule").click()
+  button("Review schedule").click()
   const third = sent.findLast((msg) => msg.type === "routineForecast")
   assert.equal(third.edit.expectedScheduleVersion, 5)
   assert.deepEqual(third.edit.expectedSchedule, fresh.schedule)
@@ -795,7 +801,7 @@ try {
     timezone: "America/Toronto",
   })
   assert.match(root.textContent, /Timezone: America\/Toronto/)
-  button("Confirm schedule change").click()
+  button("Confirm changes").click()
   const final = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
   emit({ type: "routineScheduleUpdated", requestID: final.requestID, agentID: "another-routine" })
   assert.ok(button("Saving").disabled)
@@ -969,30 +975,22 @@ try {
       ],
     })
     button("Assign").click()
-    button("Accountant starter").click()
-    const money = root.querySelector('.routines-consent input[type="checkbox"]')
-    assert.equal(money.checked, false)
-    assert.match(root.textContent, /Read and report/)
-    money.click()
-    assert.equal(money.checked, true)
-    const previous = [...root.querySelectorAll("label")]
-      .find((item) => item.textContent.trim() === "Required output")
-      .querySelector("textarea")
-    previous.value = "Previous template deliverable"
-    previous.dispatchEvent(new window.Event("input", { bubbles: true }))
     button("Inbox starter").click()
-    assert.equal(
-      [...root.querySelectorAll("label")]
-        .find((item) => item.textContent.trim() === "Required output")
-        .querySelector("textarea").value,
-      "",
-    )
+    assert.match(root.textContent, /Review this routine/)
+    const advanced = root.querySelector("details.routines-advanced")
+    advanced.open = true
+    advanced.dispatchEvent(new window.Event("toggle"))
     const messages = root.querySelector('.routines-consent input[type="checkbox"]')
     assert.equal(messages.checked, false)
     const directory = root.querySelector('input[placeholder="Choose or type a folder"]')
     directory.value = "C:/workspace"
     directory.dispatchEvent(new window.Event("input", { bubbles: true }))
-    button("Preview schedule").click()
+    const count = sent.filter((msg) => msg.type === "routineCreate").length
+    button("Review schedule").click()
+    assert.equal(sent.filter((msg) => msg.type === "routineCreate").length, count)
+    assert.match(root.textContent, /Choose whether to allow the records/)
+    messages.click()
+    button("Review schedule").click()
     const preview = sent.findLast((msg) => msg.type === "routineForecast")
     emit({
       type: "routineForecast",
@@ -1001,46 +999,16 @@ try {
       schedule: { kind: "manual" },
       occurrences: [],
     })
-    assert.equal(button("Confirm and assign").disabled, true)
-    const count = sent.filter((msg) => msg.type === "routineCreate").length
-    root.querySelector("form").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }))
-    assert.equal(sent.filter((msg) => msg.type === "routineCreate").length, count)
-    assert.match(root.textContent, /Choose whether to allow the records/)
-    messages.click()
-    assert.equal(button("Confirm and assign").disabled, true)
-    root.querySelector("form").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }))
-    assert.match(root.textContent, /Describe the required output/)
-    assert.equal(sent.filter((msg) => msg.type === "routineCreate").length, count)
-    const field = (label) =>
-      [...root.querySelectorAll("label")].find((item) => item.textContent.trim() === label)?.querySelector("textarea")
-    const fill = (label, value) => {
-      const input = field(label)
-      assert.ok(input)
-      input.value = value
-      input.dispatchEvent(new window.Event("input", { bubbles: true }))
-    }
-    fill("Required output", "Reply drafts in this conversation")
-    fill("What must be true?", "Every draft identifies its source message")
-    fill("How should Raya verify it?", "Include a message reference for each draft")
-    assert.equal(button("Remove criterion 1").disabled, true)
-    button("Add criterion").click()
-    await Promise.resolve()
-    assert.equal(document.activeElement?.closest("fieldset")?.querySelector("legend")?.textContent, "Criterion 2")
-    assert.equal(button("Confirm and assign").disabled, true)
-    button("Remove criterion 2").click()
-    await Promise.resolve()
-    assert.equal(document.activeElement === button("Add criterion"), true)
-    assert.equal(button("Confirm and assign").disabled, false)
-    button("Confirm and assign").click()
+    assert.equal(button("Assign routine").disabled, false)
+    button("Assign routine").click()
     const creation = sent.findLast((msg) => msg.type === "routineCreate")
     assert.equal(creation.role, "inbox")
     assert.deepEqual(creation.capabilities, ["messages"])
     assert.equal(creation.access, "brief")
     assert.equal(creation.output.destination, "conversation")
-    assert.equal(creation.output.description, "Reply drafts in this conversation")
+    assert.equal(creation.output.description, "A clear report in this worker's conversation.")
     assert.equal(creation.output.criteria.length, 1)
     assert.match(creation.output.criteria[0].id, /^criterion-/)
-    assert.equal(creation.output.criteria[0].verification, "Include a message reference for each draft")
   }
 } catch (err) {
   console.error(err)

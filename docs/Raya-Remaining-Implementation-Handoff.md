@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`. Product source `805fec694b` contains the timeline markers, conversational Routine setup, stable DM composer and conversational-reply completion mode. It is installed as `eden.raya@7.4.23-snapshot+805fec694b.kamil-oseni.1789966256664`, digest `273a8b19750b0a59bcf88b70870b73dd441af75dbd95cb3c4c596afb106b6b73`. Continue only the post-reload timeline and repaired Routine-DM observations below.
+> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`. Product source `50ceba2758` contains the timeline markers, conversational Routine setup, stable DM composer, conversational-reply completion mode and corrected write-folder guidance. It is installed as `eden.raya@7.4.23-snapshot+50ceba2758.kamil-oseni.1789968145116`, digest `f42af59c46d1a560a2412a3b19cb73d285b1a81ae8ed65b7328d239d7ea48cd0`. The complete Routine unit sweep passes 106/106. Continue only the post-reload timeline and repaired Routine-DM observations below.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-21 01:24 America/Toronto - preserve complete Routine verification
+
+Preserve product commit `50ceba2758`. The final legacy production-component fixture now follows the shipped conversational creation and schedule-review flow while retaining its adverse cases: stale forecast rejection after local edits, active-run rescheduling, missing-timezone recovery, invalid one-shot input, access and service consent, conditional updates, and exact creation transport. The bounded Routine sweep passes **106/106 tests across 26 files with 424 assertions**. Do not restore copy or control names from the retired all-fields-at-once creation form.
+
+The fixture caught a product defect in `AccessReview`: its `<Show>` condition ended as a boolean and therefore supplied `true` to the folder callback, rendering **File changes stay in .**. The condition must end with `props.item.dir?.trim()` so the guidance renders the complete chosen folder. The exact folder path is now asserted. Webview types, ESLint, Knip, Kilo-marker, upstream-annotation and diff guards pass; the protected push passed 29 sequential package typechecks.
+
+Installed identity is `eden.raya@7.4.23-snapshot+50ceba2758.kamil-oseni.1789968145116`. Retained VSIX is `raya.f42af59c46d1a560a2412a3b19cb73d285b1a81ae8ed65b7328d239d7ea48cd0.vsix`, **521,434,060 bytes**, SHA-256 `F42AF59C46D1A560A2412A3B19CB73D285B1A81AE8ED65B7328D239D7EA48CD0`. Bundled CLI is **231,684,096 bytes**, SHA-256 `62985FF06B57F79A79C60A68211CACDA17530DFF5EA97D9D22CF2CD5DF3CA436`.
+
+When the owner returns, ask for only this installed observation after a normal reload: reopen **Timestamp Test**, hold a focused draft for more than eight seconds, send `hey`, require a natural reply without **Run blocked**, inspect both compact/hovered times, and confirm one centered `Today <time>` ordinary-chat marker. Record the exact result in both ledgers before closing `FUT-CHAT-01`.
 
 ## ChatGPT 2026-09-21 00:55 America/Toronto - accept repaired Routine conversation behavior
 

@@ -1,10 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `55b021f74a`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `14be0b6d55`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 20:44 America/Toronto - Preserve Contact and Memory Admin probes
+
+Product commit `14be0b6d55` is on `origin/main`. Contact health uses `RayaContactOutbox.listDestinations(1)` and `listMessages(1)` only to prove the durable database reads; returned destinations, addresses, messages and identities are discarded. Memory health uses `MemoryService.status({ ctx })` with the exact `InstanceState.context`; its returned state is also discarded. Preserve the shared connected-state gate, independent failure containment and closed Admin event schema.
+
+Focused service plus real HTTP evidence passes **6 / 73**. The HTTP snapshot now reports real connected health for ten backend rows and keeps the remaining sources Unknown. Typecheck and all scoped guards pass; the protected push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains. Next build one read-only aggregate projection for Goals and Scheduler/claims/staging/queue/inbox. Do not run recovery or mutate claims during a health read. Computer use, Cloud sync and Updates still need authoritative extension-host signals.
 
 ## ChatGPT 2026-09-20 20:38 America/Toronto - Preserve the first four real Admin source probes
 

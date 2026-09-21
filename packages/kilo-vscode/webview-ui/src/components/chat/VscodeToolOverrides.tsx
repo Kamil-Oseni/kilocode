@@ -17,7 +17,7 @@ import { useVSCode } from "../../context/vscode"
 import { editReview } from "./edit-review"
 import { EditReviewChrome } from "./EditReviewChrome"
 import { note, targets, type Kind } from "./review-files"
-import { routineTarget, routineTitle } from "./routine-result"
+import { routineAction, routineTarget, routineTitle } from "./routine-result"
 import {
   TodoProposalCard,
   type TodoProposal,
@@ -438,7 +438,7 @@ function RoutineResultTool(props: ToolProps) {
             size="small"
             onClick={() => window.dispatchEvent(new CustomEvent("raya:open-routines", { detail: value() }))}
           >
-            Open in Routines
+            {routineAction(props.tool)}
           </Button>
         )}
       </Show>

@@ -115,6 +115,25 @@ const COALESCE_SCRIPT = `
     fail("prominent edit must not merge with adjacent tool-only message")
   }
 
+  // Saved Routine results carry direct navigation and must stay visible instead
+  // of disappearing inside the surrounding read/tool bookkeeping group.
+  const withOrganization = {
+    "o1": [tool("o1a", "get_goal")],
+    "o2": [tool("o2a", "create_organization")],
+    "o3": [tool("o3a", "inspect_routines")],
+  }
+  const organizationRows = coalesceToolRows(
+    ["o1", "o2", "o3"].map((id) => ({ id, role: "assistant", time })),
+    (m) => withOrganization[m.id] ?? [],
+  )
+  if (
+    organizationRows.length !== 3 ||
+    organizationRows[1].message.id !== "o2" ||
+    organizationRows[1].parts !== undefined
+  ) {
+    fail("organization result must stay inline between bookkeeping tools")
+  }
+
   console.log("${COALESCE_PASS}")
 `
 

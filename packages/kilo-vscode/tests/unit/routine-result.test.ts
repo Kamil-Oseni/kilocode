@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { routineDestination, routineTarget, routineTitle } from "../../webview-ui/src/components/chat/routine-result"
+import {
+  routineAction,
+  routineDestination,
+  routineTarget,
+  routineTitle,
+} from "../../webview-ui/src/components/chat/routine-result"
 
 const agent = "11111111-2222-4333-8444-555555555555"
 const organization = `org_${"a".repeat(32)}`
@@ -18,6 +23,13 @@ describe("main-chat Routine results", () => {
     ).text()
     expect(source).toContain('const ROUTINE_TOOLS = ["schedule_task",')
     expect(source).toContain("ToolRegistry.register({ name, render: RoutineResultTool })")
+  })
+
+  test("labels each saved destination action", () => {
+    expect(routineAction("create_organization")).toBe("View organization")
+    expect(routineAction("update_organization")).toBe("View organization")
+    expect(routineAction("schedule_task")).toBe("View routine")
+    expect(routineAction("update_routine")).toBe("View routine")
   })
 
   test("opens the exact completed routine or organization", () => {

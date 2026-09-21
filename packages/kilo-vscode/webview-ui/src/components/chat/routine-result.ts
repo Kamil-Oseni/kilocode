@@ -13,6 +13,11 @@ export function routineTitle(tool: string) {
   return "Update routine"
 }
 
+export function routineAction(tool: string) {
+  if (tool === "create_organization" || tool === "update_organization") return "View organization"
+  return "View routine"
+}
+
 export function routineDestination(metadata: Record<string, unknown>) {
   const organizationID = field(metadata.organizationID)
   const agentID = field(metadata.agentID)

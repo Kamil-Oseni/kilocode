@@ -23,6 +23,10 @@ export const PROMINENT_TOOLS = new Set([
   "apply_patch",
   "multiedit",
   "patch",
+  "schedule_task",
+  "create_organization",
+  "update_routine",
+  "update_organization",
 ])
 
 // A renderable part that collapses into an inline tool group. Only meta/read tool

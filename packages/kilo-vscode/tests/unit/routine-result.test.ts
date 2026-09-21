@@ -25,6 +25,17 @@ describe("main-chat Routine results", () => {
     expect(source).toContain("ToolRegistry.register({ name, render: RoutineResultTool })")
   })
 
+  test("keeps the saved destination action outside collapsible tool details", async () => {
+    const source = await Bun.file(
+      new URL("../../webview-ui/src/components/chat/VscodeToolOverrides.tsx", import.meta.url),
+    ).text()
+    const result = source.slice(source.indexOf("function RoutineResultTool"), source.indexOf("function BackgroundProcessTool"))
+    const details = result.indexOf("</BasicTool>")
+    const action = result.indexOf('data-slot="routine-result-action"')
+    expect(details).toBeGreaterThan(0)
+    expect(action).toBeGreaterThan(details)
+  })
+
   test("labels each saved destination action", () => {
     expect(routineAction("create_organization")).toBe("View organization")
     expect(routineAction("update_organization")).toBe("View organization")

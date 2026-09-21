@@ -418,31 +418,35 @@ function expanded(status?: string, open?: boolean) {
 function RoutineResultTool(props: ToolProps) {
   const target = createMemo(() => routineTarget(props.status, props.metadata))
   return (
-    <BasicTool
-      {...props}
-      icon="task"
-      trigger={{ title: routineTitle(props.tool), subtitle: text(props.metadata.requestStatus), args: [] }}
-      defaultOpen={props.defaultOpen ?? true}
-    >
-      <Show when={output(props.output)}>
+    <div data-component="routine-result">
+      <BasicTool
+        {...props}
+        icon="task"
+        trigger={{ title: routineTitle(props.tool), subtitle: text(props.metadata.requestStatus), args: [] }}
+        defaultOpen={props.defaultOpen ?? true}
+      >
+        <Show when={output(props.output)}>
+          {(value) => (
+            <div data-component="tool-output" data-variant="preview">
+              <p>{value()}</p>
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+      <Show when={target()}>
         {(value) => (
-          <div data-component="tool-output" data-variant="preview">
-            <p>{value()}</p>
+          <div data-slot="routine-result-action">
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => window.dispatchEvent(new CustomEvent("raya:open-routines", { detail: value() }))}
+            >
+              {routineAction(props.tool)}
+            </Button>
           </div>
         )}
       </Show>
-      <Show when={target()}>
-        {(value) => (
-          <Button
-            variant="secondary"
-            size="small"
-            onClick={() => window.dispatchEvent(new CustomEvent("raya:open-routines", { detail: value() }))}
-          >
-            {routineAction(props.tool)}
-          </Button>
-        )}
-      </Show>
-    </BasicTool>
+    </div>
   )
 }
 

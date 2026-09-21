@@ -85,6 +85,21 @@ html[data-theme="kilo-vscode"]
 }
 
 /* ============================================
+   Saved Routine / Organization Result
+   Keep the destination action visible even when the tool details are closed.
+   ============================================ */
+
+[data-component="routine-result"] {
+  display: grid;
+  gap: 6px;
+}
+
+[data-slot="routine-result-action"] {
+  display: flex;
+  padding-inline: 6px;
+}
+
+/* ============================================
    Generic / MCP Tool
    ============================================ */
 

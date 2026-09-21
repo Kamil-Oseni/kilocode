@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `14be0b6d55`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `3a21afd7fd`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 20:58 America/Toronto - Preserve durable Goal health
+
+Product commit `3a21afd7fd` is on `origin/main`. The Goals Admin row now uses `RayaGoalHealth.inspect(storage)`, a read-only bounded projection beside the goal domain. Preserve its direct `storage.list(["raya", "goal"])` plus production-schema decoding and its 256-record read cap. Do not replace it with `RayaGoal.get`: that reader prunes expired completed goals, so using it would make System Health mutate state. Do not emit key tails, session IDs, objectives, progress, decode errors or storage paths.
+
+The only exported evidence is `{ goals, active, paused, blocked, failed, incomplete }`, capped again by the Admin schema. A failed decode takes precedence as `goal-state-unreadable`; otherwise blocked records become `goal-blocked`, and an inventory larger than the read cap becomes `goal-inventory-incomplete`. Empty readable storage is Healthy. A namespace-list failure is contained by the registry as `probe-failed`, and disconnected state performs no read. The generated SDK and `AdminView` reason vocabulary must remain synchronized.
+
+Evidence passes **12 / 98** across the real inspector, registry, service and HTTP route. CLI and extension types plus all scoped guards pass; the protected push passed all **29 JavaScript/TypeScript package typechecks** and JetBrains. Continue only `FUT-ADM-01`: add one read-only aggregate for Scheduler/claims/staging/queue/inbox without calling recovery, pulse, cleanup or mutation paths. Then add authoritative extension-host signals for Computer use, Cloud sync and Updates, rerun the Admin browser matrix, and install one coherent low-memory snapshot.
 
 ## ChatGPT 2026-09-20 20:44 America/Toronto - Preserve Contact and Memory Admin probes
 

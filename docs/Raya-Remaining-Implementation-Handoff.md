@@ -1,10 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `489d83e771`; the newest installed package is `eden.raya@7.4.23-snapshot+489d83e771.kamil-oseni.1789955042932`, digest `3e58f22469ac00eab93c75225f422e77be3ed7bfd0861d904c05754b9dd1bc6d`. The open host remains on accepted source `5e9406c963` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified from repository product source `489d83e771` and active installed package `eden.raya@7.4.23-snapshot+489d83e771.kamil-oseni.1789955042932`, digest `3e58f22469ac00eab93c75225f422e77be3ed7bfd0861d904c05754b9dd1bc6d`. Continue only `FUT-CHAT-01`.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 21:54 America/Toronto - FUT-ADM-01 accepted; continue FUT-CHAT-01
+
+The owner reloaded and supplied installed System Health evidence. The package-vault active pointer now exactly matches snapshot source `489d83e771` and digest `3e58f22469ac00eab93c75225f422e77be3ed7bfd0861d904c05754b9dd1bc6d`. The CLI connects, all seventeen ordered rows render, and recent diagnostics populate. Goals correctly reports the actual blocked durable state; Browser correctly reports closed; Computer use, Cloud sync and the unobserved update checker correctly remain Unknown. This closes `FUT-ADM-01` as Verified.
+
+Continue one row only with `FUT-CHAT-01`. Re-audit the existing semantic-time implementation and its automated coverage against ordinary chat, transcript history, Routine DMs and Raya Messenger, then obtain the smallest installed-host observation needed to close it. Do not reopen Admin unless a regression appears.
 
 ## ChatGPT 2026-09-20 21:48 America/Toronto - Accept the repaired Admin snapshot after one reload
 

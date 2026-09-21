@@ -1,10 +1,22 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `20aabe7380`; the installed package is `eden.raya@7.4.23-snapshot+20aabe7380.kamil-oseni.1789947752230`, digest `5faf961b5ae60dc8f2a5ed12e5f6881a863cea6351185fe9ea8438690bb3d0cc`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `91051268f3`; the installed package is `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 20:06 America/Toronto - Preserve verified universal role skills
+
+`FUT-SKILL-01` is Verified in product commit `91051268f3`, which is on `origin/main` and installed. The closing audit found and fixed a real default-path defect: Auto's deny-by-default tool map omitted `skill`, so ordinary language routed through Raya's default agent could not load the already-packaged universal guidance. Preserve Auto's explicit `skill: allow` and the corresponding full-access normalization. This is guidance access only; it grants no files, tools, credentials, spend, publication or external action. Explicit user/per-agent denies remain authoritative, and compaction, title and summary agents must remain denied.
+
+The acceptance gate uses the real Agent and Skill services. It enumerates every user-facing native agent rather than a hand-maintained permission subset and proves each filtered catalog contains `coding`, `designer`, `writing` and `marketing`. That includes the primary modes and the generalist, coder, Engineer, Designer, accountant, reasoner and researcher specialists used by delegated children, Routines and organizations. Designer still imports the parity-locked runtime doctrine from `designer.txt`; do not add another copy. Every selected skill retains its stable source, trust, version, exact-body SHA-256, resolution order and bounded shadow chain.
+
+Preserve the independent role behavior gate: coding protects user intent, repository rules, boundary failures, runtime authority, real implementation tests, truthful observation and Designer loading for UI work; writing protects source truth, author voice, verification and external-send boundaries; marketing requires current evidence, supportable claims, measurable experiments and separate authorization for spend, publication and outreach. Organization-bound starts pin the exact revision/hash-pinned policy beside the task objective, and that policy cannot widen the worker's permission ceiling.
+
+Focused evidence passes **15 / 307**; CLI typecheck, scoped zero-warning Oxlint, Prettier, annotation, Promise-facade and diff guards pass. The protected push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains. Installed receipt: `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`; VSIX `raya.efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469.vsix`, **521,367,215 bytes**, SHA-256 `EFCD42E623FD02AA099AA3C145CC262E3FF4E4A59B8D8746658DA6AD720D2469`; bundled CLI **231,657,472 bytes**, SHA-256 `878BF44A4DE8B95FC78C580CCC5CB89FD9A341884559F229707855098067B7AF`. The open host was not force-reloaded, so its active pointer remains accepted source `dc0910ddc9`.
+
+Do not reopen this row merely to add another optional role pack. Open a new scoped requirement if a future role needs specialized doctrine. Continue with the next autonomously closable row while installed-only timestamp, agent-lifecycle, Todo and other human/external gates remain truthful.
 
 ## ChatGPT 2026-09-20 19:45 America/Toronto - Preserve PR-01 recommended first-run setup
 
@@ -1215,7 +1227,7 @@ Use these sources together:
 | `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |
-| `FUT-SKILL-01` | Universal design, coding, writing, marketing and role skills | Bundled skill discovery and specialist prompts | One versioned resolution/precedence pipeline with provenance and capability-neutral loading |
+| `FUT-SKILL-01` | Universal design, coding, writing, marketing and role skills | **Verified:** four versioned skills, deterministic provenance, all user-facing native agent catalogs, capability-neutral loading and revision-pinned organization policy | Preserve the closed authority boundary and behavior gates; add future role packs only under a separately scoped requirement |
 | `FUT-ADM-01` | Admin health/log console for every Raya subsystem | Redacted diagnostic export and scattered health signals | Read-only typed subsystem registry and disconnected-capable UI |
 | `FUT-RMSG-01` | Messenger-grade Routine chat, info, media, links and agent exchanges | Two-pane inbox, `ChatInfo`, attachments and delegation cards | Project existing data into complete info/media/exchange sections and states |
 | `FUT-RCHAT-01` | Create a routine or organization from main chat after clarification | `schedule_task`, `create_organization` and required `ask_options` descriptions exist | Scripted real-chat acceptance, reviewed provisioning card and deep link |

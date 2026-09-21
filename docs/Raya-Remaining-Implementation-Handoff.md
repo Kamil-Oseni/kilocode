@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`. Product source `1afc572613` contains the timeline markers plus the repaired Routine creation/settings flow and is installed as `eden.raya@7.4.23-snapshot+1afc572613.kamil-oseni.1789961905325`, digest `4b08356d446257339160a2a09aa55c6e36cca3cfb3140864b93626db5125a3e5`. Continue only the normal-reload timeline and first-use Routine-DM observations below.
+> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`. Product source `b31c11ffa6` contains the timeline markers plus conversational Routine setup and is installed as `eden.raya@7.4.23-snapshot+b31c11ffa6.kamil-oseni.1789963352106`, digest `5e9ab1d0fd155c19074c38409454f13ede6d3c3a917bf391ab8606e327100287`. Continue only the normal-reload timeline and first-use Routine-DM observations below.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-21 00:06 America/Toronto - use conversational Routine setup for timestamp acceptance
+
+Preserve product commit `b31c11ffa6`. New Routine creation is a three-step conversation: answer the standing-job question and optional worker name; answer the schedule question; then review worker, job, schedule, reports, workspace and access before saving. Prior answers remain visible, Edit returns to the relevant question without discarding values, and existing Routine correction remains a direct settings form. Safe defaults select the current workspace, conversation reports, Briefer, the chat agent and Read and report access. Less common output, role, agent, access, workspace and plan-file controls live under **Routine settings** at review. The exact schedule forecast is still required before assignment.
+
+The full production Routine suite passes 26/26 with one Chromium worker and a 2 GB heap cap, including conversational creation, editable review, Axe, overflow, light/dark 320/900 px and 200% zoom. Focused schedule/output tests pass 8/8. Typechecks, ESLint, Knip and repository guards pass. Installed snapshot is `eden.raya@7.4.23-snapshot+b31c11ffa6.kamil-oseni.1789963352106`; retained VSIX is **521,429,203 bytes**, SHA-256 `5E9AB1D0FD155C19074C38409454F13EDE6D3C3A917BF391AB8606E327100287`; bundled CLI is **231,677,952 bytes**, SHA-256 `7E05507389428D6D89D1282519A1DB85A720F91DD471734B29D24CA64BC2ACA8`.
+
+After a normal reload: run **Raya: Routines**; choose **Assign**; enter `Reply to my messages so I can verify Routine DM timestamps`; choose **Continue**; retain or change the schedule; choose **Review choices**; inspect the six-choice summary; choose **Review schedule**; inspect **Ready to assign**; choose **Assign routine**. Select that worker, send `Reply with "timestamp received".`, then inspect the compact and hovered time on the user message and worker reply. Also confirm an ordinary transcript shows one centered `Today <time>` landmark. Record both results in both ledgers, mark `FUT-CHAT-01` Verified only if they pass, then advance to `FUT-RMSG-01`.
 
 ## ChatGPT 2026-09-21 00:05 America/Toronto - use the repaired Routine flow for timestamp acceptance
 

@@ -107,6 +107,18 @@ try {
     enabled: true,
     access: "brief",
   }
+  const organization = {
+    version: 1,
+    id: `org_${"a".repeat(32)}`,
+    name: "Acceptance Team",
+    purpose: "Verify durable organization behavior.",
+    revision: 1,
+    archived: false,
+    createdAt: 1,
+    updatedAt: 1,
+    members: [{ agentID: agent.id, role: "Persistence verifier", position: 0 }],
+    delegations: [],
+  }
   const note = {
     id: "rmg_1",
     agentID: agent.id,
@@ -122,6 +134,7 @@ try {
     viewID: request.viewID,
     refreshID: 1,
     agents: [agent],
+    organizations: [organization],
     templates: [],
   })
   emit({
@@ -159,6 +172,15 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(root.querySelector(".routines-thread-avatar").textContent.trim(), "B")
   assert.ok(root.querySelector(".routines-composer"))
+  root.querySelector('[data-routine-organization="org_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]').click()
+  assert.equal(root.querySelector(".routines-thread[role='region']"), null)
+  assert.match(
+    root.querySelector(".routines-organization-overview").textContent,
+    /Verify durable organization behavior/,
+  )
+  assert.ok(button("Edit organization"))
+  root.querySelector(".routines-identity").click()
+  await new Promise((resolve) => setImmediate(resolve))
   const page = sent.findLast((msg) => msg.type === "routineInboxPage")
   assert.equal(page.agentID, agent.id)
   emit({

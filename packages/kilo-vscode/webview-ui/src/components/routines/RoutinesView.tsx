@@ -978,11 +978,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const chooseOrganization = (organizationID?: string) => {
+    choose()
+    setEditingOrganization()
     setOrganization(organizationID)
     rememberOrganization(organizationID)
-    if (!organizationID) return
-    const item = organizations().find((entry) => entry.id === organizationID)
-    if (chosen() && !item?.members.some((member) => member.agentID === chosen())) choose()
   }
 
   const leaveOrganization = () => {

@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified from repository product source `489d83e771` and active installed package `eden.raya@7.4.23-snapshot+489d83e771.kamil-oseni.1789955042932`, digest `3e58f22469ac00eab93c75225f422e77be3ed7bfd0861d904c05754b9dd1bc6d`. Continue only `FUT-CHAT-01`.
+> **Goal status: ACTIVE — implementation is continuing.** `FUT-ADM-01` is Verified. `FUT-CHAT-01` is source-complete at `280f0fe75a`, pushed and installed as `eden.raya@7.4.23-snapshot+280f0fe75a.kamil-oseni.1789956968286`, digest `7429dbb038d62693b1c6391d60c57e31d04c71599e4d09e5243ebc5155cbcd0f`. The accepted running host remains `489d83e771` until one normal reload; continue only the two installed timestamp observations below.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 22:18 America/Toronto - close FUT-CHAT-01 after two installed observations
+
+Product commit `280f0fe75a` is on `origin/main` and installed. Preserve `utils/message-time.ts` as the validator/formatter contract and `MessageTime.tsx` as the ordinary chat primitive. Server-authored `time.created` wins, valid persisted `createdAt` is the legacy fallback, a valid Messenger ULID supplies its exact millisecond, and missing, malformed or out-of-range persisted data renders no time. Every renderer must keep the compact localized label, exact ISO `datetime`, full localized title and matching accessible label tied to the same instant.
+
+The current production-component gate visits ordinary conversation, transcript, Routine DM and Raya Messenger routes in light and dark at 320 px and 760 px. It passes **4/4** with exact ISO and invalid-identity checks, no overflow and no Axe violations. The matching unit suite passes **5 / 18**. Messenger's timestamp footer must retain its scoped compact layout and full foreground opacity; the audit found that the generic chat metadata rule plus footer opacity reduced dark-fixture contrast to 1.42:1. Extension/webview typechecks, ESLint, Knip, targeted Prettier, the Kilo-marker guard and diff check pass. The protected push passed all **29 JavaScript/TypeScript package typechecks** sequentially.
+
+Installed package is `eden.raya@7.4.23-snapshot+280f0fe75a.kamil-oseni.1789956968286`. Retained VSIX `raya.7429dbb038d62693b1c6391d60c57e31d04c71599e4d09e5243ebc5155cbcd0f.vsix` is **521,392,739 bytes**, SHA-256 `7429DBB038D62693B1C6391D60C57E31D04C71599E4D09E5243EBC5155CBCD0F`. The low-memory workflow passed typechecks, lint, production bundling and packaging and removed the superseded staged snapshot/extension while preserving one rollback package.
+
+To close the row, reload VS Code normally. In one persisted ordinary Raya chat, confirm both a user message and Raya response show plausible compact local clocks and that hovering each shows a full date, time and timezone. Then open one persisted Routine DM and confirm its message clock and hover detail behave the same way. Send the two screenshots or report the exact visible and hovered values. If both pass, update both ledgers, change the canonical row to Verified and advance to `FUT-RMSG-01`; if either fails, repair only that production renderer and repeat its focused gate. Raya Messenger itself needs no owner account for this row because the real production `MessageBubble` already passes the Chromium matrix.
 
 ## ChatGPT 2026-09-20 21:54 America/Toronto - FUT-ADM-01 accepted; continue FUT-CHAT-01
 

@@ -2,7 +2,11 @@ import { expect, test } from "bun:test"
 import { eq, sql } from "drizzle-orm"
 import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { RayaRoutineOrganizationRevisionTable as Revision } from "@opencode-ai/core/kilocode/routine.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { RayaTask } from "@/kilocode/task"
 import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -233,6 +237,26 @@ test("organization budget cannot undercut committed work and zero clears it", as
         ],
         delegations: [{ senderID: chief.id, recipientID: books.id }],
       })
+      const project = ProjectV2.ID.make("project_organization_budget")
+      yield* database.db.insert(ProjectTable).values({
+        id: project,
+        worktree: AbsolutePath.make("/workspace"),
+        sandboxes: [],
+        time_created: 1,
+        time_updated: 1,
+      })
+      yield* database.db.insert(SessionTable).values({
+        id: SessionID.make("ses_organization_direct_cost"),
+        project_id: project,
+        slug: "organization-direct-cost",
+        directory: AbsolutePath.make("/workspace"),
+        title: "Organization direct cost",
+        version: "test",
+        cost: 3,
+        metadata: { rayaRoutine: { organizationID: item.id } },
+        time_created: 1,
+        time_updated: 1,
+      })
       const work = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
       yield* work.admit(
         {
@@ -247,10 +271,10 @@ test("organization budget cannot undercut committed work and zero clears it", as
         chief,
         books,
       )
-      const low = yield* organizations.update(item.id, { expectedRevision: 1, budget: 11 }).pipe(Effect.flip)
+      const low = yield* organizations.update(item.id, { expectedRevision: 1, budget: 14 }).pipe(Effect.flip)
       expect(low.message).toContain("cannot be lower than its current committed model cost")
-      const exact = yield* organizations.update(item.id, { expectedRevision: 1, budget: 12 })
-      expect(exact).toMatchObject({ revision: 2, budget: 12 })
+      const exact = yield* organizations.update(item.id, { expectedRevision: 1, budget: 15 })
+      expect(exact).toMatchObject({ revision: 2, budget: 15 })
       const cleared = yield* organizations.update(item.id, { expectedRevision: 2, budget: 0 })
       expect(cleared).toMatchObject({ revision: 3 })
       expect(cleared.budget).toBeUndefined()

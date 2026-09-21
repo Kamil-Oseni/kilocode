@@ -1,13 +1,12 @@
 import { and, desc, eq, lt, or, sql } from "drizzle-orm"
 import { Effect, Exit, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
-import { SessionTable } from "@opencode-ai/core/session/sql"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineMessageTable as Message,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
-import { commitment } from "./commitment"
+import { commitment, direct } from "./commitment"
 import { Artifact, artifacts } from "./delegation"
 import { AttachmentMeta, Clip, Record as MessageRecord } from "./inbox"
 
@@ -394,23 +393,7 @@ export namespace RayaTaskInfo {
         .all()
         .pipe(Effect.orDie)
       const committedCost = commitment(all)
-      const standalone = yield* db
-        .select({
-          cost: sql<number>`coalesce(sum(${SessionTable.cost}), 0)`,
-        })
-        .from(SessionTable)
-        .where(
-          and(
-            sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.organizationID') = ${organizationID}`,
-            sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.delegationID') is null`,
-          ),
-        )
-        .get()
-        .pipe(Effect.orDie)
-      const standaloneCost =
-        typeof standalone?.cost === "number" && Number.isFinite(standalone.cost) && standalone.cost >= 0
-          ? standalone.cost
-          : 0
+      const standaloneCost = yield* direct(db, organizationID).pipe(Effect.orDie)
       const summary = {
         total: all.length,
         active: all.filter((row) => active.has(row.state)).length,

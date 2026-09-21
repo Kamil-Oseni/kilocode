@@ -1,3 +1,8 @@
+import { and, sql } from "drizzle-orm"
+import { Effect } from "effect"
+import type { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+
 type Row = {
   id: string
   parent_id: string | null
@@ -28,4 +33,26 @@ export function commitment(rows: readonly Row[]) {
   const roots = rows.filter((row) => !row.parent_id || !index.has(row.parent_id))
   const rooted = roots.reduce((total, row) => total + reserve(row), 0)
   return rows.reduce((total, row) => total + (seen.has(row.id) ? 0 : reserve(row)), rooted)
+}
+
+type Ledger = Pick<Database.Interface["db"], "select">
+
+export function direct(db: Ledger, organizationID: string) {
+  return db
+    .select({
+      cost: sql<number>`coalesce(sum(${SessionTable.cost}), 0)`,
+    })
+    .from(SessionTable)
+    .where(
+      and(
+        sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.organizationID') = ${organizationID}`,
+        sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.delegationID') is null`,
+      ),
+    )
+    .get()
+    .pipe(
+      Effect.map((row) =>
+        typeof row?.cost === "number" && Number.isFinite(row.cost) && row.cost >= 0 ? row.cost : 0,
+      ),
+    )
 }

@@ -8,7 +8,7 @@ import {
   RayaRoutineOrganizationTable as Organization,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
-import { commitment } from "./commitment"
+import { commitment, direct } from "./commitment"
 import { RayaTask } from "./index"
 import { RayaTaskInbox, type Publish } from "./inbox"
 
@@ -592,7 +592,8 @@ export namespace RayaTaskDelegation {
                     .where(eq(Delegation.organization_id, organization.id))
                     .all()
                     .pipe(Effect.orDie)
-                  if (commitment(rows) + value.budget > owner.budget)
+                  const spent = yield* direct(tx, organization.id).pipe(Effect.orDie)
+                  if (commitment(rows) + spent + value.budget > owner.budget)
                     return yield* new Invalid({
                       message: "This request exceeds the organization's remaining model-cost budget.",
                     })

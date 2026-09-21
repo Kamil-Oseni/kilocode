@@ -2,7 +2,11 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { Context, Effect, Exit, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { RayaRoutineOrganizationTable as Organization } from "@opencode-ai/core/kilocode/routine.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
 import {
   RayaTaskDelegation,
@@ -146,6 +150,26 @@ test("organization budget serializes independent work admission and releases unu
           time_updated: 1,
         })
         .run()
+      const project = ProjectV2.ID.make("project_delegation_budget")
+      yield* database.db.insert(ProjectTable).values({
+        id: project,
+        worktree: AbsolutePath.make("/workspace"),
+        sandboxes: [],
+        time_created: 1,
+        time_updated: 1,
+      })
+      yield* database.db.insert(SessionTable).values({
+        id: SessionID.make("ses_delegation_direct_cost"),
+        project_id: project,
+        slug: "delegation-direct-cost",
+        directory: AbsolutePath.make("/workspace"),
+        title: "Delegation direct cost",
+        version: "test",
+        cost: 4,
+        metadata: { rayaRoutine: { organizationID: id } },
+        time_created: 1,
+        time_updated: 1,
+      })
       const policy = () => Effect.succeed({ id, name: "Website Builders", revision: 1, budget: 20 })
       const store = RayaTaskDelegation.make(database, policy, () => Effect.succeed(true))
       const chief = agent("chief", "generalist")
@@ -194,12 +218,12 @@ test("organization budget serializes independent work admission and releases unu
         request("org_budget_released", chief.id, books.id, {
           organizationID: id,
           organizationRevision: 1,
-          budget: 15,
+          budget: 11,
         }),
         chief,
         books,
       )
-      expect(last.record.budget).toBe(15)
+      expect(last.record.budget).toBe(11)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

@@ -2,4 +2,4 @@
 "raya": patch
 ---
 
-Show truthful, localized semantic timestamps in Raya Messenger conversations.
+Show truthful, localized, accessible timestamps in Raya Messenger conversations.

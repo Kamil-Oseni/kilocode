@@ -575,12 +575,21 @@
 
 .kiloclaw-msg-own .kiloclaw-msg-footer {
   color: var(--vscode-button-foreground);
-  opacity: 0.7;
 }
 
 .kiloclaw-msg-bot .kiloclaw-msg-footer,
 .kiloclaw-msg-other .kiloclaw-msg-footer {
   color: var(--vscode-descriptionForeground);
+}
+
+.kiloclaw-msg-footer [data-component="message-time"] {
+  display: inline;
+  width: auto;
+  margin: 0;
+  align-self: auto;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .kiloclaw-msg-deleted {

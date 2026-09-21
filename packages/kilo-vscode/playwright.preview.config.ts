@@ -5,6 +5,7 @@ export default defineConfig({
   testMatch: [
     "context-provenance.browser.ts",
     "memory-preview.browser.ts",
+    "message-time.browser.ts",
     "routines-preview.browser.ts",
     "surfaces-preview.browser.ts",
   ],

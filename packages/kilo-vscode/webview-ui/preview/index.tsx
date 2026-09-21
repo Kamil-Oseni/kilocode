@@ -13,9 +13,11 @@ import "../src/styles/chat-layout.css" // raya_change - preview conversation lan
 import "../src/styles/memory-provenance.css"
 import "../src/styles/routines.css"
 import "../src/styles/chat.css"
+import "../kiloclaw/kiloclaw.css"
 import "../agent-manager/agent-manager.css"
 import "./preview.css"
 import { RoutinesPreview } from "./routines"
+import { MessengerPreview } from "./messenger"
 import {
   BackgroundAgentsPreview,
   AgentManagerSubagentsPreview,
@@ -78,6 +80,7 @@ type PvState =
   | "child-viewer"
   | "agent-manager-subagents"
   | "routines"
+  | "messenger"
   | "result"
   | "recovery"
 type Theme = "light" | "dark"
@@ -116,6 +119,7 @@ const states: PvState[] = [
   "child-viewer",
   "agent-manager-subagents",
   "routines",
+  "messenger",
   "result",
   "recovery",
 ]
@@ -463,6 +467,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "routines"}>
         <RoutinesPreview />
+      </Show>
+      <Show when={props.state === "messenger"}>
+        <MessengerPreview />
       </Show>
       <Show when={banners.has(props.state)}>
         <GoalBannerView {...propsFor(props.state)} />

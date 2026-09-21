@@ -68,6 +68,7 @@ body {
 .pv-page--focused:has([data-fixture$="-background-agents"]),
 .pv-page--focused:has([data-fixture$="-child-viewer"]),
 .pv-page--focused:has([data-fixture$="-agent-manager-subagents"]),
+.pv-page--focused:has([data-fixture$="-messenger"]),
 .pv-page--focused:has([data-fixture$="-recovery"]),
 .pv-page--focused:has([data-fixture$="-result"]),
 .pv-page--focused:has([data-fixture$="-editing"]) {
@@ -174,6 +175,12 @@ body {
   --raya-accent-strong: var(--raya-primary-strong);
   --surface-brand-base: #45557a;
   --surface-brand-hover: #303b54;
+  --vscode-button-background: var(--raya-primary);
+  --vscode-button-foreground: var(--raya-on-primary);
+  --vscode-descriptionForeground: var(--text-weak);
+  --vscode-editor-background: var(--surface-base);
+  --vscode-editorWidget-background: var(--surface-raised-base);
+  --vscode-foreground: var(--text-base);
   color: var(--text-base);
 }
 
@@ -210,6 +217,19 @@ body {
   --raya-primary-ghost: color-mix(in srgb, var(--raya-primary) 9%, transparent);
   --raya-accent: var(--raya-primary);
   --raya-accent-strong: var(--raya-primary-strong);
+  --vscode-button-background: var(--raya-primary);
+  --vscode-button-foreground: var(--raya-on-primary);
+  --vscode-descriptionForeground: var(--text-weak);
+  --vscode-editor-background: var(--surface-base);
+  --vscode-editorWidget-background: var(--surface-raised-base);
+  --vscode-foreground: var(--text-base);
   color: var(--text-base);
+}
+
+.pv-messenger {
+  display: grid;
+  gap: var(--raya-space-8);
+  max-width: 48rem;
+  margin: 0 auto;
 }
 /* raya_change end */

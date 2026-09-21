@@ -12,7 +12,6 @@ import { RayaAdminLog } from "@/kilocode/admin/log"
 import { layer as requestIDLayer } from "./request-id"
 
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
-import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas handler dependency
 import { agentBuilderHandlers } from "./handlers/agent-builder"
 import { anacondaDesktopHandlers } from "./handlers/anaconda-desktop"
 import { backgroundProcessHandlers } from "./handlers/background-process"
@@ -53,7 +52,7 @@ export const provide = Layer.provide([
   instanceReloadHandlers,
   interactiveTerminalHandlers,
   kiloGatewayHandlers,
-  kilocodeHandlers.pipe(Layer.provide(Canvas.defaultLayer)), // raya_change - Milestone E canvas startup wiring
+  kilocodeHandlers,
   memoryHandlers,
   networkHandlers,
   remoteHandlers,

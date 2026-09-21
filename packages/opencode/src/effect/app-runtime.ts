@@ -58,6 +58,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Notebook } from "@/kilocode/notebook/service"
 import { AgentManager } from "@/kilocode/agent-manager/service"
 import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
+import { Canvas } from "@/kilocode/canvas/service" // kilocode_change // raya_change - Milestone E canvas bridge
 // kilocode_change end
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -80,6 +81,7 @@ const kilo = LayerNode.group([
   AgentManager.node,
   Notebook.node,
   Browser.node, // kilocode_change // raya_change - Milestone F browser bridge
+  Canvas.node, // kilocode_change // raya_change - Milestone E canvas bridge
   memory,
 ])
 // raya_change end

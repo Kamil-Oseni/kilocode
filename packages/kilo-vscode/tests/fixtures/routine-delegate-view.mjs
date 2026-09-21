@@ -65,7 +65,7 @@ const dispose = render(
     createComponent(VSCodeProvider, {
       get children() {
         return createComponent(LanguageContext.Provider, {
-          value: { t: (key) => key },
+          value: { locale: () => "en", setLocale: () => {}, userOverride: () => "", t: (key) => key },
           get children() {
             return createComponent(SessionContext.Provider, {
               value: { agents: () => [] },

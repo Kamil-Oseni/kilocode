@@ -13,6 +13,7 @@ import delegation from "@opencode-ai/core/database/migration/20260912231306_kilo
 import policy from "@opencode-ai/core/database/migration/20260915143138_kilocode-routine-organization-policy"
 import draft from "@opencode-ai/core/database/migration/20260916221534_kilocode-routine-draft-revision"
 import budget from "@opencode-ai/core/database/migration/20260917021944_kilocode-routine-organization-budget"
+import artifacts from "@opencode-ai/core/database/migration/20260921060802_kilocode-routine-delegation-artifacts"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -317,6 +318,34 @@ test("draft revision migration preserves existing routine drafts and starts them
       })
       yield* DatabaseMigration.applyOnly(db, [draft])
       expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${draft.id}`)).toEqual({ count: 1 })
+    }),
+  )
+})
+
+test("delegation artifact migration preserves queued work and adds verified handoffs", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === artifacts.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* db.run(
+        sql`INSERT INTO raya_routine_delegation (id, source, sender_id, recipient_id, objective, depth, state, time_created, time_updated) VALUES ('request', 'source', 'design', 'frontend', 'Build the approved design', 1, 'queued', 1, 1)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [artifacts])
+      expect(yield* db.get(sql`SELECT state, artifacts FROM raya_routine_delegation WHERE id = 'request'`)).toEqual({
+        state: "queued",
+        artifacts: null,
+      })
+      const saved = JSON.stringify([{ path: "/approved.fig", sha256: "d".repeat(64), tool: "write", callID: "call" }])
+      yield* db.run(sql`UPDATE raya_routine_delegation SET artifacts = ${saved} WHERE id = 'request'`)
+      expect(yield* db.get(sql`SELECT artifacts FROM raya_routine_delegation WHERE id = 'request'`)).toEqual({
+        artifacts: saved,
+      })
+      yield* DatabaseMigration.applyOnly(db, [artifacts])
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${artifacts.id}`)).toEqual({
+        count: 1,
+      })
     }),
   )
 })

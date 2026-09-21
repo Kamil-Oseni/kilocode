@@ -5,6 +5,7 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
 import { OrganizationAssignment, type Follow } from "./OrganizationAssignment"
+import { ArtifactList, validArtifacts } from "./ArtifactList"
 
 type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
 type Summary = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["summary"]
@@ -42,14 +43,18 @@ function optional(row: Record<string, unknown>, keys: string[]) {
   return keys.every((key) => row[key] === undefined || typeof row[key] === "string")
 }
 
+function cost(value: unknown) {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0)
+}
+
 function valid(value: unknown): value is Work {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
   if (!person(row.sender) || !person(row.recipient)) return false
   if (!optional(row, ["organizationName", "expected", "context", "parentID", "parentRunID", "response", "reason"]))
     return false
-  if (row.cost !== undefined && (typeof row.cost !== "number" || !Number.isFinite(row.cost) || row.cost < 0))
-    return false
+  if (!cost(row.cost)) return false
+  if (!validArtifacts(row.artifacts)) return false
   return (
     typeof row.id === "string" &&
     typeof row.organizationID === "string" &&
@@ -306,7 +311,9 @@ export const OrganizationActivity: Component<{
       if (phase() !== "all" && item.state !== phase()) return false
       if (worker() !== "all" && item.sender.id !== worker() && item.recipient.id !== worker()) return false
       if (!term) return true
-      return [item.objective, item.response, item.reason].some((value) => value?.toLowerCase().includes(term))
+      return [item.objective, item.response, item.reason, ...(item.artifacts ?? []).map((file) => file.path)].some(
+        (value) => value?.toLowerCase().includes(term),
+      )
     })
   })
   const clear = () => {
@@ -488,6 +495,7 @@ export const OrganizationActivity: Component<{
                   </span>
                 </div>
                 <p class="routines-organization-work-objective">{item.objective}</p>
+                <ArtifactList items={item.artifacts} />
                 <Show when={item.response}>
                   <p class="routines-organization-work-result">{item.response}</p>
                 </Show>

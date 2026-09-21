@@ -628,6 +628,7 @@ export namespace RayaTaskRunner {
         context: taken.context,
         deadline: taken.deadline,
         budget: taken.budget,
+        artifacts: taken.artifacts,
       })
       const run = yield* fire(recipient.id, undefined, note, {
         follow: false,

@@ -55,5 +55,6 @@ export const migrations = (
     import("./migration/20260916221534_kilocode-routine-draft-revision"), // kilocode_change
     import("./migration/20260917021944_kilocode-routine-organization-budget"), // kilocode_change
     import("./migration/20260917035533_kilocode-contact-outbox"), // kilocode_change
+    import("./migration/20260921060802_kilocode-routine-delegation-artifacts"), // kilocode_change
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

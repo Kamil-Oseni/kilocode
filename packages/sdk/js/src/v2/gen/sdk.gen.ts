@@ -9633,6 +9633,12 @@ export class Delegate extends HeyApiClient {
       context?: string
       deadline?: number
       budget?: number
+      artifacts?: Array<{
+        path: string
+        sha256: string
+        tool: string
+        callID: string
+      }>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -9656,6 +9662,7 @@ export class Delegate extends HeyApiClient {
             { in: "body", key: "context" },
             { in: "body", key: "deadline" },
             { in: "body", key: "budget" },
+            { in: "body", key: "artifacts" },
           ],
         },
       ],

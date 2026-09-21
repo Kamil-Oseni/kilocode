@@ -23936,6 +23936,12 @@ export type KilocodeRoutineOrganizationActivityResponses = {
       cost?: number
       occurrenceID?: string
       sessionID?: string
+      artifacts?: Array<{
+        path: string
+        sha256: string
+        tool: string
+        callID: string
+      }>
     }>
     summary: {
       total: number
@@ -24322,6 +24328,12 @@ export type KilocodeRoutineInboxInfoResponses = {
           cost?: number
           occurrenceID?: string
           sessionID?: string
+          artifacts?: Array<{
+            path: string
+            sha256: string
+            tool: string
+            callID: string
+          }>
         }>
         next?: string
       }
@@ -24485,6 +24497,12 @@ export type KilocodeRoutineDelegateCreateData = {
     context?: string
     deadline?: number
     budget?: number
+    artifacts?: Array<{
+      path: string
+      sha256: string
+      tool: string
+      callID: string
+    }>
   }
   path: {
     agentID: string
@@ -24538,6 +24556,12 @@ export type KilocodeRoutineDelegateCreateResponses = {
     state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
     childRunID?: string
     sessionID?: string
+    artifacts?: Array<{
+      path: string
+      sha256: string
+      tool: string
+      callID: string
+    }>
     response?: string
     cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     reason?: string
@@ -24598,6 +24622,12 @@ export type KilocodeRoutineDelegateGetResponses = {
     state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
     childRunID?: string
     sessionID?: string
+    artifacts?: Array<{
+      path: string
+      sha256: string
+      tool: string
+      callID: string
+    }>
     response?: string
     cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     reason?: string
@@ -24660,6 +24690,12 @@ export type KilocodeRoutineDelegateChainResponses = {
       state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
       childRunID?: string
       sessionID?: string
+      artifacts?: Array<{
+        path: string
+        sha256: string
+        tool: string
+        callID: string
+      }>
       response?: string
       cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       reason?: string
@@ -24685,6 +24721,12 @@ export type KilocodeRoutineDelegateChainResponses = {
       state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
       childRunID?: string
       sessionID?: string
+      artifacts?: Array<{
+        path: string
+        sha256: string
+        tool: string
+        callID: string
+      }>
       response?: string
       cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       reason?: string
@@ -24710,6 +24752,12 @@ export type KilocodeRoutineDelegateChainResponses = {
       state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
       childRunID?: string
       sessionID?: string
+      artifacts?: Array<{
+        path: string
+        sha256: string
+        tool: string
+        callID: string
+      }>
       response?: string
       cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       reason?: string
@@ -24772,6 +24820,12 @@ export type KilocodeRoutineDelegateCancelResponses = {
     state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
     childRunID?: string
     sessionID?: string
+    artifacts?: Array<{
+      path: string
+      sha256: string
+      tool: string
+      callID: string
+    }>
     response?: string
     cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     reason?: string

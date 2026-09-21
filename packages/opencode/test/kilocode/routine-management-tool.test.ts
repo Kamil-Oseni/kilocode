@@ -10,6 +10,7 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
+import * as Artifact from "@/kilocode/goal/artifact"
 import { RayaTask } from "@/kilocode/task"
 import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -892,6 +893,7 @@ it.live(
       Effect.gen(function* () {
         const storage = yield* Storage.Service
         const database = yield* Database.Service
+        const fs = yield* FSUtil.Service
         const tasks = RayaTask.make({ storage, database })
         const chief = yield* tasks.create({
           name: "Chief of Staff",
@@ -971,6 +973,14 @@ it.live(
           scheduleVersion: 1,
           trigger: { kind: "manual" },
         })
+        const file = path.join(directory, "approved-design.md")
+        yield* fs.writeFileString(file, "# Approved design\n\nUse the final desktop layout.")
+        const revision = yield* Artifact.capture(fs, file)
+        if (revision.status !== "captured") return yield* Effect.die(new Error("artifact revision was not captured"))
+        const spoofed = path.join(directory, "spoofed.md")
+        yield* fs.writeFileString(spoofed, "This receipt came from a non-file tool.")
+        const fake = yield* Artifact.capture(fs, spoofed)
+        if (fake.status !== "captured") return yield* Effect.die(new Error("spoofed revision was not captured"))
         const workerSessions = {
           ...sessions,
           get: () =>
@@ -985,6 +995,26 @@ it.live(
                 },
               },
             } as never),
+          messages: () =>
+            Effect.succeed([
+              {
+                info: { role: "assistant" },
+                parts: [
+                  {
+                    type: "tool",
+                    tool: "write",
+                    callID: "call_approved_design",
+                    state: { status: "completed", metadata: { rayaRevision: revision } },
+                  },
+                  {
+                    type: "tool",
+                    tool: "bash",
+                    callID: "call_spoofed_revision",
+                    state: { status: "completed", metadata: { rayaRevision: fake } },
+                  },
+                ],
+              },
+            ] as never),
         }
         const tools = routineManagementTools({ database, storage, sessions: workerSessions })
         const team = yield* tools.inspectTeam
@@ -1052,6 +1082,7 @@ it.live(
           context: "Use the approved design in the current request",
           deadline: Date.now() + 86_400_000,
           budget: 500,
+          artifacts: [file],
         }
         const assigned = yield* delegate.execute(params, context("delegate-build"))
         expect(assigned).toMatchObject({
@@ -1079,9 +1110,38 @@ it.live(
           context: params.context,
           deadline: params.deadline,
           budget: params.budget,
+          artifacts: [
+            {
+              path: file,
+              sha256: revision.sha256,
+              tool: "write",
+              callID: "call_approved_design",
+            },
+          ],
           state: "queued",
         })
         expect(yield* delegate.execute(params, context("delegate-build"))).toEqual(assigned)
+        expect(yield* errands.byRun(runID)).toHaveLength(1)
+
+        const missing = yield* delegate.execute(
+          { ...params, objective: "Use a missing receipt", artifacts: [path.join(directory, "not-created.md")] },
+          context("delegate-missing-artifact"),
+        )
+        expect(missing.title).toBe("Work delegation needs review")
+        expect(missing.output).toContain("Only files created or changed in this worker run")
+        const spoof = yield* delegate.execute(
+          { ...params, objective: "Use an untrusted receipt", artifacts: [spoofed] },
+          context("delegate-spoofed-artifact"),
+        )
+        expect(spoof.title).toBe("Work delegation needs review")
+        expect(spoof.output).toContain("Only files created or changed in this worker run")
+        yield* fs.writeFileString(file, "# Changed after capture")
+        const changed = yield* delegate.execute(
+          { ...params, objective: "Use a stale design" },
+          context("delegate-stale-artifact"),
+        )
+        expect(changed.title).toBe("Work delegation needs review")
+        expect(changed.output).toContain("changed after Raya captured it")
         expect(yield* errands.byRun(runID)).toHaveLength(1)
 
         const cycle = yield* delegate.execute(

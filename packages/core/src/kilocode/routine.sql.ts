@@ -116,6 +116,7 @@ export const RayaRoutineDelegationTable = sqliteTable(
     }).notNull(),
     child_run_id: text(),
     session_id: text(),
+    artifacts: text(),
     response: text(),
     cost: real(),
     reason: text(),

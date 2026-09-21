@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or } from "drizzle-orm"
 import { createHash } from "node:crypto"
-import { Effect, Schema } from "effect"
+import { isDeepStrictEqual } from "node:util"
+import { Effect, Option, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import {
   RayaRoutineDelegationTable as Delegation,
@@ -17,6 +18,20 @@ const State = Schema.Literals(["queued", "accepted", "running", "needs_input", "
 const live = ["queued", "accepted", "running", "needs_input"] as const
 const DEPTH = 3
 const FAN = 4
+
+export const Artifact = Schema.Struct({
+  path: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4096)),
+  sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  tool: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(128)),
+  callID: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(128)),
+})
+export const Artifacts = Schema.Array(Artifact).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(16),
+  Schema.makeFilter((items) =>
+    new Set(items.map((item) => item.path)).size === items.length ? undefined : "Artifact paths must be unique.",
+  ),
+)
 
 export const Request = Schema.Struct({
   source: token,
@@ -35,6 +50,7 @@ export const Request = Schema.Struct({
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  artifacts: Schema.optional(Artifacts),
 }).check(
   Schema.makeFilter((value) =>
     (value.organizationID === undefined) === (value.organizationRevision === undefined)
@@ -63,6 +79,7 @@ export const Record = Schema.Struct({
   state: State,
   childRunID: Schema.optional(token),
   sessionID: Schema.optional(SessionID),
+  artifacts: Schema.optional(Artifacts),
   response: Schema.optional(Schema.String),
   cost: Schema.optional(Schema.Number),
   reason: Schema.optional(Schema.String),
@@ -78,6 +95,14 @@ export const Lineage = Schema.Struct({
 export type Request = typeof Request.Type
 export type Record = typeof Record.Type
 export type Lineage = typeof Lineage.Type
+export type Artifact = typeof Artifact.Type
+
+export function artifacts(raw: string | null) {
+  if (!raw) return undefined
+  return Option.getOrUndefined(
+    Option.flatMap(Option.liftThrowable(JSON.parse)(raw), Schema.decodeUnknownOption(Artifacts)),
+  )
+}
 
 export class Conflict extends Schema.TaggedErrorClass<Conflict>()("RayaTaskDelegation.Conflict", {
   message: Schema.String,
@@ -141,6 +166,9 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
     request.context ? `Permitted context:\n${request.context}` : undefined,
     request.deadline !== undefined ? `Deadline: ${new Date(request.deadline).toISOString()}` : undefined,
     request.budget !== undefined ? `Maximum model cost: $${request.budget}` : undefined,
+    request.artifacts?.length
+      ? `Verified input files:\n${request.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`).join("\n")}`
+      : undefined,
     `Your standing assignment:\n${recipient.objective}`,
     "Do not invent a worker reply that has not arrived. Attribute findings to this request.",
   ]
@@ -149,6 +177,7 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
 }
 
 function decode(row: typeof Delegation.$inferSelect): Record {
+  const files = artifacts(row.artifacts)
   return {
     id: row.id,
     source: row.source,
@@ -170,6 +199,7 @@ function decode(row: typeof Delegation.$inferSelect): Record {
     ...(row.budget !== null ? { budget: row.budget } : {}),
     ...(row.child_run_id ? { childRunID: row.child_run_id } : {}),
     ...(row.session_id ? { sessionID: SessionID.make(row.session_id) } : {}),
+    ...(files ? { artifacts: files } : {}),
     ...(row.response ? { response: row.response } : {}),
     ...(row.cost !== null ? { cost: row.cost } : {}),
     ...(row.reason ? { reason: row.reason } : {}),
@@ -188,7 +218,8 @@ function same(saved: Record, value: Request) {
     saved.organizationID === value.organizationID &&
     saved.organizationRevision === value.organizationRevision &&
     saved.deadline === value.deadline &&
-    saved.budget === value.budget
+    saved.budget === value.budget &&
+    isDeepStrictEqual(saved.artifacts, value.artifacts)
   )
 }
 
@@ -202,10 +233,13 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
   const provenance = row.organizationName
     ? `${row.organizationName} · organization revision ${row.organizationRevision}`
     : undefined
-  const ask = [`Request from ${sender.name}:`, provenance, row.objective, note]
+  const files = row.artifacts?.length
+    ? ["Verified files:", ...row.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`)].join("\n")
+    : undefined
+  const ask = [`Request from ${sender.name}:`, provenance, row.objective, files, note]
     .filter((line): line is string => !!line)
     .join("\n")
-  const sent = [`Asked ${recipient.name}:`, provenance, row.objective, note]
+  const sent = [`Asked ${recipient.name}:`, provenance, row.objective, files, note]
     .filter((line): line is string => !!line)
     .join("\n")
   const id = Schema.is(token)(row.id) ? row.id : undefined
@@ -589,6 +623,7 @@ export namespace RayaTaskDelegation {
                 state,
                 child_run_id: null,
                 session_id: null,
+                artifacts: value.artifacts ? JSON.stringify(value.artifacts) : null,
                 response: null,
                 cost: null,
                 reason: reason ?? null,

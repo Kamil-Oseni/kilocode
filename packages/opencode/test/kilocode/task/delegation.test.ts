@@ -313,6 +313,43 @@ test("posted replies do not invent a completed worker result", () => {
   ).toContain("no longer only queued")
 })
 
+test("delegation persists verified artifact identity and rejects a changed replay", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const artifact = {
+        path: path.resolve("reports", "friday-close.csv"),
+        sha256: "a".repeat(64),
+        tool: "write",
+        callID: "call_write_close",
+      }
+      const value = request("dlg_artifact", chief.id, books.id, { artifacts: [artifact] })
+      const admitted = yield* store.admit(value, chief, books)
+      expect(admitted.record.artifacts).toEqual([artifact])
+      expect((yield* store.get(admitted.record.id)).artifacts).toEqual([artifact])
+      expect((yield* store.admit(value, chief, books)).created).toBe(false)
+      expect(
+        Exit.isFailure(
+          yield* store
+            .admit(
+              request("dlg_artifact", chief.id, books.id, {
+                artifacts: [{ ...artifact, sha256: "b".repeat(64) }],
+              }),
+              chief,
+              books,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect((yield* inbox.page(books.id)).messages.some((item) => item.body.includes(artifact.sha256))).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("delegation admits once, refuses loops, and queues without duplicating a busy worker", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

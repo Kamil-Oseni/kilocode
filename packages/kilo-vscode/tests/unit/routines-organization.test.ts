@@ -221,6 +221,14 @@ test("organization activity stays scoped and preserves its cursor", async () => 
     time: 10,
     updated: 20,
     response: "The books balance.",
+    artifacts: [
+      {
+        path: "C:/Projects/Finance/reports/friday-close.csv",
+        sha256: "d".repeat(64),
+        tool: "write",
+        callID: "call_friday_close",
+      },
+    ],
   }
   const client = createKiloClient({
     baseUrl: "http://localhost:4096",

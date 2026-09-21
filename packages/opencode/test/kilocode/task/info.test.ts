@@ -140,6 +140,12 @@ test("routine chat info pages durable sent and received delegation exchanges", a
       const chief = agent("chief", "Chief of Staff", "generalist")
       const books = agent("books", "Accounting", "accountant")
       const legal = agent("legal", "Legal", "reviewer")
+      const artifact = {
+        path: "/reports/friday-close.csv",
+        sha256: "c".repeat(64),
+        tool: "write",
+        callID: "call_friday_close",
+      }
       const first = yield* store.admit(
         {
           source: "dlg_books",
@@ -150,6 +156,7 @@ test("routine chat info pages durable sent and received delegation exchanges", a
           context: "The Friday close is due today.",
           parentRunID: "run_close",
           budget: 1000,
+          artifacts: [artifact],
         },
         chief,
         books,
@@ -190,6 +197,7 @@ test("routine chat info pages durable sent and received delegation exchanges", a
         cost: 1.25,
         occurrenceID: runID,
         sessionID: "ses_books",
+        artifacts: [artifact],
       })
       expect(items.find((item) => item.peerID === legal.id)).toMatchObject({
         name: "Legal",
@@ -221,6 +229,7 @@ test("organization activity reports authoritative branch spend across pages with
         context: null,
         deadline: null,
         child_run_id: null,
+        artifacts: null,
         response: null,
         reason: null,
       }
@@ -236,6 +245,14 @@ test("organization activity reports authoritative branch spend across pages with
           depth: 1,
           state: "completed",
           session_id: "ses_root_finished",
+          artifacts: JSON.stringify([
+            {
+              path: "/reports/close.csv",
+              sha256: "d".repeat(64),
+              tool: "write",
+              callID: "call_close",
+            },
+          ]),
           cost: 2,
           time_created: 60,
           time_updated: 60,
@@ -320,6 +337,14 @@ test("organization activity reports authoritative branch spend across pages with
       const first = yield* info.activity(organizationID, resolve, undefined, 1)
       const second = yield* info.activity(organizationID, resolve, first.next, 1)
       expect(first.items).toHaveLength(1)
+      expect(first.items[0]?.artifacts).toEqual([
+        {
+          path: "/reports/close.csv",
+          sha256: "d".repeat(64),
+          tool: "write",
+          callID: "call_close",
+        },
+      ])
       expect(first.next).toBeDefined()
       expect(first.summary).toEqual({
         total: 6,

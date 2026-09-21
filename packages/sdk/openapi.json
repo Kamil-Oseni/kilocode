@@ -36721,6 +36721,35 @@
                           "sessionID": {
                             "type": "string",
                             "pattern": "^ses"
+                          },
+                          "artifacts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4096
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "tool": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 128
+                                },
+                                "callID": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 128
+                                }
+                              },
+                              "required": ["path", "sha256", "tool", "callID"],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -38264,6 +38293,35 @@
                               "sessionID": {
                                 "type": "string",
                                 "pattern": "^ses"
+                              },
+                              "artifacts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4096
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "tool": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 128
+                                    },
+                                    "callID": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 128
+                                    }
+                                  },
+                                  "required": ["path", "sha256", "tool", "callID"],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [
@@ -38880,6 +38938,37 @@
                       "type": "string",
                       "pattern": "^ses"
                     },
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4096
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "tool": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          },
+                          "callID": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          }
+                        },
+                        "required": ["path", "sha256", "tool", "callID"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 16
+                    },
                     "response": {
                       "type": "string"
                     },
@@ -39041,6 +39130,37 @@
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 1000000
+                  },
+                  "artifacts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 4096
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "tool": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 128
+                        },
+                        "callID": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 128
+                        }
+                      },
+                      "required": ["path", "sha256", "tool", "callID"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 16
                   }
                 },
                 "required": ["source", "senderID", "recipientID", "objective"],
@@ -39187,6 +39307,37 @@
                     "sessionID": {
                       "type": "string",
                       "pattern": "^ses"
+                    },
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4096
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "tool": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          },
+                          "callID": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          }
+                        },
+                        "required": ["path", "sha256", "tool", "callID"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 16
                     },
                     "response": {
                       "type": "string"
@@ -39420,6 +39571,37 @@
                           "type": "string",
                           "pattern": "^ses"
                         },
+                        "artifacts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 4096
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "tool": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 128
+                              },
+                              "callID": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 128
+                              }
+                            },
+                            "required": ["path", "sha256", "tool", "callID"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 16
+                        },
                         "response": {
                           "type": "string"
                         },
@@ -39565,6 +39747,37 @@
                           "sessionID": {
                             "type": "string",
                             "pattern": "^ses"
+                          },
+                          "artifacts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4096
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "tool": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 128
+                                },
+                                "callID": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 128
+                                }
+                              },
+                              "required": ["path", "sha256", "tool", "callID"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 16
                           },
                           "response": {
                             "type": "string"
@@ -39712,6 +39925,37 @@
                           "sessionID": {
                             "type": "string",
                             "pattern": "^ses"
+                          },
+                          "artifacts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4096
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "tool": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 128
+                                },
+                                "callID": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 128
+                                }
+                              },
+                              "required": ["path", "sha256", "tool", "callID"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 16
                           },
                           "response": {
                             "type": "string"
@@ -39946,6 +40190,37 @@
                     "sessionID": {
                       "type": "string",
                       "pattern": "^ses"
+                    },
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4096
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "tool": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          },
+                          "callID": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          }
+                        },
+                        "required": ["path", "sha256", "tool", "callID"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 16
                     },
                     "response": {
                       "type": "string"

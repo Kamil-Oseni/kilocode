@@ -5,6 +5,7 @@ import type { ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
 import { MediaAttachment, previewable } from "./MediaAttachment"
 import { ReportSetting } from "./ReportSetting"
+import { ArtifactList, type HandoffArtifact, validArtifacts } from "./ArtifactList"
 
 type Share = {
   kind: "file" | "link" | "attachment"
@@ -37,6 +38,7 @@ type Contact = {
   response?: string
   reason?: string
   cost?: number
+  artifacts?: HandoffArtifact[]
 }
 
 function finite(value: unknown): value is number {
@@ -83,6 +85,7 @@ function validContact(value: unknown): value is Contact {
   const row = value as Record<string, unknown>
   if (!optionalText(row, ["expected", "context", "response", "reason"])) return false
   if (row.cost !== undefined && (typeof row.cost !== "number" || !Number.isFinite(row.cost))) return false
+  if (!validArtifacts(row.artifacts)) return false
   if (!provenance(row)) return false
   return (
     typeof row.peerID === "string" &&
@@ -407,6 +410,7 @@ export const ChatInfo: Component<{
                       <p>{item.objective}</p>
                       {item.expected ? <p>Expected: {item.expected}</p> : null}
                       {item.context ? <p>Shared context: {item.context}</p> : null}
+                      <ArtifactList items={item.artifacts} />
                       {item.response ? <p>{item.response}</p> : null}
                       {item.reason ? <p class="routines-error">{item.reason}</p> : null}
                       {typeof item.cost === "number" ? <p>Recorded child cost: ${item.cost}</p> : null}

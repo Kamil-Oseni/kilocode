@@ -7,6 +7,7 @@ import {
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
 import { commitment } from "./commitment"
+import { Artifact, artifacts } from "./delegation"
 import { AttachmentMeta, Clip, Record as MessageRecord } from "./inbox"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
@@ -79,6 +80,7 @@ export const Contact = Schema.Struct({
   cost: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))),
   occurrenceID: Schema.optional(token),
   sessionID: Schema.optional(SessionID),
+  artifacts: Schema.optional(Schema.Array(Artifact)),
 })
 export const SharePage = Schema.Struct({
   section: Schema.Literal("shares"),
@@ -122,6 +124,7 @@ export const Activity = Schema.Struct({
   cost: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))),
   occurrenceID: Schema.optional(token),
   sessionID: Schema.optional(SessionID),
+  artifacts: Schema.optional(Schema.Array(Artifact)),
 })
 export const ActivityPage = Schema.Struct({
   items: Schema.Array(Activity),
@@ -312,6 +315,7 @@ export namespace RayaTaskInfo {
         const sent = row.sender_id === agentID
         const peerID = sent ? row.recipient_id : row.sender_id
         const identity = yield* resolve(peerID)
+        const files = artifacts(row.artifacts)
         items.push({
           peerID,
           ...identity,
@@ -336,6 +340,7 @@ export namespace RayaTaskInfo {
           ...(row.cost !== null ? { cost: row.cost } : {}),
           ...(row.child_run_id ? { occurrenceID: row.child_run_id } : {}),
           ...(row.session_id ? { sessionID: SessionID.make(row.session_id) } : {}),
+          ...(files ? { artifacts: files } : {}),
         })
       }
       const last = slice.at(-1)
@@ -400,6 +405,7 @@ export namespace RayaTaskInfo {
       for (const row of slice) {
         const sender = yield* resolve(row.sender_id)
         const recipient = yield* resolve(row.recipient_id)
+        const files = artifacts(row.artifacts)
         items.push({
           id: row.id,
           sender: { id: row.sender_id, ...sender },
@@ -423,6 +429,7 @@ export namespace RayaTaskInfo {
           ...(row.cost !== null ? { cost: row.cost } : {}),
           ...(row.child_run_id ? { occurrenceID: row.child_run_id } : {}),
           ...(row.session_id ? { sessionID: SessionID.make(row.session_id) } : {}),
+          ...(files ? { artifacts: files } : {}),
         })
       }
       const last = slice.at(-1)

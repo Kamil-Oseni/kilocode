@@ -1,3 +1,4 @@
+import path from "node:path"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Effect, Schema } from "effect"
@@ -7,7 +8,7 @@ import { Destination, RayaContactOutbox } from "@/kilocode/contact/outbox"
 import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
-import { RayaTaskDelegation } from "@/kilocode/task/delegation"
+import { RayaTaskDelegation, type Artifact as DelegationArtifact } from "@/kilocode/task/delegation"
 import {
   Create as OrganizationCreate,
   DelegationInput,
@@ -22,6 +23,7 @@ import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
 import { workflow } from "./workflow-request"
+import * as Artifact from "@/kilocode/goal/artifact"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -32,6 +34,32 @@ const ToolName = Schema.String.check(Schema.isPattern(/^\S+$/), Schema.isMaxLeng
 const Tools = Schema.Array(ToolName).check(
   Schema.isMaxLength(128),
   Schema.makeFilter((value) => (new Set(value).size === value.length ? undefined : "Tool patterns must be unique.")),
+)
+const FileTools = new Set([
+  "write",
+  "edit",
+  "apply_patch",
+  "create_document",
+  "create_spreadsheet",
+  "create_presentation",
+  "create_pdf",
+  "generate_image",
+])
+const ArtifactPaths = Schema.Array(
+  Schema.String.check(
+    Schema.isPattern(/\S/),
+    Schema.isMaxLength(4096),
+    Schema.makeFilter((value) => (path.isAbsolute(value) ? undefined : "Artifact paths must be absolute.")),
+  ),
+).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(16),
+  Schema.makeFilter((items) => {
+    const keys = items.map((item) =>
+      process.platform === "win32" ? path.normalize(item).toLowerCase() : path.normalize(item),
+    )
+    return new Set(keys).size === keys.length ? undefined : "Artifact paths must be unique."
+  }),
 )
 const Provision = "organization:provision"
 const ScheduleFields = {
@@ -159,6 +187,7 @@ const DelegateWork = Schema.Struct({
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  artifacts: Schema.optional(ArtifactPaths),
 })
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
@@ -350,6 +379,52 @@ export function routineManagementTools(input: {
   const contacts = RayaContactOutbox.make(input.database)
   const errands = RayaTaskDelegation.make(input.database, organizations.authorize, organizations.shares)
   const runner = RayaTaskRunner.make({ ...input, database: input.database })
+
+  const handoff = Effect.fn("RayaRoutineManagement.handoff")(function* (
+    sessionID: Tool.Context["sessionID"],
+    paths?: readonly string[],
+  ) {
+    if (!paths?.length) return undefined
+    const key = (value: string) =>
+      process.platform === "win32" ? path.normalize(value).toLowerCase() : path.normalize(value)
+    const found = new Map<
+      string,
+      { revision: Extract<Artifact.Entry, { status: "captured" }>; tool: string; callID: string }
+    >()
+    const messages = yield* input.sessions.messages({ sessionID })
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      for (const part of message.parts) {
+        if (part.type !== "tool" || part.state.status !== "completed") continue
+        if (!FileTools.has(part.tool)) continue
+        for (const revision of Artifact.entries(part.state.metadata["rayaRevision"])) {
+          if (revision.status !== "captured") continue
+          found.set(key(revision.path), { revision, tool: part.tool, callID: part.callID })
+        }
+      }
+    }
+    const items: DelegationArtifact[] = []
+    for (const requested of paths) {
+      const receipt = found.get(key(requested))
+      if (!receipt)
+        return yield* Effect.fail(
+          new Error(`Only files created or changed in this worker run can be handed off: ${requested}`),
+        )
+      if (!(yield* Artifact.current(receipt.revision)))
+        return yield* Effect.fail(
+          new Error(
+            `This file changed after Raya captured it. Review the current file before delegating: ${requested}`,
+          ),
+        )
+      items.push({
+        path: receipt.revision.path,
+        sha256: receipt.revision.sha256,
+        tool: receipt.tool,
+        callID: receipt.callID,
+      })
+    }
+    return items
+  })
 
   const announce = Effect.fn("RayaRoutineManagement.announceSubordinate")(function* (
     item: typeof Organization.Type,
@@ -804,7 +879,7 @@ export function routineManagementTools(input: {
     "delegate_work",
     Effect.succeed({
       description:
-        "Assign one bounded follow-on request to an existing worker through the current organization. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
+        "Assign one bounded follow-on request to an existing worker through the current organization. Include artifacts when the recipient must use exact files created or changed in this worker run; Raya verifies their current bytes and saves their SHA-256 identities. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
       parameters: DelegateWork,
       execute: (params: typeof DelegateWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -859,6 +934,7 @@ export function routineManagementTools(input: {
           const source = `delegate:${digest(
             JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, sender.id, organization.id]),
           ).slice(0, 48)}`
+          const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           const request = {
             source,
             senderID: sender.id,
@@ -872,6 +948,7 @@ export function routineManagementTools(input: {
             context: params.context?.trim(),
             deadline: params.deadline,
             budget: params.budget,
+            artifacts,
           }
           const record = yield* runner.delegate(request)
           if (
@@ -886,14 +963,15 @@ export function routineManagementTools(input: {
             record.expected !== params.expected?.trim() ||
             record.context !== params.context?.trim() ||
             record.deadline !== params.deadline ||
-            record.budget !== params.budget
+            record.budget !== params.budget ||
+            !isDeepStrictEqual(record.artifacts, artifacts)
           )
             return yield* Effect.fail(new Error("The saved delegation does not match this request."))
           const recipient = yield* tasks.get(record.recipientID)
           const reason = record.reason ? ` ${record.reason}` : ""
           return {
             title: "Work delegation saved",
-            output: `Assigned the request to ${recipient.name}. Saved state: ${record.state}.${reason}`,
+            output: `Assigned the request to ${recipient.name}. Saved state: ${record.state}.${reason}${record.artifacts?.length ? ` Saved ${record.artifacts.length} verified file handoff${record.artifacts.length === 1 ? "" : "s"}.` : ""}`,
             metadata: {
               requestStatus: record.state === "failed" || record.state === "cancelled" ? "unresolved" : "complete",
               view: "routines",

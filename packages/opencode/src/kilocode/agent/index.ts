@@ -568,6 +568,7 @@ export function openFullAccess<T extends { name: string; permission: Permission.
   const capable = Permission.fromConfig({
     question: "allow",
     ask_options: "allow",
+    skill: "allow",
     suggest: "allow",
     interactive_terminal: "allow",
     plan_enter: "allow",
@@ -938,6 +939,7 @@ export function addAuto(
         "*": "deny",
         chief_route: "allow",
         task: "allow",
+        skill: "allow",
         get_goal: "allow",
         update_goal_plan: "allow",
         update_goal: "allow",

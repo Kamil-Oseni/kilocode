@@ -49,6 +49,15 @@ export namespace RayaChief {
     return request(metadata)
   } // raya_change - continuation prompts skip Chief only when the runtime persisted the exact objective and task phase
 
+  export function routine(request: string | undefined) {
+    if (!request) return false
+    if (/\b(routine|organization|organisation)\b/i.test(request)) return true
+    if (/\b(recurring|standing)\s+(agent|worker|task|job)s?\b/i.test(request)) return true
+    if (/\b(agent|worker|task|job|report|remind)\w*\b/i.test(request) && /\b(daily|weekly|monthly|hourly|every)\b/i.test(request))
+      return true
+    return /\bteam\b.*\bagents?\b|\bagents?\b.*\bteam\b/i.test(request)
+  }
+
   export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {
     // raya_change start - Auto's prompt tells it to call ask_options when a genuine choice
     // only the user can make is blocking, so those clarification tools must survive the
@@ -56,6 +65,8 @@ export namespace RayaChief {
     // /canvas, Auto may also create and refine the live canvas directly (and follow the
     // host's update_canvas retry hint) instead of only through a delegated subagent.
     const names = ["chief_route", "task", "get_goal", "update_goal", "update_goal_plan", "ask_options", "question"]
+    if (routine(request(metadata)))
+      names.push("schedule_task", "inspect_routines", "create_organization", "update_routine", "update_organization")
     if (metadata?.["raya.canvas.command"] === true) names.push("create_canvas", "update_canvas")
     return Object.fromEntries(names.flatMap((name) => (available[name] ? [[name, available[name]]] : []))) as Record<
       string,
@@ -423,7 +434,7 @@ export namespace RayaChief {
           `- ${item.name}: ${item.description ?? "No capability card"}${item.model ? ` [${item.model.providerID}/${item.model.modelID}]` : ""}`,
       )
       .join("\n")
-    return `You are Raya's Chief router. Do not inspect the repository, answer the request, narrate an approach, or name a tool that is not currently available. Make exactly one tool call per response and wait for its result before choosing the next call. On a new user request, first call chief_route exactly once; its runtime uses the user's original request, regardless of how you phrase the objective argument. After it returns, call task exactly once. On a continuation, skip chief_route and call task if concrete work remains. When a genuine choice only the user can make is blocking the request, call ask_options with concrete labeled choices and wait for the answer before routing or delegating. When the delegated work is done, call get_goal. If a goal exists, formally complete or honestly block it with update_goal; if no goal exists, give the concise synthesis directly. After goal handling, give the user a concise synthesis without another tool call. Never write tool-call markup as prose. Never invent a tool name.
+    return `You are Raya's Chief router. Requests to create or manage a routine, recurring worker, team of agents, or organization are a direct primary-chat workflow: do not call chief_route or task for them; use the available Routines tools yourself. For every other request, do not inspect the repository, answer the request, narrate an approach, or name a tool that is not currently available. Make exactly one tool call per response and wait for its result before choosing the next call. On a new non-Routines request, first call chief_route exactly once; its runtime uses the user's original request, regardless of how you phrase the objective argument. After it returns, call task exactly once. On a continuation, skip chief_route and call task if concrete work remains. When a genuine choice only the user can make is blocking the request, call ask_options with concrete labeled choices and wait for the answer before routing or delegating. When the delegated work is done, call get_goal. If a goal exists, formally complete or honestly block it with update_goal; if no goal exists, give the concise synthesis directly. After goal handling, give the user a concise synthesis without another tool call. Never write tool-call markup as prose. Never invent a tool name.
 
 Registry:
 ${registry}`

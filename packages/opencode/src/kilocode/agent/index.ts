@@ -26,7 +26,7 @@ const GOAL_INTENT_GUIDANCE =
 const ASK_OPTIONS_GUIDANCE =
   "When a discrete choice genuinely belongs to the user, call ask_options instead of asking in prose. Use stable option ids, enable allow_multiple only when choices may be combined, and rely on the always-available Other response. Before an unapproved destructive action, use ask_options with explicit confirm and cancel choices."
 const ROUTINE_GUIDANCE =
-  'Treat ordinary requests to create or change a recurring worker, routine, team, or organization as Routines intent. For an existing assignment, call inspect_routines first and use its stable ID and current organization revision. Before any mutation, call ask_options for each decision the user has not supplied: organization name and purpose; optional operating policy; shared model-cost budget or an explicit choice of no shared limit; every worker\'s name, role, job, schedule and timezone; read/notify or editing access; exact tool scope; capabilities; output description and acceptance criteria; reporting lines; and each directional delegation permission. Use ["*"] only when the user explicitly chooses all tools and [] only when the user chooses question-only access. Never infer delegation authority from a supervisor relationship. Call schedule_task, create_organization, update_routine, or update_organization only after the assignment is complete enough to save.'
+  'Treat ordinary requests to create or change a recurring worker, routine, team, or organization as Routines intent. Handle Routines intent in this primary chat with the direct Routines tools; do not call chief_route or task for it. Raya owns durable storage and generates internal IDs, so never ask the user to choose a file, database, API, schema, persistence mechanism, or internal ID. For an existing assignment, call inspect_routines first and use its stable ID and current organization revision. Before any mutation, call ask_options for each product decision the user has not supplied: organization name and purpose; optional operating policy; shared model-cost budget or an explicit choice of no shared limit; every worker\'s name, role, job, schedule and timezone; read/notify or editing access; exact tool scope; capabilities; output description and acceptance criteria; reporting lines; and each directional delegation permission. Ask one concise decision at a time when the user requests a conversational setup. Use ["*"] only when the user explicitly chooses all tools and [] only when the user chooses question-only access. Never infer delegation authority from a supervisor relationship. Call schedule_task, create_organization, update_routine, or update_organization only after the assignment is complete enough to save. After creation, call inspect_routines and confirm the saved organization by its generated ID and revision.'
 const DELEGATION_GUIDANCE =
   "Infer delegation from the work itself; never require the user to request a subagent or remember a specialist name. Delegate substantial specialist, research, design, accounting, architecture, or independently parallelizable work through task with automatic specialist selection. Fan out independent investigations in parallel and synthesize their evidence. Treat an explicit agent name only as an override."
 const BROWSER_GUIDANCE =
@@ -931,7 +931,7 @@ export function addAuto(
     name: "auto",
     displayName: "Auto",
     description: "Intelligently route each request to the best-fit specialist and model.",
-    prompt: `${RayaChief.prompt(specialists)}\n\n${ASK_OPTIONS_GUIDANCE}\n\n${ROUTINE_GUIDANCE}`,
+    prompt: `${ROUTINE_GUIDANCE}\n\n${RayaChief.prompt(specialists)}\n\n${ASK_OPTIONS_GUIDANCE}`,
     options: {},
     permission: Permission.merge(
       defaults,
@@ -977,9 +977,10 @@ export function addAuto(
 export function refreshAuto(agents: Parameters<typeof patchAgents>[0]) {
   const auto = agents.auto
   if (!auto) return
-  auto.prompt = RayaChief.prompt(
+  const prompt = RayaChief.prompt(
     Object.values(agents).filter((item) => item.mode !== "primary" && !item.hidden && !item.deprecated),
   )
+  auto.prompt = `${ROUTINE_GUIDANCE}\n\n${prompt}\n\n${ASK_OPTIONS_GUIDANCE}`
 }
 // raya_change end
 

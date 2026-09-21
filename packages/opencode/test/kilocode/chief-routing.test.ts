@@ -190,6 +190,33 @@ describe("Raya Chief routing", () => {
       "create_canvas",
       "update_canvas",
     ])
+    const routines = {
+      ...rich,
+      schedule_task: { id: "schedule" },
+      inspect_routines: { id: "inspect" },
+      create_organization: { id: "create" },
+      update_routine: { id: "routine" },
+      update_organization: { id: "organization" },
+    }
+    expect(
+      Object.keys(
+        RayaChief.tools(routines, {
+          [RayaChief.requestKey]:
+            "Create a small organization for testing persistence. Ask me the required setup questions one at a time before creating anything.",
+        }),
+      ),
+    ).toEqual([
+      ...workflow,
+      "ask_options",
+      "schedule_task",
+      "inspect_routines",
+      "create_organization",
+      "update_routine",
+      "update_organization",
+    ])
+    expect(RayaChief.prompt(agents)).toContain("do not call chief_route or task for them")
+    expect(RayaChief.routine("Have an accounting agent send me a report every Friday")).toBe(true)
+    expect(RayaChief.routine("Fix this authentication bug")).toBe(false)
     // raya_change end
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" })).toBe("route")
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" }, true)).toBe("task")

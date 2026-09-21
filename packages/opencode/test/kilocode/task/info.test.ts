@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
-import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
+import {
+  RayaRoutineDelegationTable as Delegation,
+  RayaRoutineOrganizationReservationTable as Reservation,
+  RayaRoutineOrganizationTable as Organization,
+} from "@opencode-ai/core/kilocode/routine.sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -222,6 +226,17 @@ test("organization activity reports authoritative branch spend across pages with
       const database = yield* Database.Service
       const info = RayaTaskInfo.make(database)
       const organizationID = "org_11111111111111111111111111111111"
+      yield* database.db.insert(Organization).values({
+        id: organizationID,
+        name: "Website Builders",
+        purpose: null,
+        policy: null,
+        budget: 100,
+        revision: 1,
+        archived_at: null,
+        time_created: 1,
+        time_updated: 1,
+      })
       const base = {
         sender_id: "chief",
         recipient_id: "worker",
@@ -392,7 +407,36 @@ test("organization activity reports authoritative branch spend across pages with
             },
           },
         },
+        {
+          ...session,
+          id: SessionID.make("ses_company_reserved"),
+          cost: 0.5,
+          metadata: {
+            rayaRoutine: {
+              version: 1,
+              agentID: "worker",
+              runID: "run_company_reserved",
+              scheduleVersion: 1,
+              trigger: { kind: "manual" },
+              organizationID,
+              organizationRevision: 1,
+              budget: 4,
+            },
+          },
+        },
       ])
+      yield* database.db.insert(Reservation).values({
+        run_id: "run_company_reserved",
+        agent_id: "worker",
+        organization_id: organizationID,
+        organization_revision: 1,
+        session_id: "ses_company_reserved",
+        budget: 4,
+        cost: null,
+        state: "linked",
+        time_created: 1,
+        time_updated: 1,
+      })
       const resolve = (id: string) => Effect.succeed({ name: id, role: "worker", archived: false })
       const first = yield* info.activity(organizationID, resolve, undefined, 1)
       const second = yield* info.activity(organizationID, resolve, first.next, 1)
@@ -412,7 +456,7 @@ test("organization activity reports authoritative branch spend across pages with
         needsAttention: 2,
         uncertain: 1,
         recordedCost: 6.5,
-        committedCost: 25.5,
+        committedCost: 29.5,
         standaloneCost: 1.5,
       })
       expect(second.summary).toEqual(first.summary)

@@ -10,7 +10,7 @@ import {
   RayaRoutineDelegationTable as WorkRow,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import type { Storage } from "@/storage/storage"
-import { commitment, direct } from "./commitment"
+import { commitment, direct, standing } from "./commitment"
 import { mutate } from "./mutation"
 
 const MAX = 50
@@ -421,7 +421,8 @@ export namespace RayaTaskOrganization {
                   .all()
                   .pipe(Effect.orDie)
                 const spent = yield* direct(tx, id).pipe(Effect.orDie)
-                if (value.budget < commitment(work) + spent)
+                const held = yield* standing(tx, id).pipe(Effect.orDie)
+                if (value.budget < commitment(work) + spent + held.committed)
                   return yield* new Invalid({
                     message: "The organization budget cannot be lower than its current committed model cost.",
                   })

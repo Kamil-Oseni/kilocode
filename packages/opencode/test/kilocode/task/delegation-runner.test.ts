@@ -555,13 +555,22 @@ test("standalone runs bind only an unambiguous organization", async () => {
         access: "brief",
         schedule: { kind: "manual" },
       })
+      const other = yield* runner.tasks.create({
+        name: "Other",
+        objective: "Review another company.",
+        access: "brief",
+        budget: 2,
+        schedule: { kind: "manual" },
+      })
       const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
       const first = yield* organizations.create({
         name: "First",
         policy: "Cite the first company's records.",
+        budget: 8,
         members: [
           { agentID: unique.id, role: "Reviewer" },
           { agentID: shared.id, role: "Reviewer" },
+          { agentID: other.id, role: "Reviewer" },
         ],
       })
       yield* organizations.create({
@@ -571,7 +580,10 @@ test("standalone runs bind only an unambiguous organization", async () => {
       })
 
       const bound = yield* runner.fire(unique.id)
+      const over = yield* runner.fire(other.id).pipe(Effect.flip)
       const ambiguous = yield* runner.fire(shared.id)
+      expect(over.message).toContain("remaining model-cost budget")
+      expect(opened).toHaveLength(2)
       expect(opened[0]?.metadata?.rayaRoutine).toMatchObject({
         organizationID: first.id,
         organizationRevision: first.revision,
@@ -587,6 +599,13 @@ test("standalone runs bind only an unambiguous organization", async () => {
       expect((yield* RayaGoal.make({ storage, sessions }).get(bound.sessionID))?.budget).toEqual({
         modelCost: 6.25,
       })
+      yield* RayaGoal.make({ storage, sessions }).update(bound.sessionID, {
+        status: "blocked",
+        reason: "Stopped for reservation settlement testing.",
+      })
+      yield* runner.settle(bound.sessionID)
+      const released = yield* runner.fire(other.id)
+      expect(released.sessionID).toBe(SessionID.make("ses_standalone_3"))
       expect((yield* runner.tasks.update(unique.id, { budget: null, expectedBudget: 6.25 })).budget).toBeUndefined()
       const stale = yield* runner.tasks.update(unique.id, { budget: 4, expectedBudget: 6.25 }).pipe(Effect.flip)
       expect(stale).toMatchObject({ kind: "conflict", field: "budget" })

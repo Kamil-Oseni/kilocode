@@ -27,6 +27,7 @@ export function claim<A, E, R, B, F, S>(
   operation?: "remove" | "cleanup",
   intent?: string,
   context?: Context,
+  prepare?: (input: A, claim: Pick<Claim, "id" | "at">) => Effect.Effect<void, F, S>,
 ) {
   return Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
@@ -64,6 +65,10 @@ export function claim<A, E, R, B, F, S>(
         const input = yield* restore(check).pipe(
           Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : storage.remove(key).pipe(Effect.orDie))),
         )
+        if (prepare)
+          yield* restore(prepare(input, { id: record.id, at: record.at })).pipe(
+            Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : storage.remove(key).pipe(Effect.orDie))),
+          )
         const selected = trigger?.(input)
         const prepared = selected ? { ...record, trigger: selected } : record
         if (selected) yield* storage.replace(key, prepared).pipe(Effect.orDie)

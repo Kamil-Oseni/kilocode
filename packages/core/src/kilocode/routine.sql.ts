@@ -200,3 +200,25 @@ export const RayaRoutineOrganizationRevisionTable = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.organization_id, table.revision] })],
 )
+
+export const RayaRoutineOrganizationReservationTable = sqliteTable(
+  "raya_routine_organization_reservation",
+  {
+    run_id: text().primaryKey(),
+    agent_id: text().notNull(),
+    organization_id: text()
+      .notNull()
+      .references(() => RayaRoutineOrganizationTable.id, { onDelete: "cascade" }),
+    organization_revision: integer().notNull(),
+    session_id: text(),
+    budget: real().notNull(),
+    cost: real(),
+    state: text({ enum: ["reserved", "linked", "settled", "released"] }).notNull(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+  },
+  (table) => [
+    index("raya_routine_organization_reservation_ledger").on(table.organization_id, table.state),
+    uniqueIndex("raya_routine_organization_reservation_session").on(table.session_id),
+  ],
+)

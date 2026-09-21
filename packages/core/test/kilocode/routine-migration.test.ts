@@ -14,6 +14,7 @@ import policy from "@opencode-ai/core/database/migration/20260915143138_kilocode
 import draft from "@opencode-ai/core/database/migration/20260916221534_kilocode-routine-draft-revision"
 import budget from "@opencode-ai/core/database/migration/20260917021944_kilocode-routine-organization-budget"
 import artifacts from "@opencode-ai/core/database/migration/20260921060802_kilocode-routine-delegation-artifacts"
+import reservations from "@opencode-ai/core/database/migration/20260921084500_kilocode-routine-organization-reservation"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -344,6 +345,41 @@ test("delegation artifact migration preserves queued work and adds verified hand
       })
       yield* DatabaseMigration.applyOnly(db, [artifacts])
       expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${artifacts.id}`)).toEqual({
+        count: 1,
+      })
+    }),
+  )
+})
+
+test("organization reservation migration preserves organizations and enforces exact session ownership", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === reservations.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization (id, name, purpose, policy, budget, revision, time_created, time_updated) VALUES ('org_reservation', 'Reservation', NULL, NULL, 20, 3, 1, 1)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [reservations])
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization_reservation (run_id, agent_id, organization_id, organization_revision, session_id, budget, cost, state, time_created, time_updated) VALUES ('run_one', 'worker', 'org_reservation', 3, 'session_one', 5, NULL, 'linked', 1, 1)`,
+      )
+      const duplicate = yield* db
+        .run(
+          sql`INSERT INTO raya_routine_organization_reservation (run_id, agent_id, organization_id, organization_revision, session_id, budget, cost, state, time_created, time_updated) VALUES ('run_two', 'worker', 'org_reservation', 3, 'session_one', 5, NULL, 'linked', 1, 1)`,
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(duplicate)).toBe(true)
+      expect(
+        yield* db.get(sql`SELECT name, budget, revision FROM raya_routine_organization WHERE id = 'org_reservation'`),
+      ).toEqual({
+        name: "Reservation",
+        budget: 20,
+        revision: 3,
+      })
+      yield* DatabaseMigration.applyOnly(db, [reservations])
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${reservations.id}`)).toEqual({
         count: 1,
       })
     }),

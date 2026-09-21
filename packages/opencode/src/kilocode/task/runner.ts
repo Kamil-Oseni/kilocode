@@ -36,6 +36,7 @@ import { scheduler } from "./scheduler"
 import { reconcile as recovery } from "./reconcile"
 import { RayaTaskSnapshot } from "./snapshot"
 import { RayaTaskOrganization } from "./organization"
+import { make as reservation } from "./reservation"
 import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import * as Log from "@opencode-ai/core/util/log"
 
@@ -177,6 +178,7 @@ export namespace RayaTaskRunner {
     const tasks = RayaTask.make(input)
     const snapshots = RayaTaskSnapshot.make(input)
     const goals = RayaGoal.make(input)
+    const reservations = input.database ? reservation(input.database) : undefined
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
@@ -458,6 +460,12 @@ export namespace RayaTaskRunner {
                     }),
                   )
                   yield* owner.link(created.id)
+                  if (reservations)
+                    yield* reservations
+                      .link(owner.id, created.id)
+                      .pipe(
+                        Effect.mapError((err) => new RayaTask.GuardError({ kind: "conflict", message: err.message })),
+                      )
                   if (admitted.selected.trigger.kind === "timer" && schedule)
                     yield* schedule.link(admitted.selected.trigger, owner.id, created.id)
                   yield* goals.create(
@@ -498,6 +506,22 @@ export namespace RayaTaskRunner {
                 : opts?.bind
                   ? { source: opts.bind.source, sessionID: opts.bind.sessionID }
                   : undefined,
+              (admitted, owner) => {
+                const item = admitted.selected.item
+                if (opts?.delegationID || !item.budget || !admitted.organization || !reservations) return Effect.void
+                return reservations
+                  .reserve({
+                    runID: owner.id,
+                    agentID: item.id,
+                    organizationID: admitted.organization.id,
+                    organizationRevision: admitted.organization.revision,
+                    budget: item.budget,
+                  })
+                  .pipe(
+                    Effect.asVoid,
+                    Effect.mapError((err) => new RayaTask.GuardError({ kind: "conflict", message: err.message })),
+                  )
+              },
             ),
           ),
         ),
@@ -889,6 +913,8 @@ export namespace RayaTaskRunner {
             if (definition.memoryScope === "role" && done.outcome?.summary)
               yield* tasks.learn(item.id, done.id, done.outcome.summary)
             if (schedule && (done.status === "complete" || done.status === "blocked")) yield* schedule.settle(done)
+            if (reservations && done.outcome)
+              yield* reservations.settle(done.id, done.sessionID, done.outcome.cost).pipe(Effect.orDie)
             yield* retain(done)
             yield* close(done)
           }
@@ -951,6 +977,7 @@ export namespace RayaTaskRunner {
         }
         if (changed && schedule && (status === "complete" || status === "blocked"))
           yield* schedule.settle({ ...run, status, blockedReason: goal?.blockedReason })
+        if (reservations) yield* reservations.settle(run.id, run.sessionID, cost).pipe(Effect.orDie)
         const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
         if (latest) {
           yield* retain(latest)
@@ -1013,9 +1040,16 @@ export namespace RayaTaskRunner {
               Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
             )
           yield* settle(sessionID)
+          if (reservations && !prior) {
+            const msgs = yield* input.sessions.messages({ sessionID })
+            const cost = msgs.reduce((sum, item) => sum + (item.info.role === "assistant" ? item.info.cost : 0), 0)
+            yield* reservations.settle(runID, sessionID, cost).pipe(Effect.orDie)
+          }
           const current = (yield* tasks.runsFor(id)).find((run) => run.id === runID)
           if (current && RayaTask.pending(current))
             yield* tasks.transition(current, { ...current, status: "error", blockedReason: reason })
+        } else if (reservations) {
+          yield* reservations.release(runID)
         }
         const active = schedule ? (yield* schedule.active(id)).find((item) => item.claim_id === runID) : undefined
         if (active && schedule)

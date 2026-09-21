@@ -1,6 +1,7 @@
-import { and, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { Effect } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
+import { RayaRoutineOrganizationReservationTable as Reservation } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 
 type Row = {
@@ -47,12 +48,36 @@ export function direct(db: Ledger, organizationID: string) {
       and(
         sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.organizationID') = ${organizationID}`,
         sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.delegationID') is null`,
+        sql`not exists (select 1 from raya_routine_organization_reservation as reservation where reservation.session_id = ${SessionTable.id})`,
       ),
     )
     .get()
     .pipe(
-      Effect.map((row) =>
-        typeof row?.cost === "number" && Number.isFinite(row.cost) && row.cost >= 0 ? row.cost : 0,
+      Effect.map((row) => (typeof row?.cost === "number" && Number.isFinite(row.cost) && row.cost >= 0 ? row.cost : 0)),
+    )
+}
+
+export function standing(db: Ledger, organizationID: string) {
+  return db
+    .select({ state: Reservation.state, budget: Reservation.budget, cost: Reservation.cost })
+    .from(Reservation)
+    .where(eq(Reservation.organization_id, organizationID))
+    .all()
+    .pipe(
+      Effect.map((rows) =>
+        rows.reduce(
+          (total, row) => {
+            if (row.state === "reserved" || row.state === "linked") total.committed += row.budget
+            if (row.state === "settled") {
+              const cost =
+                typeof row.cost === "number" && Number.isFinite(row.cost) && row.cost >= 0 ? row.cost : row.budget
+              total.recorded += cost
+              total.committed += cost
+            }
+            return total
+          },
+          { recorded: 0, committed: 0 },
+        ),
       ),
     )
 }

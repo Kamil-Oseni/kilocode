@@ -1,10 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `91051268f3`; the installed package is `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `89cb882eac`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 20:29 America/Toronto - Continue FUT-ADM-01 from the complete registry contract
+
+Product commit `89cb882eac` is on `origin/main`. Admin snapshot schema version 2 now carries a stable ordered row for each major Raya system: Runtime, Sessions, Goals, Routines, Organizations, Scheduler, Agents, Skills, Todos, Contacts, Browser, Computer use, Voice, Memory, Canvas, Cloud sync and Updates. Preserve all seventeen rows through loading, disconnected and partial results. A missing source is `unknown/not-checked`; never convert feature presence or an empty UI into Healthy. Runtime decoding requires the complete set, while the OpenAPI/SDK shape deliberately remains an array so generated types do not repeat the same row seventeen times.
+
+The extension Browser/Voice overlay is identity-based and maps every returned row. Do not restore the former six positional array entries, which would silently discard later services. `AdminView` owns the matching display and diagnostic-source labels. Keep the current flat read-only presentation, Raya accent, theme tokens, Instrument Serif/Outfit typography and forced-color behavior from `docs/designer.md`. It has no repair controls by design.
+
+Current evidence is **8 / 42** backend, **6 / 16** host bridge and **12/12** production-component Chromium cases. The browser gate covers light, dark, forced colors, 320/760 px, partial/unknown, disconnected/no request, health retention after logs failure, empty, keyboard retry, 48-entry scrolling, Axe and overflow. Dark 320 px and 760 px screenshots were inspected. CLI and both extension typechecks, scoped ESLint, Knip, scoped zero-warning Oxlint, Prettier, annotation, Promise-facade, Kilo-marker, Markdown-table and diff guards pass. The protected push passed all **29 JavaScript/TypeScript package typechecks** sequentially plus JetBrains.
+
+Implement the remaining source probes without opening another row. Start with backend services that already expose bounded reads: Organizations (`RayaTaskOrganization.list`), Personal Todos (`PersonalTodo.list`), Skills (`Skill.Service.all`) and Canvas pending work (`Canvas.Service.list`). Read each authority once per snapshot, isolate failures per row, cap all counts and emit only the closed Admin log schema. Then map scheduler/claims/staging/queue/inbox, goals and memory from their existing durable services. Computer use, cloud sync and updates may require extension-host signals; retain Unknown until an authoritative source exists. Contacts must expose only aggregate health and closed channel/scope events, never destination or worker identity. After source coverage, run the focused real HTTP contract, regenerate the SDK when schemas change, rerun the one-worker Admin browser suite, package one authorized low-memory snapshot and perform installed/live-backend acceptance before marking `FUT-ADM-01` Verified.
 
 ## ChatGPT 2026-09-20 20:06 America/Toronto - Preserve verified universal role skills
 

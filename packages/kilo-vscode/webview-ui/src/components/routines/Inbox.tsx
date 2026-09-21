@@ -12,6 +12,16 @@ import { MessageTime } from "../chat/MessageTime"
 
 const RESTORE_PAGE_LIMIT = 20
 
+function initials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase()
+}
+
 export type Note = {
   id: string
   agentID: string
@@ -1246,6 +1256,9 @@ export const Inbox: Component<{
             Back
           </Button>
         </Show>
+        <span class="routines-thread-avatar" aria-hidden="true">
+          {initials(props.name)}
+        </span>
         <div class="routines-thread-identity">
           <strong tabIndex={-1}>{props.name}</strong>
           <span class="routines-meta">

@@ -1995,3 +1995,363 @@
     display: none;
   }
 }
+
+/* Raya routines: a quiet messaging workspace. The roster and conversation
+ * share one surface; hierarchy comes from spacing, type, and hairlines. */
+html[data-theme="kilo-vscode"] .routines-view {
+  --routine-sidebar: clamp(16.5rem, 31vw, 19rem);
+  background: var(--surface-base, var(--vscode-editor-background));
+}
+
+html[data-theme="kilo-vscode"] .routines-main-header {
+  min-height: 48px;
+  padding-inline: var(--raya-space-16);
+  background: var(--surface-base, var(--vscode-editor-background));
+}
+
+html[data-theme="kilo-vscode"] .routines-main-header .routines-title {
+  font-size: var(--kilo-font-size-14, 14px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+html[data-theme="kilo-vscode"] .routines-view [data-component="button"] {
+  border-radius: var(--raya-radius-md, 6px);
+  transition:
+    color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out),
+    background-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out),
+    border-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out),
+    opacity var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out);
+}
+
+html[data-theme="kilo-vscode"] .routines-body[data-pane="inbox"] {
+  padding: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-inbox {
+  grid-template-columns: var(--routine-sidebar) minmax(0, 1fr);
+  background: var(--surface-base, var(--vscode-editor-background));
+}
+
+html[data-theme="kilo-vscode"] .routines-people {
+  padding: 0;
+  border-right: var(--raya-hairline, 1px) solid
+    color-mix(in srgb, var(--border-base, var(--vscode-widget-border)) 64%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--text-base, var(--vscode-foreground)) 1.5%,
+    var(--surface-base, var(--vscode-editor-background))
+  );
+  scrollbar-width: thin;
+}
+
+html[data-theme="kilo-vscode"] .routines-toolbar {
+  gap: var(--raya-space-10);
+  padding: var(--raya-space-12);
+  border-bottom: var(--raya-hairline, 1px) solid
+    color-mix(in srgb, var(--border-base, var(--vscode-widget-border)) 55%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-organizations {
+  gap: var(--raya-space-2);
+  margin-inline: calc(var(--raya-space-4) * -1);
+  padding: 0 var(--raya-space-4) var(--raya-space-2);
+  scrollbar-width: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-organizations::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization {
+  min-height: 30px;
+  padding: var(--raya-space-4) var(--raya-space-8);
+  border-radius: var(--raya-radius-md, 6px);
+  font-size: var(--kilo-font-size-12);
+  font-weight: 500;
+  transition:
+    color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out),
+    background-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization > span:last-child {
+  min-width: 1.25rem;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-11);
+  text-align: center;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 6%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization[aria-current="page"] {
+  color: var(--text-strong, var(--vscode-foreground));
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 10%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-search {
+  padding: 0;
+  border: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-search input {
+  min-height: 34px;
+  padding: 0 var(--raya-space-10);
+  border: var(--raya-hairline, 1px) solid transparent;
+  border-radius: var(--raya-radius-md, 6px);
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+  transition:
+    background-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out),
+    border-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-search input:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 7%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-search input:focus {
+  border-color: var(--vscode-focusBorder, Highlight);
+  background: var(--surface-base, var(--vscode-editor-background));
+  outline: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-filters {
+  align-self: flex-start;
+  gap: 0;
+  padding: 2px;
+  border-radius: var(--raya-radius-md, 6px);
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-filters [data-component="button"] {
+  min-height: 28px;
+  padding-inline: var(--raya-space-8);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-filters [data-component="button"][data-variant="primary"] {
+  color: var(--text-strong, var(--vscode-foreground));
+  background: var(--surface-raised-base, var(--vscode-editor-background));
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 18%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-secondary {
+  padding-inline: var(--raya-space-2);
+}
+
+html[data-theme="kilo-vscode"] .routines-secondary [data-component="button"] {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+html[data-theme="kilo-vscode"] .routines-list {
+  padding: var(--raya-space-6);
+}
+
+html[data-theme="kilo-vscode"] .routines-row {
+  min-height: 58px;
+  padding: var(--raya-space-10);
+  border-radius: var(--raya-radius-md, 6px);
+  transition: background-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out);
+}
+
+html[data-theme="kilo-vscode"] .routines-row + .routines-row {
+  margin-top: var(--raya-space-2);
+}
+
+html[data-theme="kilo-vscode"] .routines-row:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-row[data-current="true"] {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 9%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-avatar {
+  width: 2.125rem;
+  height: 2.125rem;
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 8%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-thread {
+  min-width: 0;
+  border-left: 0;
+  padding-left: 0;
+  background: var(--surface-base, var(--vscode-editor-background));
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-head {
+  min-height: 62px;
+  gap: var(--raya-space-10);
+  padding: var(--raya-space-10) var(--raya-space-16);
+  border-bottom: var(--raya-hairline, 1px) solid
+    color-mix(in srgb, var(--border-base, var(--vscode-widget-border)) 55%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-avatar {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--text-base, var(--vscode-foreground));
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 9%, transparent);
+  font-size: var(--kilo-font-size-11);
+  font-weight: 600;
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-identity strong,
+html[data-theme="kilo-vscode"] .routines-thread-identity h3 {
+  color: var(--text-strong, var(--vscode-foreground));
+  font-size: var(--kilo-font-size-13);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-identity .routines-meta,
+html[data-theme="kilo-vscode"] .routines-thread-identity > span {
+  margin-top: 1px;
+  font-size: var(--kilo-font-size-11);
+}
+
+html[data-theme="kilo-vscode"] .routines-search:not(.routines-roster-search) {
+  padding: var(--raya-space-8) var(--raya-space-16);
+  border-bottom: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-search:not(.routines-roster-search) input {
+  min-height: 32px;
+  padding-inline: var(--raya-space-10);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 4%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-body {
+  width: 100%;
+  max-width: 52rem;
+  box-sizing: border-box;
+  align-self: center;
+  gap: var(--raya-space-12);
+  padding: var(--raya-space-24, 24px) var(--raya-space-20, 20px);
+  scrollbar-width: thin;
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-body > .routines-empty:only-child {
+  margin: auto;
+  max-width: 24rem;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  text-align: center;
+}
+
+html[data-theme="kilo-vscode"] .routines-composer {
+  width: calc(100% - 32px);
+  max-width: 50rem;
+  box-sizing: border-box;
+  align-self: center;
+  margin: 0 auto var(--raya-space-16);
+  padding: var(--raya-space-6) var(--raya-space-6) var(--raya-space-6) var(--raya-space-12);
+  border: var(--raya-hairline, 1px) solid
+    color-mix(in srgb, var(--border-base, var(--vscode-widget-border)) 72%, transparent);
+  border-radius: var(--raya-radius-lg, 10px);
+  background: color-mix(
+    in srgb,
+    var(--text-base, var(--vscode-foreground)) 3%,
+    var(--surface-base, var(--vscode-editor-background))
+  );
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 12%, transparent);
+  transition:
+    border-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out),
+    background-color var(--raya-duration-fast, 140ms) var(--raya-ease-out, ease-out);
+}
+
+html[data-theme="kilo-vscode"] .routines-composer:focus-within {
+  border-color: color-mix(in srgb, var(--vscode-focusBorder, Highlight) 72%, transparent);
+  background: var(--surface-base, var(--vscode-editor-background));
+}
+
+html[data-theme="kilo-vscode"] .routines-compose-field {
+  gap: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-compose-field textarea {
+  min-height: 40px;
+  padding: var(--raya-space-8) 0 var(--raya-space-6);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-compose-field textarea:focus {
+  outline: 0;
+  box-shadow: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-compose-actions {
+  align-self: end;
+  padding-bottom: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-draft-files {
+  padding-bottom: var(--raya-space-6);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-overview .routines-thread-body,
+html[data-theme="kilo-vscode"] .routines-organization-editor .routines-thread-body {
+  align-self: stretch;
+  max-width: 58rem;
+  padding-top: var(--raya-space-20, 20px);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-overview h3 {
+  font-size: var(--kilo-font-size-12);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 42rem) {
+  html[data-theme="kilo-vscode"] .routines-inbox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html[data-theme="kilo-vscode"] .routines-people {
+    border-right: 0;
+  }
+
+  html[data-theme="kilo-vscode"] .routines-thread-head {
+    padding-inline: var(--raya-space-12);
+  }
+
+  html[data-theme="kilo-vscode"] .routines-thread-avatar {
+    display: none;
+  }
+
+  html[data-theme="kilo-vscode"] .routines-search:not(.routines-roster-search) {
+    padding-inline: var(--raya-space-12);
+  }
+
+  html[data-theme="kilo-vscode"] .routines-thread-body {
+    padding: var(--raya-space-16) var(--raya-space-12);
+  }
+
+  html[data-theme="kilo-vscode"] .routines-composer {
+    width: calc(100% - 24px);
+    margin-bottom: var(--raya-space-12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="kilo-vscode"] .routines-view *,
+  html[data-theme="kilo-vscode"] .routines-view *::before,
+  html[data-theme="kilo-vscode"] .routines-view *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

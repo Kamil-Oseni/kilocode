@@ -1397,10 +1397,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setWait("")
     }
     if (msg.type === "routineRuns") history(msg)
-    if (
-      (msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") &&
-      polling(hold, chosen(), organization())
-    )
+    if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && polling(hold, chosen(), organization()))
       load()
   })
   onCleanup(unsub)
@@ -1765,7 +1762,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   return (
     <div ref={root} class="routines-view history-view">
-      <div class="history-view-header">
+      <div class="history-view-header routines-main-header">
         <Show when={props.onBack}>
           <Button variant="ghost" size="small" icon="arrow-left" onClick={props.onBack}>
             {language.t("common.goBack")}
@@ -1877,7 +1874,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       {organizationError()}
                     </p>
                   </Show>
-                  <label class="routines-field routines-search">
+                  <label class="routines-field routines-search routines-roster-search">
                     <span class="sr-only">Search workers</span>
                     <input
                       value={query()}

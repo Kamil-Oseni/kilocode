@@ -1004,7 +1004,7 @@ export const Inbox: Component<{
     saved(msg)
     halted(msg)
     chained(msg)
-    if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && connected()) {
+    if (msg.type === "sessionTurnClosed" && connected()) {
       wait = false
       load(undefined, term || undefined)
     }

@@ -178,6 +178,11 @@ try {
   area.dispatchEvent(new window.Event("input", { bubbles: true }))
   const refreshes = sent.filter((msg) => msg.type === "routineList").length
   const pagesBeforeRefresh = sent.filter((msg) => msg.type === "routineInboxPage").length
+  for (let i = 0; i < 100; i++)
+    emit({ type: "sessionStatus", sessionID: `streaming-session-${i}`, status: { type: "busy" } })
+  assert.equal(sent.filter((msg) => msg.type === "routineInboxPage").length, pagesBeforeRefresh)
+  assert.equal(document.activeElement, area)
+  assert.equal(area.value, "Why did expenses increase?")
   emit({ type: "sessionTurnClosed", sessionID: "unrelated-session" })
   assert.equal(sent.filter((msg) => msg.type === "routineList").length, refreshes)
   assert.equal(sent.filter((msg) => msg.type === "routineInboxPage").length, pagesBeforeRefresh + 1)

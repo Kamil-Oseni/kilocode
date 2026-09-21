@@ -318,7 +318,7 @@ export namespace RayaTask {
     organization: OrganizationCreate,
     organizationRevision: Version,
   })
-  const Stage = Schema.Union([StageV1, StageV2])
+  export const Stage = Schema.Union([StageV1, StageV2])
 
   function creation(value: typeof StageV2.Type): Create {
     return {

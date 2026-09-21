@@ -54764,6 +54764,9 @@
                               "goal-blocked",
                               "goal-state-unreadable",
                               "goal-inventory-incomplete",
+                              "scheduler-recovery",
+                              "scheduler-state-unreadable",
+                              "scheduler-inventory-incomplete",
                               "routine-blocked",
                               "routine-recovery",
                               "routine-history-unreadable",
@@ -54828,6 +54831,31 @@
                                 "maximum": 1000000
                               },
                               "paused": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "queued": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "claims": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "staged": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "pending": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "stranded": {
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 1000000
@@ -55020,6 +55048,9 @@
                               "goal-blocked",
                               "goal-state-unreadable",
                               "goal-inventory-incomplete",
+                              "scheduler-recovery",
+                              "scheduler-state-unreadable",
+                              "scheduler-inventory-incomplete",
                               "routine-blocked",
                               "routine-recovery",
                               "routine-history-unreadable",

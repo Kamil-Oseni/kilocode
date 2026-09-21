@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import type { ProfileInfo } from "@/kilocode/browser/profile-schema"
 import type { RayaTask } from "@/kilocode/task"
 import type { RayaGoalHealth } from "@/kilocode/goal/health"
+import type { RayaTaskHealth } from "@/kilocode/task/health"
 import type { Info as VoiceInfo } from "@/kilocode/voice/protocol"
 
 export namespace RayaAdmin {
@@ -39,6 +40,9 @@ export namespace RayaAdmin {
     "goal-blocked",
     "goal-state-unreadable",
     "goal-inventory-incomplete",
+    "scheduler-recovery",
+    "scheduler-state-unreadable",
+    "scheduler-inventory-incomplete",
     "routine-blocked",
     "routine-recovery",
     "routine-history-unreadable",
@@ -68,6 +72,11 @@ export namespace RayaAdmin {
     failed: Schema.optional(Count),
     incomplete: Schema.optional(Count),
     paused: Schema.optional(Count),
+    queued: Schema.optional(Count),
+    claims: Schema.optional(Count),
+    staged: Schema.optional(Count),
+    pending: Schema.optional(Count),
+    stranded: Schema.optional(Count),
   })
   export type Metrics = typeof Metrics.Type
 
@@ -180,6 +189,14 @@ export namespace RayaAdmin {
     return row("goals", "healthy", "ready", at, metrics)
   }
 
+  export function scheduler(signal: RayaTaskHealth.Summary, at: number): Row {
+    const metrics = bounded(signal)
+    if (signal.failed) return row("scheduler", "degraded", "scheduler-state-unreadable", at, metrics)
+    if (signal.recovering) return row("scheduler", "degraded", "scheduler-recovery", at, metrics)
+    if (signal.incomplete) return row("scheduler", "degraded", "scheduler-inventory-incomplete", at, metrics)
+    return row("scheduler", "healthy", "ready", at, metrics)
+  }
+
   export function browser(profile: Pick<typeof ProfileInfo.Type, "status"> | undefined, at: number): Row {
     if (!profile) return unknown("browser", at, "not-checked")
     if (profile.status === "ready") return row("browser", "healthy", "ready", at)
@@ -235,6 +252,11 @@ export namespace RayaAdmin {
       ...(metrics.failed === undefined ? {} : { failed: cap(metrics.failed) }),
       ...(metrics.incomplete === undefined ? {} : { incomplete: cap(metrics.incomplete) }),
       ...(metrics.paused === undefined ? {} : { paused: cap(metrics.paused) }),
+      ...(metrics.queued === undefined ? {} : { queued: cap(metrics.queued) }),
+      ...(metrics.claims === undefined ? {} : { claims: cap(metrics.claims) }),
+      ...(metrics.staged === undefined ? {} : { staged: cap(metrics.staged) }),
+      ...(metrics.pending === undefined ? {} : { pending: cap(metrics.pending) }),
+      ...(metrics.stranded === undefined ? {} : { stranded: cap(metrics.stranded) }),
     }
   }
 

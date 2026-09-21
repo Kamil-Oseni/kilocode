@@ -33,7 +33,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
       ["goals", "healthy", "ready"],
       ["routines", "healthy", "ready"],
       ["organizations", "healthy", "ready"],
-      ["scheduler", "unknown", "not-checked"],
+      ["scheduler", "healthy", "ready"],
       ["agents", "healthy", "ready"],
       ["skills", "healthy", "ready"],
       ["todos", "healthy", "ready"],
@@ -112,7 +112,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     const recent = await request("/raya/admin/logs?limit=2")
     expect(recent.status).toBe(200)
     const latest = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await recent.json())
-    expect(latest.map((entry) => entry.seq)).toEqual([21, 22])
+    expect(latest.map((entry) => entry.seq)).toEqual([23, 24])
     expect(latest.every((entry) => entry.code === "probe.completed")).toBe(true)
 
     const page = await request("/raya/admin/logs?after=0&limit=2")
@@ -156,7 +156,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
       ["goals", "healthy", "ready"],
       ["routines", "unknown", "probe-failed"],
       ["organizations", "healthy", "ready"],
-      ["scheduler", "unknown", "not-checked"],
+      ["scheduler", "healthy", "ready"],
       ["agents", "unknown", "probe-failed"],
       ["skills", "healthy", "ready"],
       ["todos", "healthy", "ready"],
@@ -174,9 +174,9 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(text).not.toContain(first.path)
 
     const cycle = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(
-      await (await request("/raya/admin/logs?after=22&limit=100")).json(),
+      await (await request("/raya/admin/logs?after=24&limit=100")).json(),
     )
-    expect(cycle).toHaveLength(22)
+    expect(cycle).toHaveLength(24)
     const failures = cycle.filter((entry) => entry.code === "probe.failed")
     expect(failures.map((entry) => entry.subsystem).sort()).toEqual(["agents", "routines"])
     expect(JSON.stringify(failures)).not.toContain("synthetic")

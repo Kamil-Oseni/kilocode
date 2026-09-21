@@ -10,6 +10,7 @@ describe("Raya admin health service", () => {
     const reads = {
       sessions: 0,
       goals: 0,
+      scheduler: 0,
       agents: 0,
       histories: 0,
       organizations: 0,
@@ -44,6 +45,20 @@ describe("Raya admin health service", () => {
         reads.goals++
         return { goals: 2, active: 1, paused: 1, blocked: 0, failed: 0, incomplete: 0 }
       },
+      scheduler: () => {
+        reads.scheduler++
+        return {
+          queued: 1,
+          active: 1,
+          recovering: 0,
+          claims: 1,
+          staged: 0,
+          pending: 1,
+          stranded: 0,
+          failed: 0,
+          incomplete: 0,
+        }
+      },
       organizations: () => reads.organizations++,
       skills: () => reads.skills++,
       todos: () => reads.todos++,
@@ -66,6 +81,7 @@ describe("Raya admin health service", () => {
     expect(reads).toEqual({
       sessions: 1,
       goals: 1,
+      scheduler: 1,
       agents: 1,
       histories: 1,
       organizations: 1,
@@ -83,7 +99,7 @@ describe("Raya admin health service", () => {
       ["goals", "healthy", "ready"],
       ["routines", "healthy", "ready"],
       ["organizations", "healthy", "ready"],
-      ["scheduler", "unknown", "not-checked"],
+      ["scheduler", "healthy", "ready"],
       ["agents", "healthy", "ready"],
       ["skills", "healthy", "ready"],
       ["todos", "healthy", "ready"],
@@ -96,11 +112,12 @@ describe("Raya admin health service", () => {
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
     ])
-    expect(events).toHaveLength(26)
+    expect(events).toHaveLength(28)
     for (const id of [
       "runtime",
       "sessions",
       "goals",
+      "scheduler",
       "routines",
       "organizations",
       "agents",
@@ -119,7 +136,7 @@ describe("Raya admin health service", () => {
     }
 
     await service.snapshot()
-    expect(events).toHaveLength(52)
+    expect(events).toHaveLength(56)
   })
 
   test("keeps disconnected output useful without reading backend-owned stores", async () => {
@@ -160,7 +177,7 @@ describe("Raya admin health service", () => {
       ["goals", "unknown", "disconnected"],
       ["routines", "unknown", "disconnected"],
       ["organizations", "unknown", "disconnected"],
-      ["scheduler", "unknown", "not-checked"],
+      ["scheduler", "unknown", "disconnected"],
       ["agents", "unknown", "disconnected"],
       ["skills", "unknown", "disconnected"],
       ["todos", "unknown", "disconnected"],
@@ -187,6 +204,7 @@ describe("Raya admin health service", () => {
         histories: () => Effect.succeed({ items: [], failed: [] }),
       },
       goals: () => Promise.reject(new Error("C:/private/goals synthetic-goal-secret")),
+      scheduler: () => Promise.reject(new Error("C:/private/scheduler synthetic-scheduler-secret")),
       organizations: () => Promise.reject(new Error("C:/private/organizations synthetic-organization-secret")),
       skills: () => Promise.reject(new Error("C:/private/skills synthetic-skill-secret")),
       todos: () => Promise.reject(new Error("C:/private/todos synthetic-todo-secret")),
@@ -206,7 +224,7 @@ describe("Raya admin health service", () => {
       ["goals", "unknown", "probe-failed"],
       ["routines", "unknown", "probe-failed"],
       ["organizations", "unknown", "probe-failed"],
-      ["scheduler", "unknown", "not-checked"],
+      ["scheduler", "unknown", "probe-failed"],
       ["agents", "unknown", "probe-failed"],
       ["skills", "unknown", "probe-failed"],
       ["todos", "unknown", "probe-failed"],
@@ -235,6 +253,7 @@ describe("Raya admin health service", () => {
       "memory",
       "organizations",
       "routines",
+      "scheduler",
       "skills",
       "todos",
       "voice",

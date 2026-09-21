@@ -29386,6 +29386,9 @@ export type RayaAdminHealthResponses = {
         | "goal-blocked"
         | "goal-state-unreadable"
         | "goal-inventory-incomplete"
+        | "scheduler-recovery"
+        | "scheduler-state-unreadable"
+        | "scheduler-inventory-incomplete"
         | "routine-blocked"
         | "routine-recovery"
         | "routine-history-unreadable"
@@ -29411,6 +29414,11 @@ export type RayaAdminHealthResponses = {
         failed?: number
         incomplete?: number
         paused?: number
+        queued?: number
+        claims?: number
+        staged?: number
+        pending?: number
+        stranded?: number
       }
     }>
   }
@@ -29505,6 +29513,9 @@ export type RayaAdminLogsResponses = {
         | "goal-blocked"
         | "goal-state-unreadable"
         | "goal-inventory-incomplete"
+        | "scheduler-recovery"
+        | "scheduler-state-unreadable"
+        | "scheduler-inventory-incomplete"
         | "routine-blocked"
         | "routine-recovery"
         | "routine-history-unreadable"

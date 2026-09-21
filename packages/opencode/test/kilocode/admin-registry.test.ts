@@ -148,4 +148,33 @@ describe("Raya admin health registry", () => {
       RayaAdmin.goals({ goals: 300, active: 2, paused: 0, blocked: 0, failed: 0, incomplete: 44 }, at),
     ).toMatchObject({ status: "degraded", reason: "goal-inventory-incomplete" })
   })
+
+  test("reports scheduler recovery from closed aggregate counts", () => {
+    const signal = {
+      queued: 2,
+      active: 1,
+      recovering: 2,
+      claims: 1,
+      staged: 1,
+      pending: 3,
+      stranded: 1,
+      failed: 0,
+      incomplete: 0,
+    }
+    expect(RayaAdmin.scheduler(signal, at)).toEqual({
+      id: "scheduler",
+      status: "degraded",
+      reason: "scheduler-recovery",
+      observedAt: at,
+      metrics: signal,
+    })
+    expect(RayaAdmin.scheduler({ ...signal, recovering: 0, failed: 1 }, at)).toMatchObject({
+      status: "degraded",
+      reason: "scheduler-state-unreadable",
+    })
+    expect(RayaAdmin.scheduler({ ...signal, recovering: 0, incomplete: 4 }, at)).toMatchObject({
+      status: "degraded",
+      reason: "scheduler-inventory-incomplete",
+    })
+  })
 })

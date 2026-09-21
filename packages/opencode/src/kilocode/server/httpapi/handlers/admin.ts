@@ -17,6 +17,7 @@ import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { Skill } from "@/skill"
 import { RayaGoalHealth } from "@/kilocode/goal/health"
+import { RayaTaskHealth } from "@/kilocode/task/health"
 
 export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin", (handlers) =>
   Effect.gen(function* () {
@@ -41,6 +42,7 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
         },
         tasks,
         goals: () => Effect.runPromise(RayaGoalHealth.inspect(storage)),
+        scheduler: () => Effect.runPromise(RayaTaskHealth.inspect(database, storage)),
         organizations: () =>
           Effect.runPromise(organizations.list({ limit: 1 }).pipe(Effect.provideService(InstanceRef, ctx))),
         skills: () => Effect.runPromise(skills.all().pipe(Effect.provideService(InstanceRef, ctx))),

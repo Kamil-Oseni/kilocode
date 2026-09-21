@@ -7,7 +7,7 @@ import { starting } from "./claim"
 import { read as readClaim } from "./storage-read"
 
 const Owner = Schema.Struct({ host: Schema.String, pid: Schema.Number })
-const Record = Schema.Struct({
+export const Record = Schema.Struct({
   version: Schema.Literal(1),
   agentID: Schema.String,
   id: Schema.String,

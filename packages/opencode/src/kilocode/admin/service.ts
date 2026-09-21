@@ -5,6 +5,7 @@ import { RayaTask } from "@/kilocode/task"
 import type { Info as VoiceInfo } from "@/kilocode/voice/protocol"
 import type { RayaAdminLog } from "./log"
 import type { RayaGoalHealth } from "@/kilocode/goal/health"
+import type { RayaTaskHealth } from "@/kilocode/task/health"
 import { RayaAdmin } from "./registry"
 
 export namespace RayaAdminService {
@@ -26,6 +27,7 @@ export namespace RayaAdminService {
     sessions: Pick<Session.Interface, "list">
     tasks: Tasks
     goals?: () => Result<RayaGoalHealth.Summary>
+    scheduler?: () => Result<RayaTaskHealth.Summary>
     organizations?: Check
     skills?: Check
     todos?: Check
@@ -110,6 +112,15 @@ export namespace RayaAdminService {
               () => RayaAdmin.sessions({ storage: "readable", stream: current }, at),
               () => RayaAdmin.sessions({ storage: "unreadable", stream: current }, at),
             )
+          },
+        },
+        {
+          id: "scheduler",
+          read: async (at) => {
+            const current = await state
+            if (current !== "connected") return RayaAdmin.unavailable("scheduler", at, "disconnected")
+            if (!deps.scheduler) return RayaAdmin.unavailable("scheduler", at)
+            return RayaAdmin.scheduler(await deps.scheduler(), at)
           },
         },
         {

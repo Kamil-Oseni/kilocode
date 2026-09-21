@@ -30,7 +30,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(snapshot.items.map((row) => [row.id, row.status, row.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
-      ["goals", "unknown", "not-checked"],
+      ["goals", "healthy", "ready"],
       ["routines", "healthy", "ready"],
       ["organizations", "healthy", "ready"],
       ["scheduler", "unknown", "not-checked"],
@@ -112,7 +112,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     const recent = await request("/raya/admin/logs?limit=2")
     expect(recent.status).toBe(200)
     const latest = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await recent.json())
-    expect(latest.map((entry) => entry.seq)).toEqual([19, 20])
+    expect(latest.map((entry) => entry.seq)).toEqual([21, 22])
     expect(latest.every((entry) => entry.code === "probe.completed")).toBe(true)
 
     const page = await request("/raya/admin/logs?after=0&limit=2")
@@ -129,7 +129,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(next.status).toBe(200)
     const following = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await next.json())
     expect(following.map((entry) => entry.seq)).toEqual([3, 4])
-    expect(following.map((entry) => entry.subsystem)).toEqual(["routines", "organizations"])
+    expect(following.map((entry) => entry.subsystem)).toEqual(["goals", "routines"])
 
     const isolated = await request("/raya/admin/logs", second.path)
     expect(isolated.status).toBe(200)
@@ -153,7 +153,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(degraded.items.map((row) => [row.id, row.status, row.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
-      ["goals", "unknown", "not-checked"],
+      ["goals", "healthy", "ready"],
       ["routines", "unknown", "probe-failed"],
       ["organizations", "healthy", "ready"],
       ["scheduler", "unknown", "not-checked"],
@@ -174,9 +174,9 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(text).not.toContain(first.path)
 
     const cycle = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(
-      await (await request("/raya/admin/logs?after=20&limit=100")).json(),
+      await (await request("/raya/admin/logs?after=22&limit=100")).json(),
     )
-    expect(cycle).toHaveLength(20)
+    expect(cycle).toHaveLength(22)
     const failures = cycle.filter((entry) => entry.code === "probe.failed")
     expect(failures.map((entry) => entry.subsystem).sort()).toEqual(["agents", "routines"])
     expect(JSON.stringify(failures)).not.toContain("synthetic")

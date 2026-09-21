@@ -29383,6 +29383,9 @@ export type RayaAdminHealthResponses = {
         | "runtime-error"
         | "storage-unreadable"
         | "stream-error"
+        | "goal-blocked"
+        | "goal-state-unreadable"
+        | "goal-inventory-incomplete"
         | "routine-blocked"
         | "routine-recovery"
         | "routine-history-unreadable"
@@ -29400,12 +29403,14 @@ export type RayaAdminHealthResponses = {
       observedAt: number
       metrics?: {
         agents?: number
+        goals?: number
         runs?: number
         active?: number
         blocked?: number
         recovering?: number
         failed?: number
         incomplete?: number
+        paused?: number
       }
     }>
   }
@@ -29497,6 +29502,9 @@ export type RayaAdminLogsResponses = {
         | "runtime-error"
         | "storage-unreadable"
         | "stream-error"
+        | "goal-blocked"
+        | "goal-state-unreadable"
+        | "goal-inventory-incomplete"
         | "routine-blocked"
         | "routine-recovery"
         | "routine-history-unreadable"

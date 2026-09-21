@@ -54761,6 +54761,9 @@
                               "runtime-error",
                               "storage-unreadable",
                               "stream-error",
+                              "goal-blocked",
+                              "goal-state-unreadable",
+                              "goal-inventory-incomplete",
                               "routine-blocked",
                               "routine-recovery",
                               "routine-history-unreadable",
@@ -54785,6 +54788,11 @@
                             "type": "object",
                             "properties": {
                               "agents": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "goals": {
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 1000000
@@ -54815,6 +54823,11 @@
                                 "maximum": 1000000
                               },
                               "incomplete": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "paused": {
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 1000000
@@ -55004,6 +55017,9 @@
                               "runtime-error",
                               "storage-unreadable",
                               "stream-error",
+                              "goal-blocked",
+                              "goal-state-unreadable",
+                              "goal-inventory-incomplete",
                               "routine-blocked",
                               "routine-recovery",
                               "routine-history-unreadable",

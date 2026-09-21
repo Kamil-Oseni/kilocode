@@ -9,6 +9,7 @@ describe("Raya admin health service", () => {
   test("reads each authoritative source once and composes its existing signals", async () => {
     const reads = {
       sessions: 0,
+      goals: 0,
       agents: 0,
       histories: 0,
       organizations: 0,
@@ -39,6 +40,10 @@ describe("Raya admin health service", () => {
           return Effect.succeed({ items: [], failed: [] })
         },
       },
+      goals: () => {
+        reads.goals++
+        return { goals: 2, active: 1, paused: 1, blocked: 0, failed: 0, incomplete: 0 }
+      },
       organizations: () => reads.organizations++,
       skills: () => reads.skills++,
       todos: () => reads.todos++,
@@ -60,6 +65,7 @@ describe("Raya admin health service", () => {
     const snapshot = await service.snapshot()
     expect(reads).toEqual({
       sessions: 1,
+      goals: 1,
       agents: 1,
       histories: 1,
       organizations: 1,
@@ -74,7 +80,7 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
-      ["goals", "unknown", "not-checked"],
+      ["goals", "healthy", "ready"],
       ["routines", "healthy", "ready"],
       ["organizations", "healthy", "ready"],
       ["scheduler", "unknown", "not-checked"],
@@ -90,10 +96,11 @@ describe("Raya admin health service", () => {
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
     ])
-    expect(events).toHaveLength(24)
+    expect(events).toHaveLength(26)
     for (const id of [
       "runtime",
       "sessions",
+      "goals",
       "routines",
       "organizations",
       "agents",
@@ -112,7 +119,7 @@ describe("Raya admin health service", () => {
     }
 
     await service.snapshot()
-    expect(events).toHaveLength(48)
+    expect(events).toHaveLength(52)
   })
 
   test("keeps disconnected output useful without reading backend-owned stores", async () => {
@@ -150,7 +157,7 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "offline", "disconnected"],
       ["sessions", "offline", "disconnected"],
-      ["goals", "unknown", "not-checked"],
+      ["goals", "unknown", "disconnected"],
       ["routines", "unknown", "disconnected"],
       ["organizations", "unknown", "disconnected"],
       ["scheduler", "unknown", "not-checked"],
@@ -179,6 +186,7 @@ describe("Raya admin health service", () => {
         list: () => Effect.die(new Error("synthetic-task-secret")),
         histories: () => Effect.succeed({ items: [], failed: [] }),
       },
+      goals: () => Promise.reject(new Error("C:/private/goals synthetic-goal-secret")),
       organizations: () => Promise.reject(new Error("C:/private/organizations synthetic-organization-secret")),
       skills: () => Promise.reject(new Error("C:/private/skills synthetic-skill-secret")),
       todos: () => Promise.reject(new Error("C:/private/todos synthetic-todo-secret")),
@@ -195,7 +203,7 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "degraded", "storage-unreadable"],
-      ["goals", "unknown", "not-checked"],
+      ["goals", "unknown", "probe-failed"],
       ["routines", "unknown", "probe-failed"],
       ["organizations", "unknown", "probe-failed"],
       ["scheduler", "unknown", "not-checked"],
@@ -223,6 +231,7 @@ describe("Raya admin health service", () => {
       "browser",
       "canvas",
       "contacts",
+      "goals",
       "memory",
       "organizations",
       "routines",

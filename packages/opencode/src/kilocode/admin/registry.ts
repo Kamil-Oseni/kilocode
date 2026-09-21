@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import type { ProfileInfo } from "@/kilocode/browser/profile-schema"
 import type { RayaTask } from "@/kilocode/task"
+import type { RayaGoalHealth } from "@/kilocode/goal/health"
 import type { Info as VoiceInfo } from "@/kilocode/voice/protocol"
 
 export namespace RayaAdmin {
@@ -35,6 +36,9 @@ export namespace RayaAdmin {
     "runtime-error",
     "storage-unreadable",
     "stream-error",
+    "goal-blocked",
+    "goal-state-unreadable",
+    "goal-inventory-incomplete",
     "routine-blocked",
     "routine-recovery",
     "routine-history-unreadable",
@@ -56,12 +60,14 @@ export namespace RayaAdmin {
   const Time = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))
   export const Metrics = Schema.Struct({
     agents: Schema.optional(Count),
+    goals: Schema.optional(Count),
     runs: Schema.optional(Count),
     active: Schema.optional(Count),
     blocked: Schema.optional(Count),
     recovering: Schema.optional(Count),
     failed: Schema.optional(Count),
     incomplete: Schema.optional(Count),
+    paused: Schema.optional(Count),
   })
   export type Metrics = typeof Metrics.Type
 
@@ -166,6 +172,14 @@ export namespace RayaAdmin {
     return row("routines", "healthy", "ready", at, metrics)
   }
 
+  export function goals(signal: RayaGoalHealth.Summary, at: number): Row {
+    const metrics = bounded(signal)
+    if (signal.failed) return row("goals", "degraded", "goal-state-unreadable", at, metrics)
+    if (signal.blocked) return row("goals", "blocked", "goal-blocked", at, metrics)
+    if (signal.incomplete) return row("goals", "degraded", "goal-inventory-incomplete", at, metrics)
+    return row("goals", "healthy", "ready", at, metrics)
+  }
+
   export function browser(profile: Pick<typeof ProfileInfo.Type, "status"> | undefined, at: number): Row {
     if (!profile) return unknown("browser", at, "not-checked")
     if (profile.status === "ready") return row("browser", "healthy", "ready", at)
@@ -213,12 +227,14 @@ export namespace RayaAdmin {
     const cap = (value: number) => Math.min(value, 1_000_000)
     return {
       ...(metrics.agents === undefined ? {} : { agents: cap(metrics.agents) }),
+      ...(metrics.goals === undefined ? {} : { goals: cap(metrics.goals) }),
       ...(metrics.runs === undefined ? {} : { runs: cap(metrics.runs) }),
       ...(metrics.active === undefined ? {} : { active: cap(metrics.active) }),
       ...(metrics.blocked === undefined ? {} : { blocked: cap(metrics.blocked) }),
       ...(metrics.recovering === undefined ? {} : { recovering: cap(metrics.recovering) }),
       ...(metrics.failed === undefined ? {} : { failed: cap(metrics.failed) }),
       ...(metrics.incomplete === undefined ? {} : { incomplete: cap(metrics.incomplete) }),
+      ...(metrics.paused === undefined ? {} : { paused: cap(metrics.paused) }),
     }
   }
 

@@ -132,4 +132,20 @@ describe("Raya admin health registry", () => {
       metrics: { agents: 1, active: 0, recovering: 1 },
     })
   })
+
+  test("reports bounded goal health without exposing goal content", () => {
+    expect(RayaAdmin.goals({ goals: 4, active: 1, paused: 1, blocked: 1, failed: 0, incomplete: 0 }, at)).toEqual({
+      id: "goals",
+      status: "blocked",
+      reason: "goal-blocked",
+      observedAt: at,
+      metrics: { goals: 4, active: 1, paused: 1, blocked: 1, failed: 0, incomplete: 0 },
+    })
+    expect(
+      RayaAdmin.goals({ goals: 300, active: 2, paused: 0, blocked: 0, failed: 1, incomplete: 44 }, at),
+    ).toMatchObject({ status: "degraded", reason: "goal-state-unreadable" })
+    expect(
+      RayaAdmin.goals({ goals: 300, active: 2, paused: 0, blocked: 0, failed: 0, incomplete: 44 }, at),
+    ).toMatchObject({ status: "degraded", reason: "goal-inventory-incomplete" })
+  })
 })

@@ -4,6 +4,7 @@ import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
 import type { Info as VoiceInfo } from "@/kilocode/voice/protocol"
 import type { RayaAdminLog } from "./log"
+import type { RayaGoalHealth } from "@/kilocode/goal/health"
 import { RayaAdmin } from "./registry"
 
 export namespace RayaAdminService {
@@ -24,6 +25,7 @@ export namespace RayaAdminService {
     runtime: () => Result<State>
     sessions: Pick<Session.Interface, "list">
     tasks: Tasks
+    goals?: () => Result<RayaGoalHealth.Summary>
     organizations?: Check
     skills?: Check
     todos?: Check
@@ -89,6 +91,15 @@ export namespace RayaAdminService {
         {
           id: "runtime",
           read: async (at) => RayaAdmin.runtime(await state, at),
+        },
+        {
+          id: "goals",
+          read: async (at) => {
+            const current = await state
+            if (current !== "connected") return RayaAdmin.unavailable("goals", at, "disconnected")
+            if (!deps.goals) return RayaAdmin.unavailable("goals", at)
+            return RayaAdmin.goals(await deps.goals(), at)
+          },
         },
         {
           id: "sessions",

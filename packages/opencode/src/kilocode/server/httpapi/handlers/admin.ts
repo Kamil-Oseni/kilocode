@@ -16,6 +16,7 @@ import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { Skill } from "@/skill"
+import { RayaGoalHealth } from "@/kilocode/goal/health"
 
 export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin", (handlers) =>
   Effect.gen(function* () {
@@ -39,6 +40,7 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
           list: (input) => sessions.list(input).pipe(Effect.provideService(InstanceRef, ctx)),
         },
         tasks,
+        goals: () => Effect.runPromise(RayaGoalHealth.inspect(storage)),
         organizations: () =>
           Effect.runPromise(organizations.list({ limit: 1 }).pipe(Effect.provideService(InstanceRef, ctx))),
         skills: () => Effect.runPromise(skills.all().pipe(Effect.provideService(InstanceRef, ctx))),

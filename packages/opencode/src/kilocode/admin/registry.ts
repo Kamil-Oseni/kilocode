@@ -201,6 +201,10 @@ export namespace RayaAdmin {
     return row("voice", "healthy", "ready", at, metrics)
   }
 
+  export function ready(id: Subsystem, at: number) {
+    return row(id, "healthy", "ready", at)
+  }
+
   export function unavailable(id: Subsystem, at: number, reason: "disconnected" | "not-checked" = "not-checked") {
     return row(id, "unknown", reason, at)
   }

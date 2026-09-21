@@ -30,10 +30,21 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(snapshot.items.map((row) => [row.id, row.status, row.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
+      ["goals", "unknown", "not-checked"],
       ["routines", "healthy", "ready"],
+      ["organizations", "healthy", "ready"],
+      ["scheduler", "unknown", "not-checked"],
       ["agents", "healthy", "ready"],
+      ["skills", "healthy", "ready"],
+      ["todos", "healthy", "ready"],
+      ["contacts", "unknown", "not-checked"],
       ["browser", "unknown", "not-checked"],
+      ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "not-checked"],
+      ["memory", "unknown", "not-checked"],
+      ["canvas", "healthy", "ready"],
+      ["sync", "unknown", "not-checked"],
+      ["updates", "unknown", "not-checked"],
     ])
     expect(JSON.stringify(snapshot)).not.toContain(first.path)
 
@@ -101,10 +112,8 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     const recent = await request("/raya/admin/logs?limit=2")
     expect(recent.status).toBe(200)
     const latest = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await recent.json())
-    expect(latest.map((entry) => [entry.seq, entry.subsystem, entry.code])).toEqual([
-      [7, "agents", "probe.completed"],
-      [8, "routines", "probe.completed"],
-    ])
+    expect(latest.map((entry) => entry.seq)).toEqual([15, 16])
+    expect(latest.every((entry) => entry.code === "probe.completed")).toBe(true)
 
     const page = await request("/raya/admin/logs?after=0&limit=2")
     expect(page.status).toBe(200)
@@ -120,7 +129,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(next.status).toBe(200)
     const following = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await next.json())
     expect(following.map((entry) => entry.seq)).toEqual([3, 4])
-    expect(following.map((entry) => entry.subsystem)).toEqual(["routines", "agents"])
+    expect(following.map((entry) => entry.subsystem)).toEqual(["routines", "organizations"])
 
     const isolated = await request("/raya/admin/logs", second.path)
     expect(isolated.status).toBe(200)
@@ -144,19 +153,31 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(degraded.items.map((row) => [row.id, row.status, row.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
+      ["goals", "unknown", "not-checked"],
       ["routines", "unknown", "probe-failed"],
+      ["organizations", "healthy", "ready"],
+      ["scheduler", "unknown", "not-checked"],
       ["agents", "unknown", "probe-failed"],
+      ["skills", "healthy", "ready"],
+      ["todos", "healthy", "ready"],
+      ["contacts", "unknown", "not-checked"],
       ["browser", "unknown", "not-checked"],
+      ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "not-checked"],
+      ["memory", "unknown", "not-checked"],
+      ["canvas", "healthy", "ready"],
+      ["sync", "unknown", "not-checked"],
+      ["updates", "unknown", "not-checked"],
     ])
     expect(text).not.toContain("synthetic")
     expect(text).not.toContain("private")
     expect(text).not.toContain(first.path)
 
-    const failures = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(
-      await (await request("/raya/admin/logs?limit=2")).json(),
+    const cycle = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(
+      await (await request("/raya/admin/logs?after=16&limit=100")).json(),
     )
-    expect(failures.map((entry) => entry.code)).toEqual(["probe.failed", "probe.failed"])
+    expect(cycle).toHaveLength(16)
+    const failures = cycle.filter((entry) => entry.code === "probe.failed")
     expect(failures.map((entry) => entry.subsystem).sort()).toEqual(["agents", "routines"])
     expect(JSON.stringify(failures)).not.toContain("synthetic")
     expect(JSON.stringify(failures)).not.toContain("private")

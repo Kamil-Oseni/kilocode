@@ -5,11 +5,15 @@ import { RayaAdminLog } from "@/kilocode/admin/log"
 import { RayaAdminService } from "@/kilocode/admin/service"
 import { RayaMigrationLedger } from "@/kilocode/migration/compatibility"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { PersonalTodo } from "@/kilocode/personal-todo"
+import { Canvas } from "@/kilocode/canvas/service"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceState } from "@/effect/instance-state"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
+import { Skill } from "@/skill"
 
 export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin", (handlers) =>
   Effect.gen(function* () {
@@ -17,7 +21,11 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
     const storage = yield* Storage.Service
     const database = yield* Database.Service
     const logs = yield* RayaAdminLog.Service
+    const skills = yield* Skill.Service
+    const canvas = yield* Canvas.Service
     const tasks = RayaTask.make({ storage, database })
+    const organizations = RayaTaskOrganization.make(database, { get: tasks.get }, storage)
+    const todos = PersonalTodo.make({ storage })
 
     const health = Effect.fn("RayaAdminHttpApi.health")(function* () {
       const ctx = yield* InstanceState.context
@@ -27,6 +35,11 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
           list: (input) => sessions.list(input).pipe(Effect.provideService(InstanceRef, ctx)),
         },
         tasks,
+        organizations: () =>
+          Effect.runPromise(organizations.list({ limit: 1 }).pipe(Effect.provideService(InstanceRef, ctx))),
+        skills: () => Effect.runPromise(skills.all().pipe(Effect.provideService(InstanceRef, ctx))),
+        todos: () => Effect.runPromise(todos.list().pipe(Effect.provideService(InstanceRef, ctx))),
+        canvas: () => Effect.runPromise(canvas.list().pipe(Effect.provideService(InstanceRef, ctx))),
         report: (event) => Effect.runPromise(logs.write(event).pipe(Effect.provideService(InstanceRef, ctx))),
       })
       const snapshot = yield* Effect.promise(() => admin.snapshot())

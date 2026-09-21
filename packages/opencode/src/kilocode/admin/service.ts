@@ -18,11 +18,16 @@ export namespace RayaAdminService {
     available: boolean
     states: readonly { info: Pick<typeof VoiceInfo.Type, "status">; incomplete: boolean }[]
   }
+  type Check = () => Result<unknown>
 
   export type Deps = {
     runtime: () => Result<State>
     sessions: Pick<Session.Interface, "list">
     tasks: Tasks
+    organizations?: Check
+    skills?: Check
+    todos?: Check
+    canvas?: Check
     browser?: () => Result<Browser>
     voice?: () => Result<Voice>
     report?: (event: RayaAdminLog.Input) => Result<unknown>
@@ -111,6 +116,19 @@ export namespace RayaAdminService {
           },
         },
       ]
+      const check = (id: "organizations" | "skills" | "todos" | "canvas", read: Check): RayaAdmin.Probe => ({
+        id,
+        read: async (at) => {
+          const current = await state
+          if (current !== "connected") return RayaAdmin.unavailable(id, at, "disconnected")
+          await read()
+          return RayaAdmin.ready(id, at)
+        },
+      })
+      if (deps.organizations) probes.push(check("organizations", deps.organizations))
+      if (deps.skills) probes.push(check("skills", deps.skills))
+      if (deps.todos) probes.push(check("todos", deps.todos))
+      if (deps.canvas) probes.push(check("canvas", deps.canvas))
       const browser = deps.browser
       if (browser) probes.push({ id: "browser", read: async (at) => RayaAdmin.browser(await browser(), at) })
       const voice = deps.voice

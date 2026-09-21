@@ -7,7 +7,17 @@ const at = 1_800_000_000_000
 
 describe("Raya admin health service", () => {
   test("reads each authoritative source once and composes its existing signals", async () => {
-    const reads = { sessions: 0, agents: 0, histories: 0, browser: 0, voice: 0 }
+    const reads = {
+      sessions: 0,
+      agents: 0,
+      histories: 0,
+      organizations: 0,
+      skills: 0,
+      todos: 0,
+      canvas: 0,
+      browser: 0,
+      voice: 0,
+    }
     const events: RayaAdminLog.Input[] = []
     const service = RayaAdminService.make({
       runtime: () => "connected",
@@ -27,6 +37,10 @@ describe("Raya admin health service", () => {
           return Effect.succeed({ items: [], failed: [] })
         },
       },
+      organizations: () => reads.organizations++,
+      skills: () => reads.skills++,
+      todos: () => reads.todos++,
+      canvas: () => reads.canvas++,
       browser: () => {
         reads.browser++
         return { status: "ready" }
@@ -40,28 +54,49 @@ describe("Raya admin health service", () => {
     })
 
     const snapshot = await service.snapshot()
-    expect(reads).toEqual({ sessions: 1, agents: 1, histories: 1, browser: 1, voice: 1 })
+    expect(reads).toEqual({
+      sessions: 1,
+      agents: 1,
+      histories: 1,
+      organizations: 1,
+      skills: 1,
+      todos: 1,
+      canvas: 1,
+      browser: 1,
+      voice: 1,
+    })
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
       ["goals", "unknown", "not-checked"],
       ["routines", "healthy", "ready"],
-      ["organizations", "unknown", "not-checked"],
+      ["organizations", "healthy", "ready"],
       ["scheduler", "unknown", "not-checked"],
       ["agents", "healthy", "ready"],
-      ["skills", "unknown", "not-checked"],
-      ["todos", "unknown", "not-checked"],
+      ["skills", "healthy", "ready"],
+      ["todos", "healthy", "ready"],
       ["contacts", "unknown", "not-checked"],
       ["browser", "healthy", "ready"],
       ["computer", "unknown", "not-checked"],
       ["voice", "healthy", "ready"],
       ["memory", "unknown", "not-checked"],
-      ["canvas", "unknown", "not-checked"],
+      ["canvas", "healthy", "ready"],
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
     ])
-    expect(events).toHaveLength(12)
-    for (const id of ["runtime", "sessions", "routines", "agents", "browser", "voice"] as const) {
+    expect(events).toHaveLength(20)
+    for (const id of [
+      "runtime",
+      "sessions",
+      "routines",
+      "organizations",
+      "agents",
+      "skills",
+      "todos",
+      "browser",
+      "voice",
+      "canvas",
+    ] as const) {
       expect(events.filter((event) => event.subsystem === id).map((event) => event.code)).toEqual([
         "probe.started",
         "probe.completed",
@@ -69,11 +104,11 @@ describe("Raya admin health service", () => {
     }
 
     await service.snapshot()
-    expect(events).toHaveLength(24)
+    expect(events).toHaveLength(40)
   })
 
   test("keeps disconnected output useful without reading backend-owned stores", async () => {
-    const reads = { sessions: 0, tasks: 0 }
+    const reads = { sessions: 0, tasks: 0, checks: 0 }
     const service = RayaAdminService.make({
       runtime: () => "disconnected",
       sessions: {
@@ -92,28 +127,32 @@ describe("Raya admin health service", () => {
           return Effect.succeed({ items: [], failed: [] })
         },
       },
+      organizations: () => reads.checks++,
+      skills: () => reads.checks++,
+      todos: () => reads.checks++,
+      canvas: () => reads.checks++,
       browser: () => ({ status: "locked" }),
       clock: () => at,
     })
 
     const snapshot = await service.snapshot()
-    expect(reads).toEqual({ sessions: 0, tasks: 0 })
+    expect(reads).toEqual({ sessions: 0, tasks: 0, checks: 0 })
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "offline", "disconnected"],
       ["sessions", "offline", "disconnected"],
       ["goals", "unknown", "not-checked"],
       ["routines", "unknown", "disconnected"],
-      ["organizations", "unknown", "not-checked"],
+      ["organizations", "unknown", "disconnected"],
       ["scheduler", "unknown", "not-checked"],
       ["agents", "unknown", "disconnected"],
-      ["skills", "unknown", "not-checked"],
-      ["todos", "unknown", "not-checked"],
+      ["skills", "unknown", "disconnected"],
+      ["todos", "unknown", "disconnected"],
       ["contacts", "unknown", "not-checked"],
       ["browser", "blocked", "browser-locked"],
       ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "not-checked"],
       ["memory", "unknown", "not-checked"],
-      ["canvas", "unknown", "not-checked"],
+      ["canvas", "unknown", "disconnected"],
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
     ])
@@ -130,6 +169,10 @@ describe("Raya admin health service", () => {
         list: () => Effect.die(new Error("synthetic-task-secret")),
         histories: () => Effect.succeed({ items: [], failed: [] }),
       },
+      organizations: () => Promise.reject(new Error("C:/private/organizations synthetic-organization-secret")),
+      skills: () => Promise.reject(new Error("C:/private/skills synthetic-skill-secret")),
+      todos: () => Promise.reject(new Error("C:/private/todos synthetic-todo-secret")),
+      canvas: () => Promise.reject(new Error("C:/private/canvas synthetic-canvas-secret")),
       browser: () => Promise.reject(new Error("https://private.example/?token=synthetic-browser-secret")),
       voice: () => Promise.reject(new Error("synthetic-voice-secret")),
       report: (event) => events.push(event),
@@ -142,17 +185,17 @@ describe("Raya admin health service", () => {
       ["sessions", "degraded", "storage-unreadable"],
       ["goals", "unknown", "not-checked"],
       ["routines", "unknown", "probe-failed"],
-      ["organizations", "unknown", "not-checked"],
+      ["organizations", "unknown", "probe-failed"],
       ["scheduler", "unknown", "not-checked"],
       ["agents", "unknown", "probe-failed"],
-      ["skills", "unknown", "not-checked"],
-      ["todos", "unknown", "not-checked"],
+      ["skills", "unknown", "probe-failed"],
+      ["todos", "unknown", "probe-failed"],
       ["contacts", "unknown", "not-checked"],
       ["browser", "unknown", "probe-failed"],
       ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "probe-failed"],
       ["memory", "unknown", "not-checked"],
-      ["canvas", "unknown", "not-checked"],
+      ["canvas", "unknown", "probe-failed"],
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
     ])
@@ -163,7 +206,7 @@ describe("Raya admin health service", () => {
         .filter((event) => event.code === "probe.failed")
         .map((event) => event.subsystem)
         .sort(),
-    ).toEqual(["agents", "browser", "routines", "voice"])
+    ).toEqual(["agents", "browser", "canvas", "organizations", "routines", "skills", "todos", "voice"])
     expect(JSON.stringify(events)).not.toContain("synthetic")
     expect(JSON.stringify(events)).not.toContain("private")
   })

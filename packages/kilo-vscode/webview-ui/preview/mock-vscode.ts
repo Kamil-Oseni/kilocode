@@ -280,6 +280,10 @@ const calendar = (message: WebviewMessage) => {
     })
     return true
   }
+  if (message.type === "routineCreate") {
+    emit({ type: "routineState", saved: true })
+    return true
+  }
   if (message.type !== "routineScheduleUpdate") return false
   emit({ type: "routineScheduleUpdated", requestID: message.requestID, agentID: message.agentID })
   return true

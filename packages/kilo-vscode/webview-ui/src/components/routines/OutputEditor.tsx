@@ -35,7 +35,7 @@ export const OutputEditor: Component<{ value: Output; onChange: (value: Output) 
     })
   return (
     <fieldset ref={root} class="routines-schedule" disabled={props.disabled}>
-      <legend>Where should the result go?</legend>
+      <legend>Result and checks</legend>
       <p class="routines-hint">
         Results stay in this run’s conversation. Describe the deliverable and the checks it must satisfy.
       </p>

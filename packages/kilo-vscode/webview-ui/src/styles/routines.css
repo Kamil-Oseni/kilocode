@@ -427,7 +427,115 @@
 .routines-form {
   display: flex;
   flex-direction: column;
+  gap: var(--raya-space-20);
+  width: min(100%, 46rem);
+  margin-inline: auto;
+  padding-block: var(--raya-space-8) var(--raya-space-24);
+}
+
+.routines-form-section {
+  display: grid;
   gap: var(--raya-space-14);
+  padding-bottom: var(--raya-space-20);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-form-heading {
+  display: grid;
+  gap: var(--raya-space-4);
+}
+
+.routines-form-heading h3,
+.routines-form-heading p {
+  margin: 0;
+}
+
+.routines-form-heading h3 {
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-15);
+  font-weight: 600;
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-form-heading p {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+  line-height: 1.45;
+}
+
+.routines-optional {
+  margin-left: var(--raya-space-4);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-weight: 400;
+}
+
+.routines-label {
+  display: flex;
+  align-items: baseline;
+}
+
+.routines-schedule-review {
+  display: grid;
+  gap: var(--raya-space-6);
+  padding-block: var(--raya-space-12);
+  border-block: 1px solid var(--border-weak, var(--vscode-widget-border));
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-advanced {
+  padding-bottom: var(--raya-space-16);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-advanced > summary {
+  cursor: pointer;
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
+  font-weight: 500;
+}
+
+.routines-advanced > summary:focus-visible {
+  outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
+  outline-offset: 3px;
+}
+
+.routines-advanced[open] > summary {
+  margin-bottom: var(--raya-space-8);
+}
+
+.routines-advanced > :not(summary) + :not(summary) {
+  margin-top: var(--raya-space-14);
+}
+
+.routines-submit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-16);
+}
+
+.routines-submit .routines-hint {
+  max-width: 30rem;
+}
+
+.routines-submit [data-component="button"] {
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .routines-form {
+    gap: var(--raya-space-16);
+  }
+
+  .routines-submit {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .routines-submit [data-component="button"] {
+    width: 100%;
+  }
 }
 
 .routines-field {

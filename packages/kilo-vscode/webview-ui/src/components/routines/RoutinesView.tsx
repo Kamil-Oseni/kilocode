@@ -102,6 +102,26 @@ type Saved = {
 
 type ViewState = Record<string, unknown> & { routineInbox?: Saved }
 
+function defaultOutput(): Output {
+  return {
+    destination: "conversation",
+    description: "A clear report in this worker's conversation.",
+    criteria: [
+      {
+        id: `criterion-${crypto.randomUUID()}`,
+        description: "The report addresses the standing job and calls out anything that needs attention.",
+        verification: "Check the report against the standing job and include supporting evidence when available.",
+      },
+    ],
+  }
+}
+
+function basicError(job: string, dir: string, edit: boolean) {
+  if (!job.trim()) return "Describe what this worker should do."
+  if (!edit && !dir.trim()) return "Choose a workspace folder for this worker."
+  return ""
+}
+
 function OrganizationEditor(props: {
   item: Organization
   agents: Agent[]
@@ -788,11 +808,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [role, setRole] = createSignal("briefer")
   const [custom, setCustom] = createSignal("")
   const [objective, setObjective] = createSignal("")
-  const [output, setOutput] = createSignal<Output>({
-    destination: "conversation",
-    description: "",
-    criteria: [{ id: `criterion-${crypto.randomUUID()}`, description: "", verification: "" }],
-  })
+  const [output, setOutput] = createSignal<Output>(defaultOutput())
   const deliverable = createMemo(() => Output.safeParse(output()).success)
   const [draft, setDraft] = createSignal(initial(Intl.DateTimeFormat().resolvedOptions().timeZone))
   const [editing, setEditing] = createSignal<Agent>()
@@ -807,7 +823,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [messages, setMessages] = createSignal(false)
   const [plan, setPlan] = createSignal("")
   const [mode, setMode] = createSignal("chat")
-  const [dir, setDir] = createSignal("")
+  const [dir, setDir] = createSignal(scope(props.workspace ?? ""))
   const [wait, setWait] = createSignal("")
   const [access, setAccess] = createSignal<"full" | "brief">("brief")
   const [screen, setScreen] = createSignal<"roster" | "assign">("roster")
@@ -833,6 +849,27 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     const next = scope(props.workspace ?? "")
     setWorkspace(next)
   })
+
+  const start = () => {
+    setEditing()
+    setName("")
+    setRole("briefer")
+    setCustom("")
+    setObjective("")
+    setOutput(defaultOutput())
+    setDraft(initial(Intl.DateTimeFormat().resolvedOptions().timeZone))
+    setMoney(false)
+    setMessages(false)
+    setPlan("")
+    setMode("chat")
+    setDir(workspace())
+    setAccess("brief")
+    setPreview()
+    setRequest()
+    setNotice("")
+    setError("")
+    setScreen("assign")
+  }
 
   const viewState = () => {
     const value = vscode.getState<ViewState>()
@@ -1374,18 +1411,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setName(item.name)
     pick(item.role)
     setObjective(item.objective)
-    setOutput({
-      destination: "conversation",
-      description: "",
-      criteria: [
-        {
-          id: `criterion-${crypto.randomUUID()}`,
-          description: "",
-          verification: "",
-        },
-      ],
-    })
+    setOutput(defaultOutput())
     setDraft(populate(item.schedule, draft().zone))
+    setDir(workspace())
+    setPreview()
+    setRequest()
+    setError("")
   }
 
   const moved = () => {
@@ -1401,17 +1432,54 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     )
   }
 
-  const caption = () => {
-    if (saving()) return "Saving"
-    if (!editing()) return "Confirm and assign"
-    if (confirmed()) return "Confirm schedule change"
-    return "Save assignment"
+  const scheduleMoved = () => {
+    const item = editing()
+    if (!item) return false
+    const zone =
+      item.schedule.kind === "cron" && !item.schedule.tz?.trim() ? "" : Intl.DateTimeFormat().resolvedOptions().timeZone
+    return JSON.stringify(draft()) !== JSON.stringify(populate(item.schedule, zone))
   }
 
-  const blocked = () => {
-    if (saving()) return true
-    if (editing()) return !name().trim() || !objective().trim() || !consent() || (!confirmed() && !moved())
-    return !objective().trim() || !dir().trim() || !consent() || !deliverable() || !confirmed()
+  const caption = () => {
+    if (saving()) return "Saving"
+    if (previewing()) return "Checking schedule"
+    if (!editing()) return confirmed() ? "Assign routine" : "Review schedule"
+    if (scheduleMoved() && !confirmed()) return "Review schedule"
+    if (confirmed()) return "Confirm changes"
+    return "Save assignment"
+  }
+  const submitHint = () =>
+    confirmed()
+      ? "The schedule is checked. You can assign this routine now."
+      : "Review shows the exact schedule before anything is saved."
+  const submitBlocked = () => saving() || previewing()
+
+  const forecast = () => {
+    const id = crypto.randomUUID()
+    setError("")
+    setPreview(undefined)
+    setRequest({ id, key: key() })
+    try {
+      const item = editing()
+      vscode.postMessage({
+        type: "routineForecast",
+        requestID: id,
+        schedule: compile(draft()),
+        edit: item
+          ? {
+              agentID: item.id,
+              expectedSchedule: item.schedule,
+              expectedScheduleVersion: item.scheduleVersion ?? 1,
+            }
+          : undefined,
+      })
+    } catch (err) {
+      setPreview({
+        type: "routineForecast",
+        requestID: id,
+        error: err instanceof Error ? err.message : "Choose a valid schedule.",
+      })
+    }
   }
 
   const persist = (item: Agent) => {
@@ -1458,6 +1526,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const create = () => {
+    const issue = basicError(objective(), dir(), !!editing())
+    if (issue) {
+      setError(issue)
+      return
+    }
     if (!editing() && !consent()) {
       setError("Choose whether to allow the records this role needs before assigning it.")
       return
@@ -1468,12 +1541,16 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     }
     const item = editing()
     if (item) {
+      if (scheduleMoved() && !confirmed()) {
+        forecast()
+        return
+      }
       persist(item)
       return
     }
     const token = preview()?.forecastID
     if (!confirmed() || !token) {
-      setError("Preview the schedule before assigning this routine.")
+      forecast()
       return
     }
     setError("")
@@ -1685,7 +1762,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               <Button variant="ghost" size="small" onClick={() => setManage(true)}>
                 Manage
               </Button>
-              <Button size="small" onClick={() => setScreen("assign")}>
+              <Button size="small" onClick={start}>
                 Assign
               </Button>
             </Show>
@@ -1714,7 +1791,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             <div class="routines-empty-block">
               <p class="routines-empty">No standing jobs yet. Assign one and it will sleep until it is time to work.</p>
               <div class="routines-empty-actions">
-                <Button onClick={() => setScreen("assign")}>Assign a routine</Button>
+                <Button onClick={start}>Assign a routine</Button>
                 <Button variant="ghost" disabled={refreshing()} onClick={load}>
                   Refresh
                 </Button>
@@ -2019,7 +2096,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             )}
           </Show>
           <Show when={!editing()}>
-            <p class="routines-lede">Name the job in a sentence, then say when it should wake.</p>
+            <p class="routines-lede">
+              Give this worker one standing job. Its reports will stay in a dedicated conversation.
+            </p>
             <div class="routines-suggest" role="list">
               <For each={templates()}>
                 {(item) => (
@@ -2037,105 +2116,61 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               create()
             }}
           >
-            <label class="routines-field">
-              Name
-              <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
-            </label>
-            <div class="routines-field">
-              <span>Role</span>
-              <Select
-                options={[...roles]}
-                current={roleOpt()}
-                label={(item) => item.label}
-                value={(item) => item.id}
-                onSelect={(item) => item && pick(item.id)}
-                variant="secondary"
-                size="small"
-              />
-            </div>
-            <Show when={role() === "custom"}>
+            <section class="routines-form-section" aria-labelledby="routine-job-heading">
+              <div class="routines-form-heading">
+                <h3 id="routine-job-heading">Job</h3>
+                <p>Say what should happen each time this worker wakes.</p>
+              </div>
               <label class="routines-field">
-                Custom role
+                <span class="routines-label">
+                  Name <span class="routines-optional">(optional)</span>
+                </span>
                 <input
-                  value={custom()}
-                  onInput={(e) => setCustom(e.currentTarget.value)}
-                  placeholder="ops, researcher, gardener"
+                  value={name()}
+                  onInput={(e) => setName(e.currentTarget.value)}
+                  placeholder="Friday accounts review"
                 />
               </label>
-            </Show>
-            <label class="routines-field">
-              Standing job
-              <textarea
-                value={objective()}
-                onInput={(e) => setObjective(e.currentTarget.value)}
-                placeholder="Review the repo for bugs every weekday evening."
-                rows={3}
-              />
-            </label>
-            <Show when={editing()}>
-              <p class="routines-hint">
-                Earlier reports stay in this conversation. This does not start a new worker. Role, write folder, agent,
-                and plan file changes apply to later runs.
-              </p>
-            </Show>
-            <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />
-            <Show when={!editing()}>
-              <OutputEditor value={output()} onChange={setOutput} disabled={saving()} />
-            </Show>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={saving()}
-              onClick={() => {
-                const id = crypto.randomUUID()
-                setError("")
-                setPreview(undefined)
-                setRequest({ id, key: key() })
-                try {
-                  const item = editing()
-                  vscode.postMessage({
-                    type: "routineForecast",
-                    requestID: id,
-                    schedule: compile(draft()),
-                    edit: item
-                      ? {
-                          agentID: item.id,
-                          expectedSchedule: item.schedule,
-                          expectedScheduleVersion: item.scheduleVersion ?? 1,
-                        }
-                      : undefined,
-                  })
-                } catch (err) {
-                  setPreview({
-                    type: "routineForecast",
-                    requestID: id,
-                    error: err instanceof Error ? err.message : "Choose a valid schedule.",
-                  })
-                }
-              }}
-            >
-              {previewing() ? "Checking schedule — click to retry" : "Preview schedule"}
-            </Button>
+              <label class="routines-field">
+                What should this worker do?
+                <textarea
+                  required
+                  value={objective()}
+                  onInput={(e) => setObjective(e.currentTarget.value)}
+                  placeholder="Review this week's accounts, flag anything unusual, and send me a short report."
+                  rows={4}
+                />
+              </label>
+              <Show when={editing()}>
+                <p class="routines-hint">Earlier reports stay in this conversation. Changes apply to later runs.</p>
+              </Show>
+            </section>
+
+            <section class="routines-form-section" aria-labelledby="routine-schedule-heading">
+              <div class="routines-form-heading">
+                <h3 id="routine-schedule-heading">Schedule</h3>
+                <p>Choose when Raya should start this job.</p>
+              </div>
+              <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />
+            </section>
+
             <Show when={request()?.key === key() && preview()?.error}>
-              {(message) => <p role="alert">{message()}</p>}
+              {(message) => (
+                <p class="routines-error" role="alert">
+                  {message()}
+                </p>
+              )}
             </Show>
             <Show when={confirmed() && preview()?.schedule}>
               {(schedule) => (
-                <div class="routines-field" role="status" aria-live="polite">
-                  <strong>Schedule to confirm</strong>
+                <div class="routines-schedule-review" role="status" aria-live="polite">
+                  <strong>Ready to assign</strong>
                   <span>{schedule().kind === "once" ? "Once at the time below" : whenLabel(schedule())}</span>
                   <Show when={preview()?.timezone ?? timezone(schedule())}>
                     <span>Timezone: {preview()?.timezone ?? timezone(schedule())}</span>
                   </Show>
                   <Show when={schedule().kind === "cron"}>
-                    <span>Next three scheduled times:</span>
-                    <span class="routines-hint">
-                      Recurring work not already queued is skipped once it is a minute late. Queued runs remain
-                      available for recovery; one-time schedules stay due until resolved.
-                    </span>
-                    <span class="routines-hint">
-                      Skipped local times do not run; repeated local times can produce two occurrences.
-                    </span>
+                    <span>Next runs</span>
                   </Show>
                   <For each={preview()?.occurrences ?? []}>
                     {(at) => (
@@ -2147,105 +2182,135 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       </span>
                     )}
                   </For>
-                  <span class="routines-hint">
-                    Confirmation saves this schedule. Scheduled times require Raya's backend to be running; an
-                    unfinished run can delay or prevent another start.
-                  </span>
+                  <span class="routines-hint">Raya must be running at the scheduled time.</span>
                 </div>
               )}
             </Show>
-            <div class="routines-field">
-              <span>Agent</span>
-              <Select
-                options={picks()}
-                current={current()}
-                label={(item) => item.label}
-                value={(item) => item.key}
-                onSelect={(item) => item && setMode(item.key)}
-                variant="secondary"
-                size="small"
-              />
+
+            <details class="routines-advanced">
+              <summary>Result, access, and files</summary>
               <p class="routines-hint">
-                Same as chat, or a mode from Settings. It uses the model you assigned that mode.
-                <button
-                  type="button"
-                  class="routines-inline"
-                  onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
-                >
-                  Open Settings
-                </button>
+                Reports go to this worker's conversation. Files use the current workspace unless you choose another
+                folder.
               </p>
-            </div>
-            <Show when={!editing()}>
               <div class="routines-field">
-                <span>Tool access</span>
+                <span>Worker role</span>
                 <Select
-                  options={work}
-                  current={workOpt()}
+                  options={[...roles]}
+                  current={roleOpt()}
                   label={(item) => item.label}
                   value={(item) => item.id}
-                  onSelect={(item) => item && setAccess(item.id)}
+                  onSelect={(item) => item && pick(item.id)}
+                  variant="secondary"
+                  size="small"
+                />
+              </div>
+              <Show when={role() === "custom"}>
+                <label class="routines-field">
+                  Custom role
+                  <input value={custom()} onInput={(e) => setCustom(e.currentTarget.value)} placeholder="Researcher" />
+                </label>
+              </Show>
+              <Show when={!editing()}>
+                <OutputEditor value={output()} onChange={setOutput} disabled={saving()} />
+              </Show>
+              <div class="routines-field">
+                <span>Agent</span>
+                <Select
+                  options={picks()}
+                  current={current()}
+                  label={(item) => item.label}
+                  value={(item) => item.key}
+                  onSelect={(item) => item && setMode(item.key)}
                   variant="secondary"
                   size="small"
                 />
                 <p class="routines-hint">
-                  {workOpt().description} This policy does not provide operating-system confinement.
+                  Uses the same agent as chat unless you choose another.
+                  <button
+                    type="button"
+                    class="routines-inline"
+                    onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
+                  >
+                    Open settings
+                  </button>
                 </p>
               </div>
-            </Show>
-            <Show when={role() === "accountant"}>
-              <div class="routines-consent">
-                <Checkbox checked={money()} onChange={setMoney}>
-                  Allow money records
-                </Checkbox>
-                <p class="routines-hint">Receipts, ledgers, and invoices. It will not send payments.</p>
+              <Show when={!editing()}>
+                <div class="routines-field">
+                  <span>Tool access</span>
+                  <Select
+                    options={work}
+                    current={workOpt()}
+                    label={(item) => item.label}
+                    value={(item) => item.id}
+                    onSelect={(item) => item && setAccess(item.id)}
+                    variant="secondary"
+                    size="small"
+                  />
+                  <p class="routines-hint">{workOpt().description}</p>
+                </div>
+              </Show>
+              <Show when={role() === "accountant"}>
+                <div class="routines-consent">
+                  <Checkbox checked={money()} onChange={setMoney}>
+                    Allow money records
+                  </Checkbox>
+                  <p class="routines-hint">Receipts, ledgers, and invoices. This does not allow payments.</p>
+                </div>
+              </Show>
+              <Show when={role() === "inbox"}>
+                <div class="routines-consent">
+                  <Checkbox checked={messages()} onChange={setMessages}>
+                    Allow messages
+                  </Checkbox>
+                  <p class="routines-hint">
+                    Read the inbox and draft replies. Sending still requires your instruction.
+                  </p>
+                </div>
+              </Show>
+              <div class="routines-field">
+                <label for="routine-workspace">Workspace folder</label>
+                <div class="routines-pick">
+                  <input
+                    id="routine-workspace"
+                    value={dir()}
+                    onInput={(e) => setDir(e.currentTarget.value)}
+                    placeholder="Choose or type a folder"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() => {
+                      const id = crypto.randomUUID()
+                      setWait(id)
+                      vscode.postMessage({ type: "requestFolderPicker", requestId: id })
+                    }}
+                  >
+                    Choose
+                  </Button>
+                </div>
+                <p class="routines-hint">New files are kept inside this folder.</p>
               </div>
-            </Show>
-            <Show when={role() === "inbox"}>
-              <div class="routines-consent">
-                <Checkbox checked={messages()} onChange={setMessages}>
-                  Allow messages
-                </Checkbox>
-                <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
-              </div>
-            </Show>
-            <div class="routines-field">
-              <span>Write folder</span>
-              <div class="routines-pick">
+              <label class="routines-field">
+                <span class="routines-label">
+                  Plan file <span class="routines-optional">(optional)</span>
+                </span>
                 <input
-                  value={dir()}
-                  onInput={(e) => setDir(e.currentTarget.value)}
-                  placeholder="Choose or type a folder"
+                  value={plan()}
+                  onInput={(e) => setPlan(e.currentTarget.value)}
+                  placeholder="Path to a .md plan"
                 />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    const id = crypto.randomUUID()
-                    setWait(id)
-                    vscode.postMessage({ type: "requestFolderPicker", requestId: id })
-                  }}
-                >
-                  Choose
-                </Button>
-              </div>
-              <p class="routines-hint">
-                File tools write here and cannot write in parent folders. Reading can still use other locations. This is
-                not an operating-system sandbox.
-              </p>
+              </label>
+            </details>
+
+            <div class="routines-submit">
+              <span class="routines-hint">{submitHint()}</span>
+              <Button type="submit" disabled={submitBlocked()}>
+                {caption()}
+              </Button>
             </div>
-            <label class="routines-field">
-              Plan file
-              <input
-                value={plan()}
-                onInput={(e) => setPlan(e.currentTarget.value)}
-                placeholder="Optional path to a .md plan"
-              />
-            </label>
-            <Button type="submit" disabled={blocked()}>
-              {caption()}
-            </Button>
           </form>
         </Show>
       </div>

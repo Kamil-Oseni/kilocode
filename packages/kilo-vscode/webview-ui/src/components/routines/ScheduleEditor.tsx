@@ -20,7 +20,7 @@ export const ScheduleEditor: Component<{ value: Draft; onChange: (value: Draft) 
   const calendar = () => ["daily", "weekly", "monthly", "cron", "date"].includes(props.value.mode)
   return (
     <fieldset class="routines-schedule" disabled={props.disabled}>
-      <legend>Schedule</legend>
+      <legend class="sr-only">Schedule controls</legend>
       <label class="routines-field">
         Repeat
         <select

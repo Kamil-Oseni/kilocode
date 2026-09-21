@@ -2,19 +2,20 @@ import { expect, test } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
 import {
   RayaRoutineDelegationTable as Delegation,
+  RayaRoutineOrganizationCoordinatorTable as Coordinator,
   RayaRoutineOrganizationReservationTable as Reservation,
   RayaRoutineOrganizationTable as Organization,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect, Exit } from "effect"
 import type { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskInfo, type Identity } from "@/kilocode/task/info"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 
 const agent = (id: string, name: string, role: string): RayaTask.Agent => ({
   id,
@@ -424,6 +425,11 @@ test("organization activity reports authoritative branch spend across pages with
             },
           },
         },
+        {
+          ...session,
+          id: SessionID.make("ses_company_coordinator"),
+          cost: 0.75,
+        },
       ])
       yield* database.db.insert(Reservation).values({
         run_id: "run_company_reserved",
@@ -434,6 +440,32 @@ test("organization activity reports authoritative branch spend across pages with
         budget: 4,
         cost: null,
         state: "linked",
+        time_created: 1,
+        time_updated: 1,
+      })
+      yield* database.db.insert(MessageTable).values({
+        id: MessageID.make("msg_company_coordinator"),
+        session_id: SessionID.make("ses_company_coordinator"),
+        time_created: 1,
+        data: {
+          role: "assistant",
+          cost: 0.75,
+          time: { created: 1, completed: 2 },
+          parentID: "msg_parent",
+          modelID: "test",
+          providerID: "test",
+          mode: "build",
+          agent: "build",
+          path: { cwd: "/workspace", root: "/workspace" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        } as never,
+      })
+      yield* database.db.insert(Coordinator).values({
+        message_id: "msg_company_coordinator",
+        session_id: "ses_company_coordinator",
+        organization_id: organizationID,
+        organization_revision: 1,
+        state: "attributed",
         time_created: 1,
         time_updated: 1,
       })
@@ -455,9 +487,10 @@ test("organization activity reports authoritative branch spend across pages with
         active: 2,
         needsAttention: 2,
         uncertain: 1,
-        recordedCost: 6.5,
-        committedCost: 29.5,
+        recordedCost: 7.25,
+        committedCost: 30.25,
         standaloneCost: 1.5,
+        coordinatorCost: 0.75,
       })
       expect(second.summary).toEqual(first.summary)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),

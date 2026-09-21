@@ -222,3 +222,17 @@ export const RayaRoutineOrganizationReservationTable = sqliteTable(
     uniqueIndex("raya_routine_organization_reservation_session").on(table.session_id),
   ],
 )
+
+export const RayaRoutineOrganizationCoordinatorTable = sqliteTable(
+  "raya_routine_organization_coordinator",
+  {
+    message_id: text().primaryKey(),
+    session_id: text().notNull(),
+    organization_id: text().references(() => RayaRoutineOrganizationTable.id, { onDelete: "cascade" }),
+    organization_revision: integer(),
+    state: text({ enum: ["attributed", "ambiguous"] }).notNull(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+  },
+  (table) => [index("raya_routine_organization_coordinator_ledger").on(table.organization_id, table.state)],
+)

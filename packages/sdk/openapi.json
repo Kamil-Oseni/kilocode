@@ -36849,6 +36849,10 @@
                         "standaloneCost": {
                           "type": "number",
                           "minimum": 0
+                        },
+                        "coordinatorCost": {
+                          "type": "number",
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -36858,7 +36862,8 @@
                         "uncertain",
                         "recordedCost",
                         "committedCost",
-                        "standaloneCost"
+                        "standaloneCost",
+                        "coordinatorCost"
                       ],
                       "additionalProperties": false
                     },

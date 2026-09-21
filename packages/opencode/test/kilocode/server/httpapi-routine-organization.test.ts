@@ -114,6 +114,7 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
     recordedCost: 0,
     committedCost: 0,
     standaloneCost: 0,
+    coordinatorCost: 0,
   })
   expect(activity.items[0]).toMatchObject({
     sender: { id: chief.id, name: "Chief", archived: false },

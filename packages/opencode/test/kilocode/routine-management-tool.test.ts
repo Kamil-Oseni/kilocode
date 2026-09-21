@@ -7,6 +7,9 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
@@ -16,6 +19,7 @@ import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { make as coordinator } from "@/kilocode/task/coordinator"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
@@ -91,6 +95,41 @@ it.live(
       Effect.gen(function* () {
         const storage = yield* Storage.Service
         const database = yield* Database.Service
+        const project = ProjectV2.ID.make("project_company_coordinator")
+        yield* database.db.insert(ProjectTable).values({
+          id: project,
+          worktree: AbsolutePath.make(directory),
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        yield* database.db.insert(SessionTable).values({
+          id: context("seed").sessionID,
+          project_id: project,
+          slug: "company-coordinator",
+          directory: AbsolutePath.make(directory),
+          title: "Company coordinator",
+          version: "test",
+          time_created: 1,
+          time_updated: 1,
+        })
+        yield* database.db.insert(MessageTable).values({
+          id: context("seed").messageID,
+          session_id: context("seed").sessionID,
+          time_created: 1,
+          data: {
+            role: "assistant",
+            cost: 2.5,
+            time: { created: 1, completed: 2 },
+            parentID: "msg_parent",
+            modelID: "test",
+            providerID: "test",
+            mode: "build",
+            agent: "build",
+            path: { cwd: directory, root: directory },
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          } as never,
+        })
         const failed = { saves: 0 }
         const unreliable = {
           ...storage,
@@ -197,6 +236,7 @@ it.live(
         const retry = yield* (yield* tools.create).init()
         const recovered = yield* retry.execute(params, context("create-company"))
         expect(recovered.title).toBe("Organization created")
+        expect(yield* coordinator(database).cost(String(recovered.metadata.organizationID))).toBe(2.5)
         expect(recovered.metadata).toMatchObject({ requestStatus: "complete", view: "routines" })
         const agents = yield* RayaTask.make({ storage, database }).list()
         const organizations = yield* RayaTaskOrganization.make(

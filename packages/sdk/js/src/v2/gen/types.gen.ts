@@ -23960,6 +23960,7 @@ export type KilocodeRoutineOrganizationActivityResponses = {
       recordedCost: number
       committedCost: number
       standaloneCost: number
+      coordinatorCost: number
     }
     next?: string
   }

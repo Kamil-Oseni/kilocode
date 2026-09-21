@@ -15,6 +15,7 @@ import draft from "@opencode-ai/core/database/migration/20260916221534_kilocode-
 import budget from "@opencode-ai/core/database/migration/20260917021944_kilocode-routine-organization-budget"
 import artifacts from "@opencode-ai/core/database/migration/20260921060802_kilocode-routine-delegation-artifacts"
 import reservations from "@opencode-ai/core/database/migration/20260921084500_kilocode-routine-organization-reservation"
+import coordinator from "@opencode-ai/core/database/migration/20260921093000_kilocode-routine-organization-coordinator"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -380,6 +381,42 @@ test("organization reservation migration preserves organizations and enforces ex
       })
       yield* DatabaseMigration.applyOnly(db, [reservations])
       expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${reservations.id}`)).toEqual({
+        count: 1,
+      })
+    }),
+  )
+})
+
+test("organization coordinator migration preserves organizations and stores ambiguous message ownership", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === coordinator.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization (id, name, purpose, policy, budget, revision, time_created, time_updated) VALUES ('org_coordinator', 'Coordinator', NULL, NULL, 20, 3, 1, 1)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [coordinator])
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization_coordinator (message_id, session_id, organization_id, organization_revision, state, time_created, time_updated) VALUES ('message_one', 'session_one', 'org_coordinator', 3, 'attributed', 1, 1)`,
+      )
+      yield* db.run(
+        sql`UPDATE raya_routine_organization_coordinator SET organization_id = NULL, organization_revision = NULL, state = 'ambiguous' WHERE message_id = 'message_one'`,
+      )
+      expect(
+        yield* db.get(
+          sql`SELECT organization_id, organization_revision, state FROM raya_routine_organization_coordinator WHERE message_id = 'message_one'`,
+        ),
+      ).toEqual({ organization_id: null, organization_revision: null, state: "ambiguous" })
+      expect(
+        yield* db.get(sql`SELECT name, revision FROM raya_routine_organization WHERE id = 'org_coordinator'`),
+      ).toEqual({
+        name: "Coordinator",
+        revision: 3,
+      })
+      yield* DatabaseMigration.applyOnly(db, [coordinator])
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${coordinator.id}`)).toEqual({
         count: 1,
       })
     }),

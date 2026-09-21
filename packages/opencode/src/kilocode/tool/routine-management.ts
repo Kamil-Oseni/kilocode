@@ -19,6 +19,7 @@ import {
 } from "@/kilocode/task/organization"
 import { record as RoutineIdentity } from "@/kilocode/task/continuation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { make as coordinator } from "@/kilocode/task/coordinator"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
@@ -386,6 +387,24 @@ export function routineManagementTools(input: {
   const contacts = RayaContactOutbox.make(input.database)
   const errands = RayaTaskDelegation.make(input.database, organizations.authorize, organizations.shares)
   const runner = RayaTaskRunner.make({ ...input, database: input.database })
+  const coordinators = coordinator(input.database)
+  const attribute = Effect.fn("RayaRoutineManagement.attribute")(function* (
+    ctx: Tool.Context,
+    metadata: Record<string, unknown>,
+  ) {
+    if (
+      metadata.requestStatus !== "complete" ||
+      typeof metadata.organizationID !== "string" ||
+      typeof metadata.organizationRevision !== "number"
+    )
+      return
+    yield* coordinators.bind({
+      messageID: ctx.messageID,
+      sessionID: ctx.sessionID,
+      organizationID: metadata.organizationID,
+      organizationRevision: metadata.organizationRevision,
+    })
+  })
 
   const handoff = Effect.fn("RayaRoutineManagement.handoff")(function* (
     sessionID: Tool.Context["sessionID"],
@@ -655,6 +674,7 @@ export function routineManagementTools(input: {
               return organizationResult(item)
             }),
         }).pipe(
+          Effect.tap((result) => attribute(ctx, result.metadata)),
           Effect.catch((err) =>
             Effect.succeed({
               title: "Organization creation needs review",
@@ -873,6 +893,7 @@ export function routineManagementTools(input: {
                 ),
               ),
         }).pipe(
+          Effect.tap((result) => attribute(ctx, result.metadata)),
           Effect.catch((err) =>
             Effect.succeed({
               title: "Subordinate creation needs review",
@@ -1361,6 +1382,7 @@ export function routineManagementTools(input: {
                 })),
               ),
         }).pipe(
+          Effect.tap((result) => attribute(ctx, result.metadata)),
           Effect.catch((err) =>
             Effect.succeed({
               title: "Organization update needs review",

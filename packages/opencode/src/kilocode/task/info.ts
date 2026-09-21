@@ -7,6 +7,7 @@ import {
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
 import { commitment, direct, standing } from "./commitment"
+import { cost as coordinatorCost } from "./coordinator"
 import { Artifact, artifacts } from "./delegation"
 import { AttachmentMeta, Clip, Record as MessageRecord } from "./inbox"
 
@@ -136,6 +137,7 @@ export const ActivityPage = Schema.Struct({
     recordedCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
     committedCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
     standaloneCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+    coordinatorCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
   }),
   next: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
 })
@@ -394,6 +396,7 @@ export namespace RayaTaskInfo {
         .pipe(Effect.orDie)
       const committedCost = commitment(all)
       const directCost = yield* direct(db, organizationID).pipe(Effect.orDie)
+      const coordinated = yield* coordinatorCost(db, organizationID).pipe(Effect.orDie)
       const held = yield* standing(db, organizationID).pipe(Effect.orDie)
       const standaloneCost = directCost + held.recorded
       const summary = {
@@ -401,9 +404,10 @@ export namespace RayaTaskInfo {
         active: all.filter((row) => active.has(row.state)).length,
         needsAttention: all.filter((row) => row.state === "needs_input" || row.state === "failed").length,
         uncertain: all.filter((row) => !active.has(row.state) && row.session_id !== null && row.cost === null).length,
-        recordedCost: all.reduce((total, row) => total + (row.cost ?? 0), standaloneCost),
-        committedCost: committedCost + directCost + held.committed,
+        recordedCost: all.reduce((total, row) => total + (row.cost ?? 0), standaloneCost + coordinated),
+        committedCost: committedCost + directCost + coordinated + held.committed,
         standaloneCost,
+        coordinatorCost: coordinated,
       }
       const slice = rows.slice(0, limit)
       const items: Activity[] = []

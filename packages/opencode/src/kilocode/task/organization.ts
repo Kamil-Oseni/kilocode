@@ -11,6 +11,7 @@ import {
 } from "@opencode-ai/core/kilocode/routine.sql"
 import type { Storage } from "@/storage/storage"
 import { commitment, direct, standing } from "./commitment"
+import { cost as coordinatorCost } from "./coordinator"
 import { mutate } from "./mutation"
 
 const MAX = 50
@@ -421,8 +422,9 @@ export namespace RayaTaskOrganization {
                   .all()
                   .pipe(Effect.orDie)
                 const spent = yield* direct(tx, id).pipe(Effect.orDie)
+                const coordinated = yield* coordinatorCost(tx, id).pipe(Effect.orDie)
                 const held = yield* standing(tx, id).pipe(Effect.orDie)
-                if (value.budget < commitment(work) + spent + held.committed)
+                if (value.budget < commitment(work) + spent + coordinated + held.committed)
                   return yield* new Invalid({
                     message: "The organization budget cannot be lower than its current committed model cost.",
                   })

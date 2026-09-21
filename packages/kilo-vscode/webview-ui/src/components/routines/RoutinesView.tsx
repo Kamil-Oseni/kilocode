@@ -33,6 +33,7 @@ import RoutineSetup from "./RoutineSetup"
 import { Inbox, status, type Anchor, type Box } from "./Inbox"
 import { OrganizationActivity } from "./OrganizationActivity"
 import { ReportSetting } from "./ReportSetting"
+import { polling } from "./routine-polling"
 import { Output } from "../../../../src/shared/routine-output"
 import type { RoutinePaths } from "../../../../src/shared/routine-paths"
 
@@ -1185,7 +1186,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     load()
     if (session.agents().length === 0) vscode.postMessage({ type: "requestAgents" })
     const tick = setInterval(() => {
-      if (!hold && !chosen()) load()
+      if (polling(hold, chosen(), organization())) load()
     }, 4000)
     onCleanup(() => clearInterval(tick))
   })
@@ -1257,7 +1258,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       if (msg.refresh === "partial")
         setFreshness("Some history could not be refreshed. Previous history remains visible.")
       if (msg.refresh === "error") setFreshness("Refresh failed. Previously loaded information may be stale.")
-      if (msg.refresh !== "loading" && dirty && !hold) {
+      if (msg.refresh !== "loading" && dirty && polling(hold, chosen(), organization())) {
         dirty = false
         load()
       }
@@ -1396,7 +1397,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setWait("")
     }
     if (msg.type === "routineRuns") history(msg)
-    if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && !hold && !chosen()) load()
+    if (
+      (msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") &&
+      polling(hold, chosen(), organization())
+    )
+      load()
   })
   onCleanup(unsub)
 

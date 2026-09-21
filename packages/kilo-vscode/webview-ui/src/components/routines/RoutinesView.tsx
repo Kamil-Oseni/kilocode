@@ -796,6 +796,7 @@ const Person: Component<{
 interface RoutinesViewProps {
   onBack?: () => void
   onOpenSession?: (id: string) => void
+  onAskRaya?: (text: string) => void
   workspace?: string
   focus?: { nonce: string; organizationID?: string; agentID?: string }
   onFocusConsumed?: () => void
@@ -864,6 +865,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [boxes, setBoxes] = createSignal<Record<string, Box>>({})
   const [chosen, setChosen] = createSignal<string>()
   const [query, setQuery] = createSignal("")
+  const [idea, setIdea] = createSignal("")
   const [attention, setAttention] = createSignal<"all" | "unread" | "needs">("all")
   const [workspace, setWorkspace] = createSignal(scope(props.workspace ?? ""))
   let correlation = crypto.randomUUID()
@@ -1782,6 +1784,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const detail = createMemo(() => showing(screen(), !!chosen(), !!currentOrganization(), !!editingOrganization()))
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
+  const ask = (text: string) => props.onAskRaya?.(text)
+  const begin = () => {
+    const text = idea().trim()
+    if (!text) return
+    ask(
+      `Set this up in Routines for me: ${text}\n\nUse Raya's native Routines tools and durable store. Infer sensible details from what I said. Ask one short question at a time only for choices you genuinely cannot infer. Do not ask me about files, databases, schemas, IDs, revisions, or other implementation details. Before saving, give me a short plain-language review of what will happen.`,
+    )
+  }
 
   return (
     <div ref={root} class="routines-view history-view" data-detail={flag(detail())}>
@@ -1846,7 +1856,15 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                           <Button variant="ghost" size="small" onClick={() => setManage(true)}>
                             Manage
                           </Button>
-                          <Button size="small" icon="plus" onClick={start}>
+                          <Button
+                            size="small"
+                            icon="plus"
+                            onClick={() =>
+                              ask(
+                                "Help me set up a new Routine or team. Start by asking what I want Raya to handle, then infer sensible defaults and ask only the few decisions you genuinely need from me.",
+                              )
+                            }
+                          >
                             New
                           </Button>
                         </>
@@ -2045,9 +2063,21 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       </h3>
                       <span>{item.members.length} workers</span>
                     </div>
-                    <Button variant="ghost" size="small" onClick={() => editOrganization(item)}>
-                      Edit organization
-                    </Button>
+                    <div class="routines-organization-head-actions">
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          ask(
+                            `Add a worker to ${item.name} (${item.id}, revision ${item.revision}). Start by asking what I want the new worker to take care of. Infer sensible defaults from my answer, ask only for choices that affect the result or access, show me a short review, then update the existing organization with Raya's native tools. Do not ask me for IDs, revisions, files, databases, or schemas.`,
+                          )
+                        }
+                      >
+                        Add worker
+                      </Button>
+                      <Button variant="ghost" size="small" onClick={() => editOrganization(item)}>
+                        Settings
+                      </Button>
+                    </div>
                   </div>
                   <div class="routines-thread-body">
                     <Show when={item.purpose}>
@@ -2093,21 +2123,78 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     <OrganizationActivity
                       id={item.id}
                       item={item}
-                      agents={agents()}
+                      agents={agents().map((agent) => ({ ...agent, state: boxes()[agent.id]?.state }))}
                       {...(workReceipt()?.organizationID === item.id
                         ? { receipt: { id: workReceipt()!.id, name: workReceipt()!.name } }
                         : {})}
-                      onEdit={() => editOrganization(item)}
                       onChoose={choose}
                       onAssigned={(worker) => setWorkReceipt({ organizationID: item.id, ...worker })}
                       onOpenSession={props.onOpenSession}
+                      onPlan={(text) =>
+                        ask(
+                          `Assign tracked work in ${item.name} (${item.id}, revision ${item.revision}): ${text}\n\nFirst inspect the saved Routines state. Choose the best authorized assigning worker and responsible worker from their roles and standing jobs. Draft a clear outcome, expected result, and useful context. Ask me one concise question only if the route or intended result is genuinely ambiguous, then use assign_organization_work. Do not ask me for IDs or revisions.`,
+                        )
+                      }
                     />
                   </div>
                 </section>
               )}
             </Show>
             <Show when={!worker() && !currentOrganization() && !editingOrganization()}>
-              <p class="routines-empty routines-thread">Select a worker to read reports and follow up here.</p>
+              <section class="routines-start routines-thread" aria-labelledby="routines-start-title">
+                <div class="routines-start-copy">
+                  <span class="routines-start-kicker">Raya can run this for you</span>
+                  <h3 id="routines-start-title">What would you like handled?</h3>
+                  <p>
+                    Describe the result in your own words. Raya will work out whether you need one worker or a team and
+                    ask only for decisions that matter.
+                  </p>
+                </div>
+                <form
+                  class="routines-start-composer"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    begin()
+                  }}
+                >
+                  <label class="sr-only" for="routines-start-input">
+                    What should Raya handle?
+                  </label>
+                  <textarea
+                    id="routines-start-input"
+                    rows={4}
+                    value={idea()}
+                    placeholder="For example: Every Friday, review my accounts and send me anything that needs attention."
+                    onInput={(event) => setIdea(event.currentTarget.value)}
+                  />
+                  <div class="routines-start-actions">
+                    <span>Routine, team, schedule, and access can be refined in the conversation.</span>
+                    <Button type="submit" disabled={!idea().trim()}>
+                      Continue with Raya
+                    </Button>
+                  </div>
+                </form>
+                <div class="routines-start-examples" aria-label="Examples">
+                  <button
+                    type="button"
+                    onClick={() => setIdea("Every Friday, review my accounts and report anything unusual.")}
+                  >
+                    Review something regularly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIdea("Create a team that can divide work between specialist workers.")}
+                  >
+                    Build a team
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIdea("Keep watch for something important and tell me when it changes.")}
+                  >
+                    Monitor and notify me
+                  </button>
+                </div>
+              </section>
             </Show>
           </div>
           <Show when={reviewed()} keyed>

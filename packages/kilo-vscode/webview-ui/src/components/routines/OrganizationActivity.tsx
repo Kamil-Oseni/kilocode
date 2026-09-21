@@ -124,6 +124,9 @@ function live(state: Work["state"]) {
 function label(state: Work["state"]) {
   if (state === "needs_input") return "Waiting for your answer"
   if (state === "accepted") return "Starting"
+  if (state === "queued") return "Waiting to start"
+  if (state === "failed") return "Needs attention"
+  if (state === "cancelled") return "Stopped"
   return state[0]!.toUpperCase() + state.slice(1)
 }
 
@@ -143,12 +146,12 @@ function money(value: number) {
 export const OrganizationActivity: Component<{
   id: string
   item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
-  agents: { id: string; name: string; enabled: boolean }[]
+  agents: { id: string; name: string; enabled: boolean; state?: string }[]
   receipt?: { id: string; name: string }
-  onEdit: () => void
   onChoose: (id: string) => void
   onAssigned: (worker: { id: string; name: string }) => void
   onOpenSession?: (id: string) => void
+  onPlan: (text: string) => void
 }> = (props) => {
   const vscode = useVSCode()
   const dialog = useDialog()
@@ -182,8 +185,8 @@ export const OrganizationActivity: Component<{
         agents={props.agents}
         parent={parent}
         {...(available() === undefined ? {} : { available: available() })}
-        onEdit={props.onEdit}
         onChoose={props.onChoose}
+        onPlan={props.onPlan}
         onAssigned={(worker) => {
           props.onAssigned(worker)
           if (parent) {
@@ -513,6 +516,20 @@ export const OrganizationActivity: Component<{
                   </span>
                 </div>
                 <p class="routines-organization-work-objective">{item.objective}</p>
+                <Show when={item.state === "queued"}>
+                  <div class="routines-work-waiting" role="status">
+                    <span>
+                      {["working", "waiting", "failed", "needs_input"].includes(
+                        props.agents.find((agent) => agent.id === item.recipient.id)?.state ?? "",
+                      )
+                        ? `${item.recipient.name} has unfinished work. This request will start automatically after that work is resolved.`
+                        : `${item.recipient.name} will start this when ready.`}
+                    </span>
+                    <Button variant="ghost" size="small" onClick={() => props.onChoose(item.recipient.id)}>
+                      Open {item.recipient.name}
+                    </Button>
+                  </div>
+                </Show>
                 <ArtifactList items={item.artifacts} />
                 <Show when={item.response}>
                   <p class="routines-organization-work-result">{item.response}</p>

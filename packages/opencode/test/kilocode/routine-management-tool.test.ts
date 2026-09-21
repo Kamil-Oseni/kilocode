@@ -1209,6 +1209,116 @@ it.live(
 )
 
 it.live(
+  "main chat assigns tracked organization work through an authorized route",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const sender = yield* tasks.create({
+          name: "Chief of Staff",
+          role: "coordinator",
+          objective: "Route work to the right specialist",
+          output: output("Coordination"),
+          capabilities: [],
+          access: "brief",
+          tools: ["inspect_team", "delegate_work"],
+          schedule: { kind: "manual" },
+        })
+        const recipient = yield* tasks.create({
+          name: "Researcher",
+          role: "researcher",
+          objective: "Research assigned questions and report evidence",
+          output: output("Research"),
+          capabilities: [],
+          access: "brief",
+          tools: ["read"],
+          schedule: { kind: "manual" },
+        })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const organization = yield* organizations.create({
+          name: "Research Team",
+          purpose: "Turn questions into evidence-based reports.",
+          members: [
+            { agentID: sender.id, role: "Coordinator" },
+            { agentID: recipient.id, role: "Researcher", supervisorID: sender.id },
+          ],
+          delegations: [{ senderID: sender.id, recipientID: recipient.id }],
+        })
+        yield* tasks.record({
+          id: "run_existing_research",
+          agentID: recipient.id,
+          at: Date.now(),
+          sessionID: SessionID.make("ses_existing_research"),
+          status: "running",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
+        const tools = routineManagementTools({ database, storage, sessions })
+        const assign = yield* (yield* tools.assignOrganizationWork).init()
+        expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("primary"))).toBe(true)
+        expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("subagent"))).toBe(
+          false,
+        )
+        const result = yield* assign.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            senderID: sender.id,
+            recipientID: recipient.id,
+            objective: "Verify the saved organization survives a restart.",
+            expected: "A short confirmation with the organization name and worker count.",
+            context: "Use the native durable Routines state.",
+          },
+          context("assign-organization-work"),
+        )
+        expect(result.title).toBe("Organization work assigned")
+        expect(result.output).toContain("Chief of Staff assigned this work to Researcher")
+        expect(result.metadata).toMatchObject({
+          requestStatus: "complete",
+          view: "routines",
+          organizationID: organization.id,
+          state: "queued",
+          senderID: sender.id,
+          recipientID: recipient.id,
+        })
+        if (!("delegationID" in result.metadata)) throw new Error("assignment receipt did not include its request ID")
+        const saved = yield* RayaTaskDelegation.make(database, organizations.authorize, organizations.shares).get(
+          String(result.metadata.delegationID),
+        )
+        expect(saved).toMatchObject({
+          state: "queued",
+          objective: "Verify the saved organization survives a restart.",
+          expected: "A short confirmation with the organization name and worker count.",
+          context: "Use the native durable Routines state.",
+        })
+
+        const denied = yield* assign.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            senderID: recipient.id,
+            recipientID: sender.id,
+            objective: "Use a route that was never authorized.",
+          },
+          context("assign-organization-work-denied"),
+        )
+        expect(denied.title).toBe("Organization work needs review")
+        expect(denied.output).toContain("not authorized")
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
   "main-chat updates require stable identities and replay their completed receipts",
   () =>
     provideTmpdirInstance((directory) =>

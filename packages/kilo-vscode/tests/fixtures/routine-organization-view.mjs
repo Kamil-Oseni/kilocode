@@ -28,8 +28,10 @@ for (const name of [
   "document",
   "navigator",
   "Node",
+  "NodeFilter",
   "Element",
   "HTMLElement",
+  "HTMLHeadElement",
   "HTMLInputElement",
   "HTMLButtonElement",
   "MutationObserver",
@@ -41,6 +43,7 @@ for (const name of [
 ])
   globalThis[name] = window[name]
 globalThis.window = window
+globalThis.getComputedStyle = window.getComputedStyle.bind(window)
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
 
@@ -61,6 +64,7 @@ document.body.append(root)
 const organizationID = `org_${"a".repeat(32)}`
 const sender = "11111111-1111-4111-8111-111111111111"
 const recipient = "22222222-2222-4222-8222-222222222222"
+const plans = []
 const item = {
   version: 1,
   id: organizationID,
@@ -89,9 +93,9 @@ const dispose = render(
                 { id: sender, name: "Design Lead", enabled: true },
                 { id: recipient, name: "Frontend Lead", enabled: true },
               ],
-              onEdit: () => undefined,
               onChoose: () => undefined,
               onAssigned: () => undefined,
+              onPlan: (text) => plans.push(text),
             })
           },
         })
@@ -129,7 +133,16 @@ try {
         ],
       },
     ],
-    summary: { total: 1, active: 1, needsAttention: 0, uncertain: 0, recordedCost: 0, committedCost: 0 },
+    summary: {
+      total: 1,
+      active: 1,
+      needsAttention: 0,
+      uncertain: 0,
+      recordedCost: 0,
+      standaloneCost: 0,
+      coordinatorCost: 0,
+      committedCost: 0,
+    },
   })
   await new Promise((resolve) => setImmediate(resolve))
   assert.match(root.textContent, /Files handed off/)
@@ -142,6 +155,24 @@ try {
   search.value = "missing-file.pdf"
   search.dispatchEvent(new window.Event("input", { bubbles: true }))
   assert.match(root.textContent, /No work matches these filters/)
+  const assign = [...document.querySelectorAll("button")].find((button) => button.textContent.trim() === "Assign work")
+  assert.ok(assign)
+  assign.click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.match(document.body.textContent, /What needs to get done/)
+  assert.match(document.body.textContent, /Raya will choose the best authorized workers/)
+  const intent = document.querySelector('textarea[placeholder^="For example: Check that this organization"]')
+  assert.ok(intent)
+  intent.value = "Verify the saved team and send me a concise report."
+  intent.dispatchEvent(new window.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setImmediate(resolve))
+  const next = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent.trim() === "Continue with Raya",
+  )
+  assert.ok(next)
+  next.click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(plans, ["Verify the saved team and send me a concise report."])
 } finally {
   dispose()
   window.close()

@@ -343,6 +343,17 @@ const AppContent: Component = () => {
     }
   }
 
+  const askRaya = (text: string) => {
+    setCurrentView("newTask")
+    queueMicrotask(() =>
+      window.dispatchEvent(
+        new CustomEvent("raya:prefill-prompt", {
+          detail: { text },
+        }),
+      ),
+    )
+  }
+
   const cycleAgent = (direction: 1 | -1) => {
     const id = session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID()
     cycle({
@@ -483,6 +494,7 @@ const AppContent: Component = () => {
                   handleSelectSession(id)
                   setCurrentView("newTask")
                 }}
+                onAskRaya={askRaya}
               />
             </Match>
             <Match when={currentView() === "todo"}>

@@ -195,6 +195,20 @@ const DelegateWork = Schema.Struct({
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
   artifacts: Schema.optional(ArtifactPaths),
 })
+const AssignOrganizationWork = Schema.Struct({
+  organizationID: Organization.fields.id,
+  expectedRevision: Organization.fields.revision,
+  senderID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  objective: Text,
+  expected: Schema.optional(Text),
+  context: Schema.optional(Text),
+  deadline: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
+  ),
+  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  artifacts: Schema.optional(ArtifactPaths),
+})
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(20))),
@@ -1027,6 +1041,87 @@ export function routineManagementTools(input: {
     }),
   )
 
+  const assignOrganizationWork = Tool.define(
+    "assign_organization_work",
+    Effect.succeed({
+      description:
+        "Assign tracked work from the main chat to an existing organization. First call inspect_routines. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Do not ask the user for internal IDs or organization revisions.",
+      parameters: AssignOrganizationWork,
+      execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          if (!ctx.callID) return yield* Effect.fail(new Error("Organization work assignment requires a stable tool call."))
+          const organization = yield* organizations.get(params.organizationID)
+          if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
+          if (organization.revision !== params.expectedRevision)
+            return yield* Effect.fail(new Error("This organization changed. Inspect Routines again before assigning work."))
+          const sender = yield* tasks.get(params.senderID)
+          const recipient = yield* tasks.get(params.recipientID)
+          if (!sender.enabled) return yield* Effect.fail(new Error(`${sender.name} is paused and cannot assign work.`))
+          if (!recipient.enabled) return yield* Effect.fail(new Error(`${recipient.name} is paused and cannot receive work.`))
+          if (!organization.members.some((item) => item.agentID === sender.id))
+            return yield* Effect.fail(new Error("The assigning worker is not a member of this organization."))
+          if (!organization.members.some((item) => item.agentID === recipient.id))
+            return yield* Effect.fail(new Error("The responsible worker is not a member of this organization."))
+          if (!organization.delegations.some((item) => item.senderID === sender.id && item.recipientID === recipient.id))
+            return yield* Effect.fail(
+              new Error(`${sender.name} is not authorized to assign work to ${recipient.name}. Ask before changing the organization.`),
+            )
+          const source = `organization-chat:${digest(
+            JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, organization.id]),
+          ).slice(0, 48)}`
+          const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
+          yield* ctx.ask({
+            permission: "schedule_task",
+            patterns: [`organization:${organization.id}`, `route:${sender.id}:${recipient.id}`],
+            always: [`organization:${organization.id}`, `route:${sender.id}:${recipient.id}`],
+            metadata: {
+              organization: organization.name,
+              sender: sender.name,
+              recipient: recipient.name,
+              objective: params.objective,
+            },
+          })
+          const record = yield* runner.delegate({
+            source,
+            senderID: sender.id,
+            recipientID: recipient.id,
+            organizationID: organization.id,
+            organizationRevision: organization.revision,
+            objective: params.objective.trim(),
+            expected: params.expected?.trim(),
+            context: params.context?.trim(),
+            deadline: params.deadline,
+            budget: params.budget,
+            artifacts,
+          })
+          const reason = record.reason ? ` ${record.reason}` : ""
+          return {
+            title: "Organization work assigned",
+            output: `${sender.name} assigned this work to ${recipient.name}. Saved state: ${record.state}.${reason}`,
+            metadata: {
+              requestStatus: record.state === "failed" || record.state === "cancelled" ? "unresolved" : "complete",
+              view: "routines",
+              organizationID: organization.id,
+              organizationRevision: organization.revision,
+              delegationID: record.id,
+              state: record.state,
+              senderID: sender.id,
+              recipientID: recipient.id,
+            },
+          }
+        }).pipe(
+          Effect.tap((result) => attribute(ctx, result.metadata)),
+          Effect.catch((err) =>
+            Effect.succeed({
+              title: "Organization work needs review",
+              output: `${err instanceof Error ? err.message : String(err)} The request was not silently rerouted. Review the team or answer Raya's question, then try again.`,
+              metadata: { requestStatus: "unresolved", view: "routines", organizationID: params.organizationID },
+            }),
+          ),
+        ),
+    }),
+  )
+
   const inspectTeam = Tool.define(
     "inspect_team",
     Effect.succeed({
@@ -1400,6 +1495,7 @@ export function routineManagementTools(input: {
     contactOwner,
     create,
     createSubordinate,
+    assignOrganizationWork,
     delegateWork,
     updateRoutine,
     updateOrganization,

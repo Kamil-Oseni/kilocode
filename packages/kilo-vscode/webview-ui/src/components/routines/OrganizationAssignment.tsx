@@ -75,8 +75,8 @@ export const OrganizationAssignment: Component<{
   agents: Agent[]
   parent?: Follow
   available?: number
-  onEdit: () => void
   onChoose: (id: string) => void
+  onPlan: (text: string) => void
   onAssigned: (worker: { id: string; name: string }) => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -121,6 +121,8 @@ export const OrganizationAssignment: Component<{
   const [budget, setBudget] = createSignal("")
   const [sent, setSent] = createSignal<Sent>()
   const [error, setError] = createSignal("")
+  const [intent, setIntent] = createSignal("")
+  const [manual, setManual] = createSignal(!!props.parent)
   const source = `organization${props.parent ? "-follow" : ""}:${props.item.id}:${crypto.randomUUID()}`
 
   createEffect(() => {
@@ -207,7 +209,7 @@ export const OrganizationAssignment: Component<{
   }
 
   return (
-    <Dialog title={`${props.parent ? "Assign follow-on" : "Assign work"} in ${props.item.name}`} fit>
+    <Dialog title={props.parent ? `Assign follow-on in ${props.item.name}` : `Give ${props.item.name} work`} fit>
       <Show
         when={targets().length}
         fallback={
@@ -240,15 +242,62 @@ export const OrganizationAssignment: Component<{
                 size="large"
                 onClick={() => {
                   dialog.close()
-                  queueMicrotask(props.onEdit)
+                  queueMicrotask(() =>
+                    props.onPlan(
+                      `Help me make this team able to handle work. It currently has no active authorized route. Explain the smallest useful change in plain language and ask before changing the team.`,
+                    ),
+                  )
                 }}
               >
-                Edit organization
+                Ask Raya to fix this
               </Button>
             </div>
           </div>
         }
       >
+        <Show
+          when={manual()}
+          fallback={
+            <form
+              class="routines-assignment routines-assignment-simple"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const text = intent().trim()
+                if (!text) return
+                dialog.close()
+                queueMicrotask(() => props.onPlan(text))
+              }}
+            >
+              <div class="routines-assignment-intro">
+                <h3>What needs to get done?</h3>
+                <p>
+                  Say it naturally. Raya will choose the best authorized workers and prepare the expected result and
+                  context for you to review.
+                </p>
+              </div>
+              <label class="routines-field" for={`${uid}-intent`}>
+                <span class="sr-only">Describe the work</span>
+                <textarea
+                  id={`${uid}-intent`}
+                  value={intent()}
+                  maxlength={8000}
+                  rows={5}
+                  autofocus
+                  placeholder="For example: Check that this organization and both workers still exist after restart, then send me a short confirmation."
+                  onInput={(event) => setIntent(event.currentTarget.value)}
+                />
+              </label>
+              <div class="dialog-confirm-actions routines-assignment-simple-actions">
+                <Button type="button" variant="ghost" size="large" onClick={() => setManual(true)}>
+                  Choose details myself
+                </Button>
+                <Button type="submit" size="large" disabled={!intent().trim()}>
+                  Continue with Raya
+                </Button>
+              </div>
+            </form>
+          }
+        >
         <form
           class="routines-assignment"
           onSubmit={(event) => {
@@ -387,6 +436,9 @@ export const OrganizationAssignment: Component<{
             </div>
           </details>
           <div class="dialog-confirm-actions">
+            <Button type="button" variant="ghost" size="large" disabled={!!sent()} onClick={() => setManual(false)}>
+              Use Raya instead
+            </Button>
             <Button variant="secondary" size="large" disabled={!!sent()} onClick={() => dialog.close()}>
               Cancel
             </Button>
@@ -395,6 +447,7 @@ export const OrganizationAssignment: Component<{
             </Button>
           </div>
         </form>
+        </Show>
       </Show>
     </Dialog>
   )

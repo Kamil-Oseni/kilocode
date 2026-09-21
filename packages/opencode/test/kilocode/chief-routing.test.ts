@@ -197,6 +197,7 @@ describe("Raya Chief routing", () => {
       create_organization: { id: "create" },
       update_routine: { id: "routine" },
       update_organization: { id: "organization" },
+      assign_organization_work: { id: "assign" },
     }
     expect(
       Object.keys(
@@ -213,6 +214,7 @@ describe("Raya Chief routing", () => {
       "create_organization",
       "update_routine",
       "update_organization",
+      "assign_organization_work",
     ])
     expect(RayaChief.prompt(agents)).toContain("do not call chief_route or task for them")
     expect(RayaChief.routine("Have an accounting agent send me a report every Friday")).toBe(true)

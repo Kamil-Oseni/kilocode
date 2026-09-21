@@ -407,9 +407,14 @@ export namespace KiloToolRegistry {
   export function available(tool: Tool.Def, agent: Agent.Info) {
     if (tool.id === "chief_route") return agent.name === "auto" // raya_change - Milestone B
     if (
-      ["schedule_task", "inspect_routines", "create_organization", "update_routine", "update_organization"].includes(
-        tool.id,
-      )
+      [
+        "schedule_task",
+        "inspect_routines",
+        "create_organization",
+        "update_routine",
+        "update_organization",
+        "assign_organization_work",
+      ].includes(tool.id)
     )
       return agent.mode === "primary"
     if (["inspect_team", "contact_owner", "create_subordinate", "delegate_work"].includes(tool.id))

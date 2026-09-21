@@ -49,6 +49,7 @@ const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx
 const { OrganizationAssignment } = await import("../../webview-ui/src/components/routines/OrganizationAssignment.tsx")
 const root = document.createElement("div")
 const chosen = []
+const plans = []
 document.body.append(root)
 const worker = "11111111-2222-4333-8444-555555555555"
 const item = {
@@ -69,8 +70,8 @@ function Fixture() {
       createComponent(OrganizationAssignment, {
         item,
         agents: [{ id: worker, name: "Persistence Verifier", enabled: true }],
-        onEdit: () => undefined,
         onChoose: (id) => chosen.push(id),
+        onPlan: (text) => plans.push(text),
         onAssigned: () => undefined,
       }),
     ),

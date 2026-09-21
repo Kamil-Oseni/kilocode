@@ -66,7 +66,14 @@ export namespace RayaChief {
     // host's update_canvas retry hint) instead of only through a delegated subagent.
     const names = ["chief_route", "task", "get_goal", "update_goal", "update_goal_plan", "ask_options", "question"]
     if (routine(request(metadata)))
-      names.push("schedule_task", "inspect_routines", "create_organization", "update_routine", "update_organization")
+      names.push(
+        "schedule_task",
+        "inspect_routines",
+        "create_organization",
+        "update_routine",
+        "update_organization",
+        "assign_organization_work",
+      )
     if (metadata?.["raya.canvas.command"] === true) names.push("create_canvas", "update_canvas")
     return Object.fromEntries(names.flatMap((name) => (available[name] ? [[name, available[name]]] : []))) as Record<
       string,

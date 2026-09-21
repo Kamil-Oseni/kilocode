@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect, Exit } from "effect"
 import type { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -333,6 +337,62 @@ test("organization activity reports authoritative branch spend across pages with
           time_updated: 10,
         },
       ])
+      yield* database.db.insert(ProjectTable).values({
+        id: ProjectV2.ID.make("project_company_cost"),
+        worktree: AbsolutePath.make("/workspace"),
+        sandboxes: [],
+        time_created: 1,
+        time_updated: 1,
+      })
+      const session = {
+        project_id: ProjectV2.ID.make("project_company_cost"),
+        slug: "company-cost",
+        directory: "/workspace",
+        title: "Company work",
+        version: "1",
+        tokens_input: 0,
+        tokens_output: 0,
+        tokens_reasoning: 0,
+        tokens_cache_read: 0,
+        tokens_cache_write: 0,
+        time_created: 1,
+        time_updated: 1,
+      }
+      yield* database.db.insert(SessionTable).values([
+        {
+          ...session,
+          id: SessionID.make("ses_company_direct"),
+          cost: 1.5,
+          metadata: {
+            rayaRoutine: {
+              version: 1,
+              agentID: "chief",
+              runID: "run_company_direct",
+              scheduleVersion: 1,
+              trigger: { kind: "manual" },
+              organizationID,
+              organizationRevision: 1,
+            },
+          },
+        },
+        {
+          ...session,
+          id: SessionID.make("ses_company_delegated"),
+          cost: 9,
+          metadata: {
+            rayaRoutine: {
+              version: 1,
+              agentID: "worker",
+              runID: "run_company_delegated",
+              scheduleVersion: 1,
+              trigger: { kind: "manual" },
+              delegationID: "root_finished",
+              organizationID,
+              organizationRevision: 1,
+            },
+          },
+        },
+      ])
       const resolve = (id: string) => Effect.succeed({ name: id, role: "worker", archived: false })
       const first = yield* info.activity(organizationID, resolve, undefined, 1)
       const second = yield* info.activity(organizationID, resolve, first.next, 1)
@@ -351,8 +411,9 @@ test("organization activity reports authoritative branch spend across pages with
         active: 2,
         needsAttention: 2,
         uncertain: 1,
-        recordedCost: 5,
-        committedCost: 24,
+        recordedCost: 6.5,
+        committedCost: 25.5,
+        standaloneCost: 1.5,
       })
       expect(second.summary).toEqual(first.summary)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),

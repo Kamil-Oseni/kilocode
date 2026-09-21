@@ -525,6 +525,70 @@ test("organization policy is pinned at authorization and cannot widen delegated 
   )
 })
 
+test("standalone runs bind only an unambiguous organization", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const opened: Array<{ metadata?: Record<string, unknown> }> = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: (input) =>
+            Effect.sync(() => {
+              opened.push({ metadata: input?.metadata })
+              return session(`ses_standalone_${opened.length}`)
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const unique = yield* runner.tasks.create({
+        name: "Unique",
+        objective: "Review one company.",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const shared = yield* runner.tasks.create({
+        name: "Shared",
+        objective: "Review several companies.",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
+      const first = yield* organizations.create({
+        name: "First",
+        policy: "Cite the first company's records.",
+        members: [
+          { agentID: unique.id, role: "Reviewer" },
+          { agentID: shared.id, role: "Reviewer" },
+        ],
+      })
+      yield* organizations.create({
+        name: "Second",
+        policy: "Cite the second company's records.",
+        members: [{ agentID: shared.id, role: "Reviewer" }],
+      })
+
+      const bound = yield* runner.fire(unique.id)
+      const ambiguous = yield* runner.fire(shared.id)
+      expect(opened[0]?.metadata?.rayaRoutine).toMatchObject({
+        organizationID: first.id,
+        organizationRevision: first.revision,
+      })
+      expect(opened[1]?.metadata?.rayaRoutine).not.toHaveProperty("organizationID")
+      expect((yield* RayaTaskSnapshot.make({ storage }).get(bound.id)).objective).toContain(
+        "Cite the first company's records.",
+      )
+      expect((yield* RayaTaskSnapshot.make({ storage }).get(ambiguous.id)).objective).not.toContain(
+        "Cite the second company's records.",
+      )
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("a durable removal owner refuses concurrent delegation admission", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

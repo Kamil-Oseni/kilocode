@@ -73,7 +73,7 @@ function valid(value: unknown): value is Work {
 function validSummary(value: unknown): value is Summary {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
-  return ["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost"].every(
+  return ["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost", "standaloneCost"].every(
     (key) => typeof row[key] === "number" && Number.isFinite(row[key]) && row[key] >= 0,
   )
 }
@@ -402,6 +402,11 @@ export const OrganizationActivity: Component<{
                 </p>
                 <p>
                   <span>{money(total().recordedCost)} spent</span>
+                  <Show when={total().standaloneCost > 0}>
+                    <span title="Direct model cost from organization workers' scheduled or conversational Routine runs. Delegated worker sessions are excluded to prevent double counting.">
+                      {money(total().standaloneCost)} direct Routine work
+                    </span>
+                  </Show>
                   <span title="Committed cost includes recorded spend and live work reserved at its saved budget limit.">
                     {money(total().committedCost)} committed
                   </span>

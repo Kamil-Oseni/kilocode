@@ -1,6 +1,7 @@
 import { and, desc, eq, lt, or, sql } from "drizzle-orm"
 import { Effect, Exit, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineMessageTable as Message,
@@ -135,6 +136,7 @@ export const ActivityPage = Schema.Struct({
     uncertain: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     recordedCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
     committedCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+    standaloneCost: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
   }),
   next: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
 })
@@ -392,13 +394,31 @@ export namespace RayaTaskInfo {
         .all()
         .pipe(Effect.orDie)
       const committedCost = commitment(all)
+      const standalone = yield* db
+        .select({
+          cost: sql<number>`coalesce(sum(${SessionTable.cost}), 0)`,
+        })
+        .from(SessionTable)
+        .where(
+          and(
+            sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.organizationID') = ${organizationID}`,
+            sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine.delegationID') is null`,
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
+      const standaloneCost =
+        typeof standalone?.cost === "number" && Number.isFinite(standalone.cost) && standalone.cost >= 0
+          ? standalone.cost
+          : 0
       const summary = {
         total: all.length,
         active: all.filter((row) => active.has(row.state)).length,
         needsAttention: all.filter((row) => row.state === "needs_input" || row.state === "failed").length,
         uncertain: all.filter((row) => !active.has(row.state) && row.session_id !== null && row.cost === null).length,
-        recordedCost: all.reduce((total, row) => total + (row.cost ?? 0), 0),
-        committedCost,
+        recordedCost: all.reduce((total, row) => total + (row.cost ?? 0), standaloneCost),
+        committedCost: committedCost + standaloneCost,
+        standaloneCost,
       }
       const slice = rows.slice(0, limit)
       const items: Activity[] = []

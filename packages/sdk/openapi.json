@@ -36792,9 +36792,21 @@
                         "committedCost": {
                           "type": "number",
                           "minimum": 0
+                        },
+                        "standaloneCost": {
+                          "type": "number",
+                          "minimum": 0
                         }
                       },
-                      "required": ["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost"],
+                      "required": [
+                        "total",
+                        "active",
+                        "needsAttention",
+                        "uncertain",
+                        "recordedCost",
+                        "committedCost",
+                        "standaloneCost"
+                      ],
                       "additionalProperties": false
                     },
                     "next": {
@@ -38924,7 +38936,7 @@
                     "depth": {
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 3
+                      "maximum": 8
                     },
                     "state": {
                       "type": "string",
@@ -39294,7 +39306,7 @@
                     "depth": {
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 3
+                      "maximum": 8
                     },
                     "state": {
                       "type": "string",
@@ -39557,7 +39569,7 @@
                         "depth": {
                           "type": "integer",
                           "minimum": 1,
-                          "maximum": 3
+                          "maximum": 8
                         },
                         "state": {
                           "type": "string",
@@ -39734,7 +39746,7 @@
                           "depth": {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 3
+                            "maximum": 8
                           },
                           "state": {
                             "type": "string",
@@ -39912,7 +39924,7 @@
                           "depth": {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 3
+                            "maximum": 8
                           },
                           "state": {
                             "type": "string",
@@ -40177,7 +40189,7 @@
                     "depth": {
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 3
+                      "maximum": 8
                     },
                     "state": {
                       "type": "string",

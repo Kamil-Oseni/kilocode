@@ -43,7 +43,7 @@ const WAIT = "waiting on you"
 
 const log = Log.create({ service: "raya-task-runner" })
 
-type Organization = { id: string; name: string; revision: number; policy?: string }
+type Organization = { id: string; name: string; revision: number; policy?: string; budget?: number }
 
 function policy(objective: string, organization?: Organization) {
   if (!organization?.policy) return objective
@@ -185,6 +185,26 @@ export namespace RayaTaskRunner {
       ? RayaTaskDelegation.make(input.database, organizations?.authorize, organizations?.shares)
       : undefined
     const LATE = "This request timed out. It was not completed."
+    const affiliation = Effect.fn("RayaTaskRunner.affiliation")(function* (id: string) {
+      if (!organizations) return undefined
+      const page = yield* organizations
+        .memberships(id, { limit: 2 })
+        .pipe(
+          Effect.mapError(
+            (err) =>
+              new RayaTask.GuardError({ message: `Could not verify this worker's organization: ${err.message}` }),
+          ),
+        )
+      if (page.items.length !== 1 || page.next) return undefined
+      const item = page.items[0]
+      return {
+        id: item.id,
+        name: item.name,
+        revision: item.revision,
+        policy: item.policy,
+        budget: item.budget,
+      } satisfies Organization
+    })
     const sync = Effect.fn("RayaTaskRunner.syncDelegationBudget")(function* (row: Errand) {
       if (!row.parentRunID) return
       const history = yield* tasks.runsFor(row.senderID)
@@ -371,9 +391,7 @@ export namespace RayaTaskRunner {
               id,
               check(id, trigger, opts?.follow ?? !!note).pipe(
                 Effect.flatMap((selected) =>
-                  (opts?.guard ?? Effect.succeed(undefined)).pipe(
-                    Effect.map((organization) => ({ selected, organization })),
-                  ),
+                  (opts?.guard ?? affiliation(id)).pipe(Effect.map((organization) => ({ selected, organization }))),
                 ),
               ),
               (admitted, owner) =>
@@ -419,6 +437,12 @@ export namespace RayaTaskRunner {
                             scheduleVersion: item.scheduleVersion ?? 1,
                             trigger: admitted.selected.trigger,
                             ...(opts?.delegationID ? { delegationID: opts.delegationID } : {}),
+                            ...(admitted.organization
+                              ? {
+                                  organizationID: admitted.organization.id,
+                                  organizationRevision: admitted.organization.revision,
+                                }
+                              : {}),
                           },
                         },
                         model:

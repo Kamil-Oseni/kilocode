@@ -14,7 +14,17 @@ export const record = Schema.Struct({
   scheduleVersion: Schema.Number,
   trigger: RayaTask.Trigger,
   delegationID: Schema.optional(Schema.String),
-})
+  organizationID: Schema.optional(Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/))),
+  organizationRevision: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  ),
+}).check(
+  Schema.makeFilter((value) =>
+    (value.organizationID === undefined) === (value.organizationRevision === undefined)
+      ? undefined
+      : "Routine organization identity is incomplete.",
+  ),
+)
 
 /** Check scheduled session identity before dispatching another automatic turn. */
 export function continuation(input: {

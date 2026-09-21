@@ -731,7 +731,7 @@ async function activity(ctx: Ctx) {
     !Array.isArray(result.data.items) ||
     !result.data.items.every((item) => item.organizationID === msg.organizationID) ||
     !result.data.summary ||
-    !["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost"].every(
+    !["total", "active", "needsAttention", "uncertain", "recordedCost", "committedCost", "standaloneCost"].every(
       (key) =>
         typeof result.data?.summary[key as keyof typeof result.data.summary] === "number" &&
         Number.isFinite(result.data.summary[key as keyof typeof result.data.summary]) &&

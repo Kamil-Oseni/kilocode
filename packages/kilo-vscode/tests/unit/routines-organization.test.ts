@@ -243,6 +243,7 @@ test("organization activity stays scoped and preserves its cursor", async () => 
           uncertain: 1,
           recordedCost: 4.25,
           committedCost: 12,
+          standaloneCost: 1.25,
         },
         next: "next_page",
       })
@@ -278,6 +279,7 @@ test("organization activity stays scoped and preserves its cursor", async () => 
         uncertain: 1,
         recordedCost: 4.25,
         committedCost: 12,
+        standaloneCost: 1.25,
       },
       next: "next_page",
     },

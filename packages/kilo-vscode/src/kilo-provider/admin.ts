@@ -54,17 +54,9 @@ async function overlay(health: AdminHealth, host?: AdminHostSignals): Promise<Ad
       : undefined,
   ])
   for (const row of reads) if (row) rows.set(row.id, row)
-  const items = health.items
   return {
     ...health,
-    items: [
-      rows.get(items[0].id) ?? items[0],
-      rows.get(items[1].id) ?? items[1],
-      rows.get(items[2].id) ?? items[2],
-      rows.get(items[3].id) ?? items[3],
-      rows.get(items[4].id) ?? items[4],
-      rows.get(items[5].id) ?? items[5],
-    ],
+    items: health.items.map((item) => rows.get(item.id) ?? item),
   }
 }
 

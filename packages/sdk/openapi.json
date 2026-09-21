@@ -54715,7 +54715,7 @@
                     },
                     "version": {
                       "type": "number",
-                      "enum": [1]
+                      "enum": [2]
                     },
                     "generatedAt": {
                       "type": "number",
@@ -54728,7 +54728,25 @@
                         "properties": {
                           "id": {
                             "type": "string",
-                            "enum": ["runtime", "sessions", "routines", "agents", "browser", "voice"]
+                            "enum": [
+                              "runtime",
+                              "sessions",
+                              "goals",
+                              "routines",
+                              "organizations",
+                              "scheduler",
+                              "agents",
+                              "skills",
+                              "todos",
+                              "contacts",
+                              "browser",
+                              "computer",
+                              "voice",
+                              "memory",
+                              "canvas",
+                              "sync",
+                              "updates"
+                            ]
                           },
                           "status": {
                             "type": "string",
@@ -54807,9 +54825,7 @@
                         },
                         "required": ["id", "status", "reason", "observedAt"],
                         "additionalProperties": false
-                      },
-                      "minItems": 6,
-                      "maxItems": 6
+                      }
                     }
                   },
                   "required": ["format", "version", "generatedAt", "items"],
@@ -54899,7 +54915,25 @@
                       },
                       "subsystem": {
                         "type": "string",
-                        "enum": ["runtime", "sessions", "routines", "agents", "browser", "voice"]
+                        "enum": [
+                          "runtime",
+                          "sessions",
+                          "goals",
+                          "routines",
+                          "organizations",
+                          "scheduler",
+                          "agents",
+                          "skills",
+                          "todos",
+                          "contacts",
+                          "browser",
+                          "computer",
+                          "voice",
+                          "memory",
+                          "canvas",
+                          "sync",
+                          "updates"
+                        ]
                       },
                       "severity": {
                         "type": "string",
@@ -54991,10 +55025,21 @@
                             "enum": [
                               "runtime",
                               "sessions",
+                              "goals",
                               "routines",
+                              "organizations",
+                              "scheduler",
                               "agents",
+                              "skills",
+                              "todos",
+                              "contacts",
                               "browser",
+                              "computer",
                               "voice",
+                              "memory",
+                              "canvas",
+                              "sync",
+                              "updates",
                               "registry",
                               "host"
                             ]

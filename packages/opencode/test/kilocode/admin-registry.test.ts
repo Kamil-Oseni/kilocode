@@ -26,14 +26,26 @@ describe("Raya admin health registry", () => {
     expect(snapshot.items.map((item) => item.id)).toEqual([
       "runtime",
       "sessions",
+      "goals",
       "routines",
+      "organizations",
+      "scheduler",
       "agents",
+      "skills",
+      "todos",
+      "contacts",
       "browser",
+      "computer",
       "voice",
+      "memory",
+      "canvas",
+      "sync",
+      "updates",
     ])
     expect(snapshot.items[0]).toEqual({ id: "runtime", status: "healthy", reason: "ready", observedAt: at })
     expect(snapshot.items[1]).toEqual({ id: "sessions", status: "unknown", reason: "probe-failed", observedAt: at })
     expect(snapshot.items.slice(2).every((item) => item.reason === "not-checked")).toBe(true)
+    expect(snapshot.version).toBe(2)
     expect(JSON.stringify(snapshot)).not.toContain("synthetic")
     expect(Schema.decodeUnknownSync(RayaAdmin.Snapshot)(snapshot)).toEqual(snapshot)
   })

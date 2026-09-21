@@ -10,10 +10,28 @@ const params = new URLSearchParams(location.search)
 const state = params.get("state") ?? "healthy"
 const messages = []
 let attempts = 0
-const ids = ["runtime", "sessions", "routines", "agents", "browser", "voice"]
+const ids = [
+  "runtime",
+  "sessions",
+  "goals",
+  "routines",
+  "organizations",
+  "scheduler",
+  "agents",
+  "skills",
+  "todos",
+  "contacts",
+  "browser",
+  "computer",
+  "voice",
+  "memory",
+  "canvas",
+  "sync",
+  "updates",
+]
 const stamp = Date.UTC(2026, 8, 15, 14, 30)
 const healthy = ids.map((id) => ({ id, status: "healthy", reason: "ready", observedAt: stamp }))
-const health = (items = healthy) => ({ format: "raya.admin-health", version: 1, generatedAt: stamp, items })
+const health = (items = healthy) => ({ format: "raya.admin-health", version: 2, generatedAt: stamp, items })
 const entry = (index) => ({
   at: stamp - index * 60_000,
   level: index % 7 === 0 ? "warn" : "info",
@@ -70,8 +88,9 @@ window.acquireVsCodeApi = () => ({
         health: health([
           healthy[0],
           healthy[1],
+          healthy[2],
           { id: "routines", status: "degraded", reason: "routine-recovery", observedAt: stamp },
-          healthy[3],
+          ...healthy.slice(4, 15),
         ]),
         logs,
       })

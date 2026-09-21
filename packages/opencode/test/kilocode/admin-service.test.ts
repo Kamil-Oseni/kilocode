@@ -44,10 +44,21 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
+      ["goals", "unknown", "not-checked"],
       ["routines", "healthy", "ready"],
+      ["organizations", "unknown", "not-checked"],
+      ["scheduler", "unknown", "not-checked"],
       ["agents", "healthy", "ready"],
+      ["skills", "unknown", "not-checked"],
+      ["todos", "unknown", "not-checked"],
+      ["contacts", "unknown", "not-checked"],
       ["browser", "healthy", "ready"],
+      ["computer", "unknown", "not-checked"],
       ["voice", "healthy", "ready"],
+      ["memory", "unknown", "not-checked"],
+      ["canvas", "unknown", "not-checked"],
+      ["sync", "unknown", "not-checked"],
+      ["updates", "unknown", "not-checked"],
     ])
     expect(events).toHaveLength(12)
     for (const id of ["runtime", "sessions", "routines", "agents", "browser", "voice"] as const) {
@@ -90,10 +101,21 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "offline", "disconnected"],
       ["sessions", "offline", "disconnected"],
+      ["goals", "unknown", "not-checked"],
       ["routines", "unknown", "disconnected"],
+      ["organizations", "unknown", "not-checked"],
+      ["scheduler", "unknown", "not-checked"],
       ["agents", "unknown", "disconnected"],
+      ["skills", "unknown", "not-checked"],
+      ["todos", "unknown", "not-checked"],
+      ["contacts", "unknown", "not-checked"],
       ["browser", "blocked", "browser-locked"],
+      ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "not-checked"],
+      ["memory", "unknown", "not-checked"],
+      ["canvas", "unknown", "not-checked"],
+      ["sync", "unknown", "not-checked"],
+      ["updates", "unknown", "not-checked"],
     ])
   })
 
@@ -118,10 +140,21 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "degraded", "storage-unreadable"],
+      ["goals", "unknown", "not-checked"],
       ["routines", "unknown", "probe-failed"],
+      ["organizations", "unknown", "not-checked"],
+      ["scheduler", "unknown", "not-checked"],
       ["agents", "unknown", "probe-failed"],
+      ["skills", "unknown", "not-checked"],
+      ["todos", "unknown", "not-checked"],
+      ["contacts", "unknown", "not-checked"],
       ["browser", "unknown", "probe-failed"],
+      ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "probe-failed"],
+      ["memory", "unknown", "not-checked"],
+      ["canvas", "unknown", "not-checked"],
+      ["sync", "unknown", "not-checked"],
+      ["updates", "unknown", "not-checked"],
     ])
     expect(JSON.stringify(snapshot)).not.toContain("synthetic")
     expect(JSON.stringify(snapshot)).not.toContain("private")
@@ -151,10 +184,21 @@ describe("Raya admin health service", () => {
     expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
       ["runtime", "healthy", "ready"],
       ["sessions", "healthy", "ready"],
+      ["goals", "unknown", "not-checked"],
       ["routines", "healthy", "ready"],
+      ["organizations", "unknown", "not-checked"],
+      ["scheduler", "unknown", "not-checked"],
       ["agents", "healthy", "ready"],
+      ["skills", "unknown", "not-checked"],
+      ["todos", "unknown", "not-checked"],
+      ["contacts", "unknown", "not-checked"],
       ["browser", "unknown", "not-checked"],
+      ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "not-checked"],
+      ["memory", "unknown", "not-checked"],
+      ["canvas", "unknown", "not-checked"],
+      ["sync", "unknown", "not-checked"],
+      ["updates", "unknown", "not-checked"],
     ])
     expect(JSON.stringify(snapshot)).not.toContain("synthetic")
     expect(JSON.stringify(snapshot)).not.toContain("private")

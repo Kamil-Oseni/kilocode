@@ -6,14 +6,43 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import type { AdminEntry, AdminRow } from "../../../../src/shared/admin"
 
-const ids = ["runtime", "sessions", "routines", "agents", "browser", "voice"] as const
+const ids = [
+  "runtime",
+  "sessions",
+  "goals",
+  "routines",
+  "organizations",
+  "scheduler",
+  "agents",
+  "skills",
+  "todos",
+  "contacts",
+  "browser",
+  "computer",
+  "voice",
+  "memory",
+  "canvas",
+  "sync",
+  "updates",
+] as const
 const names: Record<(typeof ids)[number], string> = {
   runtime: "Runtime",
   sessions: "Sessions",
+  goals: "Goals",
   routines: "Routines",
+  organizations: "Organizations",
+  scheduler: "Scheduler",
   agents: "Agents",
+  skills: "Skills",
+  todos: "Todos",
+  contacts: "Contacts",
   browser: "Browser",
+  computer: "Computer use",
   voice: "Voice",
+  memory: "Memory",
+  canvas: "Canvas",
+  sync: "Cloud sync",
+  updates: "Updates",
 }
 const states: Record<AdminRow["status"], string> = {
   healthy: "Healthy",
@@ -59,10 +88,21 @@ const reasons: Record<AdminRow["reason"], string> = {
 const sources: Record<NonNullable<Fields["source"]>, string> = {
   runtime: "Runtime",
   sessions: "Sessions",
+  goals: "Goals",
   routines: "Routines",
+  organizations: "Organizations",
+  scheduler: "Scheduler",
   agents: "Agents",
+  skills: "Skills",
+  todos: "Todos",
+  contacts: "Contacts",
   browser: "Browser",
+  computer: "Computer use",
   voice: "Voice",
+  memory: "Memory",
+  canvas: "Canvas",
+  sync: "Cloud sync",
+  updates: "Updates",
   registry: "Health registry",
   host: "Extension host",
 }

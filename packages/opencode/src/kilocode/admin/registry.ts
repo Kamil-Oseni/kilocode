@@ -7,7 +7,25 @@ export namespace RayaAdmin {
   export const Status = Schema.Literals(["healthy", "degraded", "blocked", "offline", "unknown"])
   export type Status = typeof Status.Type
 
-  export const Subsystem = Schema.Literals(["runtime", "sessions", "routines", "agents", "browser", "voice"])
+  export const Subsystem = Schema.Literals([
+    "runtime",
+    "sessions",
+    "goals",
+    "routines",
+    "organizations",
+    "scheduler",
+    "agents",
+    "skills",
+    "todos",
+    "contacts",
+    "browser",
+    "computer",
+    "voice",
+    "memory",
+    "canvas",
+    "sync",
+    "updates",
+  ])
   export type Subsystem = typeof Subsystem.Type
 
   export const Reason = Schema.Literals([
@@ -56,11 +74,35 @@ export namespace RayaAdmin {
   })
   export type Row = typeof Row.Type
 
+  const order: readonly Subsystem[] = [
+    "runtime",
+    "sessions",
+    "goals",
+    "routines",
+    "organizations",
+    "scheduler",
+    "agents",
+    "skills",
+    "todos",
+    "contacts",
+    "browser",
+    "computer",
+    "voice",
+    "memory",
+    "canvas",
+    "sync",
+    "updates",
+  ]
+
   export const Snapshot = Schema.Struct({
     format: Schema.Literal("raya.admin-health"),
-    version: Schema.Literal(1),
+    version: Schema.Literal(2),
     generatedAt: Time,
-    items: Schema.Array(Row).check(Schema.isMinLength(6), Schema.isMaxLength(6)),
+    items: Schema.Array(Row).check(
+      Schema.makeFilter((items) =>
+        items.length === order.length ? undefined : "Admin health must contain every subsystem.",
+      ),
+    ),
   })
   export type Snapshot = typeof Snapshot.Type
 
@@ -68,8 +110,6 @@ export namespace RayaAdmin {
     id: Subsystem
     read: (at: number) => Row | Promise<Row>
   }
-
-  const order: readonly Subsystem[] = ["runtime", "sessions", "routines", "agents", "browser", "voice"]
 
   export async function collect(probes: readonly Probe[], clock = Date.now): Promise<Snapshot> {
     const at = clock()
@@ -85,7 +125,7 @@ export namespace RayaAdmin {
           .catch(() => unknown(id, at, "probe-failed"))
       }),
     )
-    return Schema.decodeUnknownPromise(Snapshot)({ format: "raya.admin-health", version: 1, generatedAt: at, items })
+    return Schema.decodeUnknownPromise(Snapshot)({ format: "raya.admin-health", version: 2, generatedAt: at, items })
   }
 
   export function runtime(state: "connecting" | "connected" | "disconnected" | "error", at: number): Row {

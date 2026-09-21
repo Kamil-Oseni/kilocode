@@ -2,6 +2,26 @@ import { describe, expect, it } from "bun:test"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { handleAdminMessage } from "../../src/kilo-provider/admin"
 
+const ids = [
+  "runtime",
+  "sessions",
+  "goals",
+  "routines",
+  "organizations",
+  "scheduler",
+  "agents",
+  "skills",
+  "todos",
+  "contacts",
+  "browser",
+  "computer",
+  "voice",
+  "memory",
+  "canvas",
+  "sync",
+  "updates",
+] as const
+
 describe("admin host bridge", () => {
   it("uses the generated read-only endpoints in order", async () => {
     const calls: string[] = []
@@ -11,7 +31,7 @@ describe("admin host bridge", () => {
         admin: {
           health: async () => {
             calls.push("health")
-            return { data: { format: "raya.admin-health", version: 1, generatedAt: 1, items: [] } }
+            return { data: { format: "raya.admin-health", version: 2, generatedAt: 1, items: [] } }
           },
           logs: async () => {
             calls.push("logs")
@@ -34,7 +54,7 @@ describe("admin host bridge", () => {
       {
         type: "adminResult",
         requestID: "req_1",
-        health: { format: "raya.admin-health", version: 1, generatedAt: 1, items: [] },
+        health: { format: "raya.admin-health", version: 2, generatedAt: 1, items: [] },
         logs: [],
       },
     ])
@@ -71,7 +91,7 @@ describe("admin host bridge", () => {
 
   it("keeps fresh health when the diagnostic request throws", async () => {
     const posts: unknown[] = []
-    const health = { format: "raya.admin-health" as const, version: 1 as const, generatedAt: 1, items: [] }
+    const health = { format: "raya.admin-health" as const, version: 2 as const, generatedAt: 1, items: [] }
     const client = {
       raya: {
         admin: {
@@ -103,7 +123,7 @@ describe("admin host bridge", () => {
 
   it("replaces unknown browser and voice rows with current extension-host signals", async () => {
     const posts: unknown[] = []
-    const row = (id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice") => ({
+    const row = (id: (typeof ids)[number]) => ({
       id,
       status: "unknown" as const,
       reason: "not-checked" as const,
@@ -111,11 +131,9 @@ describe("admin host bridge", () => {
     })
     const health = {
       format: "raya.admin-health" as const,
-      version: 1 as const,
+      version: 2 as const,
       generatedAt: 25,
-      items: ["runtime", "sessions", "routines", "agents", "browser", "voice"].map((id) =>
-        row(id as Parameters<typeof row>[0]),
-      ),
+      items: ids.map(row),
     }
     const client = {
       raya: { admin: { health: async () => ({ data: health }), logs: async () => ({ data: [] }) } },
@@ -152,10 +170,10 @@ describe("admin host bridge", () => {
     const posts: unknown[] = []
     const health = {
       format: "raya.admin-health" as const,
-      version: 1 as const,
+      version: 2 as const,
       generatedAt: 30,
-      items: ["runtime", "sessions", "routines", "agents", "browser", "voice"].map((id) => ({
-        id: id as "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice",
+      items: ids.map((id) => ({
+        id,
         status: "unknown" as const,
         reason: "not-checked" as const,
         observedAt: 30,
@@ -198,10 +216,10 @@ describe("admin host bridge", () => {
     const posts: unknown[] = []
     const health = {
       format: "raya.admin-health" as const,
-      version: 1 as const,
+      version: 2 as const,
       generatedAt: 35,
-      items: ["runtime", "sessions", "routines", "agents", "browser", "voice"].map((id) => ({
-        id: id as "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice",
+      items: ids.map((id) => ({
+        id,
         status: "unknown" as const,
         reason: "not-checked" as const,
         observedAt: 35,

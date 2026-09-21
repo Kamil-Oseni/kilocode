@@ -1004,6 +1004,10 @@ export const Inbox: Component<{
     saved(msg)
     halted(msg)
     chained(msg)
+    if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && connected()) {
+      wait = false
+      load(undefined, term || undefined)
+    }
     if (msg.type === "routineInboxAttachmentOpened" && msg.agentID === props.agentID && msg.error)
       setError(routineFailure(msg.error, msg.recovery))
   }

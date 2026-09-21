@@ -92,6 +92,13 @@ export function goalTools(
       parameters: RayaGoal.ModelUpdate,
       execute: (input: RayaGoal.ModelUpdate, ctx) =>
         Effect.gen(function* () {
+          const current = yield* goals.get(ctx.sessionID)
+          if (current?.completion === "reply")
+            return result(
+              "Reply directly",
+              "This worker conversation records the assistant's written reply automatically. Answer the message directly without update_goal.",
+              current.status,
+            )
           const rejected: Record<RayaGoal.ModelUpdate["status"], string> = {
             complete: "Completion audit rejected",
             blocked: "Goal not blocked",

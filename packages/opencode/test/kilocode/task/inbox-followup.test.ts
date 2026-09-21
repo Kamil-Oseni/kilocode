@@ -12,9 +12,12 @@ import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
+import { goalTools } from "@/kilocode/tool/goal"
 import { owner, stopped } from "@/kilocode/task/owner"
 import type { MessageV2 } from "@/session/message-v2"
 import { MessageID } from "@/session/schema"
+import * as Truncate from "@/tool/truncate"
+import { Agent } from "@/agent/agent"
 
 function memory() {
   const data = new Map<string, unknown>()
@@ -133,6 +136,50 @@ test("a paused worker follow-up starts one run without rewriting the assignment"
       expect(starts).toEqual(["start"])
       expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("a worker conversation cannot be blocked by update_goal completion auditing", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const storage = memory()
+      const sessions = {
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      const sid = SessionID.make("ses_direct_reply")
+      yield* goals.create(sid, "Reply naturally to hey", undefined, undefined, undefined, undefined, undefined, "reply")
+      const tool = yield* (yield* goalTools(goals).update).init()
+      const response = yield* tool.execute(
+        { status: "complete", audit: { summary: "No tools needed", requirements: [] } },
+        {
+          sessionID: sid,
+          messageID: MessageID.ascending(),
+          agent: "generalist",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.die("Unexpected approval"),
+        },
+      )
+      expect(response.title).toBe("Reply directly")
+      expect(response.output).toContain("written reply automatically")
+      expect((yield* goals.get(sid))?.status).toBe("active")
+      expect((yield* goals.get(sid))?.blockedReason).toBeUndefined()
+    }).pipe(
+      Effect.provideService(Truncate.Service, {
+        cleanup: () => Effect.void,
+        write: (text) => Effect.succeed(text),
+        output: (text) => Effect.succeed({ content: text, truncated: false as const }),
+        limits: () => Effect.succeed({ maxLines: 2000, maxBytes: 50 * 1024 }),
+      }),
+      Effect.provideService(
+        Agent.Service,
+        Agent.Service.of({ get: () => Effect.succeed({ name: "generalist" }) } as unknown as Agent.Interface),
+      ),
+    ),
   )
 })
 

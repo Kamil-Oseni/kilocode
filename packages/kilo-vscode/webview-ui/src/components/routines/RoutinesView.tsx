@@ -1175,7 +1175,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     load()
     if (session.agents().length === 0) vscode.postMessage({ type: "requestAgents" })
     const tick = setInterval(() => {
-      if (!hold) load()
+      if (!hold && !chosen()) load()
     }, 4000)
     onCleanup(() => clearInterval(tick))
   })
@@ -1386,7 +1386,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setWait("")
     }
     if (msg.type === "routineRuns") history(msg)
-    if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && !hold) load()
+    if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && !hold && !chosen()) load()
   })
   onCleanup(unsub)
 

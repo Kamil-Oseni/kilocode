@@ -176,6 +176,15 @@ try {
   area.focus()
   area.value = "Why did expenses increase?"
   area.dispatchEvent(new window.Event("input", { bubbles: true }))
+  const refreshes = sent.filter((msg) => msg.type === "routineList").length
+  const pagesBeforeRefresh = sent.filter((msg) => msg.type === "routineInboxPage").length
+  emit({ type: "sessionTurnClosed", sessionID: "unrelated-session" })
+  assert.equal(sent.filter((msg) => msg.type === "routineList").length, refreshes)
+  assert.equal(sent.filter((msg) => msg.type === "routineInboxPage").length, pagesBeforeRefresh + 1)
+  assert.equal(document.activeElement, area)
+  assert.equal(area.value, "Why did expenses increase?")
+  const typingPage = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({ type: "routineInboxPage", requestID: typingPage.requestID, agentID: agent.id, messages: [note] })
   emit({
     type: "routineInbox",
     requestID: request.requestID,

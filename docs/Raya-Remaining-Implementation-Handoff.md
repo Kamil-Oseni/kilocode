@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `3a21afd7fd`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `91f4cead5c`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 21:13 America/Toronto - Preserve Scheduler recovery health
+
+Product commit `91f4cead5c` is on `origin/main`. `RayaTaskHealth.inspect(database, storage)` is now the single read-only Scheduler projection. Preserve its five aggregate database reads: queued occurrences; active `starting/linked` leases; expired or null `starting/linked` leases; pending user inbox messages without a session; and stranded session-bound user messages without delivery. Preserve the bounded startup-claim and agent-stage namespace reads, real `Record`/`RayaTask.Stage` schema decoding, key/record identity checks and 256-record cap per namespace.
+
+Do not call `scheduler.clean`, `pulse`, claim `recover`, `RayaTask.recoverStages`, inbox `move`, or any mutation from Admin health. A health request must never acquire work, repair a receipt, move a message, retire a schedule or delete state. Export only `{ queued, active, recovering, claims, staged, pending, stranded, failed, incomplete }`. Never export occurrence, claim, worker, organization, session, message, source, body or error data. A process is counted as stopped only through the existing conservative `stopped(owner)` proof; foreign and denied PID checks stay uncertain.
+
+Evidence passes **13 / 104**, including real SQLite queue/inbox rows, private bodies, malformed storage, identity validation and cap enforcement. Types, generated SDK and scoped guards pass; the protected push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains. Continue only `FUT-ADM-01`: map Computer use, Cloud sync and Updates from authoritative extension-host signals, keep missing sources Unknown, then rerun Admin Chromium, install one low-memory snapshot and perform installed/live-backend acceptance.
 
 ## ChatGPT 2026-09-20 20:58 America/Toronto - Preserve durable Goal health
 

@@ -8,6 +8,8 @@ import { RayaTask } from "@/kilocode/task"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { PersonalTodo } from "@/kilocode/personal-todo"
 import { Canvas } from "@/kilocode/canvas/service"
+import { RayaContactOutbox } from "@/kilocode/contact/outbox"
+import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceState } from "@/effect/instance-state"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
@@ -23,9 +25,11 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
     const logs = yield* RayaAdminLog.Service
     const skills = yield* Skill.Service
     const canvas = yield* Canvas.Service
+    const memory = yield* MemoryService.Service
     const tasks = RayaTask.make({ storage, database })
     const organizations = RayaTaskOrganization.make(database, { get: tasks.get }, storage)
     const todos = PersonalTodo.make({ storage })
+    const contacts = RayaContactOutbox.make(database)
 
     const health = Effect.fn("RayaAdminHttpApi.health")(function* () {
       const ctx = yield* InstanceState.context
@@ -39,6 +43,13 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
           Effect.runPromise(organizations.list({ limit: 1 }).pipe(Effect.provideService(InstanceRef, ctx))),
         skills: () => Effect.runPromise(skills.all().pipe(Effect.provideService(InstanceRef, ctx))),
         todos: () => Effect.runPromise(todos.list().pipe(Effect.provideService(InstanceRef, ctx))),
+        contacts: () =>
+          Effect.runPromise(
+            Effect.all([contacts.listDestinations(1), contacts.listMessages(1)]).pipe(
+              Effect.provideService(InstanceRef, ctx),
+            ),
+          ),
+        memory: () => Effect.runPromise(memory.status({ ctx })),
         canvas: () => Effect.runPromise(canvas.list().pipe(Effect.provideService(InstanceRef, ctx))),
         report: (event) => Effect.runPromise(logs.write(event).pipe(Effect.provideService(InstanceRef, ctx))),
       })

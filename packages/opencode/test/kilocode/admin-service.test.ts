@@ -14,6 +14,8 @@ describe("Raya admin health service", () => {
       organizations: 0,
       skills: 0,
       todos: 0,
+      contacts: 0,
+      memory: 0,
       canvas: 0,
       browser: 0,
       voice: 0,
@@ -40,6 +42,8 @@ describe("Raya admin health service", () => {
       organizations: () => reads.organizations++,
       skills: () => reads.skills++,
       todos: () => reads.todos++,
+      contacts: () => reads.contacts++,
+      memory: () => reads.memory++,
       canvas: () => reads.canvas++,
       browser: () => {
         reads.browser++
@@ -61,6 +65,8 @@ describe("Raya admin health service", () => {
       organizations: 1,
       skills: 1,
       todos: 1,
+      contacts: 1,
+      memory: 1,
       canvas: 1,
       browser: 1,
       voice: 1,
@@ -75,16 +81,16 @@ describe("Raya admin health service", () => {
       ["agents", "healthy", "ready"],
       ["skills", "healthy", "ready"],
       ["todos", "healthy", "ready"],
-      ["contacts", "unknown", "not-checked"],
+      ["contacts", "healthy", "ready"],
       ["browser", "healthy", "ready"],
       ["computer", "unknown", "not-checked"],
       ["voice", "healthy", "ready"],
-      ["memory", "unknown", "not-checked"],
+      ["memory", "healthy", "ready"],
       ["canvas", "healthy", "ready"],
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
     ])
-    expect(events).toHaveLength(20)
+    expect(events).toHaveLength(24)
     for (const id of [
       "runtime",
       "sessions",
@@ -93,8 +99,10 @@ describe("Raya admin health service", () => {
       "agents",
       "skills",
       "todos",
+      "contacts",
       "browser",
       "voice",
+      "memory",
       "canvas",
     ] as const) {
       expect(events.filter((event) => event.subsystem === id).map((event) => event.code)).toEqual([
@@ -104,7 +112,7 @@ describe("Raya admin health service", () => {
     }
 
     await service.snapshot()
-    expect(events).toHaveLength(40)
+    expect(events).toHaveLength(48)
   })
 
   test("keeps disconnected output useful without reading backend-owned stores", async () => {
@@ -130,6 +138,8 @@ describe("Raya admin health service", () => {
       organizations: () => reads.checks++,
       skills: () => reads.checks++,
       todos: () => reads.checks++,
+      contacts: () => reads.checks++,
+      memory: () => reads.checks++,
       canvas: () => reads.checks++,
       browser: () => ({ status: "locked" }),
       clock: () => at,
@@ -147,11 +157,11 @@ describe("Raya admin health service", () => {
       ["agents", "unknown", "disconnected"],
       ["skills", "unknown", "disconnected"],
       ["todos", "unknown", "disconnected"],
-      ["contacts", "unknown", "not-checked"],
+      ["contacts", "unknown", "disconnected"],
       ["browser", "blocked", "browser-locked"],
       ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "not-checked"],
-      ["memory", "unknown", "not-checked"],
+      ["memory", "unknown", "disconnected"],
       ["canvas", "unknown", "disconnected"],
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
@@ -172,6 +182,8 @@ describe("Raya admin health service", () => {
       organizations: () => Promise.reject(new Error("C:/private/organizations synthetic-organization-secret")),
       skills: () => Promise.reject(new Error("C:/private/skills synthetic-skill-secret")),
       todos: () => Promise.reject(new Error("C:/private/todos synthetic-todo-secret")),
+      contacts: () => Promise.reject(new Error("C:/private/contacts synthetic-contact-secret")),
+      memory: () => Promise.reject(new Error("C:/private/memory synthetic-memory-secret")),
       canvas: () => Promise.reject(new Error("C:/private/canvas synthetic-canvas-secret")),
       browser: () => Promise.reject(new Error("https://private.example/?token=synthetic-browser-secret")),
       voice: () => Promise.reject(new Error("synthetic-voice-secret")),
@@ -190,11 +202,11 @@ describe("Raya admin health service", () => {
       ["agents", "unknown", "probe-failed"],
       ["skills", "unknown", "probe-failed"],
       ["todos", "unknown", "probe-failed"],
-      ["contacts", "unknown", "not-checked"],
+      ["contacts", "unknown", "probe-failed"],
       ["browser", "unknown", "probe-failed"],
       ["computer", "unknown", "not-checked"],
       ["voice", "unknown", "probe-failed"],
-      ["memory", "unknown", "not-checked"],
+      ["memory", "unknown", "probe-failed"],
       ["canvas", "unknown", "probe-failed"],
       ["sync", "unknown", "not-checked"],
       ["updates", "unknown", "not-checked"],
@@ -206,7 +218,18 @@ describe("Raya admin health service", () => {
         .filter((event) => event.code === "probe.failed")
         .map((event) => event.subsystem)
         .sort(),
-    ).toEqual(["agents", "browser", "canvas", "organizations", "routines", "skills", "todos", "voice"])
+    ).toEqual([
+      "agents",
+      "browser",
+      "canvas",
+      "contacts",
+      "memory",
+      "organizations",
+      "routines",
+      "skills",
+      "todos",
+      "voice",
+    ])
     expect(JSON.stringify(events)).not.toContain("synthetic")
     expect(JSON.stringify(events)).not.toContain("private")
   })

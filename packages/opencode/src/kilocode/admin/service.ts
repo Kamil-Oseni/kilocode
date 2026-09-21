@@ -27,6 +27,8 @@ export namespace RayaAdminService {
     organizations?: Check
     skills?: Check
     todos?: Check
+    contacts?: Check
+    memory?: Check
     canvas?: Check
     browser?: () => Result<Browser>
     voice?: () => Result<Voice>
@@ -116,7 +118,10 @@ export namespace RayaAdminService {
           },
         },
       ]
-      const check = (id: "organizations" | "skills" | "todos" | "canvas", read: Check): RayaAdmin.Probe => ({
+      const check = (
+        id: "organizations" | "skills" | "todos" | "contacts" | "memory" | "canvas",
+        read: Check,
+      ): RayaAdmin.Probe => ({
         id,
         read: async (at) => {
           const current = await state
@@ -128,6 +133,8 @@ export namespace RayaAdminService {
       if (deps.organizations) probes.push(check("organizations", deps.organizations))
       if (deps.skills) probes.push(check("skills", deps.skills))
       if (deps.todos) probes.push(check("todos", deps.todos))
+      if (deps.contacts) probes.push(check("contacts", deps.contacts))
+      if (deps.memory) probes.push(check("memory", deps.memory))
       if (deps.canvas) probes.push(check("canvas", deps.canvas))
       const browser = deps.browser
       if (browser) probes.push({ id: "browser", read: async (at) => RayaAdmin.browser(await browser(), at) })

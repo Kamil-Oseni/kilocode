@@ -413,6 +413,25 @@
   width: 100%;
 }
 
+[data-component="message-timeline"] {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 2px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--font-family-sans);
+  font-size: var(--kilo-font-size-11);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: var(--line-height-normal);
+  text-align: center;
+}
+
+[data-component="message-timeline"] time {
+  white-space: nowrap;
+}
+
 .vscode-session-turn-user[data-revert-disabled] [data-component="icon-button"][data-icon="arrow-left"] {
   opacity: 0.4;
   cursor: not-allowed;

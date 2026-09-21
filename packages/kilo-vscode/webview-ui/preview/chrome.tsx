@@ -8,6 +8,7 @@ import { mockSessionValue } from "../src/stories/StoryProviders"
 import type { Message, Part } from "../src/types/messages"
 import type { TranscriptAssistantRow, TranscriptUserRow } from "../src/context/transcript-rows"
 import { wrap } from "./surfaces"
+import { messageInstant } from "../src/utils/message-time"
 
 registerVscodeToolOverrides()
 
@@ -182,7 +183,7 @@ export const TranscriptPreview: Component = () =>
 export const ConversationPreview: Component = () =>
   wrap(sid, () => (
     <div class="chat-view">
-      <TranscriptRowView row={userRow} />
+      <TranscriptRowView row={userRow} timeline={messageInstant(user)} />
       <TranscriptRowView row={assistantRow(turn)} />
     </div>
   ))

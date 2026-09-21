@@ -29,13 +29,13 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
       data-component="text-shimmer"
       data-active={active() ? "true" : "false"}
       class={props.class}
-      aria-label={text()}
       style={{
         "--text-shimmer-swap": `${swap}ms`,
         "--text-shimmer-index": `${offset()}`,
       }}
     >
       <Show when={shimmer()} fallback={text()}>
+        <span class="sr-only">{text()}</span>
         <span data-slot="text-shimmer-char">
           <span data-slot="text-shimmer-char-base" aria-hidden="true">
             {text()}

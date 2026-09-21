@@ -82,6 +82,7 @@ import {
   unwrapError,
 } from "../../utils/errorUtils"
 import type { Part, QuestionRequest, SuggestionRequest, ToolState } from "../../types/messages"
+import { messageInstant, timelineBreak } from "../../utils/message-time"
 
 interface MessageListProps {
   onSelectSession?: (id: string) => void
@@ -217,6 +218,17 @@ export const MessageList: Component<MessageListProps> = (props) => {
       },
       prev,
     )
+  })
+  const markers = createMemo(() => {
+    const found = new Map<string, Date>()
+    let previous: Date | undefined
+    for (const row of rows()) {
+      if (row.type !== "user" || row.queued) continue
+      const date = messageInstant(row.message)
+      if (timelineBreak(date, previous) && date) found.set(row.key, date)
+      if (date) previous = date
+    }
+    return found
   })
 
   const search = useTranscriptSearch()
@@ -1335,6 +1347,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
                       <TranscriptRowView
                         row={row}
                         index={index()}
+                        timeline={markers().get(row.key)}
                         onForkMessage={props.onForkMessage}
                         highlight={highlight}
                         activeSearch={activeKey() === row.key}
@@ -1348,6 +1361,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
                   {(key) => (
                     <TranscriptRowView
                       row={lookup().get(key)!}
+                      timeline={markers().get(key)}
                       onForkMessage={props.onForkMessage}
                       highlight={highlight}
                       activeSearch={activeKey() === key}
@@ -1365,6 +1379,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
               {(row) => (
                 <TranscriptRowView
                   row={row}
+                  timeline={markers().get(row.key)}
                   activeSearch={activeKey() === row.key}
                   activeSearchPartID={activeKey() === row.key ? activeMatch()?.partId : undefined}
                   activeSearchPartFile={activeKey() === row.key ? activeMatch()?.partFile : undefined}

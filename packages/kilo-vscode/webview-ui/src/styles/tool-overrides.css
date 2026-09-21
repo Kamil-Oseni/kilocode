@@ -166,7 +166,7 @@ html[data-theme="kilo-vscode"]
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.75;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
 }
 
 .tool-group__body {

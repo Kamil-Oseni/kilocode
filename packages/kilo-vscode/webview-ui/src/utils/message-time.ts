@@ -3,6 +3,7 @@ type Source = string | number | { createdAt?: string; time?: { created?: number 
 const LENGTH = 10
 const ENCODING = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 const MAXIMUM = 0xffffffffffff
+const GAP = 30 * 60 * 1000
 
 export function messageInstant(source?: Source) {
   const value = source && typeof source === "object" ? (source.time?.created ?? source.createdAt) : source
@@ -35,4 +36,29 @@ export function messageLabel(date: Date | undefined, locale: string, detail: "ti
 export function messageTitle(date: Date | undefined, locale: string) {
   if (!date) return ""
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "long" }).format(date)
+}
+
+function day(date: Date) {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+export function timelineBreak(date: Date | undefined, previous?: Date) {
+  if (!date) return false
+  if (!previous) return true
+  if (day(date) !== day(previous)) return true
+  return date.getTime() - previous.getTime() >= GAP
+}
+
+export function timelineLabel(date: Date | undefined, now: Date, locale: string) {
+  if (!date) return ""
+  const days = Math.round((day(date) - day(now)) / 86_400_000)
+  const time = messageLabel(date, locale)
+  if (days === 0 || days === -1) {
+    const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(days, "day")
+    return `${relative.charAt(0).toLocaleUpperCase(locale)}${relative.slice(1)} ${time}`
+  }
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: date.getFullYear() === now.getFullYear() ? "medium" : "long",
+    timeStyle: "short",
+  }).format(date)
 }

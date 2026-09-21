@@ -13,11 +13,13 @@ import { useFeedback } from "../../context/feedback"
 import { AssistantMessage } from "./AssistantMessage"
 import { ErrorDisplay, type ErrorDisplayProps } from "./ErrorDisplay"
 import { MessageTime } from "./MessageTime"
+import { MessageTimeline } from "./MessageTimeline"
 import { VscodeUserMessage } from "./VscodeUserMessage"
 
 interface TranscriptRowViewProps {
   row: TranscriptRow
   index?: number
+  timeline?: Date
   onForkMessage?: (sessionId: string, messageId: string) => void
   /** Part behind the currently hovered/focused task-timeline bar, if any. */
   highlight?: () => TimelineHighlight | undefined
@@ -52,6 +54,7 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
       data-live={props.row.live ? "" : undefined}
       data-search-active={props.activeSearch ? "" : undefined}
     >
+      <Show when={props.timeline}>{(value) => <MessageTimeline value={value()} />}</Show>
       <Show when={props.row.type === "user" ? props.row : undefined}>
         {(row) => (
           <div

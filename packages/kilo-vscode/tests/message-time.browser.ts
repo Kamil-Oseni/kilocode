@@ -17,10 +17,16 @@ async function semantic(page: Page, selector: string, count: number) {
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {
     test(`${theme} semantic chat time at ${width}px`, async ({ page }, info) => {
+      test.setTimeout(60_000)
       await page.setViewportSize({ width, height: 900 })
 
       await page.goto(`/?state=${theme}-conversation`)
       await semantic(page, '[data-fixture] [data-component="message-time"]', 2)
+      await semantic(page, '[data-fixture] [data-component="message-timeline"] time', 1)
+      await expect(page.locator('[data-component="message-timeline"]')).toContainText("Today")
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      expect((await new AxeBuilder({ page }).include(".chat-view").analyze()).violations).toEqual([])
+      await page.screenshot({ path: info.outputPath("conversation-timeline.png"), fullPage: true })
 
       await page.goto(`/?state=${theme}-transcript`)
       await semantic(page, '[data-fixture] [data-component="message-time"]', 1)

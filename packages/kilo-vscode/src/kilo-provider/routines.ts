@@ -71,8 +71,7 @@ async function forecast(ctx: Ctx) {
   if (typeof id !== "string" || !id || id.length > 128)
     throw issue("schedule", "Request a new schedule preview.", "requestID")
   const edit = ctx.message.edit === undefined ? undefined : Edit.safeParse(ctx.message.edit)
-  if (edit && !edit.success)
-    throw issue("schedule", "Reload the routine before previewing its schedule.", "schedule")
+  if (edit && !edit.success) throw issue("schedule", "Reload the routine before previewing its schedule.", "schedule")
   const proposal = ctx.message.schedule === undefined ? undefined : Proposal.safeParse(ctx.message.schedule)
   if (proposal && !proposal.success)
     throw issue("schedule", "Choose a valid schedule and preview it again.", "schedule")
@@ -104,14 +103,26 @@ function confirmed(ctx: Ctx) {
   if (
     ctx.message.type === "routineScheduleUpdate" ? item.edit?.agentID !== ctx.message.agentID : item.edit !== undefined
   )
-    throw issue("schedule", "This preview belongs to a different routine or action. Preview the schedule again.", "schedule")
+    throw issue(
+      "schedule",
+      "This preview belongs to a different routine or action. Preview the schedule again.",
+      "schedule",
+    )
   if (item.submitted && ctx.message.type !== "routineCreate")
-    throw issue("schedule", "This assignment was already submitted. Check the routine list before trying again.", "schedule")
+    throw issue(
+      "schedule",
+      "This assignment was already submitted. Check the routine list before trying again.",
+      "schedule",
+    )
   if (item.submitted) return item.data.schedule
   if (item.data.schedule.kind === "once" && Number(item.data.schedule.at) <= Date.now())
     throw issue("schedule", "The previewed time has passed. Preview a new time before saving.", "schedule")
   if (item.data.schedule.kind === "cron" && Number(item.data.occurrences[0]) <= Date.now())
-    throw issue("schedule", "The first previewed time has passed. Preview the schedule again before saving.", "schedule")
+    throw issue(
+      "schedule",
+      "The first previewed time has passed. Preview the schedule again before saving.",
+      "schedule",
+    )
   return item.data.schedule
 }
 
@@ -343,6 +354,14 @@ function reviewInput(msg: Msg) {
 function capabilities(msg: Msg) {
   if (!Array.isArray(msg.capabilities)) return
   return msg.capabilities.filter((item): item is string => typeof item === "string")
+}
+
+function budget(msg: Msg, clear = false): number | undefined {
+  if (msg.budget === undefined) return
+  if (clear && msg.budget === null) return 0
+  if (typeof msg.budget !== "number" || !Number.isFinite(msg.budget) || msg.budget <= 0 || msg.budget > 1_000_000)
+    throw issue("unavailable", "Enter a per-run model-cost limit above 0 and no more than $1,000,000.", "budget")
+  return msg.budget
 }
 
 function access(msg: Msg) {
@@ -844,6 +863,7 @@ async function create(ctx: Ctx) {
       dir: folder(msg),
       access: access(msg),
       tools: tools(msg),
+      budget: budget(msg),
     },
     { throwOnError: true },
   )
@@ -878,6 +898,12 @@ async function update(ctx: Ctx) {
       access: access(msg),
       tools: tools(msg),
       capabilities: capabilities(msg),
+      budget: budget(msg, true),
+      expectedBudget:
+        msg.expectedBudget === "unset" ||
+        (typeof msg.expectedBudget === "number" && Number.isFinite(msg.expectedBudget) && msg.expectedBudget > 0)
+          ? msg.expectedBudget
+          : undefined,
     },
     { throwOnError: true },
   )
@@ -957,11 +983,7 @@ async function output(ctx: Ctx) {
   const contract = Output.safeParse(msg.output)
   const expected = msg.expectedOutput === "unset" ? "unset" : Output.safeParse(msg.expectedOutput)
   if (!contract.success || (expected !== "unset" && !expected.success))
-    throw issue(
-      "output",
-      "Provide valid output requirements and reload the saved version before editing.",
-      "output",
-    )
+    throw issue("output", "Provide valid output requirements and reload the saved version before editing.", "output")
   const result = await ctx.kilo.update(
     {
       directory: ctx.dir,

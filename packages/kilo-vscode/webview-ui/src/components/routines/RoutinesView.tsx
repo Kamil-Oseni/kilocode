@@ -67,6 +67,7 @@ type Agent = {
   paths?: RoutinePaths
   mode?: string
   plan?: string
+  budget?: number
 }
 
 type Run = {
@@ -121,6 +122,13 @@ function basicError(job: string, dir: string, edit: boolean) {
   if (!job.trim()) return "Describe what this worker should do."
   if (!edit && !dir.trim()) return "Choose a workspace folder for this worker."
   return ""
+}
+
+function runBudget(value: string) {
+  if (!value.trim()) return undefined
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) return null
+  return amount
 }
 
 function OrganizationEditor(props: {
@@ -827,12 +835,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [money, setMoney] = createSignal(false)
   const [messages, setMessages] = createSignal(false)
   const [plan, setPlan] = createSignal("")
+  const [budget, setBudget] = createSignal("")
   const [mode, setMode] = createSignal("chat")
   const [dir, setDir] = createSignal(scope(props.workspace ?? ""))
   const [wait, setWait] = createSignal("")
   const [access, setAccess] = createSignal<"full" | "brief">("brief")
   const [screen, setScreen] = createSignal<"roster" | "assign">("roster")
-  const [setup, setSetup] = createSignal<"job" | "schedule" | "review">("job")
+  const [setup, setSetup] = createSignal<"job" | "schedule" | "budget" | "review">("job")
   const [busy, setBusy] = createSignal<Record<string, true>>({})
   const [picked, setPicked] = createSignal<Record<string, true>>({})
   const [saving, setSaving] = createSignal(false)
@@ -867,6 +876,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setMoney(false)
     setMessages(false)
     setPlan("")
+    setBudget("")
     setMode("chat")
     setDir(workspace())
     setAccess("brief")
@@ -1436,7 +1446,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       roleof(role(), custom()) !== item.role ||
       dir().trim() !== (item.dir ?? "") ||
       (current().key === "chat" ? undefined : current().key) !== (item.mode?.trim() || undefined) ||
-      plan().trim() !== (item.plan ?? "")
+      plan().trim() !== (item.plan ?? "") ||
+      runBudget(budget()) !== item.budget
     )
   }
 
@@ -1496,6 +1507,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     const job = objective().trim()
     const part = roleof(role(), custom())
     const dest = dir().trim()
+    const limit = runBudget(budget())
+    if (limit === null) {
+      setError("Enter a per-run model-cost limit above 0 and no more than $1,000,000, or leave it blank.")
+      return
+    }
     if (!named || !job) {
       setError("Keep a name and standing job.")
       return
@@ -1526,6 +1542,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         mode: current().key,
         plan: plan().trim(),
         capabilities: part === "accountant" || part === "inbox" ? grants(money(), messages()) : undefined,
+        budget: limit ?? null,
+        expectedBudget: item.budget ?? "unset",
       })
     if (!timed) return
     const id = crypto.randomUUID()
@@ -1538,6 +1556,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     const issue = basicError(objective(), dir(), !!editing())
     if (issue) {
       setError(issue)
+      return
+    }
+    const limit = runBudget(budget())
+    if (limit === null) {
+      setError("Enter a per-run model-cost limit above 0 and no more than $1,000,000, or leave it blank.")
       return
     }
     if (!editing() && !consent()) {
@@ -1579,6 +1602,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       access: access(),
       mode: chosen.key === "chat" ? undefined : chosen.key,
       dir: dir().trim(),
+      budget: limit,
     })
   }
 
@@ -1599,6 +1623,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setDir(item.dir ?? "")
     setMode(item.mode?.trim() || "chat")
     setPlan(item.plan ?? "")
+    setBudget(item.budget?.toString() ?? "")
     setMoney(item.capabilities.some((cap) => ["money", "accounting", "books"].includes(cap.toLowerCase())))
     setMessages(item.capabilities.some((cap) => cap.toLowerCase() === "messages"))
     setDraft(
@@ -2171,11 +2196,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 role={roleOpt().label}
                 access={workOpt().label}
                 dir={dir()}
+                budget={budget()}
                 saving={saving()}
                 onStep={setSetup}
                 onName={setName}
                 onJob={setObjective}
                 onDraft={setDraft}
+                onBudget={setBudget}
               />
             </Show>
 
@@ -2320,6 +2347,21 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   </div>
                   <p class="routines-hint">New files are kept inside this folder.</p>
                 </div>
+                <label class="routines-field">
+                  <span class="routines-label">
+                    Per-run model-cost limit <span class="routines-optional">(optional)</span>
+                  </span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    max="1000000"
+                    step="0.01"
+                    value={budget()}
+                    onInput={(e) => setBudget(e.currentTarget.value)}
+                    placeholder="No saved limit"
+                  />
+                  <p class="routines-hint">Raya stops the run when its model cost reaches this amount.</p>
+                </label>
                 <label class="routines-field">
                   <span class="routines-label">
                     Plan file <span class="routines-optional">(optional)</span>

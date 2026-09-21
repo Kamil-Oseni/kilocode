@@ -4,7 +4,7 @@ import type { Output } from "../../../../src/shared/routine-output"
 import type { Draft } from "../../../../src/shared/routine-schedule"
 import { ScheduleEditor } from "./ScheduleEditor"
 
-type Step = "job" | "schedule" | "review"
+type Step = "job" | "schedule" | "budget" | "review"
 
 function label(draft: Draft) {
   if (draft.mode === "manual") return "Only when you ask"
@@ -31,17 +31,24 @@ const RoutineSetup: Component<{
   role: string
   access: string
   dir: string
+  budget: string
   saving: boolean
   onStep: (step: Step) => void
   onName: (value: string) => void
   onJob: (value: string) => void
   onDraft: (value: Draft) => void
+  onBudget: (value: string) => void
 }> = (props) => {
-  const number = () => (props.step === "job" ? 1 : props.step === "schedule" ? 2 : 3)
+  const number = () => (props.step === "job" ? 1 : props.step === "schedule" ? 2 : props.step === "budget" ? 3 : 4)
+  const valid = () => {
+    if (!props.budget.trim()) return true
+    const amount = Number(props.budget)
+    return Number.isFinite(amount) && amount > 0 && amount <= 1_000_000
+  }
   return (
     <div class="routines-setup" data-step={props.step}>
-      <div class="routines-setup-progress" aria-label={`Routine setup, step ${number()} of 3`}>
-        <span>{number()} of 3</span>
+      <div class="routines-setup-progress" aria-label={`Routine setup, step ${number()} of 4`}>
+        <span>{number()} of 4</span>
         <span>{props.step === "review" ? "Review" : "Set up routine"}</span>
       </div>
 
@@ -54,7 +61,7 @@ const RoutineSetup: Component<{
           </div>
         </div>
       </Show>
-      <Show when={props.step === "review"}>
+      <Show when={props.step === "budget" || props.step === "review"}>
         <div class="routines-setup-exchange">
           <p class="routines-setup-prompt">When should it work?</p>
           <div class="routines-setup-answer">{label(props.draft)}</div>
@@ -104,7 +111,37 @@ const RoutineSetup: Component<{
             <Button type="button" variant="ghost" onClick={() => props.onStep("job")}>
               Back
             </Button>
-            <Button type="button" onClick={() => props.onStep("review")}>
+            <Button type="button" onClick={() => props.onStep("budget")}>
+              Continue
+            </Button>
+          </div>
+        </section>
+      </Show>
+
+      <Show when={props.step === "budget"}>
+        <section class="routines-question" aria-labelledby="routine-budget-question">
+          <h3 id="routine-budget-question">Should one run have a cost limit?</h3>
+          <p>Set an optional model-cost ceiling. Raya stops that run when it reaches the amount.</p>
+          <label class="routines-field">
+            <span class="routines-label">
+              Per-run limit <span class="routines-optional">(optional)</span>
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              max="1000000"
+              step="0.01"
+              value={props.budget}
+              onInput={(event) => props.onBudget(event.currentTarget.value)}
+              placeholder="No saved limit"
+              autofocus
+            />
+          </label>
+          <div class="routines-question-footer">
+            <Button type="button" variant="ghost" onClick={() => props.onStep("schedule")}>
+              Back
+            </Button>
+            <Button type="button" disabled={!valid()} onClick={() => props.onStep("review")}>
               Review choices
             </Button>
           </div>
@@ -158,6 +195,23 @@ const RoutineSetup: Component<{
                   size="small"
                   aria-label="Edit schedule"
                   onClick={() => props.onStep("schedule")}
+                >
+                  Edit
+                </Button>
+              </dd>
+            </div>
+            <div>
+              <dt>Cost limit</dt>
+              <dd>
+                <span>
+                  {props.budget.trim() ? `$${Number(props.budget).toLocaleString()} per run` : "No saved limit"}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="small"
+                  aria-label="Edit cost limit"
+                  onClick={() => props.onStep("budget")}
                 >
                   Edit
                 </Button>

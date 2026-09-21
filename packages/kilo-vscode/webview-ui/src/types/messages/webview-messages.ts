@@ -133,6 +133,7 @@ export interface RoutineCreateMessage {
   dir?: string
   access?: "full" | "brief"
   tools?: string[]
+  budget?: number
 }
 
 export interface RoutineUpdateMessage {
@@ -150,6 +151,8 @@ export interface RoutineUpdateMessage {
   dir?: string
   access?: "full" | "brief"
   tools?: string[]
+  budget?: number | null
+  expectedBudget?: number | "unset"
 }
 
 export interface RoutineOutputUpdateMessage {

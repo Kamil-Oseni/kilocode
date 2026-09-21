@@ -103,3 +103,29 @@ test("assignment save clears default chat mode and empty plan file", async () =>
     plan: "",
   })
 })
+
+test("assignment save fences and clears a per-run model-cost limit", async () => {
+  const calls: Request[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      return Response.json({ id: "routine" })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: () => {},
+    message: {
+      type: "routineUpdate",
+      agentID: "routine",
+      budget: null,
+      expectedBudget: 8.5,
+    },
+  })
+  const patch = calls.find((request) => request.method === "PATCH")
+  expect(patch).toBeDefined()
+  expect(await patch!.json()).toEqual({ budget: 0, expectedBudget: 8.5 })
+})

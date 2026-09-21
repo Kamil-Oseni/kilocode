@@ -88,6 +88,7 @@ const New = Schema.Struct({
   capabilities: Schema.Array(Schema.String),
   access: Schema.Literals(["brief", "full"]),
   tools: Tools,
+  budget: Schema.optional(RayaTask.RunBudget),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   canCreateWorkers: Schema.optional(Schema.Boolean),
@@ -110,6 +111,7 @@ const RoutinePatch = Schema.Struct({
   canCreateWorkers: Schema.optional(Schema.Boolean),
   access: Schema.optional(Schema.Literals(["brief", "full"])),
   tools: Schema.optional(Tools),
+  budget: Schema.optional(Schema.Union([RayaTask.RunBudget, Schema.Null])),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   ...ScheduleFields,
@@ -146,6 +148,7 @@ const RoutineMutation = Schema.Struct({
   provisioning: Schema.optional(RayaTask.Provisioning),
   access: Schema.optional(Schema.Literals(["brief", "full"])),
   tools: Schema.optional(Tools),
+  budget: Schema.optional(Schema.Union([RayaTask.RunBudget, Schema.Null])),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   schedule: Schema.optional(RayaTask.Schedule),
@@ -153,6 +156,7 @@ const RoutineMutation = Schema.Struct({
   expectedAccess: Schema.Literals(["brief", "full", "unset"]),
   expectedTools: Schema.optional(Schema.Union([Tools, Schema.Literal("unset")])),
   expectedOutput: Schema.Union([RayaTask.Output, Schema.Literal("unset")]),
+  expectedBudget: Schema.Union([RayaTask.RunBudget, Schema.Literal("unset")]),
   expectedProvisioning: Schema.optional(Schema.Boolean),
 })
 const RoutinePlan = Schema.Struct({ agent: RayaTask.Agent, patch: RoutineMutation })
@@ -170,6 +174,7 @@ const CreateSubordinate = Schema.Struct({
   capabilities: Schema.Array(Schema.String),
   access: Schema.Literals(["brief", "full"]),
   tools: Tools,
+  budget: Schema.optional(RayaTask.RunBudget),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   canCreateWorkers: Schema.optional(Schema.Boolean),
@@ -277,6 +282,7 @@ function matches(agent: RayaTask.Agent, patch: typeof RoutineMutation.Type) {
   if (patch.provisioning !== undefined && !isDeepStrictEqual(agent.provisioning, patch.provisioning)) return false
   if (patch.access !== undefined && agent.access !== patch.access) return false
   if (patch.tools !== undefined && !isDeepStrictEqual(agent.tools, patch.tools)) return false
+  if (patch.budget !== undefined && (agent.budget ?? null) !== patch.budget) return false
   if (patch.plan !== undefined && agent.plan !== patch.plan) return false
   if (patch.enabled !== undefined && agent.enabled !== patch.enabled) return false
   if (patch.schedule !== undefined && !isDeepStrictEqual(agent.schedule, patch.schedule)) return false
@@ -348,6 +354,7 @@ function matchesWorker(agent: RayaTask.Agent, input: typeof RayaTask.Create.Type
     isDeepStrictEqual(agent.schedule, input.schedule) &&
     agent.access === (input.access ?? "brief") &&
     isDeepStrictEqual(agent.tools, input.tools) &&
+    agent.budget === input.budget &&
     agent.enabled === (input.enabled ?? true) &&
     agent.plan === input.plan
   )
@@ -503,7 +510,7 @@ export function routineManagementTools(input: {
     "create_organization",
     Effect.succeed({
       description:
-        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, optional organization policy, shared model-cost budget or an explicit choice of no shared limit, worker role/job, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Organization policy constrains delegated work but cannot grant tools or permissions. A shared budget caps committed model cost across independent organization work. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
+        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, optional organization policy, shared model-cost budget or an explicit choice of no shared limit, worker role/job, per-run model-cost ceiling or an explicit choice of no saved limit, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Organization policy constrains delegated work but cannot grant tools or permissions. A shared budget caps committed model cost across independent organization work. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines or invent spending limits. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
       parameters: CreateOrganization,
       execute: (params: typeof CreateOrganization.Type, ctx: Tool.Context) => {
         const patterns = [
@@ -571,6 +578,7 @@ export function routineManagementTools(input: {
                 capabilities: [...new Set([...item.capabilities, ...(item.canCreateWorkers ? [Provision] : [])])],
                 access: item.access,
                 tools: item.tools,
+                budget: item.budget,
                 schedule: yield* schedule(item),
                 plan: item.plan,
                 enabled: item.enabled,
@@ -745,6 +753,7 @@ export function routineManagementTools(input: {
               capabilities,
               access: params.access,
               tools: params.tools,
+              budget: params.budget,
               schedule: yield* schedule(params),
               plan: params.plan,
               enabled: params.enabled,
@@ -1186,7 +1195,7 @@ export function routineManagementTools(input: {
     "update_routine",
     Effect.succeed({
       description:
-        'Update one saved routine using its ID from inspect_routines. Use ask_options before calling if the requested role, job, schedule/timezone, access, exact tool scope, capabilities, worker-creation authority, output criteria, or enable state is missing or ambiguous. Use ["*"] only for all tools and [] only for question-only access.',
+        'Update one saved routine using its ID from inspect_routines. Use ask_options before calling if the requested role, job, schedule/timezone, per-run model-cost ceiling, access, exact tool scope, capabilities, worker-creation authority, output criteria, or enable state is missing or ambiguous. Set budget to null only when the user explicitly removes the saved limit. Use ["*"] only for all tools and [] only for question-only access.',
       parameters: UpdateRoutine,
       execute: (params: typeof UpdateRoutine.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -1223,6 +1232,7 @@ export function routineManagementTools(input: {
             provisioning,
             access: params.patch.access,
             tools: params.patch.tools,
+            budget: params.patch.budget,
             plan: params.patch.plan,
             enabled: params.patch.enabled,
             ...(nextSchedule ? { schedule: nextSchedule } : {}),
@@ -1230,6 +1240,7 @@ export function routineManagementTools(input: {
             expectedAccess: before.access ?? "unset",
             expectedTools: before.tools ?? "unset",
             expectedOutput: before.output ?? "unset",
+            expectedBudget: before.budget ?? "unset",
             expectedProvisioning: allowed,
           })
           const patterns = [

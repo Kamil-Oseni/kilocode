@@ -437,6 +437,7 @@ export namespace RayaTaskRunner {
                             scheduleVersion: item.scheduleVersion ?? 1,
                             trigger: admitted.selected.trigger,
                             ...(opts?.delegationID ? { delegationID: opts.delegationID } : {}),
+                            ...(item.budget ? { budget: item.budget } : {}),
                             ...(admitted.organization
                               ? {
                                   organizationID: admitted.organization.id,
@@ -466,7 +467,7 @@ export namespace RayaTaskRunner {
                     undefined,
                     undefined,
                     note ? undefined : item.output?.criteria,
-                    opts?.budget,
+                    opts?.budget ?? (item.budget ? { modelCost: item.budget } : undefined),
                     opts?.follow ? "reply" : undefined,
                   )
                   const run: RayaTask.Run = {

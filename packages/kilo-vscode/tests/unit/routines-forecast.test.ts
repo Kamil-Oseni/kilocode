@@ -48,9 +48,13 @@ test("local calendar proposals are preview-only and confirmation saves the resol
       type: "routineCreate",
       forecastID: reply.forecastID,
       schedule: { ...proposal, local: "2090-02-10T09:00" },
+      budget: 3.5,
     },
   })
-  expect(calls.find((call) => call.path === "/kilocode/agent" && call.body)?.body).toMatchObject({ schedule })
+  expect(calls.find((call) => call.path === "/kilocode/agent" && call.body)?.body).toMatchObject({
+    schedule,
+    budget: 3.5,
+  })
 })
 
 test("structured preview messages bypass phrase guessing and reject malformed schedules", async () => {

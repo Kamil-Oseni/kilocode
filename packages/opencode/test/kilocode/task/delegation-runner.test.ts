@@ -531,24 +531,22 @@ test("standalone runs bind only an unambiguous organization", async () => {
       const database = yield* Database.Service
       const storage = memory()
       const opened: Array<{ metadata?: Record<string, unknown> }> = []
-      const runner = RayaTaskRunner.make({
-        database,
-        storage,
-        sessions: {
-          create: (input) =>
-            Effect.sync(() => {
-              opened.push({ metadata: input?.metadata })
-              return session(`ses_standalone_${opened.length}`)
-            }),
-          get: () => Effect.die("unused"),
-          messages: () => Effect.succeed([]),
-          children: () => Effect.succeed([]),
-        },
-      })
+      const sessions = {
+        create: (input?: { metadata?: Record<string, unknown> }) =>
+          Effect.sync(() => {
+            opened.push({ metadata: input?.metadata })
+            return session(`ses_standalone_${opened.length}`)
+          }),
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
       const unique = yield* runner.tasks.create({
         name: "Unique",
         objective: "Review one company.",
         access: "brief",
+        budget: 6.25,
         schedule: { kind: "manual" },
       })
       const shared = yield* runner.tasks.create({
@@ -577,6 +575,7 @@ test("standalone runs bind only an unambiguous organization", async () => {
       expect(opened[0]?.metadata?.rayaRoutine).toMatchObject({
         organizationID: first.id,
         organizationRevision: first.revision,
+        budget: 6.25,
       })
       expect(opened[1]?.metadata?.rayaRoutine).not.toHaveProperty("organizationID")
       expect((yield* RayaTaskSnapshot.make({ storage }).get(bound.id)).objective).toContain(
@@ -585,6 +584,12 @@ test("standalone runs bind only an unambiguous organization", async () => {
       expect((yield* RayaTaskSnapshot.make({ storage }).get(ambiguous.id)).objective).not.toContain(
         "Cite the second company's records.",
       )
+      expect((yield* RayaGoal.make({ storage, sessions }).get(bound.sessionID))?.budget).toEqual({
+        modelCost: 6.25,
+      })
+      expect((yield* runner.tasks.update(unique.id, { budget: null, expectedBudget: 6.25 })).budget).toBeUndefined()
+      const stale = yield* runner.tasks.update(unique.id, { budget: 4, expectedBudget: 6.25 }).pipe(Effect.flip)
+      expect(stale).toMatchObject({ kind: "conflict", field: "budget" })
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

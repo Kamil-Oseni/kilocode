@@ -46,6 +46,10 @@ const Parameters = Schema.Struct({
     description:
       'The exact tool patterns the worker may use. Pass ["*"] only when the user explicitly chooses all tools and [] only when the user chooses question-only access.',
   }),
+  budget: Schema.optional(RayaTask.RunBudget).annotate({
+    description:
+      "Optional maximum model cost in USD for each run. Ask the user to choose a positive amount or explicitly choose no saved limit.",
+  }),
   plan: Schema.optional(Schema.String),
   runNow: Schema.optional(Schema.Boolean),
 })
@@ -60,7 +64,7 @@ export function scheduleTaskTool(input: {
     "schedule_task",
     Effect.succeed({
       description:
-        'Create one durable standing agent from main chat after its assignment is fully reviewed. Before calling, use ask_options for every missing name, role, job, schedule and timezone, read/notify or editing access, exact tool scope, capabilities, output description, or acceptance criterion. Pass ["*"] only for an explicit all-tools choice and [] only for question-only access. Use "only when I ask" for a manual worker. Do not invent cron. Local scheduling requires Raya\'s backend to be running.',
+        'Create one durable standing agent from main chat after its assignment is fully reviewed. Before calling, use ask_options for every missing name, role, job, schedule and timezone, read/notify or editing access, exact tool scope, capabilities, output description, acceptance criterion, and per-run model-cost ceiling or an explicit choice of no saved limit. Pass ["*"] only for an explicit all-tools choice and [] only for question-only access. Use "only when I ask" for a manual worker. Do not invent cron or a spending limit. Local scheduling requires Raya\'s backend to be running.',
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         request(
@@ -108,6 +112,7 @@ export function scheduleTaskTool(input: {
                   access: params.access,
                   capabilities: params.capabilities,
                   tools: params.tools,
+                  budget: params.budget,
                   schedule,
                   plan: params.plan,
                   runNow: params.runNow ?? false,
@@ -123,6 +128,7 @@ export function scheduleTaskTool(input: {
                 capabilities: [...params.capabilities],
                 access: params.access,
                 tools: [...params.tools],
+                budget: params.budget,
                 schedule,
                 plan: params.plan,
               }),
@@ -161,6 +167,7 @@ export function scheduleTaskTool(input: {
                   : " Review the schedule in Routines.") +
                 ` Workspace access: ${agent.access === "full" ? "editing allowed" : "read/notify"}.` +
                 ` Tool scope: ${agent.tools?.length ? agent.tools.join(", ") : "questions only"}.` +
+                ` Per-run model-cost limit: ${agent.budget === undefined ? "none saved" : `$${agent.budget}`}.` +
                 ` Required output in the run conversation: ${params.output.description}. Acceptance criteria: ${params.output.criteria.map((item) => item.id).join(", ")}.`,
               metadata: {
                 view: "routines",
@@ -171,6 +178,7 @@ export function scheduleTaskTool(input: {
                 access: agent.access,
                 capabilities: agent.capabilities,
                 tools: agent.tools,
+                budget: agent.budget,
                 output: agent.output,
                 startup: review ? "review" : run ? "started" : "not-requested",
               },

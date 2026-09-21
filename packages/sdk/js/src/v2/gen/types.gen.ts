@@ -22424,6 +22424,7 @@ export type KilocodeRoutineListResponses = {
         }
     scheduleVersion?: number
     scheduleUpdatedAt?: number
+    budget?: number
     enabled: boolean
     blockReset?: Array<string>
     plan?: string
@@ -22491,6 +22492,7 @@ export type KilocodeRoutineCreateData = {
       | {
           kind: "manual"
         }
+    budget?: number
     avatar?: string
     enabled?: boolean
     plan?: string
@@ -22575,6 +22577,7 @@ export type KilocodeRoutineCreateResponses = {
         }
     scheduleVersion?: number
     scheduleUpdatedAt?: number
+    budget?: number
     enabled: boolean
     blockReset?: Array<string>
     plan?: string
@@ -22716,6 +22719,7 @@ export type KilocodeRoutineArchiveResponses = {
             }
         scheduleVersion?: number
         scheduleUpdatedAt?: number
+        budget?: number
         enabled: boolean
         blockReset?: Array<string>
         plan?: string
@@ -22820,6 +22824,7 @@ export type KilocodeRoutineUpdateData = {
       | {
           kind: "manual"
         }
+    budget?: number
     expectedSchedule?:
       | {
           kind: "once"
@@ -22860,6 +22865,7 @@ export type KilocodeRoutineUpdateData = {
           }>
         }
       | "unset"
+    expectedBudget?: number | "unset"
     expectedScheduleVersion?: number
     avatar?: string
     enabled?: boolean
@@ -22951,6 +22957,7 @@ export type KilocodeRoutineUpdateResponses = {
         }
     scheduleVersion?: number
     scheduleUpdatedAt?: number
+    budget?: number
     enabled: boolean
     blockReset?: Array<string>
     plan?: string
@@ -23059,6 +23066,7 @@ export type KilocodeRoutineAuthorityResponses = {
         }
     scheduleVersion?: number
     scheduleUpdatedAt?: number
+    budget?: number
     enabled: boolean
     blockReset?: Array<string>
     plan?: string
@@ -23445,6 +23453,7 @@ export type KilocodeRoutineSnapshotResponses = {
           }
       scheduleVersion?: number
       scheduleUpdatedAt?: number
+      budget?: number
       enabled: boolean
       blockReset?: Array<string>
       plan?: string

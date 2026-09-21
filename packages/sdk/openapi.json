@@ -30543,6 +30543,11 @@
                       "scheduleUpdatedAt": {
                         "type": "number"
                       },
+                      "budget": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      },
                       "enabled": {
                         "type": "boolean"
                       },
@@ -30976,6 +30981,11 @@
                     "scheduleUpdatedAt": {
                       "type": "number"
                     },
+                    "budget": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -31330,6 +31340,11 @@
                         "additionalProperties": false
                       }
                     ]
+                  },
+                  "budget": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
                   },
                   "avatar": {
                     "type": "string"
@@ -31769,6 +31784,11 @@
                               },
                               "scheduleUpdatedAt": {
                                 "type": "number"
+                              },
+                              "budget": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
                               },
                               "enabled": {
                                 "type": "boolean"
@@ -32231,6 +32251,11 @@
                     "scheduleUpdatedAt": {
                       "type": "number"
                     },
+                    "budget": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -32596,6 +32621,11 @@
                       }
                     ]
                   },
+                  "budget": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
                   "expectedSchedule": {
                     "anyOf": [
                       {
@@ -32779,6 +32809,19 @@
                         },
                         "required": ["destination", "description", "criteria"],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["unset"]
+                      }
+                    ]
+                  },
+                  "expectedBudget": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
                       },
                       {
                         "type": "string",
@@ -33190,6 +33233,11 @@
                     },
                     "scheduleUpdatedAt": {
                       "type": "number"
+                    },
+                    "budget": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
                     },
                     "enabled": {
                       "type": "boolean"
@@ -34892,6 +34940,11 @@
                         },
                         "scheduleUpdatedAt": {
                           "type": "number"
+                        },
+                        "budget": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
                         },
                         "enabled": {
                           "type": "boolean"

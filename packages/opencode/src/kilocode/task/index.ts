@@ -135,6 +135,11 @@ export namespace RayaTask {
     grants: Schema.Array(PathGrant).check(Schema.isMaxLength(16)),
   })
   export type PathAccess = typeof PathAccess.Type
+  export const RunBudget = Schema.Number.check(
+    Schema.isFinite(),
+    Schema.isGreaterThan(0),
+    Schema.isLessThanOrEqualTo(1_000_000),
+  )
 
   export const Agent = Schema.Struct({
     id: Schema.String,
@@ -149,6 +154,7 @@ export namespace RayaTask {
     schedule: Schedule,
     scheduleVersion: Schema.optional(Version),
     scheduleUpdatedAt: Schema.optional(Schema.Finite),
+    budget: Schema.optional(RunBudget),
     enabled: Schema.Boolean,
     blockReset: Schema.optional(Schema.Array(Schema.String)),
     plan: Schema.optional(Schema.String),
@@ -262,6 +268,7 @@ export namespace RayaTask {
     capabilities: Schema.optional(Schema.Array(Schema.String)),
     memoryScope: Schema.optional(Schema.Literals(["role", "project", "session"])),
     schedule: Schedule,
+    budget: Schema.optional(RunBudget),
     avatar: Schema.optional(Schema.String),
     enabled: Schema.optional(Schema.Boolean),
     plan: Schema.optional(Schema.String),
@@ -942,6 +949,7 @@ export namespace RayaTask {
         capabilities,
         memoryScope: input.memoryScope ?? "role",
         schedule,
+        budget: input.budget,
         scheduleVersion: 1,
         scheduleUpdatedAt: now,
         enabled: input.enabled ?? true,
@@ -1231,7 +1239,8 @@ export namespace RayaTask {
 
     const update = Effect.fn("RayaTask.update")(function* (
       id: string,
-      patch: Partial<Create> & {
+      patch: Partial<Omit<Create, "budget">> & {
+        budget?: number | null
         enabled?: boolean
         note?: string
         expectedSchedule?: Schedule
@@ -1240,6 +1249,7 @@ export namespace RayaTask {
         expectedTools?: readonly string[] | "unset"
         expectedPaths?: PathAccess | "unset"
         expectedOutput?: Output | "unset"
+        expectedBudget?: number | "unset"
         expectedProvisioning?: boolean
         provisioning?: typeof Provisioning.Type
       },
@@ -1260,6 +1270,12 @@ export namespace RayaTask {
           kind: "conflict",
           field: "output",
           message: "This routine's output requirements changed. Reload it before editing again.",
+        })
+      if (patch.expectedBudget !== undefined && patch.expectedBudget !== (prior.budget ?? "unset"))
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "budget",
+          message: "This routine's per-run limit changed. Reload it before editing again.",
         })
       if (patch.expectedAccess !== undefined && patch.expectedAccess !== (prior.access ?? "unset"))
         return yield* new GuardError({
@@ -1315,6 +1331,7 @@ export namespace RayaTask {
         provisioning: patch.provisioning ?? prior.provisioning,
         memoryScope: patch.memoryScope ?? prior.memoryScope,
         schedule,
+        budget: patch.budget === null || patch.budget === 0 ? undefined : (patch.budget ?? prior.budget),
         scheduleVersion: version,
         scheduleUpdatedAt: changed ? Date.now() : (prior.scheduleUpdatedAt ?? prior.createdAt),
         avatar: patch.avatar ?? prior.avatar,

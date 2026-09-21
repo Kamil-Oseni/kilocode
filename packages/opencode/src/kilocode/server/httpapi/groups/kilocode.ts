@@ -154,11 +154,15 @@ export const TaskUpdatePayload = Schema.Struct({
   capabilities: Schema.optional(Schema.Array(Schema.String)),
   memoryScope: Schema.optional(Schema.Literals(["role", "project", "session"])),
   schedule: Schema.optional(RayaTask.Schedule),
+  budget: Schema.optional(
+    Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000)),
+  ),
   expectedSchedule: Schema.optional(RayaTask.Schedule),
   expectedAccess: Schema.optional(Schema.Literals(["brief", "full", "unset"])),
   expectedTools: Schema.optional(Schema.Union([Schema.Array(Schema.String), Schema.Literal("unset")])),
   expectedPaths: Schema.optional(Schema.Union([RayaTask.PathAccess, Schema.Literal("unset")])),
   expectedOutput: Schema.optional(Schema.Union([RayaTask.Output, Schema.Literal("unset")])),
+  expectedBudget: Schema.optional(Schema.Union([RayaTask.RunBudget, Schema.Literal("unset")])),
   expectedScheduleVersion: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
   ),

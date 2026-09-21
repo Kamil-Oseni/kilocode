@@ -9934,6 +9934,7 @@ export class Routine extends HeyApiClient {
         | {
             kind: "manual"
           }
+      budget?: number
       avatar?: string
       enabled?: boolean
       plan?: string
@@ -9970,6 +9971,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "capabilities" },
             { in: "body", key: "memoryScope" },
             { in: "body", key: "schedule" },
+            { in: "body", key: "budget" },
             { in: "body", key: "avatar" },
             { in: "body", key: "enabled" },
             { in: "body", key: "plan" },
@@ -10150,6 +10152,7 @@ export class Routine extends HeyApiClient {
         | {
             kind: "manual"
           }
+      budget?: number
       expectedSchedule?:
         | {
             kind: "once"
@@ -10190,6 +10193,7 @@ export class Routine extends HeyApiClient {
             }>
           }
         | "unset"
+      expectedBudget?: number | "unset"
       expectedScheduleVersion?: number
       avatar?: string
       enabled?: boolean
@@ -10228,11 +10232,13 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "capabilities" },
             { in: "body", key: "memoryScope" },
             { in: "body", key: "schedule" },
+            { in: "body", key: "budget" },
             { in: "body", key: "expectedSchedule" },
             { in: "body", key: "expectedAccess" },
             { in: "body", key: "expectedTools" },
             { in: "body", key: "expectedPaths" },
             { in: "body", key: "expectedOutput" },
+            { in: "body", key: "expectedBudget" },
             { in: "body", key: "expectedScheduleVersion" },
             { in: "body", key: "avatar" },
             { in: "body", key: "enabled" },

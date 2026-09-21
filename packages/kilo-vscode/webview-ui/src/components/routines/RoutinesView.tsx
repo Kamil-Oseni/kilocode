@@ -767,14 +767,14 @@ const Person: Component<{
         </div>
       </div>
       <Show when={!props.item.enabled}>
-        <p id={resume()} class="routines-hint routines-resume">
+        <p id={resume()} class="routines-hint routines-row-hint">
           Enabling allows future runs and starts a fresh consecutive-block count. Earlier runs remain in history.
           Resolve the cause of a pause before enabling again.
           <Show when={props.live}> The current run continues until it settles.</Show>
         </p>
       </Show>
       <Show when={props.item.enabled && props.live}>
-        <p id={hold()} class="routines-hint">
+        <p id={hold()} class="routines-hint routines-row-hint">
           Pausing stops later starts. The current run continues until it settles.
         </p>
       </Show>

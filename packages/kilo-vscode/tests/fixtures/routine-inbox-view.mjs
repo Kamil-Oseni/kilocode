@@ -264,6 +264,43 @@ try {
   assert.match(root.textContent, /You/)
   assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "")
   assert.match(root.querySelector('[data-routine-message="rmg_user"]').textContent, /receipt.pdf/)
+  const keyboard = root.querySelector("textarea[aria-label='Message this worker']")
+  keyboard.value = "Send from the keyboard"
+  keyboard.dispatchEvent(new window.Event("input", { bubbles: true }))
+  const beforeKeys = sent.filter((msg) => msg.type === "routineInboxSend").length
+  const newline = new window.KeyboardEvent("keydown", {
+    key: "Enter",
+    keyCode: 13,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  })
+  keyboard.dispatchEvent(newline)
+  assert.equal(newline.defaultPrevented, false)
+  assert.equal(sent.filter((msg) => msg.type === "routineInboxSend").length, beforeKeys)
+  const enter = new window.KeyboardEvent("keydown", {
+    key: "Enter",
+    keyCode: 13,
+    bubbles: true,
+    cancelable: true,
+  })
+  keyboard.dispatchEvent(enter)
+  assert.equal(enter.defaultPrevented, true)
+  const keyboardSend = sent.findLast((msg) => msg.type === "routineInboxSend")
+  assert.equal(keyboardSend.body, "Send from the keyboard")
+  emit({
+    type: "routineInboxSent",
+    requestID: keyboardSend.requestID,
+    agentID: agent.id,
+    message: {
+      id: "rmg_keyboard",
+      agentID: agent.id,
+      kind: "user",
+      source: keyboardSend.source,
+      body: keyboardSend.body,
+      time: 2.5,
+    },
+  })
   root.querySelector('[data-routine-message="rmg_user"] [aria-label="Open receipt.pdf"]').click()
   const openedAttachment = sent.findLast((msg) => msg.type === "routineInboxAttachmentOpen")
   assert.equal(openedAttachment.agentID, agent.id)

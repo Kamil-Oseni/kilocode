@@ -414,6 +414,18 @@ test("uncertain routine follow-up is reviewed without resending", async ({ page 
   await expect(review.getByRole("status")).toContainText("The message was not resent")
 })
 
+test("narrow active routine keeps worker identity readable", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines&scene=followup-recovery")
+  const row = page.locator(".routines-row").first()
+  const identity = row.locator(".routines-identity")
+  await expect(identity).toBeVisible()
+  await expect(row.locator(".routines-row-hint")).toBeVisible()
+  expect(await identity.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(120)
+  expect(await row.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+  await expect(identity.locator(".routines-name")).toHaveText("Books")
+})
+
 test("narrow routine access review keeps every tool group in view", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 900 })
   await page.goto("/?state=light-routines")

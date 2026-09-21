@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ConnectionState, ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
+import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 import { ChatInfo } from "./ChatInfo"
 import { ConversationSearch } from "./ConversationSearch"
 import { ConversationState } from "./ConversationState"
@@ -1436,8 +1437,14 @@ export const Inbox: Component<{
               disabled={!ready()}
               rows={2}
               aria-label="Message this worker"
+              aria-keyshortcuts="Enter"
               placeholder="Ask about a report in this conversation."
               onInput={(event) => change(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (!isEnterKeyCommitNotIme(event) || event.shiftKey) return
+                event.preventDefault()
+                submit()
+              }}
             />
           </label>
           <Show when={props.box?.state === "paused"}>

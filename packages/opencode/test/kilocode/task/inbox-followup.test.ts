@@ -139,6 +139,62 @@ test("a paused worker follow-up starts one run without rewriting the assignment"
   )
 })
 
+test("accepted worker messages wait for distinct reply turns in order", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const created: SessionID[] = []
+      const sessions = {
+        create: () =>
+          Effect.sync(() => {
+            const id = SessionID.make(`ses_queue_${created.length + 1}`)
+            created.push(id)
+            return session(id)
+          }),
+        get: (id: SessionID) => Effect.succeed(session(id)),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const inbox = RayaTaskInbox.make(database)
+      const goals = RayaGoal.make({ storage, sessions })
+      const agent = yield* runner.tasks.create({
+        name: "Accounts",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        enabled: true,
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      yield* inbox.publish({ agentID: agent.id, source: "user_first", kind: "user", body: "First question" })
+      const first = yield* runner.dispatch(agent.id)
+      expect(first?.source).toBe("user_first")
+      yield* inbox.publish({ agentID: agent.id, source: "user_second", kind: "user", body: "Second question" })
+      expect(yield* runner.dispatch(agent.id)).toBeUndefined()
+      expect((yield* inbox.pending(agent.id))?.source).toBe("user_second")
+      expect(created).toEqual([SessionID.make("ses_queue_1")])
+
+      const state = yield* goals.get(SessionID.make("ses_queue_1"))
+      if (!state) throw new Error("Missing first reply goal")
+      yield* storage.replace(["raya", "goal", SessionID.make("ses_queue_1")], {
+        ...state,
+        status: "complete",
+        reply: { messageID: MessageID.ascending(), body: "First answer", at: Date.now() },
+      })
+      yield* runner.settle(SessionID.make("ses_queue_1"))
+
+      expect(created).toEqual([SessionID.make("ses_queue_1"), SessionID.make("ses_queue_2")])
+      expect(yield* inbox.pending(agent.id)).toBeUndefined()
+      const page = yield* inbox.page(agent.id)
+      expect(page.messages.find((row) => row.source === "user_first")?.sessionID).toBe(SessionID.make("ses_queue_1"))
+      expect(page.messages.find((row) => row.source === "user_second")?.sessionID).toBe(SessionID.make("ses_queue_2"))
+      expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(2)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("a worker conversation cannot be blocked by update_goal completion auditing", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

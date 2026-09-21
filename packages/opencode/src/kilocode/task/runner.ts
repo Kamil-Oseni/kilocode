@@ -151,6 +151,7 @@ export namespace RayaTaskRunner {
       question: string,
       opts?: { defer?: boolean; bind?: { source: string; sessionID: SessionID } },
     ) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    dispatch: (id: string) => Effect.Effect<Note | undefined, RayaTask.GuardError | RayaTask.NotFoundError>
     resume: (sessionID: SessionID) => Effect.Effect<void>
     delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
@@ -603,6 +604,27 @@ export namespace RayaTaskRunner {
       }
       return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer, bind: opts?.bind })
     })
+    const dispatch = Effect.fn("RayaTaskRunner.dispatch")(function* (id: string) {
+      if (!inbox)
+        return yield* new RayaTask.GuardError({
+          kind: "unavailable",
+          message: "Routine conversations are unavailable without the local database.",
+        })
+      const waiting = yield* inbox.pending(id)
+      if (!waiting) return undefined
+      const history = yield* tasks.runsFor(id)
+      const active = history.findLast(RayaTask.pending)
+      if (active && !(active.status === "blocked" && active.blockedReason === WAIT)) return undefined
+      const run = yield* ask(id, waiting.body, { defer: true })
+      const saved = yield* inbox.attach(id, waiting.source, run.sessionID)
+      yield* kick({
+        database: input.database,
+        sessionID: run.sessionID,
+        storage: input.storage,
+        sessions: input.sessions,
+      }).pipe(Effect.forkDetach)
+      return saved
+    })
     const resume = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {
       const items = yield* tasks.list()
       const active = yield* Effect.forEach(items, (item) => tasks.runsFor(item.id), { concurrency: 1 })
@@ -982,6 +1004,7 @@ export namespace RayaTaskRunner {
         if (latest) {
           yield* retain(latest)
           yield* close(latest)
+          yield* dispatch(item.id)
         }
       }
     })
@@ -1284,6 +1307,7 @@ export namespace RayaTaskRunner {
       preview,
       fire: fire as Runner["fire"],
       ask: ask as Runner["ask"],
+      dispatch: dispatch as Runner["dispatch"],
       resume,
       delegate: delegate as Runner["delegate"],
       stop: abort as Runner["stop"],

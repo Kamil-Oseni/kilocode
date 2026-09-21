@@ -447,17 +447,6 @@ export namespace RayaTaskInbox {
                   .pipe(Effect.orDie)
                 return { record: saved, created: false }
               }
-              if (value.kind === "user") {
-                const pending = yield* tx
-                  .select({ id: Message.id })
-                  .from(Message)
-                  .where(and(eq(Message.agent_id, value.agentID), eq(Message.kind, "user"), isNull(Message.session_id)))
-                  .limit(1)
-                  .get()
-                  .pipe(Effect.orDie)
-                if (pending)
-                  return yield* new Conflict({ message: "This worker already has a follow-up waiting for dispatch." })
-              }
               const staged: Upload[] = []
               for (const id of value.attachmentIDs ?? []) {
                 const file = yield* tx

@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `91f4cead5c`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `5e9406c963`; the newest installed package is `eden.raya@7.4.23-snapshot+5e9406c963.kamil-oseni.1789953867175`, digest `9799f9cbdaa08eed71f7ef18f09c88d388ac91fdc22aa38d7924d916cb513285`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 21:28 America/Toronto - Accept the installed Admin snapshot after reload
+
+Product commit `5e9406c963` is on `origin/main` and installed as `eden.raya@7.4.23-snapshot+5e9406c963.kamil-oseni.1789953867175`. Preserve `updateAdminSignal` as a repository-identity-bound lifecycle signal: disabled, unconfigured, not-yet-run and changed configuration are `not-checked`; a successful release fetch/comparison is `ready`; credential, fetch, comparison, install, recovery or runner failures are `failed`. The host bridge maps only those closed states and strips all thrown values. Do not report Updates healthy merely because the checker module loaded.
+
+Computer use and Cloud sync remain intentionally Unknown because their native desktop-control and encrypted remote-session services are future implementation rows. Do not substitute model capability strings, a local `CloudContinuationJournal`, settings presence or planned architecture for an authoritative runtime probe. Add those signals only with the corresponding feature implementation.
+
+Evidence passes **9 / 30** for the update lifecycle/bridge and **12/12** for the full one-worker Admin Chromium matrix. The installed retained VSIX is `raya.9799f9cbdaa08eed71f7ef18f09c88d388ac91fdc22aa38d7924d916cb513285.vsix`, **521,393,108 bytes**, SHA-256 `9799F9CBDAA08EED71F7EF18F09C88D388AC91FDC22AA38D7924D916CB513285`; bundled CLI **231,681,536 bytes**, SHA-256 `F4C4BC43E93FDEAFB897F38DDDE8D509C8923212B7643776483FF1444940027C`. The active pointer is still source `dc0910ddc9`. After a normal reload, verify the seventeen-row System Health view, real Goal and Scheduler status, truthful Updates status, and explicit Unknown Computer use/Cloud sync rows. Record the visible result in both ledgers, then mark `FUT-ADM-01` Verified if it passes.
 
 ## ChatGPT 2026-09-20 21:13 America/Toronto - Preserve Scheduler recovery health
 

@@ -531,18 +531,21 @@ test("routine service access recovers from error, empty, stale and timeout catal
   expect(result.violations).toEqual([])
 })
 
-test("organization assignment requires an authorized route", async ({ page }) => {
+test("one-worker organization explains tracked work and opens its worker chat", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Finance 1" }).click()
   const work = page.locator(".routines-organization-work")
   await work.getByRole("button", { name: "Assign work" }).click()
   const assignment = page.getByRole("dialog", { name: "Assign work in Finance" })
-  await expect(assignment).toContainText("No active worker has an authorized route.")
+  await expect(assignment).toContainText("Books is the only active worker.")
+  await expect(assignment).toContainText("add another worker and choose a delegation direction")
   await expect(assignment.getByRole("button", { name: "Close", exact: true }).last()).toBeFocused()
-  await assignment.getByRole("button", { name: "Edit organization" }).click()
+  await expect(assignment.locator(".routines-assignment")).toHaveCSS("padding-left", "20px")
+  await expect(assignment.locator(".routines-assignment")).toHaveCSS("padding-bottom", "16px")
+  await assignment.getByRole("button", { name: "Open worker chat" }).click()
   await expect(assignment).toBeHidden()
-  await expect(page.getByRole("heading", { name: "Edit organization" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Books" })).toBeVisible()
 })
 
 test("organization work filters loaded and earlier activity", async ({ page }, info) => {

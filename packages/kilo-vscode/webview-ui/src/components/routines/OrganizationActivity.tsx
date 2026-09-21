@@ -183,6 +183,7 @@ export const OrganizationActivity: Component<{
         parent={parent}
         {...(available() === undefined ? {} : { available: available() })}
         onEdit={props.onEdit}
+        onChoose={props.onChoose}
         onAssigned={(worker) => {
           props.onAssigned(worker)
           if (parent) {

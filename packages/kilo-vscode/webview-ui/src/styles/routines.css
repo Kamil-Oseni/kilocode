@@ -1156,7 +1156,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--raya-space-12);
+  box-sizing: border-box;
   width: min(32rem, calc(100vw - var(--raya-space-24)));
+  padding: 0 var(--raya-space-20) var(--raya-space-16);
 }
 
 .routines-assignment-route {

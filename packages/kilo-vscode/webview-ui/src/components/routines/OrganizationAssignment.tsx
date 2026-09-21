@@ -76,6 +76,7 @@ export const OrganizationAssignment: Component<{
   parent?: Follow
   available?: number
   onEdit: () => void
+  onChoose: (id: string) => void
   onAssigned: (worker: { id: string; name: string }) => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -102,6 +103,7 @@ export const OrganizationAssignment: Component<{
       )
     }),
   )
+  const active = createMemo(() => people().filter((person) => person.agent.enabled))
   const [recipient, setRecipient] = createSignal(targets()[0]?.agent.id ?? "")
   const senders = createMemo(() => {
     if (props.parent)
@@ -213,12 +215,27 @@ export const OrganizationAssignment: Component<{
             <p>
               {props.parent
                 ? `${props.parent.recipient.name} has no authorized route to an unused active worker.`
-                : "No active worker has an authorized route. Resume a routed worker or update delegation permissions."}
+                : active().length === 1
+                  ? `${active()[0]!.agent.name} is the only active worker. Message this worker directly for standalone work, or add another worker and choose a delegation direction for tracked organization work.`
+                  : "Tracked organization work needs an explicit route between two active workers. Resume the required workers or edit who may assign work to whom."}
             </p>
             <div class="dialog-confirm-actions">
               <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
                 Close
               </Button>
+              <Show when={!props.parent && active().length === 1}>
+                <Button
+                  variant="secondary"
+                  size="large"
+                  onClick={() => {
+                    const id = active()[0]!.agent.id
+                    dialog.close()
+                    queueMicrotask(() => props.onChoose(id))
+                  }}
+                >
+                  Open worker chat
+                </Button>
+              </Show>
               <Button
                 size="large"
                 onClick={() => {

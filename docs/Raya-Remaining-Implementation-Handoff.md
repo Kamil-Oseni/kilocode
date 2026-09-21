@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `5e9406c963`; the newest installed package is `eden.raya@7.4.23-snapshot+5e9406c963.kamil-oseni.1789953867175`, digest `9799f9cbdaa08eed71f7ef18f09c88d388ac91fdc22aa38d7924d916cb513285`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `489d83e771`; the newest installed package is `eden.raya@7.4.23-snapshot+489d83e771.kamil-oseni.1789955042932`, digest `3e58f22469ac00eab93c75225f422e77be3ed7bfd0861d904c05754b9dd1bc6d`. The open host remains on accepted source `5e9406c963` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 21:48 America/Toronto - Accept the repaired Admin snapshot after one reload
+
+The first installed observation of source `5e9406c963` rendered all seventeen System Health rows but the CLI exited before binding with missing `Canvas.Service`. Source tests had missed the defect because `Server.Default()` uses the fully provided in-memory route graph, while the packaged extension starts the production `Server.listen` graph backed by `AppRuntime`. Preserve commit `489d83e771`: `Canvas.node` belongs in the shared `kilo` application group, and `kilocodeHandlers` must consume that shared service rather than privately providing `Canvas.defaultLayer`. This keeps Canvas tools and Admin health on one workspace-aware service instance.
+
+Regression `test/kilocode/server/httpapi-admin-listener.test.ts` must continue to start the real listener, fetch `/raya/admin/health`, decode the complete schema and require Canvas Healthy/Ready. Together with the existing Admin HTTP contract it passes **2 / 43**. The exact installed CLI was also started through `serve --hostname 127.0.0.1 --port 0`, bound successfully and was then stopped. All scoped guards and the protected push pass.
+
+Installed snapshot is `eden.raya@7.4.23-snapshot+489d83e771.kamil-oseni.1789955042932`. Retained VSIX `raya.3e58f22469ac00eab93c75225f422e77be3ed7bfd0861d904c05754b9dd1bc6d.vsix` is **521,392,596 bytes**, SHA-256 `3E58F22469AC00EAB93C75225F422E77BE3ED7BFD0861D904C05754B9DD1BC6D`; bundled CLI **231,681,024 bytes**, SHA-256 `B8D5BF7F391FFD0D1C871A615B74A5B17C9D663637B103C7797DEF670F1FF7F3`. The active vault pointer remains source `5e9406c963`. After one normal reload, confirm the server connects, all seventeen rows remain visible, Goals and Scheduler use real signals, Updates is truthful, and Computer use plus Cloud sync remain Unknown. Record that result before marking `FUT-ADM-01` Verified.
 
 ## ChatGPT 2026-09-20 21:28 America/Toronto - Accept the installed Admin snapshot after reload
 

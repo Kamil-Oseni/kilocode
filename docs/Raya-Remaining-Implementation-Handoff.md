@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `89cb882eac`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
+> **Goal status: ACTIVE — implementation is continuing.** Continue `FUT-ADM-01` from repository product source `55b021f74a`; the newest installed package remains `eden.raya@7.4.23-snapshot+91051268f3.kamil-oseni.1789948928493`, digest `efcd42e623fd02aa099aa3c145cc262e3ff4e4a59b8d8746658da6ad720d2469`. The open host remains on accepted source `dc0910ddc9` until a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-20 20:38 America/Toronto - Preserve the first four real Admin source probes
+
+Product commit `55b021f74a` is on `origin/main`. Organizations, Skills, Todos and Canvas no longer remain Unknown in a connected production backend. Preserve the exact authorities: `RayaTaskOrganization.list({ limit: 1 })`, `Skill.Service.all`, `PersonalTodo.list` and `Canvas.Service.list`. The handler captures `InstanceState.context` and provides that exact `InstanceRef` to every detached Effect. Do not call these services outside the current workspace context or replace them with UI presence checks.
+
+Each source executes once per snapshot after the shared connected-state gate. Disconnected state performs zero backend reads and reports `unknown/disconnected`; missing adapters remain `unknown/not-checked`; a thrown source becomes only `unknown/probe-failed`. No returned domain object enters the snapshot or log. The real HTTP evidence covers all seventeen ordered rows, isolated logs and restart, and proves corrupt private task storage cannot leak its path, token or message.
+
+Evidence passes **8 / 46** registry/service and **1 / 41** real HTTP assertions. CLI typecheck, scoped zero-warning Oxlint, Prettier, annotation, Promise-facade and diff guards pass; the protected push passed all **29 JavaScript/TypeScript package typechecks** plus JetBrains. Continue only `FUT-ADM-01`: bind Goals, Scheduler/claims/staging/queue/inbox, Contacts and Memory to durable backend authorities, then add honest extension-host sources for Computer use, Cloud sync and Updates. Keep any source Unknown until its authoritative probe exists. Installed/live-backend acceptance remains required.
 
 ## ChatGPT 2026-09-20 20:29 America/Toronto - Continue FUT-ADM-01 from the complete registry contract
 

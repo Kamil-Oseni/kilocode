@@ -8,7 +8,7 @@ import { pipeline } from "node:stream/promises"
 import type { Readable } from "node:stream"
 import * as vscode from "vscode"
 import { PackageVault } from "../../src/services/package-vault"
-import { reconcile } from "../../src/services/update-checker"
+import { reconcile, updateAdminSignal } from "../../src/services/update-checker"
 import { Installation, type InstallRequest } from "../../src/services/update-installation"
 
 const require = createRequire(import.meta.url)
@@ -92,6 +92,10 @@ function context(root: string, version: string): vscode.ExtensionContext {
     globalState: memory(),
   } as unknown as vscode.ExtensionContext
 }
+
+test("keeps an unconfigured update checker explicitly unchecked", () => {
+  expect(updateAdminSignal()).toEqual({ status: "not-checked" })
+})
 
 async function binary(root: string, value: Uint8Array) {
   const dir = join(root, "extension", "bin")

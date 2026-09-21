@@ -12,6 +12,7 @@ import { Installation } from "./update-installation"
 import { PackageVault } from "./package-vault"
 import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import type { AdminUpdateSignal } from "../shared/admin"
 
 const INTERVAL_MS = 6 * 60 * 60 * 1000 // re-check every 6 hours while the window stays open
 const FIRST_DELAY_MS = 30 * 1000 // let activation settle before the first background check
@@ -22,6 +23,17 @@ type Release = NonNullable<ReturnType<typeof latest>>
 type Config = { enabled: boolean; repo: string; token: string; includePrereleases: boolean }
 
 const log = vscode.window.createOutputChannel("Raya Updates")
+let health: AdminUpdateSignal["status"] = "not-checked"
+let observed = ""
+
+const identity = (settings: Omit<Config, "token">) => `${settings.repo}:${settings.includePrereleases ? "1" : "0"}`
+
+export function updateAdminSignal(): AdminUpdateSignal {
+  const settings = config()
+  if (!settings.enabled || !settings.repo) return { status: "not-checked" }
+  if (observed !== identity(settings)) return { status: "not-checked" }
+  return { status: health }
+}
 
 function config(): Omit<Config, "token"> {
   const cfg = vscode.workspace.getConfiguration("raya.update")
@@ -156,10 +168,13 @@ async function check(
       await vscode.window.showInformationMessage("Set `raya.update.repo` (owner/name) to check for Raya updates.")
     return
   }
+  observed = identity(settings)
+  health = "not-checked"
 
   try {
     cfg.token = await credentials.get()
   } catch {
+    health = "failed"
     if (!active()) return
     log.appendLine("[check] Update credential migration failed; update check stopped.")
     if (manual)
@@ -173,6 +188,7 @@ async function check(
   const result = await latestRelease(cfg)
     .then((release) => ({ release }))
     .catch((err) => {
+      health = "failed"
       if (!active()) return undefined
       log.appendLine(`[check] ${err instanceof Error ? err.message : String(err)}`)
       if (manual) void vscode.window.showErrorMessage(`Could not check for Raya updates: ${String(err)}`)
@@ -181,6 +197,7 @@ async function check(
   if (!result || !active()) return
   const release = result.release
   if (!release) {
+    health = "ready"
     if (manual) await vscode.window.showInformationMessage("No Raya releases were found in the configured repository.")
     return
   }
@@ -191,6 +208,7 @@ async function check(
     try {
       return compare(release.tag_name, current)
     } catch {
+      health = "failed"
       log.appendLine("[check] Update comparison stopped because the installed version is invalid.")
       if (manual)
         void vscode.window.showErrorMessage("Cannot determine update eligibility for this installed Raya version.")
@@ -198,6 +216,7 @@ async function check(
     }
   })()
   if (order === undefined) return
+  health = "ready"
   if (order <= 0) {
     if (manual) await vscode.window.showInformationMessage(`Raya is up to date (${current}).`)
     return
@@ -226,6 +245,7 @@ async function offer(
   if (choice === "Install")
     await installFrom(context, release, cfg, version, current, active).catch((err) => {
       if (!active()) return
+      health = "failed"
       log.appendLine(`[install] ${err instanceof Error ? err.message : String(err)}`)
       void vscode.window.showErrorMessage(`Raya update failed: ${String(err)}`)
     })
@@ -243,6 +263,7 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
   const recovered = runner
     .run((active) => reconcile(context, active))
     .catch(() => {
+      health = "failed"
       log.appendLine("[recovery] Could not reconcile the saved update installation record.")
       void vscode.window.showErrorMessage(
         "Raya could not verify its saved update recovery state. The record was retained and no installer was replayed.",
@@ -253,6 +274,7 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
     runner
       .run((active) => check(context, credentials, manual, active))
       .catch(() => {
+        health = "failed"
         log.appendLine("[check] Update flow could not finish.")
       })
   const command = vscode.commands.registerCommand("raya.checkForUpdates", () => run(true))

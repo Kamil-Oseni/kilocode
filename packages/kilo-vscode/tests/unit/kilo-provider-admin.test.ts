@@ -121,7 +121,7 @@ describe("admin host bridge", () => {
     ])
   })
 
-  it("replaces unknown browser and voice rows with current extension-host signals", async () => {
+  it("replaces unknown browser, voice, and update rows with current extension-host signals", async () => {
     const posts: unknown[] = []
     const row = (id: (typeof ids)[number]) => ({
       id,
@@ -146,6 +146,7 @@ describe("admin host bridge", () => {
       host: {
         browser: () => ({ status: "ready" }),
         voice: () => ({ available: true, active: 1, failed: 0, incomplete: 0 }),
+        updates: () => ({ status: "ready" }),
       },
       post: (message) => posts.push(message),
     })
@@ -163,6 +164,12 @@ describe("admin host bridge", () => {
       reason: "ready",
       observedAt: 25,
       metrics: { active: 1, failed: 0, incomplete: 0 },
+    })
+    expect(result.health.items.find((item) => item.id === "updates")).toEqual({
+      id: "updates",
+      status: "healthy",
+      reason: "ready",
+      observedAt: 25,
     })
   })
 
@@ -192,6 +199,9 @@ describe("admin host bridge", () => {
           throw new Error("C:/private browser token")
         },
         voice: () => ({ available: true, active: Number.NaN, failed: 0, incomplete: 0 }),
+        updates: () => {
+          throw new Error("C:/private update token")
+        },
       },
       post: (message) => posts.push(message),
     })
@@ -206,6 +216,12 @@ describe("admin host bridge", () => {
     })
     expect(items.find((item) => item.id === "voice")).toEqual({
       id: "voice",
+      status: "unknown",
+      reason: "probe-failed",
+      observedAt: 30,
+    })
+    expect(items.find((item) => item.id === "updates")).toEqual({
+      id: "updates",
       status: "unknown",
       reason: "probe-failed",
       observedAt: 30,

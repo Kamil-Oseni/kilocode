@@ -5,8 +5,15 @@ type Post = (message: AdminResult) => void
 
 const browser = new Set(["ready", "locked", "auth_expired", "closed", "unavailable", "error"])
 
-function failed(id: "browser" | "voice", at: number): AdminRow {
+function failed(id: "browser" | "voice" | "updates", at: number): AdminRow {
   return { id, status: "unknown", reason: "probe-failed", observedAt: at }
+}
+
+function updateRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["updates"]>>>, at: number): AdminRow {
+  if (value.status === "ready") return { id: "updates", status: "healthy", reason: "ready", observedAt: at }
+  if (value.status === "not-checked") return { id: "updates", status: "unknown", reason: "not-checked", observedAt: at }
+  if (value.status === "failed") return failed("updates", at)
+  return failed("updates", at)
 }
 
 function browserRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["browser"]>>>, at: number): AdminRow {
@@ -36,7 +43,7 @@ function voiceRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["voice"
 }
 
 async function overlay(health: AdminHealth, host?: AdminHostSignals): Promise<AdminHealth> {
-  if (!host?.browser && !host?.voice) return health
+  if (!host?.browser && !host?.voice && !host?.updates) return health
   const at = health.generatedAt
   const rows = new Map(health.items.map((item) => [item.id, item]))
   const reads = await Promise.all([
@@ -51,6 +58,12 @@ async function overlay(health: AdminHealth, host?: AdminHostSignals): Promise<Ad
           .then(host.voice)
           .then((value) => voiceRow(value, at))
           .catch(() => failed("voice", at))
+      : undefined,
+    host.updates
+      ? Promise.resolve()
+          .then(host.updates)
+          .then((value) => updateRow(value, at))
+          .catch(() => failed("updates", at))
       : undefined,
   ])
   for (const row of reads) if (row) rows.set(row.id, row)

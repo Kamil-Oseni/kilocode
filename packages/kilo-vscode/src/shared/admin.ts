@@ -16,9 +16,14 @@ export type AdminVoiceSignal = {
   incomplete: number
 }
 
+export type AdminUpdateSignal = {
+  status: "ready" | "not-checked" | "failed"
+}
+
 export type AdminHostSignals = {
   browser?: () => AdminBrowserSignal | Promise<AdminBrowserSignal>
   voice?: () => AdminVoiceSignal | Promise<AdminVoiceSignal>
+  updates?: () => AdminUpdateSignal | Promise<AdminUpdateSignal>
 }
 
 export type AdminResult = {

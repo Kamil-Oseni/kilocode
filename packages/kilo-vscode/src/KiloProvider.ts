@@ -124,6 +124,7 @@ import { handlePersonalTodoMessage } from "./kilo-provider/personal-todos"
 import { handlePersonalTodoProposalMessage } from "./kilo-provider/personal-todo-proposals"
 import { handleFocusTimerMessage } from "./kilo-provider/focus-timer"
 import { handleAdminMessage } from "./kilo-provider/admin"
+import { updateAdminSignal } from "./services/update-checker"
 // legacy-migration start
 import {
   checkAndShowMigrationWizard,
@@ -1682,6 +1683,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       host: {
         ...(this.adminBrowser ? { browser: () => this.adminBrowser!.admin() } : {}),
         ...(this.speech ? { voice: () => this.speech!.admin() } : {}),
+        updates: updateAdminSignal,
       },
     }
     if (await handlePersonalTodoMessage(input)) return true

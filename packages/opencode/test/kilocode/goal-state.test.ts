@@ -3828,6 +3828,35 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("finishes conversational replies from assistant text without weakening work goals", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const replyID = SessionID.make(`ses_reply_${crypto.randomUUID()}`)
+      const workID = SessionID.make(`ses_work_${crypto.randomUUID()}`)
+      let rows = transcript({ sessionID: replyID, text: "Hey — how can I help?" }).rows
+      const replies = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => Effect.all([replies.clear(replyID), replies.clear(workID)]).pipe(Effect.asVoid))
+      yield* replies.create(replyID, "Reply to hey", undefined, undefined, undefined, undefined, undefined, "reply")
+
+      const delivered = yield* replies.recordTurn(replyID, rows[1].info.id)
+      expect(delivered?.productive).toBe(false)
+      expect(delivered?.retry).toBe(false)
+      expect(delivered?.state.status).toBe("complete")
+      expect(delivered?.state.reply).toMatchObject({
+        messageID: rows[1].info.id,
+        body: "Hey — how can I help?",
+      })
+      expect(delivered?.state.blockedReason).toBeUndefined()
+
+      rows = transcript({ sessionID: workID, text: "I can help with that." }).rows
+      yield* replies.create(workID, "Review the accounts")
+      const work = yield* replies.recordTurn(workID, rows[1].info.id)
+      expect(work?.state.status).toBe("active")
+      expect(work?.state.reply).toBeUndefined()
+      expect(work?.retry).toBe(true)
+    }),
+  )
+
   it.live("accounts each completed message once across reloads and same-user retries", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

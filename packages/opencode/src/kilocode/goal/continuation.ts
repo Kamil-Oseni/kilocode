@@ -19,7 +19,17 @@ import { RayaTaskInbox } from "@/kilocode/task/inbox"
 const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
 
-const prompt = (objective: string) => `<system-reminder>
+const prompt = (objective: string, completion?: "reply") =>
+  completion === "reply"
+    ? `<system-reminder>
+Answer this worker-conversation message once, directly and naturally.
+
+Message context:
+${objective}
+
+Use tools only when they are needed to answer accurately. Do not call update_goal for this conversational reply. The runtime records the reply as delivered after the assistant turn closes. If the request needs clarification, ask the question in your response. Do not claim that scheduled work ran unless the supplied conversation evidence proves it.
+</system-reminder>`
+    : `<system-reminder>
 An active persistent goal must continue without a new user request.
 
 Objective:
@@ -44,6 +54,7 @@ async function continueGoal(
   queuedAt: number,
   signal: AbortSignal,
   files?: readonly SessionV1.FilePartInput[],
+  completion?: "reply",
 ): Promise<unknown> {
   const [{ AppRuntime }, { SessionPrompt }, { InstanceStore }] = await Promise.all([
     import("@/effect/app-runtime"),
@@ -60,7 +71,7 @@ async function continueGoal(
               sessionID,
               messageID,
               goalQueuedAt: queuedAt,
-              parts: [...(files ?? []), { type: "text", text: prompt(objective), synthetic: true }],
+              parts: [...(files ?? []), { type: "text", text: prompt(objective, completion), synthetic: true }],
               goalObjective: objective, // raya_change - route the latest steered objective, not the original turn
             })
             .pipe(
@@ -101,6 +112,7 @@ type Run = (
   queuedAt: number,
   signal: AbortSignal,
   files?: readonly SessionV1.FilePartInput[],
+  completion?: "reply",
 ) => Promise<unknown>
 type Loop = (sessionID: SessionID, directory: string, signal: AbortSignal) => Promise<unknown>
 
@@ -122,6 +134,7 @@ function invoke(input: {
   run?: Run
   quiet?: boolean
   files?: readonly SessionV1.FilePartInput[]
+  completion?: "reply"
   complete?: () => Effect.Effect<void>
 }) {
   return Effect.tryPromise({
@@ -134,6 +147,7 @@ function invoke(input: {
         input.queuedAt,
         signal,
         input.files,
+        input.completion,
       ),
     catch: (err) => err,
   }).pipe(
@@ -203,6 +217,7 @@ function launch(input: {
           run: input.run,
           quiet: input.quiet,
           files: delivery?.files,
+          completion: goal.completion,
           complete: delivery ? () => inbox!.delivered(input.sessionID, goal.dispatch!.messageID!) : undefined,
         })
       })
@@ -312,6 +327,7 @@ export namespace RayaGoalContinuation {
             run: input.run,
             quiet: true,
             files: delivery.files,
+            completion: goal.completion,
             complete: () => inbox!.delivered(input.sessionID, goal.dispatch!.messageID!),
           })
           return

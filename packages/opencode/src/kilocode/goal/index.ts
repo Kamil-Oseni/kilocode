@@ -118,6 +118,13 @@ export namespace RayaGoal {
   })
   export type Audit = typeof Audit.Type
 
+  export const Reply = Schema.Struct({
+    messageID: MessageID,
+    body: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8000)),
+    at: Schema.Number,
+  })
+  export type Reply = typeof Reply.Type
+
   // raya_change - the last completion-audit attempt, accepted or rejected. A rejected audit
   // otherwise only surfaces as an AuditError the model narrates into chat; persisting it lets
   // the goal audit-log view show exactly which requirement failed and which evidence was cited.
@@ -242,6 +249,8 @@ export namespace RayaGoal {
     source: Schema.Literals(["steering", "control"]),
     intent: Schema.optional(Schema.String),
     objective: Schema.String,
+    completion: Schema.optional(Schema.Literal("reply")),
+    reply: Schema.optional(Reply),
     criteria: Schema.optional(Criteria),
     plan: Schema.optional(Planning.Plan),
     budget: Schema.optional(Budget),
@@ -273,6 +282,8 @@ export namespace RayaGoal {
     charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
     activeMs: Schema.optional(Schema.Number),
     objective: Schema.String,
+    completion: Schema.optional(Schema.Literal("reply")),
+    reply: Schema.optional(Reply),
     criteria: Schema.optional(Criteria),
     status: Status,
     createdAt: Schema.Number,
@@ -289,6 +300,8 @@ export namespace RayaGoal {
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
     objective: Schema.String,
+    completion: Schema.optional(Schema.Literal("reply")),
+    reply: Schema.optional(Reply),
     revision: Schema.optional(Schema.String),
     intent: Schema.optional(Schema.String),
     inputs: Schema.optional(Schema.Array(MessageID)).annotate({
@@ -481,6 +494,8 @@ export namespace RayaGoal {
       criteria: state.criteria,
       plan: state.plan,
       budget: state.budget,
+      completion: state.completion,
+      reply: state.reply,
       budgetOverrides: state.budgetOverrides,
       budgetHit: state.budgetHit,
       usage: state.usage,
@@ -718,6 +733,7 @@ export namespace RayaGoal {
       selfHealID?: string,
       criteria?: Criteria,
       budget?: Budget,
+      completion?: "reply",
     ) {
       const linked = selfHealID ? yield* ownership(sessionID, selfHealID) : undefined
       const text = clean(objective)
@@ -749,7 +765,8 @@ export namespace RayaGoal {
         existing?.objective === text &&
         existing.status === "active" &&
         isDeepStrictEqual(existing.criteria, required) &&
-        isDeepStrictEqual(existing.budget, budget)
+        isDeepStrictEqual(existing.budget, budget) &&
+        existing.completion === completion
       )
         return existing // raya_change - retry failed first request without changing requirements
       // A completed goal must not block the next /goal. Archive it so the banner
@@ -762,6 +779,8 @@ export namespace RayaGoal {
               ...(existing.history ?? []),
               {
                 objective: existing.objective,
+                completion: existing.completion,
+                reply: existing.reply,
                 revisions: existing.revisions,
                 review: existing.review,
                 plan: existing.plan,
@@ -787,6 +806,7 @@ export namespace RayaGoal {
         sessionID,
         {
           objective: text,
+          completion,
           intent: crypto.randomUUID(),
           criteria: required,
           budget,
@@ -1880,8 +1900,10 @@ export namespace RayaGoal {
         cache: { read: 0, write: 0 },
       }
       const accounting = Accounting.sum(scope, sessionID)
-      const stalled = (idle || failed) && retries >= idleLimit
       const now = Date.now()
+      const response = state.completion === "reply" ? reply.trim().slice(0, 8000) : ""
+      const answered = !!response
+      const stalled = !answered && (idle || failed) && retries >= idleLimit
       const reason = invalid
         ? "The model reported completion without successfully calling update_goal. Review the result, then steer or stop it."
         : repeated
@@ -1889,20 +1911,21 @@ export namespace RayaGoal {
           : failed
             ? `Automatic continuation stopped after ${idleLimit} turns without a successful tool result. Review the failures and choose a different approach.`
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
-      const blocked = invalid || repeated || stalled
+      const blocked = !answered && (invalid || repeated || stalled)
       const total = Math.max((state.usage.cost ?? 0) + cost, accounting.cost)
       const spendable = yield* spend(sessionID, state, total)
       const hit =
         blocked || state.status !== "active"
           ? undefined
           : exhausted({ ...state, charges }, now, spendable.total, retries)
-      const stopped = blocked || hit !== undefined
+      const stopped = answered || blocked || hit !== undefined
       const retry = !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
         ...state,
         inputs,
         accounted: { userID: user.info.id, messages: [...recorded, ...assistants.map((message) => message.info.id)] },
-        status: blocked ? "blocked" : hit ? "paused" : state.status,
+        status: answered ? "complete" : blocked ? "blocked" : hit ? "paused" : state.status,
+        reply: answered ? { messageID: latest.info.id, body: response, at: now } : state.reply,
         blockedReason: blocked ? reason : hit ? undefined : state.blockedReason,
         budgetHit: hit ?? state.budgetHit,
         updatedAt: now,
@@ -1913,7 +1936,7 @@ export namespace RayaGoal {
           ...state.usage,
           turns: state.usage.turns + 1,
           toolCalls: state.usage.toolCalls + calls.length,
-          retries: stopped ? retries : retry ? retries : 0,
+          retries: stopped ? (answered ? 0 : retries) : retry ? retries : 0,
           cost: total,
           descendantCost: accounting.descendantCost,
           delegatedCost: spendable.delegated,
@@ -1931,20 +1954,22 @@ export namespace RayaGoal {
         progress: progress(state, {
           at: now,
           kind: stopped ? "status" : "turn",
-          message: stopped
-            ? blocked
-              ? `Blocked: ${reason}`
-              : `Paused: ${budgetReason(hit!)}`
-            : failed
-              ? `No successful tool result; recovery ${retries}/${idleLimit}. Review the failure before retrying work.`
-              : calls.length > 0
-                ? `Turn finished with ${calls.length} work or verification tool call${calls.length === 1 ? "" : "s"}.`
-                : retry
-                  ? `Idle turn ${retries}/${idleLimit}; continuing the goal.`
-                  : "Automatic continuation suppressed because the turn made no work or verification tool calls.",
+          message: answered
+            ? "Conversation reply delivered."
+            : stopped
+              ? blocked
+                ? `Blocked: ${reason}`
+                : `Paused: ${budgetReason(hit!)}`
+              : failed
+                ? `No successful tool result; recovery ${retries}/${idleLimit}. Review the failure before retrying work.`
+                : calls.length > 0
+                  ? `Turn finished with ${calls.length} work or verification tool call${calls.length === 1 ? "" : "s"}.`
+                  : retry
+                    ? `Idle turn ${retries}/${idleLimit}; continuing the goal.`
+                    : "Automatic continuation suppressed because the turn made no work or verification tool calls.",
         }),
       })
-      return { state: next, productive: succeeded.length > 0 && !stopped, retry }
+      return { state: next, productive: !answered && succeeded.length > 0 && !stopped, retry }
     })
 
     const finished = Effect.fn("RayaGoal.finished")(function* (

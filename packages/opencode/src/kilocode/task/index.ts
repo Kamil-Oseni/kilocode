@@ -182,6 +182,7 @@ export namespace RayaTask {
 
   export const Outcome = Schema.Struct({
     kind: Schema.Literals(["code", "notify"]),
+    reply: Schema.optional(Schema.Literal(true)),
     summary: Schema.String,
     evidence: Schema.optional(Schema.Array(Schema.String)),
     verification: Schema.optional(

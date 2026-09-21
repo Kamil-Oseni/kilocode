@@ -145,10 +145,7 @@ export const Send = Schema.Struct({
 export const Read = Schema.Struct({
   at: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
 })
-const Version = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(0),
-  Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
-)
+const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER))
 export const Draft = Schema.Struct({
   draft: Schema.Union([Schema.String.check(Schema.isMaxLength(8000)), Schema.Null]),
   attachments: Schema.optional(DraftUploads),
@@ -309,7 +306,7 @@ export function status(agent: RayaTask.Agent, last?: RayaTask.Run): typeof State
   return "scheduled"
 }
 
-function origin(kind: "need" | "report", id: string) {
+function origin(kind: "need" | "report" | "reply", id: string) {
   const raw = `${kind}:${id}`
   return Schema.is(token)(raw) ? raw : `${kind}:${digest(id).slice(0, 40)}`
 }
@@ -320,6 +317,15 @@ export function posted(run: RayaTask.Run): Publish | undefined {
   const at = run.trigger?.kind === "timer" ? run.trigger.scheduledAt : run.at
   const when = Number.isFinite(at) ? new Date(at).toISOString() : "unknown time"
   const findings = run.outcome?.summary?.trim()
+  if (run.status === "complete" && run.outcome?.reply && findings)
+    return {
+      agentID: run.agentID,
+      source: origin("reply", run.id),
+      kind: "worker",
+      body: findings.slice(0, 8000),
+      sessionID: run.sessionID,
+      ...(Schema.is(token)(run.id) ? { occurrenceID: run.id } : {}),
+    }
   const reason = run.blockedReason?.trim()
   const lines = waiting
     ? [`This run needs a decision (${when}).`, reason, "This is not a completed report."]

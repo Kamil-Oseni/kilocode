@@ -116,6 +116,7 @@ test("a paused worker follow-up starts one run without rewriting the assignment"
       expect(starts).toEqual(["start"])
       expect(run.sessionID).toBe(SessionID.make("ses_followup"))
       expect(run.trigger).toEqual({ kind: "manual" })
+      expect((yield* storage.read<RayaGoal.State>(["raya", "goal", run.sessionID])).completion).toBe("reply")
       const saved = yield* snapshots.find(run.id)
       expect(saved?.definition.objective).toBe("Review accounts")
       expect(saved?.objective).toContain(question)

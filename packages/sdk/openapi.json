@@ -18088,6 +18088,49 @@
                           "objective": {
                             "type": "string"
                           },
+                          "completion": {
+                            "type": "string",
+                            "enum": ["reply"]
+                          },
+                          "reply": {
+                            "type": "object",
+                            "properties": {
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["messageID", "body", "at"],
+                            "additionalProperties": false
+                          },
                           "criteria": {
                             "type": "array",
                             "items": {
@@ -18837,6 +18880,49 @@
                     },
                     "objective": {
                       "type": "string"
+                    },
+                    "completion": {
+                      "type": "string",
+                      "enum": ["reply"]
+                    },
+                    "reply": {
+                      "type": "object",
+                      "properties": {
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8000
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["messageID", "body", "at"],
+                      "additionalProperties": false
                     },
                     "revision": {
                       "type": "string"
@@ -19851,6 +19937,49 @@
                                 },
                                 "objective": {
                                   "type": "string"
+                                },
+                                "completion": {
+                                  "type": "string",
+                                  "enum": ["reply"]
+                                },
+                                "reply": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "body": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 8000
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["messageID", "body", "at"],
+                                  "additionalProperties": false
                                 },
                                 "criteria": {
                                   "type": "array",
@@ -20880,6 +21009,49 @@
                           },
                           "objective": {
                             "type": "string"
+                          },
+                          "completion": {
+                            "type": "string",
+                            "enum": ["reply"]
+                          },
+                          "reply": {
+                            "type": "object",
+                            "properties": {
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["messageID", "body", "at"],
+                            "additionalProperties": false
                           },
                           "criteria": {
                             "type": "array",
@@ -21560,6 +21732,49 @@
                           "objective": {
                             "type": "string"
                           },
+                          "completion": {
+                            "type": "string",
+                            "enum": ["reply"]
+                          },
+                          "reply": {
+                            "type": "object",
+                            "properties": {
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["messageID", "body", "at"],
+                            "additionalProperties": false
+                          },
                           "criteria": {
                             "type": "array",
                             "items": {
@@ -22309,6 +22524,49 @@
                     },
                     "objective": {
                       "type": "string"
+                    },
+                    "completion": {
+                      "type": "string",
+                      "enum": ["reply"]
+                    },
+                    "reply": {
+                      "type": "object",
+                      "properties": {
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8000
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["messageID", "body", "at"],
+                      "additionalProperties": false
                     },
                     "revision": {
                       "type": "string"
@@ -23323,6 +23581,49 @@
                                 },
                                 "objective": {
                                   "type": "string"
+                                },
+                                "completion": {
+                                  "type": "string",
+                                  "enum": ["reply"]
+                                },
+                                "reply": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "body": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 8000
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["messageID", "body", "at"],
+                                  "additionalProperties": false
                                 },
                                 "criteria": {
                                   "type": "array",
@@ -24352,6 +24653,49 @@
                           },
                           "objective": {
                             "type": "string"
+                          },
+                          "completion": {
+                            "type": "string",
+                            "enum": ["reply"]
+                          },
+                          "reply": {
+                            "type": "object",
+                            "properties": {
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["messageID", "body", "at"],
+                            "additionalProperties": false
                           },
                           "criteria": {
                             "type": "array",
@@ -24950,6 +25294,49 @@
                           "objective": {
                             "type": "string"
                           },
+                          "completion": {
+                            "type": "string",
+                            "enum": ["reply"]
+                          },
+                          "reply": {
+                            "type": "object",
+                            "properties": {
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["messageID", "body", "at"],
+                            "additionalProperties": false
+                          },
                           "criteria": {
                             "type": "array",
                             "items": {
@@ -25699,6 +26086,49 @@
                     },
                     "objective": {
                       "type": "string"
+                    },
+                    "completion": {
+                      "type": "string",
+                      "enum": ["reply"]
+                    },
+                    "reply": {
+                      "type": "object",
+                      "properties": {
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8000
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["messageID", "body", "at"],
+                      "additionalProperties": false
                     },
                     "revision": {
                       "type": "string"
@@ -26713,6 +27143,49 @@
                                 },
                                 "objective": {
                                   "type": "string"
+                                },
+                                "completion": {
+                                  "type": "string",
+                                  "enum": ["reply"]
+                                },
+                                "reply": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "body": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 8000
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["messageID", "body", "at"],
+                                  "additionalProperties": false
                                 },
                                 "criteria": {
                                   "type": "array",
@@ -27742,6 +28215,49 @@
                           },
                           "objective": {
                             "type": "string"
+                          },
+                          "completion": {
+                            "type": "string",
+                            "enum": ["reply"]
+                          },
+                          "reply": {
+                            "type": "object",
+                            "properties": {
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["messageID", "body", "at"],
+                            "additionalProperties": false
                           },
                           "criteria": {
                             "type": "array",
@@ -33127,6 +33643,10 @@
                           "type": "string",
                           "enum": ["code", "notify"]
                         },
+                        "reply": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
                         "summary": {
                           "type": "string"
                         },
@@ -33613,6 +34133,10 @@
                             "type": "string",
                             "enum": ["code", "notify"]
                           },
+                          "reply": {
+                            "type": "boolean",
+                            "enum": [true]
+                          },
                           "summary": {
                             "type": "string"
                           },
@@ -33957,6 +34481,10 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": ["code", "notify"]
+                                    },
+                                    "reply": {
+                                      "type": "boolean",
+                                      "enum": [true]
                                     },
                                     "summary": {
                                       "type": "string"
@@ -36494,6 +37022,10 @@
                           "kind": {
                             "type": "string",
                             "enum": ["code", "notify"]
+                          },
+                          "reply": {
+                            "type": "boolean",
+                            "enum": [true]
                           },
                           "summary": {
                             "type": "string"

@@ -443,6 +443,7 @@ export namespace RayaTaskRunner {
                     undefined,
                     note ? undefined : item.output?.criteria,
                     opts?.budget,
+                    opts?.follow ? "reply" : undefined,
                   )
                   const run: RayaTask.Run = {
                     id: owner.id,
@@ -501,7 +502,7 @@ export namespace RayaTaskRunner {
     const steer = Effect.fn("RayaTaskRunner.steer")(function* (run: RayaTask.Run, note: string, defer?: boolean) {
       const existing = yield* goals.get(run.sessionID)
       if (!existing || existing.status === "complete") {
-        yield* goals.create(run.sessionID, note).pipe(
+        yield* goals.create(run.sessionID, note, undefined, undefined, undefined, undefined, undefined, "reply").pipe(
           Effect.catchTag("RayaGoal.AuditError", (err) =>
             Effect.fail(new RayaTask.GuardError({ message: err.message })),
           ),
@@ -888,7 +889,7 @@ export namespace RayaTaskRunner {
         const definition = saved?.definition ?? item
         const msgs = yield* input.sessions.messages({ sessionID })
         const cost = msgs.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
-        const summary = goal?.blockedReason?.trim() || goal?.audit?.summary?.trim() || ""
+        const summary = goal?.blockedReason?.trim() || goal?.reply?.body.trim() || goal?.audit?.summary?.trim() || ""
         const changed = yield* tasks.transition(run, {
           ...run,
           status,
@@ -897,6 +898,7 @@ export namespace RayaTaskRunner {
             : "No saved goal is available to verify this run's result. Review its conversation and saved instructions before starting more work.",
           outcome: {
             kind: kind(definition.role, definition.objective),
+            reply: goal?.completion === "reply" && goal.status === "complete" ? true : undefined,
             summary,
             evidence: goal?.audit?.requirements.flatMap((req) => req.evidence.map((ev) => ev.summary)),
             verification: goal?.audit

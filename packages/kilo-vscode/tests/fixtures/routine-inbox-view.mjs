@@ -344,6 +344,7 @@ try {
     requestID: conflictedDraft.requestID,
     agentID: agent.id,
     error: "This draft is older than the version Raya already saved.",
+    recovery: { kind: "conflict", next: "Reload the current routine and compare it with your draft." },
   })
   assert.equal(draft.value, "Keep this draft")
   assert.match(root.textContent, /changed in another Raya window/)
@@ -507,12 +508,14 @@ try {
     access: "brief",
   }
   const pages = sent.filter((msg) => msg.type === "routineInboxPage").length
+  const retainedDraft = root.querySelector("textarea[aria-label='Message this worker']")
+  retainedDraft.focus()
   emit({
     type: "routineState",
     requestID: request.requestID,
     viewID: request.viewID,
     refreshID: 1,
-    agents: [agent, legal],
+    agents: [{ ...agent, nextRun: Date.now() + 60_000 }, { ...legal }],
     templates: [],
   })
   emit({
@@ -558,13 +561,14 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(sent.filter((msg) => msg.type === "routineInboxPage").length, pages)
   assert.equal(sent.filter((msg) => msg.type === "routineInboxPage" && msg.agentID === legal.id).length, 0)
+  assert.equal(root.querySelector("textarea[aria-label='Message this worker']"), retainedDraft)
   assert.match(root.textContent, /Counsel/)
   assert.equal(
     root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"),
     "Conversation with Books",
   )
-  assert.equal(document.activeElement, draft)
-  assert.equal(draft.value, "Keep this draft")
+  assert.equal(document.activeElement, retainedDraft)
+  assert.equal(retainedDraft.value, "Keep this draft")
   assert.doesNotMatch(thread.textContent, /Counsel filed the motion/)
   let top = 40
   Object.defineProperties(pane, {

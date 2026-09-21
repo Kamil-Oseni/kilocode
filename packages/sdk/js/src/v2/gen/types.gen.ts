@@ -20117,6 +20117,12 @@ export type KilocodeGoalGetResponses = {
       source: "steering" | "control"
       intent?: string
       objective: string
+      completion?: "reply"
+      reply?: {
+        messageID: string
+        body: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       criteria?: Array<{
         id: string
         description: string
@@ -20253,6 +20259,12 @@ export type KilocodeGoalGetResponses = {
       }>
     }
     objective: string
+    completion?: "reply"
+    reply?: {
+      messageID: string
+      body: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     revision?: string
     intent?: string
     inputs?: Array<string>
@@ -20411,6 +20423,12 @@ export type KilocodeGoalGetResponses = {
         source: "steering" | "control"
         intent?: string
         objective: string
+        completion?: "reply"
+        reply?: {
+          messageID: string
+          body: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         criteria?: Array<{
           id: string
           description: string
@@ -20596,6 +20614,12 @@ export type KilocodeGoalGetResponses = {
       charges?: Array<RayaGoalCharge>
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
+      completion?: "reply"
+      reply?: {
+        messageID: string
+        body: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       criteria?: Array<{
         id: string
         description: string
@@ -20744,6 +20768,12 @@ export type KilocodeGoalUpdateResponses = {
       source: "steering" | "control"
       intent?: string
       objective: string
+      completion?: "reply"
+      reply?: {
+        messageID: string
+        body: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       criteria?: Array<{
         id: string
         description: string
@@ -20880,6 +20910,12 @@ export type KilocodeGoalUpdateResponses = {
       }>
     }
     objective: string
+    completion?: "reply"
+    reply?: {
+      messageID: string
+      body: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     revision?: string
     intent?: string
     inputs?: Array<string>
@@ -21038,6 +21074,12 @@ export type KilocodeGoalUpdateResponses = {
         source: "steering" | "control"
         intent?: string
         objective: string
+        completion?: "reply"
+        reply?: {
+          messageID: string
+          body: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         criteria?: Array<{
           id: string
           description: string
@@ -21223,6 +21265,12 @@ export type KilocodeGoalUpdateResponses = {
       charges?: Array<RayaGoalCharge>
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
+      completion?: "reply"
+      reply?: {
+        messageID: string
+        body: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       criteria?: Array<{
         id: string
         description: string
@@ -21352,6 +21400,12 @@ export type KilocodeGoalCreateResponses = {
       source: "steering" | "control"
       intent?: string
       objective: string
+      completion?: "reply"
+      reply?: {
+        messageID: string
+        body: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       criteria?: Array<{
         id: string
         description: string
@@ -21488,6 +21542,12 @@ export type KilocodeGoalCreateResponses = {
       }>
     }
     objective: string
+    completion?: "reply"
+    reply?: {
+      messageID: string
+      body: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     revision?: string
     intent?: string
     inputs?: Array<string>
@@ -21646,6 +21706,12 @@ export type KilocodeGoalCreateResponses = {
         source: "steering" | "control"
         intent?: string
         objective: string
+        completion?: "reply"
+        reply?: {
+          messageID: string
+          body: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         criteria?: Array<{
           id: string
           description: string
@@ -21831,6 +21897,12 @@ export type KilocodeGoalCreateResponses = {
       charges?: Array<RayaGoalCharge>
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
+      completion?: "reply"
+      reply?: {
+        messageID: string
+        body: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       criteria?: Array<{
         id: string
         description: string
@@ -23077,6 +23149,7 @@ export type KilocodeRoutineRunResponses = {
     revision?: number
     outcome?: {
       kind: "code" | "notify"
+      reply?: true
       summary: string
       evidence?: Array<string>
       verification?: {
@@ -23193,6 +23266,7 @@ export type KilocodeRoutineRunsResponses = {
     revision?: number
     outcome?: {
       kind: "code" | "notify"
+      reply?: true
       summary: string
       evidence?: Array<string>
       verification?: {
@@ -23267,6 +23341,7 @@ export type KilocodeRoutineHistoriesResponses = {
         revision?: number
         outcome?: {
           kind: "code" | "notify"
+          reply?: true
           summary: string
           evidence?: Array<string>
           verification?: {
@@ -23930,6 +24005,7 @@ export type KilocodeRoutineEventResponses = {
     revision?: number
     outcome?: {
       kind: "code" | "notify"
+      reply?: true
       summary: string
       evidence?: Array<string>
       verification?: {

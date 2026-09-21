@@ -505,6 +505,10 @@ function others(id: string, roster: Agent[]) {
   return roster.filter((item) => item.id !== id)
 }
 
+function identity(item?: Agent) {
+  return item?.id
+}
+
 function heading(editing: boolean, screen: "roster" | "assign") {
   if (editing) return "Edit schedule"
   if (screen === "assign") return "Assign a routine"
@@ -1916,41 +1920,44 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 <p class="routines-empty routines-no-match">No workers match this view.</p>
               </Show>
             </div>
-            <Show when={worker()} keyed>
-              {(item) => (
-                <Inbox
-                  agentID={item.id}
-                  name={item.name}
-                  role={item.role}
-                  objective={item.objective}
-                  schedule={whenLabel(item.schedule)}
-                  access={
-                    item.access === "full"
-                      ? item.tools === undefined || item.tools.includes("*")
-                        ? "All tools"
-                        : "Selected tools"
-                      : item.access === "brief"
-                        ? "Read and report"
-                        : "Needs review"
-                  }
-                  output={item.output?.description?.trim() || "No required output"}
-                  enabled={item.enabled}
-                  canInspect={inspectable(item)}
-                  connection={connection()}
-                  box={boxes()[item.id]}
-                  workspace={item.dir ? folder(item.dir) : undefined}
-                  workers={others(item.id, agents())}
-                  runID={held(item, runs())}
-                  anchor={anchor(boxes()[item.id]?.conversationID)}
-                  onAnchor={(value) => saveAnchor(boxes()[item.id]?.conversationID, value)}
-                  onEdit={() => edit(item)}
-                  onAccess={() => review(item)}
-                  onOutput={() => review(item, "output")}
-                  onInspect={() => inspect(item)}
-                  onToggle={() => toggle(item)}
-                  onBack={leave}
-                />
-              )}
+            <Show when={identity(worker())} keyed>
+              {(id) => {
+                const item = createMemo(() => agents().find((candidate) => candidate.id === id)!)
+                return (
+                  <Inbox
+                    agentID={item().id}
+                    name={item().name}
+                    role={item().role}
+                    objective={item().objective}
+                    schedule={whenLabel(item().schedule)}
+                    access={
+                      item().access === "full"
+                        ? item().tools === undefined || item().tools?.includes("*")
+                          ? "All tools"
+                          : "Selected tools"
+                        : item().access === "brief"
+                          ? "Read and report"
+                          : "Needs review"
+                    }
+                    output={item().output?.description?.trim() || "No required output"}
+                    enabled={item().enabled}
+                    canInspect={inspectable(item())}
+                    connection={connection()}
+                    box={boxes()[item().id]}
+                    workspace={item().dir ? folder(item().dir!) : undefined}
+                    workers={others(item().id, agents())}
+                    runID={held(item(), runs())}
+                    anchor={anchor(boxes()[item().id]?.conversationID)}
+                    onAnchor={(value) => saveAnchor(boxes()[item().id]?.conversationID, value)}
+                    onEdit={() => edit(item())}
+                    onAccess={() => review(item())}
+                    onOutput={() => review(item(), "output")}
+                    onInspect={() => inspect(item())}
+                    onToggle={() => toggle(item())}
+                    onBack={leave}
+                  />
+                )
+              }}
             </Show>
             <Show when={!worker() && editingOrganization()}>
               <OrganizationEditor

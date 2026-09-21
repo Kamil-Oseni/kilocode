@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { Storage } from "@/storage/storage"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 
@@ -117,6 +117,55 @@ test("settlement publishes one durable inbox report and retries without duplicat
       const page = yield* inbox.page(agent.id)
       expect(page.messages.map((item) => item.source)).toEqual(["report:occ1", "need:occ2", "report:occ2"])
       expect(page.messages[2].body).toContain("Approved the travel exception.")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("settlement publishes a conversational reply as a worker message", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const sessions = {
+        create: () => Effect.die("must not create another session"),
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const inbox = RayaTaskInbox.make(database)
+      const agent = yield* runner.tasks.create({
+        name: "Accounts",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        enabled: false,
+        schedule: { kind: "manual" },
+      })
+      const sid = SessionID.make("ses_inbox_reply")
+      const now = Date.now()
+      const replyID = MessageID.ascending()
+      yield* storage.write(["raya", "goal", sid], {
+        objective: "Reply to hey",
+        completion: "reply",
+        reply: { messageID: replyID, body: "Hey — how can I help?", at: now },
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        status: "complete",
+      })
+      yield* runner.tasks.record({ id: "occ_reply", agentID: agent.id, sessionID: sid, at: now, status: "running" })
+
+      yield* runner.settle(sid)
+      const page = yield* inbox.page(agent.id)
+      expect(page.messages).toHaveLength(1)
+      expect(page.messages[0].kind).toBe("worker")
+      expect(page.messages[0].source).toBe("reply:occ_reply")
+      expect(page.messages[0].body).toBe("Hey — how can I help?")
+      expect(page.messages[0].body).not.toContain("Run blocked")
+      yield* runner.settle(sid)
+      expect((yield* inbox.page(agent.id)).messages).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

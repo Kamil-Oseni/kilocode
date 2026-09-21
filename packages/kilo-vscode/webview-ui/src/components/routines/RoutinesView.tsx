@@ -528,6 +528,16 @@ function tone(on: boolean) {
   return on ? "primary" : "ghost"
 }
 
+function showing(screen: "roster" | "assign", agent: boolean, organization: boolean, editing: boolean) {
+  return screen === "roster" && (agent || organization || editing)
+}
+
+function retreat(editing: boolean, agent: boolean, edit: () => void, worker: () => void, organization: () => void) {
+  if (editing) return edit()
+  if (agent) return worker()
+  return organization()
+}
+
 function caption(command: ReturnType<typeof action>, item: Agent) {
   if (command === "review") return "Needs review"
   if (command === "running") return item.execution?.state === "starting" ? "Starting" : "Running"
@@ -1111,6 +1121,19 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       const target = button ?? title
       target?.focus()
     })
+  }
+
+  const back = () => {
+    retreat(
+      !!editingOrganization(),
+      !!chosen(),
+      () => {
+        setEditingOrganization()
+        setOrganizationNotice("")
+      },
+      leave,
+      leaveOrganization,
+    )
   }
 
   const dismiss = () => {
@@ -1757,54 +1780,26 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     })
   })
   const worker = createMemo(() => agents().find((item) => item.id === chosen()))
+  const detail = createMemo(() => showing(screen(), !!chosen(), !!currentOrganization(), !!editingOrganization()))
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
 
   return (
-    <div ref={root} class="routines-view history-view">
-      <div class="history-view-header routines-main-header">
+    <div ref={root} class="routines-view history-view" data-detail={flag(detail())}>
+      <div class="history-view-header routines-main-header" data-detail={flag(detail())}>
         <Show when={props.onBack}>
-          <Button variant="ghost" size="small" icon="arrow-left" onClick={props.onBack}>
+          <Button class="routines-exit-back" variant="ghost" size="small" icon="arrow-left" onClick={props.onBack}>
             {language.t("common.goBack")}
           </Button>
         </Show>
-        <Show when={screen() === "roster" && !empty() && manage()}>
-          <Checkbox hideLabel checked={allOn()} indeterminate={someOn()} onChange={markAll}>
-            Select all
-          </Checkbox>
+        <Show when={detail()}>
+          <Button class="routines-detail-back" variant="ghost" size="small" icon="arrow-left" onClick={back}>
+            Routines
+          </Button>
         </Show>
         <h2 class="routines-title" tabIndex={-1}>
           {heading(!!editing(), screen())}
         </h2>
-        <Show when={screen() === "roster"}>
-          <div class="routines-header-actions">
-            <Show when={manage()}>
-              <Show when={selected().length > 0}>
-                <Button size="small" onClick={() => confirm(selected())}>
-                  Remove {selected().length}
-                </Button>
-              </Show>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={() => {
-                  setManage(false)
-                  setPicked({})
-                }}
-              >
-                Done
-              </Button>
-            </Show>
-            <Show when={!manage()}>
-              <Button variant="ghost" size="small" onClick={() => setManage(true)}>
-                Manage
-              </Button>
-              <Button size="small" onClick={start}>
-                Assign
-              </Button>
-            </Show>
-          </div>
-        </Show>
         <Show when={screen() === "assign"}>
           <Button class="routines-header-action" variant="ghost" size="small" disabled={saving()} onClick={cancel}>
             Done
@@ -1843,6 +1838,42 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             <div class="routines-people">
               <Show when={!vacant()}>
                 <div class="routines-toolbar">
+                  <div class="routines-roster-actions">
+                    <Show
+                      when={manage()}
+                      fallback={
+                        <>
+                          <strong>Workers</strong>
+                          <Button variant="ghost" size="small" onClick={() => setManage(true)}>
+                            Manage
+                          </Button>
+                          <Button size="small" icon="plus" onClick={start}>
+                            New
+                          </Button>
+                        </>
+                      }
+                    >
+                      <Checkbox hideLabel checked={allOn()} indeterminate={someOn()} onChange={markAll}>
+                        Select all
+                      </Checkbox>
+                      <span class="routines-selection-count">{selected().length || "Select workers"}</span>
+                      <Show when={selected().length > 0}>
+                        <Button size="small" onClick={() => confirm(selected())}>
+                          Remove
+                        </Button>
+                      </Show>
+                      <Button
+                        variant="ghost"
+                        size="small"
+                        onClick={() => {
+                          setManage(false)
+                          setPicked({})
+                        }}
+                      >
+                        Done
+                      </Button>
+                    </Show>
+                  </div>
                   <Show when={organizations().length > 0}>
                     <nav class="routines-organizations" aria-label="Organizations">
                       <button
@@ -2009,13 +2040,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   aria-labelledby={`organization-${item.id}`}
                 >
                   <div class="routines-thread-head">
-                    <Button
-                      variant="ghost"
-                      size="small"
-                      icon="arrow-left"
-                      aria-label={`Back to organizations from ${item.name}`}
-                      onClick={leaveOrganization}
-                    />
                     <div class="routines-thread-identity">
                       <h3 id={`organization-${item.id}`} tabIndex={-1}>
                         {item.name}

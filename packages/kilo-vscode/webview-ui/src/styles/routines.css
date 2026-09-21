@@ -2015,6 +2015,10 @@ html[data-theme="kilo-vscode"] .routines-main-header .routines-title {
   letter-spacing: -0.01em;
 }
 
+html[data-theme="kilo-vscode"] .routines-detail-back {
+  display: none;
+}
+
 html[data-theme="kilo-vscode"] .routines-view [data-component="button"] {
   border-radius: var(--raya-radius-md, 6px);
   transition:
@@ -2050,6 +2054,34 @@ html[data-theme="kilo-vscode"] .routines-toolbar {
   padding: var(--raya-space-12);
   border-bottom: var(--raya-hairline, 1px) solid
     color-mix(in srgb, var(--border-base, var(--vscode-widget-border)) 55%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-actions {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  gap: var(--raya-space-4);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-actions > strong,
+html[data-theme="kilo-vscode"] .routines-selection-count {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: var(--kilo-font-size-12);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-theme="kilo-vscode"] .routines-selection-count {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-weight: 400;
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-actions [data-component="button"] {
+  flex: 0 0 auto;
 }
 
 html[data-theme="kilo-vscode"] .routines-organizations {
@@ -2218,6 +2250,22 @@ html[data-theme="kilo-vscode"] .routines-thread-identity > span {
   font-size: var(--kilo-font-size-11);
 }
 
+html[data-theme="kilo-vscode"] .routines-thread-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-2);
+  flex: 0 0 auto;
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-actions [data-component="button"] {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+html[data-theme="kilo-vscode"] .routines-thread-actions [data-component="button"]:hover,
+html[data-theme="kilo-vscode"] .routines-thread-actions [data-component="button"][aria-pressed="true"] {
+  color: var(--text-base, var(--vscode-foreground));
+}
+
 html[data-theme="kilo-vscode"] .routines-search:not(.routines-roster-search) {
   padding: var(--raya-space-8) var(--raya-space-16);
   border-bottom: 0;
@@ -2315,6 +2363,15 @@ html[data-theme="kilo-vscode"] .routines-organization-overview h3 {
 }
 
 @media (max-width: 42rem) {
+  html[data-theme="kilo-vscode"] .routines-main-header[data-detail="true"] .routines-exit-back,
+  html[data-theme="kilo-vscode"] .routines-main-header[data-detail="true"] .routines-title {
+    display: none;
+  }
+
+  html[data-theme="kilo-vscode"] .routines-main-header[data-detail="true"] .routines-detail-back {
+    display: inline-flex;
+  }
+
   html[data-theme="kilo-vscode"] .routines-inbox {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2325,6 +2382,13 @@ html[data-theme="kilo-vscode"] .routines-organization-overview h3 {
 
   html[data-theme="kilo-vscode"] .routines-thread-head {
     padding-inline: var(--raya-space-12);
+  }
+
+  html[data-theme="kilo-vscode"] .routines-thread-identity .routines-meta {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   html[data-theme="kilo-vscode"] .routines-thread-avatar {

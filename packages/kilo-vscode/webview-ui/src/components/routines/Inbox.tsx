@@ -1251,11 +1251,6 @@ export const Inbox: Component<{
       }}
     >
       <header class="routines-thread-head">
-        <Show when={props.onBack}>
-          <Button variant="ghost" size="small" aria-label={`Back to ${props.name}`} onClick={props.onBack}>
-            Back
-          </Button>
-        </Show>
         <span class="routines-thread-avatar" aria-hidden="true">
           {initials(props.name)}
         </span>
@@ -1275,30 +1270,32 @@ export const Inbox: Component<{
             </Show>
           </span>
         </div>
-        <Show when={!info() && props.workers && props.workers.length > 0}>
+        <div class="routines-thread-actions">
+          <Show when={!info() && props.workers && props.workers.length > 0}>
+            <Button
+              variant="ghost"
+              size="small"
+              disabled={!connected()}
+              aria-expanded={passing()}
+              onClick={() => setPassing((value) => !value)}
+            >
+              Delegate
+            </Button>
+          </Show>
           <Button
+            ref={infoRef}
             variant="ghost"
             size="small"
-            disabled={!connected()}
-            aria-expanded={passing()}
-            onClick={() => setPassing((value) => !value)}
+            aria-expanded={info()}
+            aria-pressed={info()}
+            onClick={() => {
+              if (!info()) setInfoReady(true)
+              setInfo((value) => !value)
+            }}
           >
-            Delegate
+            Details
           </Button>
-        </Show>
-        <Button
-          ref={infoRef}
-          variant="ghost"
-          size="small"
-          aria-expanded={info()}
-          aria-pressed={info()}
-          onClick={() => {
-            if (!info()) setInfoReady(true)
-            setInfo((value) => !value)
-          }}
-        >
-          Info
-        </Button>
+        </div>
       </header>
       <div class="routines-conversation" hidden={info()}>
         <ConversationSearch

@@ -974,7 +974,7 @@ try {
         },
       ],
     })
-    button("Assign").click()
+    button("New").click()
     button("Inbox starter").click()
     assert.match(root.textContent, /Review this routine/)
     const advanced = root.querySelector("details.routines-advanced")

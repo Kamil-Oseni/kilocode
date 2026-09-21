@@ -879,7 +879,7 @@ export function routineManagementTools(input: {
     "delegate_work",
     Effect.succeed({
       description:
-        "Assign one bounded follow-on request to an existing worker through the current organization. Include artifacts when the recipient must use exact files created or changed in this worker run; Raya verifies their current bytes and saves their SHA-256 identities. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
+        "Assign one bounded follow-on request to an existing worker through the current organization. One work tree supports up to eight sequential requests and 64 saved requests total. Include artifacts when the recipient must use exact files created or changed in this worker run; Raya verifies their current bytes and saves their SHA-256 identities. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
       parameters: DelegateWork,
       execute: (params: typeof DelegateWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {

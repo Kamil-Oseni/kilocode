@@ -350,6 +350,86 @@ test("delegation persists verified artifact identity and rejects a changed repla
   )
 })
 
+test("delegation supports a bounded company chain and rejects returning to an earlier worker", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const workers = ["chief", "research", "brief", "design", "frontend", "sales", "success", "finance"].map((id) =>
+        agent(id, "generalist"),
+      )
+      const chain: string[] = []
+      for (let index = 0; index < workers.length - 1; index++) {
+        const sender = workers[index]!
+        const recipient = workers[index + 1]!
+        const admitted = yield* store.admit(
+          request(`company_stage_${index}`, sender.id, recipient.id, {
+            ...(chain.at(-1) ? { parentID: chain.at(-1) } : {}),
+          }),
+          sender,
+          recipient,
+        )
+        expect(admitted.record.depth).toBe(index + 1)
+        chain.push(admitted.record.id)
+      }
+      expect(
+        Exit.isFailure(
+          yield* store
+            .admit(
+              request("company_cycle", workers.at(-1)!.id, workers[0]!.id, { parentID: chain.at(-1) }),
+              workers.at(-1)!,
+              workers[0]!,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(
+        Exit.isFailure(
+          yield* store
+            .admit(
+              request("company_wrong_sender", workers[0]!.id, "outside", { parentID: chain.at(-1) }),
+              workers[0]!,
+              agent("outside", "generalist"),
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("one work tree cannot grow beyond its durable request limit", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const worker = agent("worker", "generalist")
+      const helper = agent("helper", "generalist")
+      const root = yield* store.admit(request("tree_root", chief.id, worker.id), chief, worker)
+      for (let index = 1; index < 63; index++) {
+        const child = yield* store.admit(
+          request(`tree_child_${index}`, worker.id, helper.id, { parentID: root.record.id }),
+          worker,
+          helper,
+        )
+        yield* store.finish(child.record.id, "completed", helper, `Finished bounded request ${index}.`)
+      }
+      const raced = yield* Effect.all(
+        [
+          store
+            .admit(request("tree_boundary_a", worker.id, helper.id, { parentID: root.record.id }), worker, helper)
+            .pipe(Effect.exit),
+          store
+            .admit(request("tree_boundary_b", worker.id, helper.id, { parentID: root.record.id }), worker, helper)
+            .pipe(Effect.exit),
+        ],
+        { concurrency: "unbounded" },
+      )
+      expect(raced.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(raced.filter(Exit.isFailure)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("delegation admits once, refuses loops, and queues without duplicating a busy worker", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

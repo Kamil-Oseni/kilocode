@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Effect, Option, Schema } from "effect"
@@ -16,8 +16,9 @@ const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
 const State = Schema.Literals(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
 const live = ["queued", "accepted", "running", "needs_input"] as const
-const DEPTH = 3
+const DEPTH = 8
 const FAN = 4
+const TREE = 64
 
 export const Artifact = Schema.Struct({
   path: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4096)),
@@ -456,6 +457,8 @@ export namespace RayaTaskDelegation {
         })
       const lineage = yield* ancestors(value.parentID)
       const parent = lineage[0]
+      if (parent && value.senderID !== parent.recipientID)
+        return yield* new Invalid({ message: "Only the receiving worker can delegate follow-on work." })
       if (parent?.organizationID && value.organizationID !== parent.organizationID)
         return yield* new Invalid({
           message: "A delegated follow-on must stay in its parent organization's authority graph.",
@@ -507,6 +510,35 @@ export namespace RayaTaskDelegation {
         .transaction(
           (tx) =>
             Effect.gen(function* () {
+              if (value.parentID) {
+                const size = yield* tx
+                  .get<{ count: number }>(
+                    sql`
+                    WITH RECURSIVE ancestors(id, parent_id) AS (
+                      SELECT id, parent_id FROM raya_routine_delegation WHERE id = ${value.parentID}
+                      UNION
+                      SELECT parent.id, parent.parent_id
+                      FROM raya_routine_delegation AS parent
+                      JOIN ancestors AS child ON child.parent_id = parent.id
+                    ), root(id) AS (
+                      SELECT id FROM ancestors WHERE parent_id IS NULL LIMIT 1
+                    ),
+                    tree(id) AS (
+                      SELECT id FROM root
+                      UNION
+                      SELECT child.id
+                      FROM raya_routine_delegation AS child
+                      JOIN tree ON child.parent_id = tree.id
+                    )
+                    SELECT count(*) AS count FROM tree
+                  `,
+                  )
+                  .pipe(Effect.orDie)
+                if ((size?.count ?? 0) >= TREE)
+                  return yield* new Invalid({
+                    message: `This work tree already contains the ${TREE}-request safety limit. Start a separate top-level request.`,
+                  })
+              }
               const committed = (rows: readonly (typeof Delegation.$inferSelect)[]): Effect.Effect<number> =>
                 Effect.gen(function* () {
                   let total = 0

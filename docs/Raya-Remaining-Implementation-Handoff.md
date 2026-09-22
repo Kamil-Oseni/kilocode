@@ -1,11 +1,17 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `b39ee559b5` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+48a44f4d24.kamil-oseni.1790108983160` installs grounded window switching and atomic mixed-DPI pointer gestures. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `3698246d87` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+48a44f4d24.kamil-oseni.1790108983160` installs grounded window switching and atomic mixed-DPI pointer gestures. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 16:40 America/Toronto - preserve atomic two-axis scrolling
+
+Preserve product commit `3698246d87`. A desktop scroll must remain one native batch containing the nonzero vertical and horizontal wheel events in order. Do not restore separate `Mouse` calls: they permit unrelated input to interleave between axes. Full native acceptance is confirmed; any partial count becomes unknown and is not replayed.
+
+Evidence passes **33 focused tests / 127 assertions**, extension typecheck, ESLint, Knip, targeted formatting and a real embedded-C# compilation/enumeration smoke. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `48a44f4d24`; include this source in the next coherent capped snapshot. Live two-axis scrolling remains installed-host acceptance.
 
 ## ChatGPT 2026-09-22 16:31 America/Toronto - atomic pointer gesture installation receipt
 

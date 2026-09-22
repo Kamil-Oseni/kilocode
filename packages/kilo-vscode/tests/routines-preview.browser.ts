@@ -651,27 +651,35 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("heading", { name: "Team and reporting" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Team" })).toBeVisible()
+  await expect(page.getByLabel("Operating policy")).toBeHidden()
+  await expect(page.getByLabel("Shared model budget ($)")).toBeHidden()
+  await page.getByText("Policy and spending", { exact: true }).click()
   await expect(page.getByLabel("Operating policy")).toHaveValue(
     "Do not contact a prospect until the proposed website has passed design and legal review.",
   )
   await expect(page.getByLabel("Operating policy")).toHaveAccessibleDescription(
-    "Applied to delegated work in this organization. It cannot grant tools, folders, spending access, or delegation authority.",
+    "Applies to this team's work. It cannot grant tools, folders, spending access, or delegation authority.",
   )
-  await expect(page.getByLabel("Organization model budget ($)")).toHaveValue("100")
-  await expect(page.getByLabel("Organization model budget ($)")).toHaveAccessibleDescription(
-    "Caps committed model cost across all work in this organization. Leave blank for no limit.",
+  await expect(page.getByLabel("Shared model budget ($)")).toHaveValue("100")
+  await expect(page.getByLabel("Shared model budget ($)")).toHaveAccessibleDescription(
+    "Caps committed model cost across this team. Leave blank for no limit.",
   )
-  const counsel = page.locator(".routines-organization-edit-members li").filter({ hasText: "Counsel" })
+  const counsel = page.locator(".routines-organization-edit-members > li").filter({
+    has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
+  })
+  await counsel.getByText("Worker settings", { exact: true }).click()
   const authority = counsel.getByRole("checkbox", { name: "Can create workers" }).first()
   await expect(authority).toBeChecked()
   await counsel.getByText("Can create workers", { exact: true }).first().click()
   await expect(authority).not.toBeChecked()
   await expect(counsel.getByText("Changed by you", { exact: false })).toBeVisible()
-  await expect(
-    page.getByText("Reporting lines organize the team. They don’t grant permission to delegate work."),
-  ).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeHidden()
+  await page.getByText("Who can assign work", { exact: true }).click()
   await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeVisible()
+  await expect(
+    page.getByText("Choose each direction explicitly. A checked worker can assign work to that recipient."),
+  ).toBeVisible()
   const lead = page.getByRole("group", { name: "Counsel can assign work to" })
   await expect(lead.getByRole("checkbox", { name: "Books" })).toBeChecked()
   await lead.getByText("Books", { exact: true }).click()
@@ -680,7 +688,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page
     .getByLabel("Operating policy")
     .fill("Only contact prospects after design review, legal review, and an approved outreach brief.")
-  await page.getByLabel("Organization model budget ($)").fill("250")
+  await page.getByLabel("Shared model budget ($)").fill("250")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
   await page.getByText("Organization details", { exact: true }).click()
@@ -691,6 +699,8 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByText(/\$249\.58 available/)).toBeVisible()
 
   await page.getByRole("button", { name: "Settings" }).click()
+  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeHidden()
+  await page.getByText("Archive organization", { exact: true }).click()
   await page.getByRole("button", { name: "Archive", exact: true }).click()
   await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
     "Scheduled workers keep their current schedules",

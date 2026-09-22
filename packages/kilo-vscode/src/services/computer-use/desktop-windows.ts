@@ -56,6 +56,7 @@ public static class RayaDesktopNative {
   }
 
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr state);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr handle);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr handle);
@@ -74,6 +75,12 @@ public static class RayaDesktopNative {
   [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, Input[] inputs, int size);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
+
+  public static void EnableDpiAwareness() {
+    var previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
+    if (previous == IntPtr.Zero)
+      throw new InvalidOperationException("Windows refused per-monitor DPI awareness; desktop coordinates are unsafe");
+  }
 
   private static WindowInfo Describe(IntPtr handle) {
     if (handle == IntPtr.Zero || !IsWindow(handle) || !IsWindowVisible(handle)) return null;
@@ -232,6 +239,7 @@ $ProgressPreference = "SilentlyContinue"
 Add-Type -TypeDefinition @'
 ${native}
 '@
+[RayaDesktopNative]::EnableDpiAwareness()
 
 function Get-RayaWindow {
   $handle = [RayaDesktopNative]::GetForegroundWindow()

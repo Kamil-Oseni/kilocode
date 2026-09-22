@@ -40,7 +40,11 @@ describe("Windows native desktop driver", () => {
       location: "pid:5;title:Editor;bounds:0,0,1280,720",
     })
     expect(test.scripts[0]).toContain("CopyFromScreen")
+    expect(test.scripts[0]).toContain("SetThreadDpiAwarenessContext(new IntPtr(-4))")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
+    expect(test.scripts[0]).toContain("desktop coordinates are unsafe")
     expect(test.scripts[1]).not.toContain("CopyFromScreen")
+    expect(test.scripts[1]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
   })
 
   it("lists visible windows and focuses an exact encoded identity", async () => {
@@ -71,9 +75,11 @@ describe("Windows native desktop driver", () => {
       expect.objectContaining({ windowID: "0x123", title: "Editor", processID: 5, foreground: true }),
     ])
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::Windows()")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[1]).not.toContain(windows[0].location)
     expect(test.scripts[1]).toContain(Buffer.from(JSON.stringify(windows[0]), "utf8").toString("base64"))
     expect(test.scripts[1]).toContain("[RayaDesktopNative]::Focus")
+    expect(test.scripts[1]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[1]).toContain("AttachThreadInput")
     expect(test.scripts[1]).toContain("attempt < 10")
   })
@@ -87,6 +93,7 @@ describe("Windows native desktop driver", () => {
     await driver.perform(action, target)
 
     expect(test.scripts[0]).not.toContain(text)
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[0]).toContain(Buffer.from(JSON.stringify({ action, target }), "utf8").toString("base64"))
     driver.cancel()
     expect(test.cancelled()).toBe(1)

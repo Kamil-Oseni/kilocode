@@ -4,4 +4,4 @@
 "raya": minor
 ---
 
-Let Raya list visible Windows application windows and switch to one exact, freshly observed target before continuing grounded Computer Use.
+Let Raya list visible Windows application windows, switch to one exact freshly observed target, and keep captured pixels and native input in one physical coordinate space across mixed-DPI monitors.

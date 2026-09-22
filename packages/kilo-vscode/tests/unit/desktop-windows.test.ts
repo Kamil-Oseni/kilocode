@@ -99,6 +99,39 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse($down, 0)")
   })
 
+  it("batches complete key chords and recovers every release after partial dispatch", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner)
+    await driver.perform(
+      {
+        operation: "key",
+        windowID: "0x123",
+        observationID: "obs-key",
+        key: "Enter",
+        modifiers: ["control", "shift"],
+      },
+      { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
+    )
+
+    expect(test.scripts[0]).toContain("new Input[(modifiers.Length * 2) + 2]")
+    expect(test.scripts[0]).toContain("Release(key)")
+    expect(test.scripts[0]).toContain("Release(modifiers[position])")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Chord([uint16]$key, [uint16[]]$held)")
+    expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Key($key, $false)")
+  })
+
+  it("attempts Unicode key-up recovery after partial text dispatch", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner)
+    await driver.perform(
+      { operation: "type", windowID: "0x123", observationID: "obs-type", text: "A" },
+      { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
+    )
+
+    expect(test.scripts[0]).toContain("SendInput(1, new[] { up }")
+    expect(test.scripts[0]).toContain("Windows refused complete desktop text input")
+  })
+
   it("rejects malformed native output", async () => {
     const test = harness([JSON.stringify({ windowID: "0x123" })])
     const driver = new WindowsDesktopDriver(test.runner)

@@ -78,12 +78,41 @@ public static class RayaDesktopNative {
     throw new InvalidOperationException("Windows refused complete desktop click input");
   }
 
-  public static void Key(ushort key, bool up) {
+  public static void Chord(ushort key, ushort[] modifiers) {
+    var inputs = new Input[(modifiers.Length * 2) + 2];
+    var index = 0;
+    foreach (var modifier in modifiers) {
+      inputs[index++] = new Input {
+        Type = 1,
+        Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = modifier } }
+      };
+    }
+    inputs[index++] = new Input {
+      Type = 1,
+      Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = key } }
+    };
+    inputs[index++] = new Input {
+      Type = 1,
+      Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = key, Flags = 2u } }
+    };
+    for (var position = modifiers.Length - 1; position >= 0; position--) {
+      inputs[index++] = new Input {
+        Type = 1,
+        Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = modifiers[position], Flags = 2u } }
+      };
+    }
+    if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) == (uint)inputs.Length) return;
+    Release(key);
+    for (var position = modifiers.Length - 1; position >= 0; position--) Release(modifiers[position]);
+    throw new InvalidOperationException("Windows refused complete desktop key input");
+  }
+
+  private static bool Release(ushort key) {
     var input = new Input {
       Type = 1,
-      Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = key, Flags = up ? 2u : 0u } }
+      Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = key, Flags = 2u } }
     };
-    if (SendInput(1, new[] { input }, Marshal.SizeOf(typeof(Input))) != 1) throw new InvalidOperationException("Windows refused desktop keyboard input");
+    return SendInput(1, new[] { input }, Marshal.SizeOf(typeof(Input))) == 1;
   }
 
   public static void Text(string text) {
@@ -94,7 +123,9 @@ public static class RayaDesktopNative {
       };
       var up = down;
       up.Value.Keyboard.Flags = 6u;
-      if (SendInput(2, new[] { down, up }, Marshal.SizeOf(typeof(Input))) != 2) throw new InvalidOperationException("Windows refused desktop text input");
+      if (SendInput(2, new[] { down, up }, Marshal.SizeOf(typeof(Input))) == 2) continue;
+      SendInput(1, new[] { up }, Marshal.SizeOf(typeof(Input)));
+      throw new InvalidOperationException("Windows refused complete desktop text input");
     }
   }
 }
@@ -221,7 +252,6 @@ switch ($action.operation) {
     foreach ($modifier in @($action.modifiers)) {
       $code = $mods[[string]$modifier]
       if (-not $code) { throw "Unsupported desktop modifier" }
-      [RayaDesktopNative]::Key($code, $false)
       $held += $code
     }
     $name = [string]$action.key
@@ -229,13 +259,7 @@ switch ($action.operation) {
     if (-not $key -and $name.Length -eq 1) { $key = [int][char]$name.ToUpperInvariant() }
     if (-not $key -and $name -match '^F([1-9]|1[0-2])$') { $key = 0x6F + [int]$Matches[1] }
     if (-not $key) { throw "Unsupported desktop key" }
-    try {
-      [RayaDesktopNative]::Key($key, $false)
-      [RayaDesktopNative]::Key($key, $true)
-    } finally {
-      [array]::Reverse($held)
-      foreach ($code in $held) { [RayaDesktopNative]::Key($code, $true) }
-    }
+    [RayaDesktopNative]::Chord([uint16]$key, [uint16[]]$held)
   }
 }
 `

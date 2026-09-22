@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `ba8918f646` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+40ab987f64.kamil-oseni.1790113621521` installs grounded window switching, visible physical capture bounds, covered-point refusal, held-manual-input refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `ba8918f646` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+38d8084f5b.kamil-oseni.1790116103775` installs grounded window switching, bounded whole-window capture, visible physical capture bounds, covered-point refusal, held-manual-input refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-22 18:32 America/Toronto - bounded desktop capture installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+38d8084f5b.kamil-oseni.1790116103775` is installed without a forced reload. Retained VSIX `raya.a718327fe968d2166ffb257dac8c60cb20d72799b2e290c88853ab70c3d25ac9.vsix` is **522,230,423 bytes**, SHA-256 `A718327FE968D2166FFB257DAC8C60CB20D72799B2E290C88853AB70C3D25AC9`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. SDK output was unchanged, the verified CLI was reused, and the authorized capped workflow passed extension-host and webview typechecks, lint and production bundling after the first sandboxed bundle was denied repository-ancestry access. Cleanup removed one old vault package, staged package and extension; C: has **127,058,501,632 bytes free**. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains.
 
 ## ChatGPT 2026-09-22 18:22 America/Toronto - preserve bounded whole-window desktop capture
 
@@ -12,7 +16,7 @@ Preserve product commit `ba8918f646`. Oversized visible windows must be proporti
 
 The 15,000,000-byte encoder bound is aligned to the protocol's 20,000,000-character base64 limit. Prefer validated PNG, fall back to validated quality-88 JPEG inside the same bound, use the stream's existing buffer instead of `ToArray`, and keep the 21 MiB child-process output ceiling. The native driver and shared session both reject invalid dimensions, pixels, MIME or payload size before an observation is issued.
 
-Evidence passes **36 focused tests / 166 assertions**, extension typecheck, ESLint, Knip, formatting, the marker guard, embedded-C# compilation, exact bound refusal and a decoded fallback probe. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is not yet in the installed snapshot; include it in the next coherent capped snapshot. Live scaled capture remains installed-host acceptance because the noninteractive command desktop has no foreground window and refuses screen stretching.
+Evidence passes **36 focused tests / 166 assertions**, extension typecheck, ESLint, Knip, formatting, the marker guard, embedded-C# compilation, exact bound refusal and a decoded fallback probe. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is installed in the receipt above. Live scaled capture remains installed-host acceptance because the noninteractive command desktop has no foreground window and refuses screen stretching.
 
 ## ChatGPT 2026-09-22 17:51 America/Toronto - held-input refusal installation receipt
 

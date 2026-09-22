@@ -1,5 +1,5 @@
 // raya_change - model-facing native desktop tool tests
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { DragRequest, Key, ScrollRequest, WatchRequest } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
@@ -17,10 +17,35 @@ import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Agent } from "@/agent/agent"
+import * as KiloAgent from "@/kilocode/agent"
+import { Permission } from "@/permission"
 import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(AppNodeBuilder.build(Agent.node), AppNodeBuilder.build(Truncate.node)))
+
+test("requires one-time approval for every native desktop capability in VS Code", () => {
+  const client = process.env.KILO_CLIENT
+  process.env.KILO_CLIENT = "vscode"
+  try {
+    const rules = KiloAgent.prepare({}).defaultsPatch
+    for (const permission of [
+      "desktop_observe",
+      "desktop_watch",
+      "desktop_move",
+      "desktop_drag",
+      "desktop_click",
+      "desktop_type",
+      "desktop_key",
+      "desktop_scroll",
+    ]) {
+      expect(Permission.evaluate(permission, "*", rules).action).toBe("ask")
+    }
+  } finally {
+    if (client === undefined) delete process.env.KILO_CLIENT
+    else process.env.KILO_CLIENT = client
+  }
+})
 
 it.instance(
   "desktop click forwards exact grounding and asks for the exact point",

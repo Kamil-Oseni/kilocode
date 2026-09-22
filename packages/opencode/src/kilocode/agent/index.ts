@@ -464,7 +464,16 @@ export function prepare(cfg: Config.Info): KiloData {
           browser_screenshot: "allow" as const,
           browser_evaluate: "allow" as const,
           browser_smoke_test: "allow" as const, // raya_change - Milestone G authenticated smoke tests
-          desktop_observe: "allow" as const,
+          // raya_change start - native desktop access is always scoped to one reviewed request
+          desktop_observe: "ask" as const,
+          desktop_watch: "ask" as const,
+          desktop_move: "ask" as const,
+          desktop_drag: "ask" as const,
+          desktop_click: "ask" as const,
+          desktop_type: "ask" as const,
+          desktop_key: "ask" as const,
+          desktop_scroll: "ask" as const,
+          // raya_change end
           create_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
           update_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
         }
@@ -905,7 +914,14 @@ export function patchAgents(
           browser_screenshot: "allow",
           browser_evaluate: "allow",
           browser_smoke_test: "allow",
-          desktop_observe: "allow",
+          desktop_observe: "ask",
+          desktop_watch: "ask",
+          desktop_move: "ask",
+          desktop_drag: "ask",
+          desktop_click: "ask",
+          desktop_type: "ask",
+          desktop_key: "ask",
+          desktop_scroll: "ask",
           create_canvas: "allow",
           update_canvas: "allow",
         }),

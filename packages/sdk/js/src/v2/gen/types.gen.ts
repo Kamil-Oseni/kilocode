@@ -1102,6 +1102,42 @@ export type DesktopRequest =
       observationID: ComputerUseObservationId
       text: string
     }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "key"
+      windowID: string
+      observationID: ComputerUseObservationId
+      key:
+        | "Backspace"
+        | "Tab"
+        | "Enter"
+        | "Escape"
+        | "Space"
+        | "PageUp"
+        | "PageDown"
+        | "End"
+        | "Home"
+        | "ArrowLeft"
+        | "ArrowUp"
+        | "ArrowRight"
+        | "ArrowDown"
+        | "Delete"
+        | "F1"
+        | "F2"
+        | "F3"
+        | "F4"
+        | "F5"
+        | "F6"
+        | "F7"
+        | "F8"
+        | "F9"
+        | "F10"
+        | "F11"
+        | "F12"
+        | string
+      modifiers: Array<"alt" | "control" | "meta" | "shift">
+    }
 
 export type CanvasRequestId = string
 
@@ -5686,6 +5722,10 @@ export type DesktopResult =
     }
   | {
       operation: "type"
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "key"
       receipt: ComputerUseReceipt
     }
 

@@ -19,6 +19,7 @@ export interface DesktopConnection {
 }
 
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure }
+type ActionRequest = Exclude<DesktopRequest, { operation: "observe" }>
 
 export class DesktopBridge {
   private readonly active = new Map<string, AbortController>()
@@ -109,56 +110,9 @@ export class DesktopBridge {
     const startedAt = Date.now()
     this.active.set(request.id, controller)
     try {
-      if (request.operation === "click") {
-        await this.session.execute({
-          operation: "pointer",
-          action: request.action,
-          windowID: request.windowID,
-          observationID: request.observationID,
-          x: request.x,
-          y: request.y,
-          button: request.button,
-        })
+      if (request.operation !== "observe") {
+        const result = await this.interact(request, startedAt)
         if (controller.signal.aborted) return
-        const result: DesktopResult = {
-          operation: "click",
-          receipt: {
-            version: 1,
-            requestID: request.id,
-            startedAt,
-            finishedAt: Date.now(),
-            effect: "interact",
-            outcome: "confirmed",
-            target: { surface: "desktop", windowID: request.windowID },
-            observationID: request.observationID,
-          },
-        }
-        receipt.result = result
-        receipt.failure = undefined
-        await this.deliver(request.id, directory, receipt)
-        return
-      }
-      if (request.operation === "type") {
-        await this.session.execute({
-          operation: "type",
-          windowID: request.windowID,
-          observationID: request.observationID,
-          text: request.text,
-        })
-        if (controller.signal.aborted) return
-        const result: DesktopResult = {
-          operation: "type",
-          receipt: {
-            version: 1,
-            requestID: request.id,
-            startedAt,
-            finishedAt: Date.now(),
-            effect: "interact",
-            outcome: "confirmed",
-            target: { surface: "desktop", windowID: request.windowID },
-            observationID: request.observationID,
-          },
-        }
         receipt.result = result
         receipt.failure = undefined
         await this.deliver(request.id, directory, receipt)
@@ -211,6 +165,48 @@ export class DesktopBridge {
     } finally {
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
     }
+  }
+
+  private async interact(request: ActionRequest, startedAt: number): Promise<DesktopResult> {
+    const receipt = {
+      version: 1 as const,
+      requestID: request.id,
+      startedAt,
+      finishedAt: 0,
+      effect: "interact" as const,
+      outcome: "confirmed" as const,
+      target: { surface: "desktop" as const, windowID: request.windowID },
+      observationID: request.observationID,
+    }
+    if (request.operation === "click") {
+      await this.session.execute({
+        operation: "pointer",
+        action: request.action,
+        windowID: request.windowID,
+        observationID: request.observationID,
+        x: request.x,
+        y: request.y,
+        button: request.button,
+      })
+      return { operation: "click", receipt: { ...receipt, finishedAt: Date.now() } }
+    }
+    if (request.operation === "type") {
+      await this.session.execute({
+        operation: "type",
+        windowID: request.windowID,
+        observationID: request.observationID,
+        text: request.text,
+      })
+      return { operation: "type", receipt: { ...receipt, finishedAt: Date.now() } }
+    }
+    await this.session.execute({
+      operation: "key",
+      windowID: request.windowID,
+      observationID: request.observationID,
+      key: request.key,
+      modifiers: request.modifiers,
+    })
+    return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
   }
 
   private async deliver(requestID: string, directory: string, receipt: Receipt): Promise<void> {

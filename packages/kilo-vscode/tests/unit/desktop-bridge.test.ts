@@ -167,4 +167,34 @@ describe("desktop observation bridge", () => {
     })
     test.bridge.dispose()
   })
+
+  it("presses one bounded key chord against the fresh foreground observation", async () => {
+    const test = setup()
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const input: DesktopRequest = {
+      id: "desktop_key_1",
+      sessionID: "ses_desktop",
+      operation: "key",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      key: "Enter",
+      modifiers: ["control", "shift"],
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: input } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([
+      expect.objectContaining({ operation: "key", key: "Enter", modifiers: ["control", "shift"] }),
+    ])
+    expect(test.replies[1]).toMatchObject({
+      requestID: input.id,
+      result: { operation: "key", receipt: { effect: "interact", outcome: "confirmed" } },
+    })
+    test.bridge.dispose()
+  })
 })

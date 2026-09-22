@@ -67515,6 +67515,79 @@
             },
             "required": ["id", "sessionID", "operation", "windowID", "observationID", "text"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["key"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "key": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Backspace",
+                      "Tab",
+                      "Enter",
+                      "Escape",
+                      "Space",
+                      "PageUp",
+                      "PageDown",
+                      "End",
+                      "Home",
+                      "ArrowLeft",
+                      "ArrowUp",
+                      "ArrowRight",
+                      "ArrowDown",
+                      "Delete",
+                      "F1",
+                      "F2",
+                      "F3",
+                      "F4",
+                      "F5",
+                      "F6",
+                      "F7",
+                      "F8",
+                      "F9",
+                      "F10",
+                      "F11",
+                      "F12"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9]$"
+                  }
+                ]
+              },
+              "modifiers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["alt", "control", "meta", "shift"]
+                },
+                "maxItems": 4
+              }
+            },
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "key", "modifiers"],
+            "additionalProperties": false
           }
         ]
       },
@@ -81782,6 +81855,20 @@
               "operation": {
                 "type": "string",
                 "enum": ["type"]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["key"]
               },
               "receipt": {
                 "$ref": "#/components/schemas/ComputerUseReceipt"

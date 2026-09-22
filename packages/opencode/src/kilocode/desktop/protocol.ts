@@ -12,6 +12,38 @@ export type RequestID = Schema.Schema.Type<typeof RequestID>
 const Identity = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
 const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
 const Base = { id: RequestID, sessionID: SessionID }
+export const Key = Schema.Union([
+  Schema.Literals([
+    "Backspace",
+    "Tab",
+    "Enter",
+    "Escape",
+    "Space",
+    "PageUp",
+    "PageDown",
+    "End",
+    "Home",
+    "ArrowLeft",
+    "ArrowUp",
+    "ArrowRight",
+    "ArrowDown",
+    "Delete",
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+  ]),
+  Schema.String.check(Schema.isPattern(/^[A-Za-z0-9]$/)),
+])
+export const Modifier = Schema.Literals(["alt", "control", "meta", "shift"])
 
 export const ObserveRequest = Schema.Struct({
   ...Base,
@@ -37,7 +69,16 @@ export const TypeRequest = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
 })
 
-export const Request = Schema.Union([ObserveRequest, ClickRequest, TypeRequest]).annotate({
+export const KeyRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("key"),
+  windowID: Identity,
+  observationID: ObservationID,
+  key: Key,
+  modifiers: Schema.Array(Modifier).check(Schema.isMaxLength(4)),
+})
+
+export const Request = Schema.Union([ObserveRequest, ClickRequest, TypeRequest, KeyRequest]).annotate({
   identifier: "DesktopRequest",
 })
 export type Request = Schema.Schema.Type<typeof Request>
@@ -62,7 +103,14 @@ export const TypeResult = Schema.Struct({
   receipt: Receipt,
 })
 
-export const Result = Schema.Union([ObserveResult, ClickResult, TypeResult]).annotate({ identifier: "DesktopResult" })
+export const KeyResult = Schema.Struct({
+  operation: Schema.Literal("key"),
+  receipt: Receipt,
+})
+
+export const Result = Schema.Union([ObserveResult, ClickResult, TypeResult, KeyResult]).annotate({
+  identifier: "DesktopResult",
+})
 export type Result = Schema.Schema.Type<typeof Result>
 
 export const ErrorCode = Schema.Literals(["cancelled", "disconnected", "invalid_request", "timeout", "unsupported"])

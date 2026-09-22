@@ -1,14 +1,15 @@
 // raya_change - model-facing native desktop tool tests
 import { expect } from "bun:test"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { Key } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
-import { DesktopClickTool, DesktopTypeTool } from "@/kilocode/tool/desktop-host"
+import { DesktopClickTool, DesktopKeyTool, DesktopTypeTool } from "@/kilocode/tool/desktop-host"
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Agent } from "@/agent/agent"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(AppNodeBuilder.build(Agent.node), AppNodeBuilder.build(Truncate.node)))
@@ -24,7 +25,12 @@ it.instance(
           Effect.sync(() => {
             calls.push(input)
             return {
-              operation: input.operation === "type" ? ("type" as const) : ("click" as const),
+              operation:
+                input.operation === "type"
+                  ? ("type" as const)
+                  : input.operation === "key"
+                    ? ("key" as const)
+                    : ("click" as const),
               receipt: {
                 version: 1 as const,
                 requestID: "desktop_click_test",
@@ -115,6 +121,41 @@ it.instance(
         text: "Exact text",
       })
       expect(typed.title).toBe("Typed into desktop")
+
+      const keyed = yield* DesktopKeyTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) =>
+          tool.execute(
+            {
+              window_id: "window_seen",
+              observation_id: ObservationID.make("observation_keyed"),
+              key: "Enter",
+              modifiers: ["control", "control", "shift"],
+            },
+            ctx,
+          ),
+        ),
+      )
+      expect(asks[2]).toEqual(
+        expect.objectContaining({
+          permission: "desktop_key",
+          patterns: ["window_seen:control+shift+Enter"],
+          always: [],
+        }),
+      )
+      expect(calls[2]).toEqual({
+        operation: "key",
+        sessionID: ctx.sessionID,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_keyed"),
+        key: "Enter",
+        modifiers: ["control", "shift"],
+      })
+      expect(keyed.title).toBe("Pressed control+shift+Enter")
+      expect(Schema.is(Key)("F12")).toBe(true)
+      expect(Schema.is(Key)("F13")).toBe(false)
+      expect(Schema.is(Key)(";")).toBe(false)
     }),
   { git: true },
 )

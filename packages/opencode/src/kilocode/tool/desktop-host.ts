@@ -1,6 +1,7 @@
 // raya_change - model-facing native desktop observation tool
 import { Desktop, HostError, type Input } from "@/kilocode/desktop/service"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { Key, Modifier } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -161,4 +162,60 @@ export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Servic
   }),
 )
 
-export const DesktopTools = [DesktopObserveTool, DesktopClickTool, DesktopTypeTool]
+const KeyParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_observe.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh observation ID returned by desktop_observe. It can be used only once.",
+  }),
+  key: Key.annotate({
+    description: "Named navigation/function key, or one ASCII letter or digit.",
+  }),
+  modifiers: Schema.optional(Schema.Array(Modifier).check(Schema.isMaxLength(4))).annotate({
+    description: "Optional Alt, Control, Meta, or Shift modifiers.",
+  }),
+})
+
+export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service, "desktop_key">(
+  "desktop_key",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Press one bounded key or key chord in the foreground window grounded by a fresh desktop_observe result. The host refuses changed windows, stale observations, reuse, and manual takeover before dispatch.",
+      parameters: KeyParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const modifiers = [...new Set(params.modifiers ?? [])]
+          const chord = [...modifiers, params.key].join("+")
+          yield* ctx.ask({
+            permission: "desktop_key",
+            patterns: [`${params.window_id}:${chord}`],
+            always: [],
+            metadata: {},
+          })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "key",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              key: params.key,
+              modifiers,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "key") return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: `Pressed ${chord}`,
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
+export const DesktopTools = [DesktopObserveTool, DesktopClickTool, DesktopTypeTool, DesktopKeyTool]

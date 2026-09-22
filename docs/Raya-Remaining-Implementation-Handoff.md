@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `ba8918f646` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+38d8084f5b.kamil-oseni.1790116103775` installs grounded window switching, bounded whole-window capture, visible physical capture bounds, covered-point refusal, held-manual-input refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `0e3d7d8b54` is on `origin/main`; the uncertain-outcome safety source still needs snapshot installation. Snapshot `eden.raya@7.4.23-snapshot+38d8084f5b.kamil-oseni.1790116103775` installs grounded window switching, bounded whole-window capture, visible physical capture bounds, covered-point refusal, held-manual-input refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-22 18:50 America/Toronto - preserve the uncertain desktop-action interlock
+
+Preserve product commit `0e3d7d8b54`. Once `DesktopSession` enters `driver.focus` or `driver.perform`, any thrown failure is conservatively a `DesktopOutcomeError`: the action may have affected the computer. The bridge must attach an unknown receipt, pause desktop control and require deliberate resume before any fresh-ID input. Errors from session validation before that driver boundary remain non-dispatched refusals without an unknown receipt.
+
+Persist only compact action failures with `outcome: "unknown"`, exact request/observation/window identity and `manage` or `interact` effect. Restore them through the same bounded journal as confirmed results, redeliver without native dispatch, and erase only after backend acknowledgement. `Desktop.HostError` must keep the receipt and its model-facing message must forbid automatic retry until the target is inspected.
+
+Evidence passes **29 focused tests / 143 assertions**, both affected typechecks, root and extension lint, Knip, formatting and the extension marker guard. The broad push hook was skipped after a completed typecheck left a `tsgolint` process consuming about 9.6 GB; it was terminated immediately. Install the source through the low-memory snapshot workflow next, without repeating broad typecheck work.
 
 ## ChatGPT 2026-09-22 18:32 America/Toronto - bounded desktop capture installation receipt
 

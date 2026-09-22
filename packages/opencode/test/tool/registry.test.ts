@@ -268,7 +268,7 @@ describe("tool.registry", () => {
       const tools = yield* registry.tools({
         providerID: ProviderV2.ID.opencode,
         modelID: ModelV2.ID.make("test"),
-        agent: yield* agents.defaultInfo(),
+        agent: yield* agents.get("code"), // kilocode_change - code-mode fixture must not inherit Auto's intentional MCP deny
       })
       const execute = tools.find((tool) => tool.id === "execute")
 
@@ -285,7 +285,7 @@ describe("tool.registry", () => {
       const tools = yield* registry.tools({
         providerID: ProviderV2.ID.opencode,
         modelID: ModelV2.ID.make("test"),
-        agent: yield* agents.defaultInfo(),
+        agent: yield* agents.get("code"), // kilocode_change - prove empty MCP catalog rather than Auto's permission ceiling
       })
 
       expect(tools.map((tool) => tool.id)).not.toContain("execute")
@@ -300,7 +300,7 @@ describe("tool.registry", () => {
       const tools = yield* registry.tools({
         providerID: ProviderV2.ID.opencode,
         modelID: ModelV2.ID.make("test"),
-        agent: yield* agents.defaultInfo(),
+        agent: yield* agents.get("code"), // kilocode_change - isolate the network restriction from Auto's MCP deny
         networkRestricted: true,
       })
 

@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 13:33 America/Toronto - Code-mode registry regression measures the intended agent
+
+**Status: the remaining red tool-registry regression observed during `PR-04` validation is repaired.** The fixture asked Raya's default agent for a code-mode catalog. The default is now Auto, whose intentional wildcard deny correctly hides arbitrary MCP tools, so the case no longer measured code mode. The populated, empty and network-restricted code-mode cases now use the Code agent: a populated MCP catalog exposes `execute` with its schema, an empty catalog omits it, and a network-restricted catalog omits it independently of agent permission. The complete registry file passes **21 tests / 33 assertions**. Scoped formatting, lint with zero errors, shared-source annotation and diff validation pass; its nine warnings are older fixture assertions and generator-return patterns. This test-only repair does not change the installed binary, so installed product source remains `a827903874`.
+
 ## ChatGPT 2026-09-22 13:30 America/Toronto - Raya extension changesets target the current package identity
 
 **Status: the release-plan metadata blocker found during the Routine authority validation is repaired.** Five recent extension changesets still targeted the retired `kilo-code` workspace name even though the extension package is `raya` and the fixed release group already pairs `raya` with `@kilocode/cli`. Their release levels and user-facing descriptions are unchanged; only the package identity is corrected. `bunx changeset status` now succeeds and resolves the expected patch and minor release sets, no stale `kilo-code` changeset target remains, and diff validation passes. This metadata-only repair does not require another approximately 498 MiB snapshot build; installed product source remains `a827903874`.

@@ -168,16 +168,18 @@ public static class RayaDesktopNative {
       throw new InvalidOperationException("Windows did not move the pointer to the exact desktop point");
   }
 
-  public static void Drag(int x, int y, int expectedX, int expectedY, uint down, uint up) {
-    ValidatePoint(expectedX, expectedY);
+  public static void Drag(int startX, int startY, int endX, int endY, int expectedStartX, int expectedStartY, int expectedEndX, int expectedEndY, uint down, uint up) {
+    ValidatePoint(expectedStartX, expectedStartY);
+    ValidatePoint(expectedEndX, expectedEndY);
     var inputs = new[] {
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = startX, Y = startY, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
-      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = x, Y = y, Flags = 0xC001 } } },
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = endX, Y = endY, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } }
     };
-    if (SendInput(3, inputs, Marshal.SizeOf(typeof(Input))) == 3) {
+    if (SendInput(4, inputs, Marshal.SizeOf(typeof(Input))) == 4) {
       Point point;
-      if (GetCursorPos(out point) && point.X == expectedX && point.Y == expectedY) return;
+      if (GetCursorPos(out point) && point.X == expectedEndX && point.Y == expectedEndY) return;
       throw new InvalidOperationException("Windows did not finish the drag at the exact desktop point");
     }
     Mouse(up, 0);
@@ -193,15 +195,23 @@ public static class RayaDesktopNative {
       throw new InvalidOperationException("Desktop point is outside the physical virtual desktop");
   }
 
-  public static void Click(uint down, uint up, bool twice) {
-    var once = new[] {
+  public static void Click(int x, int y, int expectedX, int expectedY, uint down, uint up, bool twice) {
+    ValidatePoint(expectedX, expectedY);
+    var inputs = new List<Input> {
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = x, Y = y, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } }
     };
-    var inputs = twice
-      ? new[] { once[0], once[1], once[0], once[1] }
-      : once;
-    if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) == (uint)inputs.Length) return;
+    if (twice) {
+      inputs.Add(new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } });
+      inputs.Add(new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } });
+    }
+    var batch = inputs.ToArray();
+    if (SendInput((uint)batch.Length, batch, Marshal.SizeOf(typeof(Input))) == (uint)batch.Length) {
+      Point point;
+      if (GetCursorPos(out point) && point.X == expectedX && point.Y == expectedY) return;
+      throw new InvalidOperationException("Windows did not click the exact desktop point");
+    }
     Mouse(up, 0);
     throw new InvalidOperationException("Windows refused complete desktop click input");
   }
@@ -372,28 +382,38 @@ switch ($action.operation) {
   "pointer" {
     $x = $window.Rect.Left + [Math]::Min($window.Width - 1, [Math]::Max(0, [Math]::Round($action.x * ($window.Width - 1))))
     $y = $window.Rect.Top + [Math]::Min($window.Height - 1, [Math]::Max(0, [Math]::Round($action.y * ($window.Height - 1))))
-    [RayaDesktopNative]::Move($x, $y)
-    if ($action.action -eq "move") { break }
+    if ($action.action -eq "move") {
+      [RayaDesktopNative]::Move($x, $y)
+      break
+    }
+    $left = [RayaDesktopNative]::GetSystemMetrics(76)
+    $top = [RayaDesktopNative]::GetSystemMetrics(77)
+    $width = [RayaDesktopNative]::GetSystemMetrics(78)
+    $height = [RayaDesktopNative]::GetSystemMetrics(79)
+    if ($width -le 1 -or $height -le 1) { throw "Windows virtual desktop bounds are unavailable" }
+    $absoluteX = [Math]::Round((($x - $left) * 65535.0) / ($width - 1))
+    $absoluteY = [Math]::Round((($y - $top) * 65535.0) / ($height - 1))
     $down = if ($action.button -eq "right") { 0x0008 } else { 0x0002 }
     $up = if ($action.button -eq "right") { 0x0010 } else { 0x0004 }
-    [RayaDesktopNative]::Click($down, $up, $action.action -eq "double_click")
+    [RayaDesktopNative]::Click($absoluteX, $absoluteY, $x, $y, $down, $up, $action.action -eq "double_click")
   }
   "drag" {
     $startX = $window.Rect.Left + [Math]::Min($window.Width - 1, [Math]::Max(0, [Math]::Round($action.startX * ($window.Width - 1))))
     $startY = $window.Rect.Top + [Math]::Min($window.Height - 1, [Math]::Max(0, [Math]::Round($action.startY * ($window.Height - 1))))
     $endX = $window.Rect.Left + [Math]::Min($window.Width - 1, [Math]::Max(0, [Math]::Round($action.endX * ($window.Width - 1))))
     $endY = $window.Rect.Top + [Math]::Min($window.Height - 1, [Math]::Max(0, [Math]::Round($action.endY * ($window.Height - 1))))
-    [RayaDesktopNative]::Move($startX, $startY)
     $left = [RayaDesktopNative]::GetSystemMetrics(76)
     $top = [RayaDesktopNative]::GetSystemMetrics(77)
     $width = [RayaDesktopNative]::GetSystemMetrics(78)
     $height = [RayaDesktopNative]::GetSystemMetrics(79)
     if ($width -le 1 -or $height -le 1) { throw "Windows virtual desktop bounds are unavailable" }
-    $absoluteX = [Math]::Round((($endX - $left) * 65535.0) / ($width - 1))
-    $absoluteY = [Math]::Round((($endY - $top) * 65535.0) / ($height - 1))
+    $absoluteStartX = [Math]::Round((($startX - $left) * 65535.0) / ($width - 1))
+    $absoluteStartY = [Math]::Round((($startY - $top) * 65535.0) / ($height - 1))
+    $absoluteEndX = [Math]::Round((($endX - $left) * 65535.0) / ($width - 1))
+    $absoluteEndY = [Math]::Round((($endY - $top) * 65535.0) / ($height - 1))
     $down = if ($action.button -eq "right") { 0x0008 } else { 0x0002 }
     $up = if ($action.button -eq "right") { 0x0010 } else { 0x0004 }
-    [RayaDesktopNative]::Drag($absoluteX, $absoluteY, $endX, $endY, $down, $up)
+    [RayaDesktopNative]::Drag($absoluteStartX, $absoluteStartY, $absoluteEndX, $absoluteEndY, $startX, $startY, $endX, $endY, $down, $up)
   }
   "type" { [RayaDesktopNative]::Text([string]$action.text) }
   "scroll" {

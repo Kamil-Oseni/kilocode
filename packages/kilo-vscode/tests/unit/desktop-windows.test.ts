@@ -99,7 +99,7 @@ describe("Windows native desktop driver", () => {
     expect(test.cancelled()).toBe(1)
   })
 
-  it("batches drag down, movement, and release with a recovery release", async () => {
+  it("batches drag positioning, down, movement, and release with recovery", async () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     const action = {
@@ -114,16 +114,19 @@ describe("Windows native desktop driver", () => {
     }
     await driver.perform(action, { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" })
 
-    expect(test.scripts[0]).toContain("SendInput(3, inputs")
+    expect(test.scripts[0]).toContain("SendInput(4, inputs")
     expect(test.scripts[0]).toContain("Mouse(up, 0)")
     expect(test.scripts[0]).toContain("GetSystemMetrics(76)")
-    expect(test.scripts[0]).toContain("ValidatePoint(expectedX, expectedY)")
-    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Move($startX, $startY)")
-    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Drag($absoluteX, $absoluteY, $endX, $endY, $down, $up)")
+    expect(test.scripts[0]).toContain("ValidatePoint(expectedStartX, expectedStartY)")
+    expect(test.scripts[0]).toContain("ValidatePoint(expectedEndX, expectedEndY)")
+    expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Move($startX, $startY)")
+    expect(test.scripts[0]).toContain(
+      "[RayaDesktopNative]::Drag($absoluteStartX, $absoluteStartY, $absoluteEndX, $absoluteEndY, $startX, $startY, $endX, $endY, $down, $up)",
+    )
     expect(test.scripts[0]).toContain("Windows did not finish the drag at the exact desktop point")
   })
 
-  it("batches click press and release with a recovery release", async () => {
+  it("batches click positioning, press, and release with recovery", async () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     await driver.perform(
@@ -139,19 +142,23 @@ describe("Windows native desktop driver", () => {
       { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
     )
 
-    expect(test.scripts[0]).toContain("SendInput((uint)inputs.Length, inputs")
+    expect(test.scripts[0]).toContain("SendInput((uint)batch.Length, batch")
     expect(test.scripts[0]).toContain("Mouse(up, 0)")
-    expect(test.scripts[0]).toContain('[RayaDesktopNative]::Click($down, $up, $action.action -eq "double_click")')
+    expect(test.scripts[0]).toContain(
+      '[RayaDesktopNative]::Click($absoluteX, $absoluteY, $x, $y, $down, $up, $action.action -eq "double_click")',
+    )
+    expect(test.scripts[0]).toContain("Windows did not click the exact desktop point")
+    expect(test.scripts[0]).toContain('if ($action.action -eq "move") {')
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse($down, 0)")
   })
 
-  it("refuses off-screen pointer targets and verifies exact native placement", async () => {
+  it("refuses off-screen pointer movement and verifies exact native placement", async () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     await driver.perform(
       {
         operation: "pointer",
-        action: "click",
+        action: "move",
         windowID: "0x123",
         observationID: "obs-point",
         x: 0.5,

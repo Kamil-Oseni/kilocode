@@ -228,20 +228,18 @@ function same(saved: Record, value: Request) {
 function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): Publish[] {
   const note =
     row.state === "queued"
-      ? "This request is queued until the worker is free. It has not started."
+      ? "Waiting to start."
       : row.state === "failed"
         ? row.reason || "This request was not started."
         : undefined
-  const provenance = row.organizationName
-    ? `${row.organizationName} · organization revision ${row.organizationRevision}`
-    : undefined
+  const provenance = row.organizationName ? row.organizationName : undefined
   const files = row.artifacts?.length
     ? ["Verified files:", ...row.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`)].join("\n")
     : undefined
-  const ask = [`Request from ${sender.name}:`, provenance, row.objective, files, note]
+  const ask = [`From ${sender.name}`, provenance, row.objective, files, note]
     .filter((line): line is string => !!line)
     .join("\n")
-  const sent = [`Asked ${recipient.name}:`, provenance, row.objective, files, note]
+  const sent = [`To ${recipient.name}`, provenance, row.objective, files, note]
     .filter((line): line is string => !!line)
     .join("\n")
   const id = Schema.is(token)(row.id) ? row.id : undefined

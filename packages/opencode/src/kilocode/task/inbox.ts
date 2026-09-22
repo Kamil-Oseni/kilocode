@@ -314,8 +314,6 @@ function origin(kind: "need" | "report" | "reply", id: string) {
 export function posted(run: RayaTask.Run): Publish | undefined {
   if (run.status === "running") return undefined
   const waiting = run.status === "blocked" && run.blockedReason === "waiting on you"
-  const at = run.trigger?.kind === "timer" ? run.trigger.scheduledAt : run.at
-  const when = Number.isFinite(at) ? new Date(at).toISOString() : "unknown time"
   const findings = run.outcome?.summary?.trim()
   if (run.status === "complete" && run.outcome?.reply && findings)
     return {
@@ -328,17 +326,10 @@ export function posted(run: RayaTask.Run): Publish | undefined {
     }
   const reason = run.blockedReason?.trim()
   const lines = waiting
-    ? [`This run needs a decision (${when}).`, reason, "This is not a completed report."]
+    ? [reason && reason !== "waiting on you" ? reason : "Reply when you're ready so this work can continue."]
     : run.status === "complete"
-      ? [
-          `Run completed (${when}).`,
-          findings || "No written findings were saved. Inspect the run details; this is not invented success.",
-        ]
-      : [
-          `Run ${run.status} (${when}).`,
-          reason || findings || "No written findings were saved.",
-          "This is not a completed report.",
-        ]
+      ? [findings || "This run finished without a written summary. Open the run for details."]
+      : [reason || findings || "This work stopped before it finished."]
   if (run.outcome?.evidence?.length) lines.push("Evidence:", ...run.outcome.evidence.slice(0, 8))
   const body = lines
     .filter((line): line is string => !!line)

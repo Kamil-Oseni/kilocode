@@ -156,18 +156,44 @@ function caption(item: Peer, phase: "idle" | "sending" | "failed", workspace?: s
   return `Ask ${item.name}`
 }
 
-function kind(value: Note["kind"], source?: string) {
-  if (value === "system") return "Update"
-  if (value === "report") return "Report"
-  if (value === "decision") return "Needs a decision"
-  if (value === "delegation") {
-    if (source?.startsWith("sent:")) return "Asked another worker"
-    if (source?.startsWith("reply:")) return "Answer from another worker"
-    if (source?.startsWith("start:")) return "Work started"
+function label(item: Note) {
+  if (item.kind === "system") return "Update"
+  if (item.kind === "report") return /^Run (?:blocked|failed|error)\b/.test(item.body) ? "Update" : "Report"
+  if (item.kind === "decision") return "Needs your answer"
+  if (item.kind === "delegation") {
+    if (item.source.startsWith("sent:")) return "Asked another worker"
+    if (item.source.startsWith("reply:")) return "Answer from another worker"
+    if (item.source.startsWith("start:")) return "Work started"
     return "Asked you"
   }
-  if (value === "worker") return "Worker"
+  if (item.kind === "worker") return "Worker"
   return "You"
+}
+
+function body(item: Note) {
+  const lines = item.body.split("\n").map((line) => line.trim())
+  if (item.kind === "decision" && lines[0]?.startsWith("This run needs a decision")) {
+    const kept = lines.filter(
+      (line, index) =>
+        index > 0 && line.toLowerCase() !== "waiting on you" && line !== "This is not a completed report.",
+    )
+    return kept.join("\n") || "Reply when you're ready so this work can continue."
+  }
+  if (item.kind === "report" && /^Run (?:blocked|failed|error)\b/.test(lines[0] ?? "")) {
+    const kept = lines.slice(1).filter((line) => line !== "This is not a completed report.")
+    if (kept[0]?.startsWith("Conversational reply delivered"))
+      return "The reply was delivered. This scheduled run still needs review."
+    return kept.join("\n") || "This work stopped before it finished."
+  }
+  if (item.kind !== "delegation") return item.body
+  const kept = lines.flatMap((line, index) => {
+    if (/ · organization revision \d+$/.test(line)) return [line.replace(/ · organization revision \d+$/, "")]
+    if (line === "This request is queued until the worker is free. It has not started.") return ["Waiting to start."]
+    if (index === 0 && line.startsWith("Request from ")) return [`From ${line.slice(13).replace(/:$/, "")}`]
+    if (index === 0 && line.startsWith("Asked ")) return [`To ${line.slice(6).replace(/:$/, "")}`]
+    return [line]
+  })
+  return kept.filter(Boolean).join("\n")
 }
 
 function pending(item: Note, rows: Note[]) {
@@ -293,36 +319,41 @@ const Line: Component<{
       data-routine-message={props.item.id}
     >
       <span class="routines-line-meta">
-        {kind(props.item.kind, props.item.source)} · <MessageTime value={props.item.time} side="routine" />
+        {label(props.item)} · <MessageTime value={props.item.time} side="routine" />
       </span>
-      <p class="routines-line-body">{props.item.body}</p>
+      <p class="routines-line-body">{body(props.item)}</p>
       <Files items={props.item.files} session={props.item.sessionID} />
       <Attachments agentID={props.item.agentID} items={props.item.attachments} />
-      <Show when={live()}>
-        <Button
-          type="button"
-          size="small"
-          variant="ghost"
-          disabled={props.busy || props.disabled}
-          onClick={() => {
-            const id = props.item.occurrenceID
-            if (id) props.onStop(id)
-          }}
-        >
-          {props.busy ? "Stopping" : "Stop this request"}
-        </Button>
-      </Show>
-      <Show when={id()}>
-        {(value) => (
-          <Trace
-            id={value()}
-            busy={props.look === value()}
-            disabled={props.disabled}
-            tree={props.tree}
-            error={props.fault}
-            onShow={props.onShow}
-          />
-        )}
+      <Show when={live() || id()}>
+        <details class="routines-line-actions">
+          <summary>Request details</summary>
+          <Show when={live()}>
+            <Button
+              type="button"
+              size="small"
+              variant="ghost"
+              disabled={props.busy || props.disabled}
+              onClick={() => {
+                const id = props.item.occurrenceID
+                if (id) props.onStop(id)
+              }}
+            >
+              {props.busy ? "Stopping" : "Stop this request"}
+            </Button>
+          </Show>
+          <Show when={id()}>
+            {(value) => (
+              <Trace
+                id={value()}
+                busy={props.look === value()}
+                disabled={props.disabled}
+                tree={props.tree}
+                error={props.fault}
+                onShow={props.onShow}
+              />
+            )}
+          </Show>
+        </details>
       </Show>
     </article>
   )

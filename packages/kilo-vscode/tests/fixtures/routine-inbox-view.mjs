@@ -128,6 +128,32 @@ try {
     files: [{ name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" }],
     time: 1,
   }
+  const legacy = {
+    id: "rmg_legacy",
+    agentID: agent.id,
+    kind: "report",
+    source: "report:legacy",
+    body: [
+      "Run blocked (2026-09-21T04:12:47.532Z).",
+      "Conversational reply delivered, but this objective is a pure conversation response with no eligible tool-call work evidence to cite, so the completion audit cannot be satisfied.",
+      "This is not a completed report.",
+    ].join("\n"),
+    time: 1.5,
+  }
+  const delegation = {
+    id: "rmg_delegation",
+    agentID: agent.id,
+    kind: "delegation",
+    source: "sent:legacy-request",
+    body: [
+      "Asked Counsel:",
+      "Acceptance Team · organization revision 2",
+      "Confirm that the saved organization can be read back intact.",
+      "This request is queued until the worker is free. It has not started.",
+    ].join("\n"),
+    occurrenceID: "dlg_1",
+    time: 1.75,
+  }
   emit({
     type: "routineState",
     requestID: request.requestID,
@@ -187,10 +213,16 @@ try {
     type: "routineInboxPage",
     requestID: page.requestID,
     agentID: agent.id,
-    messages: [note],
+    messages: [note, legacy, delegation],
   })
   await new Promise((resolve) => setImmediate(resolve))
   assert.match(root.textContent, /Report/)
+  assert.match(root.textContent, /The reply was delivered\. This scheduled run still needs review\./)
+  assert.doesNotMatch(root.textContent, /completion audit cannot be satisfied|This is not a completed report/)
+  const requestDetails = root.querySelector('[data-routine-message="rmg_delegation"] .routines-line-actions')
+  assert.equal(requestDetails.open, false)
+  assert.match(requestDetails.closest("article").textContent, /To Counsel.*Acceptance Team.*Waiting to start\./s)
+  assert.doesNotMatch(requestDetails.closest("article").textContent, /organization revision|queued until/)
   assert.doesNotMatch(root.textContent, /Does not change the assignment/)
   const card = root.querySelector('[aria-label="Open ledger.pdf"]')
   assert.ok(card)

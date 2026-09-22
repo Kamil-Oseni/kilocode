@@ -466,9 +466,7 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       expect(first.created).toBe(true)
       expect(first.record.state).toBe("queued")
       expect(first.record.depth).toBe(1)
-      expect(
-        (yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("queued until the worker is free")),
-      ).toBe(true)
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("Waiting to start."))).toBe(true)
       expect((yield* store.admit(request("dlg_1", chief.id, books.id), chief, books)).created).toBe(false)
       expect(
         Exit.isFailure(
@@ -705,7 +703,7 @@ test("an exact admission replay restores a missing sent card after restart", asy
       expect((yield* inbox.page(books.id)).messages.filter((item) => item.source === `ask:${source}`)).toHaveLength(1)
       const sent = (yield* inbox.page(chief.id)).messages.filter((item) => item.source === `sent:${source}`)
       expect(sent).toHaveLength(1)
-      expect(sent[0]?.body).toContain("Asked books")
+      expect(sent[0]?.body).toContain("To books")
       expect(sent[0]?.body).toContain("Review Friday receipts")
     }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
   )

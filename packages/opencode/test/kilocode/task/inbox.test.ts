@@ -56,7 +56,7 @@ test("posted reports do not treat a running or empty completion as invented succ
   })
   expect(done?.kind).toBe("report")
   expect(done?.source).toBe("report:run")
-  expect(done?.body).toContain("not invented success")
+  expect(done?.body).toBe("This run finished without a written summary. Open the run for details.")
   const need = posted({
     id: "run",
     agentID: "a",
@@ -67,10 +67,10 @@ test("posted reports do not treat a running or empty completion as invented succ
   })
   expect(need?.kind).toBe("decision")
   expect(need?.source).toBe("need:run")
-  expect(need?.body).toContain("not a completed report")
+  expect(need?.body).toBe("Reply when you're ready so this work can continue.")
   const failed = posted({ id: "run", agentID: "a", at: 1, sessionID: sid, status: "error" })
   expect(failed?.kind).toBe("report")
-  expect(failed?.body).toContain("not a completed report")
+  expect(failed?.body).toBe("This work stopped before it finished.")
   const timer = posted({
     id: 'timer:["agt",1,1]',
     agentID: "a",

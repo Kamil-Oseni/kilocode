@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 13:30 America/Toronto - Raya extension changesets target the current package identity
+
+**Status: the release-plan metadata blocker found during the Routine authority validation is repaired.** Five recent extension changesets still targeted the retired `kilo-code` workspace name even though the extension package is `raya` and the fixed release group already pairs `raya` with `@kilocode/cli`. Their release levels and user-facing descriptions are unchanged; only the package identity is corrected. `bunx changeset status` now succeeds and resolves the expected patch and minor release sets, no stale `kilo-code` changeset target remains, and diff validation passes. This metadata-only repair does not require another approximately 498 MiB snapshot build; installed product source remains `a827903874`.
+
 ## ChatGPT 2026-09-22 13:25 America/Toronto - Routine connected-service catalogs enforce exact saved scope
 
 **Status: the remaining model-facing connected-service catalog gap in `PR-04` is implemented, pushed and installed.** Routine sessions now apply their merged durable authority to dynamic MCP tools and the synthetic resource-list, resource-template and resource-read helpers added after the main registry. Unlisted connected tools are removed before model dispatch. A selected resource helper authorizes under its own exact tool ID; ordinary chats retain the existing generic `read` permission and complete connected-service catalog.

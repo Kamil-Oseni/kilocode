@@ -277,6 +277,7 @@ export interface RoutineInboxInfoMessage {
 export interface RoutineContactDestinationMessage {
   type: "routineContactDestination"
   requestID: string
+  global?: true
   agentID?: string
   organizationID?: string
   action: "load" | "enable" | "disable" | "save"

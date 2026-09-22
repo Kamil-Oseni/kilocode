@@ -29810,6 +29810,7 @@ export type RayaContactDestinationListData = {
     agentID?: string
     limit?: string
     organizationID?: string
+    global?: "true"
   }
   url: "/raya/contact/destinations"
 }

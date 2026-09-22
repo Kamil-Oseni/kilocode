@@ -5,20 +5,28 @@ import type { ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
 
 type Quiet = { start: number; end: number; timezone: string }
+type Target = "global" | "agent" | "organization"
 
-function detail(on: boolean, quiet: Quiet | undefined, group: boolean, clock: (minute: number) => string) {
-  if (!on)
-    return group
-      ? "Allow workers in this organization to send reports to their conversations."
-      : "Allow this worker to send reports to this conversation."
-  if (!quiet)
-    return group
-      ? "Workers in this organization can send reports to their conversations at any time."
-      : "This worker can send reports to this conversation at any time."
-  return `New ${group ? "organization " : ""}reports are held ${clock(quiet.start)}–${clock(quiet.end)} (${quiet.timezone}).`
+function detail(on: boolean, quiet: Quiet | undefined, target: Target, clock: (minute: number) => string) {
+  if (!on) {
+    if (target === "global") return "Allow any eligible Routine worker to report to its own conversation."
+    if (target === "organization") return "Allow workers in this organization to report to their conversations."
+    return "Allow this worker to report to this conversation."
+  }
+  if (!quiet) {
+    if (target === "global") return "Eligible Routine workers can report to their own conversations at any time."
+    if (target === "organization") return "Workers in this organization can report at any time."
+    return "This worker can report at any time."
+  }
+  return `New reports are held ${clock(quiet.start)}–${clock(quiet.end)} (${quiet.timezone}).`
 }
 
-export const ReportSetting: Component<{ agentID?: string; organizationID?: string; connected: boolean }> = (props) => {
+export const ReportSetting: Component<{
+  global?: true
+  agentID?: string
+  organizationID?: string
+  connected: boolean
+}> = (props) => {
   const vscode = useVSCode()
   const [busy, setBusy] = createSignal(true)
   const [enabled, setEnabled] = createSignal(false)
@@ -42,7 +50,7 @@ export const ReportSetting: Component<{ agentID?: string; organizationID?: strin
     action: "load" | "enable" | "disable" | "save",
     policy?: { start: number; end: number; timezone: string } | null,
   ) => {
-    if (!!props.agentID === !!props.organizationID) {
+    if ([props.global === true, !!props.agentID, !!props.organizationID].filter(Boolean).length !== 1) {
       setBusy(false)
       setError("Reload this report setting.")
       return
@@ -56,7 +64,11 @@ export const ReportSetting: Component<{ agentID?: string; organizationID?: strin
     pending = action
     setBusy(true)
     setError("")
-    const scope = props.agentID ? { agentID: props.agentID } : { organizationID: props.organizationID }
+    const scope = props.global
+      ? { global: true as const }
+      : props.agentID
+        ? { agentID: props.agentID }
+        : { organizationID: props.organizationID }
     vscode.postMessage({
       type: "routineContactDestination",
       requestID: id,
@@ -68,6 +80,7 @@ export const ReportSetting: Component<{ agentID?: string; organizationID?: strin
   const receive = (msg: ExtensionMessage) => {
     if (
       msg.type !== "routineContactDestination" ||
+      msg.global !== props.global ||
       msg.agentID !== props.agentID ||
       msg.organizationID !== props.organizationID ||
       msg.requestID !== id
@@ -118,15 +131,15 @@ export const ReportSetting: Component<{ agentID?: string; organizationID?: strin
     }
     request("save", { start: from, end: until, timezone: quiet()?.timezone ?? timezone })
   }
-  const group = () => !!props.organizationID
-  const heading = `routine-info-reports-${props.agentID ?? props.organizationID}`
+  const target = (): Target => (props.global ? "global" : props.organizationID ? "organization" : "agent")
+  const heading = `routine-info-reports-${props.global ? "global" : (props.agentID ?? props.organizationID)}`
   return (
     <section class="routines-info-section" aria-labelledby={heading}>
       <h3 id={heading}>Reports to you</h3>
       <div class="routines-info-setting">
         <div>
           <strong>Raya inbox</strong>
-          <span>{detail(enabled(), quiet(), group(), clock)}</span>
+          <span>{detail(enabled(), quiet(), target(), clock)}</span>
         </div>
         <Button
           size="small"

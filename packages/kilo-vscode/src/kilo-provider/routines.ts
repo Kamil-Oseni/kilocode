@@ -1124,17 +1124,25 @@ async function archive(ctx: Ctx) {
   ctx.post({ ...base, ...(await retained(ctx, String(msg.agentID))) })
 }
 
-type Scope = { kind: "agent" | "organization"; id: string }
+type Scope = { kind: "global" } | { kind: "agent" | "organization"; id: string }
 
 function scope(msg: Msg): Scope {
+  const global = msg.global === true
   const agent = token(msg.agentID) ? String(msg.agentID) : undefined
   const organization = token(msg.organizationID) ? String(msg.organizationID) : undefined
-  if (!!agent === !!organization) throw new Error("Reload this report setting before changing it.")
+  if ([global, !!agent, !!organization].filter(Boolean).length !== 1)
+    throw new Error("Reload this report setting before changing it.")
+  if (global) return { kind: "global" }
   return agent ? { kind: "agent", id: agent } : { kind: "organization", id: organization! }
 }
 
 async function lookup(ctx: Ctx, value: Scope) {
-  const filter = value.kind === "agent" ? { agentID: value.id } : { organizationID: value.id }
+  const filter =
+    value.kind === "global"
+      ? { global: "true" as const }
+      : value.kind === "agent"
+        ? { agentID: value.id }
+        : { organizationID: value.id }
   const listed = await ctx.contact.destination.list(
     { directory: ctx.dir, limit: "1", ...filter },
     { throwOnError: true },
@@ -1143,7 +1151,12 @@ async function lookup(ctx: Ctx, value: Scope) {
 }
 
 function answer(ctx: Ctx, value: Scope, target: Awaited<ReturnType<typeof lookup>>) {
-  const identity = value.kind === "agent" ? { agentID: value.id } : { organizationID: value.id }
+  const identity =
+    value.kind === "global"
+      ? { global: true as const }
+      : value.kind === "agent"
+        ? { agentID: value.id }
+        : { organizationID: value.id }
   ctx.post({
     type: "routineContactDestination",
     requestID: ctx.message.requestID,
@@ -1184,7 +1197,11 @@ async function authorize(ctx: Ctx, value: Scope) {
       directory: ctx.dir,
       source:
         target?.source ??
-        (value.kind === "agent" ? `routine-owner:${value.id}` : `routine-owner:organization:${value.id}`),
+        (value.kind === "global"
+          ? "routine-owner:global"
+          : value.kind === "agent"
+            ? `routine-owner:${value.id}`
+            : `routine-owner:organization:${value.id}`),
       channel: "raya",
       address: "owner",
       label: "Raya inbox",
@@ -1322,6 +1339,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
     input.post({
       type: reply(type),
       requestID: input.message.requestID,
+      global: input.message.global,
       agentID: input.message.agentID,
       organizationID: input.message.organizationID,
       runID: input.message.runID,
@@ -1348,6 +1366,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
     ctx.post({
       type: reply(type),
       requestID: ctx.message.requestID,
+      global: ctx.message.global,
       agentID: ctx.message.agentID,
       organizationID: ctx.message.organizationID,
       runID: ctx.message.runID,

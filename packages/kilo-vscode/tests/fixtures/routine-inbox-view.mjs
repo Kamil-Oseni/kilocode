@@ -28,8 +28,10 @@ for (const name of [
   "document",
   "navigator",
   "Node",
+  "NodeFilter",
   "Element",
   "HTMLElement",
+  "HTMLHeadElement",
   "HTMLInputElement",
   "HTMLButtonElement",
   "HTMLTextAreaElement",
@@ -43,6 +45,7 @@ for (const name of [
 ])
   globalThis[name] = window[name]
 globalThis.window = window
+globalThis.getComputedStyle = window.getComputedStyle.bind(window)
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
 const sent = []
@@ -90,7 +93,7 @@ const mount = (workspace = "C:/Projects/Books") =>
 let dispose = mount()
 const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
 const button = (text) => {
-  const found = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
+  const found = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
   assert.ok(found, `Missing button: ${text}`)
   return found
 }
@@ -192,6 +195,23 @@ try {
   assert.match(root.querySelector(".routines-identity").getAttribute("aria-label"), /Scheduled/)
   assert.ok(root.querySelector(".routines-main-header"))
   assert.ok(root.querySelector(".routines-roster-search"))
+  const options = [...root.querySelectorAll("summary")].find((item) => item.textContent.trim() === "View options")
+  options.click()
+  button("Report settings").click()
+  await new Promise((resolve) => setImmediate(resolve))
+  const globalReports = sent.find((msg) => msg.type === "routineContactDestination" && msg.global === true)
+  assert.ok(globalReports)
+  assert.equal(globalReports.agentID, undefined)
+  assert.equal(globalReports.organizationID, undefined)
+  emit({
+    type: "routineContactDestination",
+    requestID: globalReports.requestID,
+    global: true,
+    enabled: false,
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.match(document.body.textContent, /Allow any eligible Routine worker to report to its own conversation/)
+  button("Done").click()
   root.querySelector(".routines-identity").click()
   assert.equal(webview.unrelated, "keep me")
   assert.deepEqual(Object.values(webview.routineInbox.selected), [agent.id])

@@ -238,4 +238,83 @@ test("Organization report settings authorize and load only their exact owner des
     organizationID,
     error: "Reload this report setting before changing it.",
   })
+
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineContactDestination",
+      requestID: "three-scopes",
+      global: true,
+      agentID: "books",
+      organizationID,
+      action: "load",
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineContactDestination",
+    requestID: "three-scopes",
+    global: true,
+    agentID: "books",
+    organizationID,
+    error: "Reload this report setting before changing it.",
+  })
+})
+
+test("All workers report settings use the exact global Raya inbox destination", async () => {
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  const target = {
+    version: 1 as const,
+    id: `ctd_${"3".repeat(48)}`,
+    source: "routine-owner:global",
+    channel: "raya" as const,
+    address: "owner",
+    label: "Raya inbox",
+    scope: { kind: "global" as const },
+    revision: 1,
+    enabled: true,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      if (request.method === "GET") return Response.json([])
+      return Response.json(target)
+    },
+  })
+  const post = (msg: unknown) => messages.push(msg)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineContactDestination", requestID: "global-load", global: true, action: "load" },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineContactDestination", requestID: "global-enable", global: true, action: "enable" },
+  })
+  expect(messages).toEqual([
+    expect.objectContaining({ requestID: "global-load", global: true, enabled: false }),
+    expect.objectContaining({ requestID: "global-enable", global: true, enabled: true }),
+  ])
+  const query = new URL(calls[0].url).searchParams
+  expect(query.get("global")).toBe("true")
+  expect(query.has("agentID")).toBe(false)
+  expect(query.has("organizationID")).toBe(false)
+  const authorized = calls.find((request) => request.method === "POST")
+  if (!authorized) throw new Error("expected global destination authorization request")
+  expect(await authorized.clone().json()).toEqual({
+    source: "routine-owner:global",
+    channel: "raya",
+    address: "owner",
+    label: "Raya inbox",
+    scope: { kind: "global" },
+  })
 })

@@ -39,6 +39,7 @@ export const ContactListQuery = Schema.Struct({
 export const ContactDestinationListQuery = Schema.Struct({
   ...ContactListQuery.fields,
   organizationID: Schema.optional(AgentID),
+  global: Schema.optional(Schema.Literal("true")),
 })
 
 export const ContactRevokePayload = Schema.Struct({ revision: Revision })
@@ -74,7 +75,7 @@ export const ContactApi = HttpApi.make("raya-contact").add(
           identifier: "raya.contact.destination.list",
           summary: "List contact destinations",
           description:
-            "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker or organization Raya inbox scope.",
+            "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to the global, one Routine worker, or one organization Raya inbox scope.",
         }),
       ),
       HttpApiEndpoint.post("contactDestinationAuthorize", ContactPaths.destinations, {

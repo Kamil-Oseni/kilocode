@@ -1544,6 +1544,27 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
   grid-column: 1 / -1;
 }
 
+.routines-global-reports {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-16);
+  box-sizing: border-box;
+  width: min(30rem, calc(100vw - var(--raya-space-32)));
+  max-width: 100%;
+  padding: var(--raya-space-16) var(--raya-space-20) var(--raya-space-20);
+}
+
+.routines-global-reports > p {
+  margin: 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  line-height: 1.45;
+}
+
+.routines-global-reports .routines-info-section {
+  padding-top: var(--raya-space-12);
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
 .routines-organization-add,
 .routines-organization-danger {
   display: flex;

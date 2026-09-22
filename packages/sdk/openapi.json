@@ -56282,6 +56282,15 @@
               "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
             },
             "required": false
+          },
+          {
+            "name": "global",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -56468,7 +56477,7 @@
             }
           }
         },
-        "description": "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to one Routine worker or organization Raya inbox scope.",
+        "description": "List up to 100 owner-authorized contact destinations for this Raya workspace, optionally limited to the global, one Routine worker, or one organization Raya inbox scope.",
         "summary": "List contact destinations",
         "x-codeSamples": [
           {

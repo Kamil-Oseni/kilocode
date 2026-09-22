@@ -210,10 +210,32 @@ it.live("serves authenticated owner contact destination management without dispa
         expect(organization.status).toBe(200)
         expect(yield* Effect.promise(() => organization.json())).toEqual([organizationTarget])
 
+        const localGlobal = yield* request("/raya/contact/destinations", {
+          method: "POST",
+          body: JSON.stringify({
+            source: "routine-owner:global",
+            channel: "raya",
+            address: "owner",
+            scope: { kind: "global" },
+          }),
+        })
+        expect(localGlobal.status).toBe(200)
+        const globalTarget = yield* Effect.promise(() => localGlobal.json()).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Destination)),
+        )
+        expect(globalTarget.scope).toEqual({ kind: "global" })
+        const global = yield* request("/raya/contact/destinations?limit=1&global=true")
+        expect(global.status).toBe(200)
+        expect(yield* Effect.promise(() => global.json())).toEqual([globalTarget])
+
         const ambiguous = yield* request(
           `/raya/contact/destinations?limit=1&agentID=${worker.id}&organizationID=org_accounts`,
         )
         expect(ambiguous.status).toBe(400)
+        const globalAmbiguous = yield* request(
+          `/raya/contact/destinations?limit=1&global=true&agentID=${worker.id}&organizationID=org_accounts`,
+        )
+        expect(globalAmbiguous.status).toBe(400)
 
         const stopped = yield* request(`/raya/contact/destinations/${target.id}/revoke`, {
           method: "POST",
@@ -309,6 +331,7 @@ it.live("serves authenticated owner contact destination management without dispa
           "contact.authorized",
           "delivery.started",
           "delivery.completed",
+          "contact.authorized",
           "contact.authorized",
           "contact.revoked",
           "contact.authorized",

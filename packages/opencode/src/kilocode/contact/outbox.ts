@@ -821,16 +821,26 @@ export namespace RayaContactOutbox {
           Effect.orDie,
         )
 
-    const listDestinations = (limit: number, filter?: { kind: "agent" | "organization"; id: string }) => {
+    const listDestinations = (
+      limit: number,
+      filter?: { kind: "global" } | { kind: "agent" | "organization"; id: string },
+    ) => {
       const query = db.select().from(DestinationRow)
       const filtered = filter
         ? query.where(
-            and(
-              eq(DestinationRow.channel, "raya"),
-              eq(DestinationRow.address, "owner"),
-              eq(DestinationRow.scope, filter.kind),
-              eq(DestinationRow.scope_id, filter.id),
-            ),
+            filter.kind === "global"
+              ? and(
+                  eq(DestinationRow.channel, "raya"),
+                  eq(DestinationRow.address, "owner"),
+                  eq(DestinationRow.scope, "global"),
+                  eq(DestinationRow.scope_id, ""),
+                )
+              : and(
+                  eq(DestinationRow.channel, "raya"),
+                  eq(DestinationRow.address, "owner"),
+                  eq(DestinationRow.scope, filter.kind),
+                  eq(DestinationRow.scope_id, filter.id),
+                ),
           )
         : query
       return filtered

@@ -107,15 +107,21 @@ export const contactHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-conta
 
     return handlers
       .handle("contactDestinationList", (ctx) => {
-        if (ctx.query.agentID && ctx.query.organizationID)
+        const selected = [ctx.query.global === "true", !!ctx.query.agentID, !!ctx.query.organizationID].filter(Boolean)
+        if (selected.length > 1)
           return api(
-            Effect.fail(new Invalid({ message: "Filter contact destinations by one worker or one organization." })),
+            Effect.fail(
+              new Invalid({ message: "Filter contact destinations by global, one worker, or one organization." }),
+            ),
           )
-        const filter = ctx.query.agentID
-          ? { kind: "agent" as const, id: ctx.query.agentID }
-          : ctx.query.organizationID
-            ? { kind: "organization" as const, id: ctx.query.organizationID }
-            : undefined
+        const filter =
+          ctx.query.global === "true"
+            ? { kind: "global" as const }
+            : ctx.query.agentID
+              ? { kind: "agent" as const, id: ctx.query.agentID }
+              : ctx.query.organizationID
+                ? { kind: "organization" as const, id: ctx.query.organizationID }
+                : undefined
         return outbox.listDestinations(ctx.query.limit ?? 100, filter)
       })
       .handle("contactDestinationAuthorize", (ctx) =>

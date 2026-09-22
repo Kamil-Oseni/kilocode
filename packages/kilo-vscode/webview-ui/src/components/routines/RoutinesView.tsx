@@ -1735,6 +1735,21 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     ))
   }
 
+  const reports = () =>
+    dialog.show(() => (
+      <Dialog title="Report settings" fit>
+        <div class="routines-global-reports">
+          <p>Choose whether eligible Routine workers may send reports to their own conversations.</p>
+          <ReportSetting global connected={connection() === "connected"} />
+          <div class="dialog-confirm-actions">
+            <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
+              Done
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
+
   const state = (item: Agent) => {
     if (item.execution) return item.execution.state === "recovery" ? ("error" as const) : ("working" as const)
     const last = latest(item, runs())
@@ -1932,6 +1947,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       </Button>
                     </div>
                     <div class="routines-secondary">
+                      <Show when={!organization()}>
+                        <Button variant="ghost" size="small" onClick={reports}>
+                          Report settings
+                        </Button>
+                      </Show>
                       <Button variant="ghost" size="small" onClick={() => setManage(true)}>
                         Manage workers
                       </Button>

@@ -400,6 +400,7 @@ export interface RoutineInboxInfoResultMessage {
 export interface RoutineContactDestinationResultMessage {
   type: "routineContactDestination"
   requestID: string
+  global?: true
   agentID?: string
   organizationID?: string
   enabled?: boolean

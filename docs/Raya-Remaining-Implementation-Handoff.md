@@ -1,11 +1,17 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `3ab59d819b` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+42e8f8c582.kamil-oseni.1790112782617` installs grounded window switching, visible physical capture bounds, covered-point refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `97c0cc6dfd` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+42e8f8c582.kamil-oseni.1790112782617` installs grounded window switching, visible physical capture bounds, covered-point refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 17:44 America/Toronto - preserve held-manual-input refusal
+
+Preserve product commit `97c0cc6dfd`. `ValidateIdleInput` scans virtual keys 1 through 255 with the high-order `GetAsyncKeyState` bit immediately before window focus and every native input path. Any held key or mouse button must refuse before focus change or dispatch. Keep this check inside the native process and adjacent to dispatch; an earlier TypeScript check would reopen the race. The low toggle bit is intentionally ignored.
+
+Evidence passes **33 focused tests / 146 assertions** and the formatted native-driver rerun passes **10 tests / 74 assertions**. Extension typecheck, ESLint, Knip, formatting, the marker guard, embedded-C# compilation/enumeration and a live non-injecting reflection probe of the held-input check pass. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `42e8f8c582`; include this source in the next coherent capped snapshot.
 
 ## ChatGPT 2026-09-22 17:35 America/Toronto - pointer target ownership installation receipt
 

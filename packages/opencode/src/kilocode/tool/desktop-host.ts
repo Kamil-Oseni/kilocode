@@ -111,4 +111,54 @@ export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Serv
   }),
 )
 
-export const DesktopTools = [DesktopObserveTool, DesktopClickTool]
+const TypeParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_observe.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh observation ID returned by desktop_observe. It can be used only once.",
+  }),
+  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)).annotate({
+    description: "Text to insert at the current focus. The host does not put this text on the clipboard.",
+  }),
+})
+
+export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Service, "desktop_type">(
+  "desktop_type",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Insert text at the current focus in the foreground window grounded by a fresh desktop_observe result. The host refuses changed windows, stale observations, reuse, and manual takeover before dispatch.",
+      parameters: TypeParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "desktop_type",
+            patterns: [params.window_id],
+            always: [],
+            metadata: { length: params.text.length },
+          })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "type",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              text: params.text,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "type") return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: "Typed into desktop",
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
+export const DesktopTools = [DesktopObserveTool, DesktopClickTool, DesktopTypeTool]

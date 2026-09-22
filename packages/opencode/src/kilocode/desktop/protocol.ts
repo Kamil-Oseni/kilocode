@@ -29,7 +29,17 @@ export const ClickRequest = Schema.Struct({
   button: Schema.Literals(["left", "right"]),
 })
 
-export const Request = Schema.Union([ObserveRequest, ClickRequest]).annotate({ identifier: "DesktopRequest" })
+export const TypeRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("type"),
+  windowID: Identity,
+  observationID: ObservationID,
+  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
+})
+
+export const Request = Schema.Union([ObserveRequest, ClickRequest, TypeRequest]).annotate({
+  identifier: "DesktopRequest",
+})
 export type Request = Schema.Schema.Type<typeof Request>
 
 export const ObserveResult = Schema.Struct({
@@ -47,7 +57,12 @@ export const ClickResult = Schema.Struct({
   receipt: Receipt,
 })
 
-export const Result = Schema.Union([ObserveResult, ClickResult]).annotate({ identifier: "DesktopResult" })
+export const TypeResult = Schema.Struct({
+  operation: Schema.Literal("type"),
+  receipt: Receipt,
+})
+
+export const Result = Schema.Union([ObserveResult, ClickResult, TypeResult]).annotate({ identifier: "DesktopResult" })
 export type Result = Schema.Schema.Type<typeof Result>
 
 export const ErrorCode = Schema.Literals(["cancelled", "disconnected", "invalid_request", "timeout", "unsupported"])

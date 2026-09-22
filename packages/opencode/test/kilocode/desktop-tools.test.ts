@@ -2,7 +2,7 @@
 import { expect } from "bun:test"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
-import { DesktopClickTool } from "@/kilocode/tool/desktop-host"
+import { DesktopClickTool, DesktopTypeTool } from "@/kilocode/tool/desktop-host"
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
@@ -24,7 +24,7 @@ it.instance(
           Effect.sync(() => {
             calls.push(input)
             return {
-              operation: "click" as const,
+              operation: input.operation === "type" ? ("type" as const) : ("click" as const),
               receipt: {
                 version: 1 as const,
                 requestID: "desktop_click_test",
@@ -84,6 +84,37 @@ it.instance(
         },
       ])
       expect(result.title).toBe("Double-clicked desktop")
+
+      const typed = yield* DesktopTypeTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) =>
+          tool.execute(
+            {
+              window_id: "window_seen",
+              observation_id: ObservationID.make("observation_typed"),
+              text: "Exact text",
+            },
+            ctx,
+          ),
+        ),
+      )
+      expect(asks[1]).toEqual(
+        expect.objectContaining({
+          permission: "desktop_type",
+          patterns: ["window_seen"],
+          always: [],
+          metadata: { length: 10 },
+        }),
+      )
+      expect(calls[1]).toEqual({
+        operation: "type",
+        sessionID: ctx.sessionID,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_typed"),
+        text: "Exact text",
+      })
+      expect(typed.title).toBe("Typed into desktop")
     }),
   { git: true },
 )

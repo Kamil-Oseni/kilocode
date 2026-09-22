@@ -67484,6 +67484,37 @@
             },
             "required": ["id", "sessionID", "operation", "windowID", "observationID", "action", "x", "y", "button"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["type"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "text"],
+            "additionalProperties": false
           }
         ]
       },
@@ -81737,6 +81768,20 @@
               "operation": {
                 "type": "string",
                 "enum": ["click"]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["type"]
               },
               "receipt": {
                 "$ref": "#/components/schemas/ComputerUseReceipt"

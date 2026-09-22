@@ -1094,6 +1094,14 @@ export type DesktopRequest =
       y: number
       button: "left" | "right"
     }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "type"
+      windowID: string
+      observationID: ComputerUseObservationId
+      text: string
+    }
 
 export type CanvasRequestId = string
 
@@ -5674,6 +5682,10 @@ export type DesktopResult =
     }
   | {
       operation: "click"
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "type"
       receipt: ComputerUseReceipt
     }
 

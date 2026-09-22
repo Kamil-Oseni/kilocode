@@ -138,6 +138,32 @@ export class DesktopBridge {
         await this.deliver(request.id, directory, receipt)
         return
       }
+      if (request.operation === "type") {
+        await this.session.execute({
+          operation: "type",
+          windowID: request.windowID,
+          observationID: request.observationID,
+          text: request.text,
+        })
+        if (controller.signal.aborted) return
+        const result: DesktopResult = {
+          operation: "type",
+          receipt: {
+            version: 1,
+            requestID: request.id,
+            startedAt,
+            finishedAt: Date.now(),
+            effect: "interact",
+            outcome: "confirmed",
+            target: { surface: "desktop", windowID: request.windowID },
+            observationID: request.observationID,
+          },
+        }
+        receipt.result = result
+        receipt.failure = undefined
+        await this.deliver(request.id, directory, receipt)
+        return
+      }
       const frame = await this.observe()
       if (controller.signal.aborted) return
       const result: DesktopResult = {
@@ -173,7 +199,7 @@ export class DesktopBridge {
           finishedAt: Date.now(),
           effect: request.operation === "observe" ? "observe" : "interact",
           outcome: "unknown",
-          ...(request.operation === "click"
+          ...(request.operation !== "observe"
             ? {
                 target: { surface: "desktop" as const, windowID: request.windowID },
                 observationID: request.observationID,

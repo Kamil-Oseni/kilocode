@@ -220,9 +220,16 @@ try {
   assert.match(root.textContent, /The reply was delivered\. This scheduled run still needs review\./)
   assert.doesNotMatch(root.textContent, /completion audit cannot be satisfied|This is not a completed report/)
   const requestDetails = root.querySelector('[data-routine-message="rmg_delegation"] .routines-line-actions')
+  const requestCard = requestDetails.closest("article")
   assert.equal(requestDetails.open, false)
-  assert.match(requestDetails.closest("article").textContent, /To Counsel.*Acceptance Team.*Waiting to start\./s)
-  assert.doesNotMatch(requestDetails.closest("article").textContent, /organization revision|queued until/)
+  assert.match(requestCard.querySelector(".routines-line-meta").textContent, /To Counsel/)
+  assert.equal(requestCard.querySelector(".routines-line-context").textContent, "Acceptance Team")
+  assert.equal(
+    requestCard.querySelector(".routines-line-body").textContent,
+    "Confirm that the saved organization can be read back intact.",
+  )
+  assert.equal(requestCard.querySelector(".routines-line-status").textContent, "Waiting to start")
+  assert.doesNotMatch(requestCard.textContent, /organization revision|queued until/)
   assert.doesNotMatch(root.textContent, /Does not change the assignment/)
   const card = root.querySelector('[aria-label="Open ledger.pdf"]')
   assert.ok(card)

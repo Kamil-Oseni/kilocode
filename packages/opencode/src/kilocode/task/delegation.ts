@@ -232,7 +232,7 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
       : row.state === "failed"
         ? row.reason || "This request was not started."
         : undefined
-  const provenance = row.organizationName ? row.organizationName : undefined
+  const provenance = row.organizationName ? `Team: ${row.organizationName}` : undefined
   const files = row.artifacts?.length
     ? ["Verified files:", ...row.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`)].join("\n")
     : undefined

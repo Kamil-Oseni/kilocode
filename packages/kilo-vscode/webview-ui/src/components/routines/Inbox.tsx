@@ -196,6 +196,33 @@ function body(item: Note) {
   return kept.filter(Boolean).join("\n")
 }
 
+type Copy = {
+  body: string
+  title?: string
+  context?: string
+  status?: string
+}
+
+function copy(item: Note): Copy {
+  const value = body(item)
+  if (item.kind !== "delegation") return { body: value }
+  if (!item.source.startsWith("ask:") && !item.source.startsWith("sent:")) return { body: value }
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const title = lines.shift()
+  const state = lines.findIndex((line) => line === "Waiting to start.")
+  if (state >= 0) lines.splice(state, 1)
+  const context = lines.length > 1 ? lines.shift()?.replace(/^Team:\s*/, "") : undefined
+  return {
+    title: title || label(item),
+    context,
+    body: lines.join("\n") || "No request details were provided.",
+    status: state >= 0 ? "Waiting to start" : undefined,
+  }
+}
+
 function pending(item: Note, rows: Note[]) {
   if (item.kind !== "delegation" || !item.occurrenceID) return false
   if (!item.source.startsWith("sent:") && !item.source.startsWith("ask:")) return false
@@ -311,6 +338,7 @@ const Line: Component<{
 }> = (props) => {
   const live = () => pending(props.item, props.rows)
   const id = () => linked(props.item)
+  const content = () => copy(props.item)
   return (
     <article
       class="routines-line"
@@ -319,9 +347,11 @@ const Line: Component<{
       data-routine-message={props.item.id}
     >
       <span class="routines-line-meta">
-        {label(props.item)} · <MessageTime value={props.item.time} side="routine" />
+        {content().title ?? label(props.item)} · <MessageTime value={props.item.time} side="routine" />
       </span>
-      <p class="routines-line-body">{body(props.item)}</p>
+      <Show when={content().context}>{(value) => <span class="routines-line-context">{value()}</span>}</Show>
+      <p class="routines-line-body">{content().body}</p>
+      <Show when={content().status}>{(value) => <span class="routines-line-status">{value()}</span>}</Show>
       <Files items={props.item.files} session={props.item.sessionID} />
       <Attachments agentID={props.item.agentID} items={props.item.attachments} />
       <Show when={live() || id()}>

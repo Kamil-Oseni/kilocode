@@ -1,17 +1,21 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `18eb85ea82` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+4cf3bb6720.kamil-oseni.1790106027566` installs the grounded desktop window listing and switching slice. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `18eb85ea82` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+be55fc2e84.kamil-oseni.1790107250386` installs grounded desktop window switching and mixed-DPI coordinate safety. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
 
+## ChatGPT 2026-09-22 16:02 America/Toronto - mixed-DPI grounding installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+be55fc2e84.kamil-oseni.1790107250386` is installed without a forced reload. Retained VSIX `raya.537196419c55b4e37585f886e55277e9795d3a19e6a1d80bfe5b12390a4f9c87.vsix` is **522,219,734 bytes**, SHA-256 `537196419C55B4E37585F886E55277E9795D3A19E6A1D80BFE5B12390A4F9C87`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. SDK output was unchanged, the CLI was reused, and extension types, webview types, lint and production bundling passed. Retention pruned one old vault package, staged package and extension. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains.
+
 ## ChatGPT 2026-09-22 15:57 America/Toronto - preserve mixed-DPI desktop grounding
 
 Preserve product commit `18eb85ea82`. Every generated native observe, list, focus and action script calls `SetThreadDpiAwarenessContext` with per-monitor-aware-v2 before it reads bounds, captures pixels or sends pointer input. Zero return aborts the command with an unsafe-coordinate error. Do not weaken this to system awareness or continue on failure: mixed-scale monitors otherwise let screenshot pixels and native input address different points.
 
-Evidence passes **31 focused tests / 108 assertions**, extension typecheck, ESLint, Knip, formatting and the extension marker guard. The embedded C# compiles and its DPI-aware enumeration executes in the noninteractive shell, which exposes zero windows. The protected push passed all 29 JavaScript/TypeScript package typechecks. Package this source in the next capped snapshot; live mixed-scale focus/click observation remains physical installed-host acceptance.
+Evidence passes **31 focused tests / 108 assertions**, extension typecheck, ESLint, Knip, formatting and the extension marker guard. The embedded C# compiles and its DPI-aware enumeration executes in the noninteractive shell, which exposes zero windows. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is installed in the receipt above; live mixed-scale focus/click observation remains physical installed-host acceptance.
 
 ## ChatGPT 2026-09-22 15:44 America/Toronto - grounded window switching installation receipt
 

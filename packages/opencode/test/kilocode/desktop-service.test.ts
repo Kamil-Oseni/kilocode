@@ -133,13 +133,24 @@ it.instance(
       const desktop = yield* Desktop.Service
       const fiber = yield* desktop.request({ operation: "observe", sessionID }).pipe(Effect.forkChild)
       const pending = yield* desktop.list().pipe(Effect.repeat({ until: (items) => items.length === 1 }))
+      const receipt = {
+        version: 1 as const,
+        requestID: pending[0].id,
+        startedAt: 1,
+        finishedAt: 2,
+        effect: "interact" as const,
+        outcome: "unknown" as const,
+        target: { surface: "desktop" as const, windowID: "window_1" },
+        observationID: ObservationID.make("obs_desktop_uncertain"),
+      }
       yield* desktop.reject({
         requestID: pending[0].id,
-        error: { code: "unsupported", message: "Desktop observation is unavailable" },
+        error: { code: "unsupported", message: "Desktop input completion is uncertain", receipt },
       })
       const err = yield* Fiber.join(fiber).pipe(Effect.flip)
       expect(err).toBeInstanceOf(HostError)
-      expect(err.message).toContain("unavailable")
+      expect(err.receipt).toEqual(receipt)
+      expect(err.message).toContain("Do not automatically retry")
       const timeout = yield* desktop.request({ operation: "observe", sessionID }).pipe(Effect.flip)
       expect(timeout.code).toBe("timeout")
       expect(yield* desktop.list()).toEqual([])

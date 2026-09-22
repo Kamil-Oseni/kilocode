@@ -12,7 +12,14 @@ import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 const request: DesktopRequest = { id: "desktop_1", sessionID: "ses_desktop", operation: "observe" }
 
 function setup(
-  input: { store?: DesktopReceiptStore; pending?: DesktopRequest[]; fail?: boolean; hold?: Promise<void> } = {},
+  input: {
+    store?: DesktopReceiptStore
+    pending?: DesktopRequest[]
+    fail?: boolean
+    rejectFail?: boolean
+    actionError?: Error
+    hold?: Promise<void>
+  } = {},
 ) {
   const replies: unknown[] = []
   const rejects: unknown[] = []
@@ -49,6 +56,7 @@ function setup(
     },
     perform: async (action) => {
       actions.push(action)
+      if (input.actionError) throw input.actionError
     },
   }
   const client = {
@@ -61,8 +69,9 @@ function setup(
           if (input.fail && operation !== "observe" && operation !== "watch") return { error: { message: "offline" } }
           return { data: true }
         },
-        reject: async (input: unknown) => {
-          rejects.push(input)
+        reject: async (value: unknown) => {
+          rejects.push(value)
+          if (input.rejectFail) return { error: { message: "offline" } }
           return { data: true }
         },
       },
@@ -382,6 +391,89 @@ describe("desktop observation bridge", () => {
         result: expect.objectContaining({
           operation: "click",
           receipt: expect.objectContaining({ outcome: "confirmed" }),
+        }),
+      }),
+    ])
+    expect(store.read()).toEqual({ version: 1, items: [] })
+    second.bridge.dispose()
+  })
+
+  it("persists an uncertain action failure, pauses fresh input, and redelivers it without replay", async () => {
+    const store = memory()
+    const first = setup({
+      store,
+      rejectFail: true,
+      actionError: new Error("Windows sent only part of the click input"),
+    })
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = first.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const click: DesktopRequest = {
+      id: "desktop_uncertain_1",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(first.actions).toHaveLength(1)
+    expect(first.rejects).toEqual([
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({
+          message: expect.stringContaining("may have taken effect"),
+          receipt: expect.objectContaining({ requestID: click.id, outcome: "unknown" }),
+        }),
+      }),
+    ])
+    expect(store.read()).toMatchObject({
+      version: 1,
+      items: [{ id: click.id, failure: { receipt: { requestID: click.id, outcome: "unknown" } } }],
+    })
+
+    const next = { ...request, id: "desktop_after_uncertain_observe" }
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: next } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const frame = first.replies.at(-1) as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const blocked: DesktopRequest = {
+      ...click,
+      id: "desktop_after_uncertain_click",
+      windowID: frame.result.observation.target.windowID,
+      observationID: frame.result.observation.id,
+    }
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: blocked } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(first.actions).toHaveLength(1)
+    expect(first.rejects.at(-1)).toMatchObject({
+      requestID: blocked.id,
+      error: { message: expect.stringContaining("Resume agent desktop control") },
+    })
+    first.bridge.dispose()
+
+    const second = setup({ store, pending: [click] })
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.replies).toEqual([])
+    expect(second.rejects).toEqual([
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({
+          receipt: expect.objectContaining({ requestID: click.id, outcome: "unknown" }),
         }),
       }),
     ])

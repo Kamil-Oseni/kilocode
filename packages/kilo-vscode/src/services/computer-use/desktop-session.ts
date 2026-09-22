@@ -49,6 +49,16 @@ export type DesktopState = {
   reason?: string
 }
 
+export class DesktopOutcomeError extends Error {
+  readonly name = "DesktopOutcomeError"
+
+  constructor(operation: string, detail: string) {
+    super(
+      `The desktop ${operation} may have taken effect. It was not retried. Inspect the target before repeating it. ${detail}`,
+    )
+  }
+}
+
 export interface DesktopDriver {
   observe(): Promise<DesktopFrame>
   windows(): Promise<DesktopWindow[]>
@@ -134,7 +144,10 @@ export class DesktopSession {
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
-        await this.driver.focus(target)
+        await this.driver.focus(target).catch((error: unknown) => {
+          const detail = error instanceof Error ? error.message : String(error)
+          throw new DesktopOutcomeError("window switch", detail)
+        })
       } finally {
         this.active = Math.max(0, this.active - 1)
         if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })
@@ -172,7 +185,10 @@ export class DesktopSession {
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
-        await this.driver.perform(action, current)
+        await this.driver.perform(action, current).catch((error: unknown) => {
+          const detail = error instanceof Error ? error.message : String(error)
+          throw new DesktopOutcomeError(action.operation, detail)
+        })
       } finally {
         this.active = Math.max(0, this.active - 1)
         if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })

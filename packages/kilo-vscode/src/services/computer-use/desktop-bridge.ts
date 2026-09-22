@@ -9,7 +9,7 @@ import type {
 } from "@kilocode/sdk/v2/client"
 import type { ConnectionState } from "../cli-backend/connection-service"
 import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
-import type { DesktopSession } from "./desktop-session"
+import { DesktopOutcomeError, type DesktopSession } from "./desktop-session"
 
 export interface DesktopConnection {
   onEvent(listener: (event: SSEPayload, directory?: string) => void): () => void
@@ -166,19 +166,31 @@ export class DesktopBridge {
       await this.deliver(request.id, directory, receipt)
     } catch (error) {
       if (controller.signal.aborted) return
+      const uncertain = error instanceof DesktopOutcomeError
       receipt.failure = {
         code: "invalid_request",
         message: (error instanceof Error ? error.message : String(error)).slice(0, 10_000),
-        receipt: {
-          version: 1,
-          requestID: request.id,
-          startedAt,
-          finishedAt: Date.now(),
-          effect: effect(request),
-          outcome: "unknown",
-          ...ground(request),
-        },
+        ...(uncertain
+          ? {
+              receipt: {
+                version: 1 as const,
+                requestID: request.id,
+                startedAt,
+                finishedAt: Date.now(),
+                effect: effect(request),
+                outcome: "unknown" as const,
+                ...ground(request),
+              },
+            }
+          : {}),
       }
+      if (uncertain) this.session.takeControl("A desktop action had an uncertain outcome. Inspect it before resuming.")
+      await this.retain(receipt).catch((error) =>
+        console.error(
+          "[Raya] Desktop failure receipt persistence failed; backend delivery will still be attempted",
+          error,
+        ),
+      )
       await this.deliver(request.id, directory, receipt)
     } finally {
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
@@ -379,31 +391,23 @@ export class DesktopBridge {
     const value = saved as { version?: unknown; items?: unknown }
     if (value.version !== 1 || !Array.isArray(value.items) || value.items.length > 256) return
     for (const item of value.items) {
-      if (!item || typeof item !== "object") continue
-      const entry = item as { id?: unknown; fingerprint?: unknown; result?: unknown }
-      if (
-        typeof entry.id !== "string" ||
-        !entry.id ||
-        entry.id.length > 256 ||
-        typeof entry.fingerprint !== "string" ||
-        !/^[a-f0-9]{64}$/.test(entry.fingerprint) ||
-        !persistable(entry.result) ||
-        entry.result.receipt.requestID !== entry.id
-      )
-        continue
-      this.receipts.set(entry.id, { fingerprint: entry.fingerprint, result: entry.result })
+      const entry = restored(item)
+      if (entry) this.receipts.set(entry[0], entry[1])
     }
   }
 
   private retain(receipt: Receipt): Promise<void> {
-    if (!this.store || !receipt.result || !persistable(receipt.result)) return Promise.resolve()
+    if (!this.store || (!persistable(receipt.result) && !persistableFailure(receipt.failure))) return Promise.resolve()
     this.writes = this.writes.then(() => {
       const items = [...this.receipts.entries()]
         .filter(
-          (entry): entry is [string, Receipt & { result: ActionResult }] =>
-            !entry[1].delivered && persistable(entry[1].result),
+          (entry) => !entry[1].delivered && (persistable(entry[1].result) || persistableFailure(entry[1].failure)),
         )
-        .map(([key, value]) => ({ id: key, fingerprint: value.fingerprint, result: value.result }))
+        .map(([key, value]) => ({
+          id: key,
+          fingerprint: value.fingerprint,
+          ...(persistable(value.result) ? { result: value.result } : { failure: value.failure }),
+        }))
         .slice(-256)
       return Promise.resolve(this.store!.update(journal, { version: 1, items }))
     })
@@ -442,4 +446,39 @@ function persistable(value: unknown): value is ActionResult {
     (receipt.target as Record<string, unknown>).surface === "desktop" &&
     typeof (receipt.target as Record<string, unknown>).windowID === "string"
   )
+}
+
+function persistableFailure(
+  value: unknown,
+): value is DesktopFailure & { receipt: NonNullable<DesktopFailure["receipt"]> } {
+  if (!value || typeof value !== "object") return false
+  const failure = value as { code?: unknown; message?: unknown; receipt?: unknown }
+  if (typeof failure.code !== "string" || typeof failure.message !== "string" || !failure.receipt) return false
+  if (failure.message.length < 1 || failure.message.length > 10_000 || typeof failure.receipt !== "object") return false
+  const receipt = failure.receipt as Record<string, unknown>
+  const target = receipt.target as Record<string, unknown> | undefined
+  return (
+    receipt.version === 1 &&
+    typeof receipt.requestID === "string" &&
+    Number.isFinite(receipt.startedAt) &&
+    Number.isFinite(receipt.finishedAt) &&
+    (receipt.effect === "manage" || receipt.effect === "interact") &&
+    receipt.outcome === "unknown" &&
+    typeof receipt.observationID === "string" &&
+    target?.surface === "desktop" &&
+    typeof target.windowID === "string"
+  )
+}
+
+function restored(value: unknown): [string, Receipt] | undefined {
+  if (!value || typeof value !== "object") return
+  const entry = value as { id?: unknown; fingerprint?: unknown; result?: unknown; failure?: unknown }
+  if (typeof entry.id !== "string" || !entry.id || entry.id.length > 256) return
+  if (typeof entry.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(entry.fingerprint)) return
+  const result = persistable(entry.result) ? entry.result : undefined
+  const failure = persistableFailure(entry.failure) ? entry.failure : undefined
+  if (!result && !failure) return
+  if (result && result.receipt.requestID !== entry.id) return
+  if (failure && failure.receipt.requestID !== entry.id) return
+  return [entry.id, { fingerprint: entry.fingerprint, ...(result ? { result } : { failure }) }]
 }

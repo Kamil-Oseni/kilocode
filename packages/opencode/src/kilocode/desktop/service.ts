@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import { InstanceRef } from "@/effect/instance-ref"
 import { registerDisposer } from "@/effect/instance-registry"
 import { Identifier } from "@/id/id"
+import { Receipt } from "@/kilocode/computer-use/protocol"
 import { capture } from "@/kilocode/instance"
 import { Context, Deferred, Duration, Effect, Layer, LayerMap, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -14,8 +15,11 @@ export type Input = WithoutID<Request>
 export class HostError extends Schema.TaggedErrorClass<HostError>()("DesktopHostError", {
   code: ErrorCode,
   detail: Schema.String,
+  receipt: Schema.optional(Receipt),
 }) {
   override get message() {
+    if (this.receipt?.outcome === "unknown")
+      return `${this.detail}\nThe desktop request may already have affected the computer. Do not automatically retry it. Inspect the target first and ask the user if the result cannot be verified safely.`
     return this.detail
   }
 }
@@ -170,7 +174,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         pending.delete(input.requestID)
         return yield* Deferred.fail(
           entry.deferred,
-          new HostError({ code: input.error.code, detail: input.error.message }),
+          new HostError({ code: input.error.code, detail: input.error.message, receipt: input.error.receipt }),
         )
       })
 

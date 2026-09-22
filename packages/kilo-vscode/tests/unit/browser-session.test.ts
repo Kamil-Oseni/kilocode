@@ -233,6 +233,66 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
+  it("binds one grounded action to a fresh snapshot observation", async () => {
+    const fake = harness()
+    const session = new BrowserSession("observation-profile", fake.launch)
+
+    await session.execute({ operation: "navigate", url: "https://example.test/form" })
+    const snapshot = await session.execute({ operation: "snapshot" })
+    expect(snapshot.observation).toMatchObject({
+      version: 1,
+      target: { surface: "browser", location: "https://example.test/form" },
+    })
+    expect(snapshot.observation!.validUntil).toBeGreaterThan(snapshot.observation!.observedAt)
+
+    await session.execute({
+      operation: "click",
+      tabID: snapshot.observation!.target.windowID,
+      observationID: snapshot.observation!.id,
+      selector: "#save",
+    })
+    await expect(
+      session.execute({
+        operation: "click",
+        tabID: snapshot.observation!.target.windowID,
+        observationID: snapshot.observation!.id,
+        selector: "#save-again",
+      }),
+    ).rejects.toThrow(/unknown or was already used/i)
+    expect(fake.pages[0]!.clicks).toEqual(["#save"])
+    await session.dispose()
+  })
+
+  it("refuses an observation made stale by navigation or manual control before dispatch", async () => {
+    const fake = harness()
+    const session = new BrowserSession("stale-observation-profile", fake.launch)
+
+    await session.execute({ operation: "navigate", url: "https://example.test/first" })
+    const navigated = await session.execute({ operation: "snapshot" })
+    fake.pages[0]!.current = "https://example.test/second"
+    await expect(
+      session.execute({
+        operation: "click",
+        tabID: navigated.observation!.target.windowID,
+        observationID: navigated.observation!.id,
+        selector: "#stale",
+      }),
+    ).rejects.toThrow(/stale after navigation/i)
+
+    const controlled = await session.execute({ operation: "snapshot" })
+    session.takeControl()
+    await expect(
+      session.execute({
+        operation: "click",
+        tabID: controlled.observation!.target.windowID,
+        observationID: controlled.observation!.id,
+        selector: "#manual",
+      }),
+    ).rejects.toThrow(/stale after manual control/i)
+    expect(fake.pages[0]!.clicks).toEqual([])
+    await session.dispose()
+  })
+
   it("forwards panel pointer and keyboard input through the CDP Input domain", async () => {
     const fake = harness()
     const session = new BrowserSession("test-profile", fake.launch)

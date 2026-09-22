@@ -475,6 +475,8 @@ export type BrowserUploadFile = {
   sha256: string
 }
 
+export type ComputerUseObservationId = string
+
 export type BrowserRequest =
   | {
       id: BrowserRequestId
@@ -747,6 +749,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -781,6 +784,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -817,6 +821,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -852,6 +857,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -895,6 +901,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5125,6 +5132,32 @@ export type BrowserUploadChunk = {
   next: number
 }
 
+export type ComputerUseTarget = {
+  surface: "browser" | "desktop" | "mobile"
+  windowID: string
+  documentID?: string
+  location?: string
+}
+
+export type ComputerUseReceipt = {
+  version: 1
+  requestID: string
+  startedAt: number
+  finishedAt: number
+  effect: "observe" | "navigate" | "interact" | "manage" | "transfer" | "authenticate" | "test"
+  outcome: "confirmed" | "unknown"
+  target?: ComputerUseTarget
+  observationID?: ComputerUseObservationId
+}
+
+export type ComputerUseObservation = {
+  version: 1
+  id: ComputerUseObservationId
+  observedAt: number
+  validUntil: number
+  target: ComputerUseTarget
+}
+
 export type BrowserAuthSource = {
   source: "live" | "capture"
   profileID: string
@@ -5198,6 +5231,8 @@ export type BrowserUploadInfo = {
 
 export type BrowserResult =
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5215,6 +5250,8 @@ export type BrowserResult =
       operation: "profile"
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5233,11 +5270,15 @@ export type BrowserResult =
       captures: Array<BrowserCaptureInfo>
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       operation: "upload"
       uploads: Array<BrowserUploadInfo>
       url?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       operation: "download"
       transfers: Array<BrowserTransfer>
       next?: number
@@ -5246,6 +5287,8 @@ export type BrowserResult =
       url?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       operation: "dialog"
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
@@ -5280,6 +5323,8 @@ export type BrowserResult =
       title?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       transfers?: Array<BrowserTransfer>
       operation: "tabs"
       tabs: Array<{
@@ -5303,6 +5348,8 @@ export type BrowserResult =
       title?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       operation: "frames"
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
@@ -5329,6 +5376,8 @@ export type BrowserResult =
       title?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5347,6 +5396,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5365,6 +5416,8 @@ export type BrowserResult =
       snapshot: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5383,6 +5436,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5401,6 +5456,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5419,6 +5476,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5437,6 +5496,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5456,6 +5517,8 @@ export type BrowserResult =
       data: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5474,6 +5537,8 @@ export type BrowserResult =
       output: string
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5495,6 +5560,8 @@ export type BrowserResult =
       origins: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   | {
+      receipt?: ComputerUseReceipt
+      observation?: ComputerUseObservation
       profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
@@ -5566,6 +5633,7 @@ export type BrowserFailure = {
     | "timeout"
     | "unsupported"
   message: string
+  receipt?: ComputerUseReceipt
 }
 
 export type CanvasResult = {
@@ -6648,6 +6716,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -6682,6 +6751,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -6718,6 +6788,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -6753,6 +6824,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**
@@ -6796,6 +6868,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       id: BrowserRequestId
       sessionID: string
       /**

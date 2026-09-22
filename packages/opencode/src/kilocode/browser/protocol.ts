@@ -2,6 +2,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
+import { Observation, ObservationID, Receipt } from "@/kilocode/computer-use/protocol"
 import { UploadFile, UploadInfo } from "./upload-schema"
 import { AuthSource, CaptureID, CaptureInfo, ProfileID, ProfileInfo } from "./profile-schema"
 
@@ -30,6 +31,8 @@ export const FrameID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLe
   description: "Observed frame document identity; invalid after navigation or detachment.",
 })
 const Framed = { frameID: Schema.optional(FrameID) }
+const Grounded = { observationID: Schema.optional(ObservationID) }
+const Evidence = { receipt: Schema.optional(Receipt), observation: Schema.optional(Observation) }
 export const UploadRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
@@ -58,6 +61,7 @@ export const UploadRequest = Schema.Union([
   }),
 ])
 export const UploadResult = Schema.Struct({
+  ...Evidence,
   operation: Schema.Literal("upload"),
   uploads: Schema.Array(UploadInfo),
   url: Schema.optional(Url),
@@ -107,6 +111,7 @@ export const DownloadRequest = Schema.Union([
   }),
 ])
 export const DownloadResult = Schema.Struct({
+  ...Evidence,
   operation: Schema.Literal("download"),
   transfers: Schema.Array(Transfer),
   next: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -141,6 +146,7 @@ export const FramesRequest = Schema.Union([
   }),
 ])
 export const FramesResult = Schema.Struct({
+  ...Evidence,
   operation: Schema.Literal("frames"),
   tabID: TabID,
   frames: Schema.Array(FrameInfo),
@@ -181,6 +187,7 @@ export const Tab = Schema.Struct({
   openerID: Schema.optional(TabID),
 })
 export const TabsResult = Schema.Struct({
+  ...Evidence,
   ...Transfers,
   operation: Schema.Literal("tabs"),
   tabs: Schema.Array(Tab),
@@ -235,6 +242,7 @@ export const DialogRequest = Schema.Union([
   }),
 ])
 export const DialogResult = Schema.Struct({
+  ...Evidence,
   operation: Schema.Literal("dialog"),
   tabID: TabID,
   dialogs: Schema.Array(DialogInfo),
@@ -255,12 +263,14 @@ export const SnapshotRequest = Schema.Struct({
 })
 export const ClickRequest = Schema.Struct({
   ...Framed,
+  ...Grounded,
   ...Base,
   operation: Schema.Literal("click"),
   selector: Selector,
 })
 export const TypeRequest = Schema.Struct({
   ...Framed,
+  ...Grounded,
   ...Base,
   operation: Schema.Literal("type"),
   selector: Selector,
@@ -269,6 +279,7 @@ export const TypeRequest = Schema.Struct({
 })
 export const SelectRequest = Schema.Struct({
   ...Framed,
+  ...Grounded,
   ...Base,
   operation: Schema.Literal("select"),
   selector: Selector,
@@ -276,6 +287,7 @@ export const SelectRequest = Schema.Struct({
 })
 export const ScrollRequest = Schema.Struct({
   ...Framed,
+  ...Grounded,
   ...Base,
   operation: Schema.Literal("scroll"),
   deltaX: Schema.Number,
@@ -289,6 +301,7 @@ export const ScreenshotRequest = Schema.Struct({
 })
 export const EvaluateRequest = Schema.Struct({
   ...Framed,
+  ...Grounded,
   ...Base,
   operation: Schema.Literal("evaluate"),
   expression: Text,
@@ -372,6 +385,7 @@ export const Request = Schema.Union([
 export type Request = Schema.Schema.Type<typeof Request>
 
 const ResultBase = {
+  ...Evidence,
   profile: Schema.optional(ProfileInfo),
   navigation: Schema.optional(Schema.Literal("download")),
   ...Transfers,
@@ -503,6 +517,7 @@ export type ErrorCode = Schema.Schema.Type<typeof ErrorCode>
 export const Failure = Schema.Struct({
   code: ErrorCode,
   message: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000)),
+  receipt: Schema.optional(Receipt),
 }).annotate({ identifier: "BrowserFailure" })
 export type Failure = Schema.Schema.Type<typeof Failure>
 

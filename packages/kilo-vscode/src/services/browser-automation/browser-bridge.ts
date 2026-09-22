@@ -70,6 +70,54 @@ function action(request: BrowserRequest): BrowserAction {
 
 type Receipt = { fingerprint: string; result?: HostBrowserResult; failure?: BrowserFailure }
 
+function effect(request: BrowserRequest) {
+  if (["snapshot", "screenshot", "frames"].includes(request.operation)) return "observe" as const
+  if (request.operation === "navigate") return "navigate" as const
+  if (["click", "type", "select", "scroll", "evaluate"].includes(request.operation)) return "interact" as const
+  if (request.operation === "upload" || request.operation === "download") return "transfer" as const
+  if (request.operation === "auth" || request.operation === "auth_capture" || request.operation === "profile")
+    return "authenticate" as const
+  if (request.operation === "smoke") return "test" as const
+  return "manage" as const
+}
+
+function target(request: BrowserRequest, result?: BrowserResult) {
+  const tabID = result?.tabID ?? ("tabID" in request ? request.tabID : undefined)
+  if (!tabID) return undefined
+  const frameID = result?.frameID ?? ("frameID" in request ? request.frameID : undefined)
+  const location =
+    result && "url" in result
+      ? (result.frameURL ?? result.url)
+      : request.operation === "navigate"
+        ? request.url
+        : undefined
+  return {
+    surface: "browser" as const,
+    windowID: tabID,
+    ...(frameID ? { documentID: frameID } : {}),
+    ...(location ? { location } : {}),
+  }
+}
+
+function evidence(
+  request: BrowserRequest,
+  startedAt: number,
+  outcome: "confirmed" | "unknown",
+  result?: BrowserResult,
+) {
+  const observationID = "observationID" in request ? request.observationID : undefined
+  return {
+    version: 1 as const,
+    requestID: request.id,
+    startedAt,
+    finishedAt: Date.now(),
+    effect: effect(request),
+    outcome,
+    target: target(request, result),
+    ...(observationID ? { observationID } : {}),
+  }
+}
+
 export class BrowserBridge {
   private readonly active = new Map<string, AbortController>()
   private readonly receipts = new Map<string, Receipt>()
@@ -206,16 +254,20 @@ export class BrowserBridge {
       return
     }
     const controller = new AbortController()
+    const startedAt = Date.now()
     this.active.set(request.id, controller)
     const state = { completed: false }
     try {
       await this.show(request, directory)
       if (controller.signal.aborted) return
-      const result = (await this.host.execute({
+      const value = await this.host.execute({
         ...action(request),
         origin: { requestID: request.id, sessionID: request.sessionID, directory },
         uploader: this.uploader(request, directory),
-      })) as HostBrowserResult
+      })
+      const result = Object.assign(value, {
+        receipt: evidence(request, startedAt, "confirmed", value),
+      }) as HostBrowserResult
       state.completed = true
       if (controller.signal.aborted) return
       if (Buffer.byteLength(JSON.stringify(result), "utf8") <= 64_000) {
@@ -245,6 +297,7 @@ export class BrowserBridge {
                 ? "evaluation_failed"
                 : "invalid_request",
         message: message.slice(0, 10_000),
+        receipt: evidence(request, startedAt, "unknown"),
       }
       await this.deliver(request.id, directory, receipt)
     } finally {

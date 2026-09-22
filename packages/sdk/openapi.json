@@ -65170,6 +65170,11 @@
         "required": ["id", "name", "bytes", "sha256"],
         "additionalProperties": false
       },
+      "ComputerUseObservationID": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
       "BrowserRequest": {
         "anyOf": [
           {
@@ -66006,6 +66011,9 @@
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
               },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -66113,6 +66121,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -66228,6 +66239,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -66345,6 +66359,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -66525,6 +66542,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -79660,6 +79680,94 @@
         "required": ["data", "offset", "next"],
         "additionalProperties": false
       },
+      "ComputerUseTarget": {
+        "type": "object",
+        "properties": {
+          "surface": {
+            "type": "string",
+            "enum": ["browser", "desktop", "mobile"]
+          },
+          "windowID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "documentID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": ["surface", "windowID"],
+        "additionalProperties": false
+      },
+      "ComputerUseReceipt": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "requestID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "startedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "finishedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "effect": {
+            "type": "string",
+            "enum": ["observe", "navigate", "interact", "manage", "transfer", "authenticate", "test"]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": ["confirmed", "unknown"]
+          },
+          "target": {
+            "$ref": "#/components/schemas/ComputerUseTarget"
+          },
+          "observationID": {
+            "$ref": "#/components/schemas/ComputerUseObservationID"
+          }
+        },
+        "required": ["version", "requestID", "startedAt", "finishedAt", "effect", "outcome"],
+        "additionalProperties": false
+      },
+      "ComputerUseObservation": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "id": {
+            "$ref": "#/components/schemas/ComputerUseObservationID"
+          },
+          "observedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "validUntil": {
+            "type": "number",
+            "minimum": 0
+          },
+          "target": {
+            "$ref": "#/components/schemas/ComputerUseTarget"
+          }
+        },
+        "required": ["version", "id", "observedAt", "validUntil", "target"],
+        "additionalProperties": false
+      },
       "BrowserAuthSource": {
         "type": "object",
         "properties": {
@@ -79922,6 +80030,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -79970,6 +80084,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80024,6 +80144,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["upload"]
@@ -80046,6 +80172,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["download"]
@@ -80078,6 +80210,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["dialog"]
@@ -80187,6 +80325,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "transfers": {
                 "type": "array",
                 "items": {
@@ -80251,6 +80395,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["frames"]
@@ -80313,6 +80463,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80365,6 +80521,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80417,6 +80579,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80469,6 +80637,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80521,6 +80695,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80573,6 +80753,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80625,6 +80811,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80681,6 +80873,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80733,6 +80931,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -80835,6 +81039,12 @@
           {
             "type": "object",
             "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
               "profile": {
                 "$ref": "#/components/schemas/BrowserProfileInfo"
               },
@@ -81150,6 +81360,9 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 10000
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComputerUseReceipt"
           }
         },
         "required": ["code", "message"],
@@ -85081,6 +85294,9 @@
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
               },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -85188,6 +85404,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -85303,6 +85522,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -85420,6 +85642,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
@@ -85592,6 +85817,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"

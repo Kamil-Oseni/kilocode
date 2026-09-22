@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { Agent } from "@/agent/agent"
 import * as KiloAgent from "@/kilocode/agent"
 import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
+import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { Browser, HostError } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
@@ -485,7 +486,10 @@ describe("browser host tools", () => {
 
         yield* navigate.execute({ url: "https://example.com" }, ctx)
         const tree = yield* snapshot.execute({}, ctx)
-        yield* click.execute({ tab_id: "tab_test", selector: "e1" }, ctx)
+        yield* click.execute(
+          { tab_id: "tab_test", observation_id: ObservationID.make("obs_seen"), selector: "e1" },
+          ctx,
+        )
         yield* type.execute({ tab_id: "tab_test", selector: "#name", text: "Raya", submit: true }, ctx)
         yield* select.execute({ tab_id: "tab_test", selector: "#role", values: ["admin"] }, ctx)
         yield* scroll.execute({ tab_id: "tab_test", delta_x: 4, delta_y: 500, selector: "#main" }, ctx)
@@ -523,6 +527,7 @@ describe("browser host tools", () => {
           "smoke",
         ])
         expect(calls[3]).toMatchObject({ text: "Raya", submit: true })
+        expect(calls[2]).toMatchObject({ observationID: "obs_seen" })
         expect(calls[5]).toMatchObject({ deltaX: 4, deltaY: 500 })
         expect(asks.map((item) => item.permission)).toEqual([
           "browser_navigate",

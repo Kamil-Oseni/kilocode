@@ -647,6 +647,67 @@ describe("Raya browser bridge", () => {
     })
     bridge.dispose()
   })
+
+  it("returns a versioned receipt bound to the request, target, and observation", async () => {
+    const replies: Record<string, unknown>[] = []
+    const done = Promise.withResolvers<void>()
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async (input: Record<string, unknown>) => {
+            replies.push(input)
+            done.resolve()
+            return {}
+          },
+          reject: async () => ({}),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => ({
+        operation: "click",
+        tabID: "tab_seen",
+        url: "https://example.test/form",
+        title: "Form",
+      }),
+    })
+
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_grounded",
+        sessionID: "ses_test",
+        operation: "click",
+        tabID: "tab_seen",
+        observationID: "obs_seen",
+        selector: "#save",
+      },
+    })
+    await done.promise
+
+    expect(replies[0]).toMatchObject({
+      requestID: "brr_grounded",
+      result: {
+        operation: "click",
+        receipt: {
+          version: 1,
+          requestID: "brr_grounded",
+          effect: "interact",
+          outcome: "confirmed",
+          observationID: "obs_seen",
+          target: {
+            surface: "browser",
+            windowID: "tab_seen",
+            location: "https://example.test/form",
+          },
+        },
+      },
+    })
+    bridge.dispose()
+  })
 })
 
 function harness(client: KiloClient) {

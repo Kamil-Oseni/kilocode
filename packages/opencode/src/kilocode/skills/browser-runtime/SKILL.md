@@ -1,17 +1,17 @@
 ---
 name: browser-runtime
-description: Capability reference for Raya browser skill version 9.
+description: Capability reference for Raya browser skill version 10.
 metadata:
-  version: "9"
+  version: "10"
 ---
 
-# Browser runtime contract, version 9
+# Browser runtime contract, version 10
 
 ## Execution and recovery
 
 Evaluation candidates are parsed before execution; the selected expression, script or async body runs once. Runtime exceptions, including runtime SyntaxError and promise rejection, never select another wrapper. Navigation, clicks, typing, selection, scrolling, evaluation and smoke work are not automatically retried once dispatched. An uncertain outcome preserves the current page; inspect the destination before issuing a fresh action. Read-only snapshots/screenshots may retry within existing bounds. A syntax/target preflight failure is distinct from an action that may have taken effect. A failed smoke assertion returns its structured report without restarting earlier steps.
 
-The extension bridge binds each request ID to its canonical payload and directory. Identical requests reuse retained outcomes; changed content under the same ID is rejected. Lost reply delivery does not rerun the browser action. Receipts last for that bridge instance, retain at most 1,024 request identities and at most 64,000 UTF-8 serialized bytes per result, and never expire or evict an in-flight identity. Oversized results retain a non-replay marker. Capacity exhaustion rejects new work before dispatch; reconnecting does not clear capacity. Review unresolved outcomes before intentionally reloading the extension, which discards local receipts and cannot establish old outcomes. Recovered pending requests without a local receipt are refused for inspection, not replayed. These are process-local protections, not durable exactly-once execution across a host restart.
+The extension bridge binds each request ID to its canonical payload and directory. Identical requests reuse retained outcomes; changed content under the same ID is rejected. Lost reply delivery does not rerun the browser action. Every delivered success carries a versioned receipt with request identity, timing, effect class, confirmed outcome, target and grounding observation when used. Failures carry an unknown-outcome receipt when dispatch cannot be established safely. Receipts last for that bridge instance, retain at most 1,024 request identities and at most 64,000 UTF-8 serialized bytes per result, and never expire or evict an in-flight identity. Oversized results retain a non-replay marker. Capacity exhaustion rejects new work before dispatch; reconnecting does not clear capacity. Review unresolved outcomes before intentionally reloading the extension, which discards local receipts and cannot establish old outcomes. Recovered pending requests without a local receipt are refused for inspection, not replayed. These are process-local protections, not durable exactly-once execution across a host restart.
 
 This reference describes the model-facing BrowserTools in `kilocode/tool/browser-host.ts` and protocol in `kilocode/browser/protocol.ts`. Use live tool schemas when available; report mismatches instead of guessing parameters. These tools are exposed to the VS Code client and require a connected extension browser host. Other clients can discover this guidance without having browser tools. Availability in the skill list does not establish a connected host or permission to use it.
 
@@ -23,16 +23,16 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 | `browser_frames` | `action: "list", tab_id`; or `action: "resolve", tab_id, parent_frame_id, selector` | Frame document IDs, parent relation, URL/name and main-frame flag. Resolve exactly one observed iframe element. |
 | `browser_tabs` | `action: "list"`; `action: "open", url`; `action: "select"` or `"close", tab_id` | Stable IDs, URL/title, selected flag and popup opener ID. Opening selects the new tab; popups do not. |
 | `browser_navigate` | optional `tab_id`, `url` (absolute URL) | Resulting shared page URL/title; inspect a fresh snapshot for controls. |
-| `browser_snapshot` | optional `tab_id` | Accessibility-oriented current page snapshot; it may omit visual or off-frame content. |
-| `browser_click` | `tab_id`, `selector` | Action result, not a saved-record guarantee. |
-| `browser_type` | `tab_id`, `selector`, `text`, optional `submit` | Replaces editable text; `submit: true` presses Enter and may mutate external state. Defaults false. |
-| `browser_select` | `tab_id`, `selector`, `values` (array) | Select element values; verify the resulting selection. |
-| `browser_scroll` | `tab_id`, `delta_y`, optional `delta_x`, optional `selector` | Scroll page or observed container by pixels. |
+| `browser_snapshot` | optional `tab_id` | Accessibility-oriented current page snapshot plus a one-minute, single-use observation ID; it may omit visual or off-frame content. |
+| `browser_click` | `tab_id`, `selector`, optional `observation_id` | Action result, not a saved-record guarantee. A supplied observation is verified before dispatch. |
+| `browser_type` | `tab_id`, `selector`, `text`, optional `submit`, optional `observation_id` | Replaces editable text; `submit: true` presses Enter and may mutate external state. Defaults false. |
+| `browser_select` | `tab_id`, `selector`, `values` (array), optional `observation_id` | Select element values; verify the resulting selection. |
+| `browser_scroll` | `tab_id`, `delta_y`, optional `delta_x`, optional `selector`, optional `observation_id` | Scroll page or observed container by pixels. |
 | `browser_screenshot` | optional `tab_id`, optional `full_page` | Image attachment for the current rendered page; full_page defaults false. |
-| `browser_evaluate` | `tab_id`, `expression` | Bounded serialized page evaluation. Prefer ordinary interaction tools; use narrowly scoped DOM inspection when necessary. |
+| `browser_evaluate` | `tab_id`, `expression`, optional `observation_id` | Bounded serialized page evaluation. Prefer ordinary interaction tools; use narrowly scoped DOM inspection when necessary. |
 | `browser_smoke_test` | `tab_id`, `name`, optional `mode`, `steps` | Structured pass/fail, run ID, artifact and failing step; inspect assertions, not only tool completion. |
 
-Every page result identifies its tab; evaluation text and screenshot descriptions include that identity. Pass the observed `tab_id` for mutations and smoke work. Navigation/snapshot/screenshot may omit it only for the single original tab before another tab has ever existed. After opening a tab or popup, list tabs and use explicit IDs even if only one tab remains. IDs are opaque, never reused in a host lifetime, and invalid after restart; closed/unknown IDs fail without opening a replacement. Selecting a tab changes the viewer, not the page identity bound to already queued work. The panel binds input to the displayed frame and rejects stale selection. Closing the selected/last tab leaves no selected page until you select or open one.
+Every page result identifies its tab; evaluation text and screenshot descriptions include that identity. A snapshot also returns a versioned observation bound to the exact tab, frame document, location, observation time and expiry. Pass its `observation_id` with the next click, type, select, scroll or evaluation. The host consumes it once and refuses it before dispatch if it expired, was already used, targets another tab/frame, followed navigation, or predates manual control. Pass the observed `tab_id` for mutations and smoke work. Navigation/snapshot/screenshot may omit it only for the single original tab before another tab has ever existed. After opening a tab or popup, list tabs and use explicit IDs even if only one tab remains. IDs are opaque, never reused in a host lifetime, and invalid after restart; closed/unknown IDs fail without opening a replacement. Selecting a tab changes the viewer, not the page identity bound to already queued work. The panel binds input to the displayed frame and rejects stale selection. Closing the selected/last tab leaves no selected page until you select or open one.
 
 Raya opens the browser for the active editor's workspace, or the first open workspace when no editor is active. Chromium keeps ordinary site storage between launches, including persistent cookies. The panel does not expose workspace selection, profile IDs, authentication captures or expiry controls. At most four workspace browsers can be open at once; close an unused panel to release its context.
 

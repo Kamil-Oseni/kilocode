@@ -19,6 +19,7 @@ import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse,
 export type BrowserAction = {
   tabID?: string
   frameID?: string
+  observationID?: string
   origin?: TransferOrigin
   uploader?: UploadTransport
 } & (
@@ -72,6 +73,7 @@ export type BrowserResult = {
   frameURL?: string
   transfers?: TransferInfo[]
   navigation?: "download"
+  observation?: BrowserObservation
 } & (
   | { operation: "profile"; profile: ProfileInfo; url?: string }
   | { operation: "auth"; captures: CaptureInfo[]; profile: ProfileInfo; url?: string }
@@ -101,6 +103,14 @@ export type BrowserResult = {
     }
   | SmokeResult
 )
+
+type BrowserObservation = {
+  version: 1
+  id: string
+  observedAt: number
+  validUntil: number
+  target: { surface: "browser"; windowID: string; documentID?: string; location?: string }
+}
 
 export type BrowserFrame = {
   tabID: string
@@ -280,6 +290,7 @@ export class BrowserSession {
   private readonly identities = new Map<BrowserPage, string>()
   private readonly openers = new Map<BrowserPage, Promise<string | undefined>>()
   private readonly inventories = new Set<(tabs: BrowserTab[]) => void>()
+  private readonly observations = new Map<string, { value: BrowserObservation; revision: number }>()
   private page: BrowserPage | undefined
   private cdp: BrowserCDP | undefined
   private start: Promise<void> | undefined
@@ -761,7 +772,53 @@ export class BrowserSession {
       )
     if (this.failure && this.context) throw new TargetError(this.failure.message)
     const result = await this.executeAction(action)
+    if (result.operation === "snapshot") return { ...result, observation: this.observe(result) }
+    if (["navigate", "click", "type", "select", "scroll", "evaluate"].includes(result.operation))
+      this.invalidate(result.tabID)
     return result
+  }
+
+  private observe(result: BrowserResult): BrowserObservation {
+    if (!result.tabID) throw new TargetError("Browser snapshot did not preserve its tab identity")
+    const observedAt = Date.now()
+    const value: BrowserObservation = {
+      version: 1,
+      id: randomUUID(),
+      observedAt,
+      validUntil: observedAt + 60_000,
+      target: {
+        surface: "browser",
+        windowID: result.tabID,
+        ...(result.frameID ? { documentID: result.frameID } : {}),
+        ...("url" in result && result.url ? { location: result.frameURL ?? result.url } : {}),
+      },
+    }
+    this.observations.set(value.id, { value, revision: this.revision })
+    while (this.observations.size > 256) this.observations.delete(this.observations.keys().next().value!)
+    return value
+  }
+
+  private consume(action: BrowserAction): void {
+    if (!action.observationID) return
+    const record = this.observations.get(action.observationID)
+    this.observations.delete(action.observationID)
+    if (!record) throw new TargetError("Browser observation is unknown or was already used; take a fresh snapshot")
+    if (record.value.validUntil < Date.now())
+      throw new TargetError("Browser observation expired; take a fresh snapshot")
+    if (record.revision !== this.revision)
+      throw new TargetError("Browser observation became stale after manual control; take a fresh snapshot")
+    if (record.value.target.windowID !== action.tabID || record.value.target.documentID !== action.frameID)
+      throw new TargetError("Browser observation belongs to a different tab or frame; no action was dispatched")
+    const page = this.resolve(action.tabID)
+    const location = action.frameID ? this.document(action.tabID, action.frameID).frame.url() : page.url()
+    if (record.value.target.location !== location)
+      throw new TargetError("Browser observation became stale after navigation; take a fresh snapshot")
+  }
+
+  private invalidate(tabID?: string): void {
+    for (const [id, record] of this.observations) {
+      if (!tabID || record.value.target.windowID === tabID) this.observations.delete(id)
+    }
   }
 
   private async executeAction(
@@ -783,6 +840,7 @@ export class BrowserSession {
       if (registry && action.frameID) action = { ...action, frameID: registry.lease(action.frameID).id }
     } else if (action.frameID)
       throw new TargetError("This operation is tab-scoped and does not accept a frame identity")
+    this.consume(action)
     const result = pending<BrowserResult>()
     this.queued += 1
     const revision = this.revision
@@ -1542,6 +1600,7 @@ export class BrowserSession {
   // raya_change end
 
   async dispose(preserve = false): Promise<void> {
+    this.observations.clear()
     if (!preserve) {
       this.stopAuth?.()
       this.stopAuth = undefined

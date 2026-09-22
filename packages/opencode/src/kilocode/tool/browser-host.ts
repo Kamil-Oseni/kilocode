@@ -2,6 +2,7 @@
 import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
 import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
+import { ObservationID } from "@/kilocode/computer-use/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 import { BrowserUploadTool } from "./browser-upload"
@@ -9,6 +10,13 @@ import { BrowserUploadTool } from "./browser-upload"
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
 const Identity = { tab_id: TabID }
 const Framed = { frame_id: Schema.optional(FrameID) }
+const Grounded = {
+  ...Framed,
+  observation_id: Schema.optional(ObservationID).annotate({
+    description:
+      "Observation ID returned by browser_snapshot. The host rejects stale or mismatched observations before dispatch.",
+  }),
+}
 const Bootstrap = { tab_id: Schema.optional(TabID) }
 const LIMIT = 100_000
 
@@ -113,7 +121,7 @@ export const BrowserSnapshotTool = Tool.define<
   }),
 )
 
-const ClickParams = Schema.Struct({ ...Framed, ...Identity, selector: Selector })
+const ClickParams = Schema.Struct({ ...Grounded, ...Identity, selector: Selector })
 export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }, Browser.Service, "browser_click">(
   "browser_click",
   Effect.gen(function* () {
@@ -134,6 +142,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
             browser,
             {
               operation: "click",
+              observationID: params.observation_id,
               frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
@@ -148,7 +157,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
 )
 
 const TypeParams = Schema.Struct({
-  ...Framed,
+  ...Grounded,
   ...Identity,
   selector: Selector,
   text: Text,
@@ -173,6 +182,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
             browser,
             {
               operation: "type",
+              observationID: params.observation_id,
               frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
@@ -193,7 +203,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
 )
 
 const SelectParams = Schema.Struct({
-  ...Framed,
+  ...Grounded,
   ...Identity,
   selector: Selector,
   values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
@@ -217,6 +227,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
             browser,
             {
               operation: "select",
+              observationID: params.observation_id,
               frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
@@ -232,7 +243,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
 )
 
 const ScrollParams = Schema.Struct({
-  ...Framed,
+  ...Grounded,
   ...Identity,
   delta_x: Schema.optional(Schema.Number).annotate({ description: "Horizontal pixels. Defaults to 0." }),
   delta_y: Schema.Number.annotate({ description: "Vertical pixels; positive scrolls down." }),
@@ -253,6 +264,7 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
             browser,
             {
               operation: "scroll",
+              observationID: params.observation_id,
               frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
@@ -318,7 +330,7 @@ export const BrowserScreenshotTool = Tool.define<
 )
 
 const EvaluateParams = Schema.Struct({
-  ...Framed,
+  ...Grounded,
   ...Identity,
   expression: Text.annotate({ description: "JavaScript expression or function body to evaluate in the current page." }),
 })
@@ -342,6 +354,7 @@ export const BrowserEvaluateTool = Tool.define<
             browser,
             {
               operation: "evaluate",
+              observationID: params.observation_id,
               frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,

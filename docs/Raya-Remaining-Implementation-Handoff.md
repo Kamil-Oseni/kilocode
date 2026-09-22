@@ -1,11 +1,17 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `e449b44ca9` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+4cf3bb6720.kamil-oseni.1790106027566` installs the grounded desktop window listing and switching slice. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `18eb85ea82` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+4cf3bb6720.kamil-oseni.1790106027566` installs the grounded desktop window listing and switching slice. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 15:57 America/Toronto - preserve mixed-DPI desktop grounding
+
+Preserve product commit `18eb85ea82`. Every generated native observe, list, focus and action script calls `SetThreadDpiAwarenessContext` with per-monitor-aware-v2 before it reads bounds, captures pixels or sends pointer input. Zero return aborts the command with an unsafe-coordinate error. Do not weaken this to system awareness or continue on failure: mixed-scale monitors otherwise let screenshot pixels and native input address different points.
+
+Evidence passes **31 focused tests / 108 assertions**, extension typecheck, ESLint, Knip, formatting and the extension marker guard. The embedded C# compiles and its DPI-aware enumeration executes in the noninteractive shell, which exposes zero windows. The protected push passed all 29 JavaScript/TypeScript package typechecks. Package this source in the next capped snapshot; live mixed-scale focus/click observation remains physical installed-host acceptance.
 
 ## ChatGPT 2026-09-22 15:44 America/Toronto - grounded window switching installation receipt
 

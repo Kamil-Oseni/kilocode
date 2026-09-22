@@ -14,6 +14,8 @@ The production-component journey now proves the intended hierarchy directly. **P
 
 Targeted Prettier and ESLint pass. The protected push passed all **29 relevant JavaScript/TypeScript package typechecks** and skipped JetBrains. Test commit `9556f6741d` is on `origin/main`. Because this commit changes only executable acceptance, the installed product remains `eden.raya@7.4.23-snapshot+b7860353a0.kamil-oseni.1790059790292`; rebuilding identical runtime bytes would add no installed behavior.
 
+Follow-up test commit `53814a0367` adds the missing 320px organization-editor journey. It proves policy, one worker, delegation and archive disclosures can each be opened and closed in the single-pane layout, with Axe WCAG A/AA and horizontal-overflow checks. The case passes in **16.7 seconds** and its screenshot was inspected directly. The installed runtime remains unchanged.
+
 ## ChatGPT 2026-09-22 02:52 America/Toronto - advanced assignment reveals only required choices
 
 **Status: another bounded `FUT-ORG-01` UX defect is implemented, visually inspected, pushed and installed.** An organization spending limit previously forced the advanced assignment disclosure open because its required work budget lived beside optional expected-result, context and deadline inputs. Choosing details manually therefore revealed every field at once. Required **Work budget (USD)** now stays in the main assignment path, while **Optional details** begins closed. Organizations without a shared limit keep their optional budget inside that disclosure. The ambiguous **Use Raya instead** action now says **Let Raya choose**.

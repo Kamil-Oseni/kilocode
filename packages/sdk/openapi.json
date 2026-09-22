@@ -67453,6 +67453,24 @@
               },
               "operation": {
                 "type": "string",
+                "enum": ["windows"]
+              }
+            },
+            "required": ["id", "sessionID", "operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
                 "enum": ["watch"]
               },
               "frameCount": {
@@ -67467,6 +67485,32 @@
               }
             },
             "required": ["id", "sessionID", "operation", "frameCount", "intervalMs"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["focus"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "windowID", "observationID"],
             "additionalProperties": false
           },
           {
@@ -82001,6 +82045,78 @@
             "properties": {
               "operation": {
                 "type": "string",
+                "enum": ["windows"]
+              },
+              "windows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "windowID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "processID": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "height": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "minimized": {
+                      "type": "boolean"
+                    },
+                    "foreground": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "windowID",
+                    "title",
+                    "processID",
+                    "x",
+                    "y",
+                    "width",
+                    "height",
+                    "minimized",
+                    "foreground"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 64
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "windows", "observation", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
                 "enum": ["watch"]
               },
               "frames": {
@@ -82040,6 +82156,20 @@
               }
             },
             "required": ["operation", "frames", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["focus"]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "receipt"],
             "additionalProperties": false
           },
           {

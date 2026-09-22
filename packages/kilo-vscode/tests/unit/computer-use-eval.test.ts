@@ -11,13 +11,15 @@ describe("Computer Use evaluation contract", () => {
       summary: {
         successRate: 1,
         unintendedDispatches: 0,
-        staleFrameRefusals: 2,
+        staleFrameRefusals: 3,
         recoverySuccesses: 1,
         humanInterventions: 1,
         modelCostUsd: 0,
       },
     })
     expect(report.scenarios.map((item) => item.id)).toEqual([
+      "grounded-window-focus",
+      "changed-window-catalog-refusal",
       "grounded-effect",
       "changed-target-refusal",
       "observation-replay-refusal",

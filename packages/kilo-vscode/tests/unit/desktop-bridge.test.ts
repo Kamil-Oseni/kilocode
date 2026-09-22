@@ -17,6 +17,7 @@ function setup(
   const replies: unknown[] = []
   const rejects: unknown[] = []
   const actions: unknown[] = []
+  const focused: string[] = []
   const events = new Set<(event: SSEPayload, directory?: string) => void>()
   const states = new Set<(state: ConnectionState, error?: Error) => void>()
   const driver: DesktopDriver = {
@@ -28,7 +29,24 @@ function setup(
       mime: "image/png",
       data: "cG5n",
     }),
+    windows: async () => [
+      {
+        windowID: "window_2",
+        location: "pid:7;class:Browser;title:Browser",
+        title: "Browser",
+        processID: 7,
+        x: 40,
+        y: 20,
+        width: 1000,
+        height: 700,
+        minimized: false,
+        foreground: false,
+      },
+    ],
     current: async () => ({ windowID: "window_1", location: "process|title|bounds" }),
+    focus: async (target) => {
+      focused.push(target.windowID)
+    },
     perform: async (action) => {
       actions.push(action)
     },
@@ -80,7 +98,7 @@ function setup(
     },
     input.store,
   )
-  return { bridge, events, states, replies, rejects, actions, observed: () => observed }
+  return { bridge, events, states, replies, rejects, actions, focused, observed: () => observed }
 }
 
 function memory(seed?: unknown) {
@@ -95,6 +113,51 @@ function memory(seed?: unknown) {
 }
 
 describe("desktop observation bridge", () => {
+  it("lists sanitized windows and focuses one exact catalog target once", async () => {
+    const test = setup()
+    const windows: DesktopRequest = { id: "desktop_windows_1", sessionID: "ses_desktop", operation: "windows" }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: windows } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.replies[0]).toMatchObject({
+      requestID: windows.id,
+      result: {
+        operation: "windows",
+        windows: [expect.objectContaining({ windowID: "window_2", title: "Browser", processID: 7 })],
+        receipt: { effect: "observe", outcome: "confirmed" },
+      },
+    })
+    const listed = test.replies[0] as {
+      result: { windows: Array<Record<string, unknown>>; observation: { id: string } }
+    }
+    expect(listed.result.windows[0]).not.toHaveProperty("location")
+    const focus: DesktopRequest = {
+      id: "desktop_focus_1",
+      sessionID: "ses_desktop",
+      operation: "focus",
+      windowID: "window_2",
+      observationID: listed.result.observation.id,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: focus } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: focus } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.focused).toEqual(["window_2"])
+    expect(test.replies).toContainEqual(
+      expect.objectContaining({
+        requestID: focus.id,
+        result: expect.objectContaining({
+          operation: "focus",
+          receipt: expect.objectContaining({ effect: "manage", outcome: "confirmed" }),
+        }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
   it("delivers one grounded image with a request-bound receipt", async () => {
     const test = setup()
     for (const listener of test.events)

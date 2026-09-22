@@ -1,12 +1,29 @@
 import { execFile, type ChildProcess } from "node:child_process"
-import type { DesktopAction, DesktopDriver, DesktopFrame } from "./desktop-session"
+import type { DesktopAction, DesktopDriver, DesktopFrame, DesktopWindow } from "./desktop-session"
 
 const native = String.raw`
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 public static class RayaDesktopNative {
+  public delegate bool EnumWindowsProc(IntPtr handle, IntPtr state);
+
+  public sealed class WindowInfo {
+    public string WindowID;
+    public string Location;
+    public string Title;
+    public uint ProcessID;
+    public int X;
+    public int Y;
+    public int Width;
+    public int Height;
+    public bool Minimized;
+    public bool Foreground;
+  }
+
   [StructLayout(LayoutKind.Sequential)]
   public struct Rect { public int Left; public int Top; public int Right; public int Bottom; }
 
@@ -39,12 +56,90 @@ public static class RayaDesktopNative {
   }
 
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr state);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr handle);
+  [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint source, uint target, bool attach);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr handle, out Rect rect);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int count);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr handle, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint process);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, Input[] inputs, int size);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
+
+  private static WindowInfo Describe(IntPtr handle) {
+    if (handle == IntPtr.Zero || !IsWindow(handle) || !IsWindowVisible(handle)) return null;
+    int cloaked;
+    if (DwmGetWindowAttribute(handle, 14, out cloaked, sizeof(int)) == 0 && cloaked != 0) return null;
+    var rect = new Rect();
+    if (!GetWindowRect(handle, out rect)) return null;
+    var width = rect.Right - rect.Left;
+    var height = rect.Bottom - rect.Top;
+    if (width <= 0 || height <= 0) return null;
+    var title = new StringBuilder(2048);
+    GetWindowText(handle, title, title.Capacity);
+    if (title.Length == 0) return null;
+    var kind = new StringBuilder(512);
+    GetClassName(handle, kind, kind.Capacity);
+    uint process;
+    GetWindowThreadProcessId(handle, out process);
+    return new WindowInfo {
+      WindowID = String.Format("0x{0:X}", handle.ToInt64()),
+      Location = String.Format("pid:{0};class:{1};title:{2}", process, kind.ToString(), title.ToString()),
+      Title = title.ToString(),
+      ProcessID = process,
+      X = rect.Left,
+      Y = rect.Top,
+      Width = width,
+      Height = height,
+      Minimized = IsIconic(handle),
+      Foreground = handle == GetForegroundWindow()
+    };
+  }
+
+  public static WindowInfo[] Windows() {
+    var windows = new List<WindowInfo>();
+    EnumWindows((handle, state) => {
+      var info = Describe(handle);
+      if (info != null) windows.Add(info);
+      return windows.Count <= 64;
+    }, IntPtr.Zero);
+    if (windows.Count > 64) throw new InvalidOperationException("More than 64 visible desktop windows are open; close unused windows and try again");
+    return windows.ToArray();
+  }
+
+  public static void Focus(long value, string location, int x, int y, int width, int height, bool minimized, bool foreground) {
+    var handle = new IntPtr(value);
+    var info = Describe(handle);
+    if (info == null || info.Location != location || info.X != x || info.Y != y || info.Width != width || info.Height != height || info.Minimized != minimized || info.Foreground != foreground)
+      throw new InvalidOperationException("Desktop window changed before focus");
+    uint ignored;
+    var current = GetCurrentThreadId();
+    var before = GetForegroundWindow();
+    var foregroundThread = before == IntPtr.Zero ? 0 : GetWindowThreadProcessId(before, out ignored);
+    var targetThread = GetWindowThreadProcessId(handle, out ignored);
+    var foregroundAttached = foregroundThread != 0 && foregroundThread != current && AttachThreadInput(current, foregroundThread, true);
+    var targetAttached = targetThread != 0 && targetThread != current && targetThread != foregroundThread && AttachThreadInput(current, targetThread, true);
+    try {
+      if (info.Minimized) ShowWindow(handle, 9);
+      BringWindowToTop(handle);
+      if (!SetForegroundWindow(handle)) throw new InvalidOperationException("Windows refused to focus the selected window");
+      SetFocus(handle);
+    } finally {
+      if (targetAttached) AttachThreadInput(current, targetThread, false);
+      if (foregroundAttached) AttachThreadInput(current, foregroundThread, false);
+    }
+    for (var attempt = 0; attempt < 10 && GetForegroundWindow() != handle; attempt++) Thread.Sleep(25);
+    if (GetForegroundWindow() != handle) throw new InvalidOperationException("Windows did not foreground the selected window");
+  }
 
   public static void Mouse(uint flags, uint data) {
     var input = new Input {
@@ -189,6 +284,43 @@ const current = `${setup}
 $window = Get-RayaWindow
 [pscustomobject]@{ windowID = $window.WindowID; location = $window.Location } | ConvertTo-Json -Compress
 `
+
+const windows = `${setup}
+$items = @([RayaDesktopNative]::Windows() | ForEach-Object {
+  [pscustomobject]@{
+    windowID = $_.WindowID
+    location = $_.Location
+    title = $_.Title
+    processID = [int]$_.ProcessID
+    x = $_.X
+    y = $_.Y
+    width = $_.Width
+    height = $_.Height
+    minimized = $_.Minimized
+    foreground = $_.Foreground
+  }
+})
+[pscustomobject]@{ windows = $items } | ConvertTo-Json -Depth 4 -Compress
+`
+
+function focus(target: DesktopWindow) {
+  const input = payload(target)
+  return `${setup}
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+if ([string]$target.windowID -notmatch '^0x[0-9A-Fa-f]+$') { throw "Desktop window identity is invalid" }
+$value = [Convert]::ToInt64(([string]$target.windowID).Substring(2), 16)
+[RayaDesktopNative]::Focus(
+  $value,
+  [string]$target.location,
+  [int]$target.x,
+  [int]$target.y,
+  [int]$target.width,
+  [int]$target.height,
+  [bool]$target.minimized,
+  [bool]$target.foreground
+)
+`
+}
 
 function payload(value: unknown) {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64")
@@ -335,11 +467,39 @@ export class WindowsDesktopDriver implements DesktopDriver {
     }
   }
 
+  async windows(): Promise<DesktopWindow[]> {
+    const result = object(await this.runner.run(windows))
+    if (!Array.isArray(result.windows) || result.windows.length > 64)
+      throw new Error("Windows desktop window list is incomplete")
+    return result.windows.map((value) => {
+      if (!value || typeof value !== "object") throw new Error("Windows desktop window entry is invalid")
+      const window = value as Record<string, unknown>
+      if (
+        typeof window.windowID !== "string" ||
+        typeof window.location !== "string" ||
+        typeof window.title !== "string" ||
+        typeof window.processID !== "number" ||
+        typeof window.x !== "number" ||
+        typeof window.y !== "number" ||
+        typeof window.width !== "number" ||
+        typeof window.height !== "number" ||
+        typeof window.minimized !== "boolean" ||
+        typeof window.foreground !== "boolean"
+      )
+        throw new Error("Windows desktop window entry is incomplete")
+      return window as DesktopWindow
+    })
+  }
+
   async current() {
     const result = object(await this.runner.run(current))
     if (typeof result.windowID !== "string" || typeof result.location !== "string")
       throw new Error("Windows desktop target identity is incomplete")
     return { windowID: result.windowID, location: result.location }
+  }
+
+  async focus(target: DesktopWindow): Promise<void> {
+    await this.runner.run(focus(target))
   }
 
   async perform(action: DesktopAction, target: { windowID: string; location?: string }): Promise<void> {

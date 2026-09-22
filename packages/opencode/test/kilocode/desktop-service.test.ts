@@ -72,6 +72,56 @@ it.instance(
       const clicked = { operation: "click" as const, receipt: clickReceipt }
       yield* desktop.reply({ requestID: clickRequest.id, result: clicked })
       expect(yield* Fiber.join(click)).toEqual(clicked)
+
+      const windows = yield* desktop.request({ operation: "windows", sessionID }).pipe(Effect.forkChild)
+      const windowsRequest = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+      const catalog = {
+        ...observation,
+        id: ObservationID.make("obs_desktop_windows"),
+        target: { surface: "desktop" as const, windowID: "visible-windows", location: "catalog" },
+      }
+      const listed = {
+        operation: "windows" as const,
+        windows: [
+          {
+            windowID: "window_1",
+            title: "Editor",
+            processID: 5,
+            x: 0,
+            y: 0,
+            width: 1280,
+            height: 720,
+            minimized: false,
+            foreground: true,
+          },
+        ],
+        observation: catalog,
+        receipt: {
+          ...receipt,
+          requestID: windowsRequest.id,
+          target: catalog.target,
+          observationID: catalog.id,
+        },
+      }
+      yield* desktop.reply({ requestID: windowsRequest.id, result: listed })
+      expect(yield* Fiber.join(windows)).toEqual(listed)
+
+      const focus = yield* desktop
+        .request({ operation: "focus", sessionID, windowID: "window_1", observationID: catalog.id })
+        .pipe(Effect.forkChild)
+      const focusRequest = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+      const focused = {
+        operation: "focus" as const,
+        receipt: {
+          ...receipt,
+          requestID: focusRequest.id,
+          effect: "manage" as const,
+          target: { surface: "desktop" as const, windowID: "window_1" },
+          observationID: catalog.id,
+        },
+      }
+      yield* desktop.reply({ requestID: focusRequest.id, result: focused })
+      expect(yield* Fiber.join(focus)).toEqual(focused)
     }),
   { git: true },
 )

@@ -109,6 +109,8 @@ it.instance("primary and routed specialist prompts infer goal, choice, delegatio
     expect(evalPerm(researcher, "browser_navigate")).toBe("allow")
     expect(evalPerm(researcher, "browser_smoke_test")).toBe("allow")
     expect(evalPerm(researcher, "desktop_observe")).toBe("ask")
+    expect(evalPerm(researcher, "desktop_windows")).toBe("ask")
+    expect(evalPerm(researcher, "desktop_focus")).toBe("ask")
     expect(evalPerm(researcher, "desktop_watch")).toBe("ask")
     expect(evalPerm(researcher, "desktop_move")).toBe("ask")
     expect(evalPerm(researcher, "desktop_drag")).toBe("ask")

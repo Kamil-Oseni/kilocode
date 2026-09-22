@@ -65,6 +65,11 @@ export const ObserveRequest = Schema.Struct({
   operation: Schema.Literal("observe"),
 })
 
+export const WindowsRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("windows"),
+})
+
 export const WatchRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("watch"),
@@ -81,6 +86,13 @@ export const ClickRequest = Schema.Struct({
   x: Unit,
   y: Unit,
   button: Schema.Literals(["left", "right"]),
+})
+
+export const FocusRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("focus"),
+  windowID: Identity,
+  observationID: ObservationID,
 })
 
 export const MoveRequest = Schema.Struct({
@@ -142,7 +154,9 @@ export const ScrollRequest = Schema.Struct({
 
 export const Request = Schema.Union([
   ObserveRequest,
+  WindowsRequest,
   WatchRequest,
+  FocusRequest,
   MoveRequest,
   DragRequest,
   ClickRequest,
@@ -158,6 +172,25 @@ export const ObserveResult = Schema.Struct({
   height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   mime: Schema.Literals(["image/png", "image/jpeg"]),
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
+  observation: Observation,
+  receipt: Receipt,
+})
+
+export const Window = Schema.Struct({
+  windowID: Identity,
+  title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_048)),
+  processID: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+  x: Schema.Number.check(Schema.isInt()),
+  y: Schema.Number.check(Schema.isInt()),
+  width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  minimized: Schema.Boolean,
+  foreground: Schema.Boolean,
+})
+
+export const WindowsResult = Schema.Struct({
+  operation: Schema.Literal("windows"),
+  windows: Schema.Array(Window).check(Schema.isMaxLength(64)),
   observation: Observation,
   receipt: Receipt,
 })
@@ -178,6 +211,11 @@ export const WatchResult = Schema.Struct({
 
 export const ClickResult = Schema.Struct({
   operation: Schema.Literal("click"),
+  receipt: Receipt,
+})
+
+export const FocusResult = Schema.Struct({
+  operation: Schema.Literal("focus"),
   receipt: Receipt,
 })
 
@@ -208,7 +246,9 @@ export const ScrollResult = Schema.Struct({
 
 export const Result = Schema.Union([
   ObserveResult,
+  WindowsResult,
   WatchResult,
+  FocusResult,
   MoveResult,
   DragResult,
   ClickResult,

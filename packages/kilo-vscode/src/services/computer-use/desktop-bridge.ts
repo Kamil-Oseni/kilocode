@@ -20,12 +20,30 @@ export interface DesktopConnection {
 
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure; delivered?: boolean }
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
-type ActionRequest = Exclude<DesktopRequest, CaptureRequest>
-type ActionResult = Exclude<DesktopResult, { operation: "observe" | "watch" }>
+type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
+type PassiveRequest = CaptureRequest | WindowsRequest
+type ActionRequest = Exclude<DesktopRequest, PassiveRequest>
+type ActionResult = Exclude<DesktopResult, { operation: "observe" | "watch" | "windows" }>
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
 
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
-const actions = new Set(["move", "drag", "click", "type", "key", "scroll"])
+const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll"])
+const passive = new Set(["observe", "watch", "windows"])
+
+function effect(request: DesktopRequest) {
+  if (passive.has(request.operation)) return "observe" as const
+  if (request.operation === "focus") return "manage" as const
+  return "interact" as const
+}
+
+function ground(request: DesktopRequest) {
+  if (passive.has(request.operation)) return {}
+  const action = request as ActionRequest
+  return {
+    target: { surface: "desktop" as const, windowID: action.windowID },
+    observationID: action.observationID,
+  }
+}
 
 export interface DesktopReceiptStore {
   get<T>(key: string): T | undefined
@@ -138,10 +156,7 @@ export class DesktopBridge {
     const startedAt = Date.now()
     this.active.set(request.id, controller)
     try {
-      const result =
-        request.operation === "observe" || request.operation === "watch"
-          ? await this.observe(request, startedAt, controller.signal)
-          : await this.interact(request, startedAt)
+      const result = await this.dispatch(request, startedAt, controller.signal)
       if (controller.signal.aborted) return
       receipt.result = result
       receipt.failure = undefined
@@ -159,20 +174,22 @@ export class DesktopBridge {
           requestID: request.id,
           startedAt,
           finishedAt: Date.now(),
-          effect: request.operation === "observe" || request.operation === "watch" ? "observe" : "interact",
+          effect: effect(request),
           outcome: "unknown",
-          ...(request.operation !== "observe" && request.operation !== "watch"
-            ? {
-                target: { surface: "desktop" as const, windowID: request.windowID },
-                observationID: request.observationID,
-              }
-            : {}),
+          ...ground(request),
         },
       }
       await this.deliver(request.id, directory, receipt)
     } finally {
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
     }
+  }
+
+  private dispatch(request: DesktopRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
+    if (request.operation === "windows") return this.windows(request, startedAt)
+    if (request.operation === "observe" || request.operation === "watch")
+      return this.observe(request, startedAt, signal)
+    return this.interact(request, startedAt)
   }
 
   private async observe(request: CaptureRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
@@ -218,6 +235,35 @@ export class DesktopBridge {
     }
   }
 
+  private async windows(request: WindowsRequest, startedAt: number): Promise<DesktopResult> {
+    const result = await this.session.windows()
+    return {
+      operation: "windows",
+      windows: result.windows.map((window) => ({
+        windowID: window.windowID,
+        title: window.title,
+        processID: window.processID,
+        x: window.x,
+        y: window.y,
+        width: window.width,
+        height: window.height,
+        minimized: window.minimized,
+        foreground: window.foreground,
+      })),
+      observation: result.observation,
+      receipt: {
+        version: 1,
+        requestID: request.id,
+        startedAt,
+        finishedAt: Date.now(),
+        effect: "observe",
+        outcome: "confirmed",
+        target: result.observation.target,
+        observationID: result.observation.id,
+      },
+    }
+  }
+
   private async interact(request: ActionRequest, startedAt: number): Promise<DesktopResult> {
     const receipt = {
       version: 1 as const,
@@ -228,6 +274,10 @@ export class DesktopBridge {
       outcome: "confirmed" as const,
       target: { surface: "desktop" as const, windowID: request.windowID },
       observationID: request.observationID,
+    }
+    if (request.operation === "focus") {
+      await this.session.focus(request.windowID, request.observationID)
+      return { operation: "focus", receipt: { ...receipt, effect: "manage", finishedAt: Date.now() } }
     }
     if (request.operation === "move") {
       await this.session.execute({
@@ -383,7 +433,8 @@ function persistable(value: unknown): value is ActionResult {
     typeof receipt.requestID === "string" &&
     Number.isFinite(receipt.startedAt) &&
     Number.isFinite(receipt.finishedAt) &&
-    receipt.effect === "interact" &&
+    ((result.operation === "focus" && receipt.effect === "manage") ||
+      (result.operation !== "focus" && receipt.effect === "interact")) &&
     receipt.outcome === "confirmed" &&
     typeof receipt.observationID === "string" &&
     !!receipt.target &&

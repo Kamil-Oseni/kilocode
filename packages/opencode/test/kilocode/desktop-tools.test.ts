@@ -6,11 +6,13 @@ import { Desktop } from "@/kilocode/desktop/service"
 import {
   DesktopClickTool,
   DesktopDragTool,
+  DesktopFocusTool,
   DesktopKeyTool,
   DesktopMoveTool,
   DesktopScrollTool,
   DesktopTypeTool,
   DesktopWatchTool,
+  DesktopWindowsTool,
 } from "@/kilocode/tool/desktop-host"
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
@@ -31,6 +33,8 @@ test("requires one-time approval for every native desktop capability in VS Code"
     const rules = KiloAgent.prepare({}).defaultsPatch
     for (const permission of [
       "desktop_observe",
+      "desktop_windows",
+      "desktop_focus",
       "desktop_watch",
       "desktop_move",
       "desktop_drag",
@@ -46,6 +50,107 @@ test("requires one-time approval for every native desktop capability in VS Code"
     else process.env.KILO_CLIENT = client
   }
 })
+
+it.instance("lists visible windows and focuses one exact observed target", () =>
+  Effect.gen(function* () {
+    const calls: Desktop.Input[] = []
+    const asks: Parameters<Tool.Context["ask"]>[0][] = []
+    const observation = {
+      version: 1 as const,
+      id: ObservationID.make("observation_windows"),
+      observedAt: 1,
+      validUntil: 10_000,
+      target: { surface: "desktop" as const, windowID: "visible-windows", location: "catalog" },
+    }
+    const host: Desktop.Interface = {
+      request: (input) =>
+        Effect.sync(() => {
+          calls.push(input)
+          if (input.operation === "windows")
+            return {
+              operation: "windows" as const,
+              windows: [
+                {
+                  windowID: "window_seen",
+                  title: "Editor",
+                  processID: 5,
+                  x: 0,
+                  y: 0,
+                  width: 1280,
+                  height: 720,
+                  minimized: false,
+                  foreground: true,
+                },
+              ],
+              observation,
+              receipt: {
+                version: 1 as const,
+                requestID: "desktop_windows_test",
+                startedAt: 1,
+                finishedAt: 2,
+                effect: "observe" as const,
+                outcome: "confirmed" as const,
+                target: observation.target,
+                observationID: observation.id,
+              },
+            }
+          return {
+            operation: "focus" as const,
+            receipt: {
+              version: 1 as const,
+              requestID: "desktop_focus_test",
+              startedAt: 1,
+              finishedAt: 2,
+              effect: "manage" as const,
+              outcome: "confirmed" as const,
+              target: { surface: "desktop" as const, windowID: "window_seen" },
+              observationID: observation.id,
+            },
+          }
+        }),
+      list: () => Effect.succeed([]),
+      cancelSession: () => Effect.void,
+      reply: () => Effect.void,
+      reject: () => Effect.void,
+    }
+    const ctx: Tool.Context = {
+      sessionID: SessionID.make("ses_desktop_windows"),
+      messageID: MessageID.make("msg_desktop_windows"),
+      agent: "build",
+      abort: new AbortController().signal,
+      messages: [],
+      metadata: () => Effect.void,
+      ask: (input) => Effect.sync(() => asks.push(input)),
+    }
+    const listed = yield* DesktopWindowsTool.pipe(
+      Effect.provideService(Desktop.Service, host),
+      Effect.flatMap(Tool.init),
+      Effect.flatMap((tool) => tool.execute({}, ctx)),
+    )
+    const focused = yield* DesktopFocusTool.pipe(
+      Effect.provideService(Desktop.Service, host),
+      Effect.flatMap(Tool.init),
+      Effect.flatMap((tool) => tool.execute({ window_id: "window_seen", observation_id: observation.id }, ctx)),
+    )
+
+    expect(asks).toEqual([
+      expect.objectContaining({ permission: "desktop_windows", patterns: ["visible-windows"], always: [] }),
+      expect.objectContaining({ permission: "desktop_focus", patterns: ["window_seen"], always: [] }),
+    ])
+    expect(calls).toEqual([
+      { operation: "windows", sessionID: ctx.sessionID },
+      {
+        operation: "focus",
+        sessionID: ctx.sessionID,
+        windowID: "window_seen",
+        observationID: observation.id,
+      },
+    ])
+    expect(listed.title).toBe("Found 1 visible desktop windows")
+    expect(listed.output).not.toContain("pid:5;")
+    expect(focused.title).toBe("Focused desktop window")
+  }),
+)
 
 it.instance(
   "desktop click forwards exact grounding and asks for the exact point",

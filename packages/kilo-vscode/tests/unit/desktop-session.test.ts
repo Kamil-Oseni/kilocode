@@ -1,9 +1,29 @@
 import { describe, expect, it } from "bun:test"
-import { DesktopSession, type DesktopAction, type DesktopDriver } from "../../src/services/computer-use/desktop-session"
+import {
+  DesktopSession,
+  type DesktopAction,
+  type DesktopDriver,
+  type DesktopWindow,
+} from "../../src/services/computer-use/desktop-session"
 
 class Driver implements DesktopDriver {
   target = { windowID: "window-1", location: "Editor" }
   readonly actions: DesktopAction[] = []
+  readonly focused: string[] = []
+  list: DesktopWindow[] = [
+    {
+      windowID: "window-1",
+      location: "pid:5;class:Editor;title:Editor",
+      title: "Editor",
+      processID: 5,
+      x: 0,
+      y: 0,
+      width: 1280,
+      height: 720,
+      minimized: false,
+      foreground: true,
+    },
+  ]
   cancelled = 0
 
   async observe() {
@@ -12,6 +32,14 @@ class Driver implements DesktopDriver {
 
   async current() {
     return { ...this.target }
+  }
+
+  async windows() {
+    return this.list.map((window) => ({ ...window }))
+  }
+
+  async focus(target: DesktopWindow) {
+    this.focused.push(target.windowID)
   }
 
   async perform(action: DesktopAction) {
@@ -24,6 +52,42 @@ class Driver implements DesktopDriver {
 }
 
 describe("native desktop session boundary", () => {
+  it("focuses one exact window from a fresh single-use catalog", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const catalog = await session.windows()
+
+    expect(catalog.windows).toHaveLength(1)
+    await session.focus("window-1", catalog.observation.id)
+    await expect(session.focus("window-1", catalog.observation.id)).rejects.toThrow(/unknown or was already used/i)
+    expect(driver.focused).toEqual(["window-1"])
+  })
+
+  it("refuses a changed window catalog before focus", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const catalog = await session.windows()
+    driver.list[0] = { ...driver.list[0], title: "Different", location: "pid:5;class:Editor;title:Different" }
+
+    await expect(session.focus("window-1", catalog.observation.id)).rejects.toThrow(/stale after navigation/i)
+    expect(driver.focused).toEqual([])
+  })
+
+  it("refuses duplicate and oversized window catalogs", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    driver.list = [{ ...driver.list[0] }, { ...driver.list[0] }]
+    await expect(session.windows()).rejects.toThrow(/duplicate identity/i)
+    driver.list = Array.from({ length: 65 }, (_, index) => ({
+      ...driver.list[0],
+      windowID: `window-${index}`,
+      location: `pid:${index};class:Editor;title:Editor ${index}`,
+      title: `Editor ${index}`,
+      processID: index,
+    }))
+    await expect(session.windows()).rejects.toThrow(/64-window limit/i)
+  })
+
   it("dispatches one exact observation-grounded action", async () => {
     const driver = new Driver()
     const session = new DesktopSession(driver)
@@ -106,8 +170,10 @@ describe("native desktop session boundary", () => {
     const states: string[] = []
     session.onState((state) => states.push(`${state.control}:${state.busy}:${state.reason ?? ""}`))
     const stale = await session.observe()
+    const catalog = await session.windows()
 
     session.takeControl()
+    await expect(session.focus("window-1", catalog.observation.id)).rejects.toThrow(/resume agent desktop control/i)
     await expect(
       session.execute({
         operation: "key",

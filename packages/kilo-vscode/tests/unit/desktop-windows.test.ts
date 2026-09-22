@@ -43,6 +43,41 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[1]).not.toContain("CopyFromScreen")
   })
 
+  it("lists visible windows and focuses an exact encoded identity", async () => {
+    const test = harness([
+      JSON.stringify({
+        windows: [
+          {
+            windowID: "0x123",
+            location: "pid:5;class:Editor;title:Editor",
+            title: "Editor",
+            processID: 5,
+            x: 10,
+            y: 20,
+            width: 1280,
+            height: 720,
+            minimized: false,
+            foreground: true,
+          },
+        ],
+      }),
+      "",
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+    const windows = await driver.windows()
+    await driver.focus(windows[0])
+
+    expect(windows).toEqual([
+      expect.objectContaining({ windowID: "0x123", title: "Editor", processID: 5, foreground: true }),
+    ])
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Windows()")
+    expect(test.scripts[1]).not.toContain(windows[0].location)
+    expect(test.scripts[1]).toContain(Buffer.from(JSON.stringify(windows[0]), "utf8").toString("base64"))
+    expect(test.scripts[1]).toContain("[RayaDesktopNative]::Focus")
+    expect(test.scripts[1]).toContain("AttachThreadInput")
+    expect(test.scripts[1]).toContain("attempt < 10")
+  })
+
   it("passes actions as encoded JSON instead of interpolated text", async () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)

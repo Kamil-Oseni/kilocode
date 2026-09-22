@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { ObservationLedger, type ComputerObservation, type ComputerTarget } from "./observation-ledger"
 
 export type DesktopFrame = {
@@ -7,6 +8,19 @@ export type DesktopFrame = {
   height: number
   mime: "image/png" | "image/jpeg"
   data: string
+}
+
+export type DesktopWindow = {
+  windowID: string
+  location: string
+  title: string
+  processID: number
+  x: number
+  y: number
+  width: number
+  height: number
+  minimized: boolean
+  foreground: boolean
 }
 
 export type DesktopAction = {
@@ -35,7 +49,9 @@ export type DesktopState = {
 
 export interface DesktopDriver {
   observe(): Promise<DesktopFrame>
+  windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
+  focus(target: DesktopWindow): Promise<void>
   perform(action: DesktopAction, target: { windowID: string; location?: string }): Promise<void>
   cancel?(): void
 }
@@ -76,6 +92,43 @@ export class DesktopSession {
       this.revision,
     )
     return { ...frame, observation }
+  }
+
+  async windows(): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
+    const windows = await this.driver.windows()
+    this.validateWindows(windows)
+    const observation = this.observations.issue(this.catalog(windows), this.revision)
+    return { windows, observation }
+  }
+
+  focus(windowID: string, observationID: string): Promise<void> {
+    if (this.state.control === "manual")
+      return Promise.reject(new Error("Resume agent desktop control before switching windows"))
+    const run = async () => {
+      const windows = await this.driver.windows()
+      this.validateWindows(windows)
+      const target = windows.find((window) => window.windowID === windowID)
+      if (!target) throw new Error("The selected desktop window is no longer available; list windows again")
+      this.observations.consume(observationID, this.catalog(windows), this.revision)
+      const revision = this.revision
+      if (this.state.control === "manual" || revision !== this.revision)
+        throw new Error("Desktop window switch cancelled for manual takeover; no action was dispatched")
+      this.observations.invalidate("desktop")
+      this.active += 1
+      this.update({ control: "agent", busy: true })
+      try {
+        await this.driver.focus(target)
+      } finally {
+        this.active = Math.max(0, this.active - 1)
+        if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })
+      }
+    }
+    const result = this.queue.then(run)
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
   }
 
   execute(action: DesktopAction): Promise<void> {
@@ -162,6 +215,48 @@ export class DesktopSession {
       throw new Error("Desktop text input exceeds the 200,000 character limit")
     if (action.operation === "key" && (!action.key || action.key.length > 100))
       throw new Error("Desktop key identity must contain 1 through 100 characters")
+  }
+
+  private validateWindows(windows: DesktopWindow[]): void {
+    if (windows.length > 64) throw new Error("Desktop window list exceeds the 64-window limit")
+    const ids = new Set<string>()
+    for (const window of windows) {
+      if (!window.windowID || !window.location || !window.title || ids.has(window.windowID))
+        throw new Error("Desktop window list contains an invalid or duplicate identity")
+      if (
+        !Number.isInteger(window.processID) ||
+        window.processID < 0 ||
+        ![window.x, window.y, window.width, window.height].every(Number.isInteger) ||
+        window.width <= 0 ||
+        window.height <= 0
+      )
+        throw new Error("Desktop window list contains invalid process or bounds metadata")
+      ids.add(window.windowID)
+    }
+  }
+
+  private catalog(windows: DesktopWindow[]): ComputerTarget & { surface: "desktop" } {
+    const fingerprint = createHash("sha256")
+      .update(
+        JSON.stringify(
+          [...windows]
+            .sort((left, right) => left.windowID.localeCompare(right.windowID))
+            .map((window) => [
+              window.windowID,
+              window.location,
+              window.title,
+              window.processID,
+              window.x,
+              window.y,
+              window.width,
+              window.height,
+              window.minimized,
+              window.foreground,
+            ]),
+        ),
+      )
+      .digest("hex")
+    return { surface: "desktop", windowID: "visible-windows", location: fingerprint }
   }
 
   private update(state: DesktopState): void {

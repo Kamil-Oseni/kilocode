@@ -3,6 +3,7 @@ import {
   type DesktopAction,
   type DesktopDriver,
   type DesktopFrame,
+  type DesktopWindow,
 } from "../src/services/computer-use/desktop-session"
 
 type Result = {
@@ -11,7 +12,7 @@ type Result = {
   expectedDispatches: number
   actualDispatches: number
   latencyMs: number
-  refusal?: "changed-target" | "replay" | "takeover"
+  refusal?: "changed-target" | "changed-catalog" | "replay" | "takeover"
   recovered?: boolean
   interventions: number
 }
@@ -36,6 +37,7 @@ class Driver implements DesktopDriver {
   target = "window_1"
   location = "process|title|bounds"
   readonly actions: DesktopAction[] = []
+  readonly focuses: string[] = []
 
   async observe(): Promise<DesktopFrame> {
     return {
@@ -50,6 +52,27 @@ class Driver implements DesktopDriver {
 
   async current() {
     return { windowID: this.target, location: this.location }
+  }
+
+  async windows(): Promise<DesktopWindow[]> {
+    return [
+      {
+        windowID: this.target,
+        location: this.location,
+        title: "Evaluation window",
+        processID: 5,
+        x: 0,
+        y: 0,
+        width: 1280,
+        height: 720,
+        minimized: false,
+        foreground: true,
+      },
+    ]
+  }
+
+  async focus(target: DesktopWindow): Promise<void> {
+    this.focuses.push(target.windowID)
   }
 
   async perform(action: DesktopAction): Promise<void> {
@@ -77,13 +100,27 @@ async function measure(
   const started = performance.now()
   const result = await run(driver, session)
   const latencyMs = Math.max(0, performance.now() - started)
-  const actualDispatches = driver.actions.length
+  const actualDispatches = driver.actions.length + driver.focuses.length
   session.dispose()
   return { id, expectedDispatches: expected, actualDispatches, latencyMs, ...result }
 }
 
 export async function evaluate(): Promise<Report> {
   const scenarios = [
+    await measure("grounded-window-focus", 1, async (_driver, session) => {
+      const result = await session.windows()
+      await session.focus(result.windows[0].windowID, result.observation.id)
+      return { passed: true, interventions: 0 }
+    }),
+    await measure("changed-window-catalog-refusal", 0, async (driver, session) => {
+      const result = await session.windows()
+      driver.location = "process|changed-title|bounds"
+      const denied = await refuse(
+        session.focus(result.windows[0].windowID, result.observation.id),
+        /stale after navigation/i,
+      )
+      return { passed: denied, refusal: "changed-catalog" as const, interventions: 0 }
+    }),
     await measure("grounded-effect", 1, async (_driver, session) => {
       const frame = await session.observe()
       await session.execute({
@@ -159,8 +196,9 @@ export async function evaluate(): Promise<Report> {
         (total, item) => total + Math.max(0, item.actualDispatches - item.expectedDispatches),
         0,
       ),
-      staleFrameRefusals: scenarios.filter((item) => item.refusal === "changed-target" || item.refusal === "replay")
-        .length,
+      staleFrameRefusals: scenarios.filter(
+        (item) => item.refusal === "changed-target" || item.refusal === "changed-catalog" || item.refusal === "replay",
+      ).length,
       recoverySuccesses: scenarios.filter((item) => item.recovered && item.passed).length,
       latencyP95Ms: latencies[index] ?? 0,
       humanInterventions: scenarios.reduce((total, item) => total + item.interventions, 0),

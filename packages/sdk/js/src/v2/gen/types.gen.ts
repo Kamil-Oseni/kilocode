@@ -1086,9 +1086,21 @@ export type DesktopRequest =
   | {
       id: DesktopRequestId
       sessionID: string
+      operation: "windows"
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
       operation: "watch"
       frameCount: number
       intervalMs: number
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "focus"
+      windowID: string
+      observationID: ComputerUseObservationId
     }
   | {
       id: DesktopRequestId
@@ -5754,6 +5766,22 @@ export type DesktopResult =
       receipt: ComputerUseReceipt
     }
   | {
+      operation: "windows"
+      windows: Array<{
+        windowID: string
+        title: string
+        processID: number
+        x: number
+        y: number
+        width: number
+        height: number
+        minimized: boolean
+        foreground: boolean
+      }>
+      observation: ComputerUseObservation
+      receipt: ComputerUseReceipt
+    }
+  | {
       operation: "watch"
       frames: Array<{
         width: number
@@ -5762,6 +5790,10 @@ export type DesktopResult =
         data: string
         observation: ComputerUseObservation
       }>
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "focus"
       receipt: ComputerUseReceipt
     }
   | {

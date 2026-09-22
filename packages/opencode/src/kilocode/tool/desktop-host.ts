@@ -58,6 +58,77 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
   }),
 )
 
+export const DesktopWindowsTool = Tool.define<typeof Params, { count: number }, Desktop.Service, "desktop_windows">(
+  "desktop_windows",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "List up to 64 visible Windows application windows with opaque IDs, titles, process IDs, bounds, minimized state, and foreground state. The result includes a fresh single-use observation required by desktop_focus; it sends no input.",
+      parameters: Params,
+      execute: (_params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({ permission: "desktop_windows", patterns: ["visible-windows"], always: [], metadata: {} })
+          const result = yield* run(desktop, { operation: "windows", sessionID: ctx.sessionID }, ctx.abort)
+          if (result.operation !== "windows")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: `Found ${result.windows.length} visible desktop windows`,
+            output: JSON.stringify(result, undefined, 2),
+            metadata: { count: result.windows.length },
+          }
+        }),
+    }
+  }),
+)
+
+const FocusParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_windows.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh desktop_windows observation ID. It can be used only once.",
+  }),
+})
+
+export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Service, "desktop_focus">(
+  "desktop_focus",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Bring one exact visible application window to the foreground using a fresh desktop_windows result. The host refuses stale or changed window lists, missing targets, reuse, and manual takeover before dispatch. Observe the focused window afterward before any other action.",
+      parameters: FocusParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "desktop_focus",
+            patterns: [params.window_id],
+            always: [],
+            metadata: {},
+          })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "focus",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "focus")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: "Focused desktop window",
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
 const WatchParams = Schema.Struct({
   frames: WatchCount.annotate({ description: "Number of sampled frames, from 2 through 4." }),
   interval_ms: WatchInterval.annotate({ description: "Delay between samples, from 250 through 2000 milliseconds." }),
@@ -443,6 +514,8 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
 
 export const DesktopTools = [
   DesktopObserveTool,
+  DesktopWindowsTool,
+  DesktopFocusTool,
   DesktopWatchTool,
   DesktopMoveTool,
   DesktopDragTool,

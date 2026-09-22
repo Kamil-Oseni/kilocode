@@ -65140,6 +65140,11 @@
       "BrowserRequestID": {
         "type": "string"
       },
+      "ComputerUseObservationID": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
       "BrowserUploadFile": {
         "type": "object",
         "properties": {
@@ -65169,11 +65174,6 @@
         },
         "required": ["id", "name", "bytes", "sha256"],
         "additionalProperties": false
-      },
-      "ComputerUseObservationID": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 200
       },
       "BrowserRequest": {
         "anyOf": [
@@ -65323,6 +65323,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "operation": {
                 "type": "string",
@@ -65512,6 +65515,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "operation": {
                 "type": "string",
@@ -84607,6 +84613,9 @@
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
               },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["upload"]
@@ -84795,6 +84804,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
               },
               "operation": {
                 "type": "string",

@@ -202,6 +202,7 @@ describe("browser host tools", () => {
           {
             action: "start",
             tab_id: "tab_seen",
+            observation_id: ObservationID.make("obs_upload"),
             selector: "input[type=file]",
             destination: "https://example.test/form",
             paths: [source],
@@ -213,6 +214,7 @@ describe("browser host tools", () => {
         expect(request.operation).toBe("upload")
         if (request.operation !== "upload" || request.action !== "start") throw new Error("Missing upload request")
         expect(request.files[0]).toMatchObject({ name: "upload.txt", bytes: 17 })
+        expect(request.observationID).toBe(ObservationID.make("obs_upload"))
         expect(JSON.stringify(request)).not.toContain(source)
         const stage = new UploadStage()
         const owner = { directory: instance.directory, sessionID: ctx.sessionID, uploadID: request.uploadID }
@@ -242,7 +244,12 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
         yield* tool.execute(
-          { action: "start", tab_id: "tab_seen", selector: { kind: "role", role: "button", name: "Export" } },
+          {
+            action: "start",
+            tab_id: "tab_seen",
+            observation_id: ObservationID.make("obs_download"),
+            selector: { kind: "role", role: "button", name: "Export" },
+          },
           ctx,
         )
         const inspected = yield* tool.execute({ action: "inspect", transfer_id: "transfer_seen" }, ctx)
@@ -253,6 +260,7 @@ describe("browser host tools", () => {
           action: "start",
           sessionID: ctx.sessionID,
           tabID: "tab_seen",
+          observationID: "obs_download",
         })
         expect(calls[1]).toMatchObject({
           operation: "download",
@@ -325,7 +333,12 @@ describe("browser host tools", () => {
           Effect.provideService(Browser.Service, waiting),
           Effect.flatMap(Tool.init),
         )
-        const failed = yield* click.execute({ tab_id: "tab_seen", selector: "#save" }, context([])).pipe(Effect.exit)
+        const failed = yield* click
+          .execute(
+            { tab_id: "tab_seen", observation_id: ObservationID.make("obs_dialog"), selector: "#save" },
+            context([]),
+          )
+          .pipe(Effect.exit)
         expect(failed._tag).toBe("Failure")
         expect(JSON.stringify(failed)).toContain("dialog_pending")
         expect(JSON.stringify(failed)).toContain("must not be retried")
@@ -371,7 +384,15 @@ describe("browser host tools", () => {
           Effect.provideService(Browser.Service, host),
           Effect.flatMap(Tool.init),
         )
-        yield* click.execute({ tab_id: "tab_seen", frame_id: "frame_child", selector: "button" }, ctx)
+        yield* click.execute(
+          {
+            tab_id: "tab_seen",
+            frame_id: "frame_child",
+            observation_id: ObservationID.make("obs_frame"),
+            selector: "button",
+          },
+          ctx,
+        )
         expect(calls[1]).toMatchObject({ operation: "frames", parentID: "frame_parent", selector: "#form" })
         expect(calls[2]).toMatchObject({ operation: "click", tabID: "tab_seen", frameID: "frame_child" })
       }),
@@ -379,7 +400,7 @@ describe("browser host tools", () => {
   )
 
   it.instance(
-    "forwards stable tab commands and refuses missing mutation identity",
+    "forwards stable tab commands and refuses missing mutation grounding",
     () =>
       Effect.gen(function* () {
         calls.length = 0
@@ -404,9 +425,27 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
         const failed = yield* click
-          .execute({ selector: "#save" } as { selector: string; tab_id: string }, ctx)
+          .execute(
+            { observation_id: ObservationID.make("obs_missing_tab"), selector: "#save" } as {
+              selector: string
+              tab_id: string
+              observation_id: typeof ObservationID.Type
+            },
+            ctx,
+          )
           .pipe(Effect.exit)
         expect(failed._tag).toBe("Failure")
+        const ungrounded = yield* click
+          .execute(
+            { tab_id: "tab_seen", selector: "#save" } as {
+              selector: string
+              tab_id: string
+              observation_id: typeof ObservationID.Type
+            },
+            ctx,
+          )
+          .pipe(Effect.exit)
+        expect(ungrounded._tag).toBe("Failure")
         expect(calls).toHaveLength(4)
       }),
     60_000,
@@ -423,14 +462,21 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
         const selector = { kind: "role" as const, role: "button", name: "Save", scope: "#form" }
-        yield* tool.execute({ tab_id: "tab_test", selector }, context(asks))
+        yield* tool.execute(
+          { tab_id: "tab_test", observation_id: ObservationID.make("obs_semantic"), selector },
+          context(asks),
+        )
         expect(calls[0]).toMatchObject({ operation: "click", selector })
         expect(asks[0].patterns).toEqual([JSON.stringify(selector)])
         expect(asks[0].always).toEqual([JSON.stringify(selector)])
         const count = calls.length
         const failed = yield* tool
           .execute(
-            { tab_id: "tab_test", selector: { kind: "role", role: "button" } as typeof Selector.Type },
+            {
+              tab_id: "tab_test",
+              observation_id: ObservationID.make("obs_invalid"),
+              selector: { kind: "role", role: "button" } as typeof Selector.Type,
+            },
             context(asks),
           )
           .pipe(Effect.exit)
@@ -490,11 +536,44 @@ describe("browser host tools", () => {
           { tab_id: "tab_test", observation_id: ObservationID.make("obs_seen"), selector: "e1" },
           ctx,
         )
-        yield* type.execute({ tab_id: "tab_test", selector: "#name", text: "Raya", submit: true }, ctx)
-        yield* select.execute({ tab_id: "tab_test", selector: "#role", values: ["admin"] }, ctx)
-        yield* scroll.execute({ tab_id: "tab_test", delta_x: 4, delta_y: 500, selector: "#main" }, ctx)
+        yield* type.execute(
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_type"),
+            selector: "#name",
+            text: "Raya",
+            submit: true,
+          },
+          ctx,
+        )
+        yield* select.execute(
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_select"),
+            selector: "#role",
+            values: ["admin"],
+          },
+          ctx,
+        )
+        yield* scroll.execute(
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_scroll"),
+            delta_x: 4,
+            delta_y: 500,
+            selector: "#main",
+          },
+          ctx,
+        )
         const image = yield* screenshot.execute({ full_page: true }, ctx)
-        const value = yield* evaluate.execute({ tab_id: "tab_test", expression: "() => ({ ok: true })" }, ctx)
+        const value = yield* evaluate.execute(
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_evaluate"),
+            expression: "() => ({ ok: true })",
+          },
+          ctx,
+        )
         const report = yield* smoke.execute(
           {
             tab_id: "tab_test",

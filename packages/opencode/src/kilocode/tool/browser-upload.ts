@@ -10,6 +10,7 @@ import { KiloReference } from "@/kilocode/reference/contains"
 import { Browser } from "@/kilocode/browser/service"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { FrameID, Selector, TabID } from "@/kilocode/browser/protocol"
+import { ObservationID } from "@/kilocode/computer-use/protocol"
 import type { UploadFile } from "@/kilocode/browser/upload-schema"
 
 const Params = Schema.Union([
@@ -17,6 +18,7 @@ const Params = Schema.Union([
     action: Schema.Literal("start"),
     tab_id: TabID,
     frame_id: Schema.optional(FrameID),
+    observation_id: ObservationID,
     selector: Selector,
     destination: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20000)),
     paths: Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(32768))).check(
@@ -35,7 +37,7 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
     const fs = yield* FSUtil.Service
     return {
       description:
-        "Attach authorized local files to one observed browser file input. Requires the observed destination URL and tab/frame. Files are staged by verified reference, never guessed host paths. Selection may trigger page-side submission: selected does not mean server-confirmed upload. Inspect the retained operation and page/network result; never automatically repeat selection after interruption. Cancel before selection stops staging; after selection reconcile the destination instead.",
+        "Attach authorized local files to one browser file input grounded by a fresh snapshot observation. Requires the observed destination URL and tab/frame. Files are staged by verified reference, never guessed host paths. Selection may trigger page-side submission: selected does not mean server-confirmed upload. Inspect the retained operation and page/network result; never automatically repeat selection after interruption. Cancel before selection stops staging; after selection reconcile the destination instead.",
       parameters: Params,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -104,6 +106,7 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
             uploadID: owner.uploadID,
             tabID: params.tab_id,
             frameID: params.frame_id,
+            observationID: params.observation_id,
             selector: params.selector,
             destination: params.destination,
             files,

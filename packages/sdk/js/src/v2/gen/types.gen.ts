@@ -467,6 +467,8 @@ export type NotebookRequest = NotebookReadRequest | NotebookEditRequest | Notebo
 
 export type BrowserRequestId = string
 
+export type ComputerUseObservationId = string
+
 export type BrowserUploadFile = {
   id: string
   name: string
@@ -474,8 +476,6 @@ export type BrowserUploadFile = {
   bytes: number
   sha256: string
 }
-
-export type ComputerUseObservationId = string
 
 export type BrowserRequest =
   | {
@@ -532,6 +532,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       operation: "upload"
       action: "start"
       uploadID: string
@@ -583,6 +584,7 @@ export type BrowserRequest =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       operation: "download"
       action: "start"
       /**
@@ -6499,6 +6501,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       operation: "upload"
       action: "start"
       uploadID: string
@@ -6550,6 +6553,7 @@ export type BrowserRequest1 =
        * Observed frame document identity; invalid after navigation or detachment.
        */
       frameID?: string
+      observationID?: ComputerUseObservationId
       operation: "download"
       action: "start"
       /**

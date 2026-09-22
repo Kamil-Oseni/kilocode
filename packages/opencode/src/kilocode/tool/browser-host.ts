@@ -12,7 +12,7 @@ const Identity = { tab_id: TabID }
 const Framed = { frame_id: Schema.optional(FrameID) }
 const Grounded = {
   ...Framed,
-  observation_id: Schema.optional(ObservationID).annotate({
+  observation_id: ObservationID.annotate({
     description:
       "Observation ID returned by browser_snapshot. The host rejects stale or mismatched observations before dispatch.",
   }),
@@ -128,7 +128,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
     const browser = yield* Browser.Service
     return {
       description:
-        "Click an observed target using an exact role/name, label, test ID, or legacy selector. Ambiguous semantic targets are rejected; scope to an observed container when needed.",
+        "Click a target grounded by a fresh browser_snapshot observation using an exact role/name, label, test ID, or legacy selector. Ambiguous semantic targets are rejected; scope to an observed container when needed.",
       parameters: ClickParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -168,7 +168,8 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
   Effect.gen(function* () {
     const browser = yield* Browser.Service
     return {
-      description: "Replace the text in an editable browser element and optionally submit it with Enter.",
+      description:
+        "Replace text in an editable element grounded by a fresh browser_snapshot observation and optionally submit it with Enter.",
       parameters: TypeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -213,7 +214,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
   Effect.gen(function* () {
     const browser = yield* Browser.Service
     return {
-      description: "Select one or more values in a browser select element.",
+      description: "Select values in an element grounded by a fresh browser_snapshot observation.",
       parameters: SelectParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -254,7 +255,7 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
   Effect.gen(function* () {
     const browser = yield* Browser.Service
     return {
-      description: "Scroll the current browser page or a selected scrollable element by pixel deltas.",
+      description: "Scroll a page or selected container grounded by a fresh browser_snapshot observation.",
       parameters: ScrollParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -345,7 +346,7 @@ export const BrowserEvaluateTool = Tool.define<
     const browser = yield* Browser.Service
     return {
       description:
-        "Evaluate JavaScript in the current browser page and return a bounded serialized result. Prefer snapshot-grounded actions for normal interaction.",
+        "Evaluate JavaScript in the page identified by a fresh browser_snapshot observation and return a bounded serialized result. Prefer ordinary grounded interactions.",
       parameters: EvaluateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -579,7 +580,7 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
 )
 
 const DownloadParams = Schema.Union([
-  Schema.Struct({ action: Schema.Literal("start"), ...Identity, ...Framed, selector: Selector }),
+  Schema.Struct({ action: Schema.Literal("start"), ...Identity, ...Grounded, selector: Selector }),
   Schema.Struct({
     action: Schema.Literal("list"),
     offset: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -627,6 +628,7 @@ export const BrowserDownloadTool = Tool.define<
                   sessionID: ctx.sessionID,
                   tabID: params.tab_id,
                   frameID: params.frame_id,
+                  observationID: params.observation_id,
                   selector: params.selector,
                 }
               : params.action === "list"

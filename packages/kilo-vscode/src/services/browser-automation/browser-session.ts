@@ -972,6 +972,7 @@ export class BrowserSession {
     await this.ready()
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
+    this.consume(action)
     const lease = this.document(action.tabID, action.frameID)
     const expected = new URL(action.destination).href
     const revision = this.revision
@@ -1100,6 +1101,7 @@ export class BrowserSession {
       capture: true,
       tabID: action.tabID,
       frameID: action.frameID,
+      observationID: action.observationID,
       selector: action.selector,
       origin: action.origin,
     }).then(

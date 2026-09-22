@@ -47,8 +47,13 @@ const agent: Agent.Info = {
 }
 const approvals: Permission.AskInput[] = []
 const registrations: boolean[] = []
+// oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- this protocol fixture implements only the methods exercised by SessionTools
+const client = {
+  getServerCapabilities: () => ({ resources: {} }),
+  callTool: () => Promise.resolve({ content: [{ type: "text" as const, text: "selected" }] }),
+} as unknown as MCP.McpTool["client"]
 
-function session(directory: string, routine = false): Session.Info {
+function session(directory: string, routine = false, rules = Permission.fromConfig({ "*": "allow" })): Session.Info {
   return {
     id: sessionID,
     slug: "sandbox-session-tools",
@@ -56,7 +61,7 @@ function session(directory: string, routine = false): Session.Info {
     directory,
     title: "Sandbox worktree isolation",
     version: "test",
-    permission: Permission.fromConfig({ "*": "allow" }),
+    permission: rules,
     ...(routine ? { metadata: { rayaRoutine: { agentID: "routine", runID: "run" } } } : {}),
     time: { created: 0, updated: 0 },
   }
@@ -113,8 +118,23 @@ const plugin = Layer.mock(Plugin.Service)({
   trigger: (_name, _input, output) => Effect.succeed(output),
 })
 const mcp = Layer.mock(MCP.Service)({
-  tools: () => Effect.succeed({}),
-  clients: () => Effect.succeed({}), // kilocode_change - upstream's MCP resource tools probe the clients
+  tools: () =>
+    Effect.succeed({
+      service_selected: {
+        def: { name: "selected", description: "selected service", inputSchema: { type: "object" } },
+        client,
+        clientName: "service",
+      },
+      service_hidden: {
+        def: { name: "hidden", description: "hidden service", inputSchema: { type: "object" } },
+        client,
+        clientName: "service",
+      },
+    }),
+  clients: () => Effect.succeed({ service: client }), // kilocode_change - upstream's MCP resource tools probe the clients
+  resources: () => Effect.succeed({}),
+  resourceTemplates: () => Effect.succeed({}),
+  readResource: () => Effect.succeed(undefined),
 })
 const lsp = Layer.mock(LSP.Service)({
   touchFile: () => Effect.void,
@@ -143,7 +163,7 @@ const base = Layer.mergeAll(
   AppNodeBuilder.build(Database.node),
   AppNodeBuilder.build(FSUtil.node),
   AppNodeBuilder.build(CrossSpawnSpawner.node),
-  RuntimeFlags.layer(),
+  RuntimeFlags.layer({ experimentalCodeMode: false }),
 )
 const registry = Layer.effect(
   ToolRegistry.Service,
@@ -170,11 +190,12 @@ function resolve(
   ctx: InstanceContext,
   metadataCalls: { toolCallID: string; value: Record<string, any> }[] = [],
   routine = false,
+  rules = Permission.fromConfig({ "*": "allow" }),
 ) {
   return SessionTools.resolve({
     agent,
     model,
-    session: session(ctx.directory, routine),
+    session: session(ctx.directory, routine, rules),
     processor: {
       message: message(ctx),
       // capture metadata writes so tests can assert on recorded approval provenance
@@ -199,6 +220,46 @@ it.live("requests trusted plugin tools only for Routine sessions", () =>
     yield* resolve(dirs.ctx)
     yield* resolve(dirs.ctx, [], true)
     expect(registrations.slice(start)).toEqual([false, true])
+  }),
+)
+
+it.live("exposes only exact saved connected-service tools to Routine sessions", () =>
+  Effect.gen(function* () {
+    const dirs = yield* fixture()
+    const rules = Permission.fromConfig({
+      "*": "deny",
+      service_selected: "allow",
+      list_mcp_resources: "allow",
+    })
+    const open = TestConfig.layer({ get: () => Effect.succeed({ sandbox: { enabled: false } }) })
+    const ordinary = yield* resolve(dirs.ctx, [], false, rules).pipe(Effect.provide(open))
+    const routine = yield* resolve(dirs.ctx, [], true, rules).pipe(Effect.provide(open))
+
+    expect(Object.keys(ordinary)).toContain("service_selected")
+    expect(Object.keys(ordinary)).toContain("service_hidden")
+    expect(Object.keys(ordinary)).toContain("list_mcp_resources")
+    expect(Object.keys(ordinary)).toContain("list_mcp_resource_templates")
+    expect(Object.keys(ordinary)).toContain("read_mcp_resource")
+    expect(Object.keys(routine)).toContain("service_selected")
+    expect(Object.keys(routine)).toContain("list_mcp_resources")
+    expect(Object.keys(routine)).not.toContain("service_hidden")
+    expect(Object.keys(routine)).not.toContain("list_mcp_resource_templates")
+    expect(Object.keys(routine)).not.toContain("read_mcp_resource")
+
+    const resources = ordinary.list_mcp_resources
+    if (!resources) yield* Effect.die(new Error("ordinary MCP resource tool is missing"))
+    yield* call(resources, { server: "service" }, "call-ordinary-resources")
+    expect(approvals.at(-1)?.permission).toBe("read")
+
+    const list = routine.list_mcp_resources
+    if (!list) yield* Effect.die(new Error("selected MCP resource tool is missing"))
+    yield* call(list, { server: "service" }, "call-resources")
+    expect(approvals.at(-1)?.permission).toBe("list_mcp_resources")
+
+    const selected = routine.service_selected
+    if (!selected) yield* Effect.die(new Error("selected MCP tool is missing"))
+    expect(yield* call(selected, {}, "call-selected")).toMatchObject({ output: "selected" })
+    expect(approvals.at(-1)?.permission).toBe("service_selected")
   }),
 )
 

@@ -2,4 +2,4 @@
 "@kilocode/cli": patch
 ---
 
-Restrict Routine workers to built-in and trusted global plugin tools in their saved tool scope while keeping project-local plugin tools available in ordinary chats.
+Restrict Routine workers to built-in, trusted global plugin and connected-service tools in their exact saved scope while keeping ordinary chat access unchanged.

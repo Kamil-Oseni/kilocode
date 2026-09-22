@@ -76,6 +76,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const flags = yield* RuntimeFlags.Service
   const restricted = yield* SandboxPolicy.networkRestricted(input.session.id) // kilocode_change
   const sandboxed = (yield* SandboxPolicy.status(input.session.id)).enabled // kilocode_change
+  // kilocode_change start - Routine catalogs expose only exact durable tool grants
+  const routine = input.session.metadata?.rayaRoutine !== undefined
+  const authority = routine ? Permission.merge(input.agent.permission, input.session.permission ?? []) : undefined
+  const visible = (id: string) => !authority || Permission.evaluate(id, "*", authority).action !== "deny"
+  const grant = (id: string) => (routine ? id : "read")
+  // kilocode_change end
   const catalog = CapabilityCatalog.bind(tools, restricted) // kilocode_change
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => {
     const extra = {
@@ -159,7 +165,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     agent: input.agent,
     permission: input.session.permission,
     networkRestricted: restricted, // kilocode_change - let the registry suppress code-mode in restricted sessions
-    trustedOnly: input.session.metadata?.rayaRoutine !== undefined, // kilocode_change - fail closed on local plugin tools in Routines
+    trustedOnly: routine, // kilocode_change - fail closed on local plugin tools in Routines
   })) {
     const base = ToolJsonSchema.fromTool(item)
     const schema = ProviderTransform.schema(input.model, base)
@@ -250,7 +256,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             yield* ctx.ask({
-              permission: "read",
+              permission: grant(MCP_RESOURCE_TOOLS.list),
               metadata: parsed.server ? { server: parsed.server } : {},
               patterns: permissionPatterns,
               always: permissionPatterns,
@@ -333,7 +339,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             yield* ctx.ask({
-              permission: "read",
+              permission: grant(MCP_RESOURCE_TOOLS.listTemplates),
               metadata: parsed.server ? { server: parsed.server } : {},
               patterns: permissionPatterns,
               always: permissionPatterns,
@@ -413,7 +419,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             yield* ctx.ask({
-              permission: "read",
+              permission: grant(MCP_RESOURCE_TOOLS.read),
               metadata: { server: parsed.server, uri: parsed.uri },
               patterns: [`mcp:${parsed.server}:${parsed.uri}`],
               always: [`mcp:${parsed.server}:*`],
@@ -457,10 +463,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
+  // kilocode_change start - synthetic resource tools follow the same exact Routine scope
+  if (routine) {
+    for (const id of Object.values(MCP_RESOURCE_TOOLS)) {
+      if (!visible(id)) delete tools[id]
+    }
+  }
+  // kilocode_change end
+
   if (flags.experimentalCodeMode) return tools
 
   const mcpTools = restricted ? {} : yield* mcp.tools() // kilocode_change
   for (const [key, entry] of Object.entries(mcpTools)) {
+    if (!visible(key)) continue // kilocode_change - hide unsaved connected-service tools from Routine models
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
     const execute = item.execute
     if (!execute) continue

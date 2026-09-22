@@ -11,7 +11,9 @@ import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 
 const request: DesktopRequest = { id: "desktop_1", sessionID: "ses_desktop", operation: "observe" }
 
-function setup(input: { store?: DesktopReceiptStore; pending?: DesktopRequest[]; fail?: boolean } = {}) {
+function setup(
+  input: { store?: DesktopReceiptStore; pending?: DesktopRequest[]; fail?: boolean; hold?: Promise<void> } = {},
+) {
   const replies: unknown[] = []
   const rejects: unknown[] = []
   const actions: unknown[] = []
@@ -65,7 +67,9 @@ function setup(input: { store?: DesktopReceiptStore; pending?: DesktopRequest[];
   const bridge = new DesktopBridge(
     connection,
     session,
-    async (request) => {
+    async (request, signal) => {
+      if (input.hold) await input.hold
+      if (signal.aborted) throw new Error("Desktop viewing was stopped")
       const count = request.operation === "watch" ? request.frameCount : 1
       const frames = []
       for (const _index of Array.from({ length: count }, (_, index) => index)) {
@@ -112,6 +116,69 @@ describe("desktop observation bridge", () => {
         receipt: { requestID: request.id, effect: "observe", outcome: "confirmed" },
       },
     })
+    test.bridge.dispose()
+  })
+
+  it("does not pause desktop control for a disconnected startup state", async () => {
+    const test = setup()
+    for (const listener of test.states) listener("disconnected")
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(1)
+    expect(test.replies).toHaveLength(1)
+    expect(test.rejects).toEqual([])
+    test.bridge.dispose()
+  })
+
+  it("requires explicit resume after a live backend disconnect", async () => {
+    const test = setup()
+    for (const listener of test.states) listener("connected")
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    for (const listener of test.states) listener("disconnected")
+    for (const listener of test.states) listener("connected")
+    const click: DesktopRequest = {
+      id: "desktop_reconnect_1",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({ message: expect.stringContaining("Resume agent desktop control") }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
+  it("aborts an active desktop capture when the live backend disconnects", async () => {
+    const gate = Promise.withResolvers<void>()
+    const test = setup({ hold: gate.promise })
+    for (const listener of test.states) listener("connected")
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(0)
+    for (const listener of test.states) listener("error")
+    gate.resolve()
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(0)
+    expect(test.replies).toEqual([])
+    expect(test.rejects).toEqual([])
     test.bridge.dispose()
   })
 

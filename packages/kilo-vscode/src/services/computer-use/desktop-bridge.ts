@@ -39,6 +39,7 @@ export class DesktopBridge {
   private readonly offState: () => void
   private writes = Promise.resolve()
   private revision = 0
+  private connected = false
   private disposed = false
 
   constructor(
@@ -66,9 +67,21 @@ export class DesktopBridge {
   }
 
   private state(state: ConnectionState): void {
-    if (state !== "connected") return
-    const revision = ++this.revision
-    void this.recover(revision)
+    if (state === "connected") {
+      this.connected = true
+      const revision = ++this.revision
+      void this.recover(revision).catch((error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error)
+        console.error("[Raya] Desktop request recovery read failed; no work replayed:", detail.slice(0, 1000))
+      })
+      return
+    }
+    if (!this.connected || (state !== "disconnected" && state !== "error")) return
+    this.connected = false
+    this.revision += 1
+    for (const controller of this.active.values()) controller.abort()
+    this.active.clear()
+    this.session.takeControl("Raya disconnected. Resume desktop control after reconnecting.")
   }
 
   private async recover(revision: number): Promise<void> {

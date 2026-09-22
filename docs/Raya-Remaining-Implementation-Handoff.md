@@ -1,11 +1,17 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `05588f541c` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+9af3008710.kamil-oseni.1790111074782` installs grounded window switching, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `2a8e6b8176` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+9af3008710.kamil-oseni.1790111074782` installs grounded window switching, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 17:17 America/Toronto - preserve visible physical observation bounds
+
+Preserve product commit `2a8e6b8176`. `Get-RayaWindow` must intersect the foreground native rectangle with the physical virtual desktop before capture. Keep the resulting visible rectangle identical across the location fingerprint, returned frame dimensions, `CopyFromScreen` origin and normalized pointer/drag mapping. Do not restore full off-screen bounds: the model would otherwise ground actions against pixels it cannot see and the native safety boundary must refuse.
+
+Evidence passes **33 focused tests / 134 assertions**, extension typecheck, ESLint, Knip, targeted formatting, the marker guard and real embedded-C# compilation/enumeration. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `9af3008710`; include this source in the next coherent capped snapshot. A real partially off-screen foreground window remains installed-host acceptance.
 
 ## ChatGPT 2026-09-22 17:06 America/Toronto - atomic desktop text installation receipt
 

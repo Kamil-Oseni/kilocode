@@ -28,7 +28,7 @@ export type DesktopState = {
 export interface DesktopDriver {
   observe(): Promise<DesktopFrame>
   current(): Promise<{ windowID: string; location?: string }>
-  perform(action: DesktopAction): Promise<void>
+  perform(action: DesktopAction, target: { windowID: string; location?: string }): Promise<void>
   cancel?(): void
 }
 
@@ -94,7 +94,7 @@ export class DesktopSession {
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
-        await this.driver.perform(action)
+        await this.driver.perform(action, current)
       } finally {
         this.active = Math.max(0, this.active - 1)
         if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })

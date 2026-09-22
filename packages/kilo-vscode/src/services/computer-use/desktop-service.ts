@@ -10,43 +10,48 @@ export class DesktopAutomationService implements vscode.Disposable {
   private readonly panel: DesktopPanel | undefined
   private readonly bridge: DesktopBridge | undefined
 
-  constructor(connection: KiloConnectionService) {
+  constructor(connection: KiloConnectionService, context: vscode.ExtensionContext) {
     if (process.platform !== "win32") return
     this.session = new DesktopSession(new WindowsDesktopDriver())
     this.panel = new DesktopPanel(this.session)
-    this.bridge = new DesktopBridge(connection, this.session, async (request, signal) => {
-      const count = request.operation === "watch" ? request.frameCount : 1
-      const interval = request.operation === "watch" ? request.intervalMs : 0
-      return await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title:
-            request.operation === "watch"
-              ? "Raya is watching the foreground window"
-              : "Raya is looking at the foreground window",
-          cancellable: true,
-        },
-        async (progress, token) => {
-          const state = { cancelled: false }
-          const stop = token.onCancellationRequested(() => {
-            state.cancelled = true
-            this.session!.takeControl("You stopped live desktop viewing.")
-          })
-          try {
-            const frames = []
-            for (const index of Array.from({ length: count }, (_, value) => value)) {
-              if (state.cancelled || signal.aborted) throw new Error("Desktop viewing was stopped")
-              frames.push(await this.session!.observe())
-              progress.report({ increment: 100 / count, message: `Frame ${index + 1} of ${count}` })
-              if (index + 1 < count) await wait(interval, signal, state)
+    this.bridge = new DesktopBridge(
+      connection,
+      this.session,
+      async (request, signal) => {
+        const count = request.operation === "watch" ? request.frameCount : 1
+        const interval = request.operation === "watch" ? request.intervalMs : 0
+        return await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title:
+              request.operation === "watch"
+                ? "Raya is watching the foreground window"
+                : "Raya is looking at the foreground window",
+            cancellable: true,
+          },
+          async (progress, token) => {
+            const state = { cancelled: false }
+            const stop = token.onCancellationRequested(() => {
+              state.cancelled = true
+              this.session!.takeControl("You stopped live desktop viewing.")
+            })
+            try {
+              const frames = []
+              for (const index of Array.from({ length: count }, (_, value) => value)) {
+                if (state.cancelled || signal.aborted) throw new Error("Desktop viewing was stopped")
+                frames.push(await this.session!.observe())
+                progress.report({ increment: 100 / count, message: `Frame ${index + 1} of ${count}` })
+                if (index + 1 < count) await wait(interval, signal, state)
+              }
+              return frames
+            } finally {
+              stop.dispose()
             }
-            return frames
-          } finally {
-            stop.dispose()
-          }
-        },
-      )
-    })
+          },
+        )
+      },
+      context.globalState,
+    )
   }
 
   async show(): Promise<void> {

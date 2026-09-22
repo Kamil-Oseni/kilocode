@@ -1,13 +1,17 @@
 import { describe, expect, it } from "bun:test"
 import type { DesktopRequest, KiloClient } from "@kilocode/sdk/v2/client"
-import { DesktopBridge, type DesktopConnection } from "../../src/services/computer-use/desktop-bridge"
+import {
+  DesktopBridge,
+  type DesktopConnection,
+  type DesktopReceiptStore,
+} from "../../src/services/computer-use/desktop-bridge"
 import { DesktopSession, type DesktopDriver } from "../../src/services/computer-use/desktop-session"
 import type { ConnectionState } from "../../src/services/cli-backend/connection-service"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 
 const request: DesktopRequest = { id: "desktop_1", sessionID: "ses_desktop", operation: "observe" }
 
-function setup() {
+function setup(input: { store?: DesktopReceiptStore; pending?: DesktopRequest[]; fail?: boolean } = {}) {
   const replies: unknown[] = []
   const rejects: unknown[] = []
   const actions: unknown[] = []
@@ -30,9 +34,11 @@ function setup() {
   const client = {
     kilocode: {
       desktop: {
-        list: async () => ({ data: [] }),
-        reply: async (input: unknown) => {
-          replies.push(input)
+        list: async () => ({ data: input.pending ?? [] }),
+        reply: async (value: unknown) => {
+          replies.push(value)
+          const operation = (value as { result?: { operation?: string } }).result?.operation
+          if (input.fail && operation !== "observe" && operation !== "watch") return { error: { message: "offline" } }
           return { data: true }
         },
         reject: async (input: unknown) => {
@@ -56,16 +62,32 @@ function setup() {
   }
   const session = new DesktopSession(driver)
   let observed = 0
-  const bridge = new DesktopBridge(connection, session, async (input) => {
-    const count = input.operation === "watch" ? input.frameCount : 1
-    const frames = []
-    for (const _index of Array.from({ length: count }, (_, index) => index)) {
-      observed += 1
-      frames.push(await session.observe())
-    }
-    return frames
-  })
-  return { bridge, events, replies, rejects, actions, observed: () => observed }
+  const bridge = new DesktopBridge(
+    connection,
+    session,
+    async (request) => {
+      const count = request.operation === "watch" ? request.frameCount : 1
+      const frames = []
+      for (const _index of Array.from({ length: count }, (_, index) => index)) {
+        observed += 1
+        frames.push(await session.observe())
+      }
+      return frames
+    },
+    input.store,
+  )
+  return { bridge, events, states, replies, rejects, actions, observed: () => observed }
+}
+
+function memory(seed?: unknown) {
+  let value: unknown = seed
+  return {
+    get: <T>(_key: string) => value as T | undefined,
+    update: async (_key: string, next: unknown) => {
+      value = structuredClone(next)
+    },
+    read: () => value,
+  } satisfies DesktopReceiptStore & { read(): unknown }
 }
 
 describe("desktop observation bridge", () => {
@@ -170,6 +192,106 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(test.actions).toHaveLength(1)
     expect(test.rejects).toHaveLength(1)
+    test.bridge.dispose()
+  })
+
+  it("redelivers a confirmed action after extension restart without replaying native input", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = first.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const click: DesktopRequest = {
+      id: "desktop_restart_1",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(first.actions).toHaveLength(1)
+    expect(JSON.stringify(store.read())).not.toContain("cG5n")
+    expect(store.read()).toMatchObject({
+      version: 1,
+      items: [{ id: click.id, result: { operation: "click", receipt: { outcome: "confirmed" } } }],
+    })
+    first.bridge.dispose()
+
+    const second = setup({ store, pending: [click] })
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.rejects).toEqual([])
+    expect(second.replies).toEqual([
+      expect.objectContaining({
+        requestID: click.id,
+        directory: "C:\\workspace",
+        result: expect.objectContaining({
+          operation: "click",
+          receipt: expect.objectContaining({ outcome: "confirmed" }),
+        }),
+      }),
+    ])
+    second.bridge.dispose()
+  })
+
+  it("ignores malformed saved receipts and refuses recovered input", async () => {
+    const click: DesktopRequest = {
+      id: "desktop_corrupt_1",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: "window_1",
+      observationID: "observation_missing",
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    const store = memory({
+      version: 1,
+      items: [
+        {
+          id: click.id,
+          fingerprint: "0".repeat(64),
+          result: {
+            operation: "click",
+            receipt: {
+              version: 1,
+              requestID: "different_request",
+              startedAt: 1,
+              finishedAt: 2,
+              effect: "interact",
+              outcome: "confirmed",
+              observationID: click.observationID,
+              target: { surface: "desktop", windowID: click.windowID },
+            },
+          },
+        },
+      ],
+    })
+    const test = setup({ store, pending: [click] })
+    for (const listener of test.states) listener("connected")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([])
+    expect(test.replies).toEqual([])
+    expect(test.rejects).toEqual([
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({
+          code: "invalid_request",
+          message: expect.stringContaining("prior outcome is unknown"),
+        }),
+      }),
+    ])
     test.bridge.dispose()
   })
 

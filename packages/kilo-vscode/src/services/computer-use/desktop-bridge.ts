@@ -21,13 +21,23 @@ export interface DesktopConnection {
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure }
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type ActionRequest = Exclude<DesktopRequest, CaptureRequest>
+type ActionResult = Exclude<DesktopResult, { operation: "observe" | "watch" }>
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
+
+const journal = "raya.computerUse.desktop.actionReceipts.v1"
+const actions = new Set(["move", "drag", "click", "type", "key", "scroll"])
+
+export interface DesktopReceiptStore {
+  get<T>(key: string): T | undefined
+  update(key: string, value: unknown): Thenable<void>
+}
 
 export class DesktopBridge {
   private readonly active = new Map<string, AbortController>()
   private readonly receipts = new Map<string, Receipt>()
   private readonly offEvent: () => void
   private readonly offState: () => void
+  private writes = Promise.resolve()
   private revision = 0
   private disposed = false
 
@@ -35,7 +45,9 @@ export class DesktopBridge {
     private readonly connection: DesktopConnection,
     private readonly session: DesktopSession,
     private readonly capture: (request: CaptureRequest, signal: AbortSignal) => Promise<Frame[]>,
+    private readonly store?: DesktopReceiptStore,
   ) {
+    this.restore()
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
     this.offState = connection.onStateChange((state) => this.state(state))
   }
@@ -119,6 +131,9 @@ export class DesktopBridge {
       if (controller.signal.aborted) return
       receipt.result = result
       receipt.failure = undefined
+      await this.retain(receipt).catch((error) =>
+        console.error("[Raya] Desktop receipt persistence failed; backend delivery will still be attempted", error),
+      )
       await this.deliver(request.id, directory, receipt)
     } catch (error) {
       if (controller.signal.aborted) return
@@ -277,6 +292,40 @@ export class DesktopBridge {
     }
   }
 
+  private restore(): void {
+    const saved = this.store?.get<unknown>(journal)
+    if (!saved || typeof saved !== "object") return
+    const value = saved as { version?: unknown; items?: unknown }
+    if (value.version !== 1 || !Array.isArray(value.items) || value.items.length > 256) return
+    for (const item of value.items) {
+      if (!item || typeof item !== "object") continue
+      const entry = item as { id?: unknown; fingerprint?: unknown; result?: unknown }
+      if (
+        typeof entry.id !== "string" ||
+        !entry.id ||
+        entry.id.length > 256 ||
+        typeof entry.fingerprint !== "string" ||
+        !/^[a-f0-9]{64}$/.test(entry.fingerprint) ||
+        !persistable(entry.result) ||
+        entry.result.receipt.requestID !== entry.id
+      )
+        continue
+      this.receipts.set(entry.id, { fingerprint: entry.fingerprint, result: entry.result })
+    }
+  }
+
+  private retain(receipt: Receipt): Promise<void> {
+    if (!this.store || !receipt.result || !persistable(receipt.result)) return Promise.resolve()
+    this.writes = this.writes.then(() => {
+      const items = [...this.receipts.entries()]
+        .filter((entry): entry is [string, Receipt & { result: ActionResult }] => persistable(entry[1].result))
+        .map(([key, value]) => ({ id: key, fingerprint: value.fingerprint, result: value.result }))
+        .slice(-256)
+      return Promise.resolve(this.store!.update(journal, { version: 1, items }))
+    })
+    return this.writes
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
@@ -287,4 +336,25 @@ export class DesktopBridge {
     this.active.clear()
     this.receipts.clear()
   }
+}
+
+function persistable(value: unknown): value is ActionResult {
+  if (!value || typeof value !== "object") return false
+  const result = value as { operation?: unknown; receipt?: unknown }
+  if (typeof result.operation !== "string" || !actions.has(result.operation)) return false
+  if (!result.receipt || typeof result.receipt !== "object") return false
+  const receipt = result.receipt as Record<string, unknown>
+  return (
+    receipt.version === 1 &&
+    typeof receipt.requestID === "string" &&
+    Number.isFinite(receipt.startedAt) &&
+    Number.isFinite(receipt.finishedAt) &&
+    receipt.effect === "interact" &&
+    receipt.outcome === "confirmed" &&
+    typeof receipt.observationID === "string" &&
+    !!receipt.target &&
+    typeof receipt.target === "object" &&
+    (receipt.target as Record<string, unknown>).surface === "desktop" &&
+    typeof (receipt.target as Record<string, unknown>).windowID === "string"
+  )
 }

@@ -1,11 +1,17 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `2a8e6b8176` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+8461b3d974.kamil-oseni.1790112002819` installs grounded window switching, visible physical capture bounds, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `3ab59d819b` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+8461b3d974.kamil-oseni.1790112002819` installs grounded window switching, visible physical capture bounds, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 17:30 America/Toronto - preserve pointer target ownership checks
+
+Preserve product commit `3ab59d819b`. Immediately before a move, click or drag, `ValidateTarget` must resolve the physical point with `WindowFromPoint` and compare `GA_ROOTOWNER` against the current foreground window. This permits foreground child controls and owned dialogs while refusing another application's overlay. Keep the check after physical-range validation and before every pointer batch; do not treat a foreground rectangle alone as proof that the foreground app owns every visible point.
+
+Evidence passes **33 focused tests / 140 assertions**, extension typecheck, ESLint, Knip, targeted formatting, the marker guard and real embedded-C# compilation/enumeration. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `8461b3d974`; include this source in the next coherent capped snapshot. Live overlay refusal remains installed-host acceptance.
 
 ## ChatGPT 2026-09-22 17:22 America/Toronto - visible desktop grounding installation receipt
 

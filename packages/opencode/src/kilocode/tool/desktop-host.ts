@@ -176,6 +176,71 @@ export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Servic
   }),
 )
 
+const DragParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_observe.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh observation ID returned by desktop_observe. It can be used only once.",
+  }),
+  start_x: Unit.annotate({ description: "Normalized horizontal drag start." }),
+  start_y: Unit.annotate({ description: "Normalized vertical drag start." }),
+  end_x: Unit.annotate({ description: "Normalized horizontal drag end." }),
+  end_y: Unit.annotate({ description: "Normalized vertical drag end." }),
+  button: Schema.optional(Schema.Literals(["left", "right"])).annotate({ description: "Defaults to left." }),
+}).check(
+  Schema.makeFilter((value) =>
+    value.start_x !== value.end_x || value.start_y !== value.end_y
+      ? undefined
+      : "Desktop drag requires different start and end points.",
+  ),
+)
+
+export const DesktopDragTool = Tool.define<typeof DragParams, {}, Desktop.Service, "desktop_drag">(
+  "desktop_drag",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Drag between two exact normalized points in the foreground window, grounded by a fresh desktop_observe result. The Windows host batches button down, absolute movement, and button up, and sends a recovery release if native dispatch is incomplete.",
+      parameters: DragParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const start = `${params.start_x.toFixed(4)},${params.start_y.toFixed(4)}`
+          const end = `${params.end_x.toFixed(4)},${params.end_y.toFixed(4)}`
+          const button = params.button ?? "left"
+          yield* ctx.ask({
+            permission: "desktop_drag",
+            patterns: [`${params.window_id}:${button}:${start}->${end}`],
+            always: [],
+            metadata: {},
+          })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "drag",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              startX: params.start_x,
+              startY: params.start_y,
+              endX: params.end_x,
+              endY: params.end_y,
+              button,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "drag") return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: "Dragged on desktop",
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
 export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Service, "desktop_click">(
   "desktop_click",
   Effect.gen(function* () {
@@ -380,6 +445,7 @@ export const DesktopTools = [
   DesktopObserveTool,
   DesktopWatchTool,
   DesktopMoveTool,
+  DesktopDragTool,
   DesktopClickTool,
   DesktopTypeTool,
   DesktopKeyTool,

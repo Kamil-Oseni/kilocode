@@ -14,6 +14,14 @@ export type DesktopAction = {
   observationID: string
 } & (
   | { operation: "pointer"; action: "move" | "click" | "double_click"; x: number; y: number; button?: "left" | "right" }
+  | {
+      operation: "drag"
+      startX: number
+      startY: number
+      endX: number
+      endY: number
+      button: "left" | "right"
+    }
   | { operation: "type"; text: string }
   | { operation: "key"; key: string; modifiers?: readonly ("alt" | "control" | "meta" | "shift")[] }
   | { operation: "scroll"; deltaX: number; deltaY: number }
@@ -131,6 +139,17 @@ export class DesktopSession {
     if (action.operation === "pointer") {
       if (![action.x, action.y].every((value) => Number.isFinite(value) && value >= 0 && value <= 1))
         throw new Error("Desktop pointer coordinates must be normalized values from 0 through 1")
+      return
+    }
+    if (action.operation === "drag") {
+      if (
+        ![action.startX, action.startY, action.endX, action.endY].every(
+          (value) => Number.isFinite(value) && value >= 0 && value <= 1,
+        )
+      )
+        throw new Error("Desktop drag coordinates must be normalized values from 0 through 1")
+      if (action.startX === action.endX && action.startY === action.endY)
+        throw new Error("Desktop drag requires different start and end points")
       return
     }
     if (action.operation === "scroll") {

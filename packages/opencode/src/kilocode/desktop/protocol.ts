@@ -92,6 +92,24 @@ export const MoveRequest = Schema.Struct({
   y: Unit,
 })
 
+export const DragRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("drag"),
+  windowID: Identity,
+  observationID: ObservationID,
+  startX: Unit,
+  startY: Unit,
+  endX: Unit,
+  endY: Unit,
+  button: Schema.Literals(["left", "right"]),
+}).check(
+  Schema.makeFilter((value) =>
+    value.startX !== value.endX || value.startY !== value.endY
+      ? undefined
+      : "Desktop drag requires different start and end points.",
+  ),
+)
+
 export const TypeRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("type"),
@@ -126,6 +144,7 @@ export const Request = Schema.Union([
   ObserveRequest,
   WatchRequest,
   MoveRequest,
+  DragRequest,
   ClickRequest,
   TypeRequest,
   KeyRequest,
@@ -167,6 +186,11 @@ export const MoveResult = Schema.Struct({
   receipt: Receipt,
 })
 
+export const DragResult = Schema.Struct({
+  operation: Schema.Literal("drag"),
+  receipt: Receipt,
+})
+
 export const TypeResult = Schema.Struct({
   operation: Schema.Literal("type"),
   receipt: Receipt,
@@ -186,6 +210,7 @@ export const Result = Schema.Union([
   ObserveResult,
   WatchResult,
   MoveResult,
+  DragResult,
   ClickResult,
   TypeResult,
   KeyResult,

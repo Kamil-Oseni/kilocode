@@ -85,6 +85,18 @@ describe("native desktop session boundary", () => {
         deltaY: 1_201,
       }),
     ).rejects.toThrow(/-1200 through 1200/i)
+    await expect(
+      session.execute({
+        operation: "drag",
+        windowID: frame.windowID,
+        observationID: frame.observation.id,
+        startX: 0.5,
+        startY: 0.5,
+        endX: 0.5,
+        endY: 0.5,
+        button: "left",
+      }),
+    ).rejects.toThrow(/different start and end points/i)
     expect(driver.actions).toEqual([])
   })
 

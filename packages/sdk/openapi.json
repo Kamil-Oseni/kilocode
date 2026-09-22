@@ -67517,6 +67517,67 @@
               },
               "operation": {
                 "type": "string",
+                "enum": ["drag"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "startX": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "startY": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "endX": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "endY": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "button": {
+                "type": "string",
+                "enum": ["left", "right"]
+              }
+            },
+            "required": [
+              "id",
+              "sessionID",
+              "operation",
+              "windowID",
+              "observationID",
+              "startX",
+              "startY",
+              "endX",
+              "endY",
+              "button"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
                 "enum": ["click"]
               },
               "windowID": {
@@ -81987,6 +82048,20 @@
               "operation": {
                 "type": "string",
                 "enum": ["move"]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["drag"]
               },
               "receipt": {
                 "$ref": "#/components/schemas/ComputerUseReceipt"

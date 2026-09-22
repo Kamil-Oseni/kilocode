@@ -211,6 +211,19 @@ export class DesktopBridge {
       })
       return { operation: "move", receipt: { ...receipt, finishedAt: Date.now() } }
     }
+    if (request.operation === "drag") {
+      await this.session.execute({
+        operation: "drag",
+        windowID: request.windowID,
+        observationID: request.observationID,
+        startX: request.startX,
+        startY: request.startY,
+        endX: request.endX,
+        endY: request.endY,
+        button: request.button,
+      })
+      return { operation: "drag", receipt: { ...receipt, finishedAt: Date.now() } }
+    }
     if (request.operation === "click") {
       await this.session.execute({
         operation: "pointer",

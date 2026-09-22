@@ -1102,6 +1102,18 @@ export type DesktopRequest =
   | {
       id: DesktopRequestId
       sessionID: string
+      operation: "drag"
+      windowID: string
+      observationID: ComputerUseObservationId
+      startX: number
+      startY: number
+      endX: number
+      endY: number
+      button: "left" | "right"
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
       operation: "click"
       windowID: string
       observationID: ComputerUseObservationId
@@ -5754,6 +5766,10 @@ export type DesktopResult =
     }
   | {
       operation: "move"
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "drag"
       receipt: ComputerUseReceipt
     }
   | {

@@ -1,10 +1,11 @@
 // raya_change - model-facing native desktop tool tests
 import { expect } from "bun:test"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { Key, ScrollRequest, WatchRequest } from "@/kilocode/desktop/protocol"
+import { DragRequest, Key, ScrollRequest, WatchRequest } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
 import {
   DesktopClickTool,
+  DesktopDragTool,
   DesktopKeyTool,
   DesktopMoveTool,
   DesktopScrollTool,
@@ -67,7 +68,9 @@ it.instance(
                       ? ("scroll" as const)
                       : input.operation === "move"
                         ? ("move" as const)
-                        : ("click" as const),
+                        : input.operation === "drag"
+                          ? ("drag" as const)
+                          : ("click" as const),
               receipt: {
                 version: 1 as const,
                 requestID: "desktop_click_test",
@@ -288,6 +291,59 @@ it.instance(
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 1, intervalMs: 500 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 3, intervalMs: 249 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 4, intervalMs: 2_000 })).toBe(true)
+
+      const dragged = yield* DesktopDragTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) =>
+          tool.execute(
+            {
+              window_id: "window_seen",
+              observation_id: ObservationID.make("observation_dragged"),
+              start_x: 0.125,
+              start_y: 0.25,
+              end_x: 0.875,
+              end_y: 0.75,
+              button: "right",
+            },
+            ctx,
+          ),
+        ),
+      )
+      expect(asks[6]).toEqual(
+        expect.objectContaining({
+          permission: "desktop_drag",
+          patterns: ["window_seen:right:0.1250,0.2500->0.8750,0.7500"],
+          always: [],
+        }),
+      )
+      expect(calls[6]).toEqual({
+        operation: "drag",
+        sessionID: ctx.sessionID,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_dragged"),
+        startX: 0.125,
+        startY: 0.25,
+        endX: 0.875,
+        endY: 0.75,
+        button: "right",
+      })
+      expect(dragged.title).toBe("Dragged on desktop")
+      const drag = {
+        id: "drag_schema",
+        sessionID: ctx.sessionID,
+        operation: "drag" as const,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_drag_schema"),
+        startX: 0.5,
+        startY: 0.5,
+        endX: 0.5,
+        endY: 0.5,
+        button: "left" as const,
+      }
+      expect(Schema.is(DragRequest)(drag)).toBe(false)
+      expect(Schema.is(DragRequest)({ ...drag, endX: 1.1 })).toBe(false)
+      expect(Schema.is(DragRequest)({ ...drag, endX: 0.75 })).toBe(true)
     }),
   { git: true },
 )

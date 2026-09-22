@@ -43,6 +43,7 @@ public static class RayaDesktopNative {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint process);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, Input[] inputs, int size);
 
   public static void Mouse(uint flags, uint data) {
@@ -51,6 +52,17 @@ public static class RayaDesktopNative {
       Value = new InputUnion { Mouse = new MouseInput { Flags = flags, Data = data } }
     };
     if (SendInput(1, new[] { input }, Marshal.SizeOf(typeof(Input))) != 1) throw new InvalidOperationException("Windows refused desktop mouse input");
+  }
+
+  public static void Drag(int x, int y, uint down, uint up) {
+    var inputs = new[] {
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = x, Y = y, Flags = 0xC001 } } },
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } }
+    };
+    if (SendInput(3, inputs, Marshal.SizeOf(typeof(Input))) == 3) return;
+    Mouse(up, 0);
+    throw new InvalidOperationException("Windows refused complete desktop drag input");
   }
 
   public static void Key(ushort key, bool up) {
@@ -160,6 +172,23 @@ switch ($action.operation) {
       [RayaDesktopNative]::Mouse($down, 0)
       [RayaDesktopNative]::Mouse($up, 0)
     }
+  }
+  "drag" {
+    $startX = $window.Rect.Left + [Math]::Min($window.Width - 1, [Math]::Max(0, [Math]::Round($action.startX * ($window.Width - 1))))
+    $startY = $window.Rect.Top + [Math]::Min($window.Height - 1, [Math]::Max(0, [Math]::Round($action.startY * ($window.Height - 1))))
+    $endX = $window.Rect.Left + [Math]::Min($window.Width - 1, [Math]::Max(0, [Math]::Round($action.endX * ($window.Width - 1))))
+    $endY = $window.Rect.Top + [Math]::Min($window.Height - 1, [Math]::Max(0, [Math]::Round($action.endY * ($window.Height - 1))))
+    if (-not [RayaDesktopNative]::SetCursorPos($startX, $startY)) { throw "Windows refused desktop drag start" }
+    $left = [RayaDesktopNative]::GetSystemMetrics(76)
+    $top = [RayaDesktopNative]::GetSystemMetrics(77)
+    $width = [RayaDesktopNative]::GetSystemMetrics(78)
+    $height = [RayaDesktopNative]::GetSystemMetrics(79)
+    if ($width -le 1 -or $height -le 1) { throw "Windows virtual desktop bounds are unavailable" }
+    $absoluteX = [Math]::Round((($endX - $left) * 65535.0) / ($width - 1))
+    $absoluteY = [Math]::Round((($endY - $top) * 65535.0) / ($height - 1))
+    $down = if ($action.button -eq "right") { 0x0008 } else { 0x0002 }
+    $up = if ($action.button -eq "right") { 0x0010 } else { 0x0004 }
+    [RayaDesktopNative]::Drag($absoluteX, $absoluteY, $down, $up)
   }
   "type" { [RayaDesktopNative]::Text([string]$action.text) }
   "scroll" {

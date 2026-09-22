@@ -2528,7 +2528,7 @@ html[data-theme="kilo-vscode"] .routines-filters {
 html[data-theme="kilo-vscode"] .routines-filters [data-component="button"] {
   min-height: 28px;
   padding-inline: var(--raya-space-8);
-  color: var(--text-weak, var(--vscode-descriptionForeground));
+  color: var(--text-base, var(--vscode-foreground));
   background: transparent;
   border-color: transparent;
   box-shadow: none;

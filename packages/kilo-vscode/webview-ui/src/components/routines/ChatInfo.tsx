@@ -402,11 +402,7 @@ export const ChatInfo: Component<{
                       <span class="routines-line-meta">
                         {item.state} · {stamp(item.updated)}
                       </span>
-                      {item.organizationName ? (
-                        <span class="routines-line-meta">
-                          {item.organizationName} · organization revision {item.organizationRevision}
-                        </span>
-                      ) : null}
+                      {item.organizationName ? <span class="routines-line-meta">{item.organizationName}</span> : null}
                       <p>{item.objective}</p>
                       {item.expected ? <p>Expected: {item.expected}</p> : null}
                       {item.context ? <p>Shared context: {item.context}</p> : null}

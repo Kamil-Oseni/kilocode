@@ -458,6 +458,52 @@ describe("Raya browser bridge", () => {
     }
   })
 
+  it("retires acknowledged receipts so prolonged browser use does not reach capacity", async () => {
+    let calls = 0
+    let replies = 0
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => {
+            replies++
+            return {}
+          },
+          reject: async (input: unknown) => {
+            failures.push(input)
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls++
+        return { operation: "snapshot", url: "https://example.test", title: "Ready" }
+      },
+    })
+    const send = (id: number) =>
+      connection.event({
+        type: "kilocode.browser.requested",
+        properties: { id: `brr_long_${id}`, sessionID: "ses_test", operation: "snapshot" },
+      })
+    try {
+      for (const start of [0, 256, 512, 768]) {
+        for (const id of Array.from({ length: 256 }, (_, offset) => start + offset)) send(id)
+        while (replies < start + 256) await Bun.sleep(0)
+      }
+      send(1024)
+      while (replies < 1025) await Bun.sleep(0)
+      expect(calls).toBe(1025)
+      expect(failures).toEqual([])
+    } finally {
+      bridge.dispose()
+    }
+  })
+
   it.each([
     { operation: "navigate" as const, url: "https://example.test" },
     { operation: "click" as const, selector: { kind: "role" as const, role: "button", name: "Save", scope: "#form" } },
@@ -565,6 +611,81 @@ describe("Raya browser bridge", () => {
     })
 
     expect(cancelled).toHaveLength(1)
+    bridge.dispose()
+  })
+
+  it("pauses browser control only after a live backend connection is lost", async () => {
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({}),
+          reject: async () => ({}),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const cancelled: number[] = []
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async (action) => ({ operation: action.operation, url: "about:blank", title: "" }),
+      cancel: () => cancelled.push(Date.now()),
+    })
+    connection.state("disconnected")
+    expect(cancelled).toEqual([])
+    connection.state("connected")
+    connection.state("error")
+    connection.state("disconnected")
+    expect(cancelled).toHaveLength(1)
+    connection.state("connected")
+    connection.state("disconnected")
+    expect(cancelled).toHaveLength(2)
+    bridge.dispose()
+  })
+
+  it("aborts an active browser result when the live backend disconnects", async () => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const replies: unknown[] = []
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async (input: unknown) => {
+            replies.push(input)
+            return {}
+          },
+          reject: async (input: unknown) => {
+            failures.push(input)
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const cancelled: number[] = []
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        entered.resolve()
+        await release.promise
+        return { operation: "snapshot", url: "about:blank", title: "" }
+      },
+      cancel: () => cancelled.push(Date.now()),
+    })
+    connection.state("connected")
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: { id: "brr_disconnect", sessionID: "ses_test", operation: "snapshot" },
+    })
+    await entered.promise
+    connection.state("disconnected")
+    release.resolve()
+    await Bun.sleep(0)
+    expect(cancelled).toHaveLength(1)
+    expect(replies).toEqual([])
+    expect(failures).toEqual([])
     bridge.dispose()
   })
 

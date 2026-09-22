@@ -68,7 +68,7 @@ function action(request: BrowserRequest): BrowserAction {
   return request
 }
 
-type Receipt = { fingerprint: string; result?: HostBrowserResult; failure?: BrowserFailure }
+type Receipt = { fingerprint: string; result?: HostBrowserResult; failure?: BrowserFailure; delivered?: boolean }
 
 function effect(request: BrowserRequest) {
   if (["snapshot", "screenshot", "frames"].includes(request.operation)) return "observe" as const
@@ -124,6 +124,7 @@ export class BrowserBridge {
   private readonly offEvent: () => void
   private readonly offState: () => void
   private revision = 0
+  private connected = false
   private disposed = false
 
   constructor(
@@ -148,12 +149,21 @@ export class BrowserBridge {
   }
 
   private state(state: ConnectionState): void {
-    if (state !== "connected") return
-    const revision = ++this.revision
-    void this.recover(revision).catch((error: unknown) => {
-      const detail = error instanceof Error ? error.message : String(error)
-      console.error("[Raya] Browser request recovery read failed; no work replayed:", detail.slice(0, 1000))
-    })
+    if (state === "connected") {
+      this.connected = true
+      const revision = ++this.revision
+      void this.recover(revision).catch((error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error)
+        console.error("[Raya] Browser request recovery read failed; no work replayed:", detail.slice(0, 1000))
+      })
+      return
+    }
+    if (!this.connected || (state !== "disconnected" && state !== "error")) return
+    this.connected = false
+    this.revision += 1
+    for (const controller of this.active.values()) controller.abort()
+    this.active.clear()
+    this.host.cancel?.()
   }
 
   private async recover(revision: number): Promise<void> {
@@ -223,7 +233,8 @@ export class BrowserBridge {
       await this.deliver(request.id, directory, prior)
       return
     }
-    // Never evict a dispatched ID and later mistake it for new work. Capacity fails before dispatch.
+    this.compact()
+    // Never evict an unresolved ID and later mistake it for new work. Capacity fails before dispatch.
     if (this.receipts.size >= 1024) {
       await this.deliver(request.id, directory, {
         fingerprint,
@@ -280,7 +291,7 @@ export class BrowserBridge {
             "This browser request completed, but its result exceeds the retained receipt limit. It will not execute again. Inspect the destination for the result.",
         }
       }
-      await this.deliver(request.id, directory, { fingerprint, result })
+      await this.deliver(request.id, directory, { fingerprint, result }, receipt)
     } catch (error) {
       if (controller.signal.aborted) return
       const detail = error instanceof Error ? error.message : String(error)
@@ -305,16 +316,28 @@ export class BrowserBridge {
     }
   }
 
-  private async deliver(requestID: string, directory: string, receipt: Receipt): Promise<void> {
+  private async deliver(requestID: string, directory: string, receipt: Receipt, owner = receipt): Promise<void> {
     try {
       const client = this.connection.getClient().kilocode.browser
       const response = receipt.result
         ? await client.reply({ requestID, directory, result: receipt.result })
         : await client.reject({ requestID, directory, error: receipt.failure! })
-      if (response.error)
+      if (response.error) {
         console.error("[Raya] Browser result delivery failed; retained receipt prevents replay:", response.error)
+        return
+      }
+      if (this.receipts.get(requestID) === owner) owner.delivered = true
     } catch (error) {
       console.error("[Raya] Browser result delivery failed; retained receipt prevents replay:", error)
+    }
+  }
+
+  private compact(): void {
+    if (this.receipts.size < 1024) return
+    for (const [id, receipt] of this.receipts) {
+      if (!receipt.delivered) continue
+      this.receipts.delete(id)
+      if (this.receipts.size < 1024) return
     }
   }
 

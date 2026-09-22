@@ -1489,6 +1489,7 @@
     "test:voice-live": "bun script/test-voice-live.ts",
     "test:voice-stt-live": "bun script/test-voice-stt-live.ts",
     "test:voice-mic-live": "bun script/test-voice-mic-live.ts",
+    "eval:computer-use": "bun script/computer-use-eval.ts",
     "rebuild-sdk": "bun run --cwd ../sdk/js build",
     "storybook": "storybook dev -p 6007",
     "build-storybook": "storybook build -o storybook-static",

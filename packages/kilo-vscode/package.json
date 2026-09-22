@@ -165,6 +165,12 @@
         "icon": "$(globe)"
       },
       {
+        "command": "raya.openComputerUse",
+        "title": "Open Computer Use Preview",
+        "category": "Raya",
+        "icon": "$(device-desktop)"
+      },
+      {
         "command": "raya.openCanvas",
         "title": "Open saved canvas",
         "category": "Raya",

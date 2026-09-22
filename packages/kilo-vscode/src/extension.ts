@@ -20,6 +20,7 @@ import { ensureBackendForAutocomplete } from "./services/autocomplete/ensure-bac
 import { AutocompleteServiceManager } from "./services/autocomplete/AutocompleteServiceManager"
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
+import { DesktopAutomationService } from "./services/computer-use"
 import { registerGrantAllPermissions } from "./kilo-provider/grant-all-permissions" // raya_change - global all-tools toggle
 import { mentions } from "./kilo-provider/file-picker"
 import { registerDesignSystemLock } from "./kilo-provider/design-system-lock" // raya_change - owner design-system lock
@@ -101,6 +102,17 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   )
   // raya_change end
+
+  const desktop = new DesktopAutomationService()
+  context.subscriptions.push(
+    desktop,
+    vscode.commands.registerCommand("raya.openComputerUse", () =>
+      desktop.show().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        return vscode.window.showErrorMessage(`Raya Computer Use: ${message}`)
+      }),
+    ),
+  )
 
   // raya_change start - Milestone E live React canvas panel and host bridge
   const canvasService = new CanvasService(connectionService, context)

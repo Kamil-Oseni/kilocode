@@ -1444,6 +1444,30 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
   gap: var(--raya-space-16);
 }
 
+.routines-organization-disclosure {
+  padding-top: var(--raya-space-12);
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-organization-disclosure > summary,
+.routines-organization-member-settings > summary {
+  width: fit-content;
+  cursor: pointer;
+  user-select: none;
+}
+
+.routines-organization-disclosure-body {
+  display: grid;
+  gap: var(--raya-space-12);
+  margin-top: var(--raya-space-12);
+}
+
+.routines-organization-disclosure > .routines-organization-section {
+  margin-top: var(--raya-space-12);
+  padding-top: 0;
+  border-top: 0;
+}
+
 .routines-organization-section {
   display: flex;
   flex-direction: column;
@@ -1473,9 +1497,9 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
 
 .routines-organization-edit-members li {
   display: grid;
-  grid-template-columns: minmax(7rem, 1fr) minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--raya-space-8);
-  align-items: end;
+  align-items: start;
   padding: var(--raya-space-10) 0;
 }
 
@@ -1483,12 +1507,41 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
   border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
 
-.routines-organization-edit-members strong {
-  align-self: center;
+.routines-organization-member-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-2);
   min-width: 0;
+}
+
+.routines-organization-member-summary strong,
+.routines-organization-member-summary span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.routines-organization-member-summary span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-organization-member-settings[open] {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.routines-organization-member-fields {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
+  gap: var(--raya-space-10);
+  align-items: end;
+  margin-top: var(--raya-space-10);
+}
+
+.routines-organization-member-fields > [data-component="checkbox"],
+.routines-organization-member-fields > .routines-hint {
+  grid-column: 1 / -1;
 }
 
 .routines-organization-add,
@@ -2226,6 +2279,12 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
   .routines-organization-edit-members li {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
+  }
+  .routines-organization-member-settings {
+    justify-self: start;
+  }
+  .routines-organization-member-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
   .routines-organization-add,
   .routines-organization-danger {

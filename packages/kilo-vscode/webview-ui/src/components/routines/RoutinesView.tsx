@@ -204,8 +204,8 @@ function OrganizationEditor(props: {
     <section class="routines-thread routines-organization-editor" aria-labelledby={`edit-${props.item.id}`}>
       <div class="routines-thread-head">
         <div class="routines-thread-identity">
-          <h3 id={`edit-${props.item.id}`}>Edit organization</h3>
-          <span>Revision {props.item.revision}</span>
+          <h3 id={`edit-${props.item.id}`}>Organization settings</h3>
+          <span>{props.item.name}</span>
         </div>
         <Button variant="ghost" size="small" disabled={props.saving} onClick={props.onClose}>
           Cancel
@@ -247,99 +247,110 @@ function OrganizationEditor(props: {
             onInput={(event) => setPurpose(event.currentTarget.value)}
           />
         </label>
-        <label class="routines-field">
-          Operating policy
-          <textarea
-            value={policy()}
-            maxlength={12000}
-            rows={5}
-            aria-describedby={`policy-help-${props.item.id}`}
-            placeholder="Rules every worker must follow when doing organization work"
-            onInput={(event) => setPolicy(event.currentTarget.value)}
-          />
-          <span id={`policy-help-${props.item.id}`} class="routines-hint">
-            Applied to delegated work in this organization. It cannot grant tools, folders, spending access, or
-            delegation authority.
-          </span>
-        </label>
-        <label class="routines-field">
-          Organization model budget ($)
-          <input
-            value={budget()}
-            inputmode="numeric"
-            pattern="[0-9]*"
-            maxlength={7}
-            placeholder="No shared limit"
-            aria-describedby={`budget-help-${props.item.id}`}
-            onInput={(event) => setBudget(event.currentTarget.value)}
-          />
-          <span id={`budget-help-${props.item.id}`} class="routines-hint">
-            Caps committed model cost across all work in this organization. Leave blank for no limit.
-          </span>
-        </label>
+        <details class="routines-organization-disclosure">
+          <summary>Policy and spending</summary>
+          <div class="routines-organization-disclosure-body">
+            <label class="routines-field">
+              Operating policy
+              <textarea
+                value={policy()}
+                maxlength={12000}
+                rows={5}
+                aria-describedby={`policy-help-${props.item.id}`}
+                placeholder="Rules every worker must follow when doing organization work"
+                onInput={(event) => setPolicy(event.currentTarget.value)}
+              />
+              <span id={`policy-help-${props.item.id}`} class="routines-hint">
+                Applies to this team's work. It cannot grant tools, folders, spending access, or delegation authority.
+              </span>
+            </label>
+            <label class="routines-field">
+              Shared model budget ($)
+              <input
+                value={budget()}
+                inputmode="numeric"
+                pattern="[0-9]*"
+                maxlength={7}
+                placeholder="No shared limit"
+                aria-describedby={`budget-help-${props.item.id}`}
+                onInput={(event) => setBudget(event.currentTarget.value)}
+              />
+              <span id={`budget-help-${props.item.id}`} class="routines-hint">
+                Caps committed model cost across this team. Leave blank for no limit.
+              </span>
+            </label>
+          </div>
+        </details>
 
         <section class="routines-organization-section" aria-labelledby={`team-${props.item.id}`}>
           <div class="routines-organization-section-head">
             <div>
-              <h4 id={`team-${props.item.id}`}>Team and reporting</h4>
-              <p>Reporting lines organize the team. They don’t grant permission to delegate work.</p>
-              <p>Creation authority applies in every organization this worker belongs to.</p>
+              <h4 id={`team-${props.item.id}`}>Team</h4>
+              <p>Open a worker only when you need to change their role or reporting line.</p>
             </div>
           </div>
           <ol class="routines-organization-edit-members">
             <For each={members()}>
               {(member) => (
                 <li>
-                  <strong>{label(member.agentID)}</strong>
-                  <Checkbox
-                    checked={provisions(member.agentID)}
-                    disabled={props.saving || props.provisioning === member.agentID}
-                    onChange={(enabled) => props.onProvision(member.agentID, enabled, provisions(member.agentID))}
-                  >
-                    Can create workers
-                  </Checkbox>
-                  <Show when={provenance(member.agentID)}>
-                    {(entry) => (
-                      <span class="routines-hint">
-                        {entry().source === "user"
-                          ? "Changed by you"
-                          : entry().source === "chat"
-                            ? "Changed from chat"
-                            : "Changed by " + label(entry().actorID ?? "")}{" "}
-                        · {new Date(entry().changedAt).toLocaleString()}
-                      </span>
-                    )}
-                  </Show>
-                  <label class="routines-field">
-                    Role
-                    <input
-                      value={member.role}
-                      maxlength={120}
-                      onInput={(event) => revise(member.agentID, { role: event.currentTarget.value })}
-                    />
-                  </label>
-                  <label class="routines-field">
-                    Reports to
-                    <select
-                      value={member.supervisorID ?? ""}
-                      onChange={(event) =>
-                        revise(member.agentID, { supervisorID: event.currentTarget.value || undefined })
-                      }
-                    >
-                      <option value="">No supervisor</option>
-                      <For each={members().filter((item) => item.agentID !== member.agentID)}>
-                        {(item) => <option value={item.agentID}>{label(item.agentID)}</option>}
-                      </For>
-                    </select>
-                  </label>
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    disabled={members().length === 1}
-                    onClick={() => remove(member.agentID)}
-                  >
-                    Remove
-                  </Button>
+                  <div class="routines-organization-member-summary">
+                    <strong>{label(member.agentID)}</strong>
+                    <span>{member.role}</span>
+                  </div>
+                  <details class="routines-organization-member-settings">
+                    <summary>Worker settings</summary>
+                    <div class="routines-organization-member-fields">
+                      <Checkbox
+                        checked={provisions(member.agentID)}
+                        disabled={props.saving || props.provisioning === member.agentID}
+                        onChange={(enabled) => props.onProvision(member.agentID, enabled, provisions(member.agentID))}
+                      >
+                        Can create workers
+                      </Checkbox>
+                      <Show when={provenance(member.agentID)}>
+                        {(entry) => (
+                          <span class="routines-hint">
+                            {entry().source === "user"
+                              ? "Changed by you"
+                              : entry().source === "chat"
+                                ? "Changed from chat"
+                                : "Changed by " + label(entry().actorID ?? "")}{" "}
+                            · {new Date(entry().changedAt).toLocaleString()}
+                          </span>
+                        )}
+                      </Show>
+                      <label class="routines-field">
+                        Role
+                        <input
+                          value={member.role}
+                          maxlength={120}
+                          onInput={(event) => revise(member.agentID, { role: event.currentTarget.value })}
+                        />
+                      </label>
+                      <label class="routines-field">
+                        Reports to
+                        <select
+                          value={member.supervisorID ?? ""}
+                          onChange={(event) =>
+                            revise(member.agentID, { supervisorID: event.currentTarget.value || undefined })
+                          }
+                        >
+                          <option value="">No supervisor</option>
+                          <For each={members().filter((item) => item.agentID !== member.agentID)}>
+                            {(item) => <option value={item.agentID}>{label(item.agentID)}</option>}
+                          </For>
+                        </select>
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="small"
+                        disabled={members().length === 1}
+                        onClick={() => remove(member.agentID)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </details>
                 </li>
               )}
             </For>
@@ -360,49 +371,55 @@ function OrganizationEditor(props: {
           </Show>
         </section>
 
-        <section class="routines-organization-section" aria-labelledby={`authority-${props.item.id}`}>
-          <div class="routines-organization-section-head">
-            <div>
-              <h4 id={`authority-${props.item.id}`}>Delegation permissions</h4>
-              <p>Choose each direction explicitly. A checked worker can assign work to that recipient.</p>
+        <details class="routines-organization-disclosure">
+          <summary>Who can assign work</summary>
+          <section class="routines-organization-section" aria-labelledby={`authority-${props.item.id}`}>
+            <div class="routines-organization-section-head">
+              <div>
+                <h4 id={`authority-${props.item.id}`}>Delegation permissions</h4>
+                <p>Choose each direction explicitly. A checked worker can assign work to that recipient.</p>
+              </div>
             </div>
-          </div>
-          <div class="routines-authority">
-            <For each={members()}>
-              {(sender) => (
-                <fieldset>
-                  <legend>{label(sender.agentID)} can assign work to</legend>
-                  <For each={members().filter((item) => item.agentID !== sender.agentID)}>
-                    {(recipient) => (
-                      <Checkbox
-                        checked={allowed(sender.agentID, recipient.agentID)}
-                        onChange={(on) => permit(sender.agentID, recipient.agentID, on)}
-                      >
-                        {label(recipient.agentID)}
-                      </Checkbox>
-                    )}
-                  </For>
-                  <Show when={members().length === 1}>
-                    <span class="routines-hint">Add another worker to delegate work.</span>
-                  </Show>
-                </fieldset>
-              )}
-            </For>
-          </div>
-        </section>
+            <div class="routines-authority">
+              <For each={members()}>
+                {(sender) => (
+                  <fieldset>
+                    <legend>{label(sender.agentID)} can assign work to</legend>
+                    <For each={members().filter((item) => item.agentID !== sender.agentID)}>
+                      {(recipient) => (
+                        <Checkbox
+                          checked={allowed(sender.agentID, recipient.agentID)}
+                          onChange={(on) => permit(sender.agentID, recipient.agentID, on)}
+                        >
+                          {label(recipient.agentID)}
+                        </Checkbox>
+                      )}
+                    </For>
+                    <Show when={members().length === 1}>
+                      <span class="routines-hint">Add another worker to delegate work.</span>
+                    </Show>
+                  </fieldset>
+                )}
+              </For>
+            </div>
+          </section>
+        </details>
 
-        <section
-          class="routines-organization-section routines-organization-danger"
-          aria-labelledby={`archive-${props.item.id}`}
-        >
-          <div>
-            <h4 id={`archive-${props.item.id}`}>Archive organization</h4>
-            <p>Workers, conversations, reports, and organization history stay saved.</p>
-          </div>
-          <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
-            Archive
-          </Button>
-        </section>
+        <details class="routines-organization-disclosure routines-organization-archive">
+          <summary>Archive organization</summary>
+          <section
+            class="routines-organization-section routines-organization-danger"
+            aria-labelledby={`archive-${props.item.id}`}
+          >
+            <div>
+              <h4 id={`archive-${props.item.id}`}>Archive {props.item.name}</h4>
+              <p>Workers, conversations, reports, and organization history stay saved.</p>
+            </div>
+            <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
+              Archive
+            </Button>
+          </section>
+        </details>
       </div>
     </section>
   )

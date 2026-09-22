@@ -204,7 +204,19 @@ try {
     root.querySelector(".routines-organization-overview").textContent,
     /Verify durable organization behavior/,
   )
-  assert.ok(button("Settings"))
+  button("Settings").click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.match(root.querySelector(".routines-organization-editor h3").textContent, /Organization settings/)
+  assert.doesNotMatch(root.querySelector(".routines-organization-editor").textContent, /Revision \d+/)
+  const settings = [...root.querySelectorAll(".routines-organization-disclosure")]
+  assert.equal(settings.length, 3)
+  assert.ok(settings.every((item) => !item.open))
+  const workerSettings = root.querySelector(".routines-organization-member-settings")
+  assert.equal(workerSettings.open, false)
+  workerSettings.querySelector("summary").click()
+  assert.equal(workerSettings.open, true)
+  button("Cancel").click()
+  await new Promise((resolve) => setImmediate(resolve))
   root.querySelector(".routines-identity").click()
   await new Promise((resolve) => setImmediate(resolve))
   const page = sent.findLast((msg) => msg.type === "routineInboxPage")

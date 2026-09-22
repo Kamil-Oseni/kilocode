@@ -122,6 +122,8 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("GetSystemMetrics(76)")
     expect(test.scripts[0]).toContain("ValidatePoint(expectedStartX, expectedStartY)")
     expect(test.scripts[0]).toContain("ValidatePoint(expectedEndX, expectedEndY)")
+    expect(test.scripts[0]).toContain("ValidateTarget(expectedStartX, expectedStartY)")
+    expect(test.scripts[0]).toContain("ValidateTarget(expectedEndX, expectedEndY)")
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Move($startX, $startY)")
     expect(test.scripts[0]).toContain(
       "[RayaDesktopNative]::Drag($absoluteStartX, $absoluteStartY, $absoluteEndX, $absoluteEndY, $startX, $startY, $endX, $endY, $down, $up)",
@@ -151,6 +153,8 @@ describe("Windows native desktop driver", () => {
       '[RayaDesktopNative]::Click($absoluteX, $absoluteY, $x, $y, $down, $up, $action.action -eq "double_click")',
     )
     expect(test.scripts[0]).toContain("Windows did not click the exact desktop point")
+    expect(test.scripts[0]).toContain("ValidateTarget(expectedX, expectedY)")
+    expect(test.scripts[0]).toContain("Another application covers the grounded desktop point")
     expect(test.scripts[0]).toContain('if ($action.action -eq "move") {')
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse($down, 0)")
   })
@@ -172,6 +176,8 @@ describe("Windows native desktop driver", () => {
     )
 
     expect(test.scripts[0]).toContain("ValidatePoint(x, y)")
+    expect(test.scripts[0]).toContain("ValidateTarget(x, y)")
+    expect(test.scripts[0]).toContain("WindowFromPoint(new Point { X = x, Y = y })")
     expect(test.scripts[0]).toContain("GetCursorPos(out point)")
     expect(test.scripts[0]).toContain("Desktop point is outside the physical virtual desktop")
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::Move($x, $y)")

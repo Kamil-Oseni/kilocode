@@ -76,6 +76,8 @@ public static class RayaDesktopNative {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint process);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point point);
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr handle, uint flags);
   [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, Input[] inputs, int size);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
@@ -182,6 +184,7 @@ public static class RayaDesktopNative {
 
   public static void Move(int x, int y) {
     ValidatePoint(x, y);
+    ValidateTarget(x, y);
     if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows refused desktop pointer movement");
     Point point;
     if (!GetCursorPos(out point) || point.X != x || point.Y != y)
@@ -191,6 +194,8 @@ public static class RayaDesktopNative {
   public static void Drag(int startX, int startY, int endX, int endY, int expectedStartX, int expectedStartY, int expectedEndX, int expectedEndY, uint down, uint up) {
     ValidatePoint(expectedStartX, expectedStartY);
     ValidatePoint(expectedEndX, expectedEndY);
+    ValidateTarget(expectedStartX, expectedStartY);
+    ValidateTarget(expectedEndX, expectedEndY);
     var inputs = new[] {
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = startX, Y = startY, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
@@ -215,8 +220,20 @@ public static class RayaDesktopNative {
       throw new InvalidOperationException("Desktop point is outside the physical virtual desktop");
   }
 
+  private static void ValidateTarget(int x, int y) {
+    var foreground = GetForegroundWindow();
+    var target = WindowFromPoint(new Point { X = x, Y = y });
+    if (foreground == IntPtr.Zero || target == IntPtr.Zero)
+      throw new InvalidOperationException("Desktop point has no verifiable foreground target");
+    var foregroundRoot = GetAncestor(foreground, 3);
+    var targetRoot = GetAncestor(target, 3);
+    if ((foregroundRoot == IntPtr.Zero ? foreground : foregroundRoot) != (targetRoot == IntPtr.Zero ? target : targetRoot))
+      throw new InvalidOperationException("Another application covers the grounded desktop point");
+  }
+
   public static void Click(int x, int y, int expectedX, int expectedY, uint down, uint up, bool twice) {
     ValidatePoint(expectedX, expectedY);
+    ValidateTarget(expectedX, expectedY);
     var inputs = new List<Input> {
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = x, Y = y, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },

@@ -311,14 +311,24 @@ function Get-RayaWindow {
   [void][RayaDesktopNative]::GetWindowText($handle, $title, $title.Capacity)
   [uint32]$processID = 0
   [void][RayaDesktopNative]::GetWindowThreadProcessId($handle, [ref]$processID)
-  $width = $rect.Right - $rect.Left
-  $height = $rect.Bottom - $rect.Top
+  $desktopLeft = [RayaDesktopNative]::GetSystemMetrics(76)
+  $desktopTop = [RayaDesktopNative]::GetSystemMetrics(77)
+  $desktopWidth = [RayaDesktopNative]::GetSystemMetrics(78)
+  $desktopHeight = [RayaDesktopNative]::GetSystemMetrics(79)
+  if ($desktopWidth -le 1 -or $desktopHeight -le 1) { throw "Windows virtual desktop bounds are unavailable" }
+  $visible = New-Object RayaDesktopNative+Rect
+  $visible.Left = [Math]::Max($rect.Left, $desktopLeft)
+  $visible.Top = [Math]::Max($rect.Top, $desktopTop)
+  $visible.Right = [Math]::Min($rect.Right, $desktopLeft + $desktopWidth)
+  $visible.Bottom = [Math]::Min($rect.Bottom, $desktopTop + $desktopHeight)
+  $width = $visible.Right - $visible.Left
+  $height = $visible.Bottom - $visible.Top
   if ($width -le 0 -or $height -le 0) { throw "Foreground window has no observable area" }
   [pscustomobject]@{
     Handle = $handle
-    Rect = $rect
+    Rect = $visible
     WindowID = ("0x{0:X}" -f $handle.ToInt64())
-    Location = ("pid:{0};title:{1};bounds:{2},{3},{4},{5}" -f $processID, $title.ToString(), $rect.Left, $rect.Top, $width, $height)
+    Location = ("pid:{0};title:{1};bounds:{2},{3},{4},{5}" -f $processID, $title.ToString(), $visible.Left, $visible.Top, $width, $height)
     Width = $width
     Height = $height
   }

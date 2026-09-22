@@ -40,6 +40,9 @@ describe("Windows native desktop driver", () => {
       location: "pid:5;title:Editor;bounds:0,0,1280,720",
     })
     expect(test.scripts[0]).toContain("CopyFromScreen")
+    expect(test.scripts[0]).toContain("$visible.Left = [Math]::Max($rect.Left, $desktopLeft)")
+    expect(test.scripts[0]).toContain("$visible.Right = [Math]::Min($rect.Right, $desktopLeft + $desktopWidth)")
+    expect(test.scripts[0]).toContain("Rect = $visible")
     expect(test.scripts[0]).toContain("SetThreadDpiAwarenessContext(new IntPtr(-4))")
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[0]).toContain("desktop coordinates are unsafe")

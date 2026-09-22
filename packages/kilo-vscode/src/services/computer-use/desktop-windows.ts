@@ -65,6 +65,19 @@ public static class RayaDesktopNative {
     throw new InvalidOperationException("Windows refused complete desktop drag input");
   }
 
+  public static void Click(uint down, uint up, bool twice) {
+    var once = new[] {
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
+      new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } }
+    };
+    var inputs = twice
+      ? new[] { once[0], once[1], once[0], once[1] }
+      : once;
+    if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) == (uint)inputs.Length) return;
+    Mouse(up, 0);
+    throw new InvalidOperationException("Windows refused complete desktop click input");
+  }
+
   public static void Key(ushort key, bool up) {
     var input = new Input {
       Type = 1,
@@ -166,12 +179,7 @@ switch ($action.operation) {
     if ($action.action -eq "move") { break }
     $down = if ($action.button -eq "right") { 0x0008 } else { 0x0002 }
     $up = if ($action.button -eq "right") { 0x0010 } else { 0x0004 }
-    [RayaDesktopNative]::Mouse($down, 0)
-    [RayaDesktopNative]::Mouse($up, 0)
-    if ($action.action -eq "double_click") {
-      [RayaDesktopNative]::Mouse($down, 0)
-      [RayaDesktopNative]::Mouse($up, 0)
-    }
+    [RayaDesktopNative]::Click($down, $up, $action.action -eq "double_click")
   }
   "drag" {
     $startX = $window.Rect.Left + [Math]::Min($window.Width - 1, [Math]::Max(0, [Math]::Round($action.startX * ($window.Width - 1))))

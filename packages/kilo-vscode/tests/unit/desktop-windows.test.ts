@@ -77,6 +77,28 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("GetSystemMetrics(76)")
   })
 
+  it("batches click press and release with a recovery release", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner)
+    await driver.perform(
+      {
+        operation: "pointer",
+        action: "double_click",
+        windowID: "0x123",
+        observationID: "obs-click",
+        x: 0.25,
+        y: 0.75,
+        button: "right",
+      },
+      { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
+    )
+
+    expect(test.scripts[0]).toContain("SendInput((uint)inputs.Length, inputs")
+    expect(test.scripts[0]).toContain("Mouse(up, 0)")
+    expect(test.scripts[0]).toContain('[RayaDesktopNative]::Click($down, $up, $action.action -eq "double_click")')
+    expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse($down, 0)")
+  })
+
   it("rejects malformed native output", async () => {
     const test = harness([JSON.stringify({ windowID: "0x123" })])
     const driver = new WindowsDesktopDriver(test.runner)

@@ -237,6 +237,41 @@ for (const theme of ["light", "dark"]) {
   }
 }
 
+for (const width of [320, 900]) {
+  test(`forced colors routines at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.emulateMedia({ forcedColors: "active" })
+    await page.goto("/?state=light-routines")
+    const books = page.locator('.routines-identity[data-routine-worker="routine"]')
+    await expect(books).toBeVisible()
+    await books.click()
+    const thread = page.getByRole("region", { name: "Conversation with Books" })
+    await expect(thread).toBeVisible()
+    await page.getByRole("button", { name: "Info", exact: true }).click()
+    const panel = page.getByLabel("Chat info for Books")
+    await expect(panel).toBeVisible()
+    const sizes = await Promise.all([thread.boundingBox(), panel.boundingBox()])
+    expect(sizes[0]).not.toBeNull()
+    expect(sizes[1]).not.toBeNull()
+    expect(sizes[1]!.width).toBeGreaterThan(sizes[0]!.width * 0.85)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath("chat-info.png"), fullPage: true })
+
+    await page.goto("/?state=light-routines&target=organization")
+    await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Assign work" })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath("organization.png"), fullPage: true })
+
+    await page.emulateMedia({ forcedColors: "none" })
+    const result = await new AxeBuilder({ page })
+      .include(".routines-view")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze()
+    expect(result.violations).toEqual([])
+  })
+}
+
 test("wide routines organization filters and opens worker DMs", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")

@@ -1,17 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `97c0cc6dfd` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+42e8f8c582.kamil-oseni.1790112782617` installs grounded window switching, visible physical capture bounds, covered-point refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `97c0cc6dfd` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+40ab987f64.kamil-oseni.1790113621521` installs grounded window switching, visible physical capture bounds, covered-point refusal, held-manual-input refusal, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 17:51 America/Toronto - held-input refusal installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+40ab987f64.kamil-oseni.1790113621521` is installed without a forced reload. Retained VSIX `raya.2859ef5acdce00954ab5846a14418ce3fcafc9bc6175f384e532f46d5937bc92.vsix` is **522,225,422 bytes**, SHA-256 `2859EF5ACDCE00954AB5846A14418CE3FCAFC9BC6175F384E532F46D5937BC92`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. SDK output was unchanged, the verified CLI was reused, and sequential validation passed both typechecks, lint and production bundling. Cleanup removed one old vault package, staged package and extension; C: has **127,133,675,520 bytes free**. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains.
 
 ## ChatGPT 2026-09-22 17:44 America/Toronto - preserve held-manual-input refusal
 
 Preserve product commit `97c0cc6dfd`. `ValidateIdleInput` scans virtual keys 1 through 255 with the high-order `GetAsyncKeyState` bit immediately before window focus and every native input path. Any held key or mouse button must refuse before focus change or dispatch. Keep this check inside the native process and adjacent to dispatch; an earlier TypeScript check would reopen the race. The low toggle bit is intentionally ignored.
 
-Evidence passes **33 focused tests / 146 assertions** and the formatted native-driver rerun passes **10 tests / 74 assertions**. Extension typecheck, ESLint, Knip, formatting, the marker guard, embedded-C# compilation/enumeration and a live non-injecting reflection probe of the held-input check pass. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `42e8f8c582`; include this source in the next coherent capped snapshot.
+Evidence passes **33 focused tests / 146 assertions** and the formatted native-driver rerun passes **10 tests / 74 assertions**. Extension typecheck, ESLint, Knip, formatting, the marker guard, embedded-C# compilation/enumeration and a live non-injecting reflection probe of the held-input check pass. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is installed in the receipt above.
 
 ## ChatGPT 2026-09-22 17:35 America/Toronto - pointer target ownership installation receipt
 

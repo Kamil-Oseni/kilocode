@@ -6,6 +6,7 @@ import { Desktop } from "@/kilocode/desktop/service"
 import {
   DesktopClickTool,
   DesktopKeyTool,
+  DesktopMoveTool,
   DesktopScrollTool,
   DesktopTypeTool,
   DesktopWatchTool,
@@ -64,7 +65,9 @@ it.instance(
                     ? ("key" as const)
                     : input.operation === "scroll"
                       ? ("scroll" as const)
-                      : ("click" as const),
+                      : input.operation === "move"
+                        ? ("move" as const)
+                        : ("click" as const),
               receipt: {
                 version: 1 as const,
                 requestID: "desktop_click_test",
@@ -125,6 +128,34 @@ it.instance(
       ])
       expect(result.title).toBe("Double-clicked desktop")
 
+      const moved = yield* DesktopMoveTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) =>
+          tool.execute(
+            {
+              window_id: "window_seen",
+              observation_id: ObservationID.make("observation_moved"),
+              x: 0.5,
+              y: 0.125,
+            },
+            ctx,
+          ),
+        ),
+      )
+      expect(asks[1]).toEqual(
+        expect.objectContaining({ permission: "desktop_move", patterns: ["window_seen:0.5000,0.1250"], always: [] }),
+      )
+      expect(calls[1]).toEqual({
+        operation: "move",
+        sessionID: ctx.sessionID,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_moved"),
+        x: 0.5,
+        y: 0.125,
+      })
+      expect(moved.title).toBe("Moved desktop pointer")
+
       const typed = yield* DesktopTypeTool.pipe(
         Effect.provideService(Desktop.Service, host),
         Effect.flatMap(Tool.init),
@@ -139,7 +170,7 @@ it.instance(
           ),
         ),
       )
-      expect(asks[1]).toEqual(
+      expect(asks[2]).toEqual(
         expect.objectContaining({
           permission: "desktop_type",
           patterns: ["window_seen"],
@@ -147,7 +178,7 @@ it.instance(
           metadata: { length: 10 },
         }),
       )
-      expect(calls[1]).toEqual({
+      expect(calls[2]).toEqual({
         operation: "type",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -171,14 +202,14 @@ it.instance(
           ),
         ),
       )
-      expect(asks[2]).toEqual(
+      expect(asks[3]).toEqual(
         expect.objectContaining({
           permission: "desktop_key",
           patterns: ["window_seen:control+shift+Enter"],
           always: [],
         }),
       )
-      expect(calls[2]).toEqual({
+      expect(calls[3]).toEqual({
         operation: "key",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -206,14 +237,14 @@ it.instance(
           ),
         ),
       )
-      expect(asks[3]).toEqual(
+      expect(asks[4]).toEqual(
         expect.objectContaining({
           permission: "desktop_scroll",
           patterns: ["window_seen:120,-240"],
           always: [],
         }),
       )
-      expect(calls[3]).toEqual({
+      expect(calls[4]).toEqual({
         operation: "scroll",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -238,14 +269,14 @@ it.instance(
         Effect.flatMap(Tool.init),
         Effect.flatMap((tool) => tool.execute({ frames: 3, interval_ms: 500 }, ctx)),
       )
-      expect(asks[4]).toEqual(
+      expect(asks[5]).toEqual(
         expect.objectContaining({
           permission: "desktop_watch",
           patterns: ["foreground-window:3x500ms"],
           always: [],
         }),
       )
-      expect(calls[4]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
+      expect(calls[5]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
       expect(watched.title).toBe("Captured 3 desktop frames")
       expect(watched.attachments).toHaveLength(3)
       expect(watched.attachments?.map((item) => item.filename)).toEqual([

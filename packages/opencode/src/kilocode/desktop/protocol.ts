@@ -83,6 +83,15 @@ export const ClickRequest = Schema.Struct({
   button: Schema.Literals(["left", "right"]),
 })
 
+export const MoveRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("move"),
+  windowID: Identity,
+  observationID: ObservationID,
+  x: Unit,
+  y: Unit,
+})
+
 export const TypeRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("type"),
@@ -116,6 +125,7 @@ export const ScrollRequest = Schema.Struct({
 export const Request = Schema.Union([
   ObserveRequest,
   WatchRequest,
+  MoveRequest,
   ClickRequest,
   TypeRequest,
   KeyRequest,
@@ -152,6 +162,11 @@ export const ClickResult = Schema.Struct({
   receipt: Receipt,
 })
 
+export const MoveResult = Schema.Struct({
+  operation: Schema.Literal("move"),
+  receipt: Receipt,
+})
+
 export const TypeResult = Schema.Struct({
   operation: Schema.Literal("type"),
   receipt: Receipt,
@@ -170,6 +185,7 @@ export const ScrollResult = Schema.Struct({
 export const Result = Schema.Union([
   ObserveResult,
   WatchResult,
+  MoveResult,
   ClickResult,
   TypeResult,
   KeyResult,

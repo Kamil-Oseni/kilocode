@@ -130,6 +130,52 @@ const ClickParams = Schema.Struct({
   button: Schema.optional(Schema.Literals(["left", "right"])).annotate({ description: "Defaults to left." }),
 })
 
+const MoveParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_observe.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh observation ID returned by desktop_observe. It can be used only once.",
+  }),
+  x: Unit.annotate({ description: "Horizontal position normalized from 0 at the left to 1 at the right." }),
+  y: Unit.annotate({ description: "Vertical position normalized from 0 at the top to 1 at the bottom." }),
+})
+
+export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Service, "desktop_move">(
+  "desktop_move",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Move the pointer to exact normalized coordinates in the foreground window, for hover and pointer targeting, grounded by a fresh desktop_observe result. The host refuses changed windows, stale observations, reuse, and manual takeover before dispatch.",
+      parameters: MoveParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const point = `${params.window_id}:${params.x.toFixed(4)},${params.y.toFixed(4)}`
+          yield* ctx.ask({ permission: "desktop_move", patterns: [point], always: [], metadata: {} })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "move",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              x: params.x,
+              y: params.y,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "move") return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: "Moved desktop pointer",
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
 export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Service, "desktop_click">(
   "desktop_click",
   Effect.gen(function* () {
@@ -333,6 +379,7 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
 export const DesktopTools = [
   DesktopObserveTool,
   DesktopWatchTool,
+  DesktopMoveTool,
   DesktopClickTool,
   DesktopTypeTool,
   DesktopKeyTool,

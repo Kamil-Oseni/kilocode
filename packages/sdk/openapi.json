@@ -67481,6 +67481,42 @@
               },
               "operation": {
                 "type": "string",
+                "enum": ["move"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "x", "y"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
                 "enum": ["click"]
               },
               "windowID": {
@@ -81943,6 +81979,20 @@
               }
             },
             "required": ["operation", "frames", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["move"]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "receipt"],
             "additionalProperties": false
           },
           {

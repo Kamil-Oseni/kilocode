@@ -200,6 +200,17 @@ export class DesktopBridge {
       target: { surface: "desktop" as const, windowID: request.windowID },
       observationID: request.observationID,
     }
+    if (request.operation === "move") {
+      await this.session.execute({
+        operation: "pointer",
+        action: "move",
+        windowID: request.windowID,
+        observationID: request.observationID,
+        x: request.x,
+        y: request.y,
+      })
+      return { operation: "move", receipt: { ...receipt, finishedAt: Date.now() } }
+    }
     if (request.operation === "click") {
       await this.session.execute({
         operation: "pointer",

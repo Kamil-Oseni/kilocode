@@ -1,17 +1,21 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `b39ee559b5` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+933908534b.kamil-oseni.1790107975074` installs grounded window switching, mixed-DPI coordinate safety and exact physical pointer verification. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `b39ee559b5` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+48a44f4d24.kamil-oseni.1790108983160` installs grounded window switching and atomic mixed-DPI pointer gestures. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
 
+## ChatGPT 2026-09-22 16:31 America/Toronto - atomic pointer gesture installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+48a44f4d24.kamil-oseni.1790108983160` is installed without a forced reload. Retained VSIX `raya.6db96c79fb92166f860a02512324b97ac932253b29441ef83201de6776b452a5.vsix` is **522,222,405 bytes**, SHA-256 `6DB96C79FB92166F860A02512324B97AC932253B29441EF83201DE6776B452A5`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. SDK output was unchanged, the CLI was reused, and extension types, webview types, lint and production bundling passed. Retention pruned one old vault package, staged package and extension. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains.
+
 ## ChatGPT 2026-09-22 16:26 America/Toronto - preserve atomic native pointer gestures
 
 Preserve product commit `b39ee559b5`. Do not restore separate `SetCursorPos` and button calls for click or drag. Click/double-click must remain one absolute-move/down/up batch; drag must remain one absolute-start/down/absolute-end/up batch. Both validate physical points before dispatch, verify the exact endpoint afterward, recover button-up after partial dispatch and surface every partial or mismatched outcome as unknown without automatic replay.
 
-Evidence passes **32 focused tests / 120 assertions**, extension typecheck, ESLint, Knip, targeted formatting and a real embedded-C# compilation/enumeration smoke. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `933908534b`; include this source in the next coherent capped snapshot. Live gestures remain installed-host acceptance.
+Evidence passes **32 focused tests / 120 assertions**, extension typecheck, ESLint, Knip, targeted formatting and a real embedded-C# compilation/enumeration smoke. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is installed in the receipt above. Live gestures remain installed-host acceptance.
 
 ## ChatGPT 2026-09-22 16:15 America/Toronto - exact physical pointer installation receipt
 

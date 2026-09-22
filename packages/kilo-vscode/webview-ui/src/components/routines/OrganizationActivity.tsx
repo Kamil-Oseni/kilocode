@@ -411,35 +411,6 @@ export const OrganizationActivity: Component<{
                   {total().needsAttention ? ` · ${total().needsAttention} need attention` : ""}
                   {` · ${total().total} ${total().total === 1 ? "request" : "requests"}`}
                 </p>
-                <p>
-                  <span>{money(total().recordedCost)} spent</span>
-                  <Show when={total().standaloneCost > 0}>
-                    <span title="Direct model cost from organization workers' scheduled or conversational Routine runs. Delegated worker sessions are excluded to prevent double counting.">
-                      {money(total().standaloneCost)} direct Routine work
-                    </span>
-                  </Show>
-                  <Show when={total().coordinatorCost > 0}>
-                    <span title="Model cost from main-chat turns that completed work for this organization. A turn involving more than one organization is excluded.">
-                      {money(total().coordinatorCost)} coordinator work
-                    </span>
-                  </Show>
-                  <span title="Committed cost includes recorded spend and live work reserved at its saved budget limit.">
-                    {money(total().committedCost)} committed
-                  </span>
-                  <Show when={props.item.budget !== undefined}>
-                    <span>
-                      {money(Math.max((props.item.budget ?? 0) - total().committedCost, 0))} available of{" "}
-                      {money(props.item.budget ?? 0)}
-                    </span>
-                  </Show>
-                  <Show when={total().uncertain}>
-                    {(count) => (
-                      <span>
-                        {count()} cost {count() === 1 ? "receipt" : "receipts"} pending
-                      </span>
-                    )}
-                  </Show>
-                </p>
               </div>
             )}
           </Show>
@@ -448,11 +419,26 @@ export const OrganizationActivity: Component<{
           <Button size="small" onClick={() => assign()}>
             Assign work
           </Button>
-          <Button variant="ghost" size="small" disabled={busy()} onClick={() => load()}>
-            Refresh work
-          </Button>
         </div>
       </div>
+      <details class="routines-organization-work-details">
+        <summary>Work details</summary>
+        <Show when={summary()}>
+          {(total) => (
+            <div class="routines-organization-work-costs">
+              <span>{money(total().recordedCost)} spent</span>
+              <span>{money(total().committedCost)} committed</span>
+              <Show when={props.item.budget !== undefined}>
+                <span>{money(Math.max((props.item.budget ?? 0) - total().committedCost, 0))} available</span>
+              </Show>
+              <Show when={total().uncertain}>{(count) => <span>{count()} cost pending</span>}</Show>
+            </div>
+          )}
+        </Show>
+        <Button variant="ghost" size="small" disabled={busy()} onClick={() => load()}>
+          Refresh work
+        </Button>
+      </details>
       <Show when={props.receipt}>
         {(worker) => (
           <div class="routines-organization-work-notice" role="status">
@@ -464,39 +450,43 @@ export const OrganizationActivity: Component<{
         )}
       </Show>
       <Show when={items().length}>
-        <div class="routines-organization-work-filters" aria-label="Filter work">
-          <label class="routines-field">
-            Search work
-            <input
-              type="search"
-              value={query()}
-              placeholder="Outcome or report"
-              onInput={(event) => setQuery(event.currentTarget.value)}
-            />
-          </label>
-          <label class="routines-field">
-            State
-            <select value={phase()} onChange={(event) => setPhase(event.currentTarget.value)}>
-              <option value="all">All states</option>
-              <For each={[...states]}>{(state) => <option value={state}>{label(state)}</option>}</For>
-            </select>
-          </label>
-          <label class="routines-field">
-            Worker
-            <select value={worker()} onChange={(event) => setWorker(event.currentTarget.value)}>
-              <option value="all">All workers</option>
-              <For each={workers()}>{(person) => <option value={person.id}>{person.name}</option>}</For>
-            </select>
-          </label>
-          <Show when={query() || phase() !== "all" || worker() !== "all"}>
-            <Button variant="ghost" size="small" onClick={clear}>
-              Clear filters
-            </Button>
-          </Show>
-        </div>
-        <p class="routines-organization-work-count" role="status">
-          Showing {visible().length} of {items().length} loaded
-        </p>
+        <details class="routines-organization-filter">
+          <summary>Filter work</summary>
+          <div class="routines-organization-work-filters" aria-label="Filter work">
+            <label class="routines-field">
+              Search
+              <input
+                type="search"
+                value={query()}
+                placeholder="Outcome or report"
+                aria-label="Search work"
+                onInput={(event) => setQuery(event.currentTarget.value)}
+              />
+            </label>
+            <label class="routines-field">
+              State
+              <select value={phase()} onChange={(event) => setPhase(event.currentTarget.value)}>
+                <option value="all">All states</option>
+                <For each={[...states]}>{(state) => <option value={state}>{label(state)}</option>}</For>
+              </select>
+            </label>
+            <label class="routines-field">
+              Worker
+              <select value={worker()} onChange={(event) => setWorker(event.currentTarget.value)}>
+                <option value="all">All workers</option>
+                <For each={workers()}>{(person) => <option value={person.id}>{person.name}</option>}</For>
+              </select>
+            </label>
+            <Show when={query() || phase() !== "all" || worker() !== "all"}>
+              <Button variant="ghost" size="small" onClick={clear}>
+                Clear filters
+              </Button>
+            </Show>
+          </div>
+          <p class="routines-organization-work-count" role="status">
+            Showing {visible().length} of {items().length} loaded
+          </p>
+        </details>
       </Show>
       <Show when={visible().length}>
         <ol class="routines-organization-work-list">
@@ -542,37 +532,34 @@ export const OrganizationActivity: Component<{
                   <Show when={item.parentID}>
                     <span>Follow-on work</span>
                   </Show>
-                  <Show when={typeof item.cost === "number"}>
-                    <span>Recorded cost ${item.cost}</span>
-                  </Show>
-                  <Show when={item.sessionID && props.onOpenSession}>
-                    <button type="button" onClick={() => props.onOpenSession?.(item.sessionID!)}>
-                      Open run
-                    </button>
-                  </Show>
                 </div>
-                <div class="routines-organization-work-actions">
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    aria-expanded={open() === item.id}
-                    aria-controls={`organization-chain-${item.id}`}
-                    disabled={!!trace()}
-                    onClick={() => inspect(item)}
-                  >
-                    {trace()?.id === item.id ? "Loading chain" : open() === item.id ? "Hide chain" : "Show chain"}
-                  </Button>
-                  <Show when={item.state === "completed"}>
-                    <Button variant="ghost" size="small" disabled={!!trace()} onClick={() => follow(item)}>
-                      {trace()?.id === item.id && trace()?.action === "follow" ? "Loading routes" : "Assign follow-on"}
+                <details class="routines-organization-work-more">
+                  <summary>More</summary>
+                  <div class="routines-organization-work-actions">
+                    <Button
+                      variant="ghost"
+                      size="small"
+                      aria-expanded={open() === item.id}
+                      aria-controls={`organization-chain-${item.id}`}
+                      disabled={!!trace()}
+                      onClick={() => inspect(item)}
+                    >
+                      {trace()?.id === item.id ? "Loading chain" : open() === item.id ? "Hide chain" : "Show chain"}
                     </Button>
-                  </Show>
-                  <Show when={live(item.state) && confirm() !== item.id}>
-                    <Button variant="ghost" size="small" disabled={!!stopping()} onClick={() => setConfirm(item.id)}>
-                      Stop work
-                    </Button>
-                  </Show>
-                </div>
+                    <Show when={item.state === "completed"}>
+                      <Button variant="ghost" size="small" disabled={!!trace()} onClick={() => follow(item)}>
+                        {trace()?.id === item.id && trace()?.action === "follow"
+                          ? "Loading routes"
+                          : "Assign follow-on"}
+                      </Button>
+                    </Show>
+                    <Show when={live(item.state) && confirm() !== item.id}>
+                      <Button variant="ghost" size="small" disabled={!!stopping()} onClick={() => setConfirm(item.id)}>
+                        Stop work
+                      </Button>
+                    </Show>
+                  </div>
+                </details>
                 <Show when={faults()[item.id]}>
                   <p class="routines-error" role="alert">
                     {faults()[item.id]}
@@ -620,6 +607,11 @@ export const OrganizationActivity: Component<{
                           </For>
                         </ol>
                       )}
+                    </Show>
+                    <Show when={item.sessionID && props.onOpenSession}>
+                      <Button variant="ghost" size="small" onClick={() => props.onOpenSession?.(item.sessionID!)}>
+                        Open run
+                      </Button>
                     </Show>
                   </div>
                 </Show>

@@ -848,6 +848,197 @@
   }
 }
 
+/* Routines information hierarchy: keep the next action visible and disclose
+ * operational controls only when the user asks for them. */
+html[data-theme="kilo-vscode"] .routines-thread-context-back {
+  flex: 0 0 auto;
+  max-width: 11rem;
+  overflow: hidden;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-more,
+html[data-theme="kilo-vscode"] .routines-conversation-search,
+html[data-theme="kilo-vscode"] .routines-organization-details,
+html[data-theme="kilo-vscode"] .routines-organization-work-details,
+html[data-theme="kilo-vscode"] .routines-organization-filter,
+html[data-theme="kilo-vscode"] .routines-organization-work-more {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-more > summary,
+html[data-theme="kilo-vscode"] .routines-conversation-search > summary,
+html[data-theme="kilo-vscode"] .routines-organization-details > summary,
+html[data-theme="kilo-vscode"] .routines-organization-work-details > summary,
+html[data-theme="kilo-vscode"] .routines-organization-filter > summary,
+html[data-theme="kilo-vscode"] .routines-organization-work-more > summary {
+  width: fit-content;
+  border-radius: var(--raya-radius-sm, 4px);
+  cursor: pointer;
+  list-style-position: inside;
+  user-select: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-more > summary:hover,
+html[data-theme="kilo-vscode"] .routines-conversation-search > summary:hover,
+html[data-theme="kilo-vscode"] .routines-organization-details > summary:hover,
+html[data-theme="kilo-vscode"] .routines-organization-work-details > summary:hover,
+html[data-theme="kilo-vscode"] .routines-organization-filter > summary:hover,
+html[data-theme="kilo-vscode"] .routines-organization-work-more > summary:hover {
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-more[open] {
+  display: grid;
+  gap: var(--raya-space-8);
+}
+
+html[data-theme="kilo-vscode"] .routines-roster-more .routines-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-2);
+  padding: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-row {
+  min-height: 54px;
+  padding: var(--raya-space-8);
+}
+
+html[data-theme="kilo-vscode"] .routines-row .routines-note {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+html[data-theme="kilo-vscode"] .routines-conversation-search {
+  padding: var(--raya-space-8) var(--raya-space-16) 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-conversation-search[open] > summary {
+  margin-bottom: var(--raya-space-6);
+}
+
+html[data-theme="kilo-vscode"] .routines-conversation-search .routines-search {
+  padding: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-overview .routines-thread-body {
+  gap: var(--raya-space-20, 20px);
+  padding: var(--raya-space-20, 20px) var(--raya-space-24, 24px) var(--raya-space-32, 32px);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-purpose {
+  display: -webkit-box;
+  max-width: 44rem;
+  overflow: hidden;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-13);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-members {
+  display: grid;
+  gap: var(--raya-space-2);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-members li + li {
+  border-top: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-members button {
+  min-height: 48px;
+  padding: var(--raya-space-8) var(--raya-space-10);
+  border-radius: var(--raya-radius-md, 6px);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-members button:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-details {
+  padding-top: var(--raya-space-2);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-details[open] {
+  display: grid;
+  gap: var(--raya-space-12);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-details > summary {
+  margin-bottom: var(--raya-space-8);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work {
+  gap: var(--raya-space-10);
+  margin-top: 0;
+  padding-top: var(--raya-space-20, 20px);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work-details[open],
+html[data-theme="kilo-vscode"] .routines-organization-filter[open],
+html[data-theme="kilo-vscode"] .routines-organization-work-more[open] {
+  display: grid;
+  gap: var(--raya-space-8);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work-costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-4) var(--raya-space-12);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work-details [data-component="button"] {
+  justify-self: start;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-filter {
+  padding-block: var(--raya-space-2);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work-filters {
+  margin-top: var(--raya-space-6);
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work-list > li {
+  gap: var(--raya-space-8);
+  padding: var(--raya-space-14, 14px) 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-organization-work-more > summary {
+  font-size: var(--kilo-font-size-11);
+}
+
+html[data-theme="kilo-vscode"] .routines-info-primary-action {
+  padding-bottom: var(--raya-space-12);
+}
+
+@media (max-width: 42rem) {
+  html[data-theme="kilo-vscode"] .routines-thread-context-back {
+    display: none;
+  }
+
+  html[data-theme="kilo-vscode"] .routines-conversation-search {
+    padding-inline: var(--raya-space-12);
+  }
+
+  html[data-theme="kilo-vscode"] .routines-organization-overview .routines-thread-body {
+    padding-inline: var(--raya-space-14, 14px);
+  }
+}
+
+@media (min-width: 42.01rem) {
+  html[data-theme="kilo-vscode"] .routines-thread-head > .routines-thread-context-back {
+    display: inline-flex;
+  }
+}
+
 .routines-body[data-pane="inbox"] {
   overflow: hidden;
   display: flex;

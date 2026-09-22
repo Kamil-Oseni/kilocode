@@ -242,6 +242,7 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
   await expect(page.getByText("Find, design, build, and support better client websites.")).toBeVisible()
+  await page.getByText("Organization details", { exact: true }).click()
   await expect(page.getByRole("heading", { name: "Operating policy" })).toBeVisible()
   await expect(
     page.getByText("Do not contact a prospect until the proposed website has passed design and legal review."),
@@ -259,13 +260,12 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
     reports.getByText("Workers in this organization can send reports to their conversations at any time."),
   ).toBeVisible()
   await expect(page.getByText("Reports to Counsel")).toHaveCount(2)
-  await expect(page.getByText("Can create workers", { exact: true })).toBeVisible()
-  await expect(page.getByText("Cannot create workers", { exact: true })).toHaveCount(2)
   const work = page.locator(".routines-organization-work")
   await expect(work.getByRole("heading", { name: "Work" })).toBeVisible()
   await expect(work.getByLabel("Organization work totals")).toContainText("1 active · 1 need attention · 3 requests")
-  await expect(work.getByLabel("Organization work totals")).toContainText("$0.42 spent")
-  await expect(work.getByLabel("Organization work totals")).toContainText("$0.42 committed")
+  await work.getByText("Work details", { exact: true }).click()
+  await expect(work.getByText("$0.42 spent", { exact: true })).toBeVisible()
+  await expect(work.getByText("$0.42 committed", { exact: true })).toBeVisible()
   await expect(work.getByText("Review Friday travel expenses and return a reconciled ledger.")).toBeVisible()
   await expect(work.locator('.routines-organization-work-state[data-state="completed"]')).toBeVisible()
   await expect(work.getByText("The ledger is reconciled and the receipt exception is documented.")).toBeVisible()
@@ -299,6 +299,7 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   const root = work
     .locator(".routines-organization-work-list > li")
     .filter({ hasText: "Review Friday travel expenses" })
+  await root.getByText("More", { exact: true }).click()
   await root.getByRole("button", { name: "Show chain" }).click()
   const chain = root.getByRole("list", { name: "Request chain" })
   await expect(chain.getByText("This request", { exact: false })).toBeVisible()
@@ -328,6 +329,7 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   const follow = work
     .locator(".routines-organization-work-list > li")
     .filter({ hasText: "Prepare a client-ready summary" })
+  await follow.getByText("More", { exact: true }).click()
   await follow.getByRole("button", { name: "Stop work" }).click()
   await expect(follow.getByText("This stops this request and live follow-on work.")).toBeVisible()
   await follow.getByRole("button", { name: "Keep running" }).dispatchEvent("click")
@@ -553,6 +555,7 @@ test("organization work filters loaded and earlier activity", async ({ page }, i
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   const work = page.locator(".routines-organization-work")
+  await work.getByText("Filter work", { exact: true }).click()
   const search = work.getByLabel("Search work")
   await search.fill("hosting provider")
   await expect(work.getByText("Showing 0 of 2 loaded")).toBeVisible()
@@ -580,7 +583,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
-  await page.getByRole("button", { name: "Edit organization" }).click()
+  await page.getByRole("button", { name: "Settings" }).click()
   await expect(page.getByRole("heading", { name: "Team and reporting" })).toBeVisible()
   await expect(page.getByLabel("Operating policy")).toHaveValue(
     "Do not contact a prospect until the proposed website has passed design and legal review.",
@@ -613,12 +616,14 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.getByLabel("Organization model budget ($)").fill("250")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
+  await page.getByText("Organization details", { exact: true }).click()
   await expect(
     page.getByText("Only contact prospects after design review, legal review, and an approved outreach brief."),
   ).toBeVisible()
-  await expect(page.getByText(/available of \$250\.00/)).toBeVisible()
+  await page.getByText("Work details", { exact: true }).click()
+  await expect(page.getByText(/\$249\.58 available/)).toBeVisible()
 
-  await page.getByRole("button", { name: "Edit organization" }).click()
+  await page.getByRole("button", { name: "Settings" }).click()
   await page.getByRole("button", { name: "Archive", exact: true }).click()
   await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
     "Scheduled workers keep their current schedules",
@@ -733,6 +738,7 @@ test("narrow organization overview can return to the organization list", async (
   const root = work
     .locator(".routines-organization-work-list > li")
     .filter({ hasText: "Review Friday travel expenses" })
+  await root.getByText("More", { exact: true }).click()
   await root.getByRole("button", { name: "Show chain" }).click()
   await expect(root.getByRole("list", { name: "Request chain" })).toBeVisible()
   await root.getByRole("button", { name: "Assign follow-on" }).click()
@@ -761,7 +767,7 @@ test("organization revision conflict stays in the editor with recovery guidance"
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines&scene=conflict")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
-  await page.getByRole("button", { name: "Edit organization" }).click()
+  await page.getByRole("button", { name: "Settings" }).click()
   await page.getByLabel("Purpose").fill("A newer purpose")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("alert")).toContainText("This organization changed after you opened it.")
@@ -860,7 +866,7 @@ test("light routines at 200% zoom", async ({ browser }, info) => {
   await expect(books).toBeVisible()
   await books.click()
   await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
-  await page.getByRole("button", { name: "Details", exact: true }).click()
+  await page.getByRole("button", { name: "Info", exact: true }).click()
   const panel = page.getByLabel("Chat info for Books")
   await expect(panel.getByRole("heading", { name: "Worker communication" })).toBeVisible()
   const overflow = await panel.locator("*").evaluateAll((nodes) =>
@@ -878,6 +884,8 @@ test("light routines at 200% zoom", async ({ browser }, info) => {
   await page.screenshot({ path: info.outputPath("zoom.png"), fullPage: true })
   await page.goto("http://127.0.0.1:5199/?state=light-routines&target=organization")
   const work = page.locator(".routines-organization-work")
+  await expect(work.getByLabel("Search work")).toBeHidden()
+  await work.getByText("Filter work", { exact: true }).click()
   await expect(work.getByLabel("Search work")).toBeVisible()
   await expect(work.getByLabel("State")).toBeVisible()
   await expect(work.getByLabel("Worker")).toBeVisible()

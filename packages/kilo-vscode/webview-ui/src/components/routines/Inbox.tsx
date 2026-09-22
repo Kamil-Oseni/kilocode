@@ -598,6 +598,7 @@ export const Inbox: Component<{
   anchor?: Anchor
   onAnchor?: (value?: Anchor) => void
   onBack?: () => void
+  backLabel?: string
 }> = (props) => {
   const vscode = useVSCode()
   const ready = () => !!props.box
@@ -1251,6 +1252,18 @@ export const Inbox: Component<{
       }}
     >
       <header class="routines-thread-head">
+        <Show when={props.onBack && props.backLabel}>
+          <Button
+            class="routines-thread-context-back"
+            variant="ghost"
+            size="small"
+            icon="arrow-left"
+            aria-label={`Back to ${props.backLabel}`}
+            onClick={props.onBack}
+          >
+            {props.backLabel}
+          </Button>
+        </Show>
         <span class="routines-thread-avatar" aria-hidden="true">
           {initials(props.name)}
         </span>
@@ -1258,7 +1271,6 @@ export const Inbox: Component<{
           <strong tabIndex={-1}>{props.name}</strong>
           <span class="routines-meta">
             {props.role}
-            <Show when={props.workspace}> · {props.workspace}</Show>
             {` · ${status(props.box?.state ?? "scheduled")}`}
             <Show when={props.box?.nextRun}>
               {(at) => (
@@ -1271,17 +1283,6 @@ export const Inbox: Component<{
           </span>
         </div>
         <div class="routines-thread-actions">
-          <Show when={!info() && props.workers && props.workers.length > 0}>
-            <Button
-              variant="ghost"
-              size="small"
-              disabled={!connected()}
-              aria-expanded={passing()}
-              onClick={() => setPassing((value) => !value)}
-            >
-              Delegate
-            </Button>
-          </Show>
           <Button
             ref={infoRef}
             variant="ghost"
@@ -1293,18 +1294,21 @@ export const Inbox: Component<{
               setInfo((value) => !value)
             }}
           >
-            Details
+            Info
           </Button>
         </div>
       </header>
       <div class="routines-conversation" hidden={info()}>
-        <ConversationSearch
-          agentID={props.agentID}
-          name={props.name}
-          disabled={!connected()}
-          reset={searchRevision()}
-          onSearch={search}
-        />
+        <details class="routines-conversation-search">
+          <summary>Search conversation</summary>
+          <ConversationSearch
+            agentID={props.agentID}
+            name={props.name}
+            disabled={!connected()}
+            reset={searchRevision()}
+            onSearch={search}
+          />
+        </details>
         <Show when={!connected()}>
           <p class="routines-offline" role="status" aria-live="polite">
             Offline. Your messages and draft stay here. This conversation will refresh when Raya reconnects.
@@ -1487,6 +1491,20 @@ export const Inbox: Component<{
       </div>
       <Show when={infoReady()}>
         <div class="routines-info-shell" hidden={!info()}>
+          <Show when={props.workers && props.workers.length > 0}>
+            <div class="routines-info-primary-action">
+              <Button
+                size="small"
+                disabled={!connected()}
+                onClick={() => {
+                  setInfo(false)
+                  setPassing(true)
+                }}
+              >
+                Ask another worker
+              </Button>
+            </div>
+          </Show>
           <ChatInfo
             agentID={props.agentID}
             name={props.name}

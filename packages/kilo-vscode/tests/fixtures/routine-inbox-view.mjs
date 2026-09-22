@@ -178,7 +178,7 @@ try {
     root.querySelector(".routines-organization-overview").textContent,
     /Verify durable organization behavior/,
   )
-  assert.ok(button("Edit organization"))
+  assert.ok(button("Settings"))
   root.querySelector(".routines-identity").click()
   await new Promise((resolve) => setImmediate(resolve))
   const page = sent.findLast((msg) => msg.type === "routineInboxPage")
@@ -382,8 +382,11 @@ try {
   const thread = root.querySelector(".routines-thread[role='region']")
   assert.equal(thread.getAttribute("aria-label"), "Conversation with Books")
   assert.equal(root.querySelector(".routines-view").getAttribute("data-detail"), "true")
-  assert.ok(button("Routines").classList.contains("routines-detail-back"))
-  assert.equal(root.querySelector(".routines-thread-head [aria-label^='Back to']"), null)
+  assert.equal(root.querySelector(".routines-detail-back").textContent.trim(), "Acceptance Team")
+  assert.equal(
+    root.querySelector(".routines-thread-head [aria-label^='Back to']").getAttribute("aria-label"),
+    "Back to Acceptance Team",
+  )
   const pane = root.querySelector(".routines-thread-body")
   assert.equal(pane.getAttribute("role"), "log")
   assert.equal(pane.getAttribute("tabindex"), "0")
@@ -427,7 +430,7 @@ try {
   })
   assert.equal(draft.value, "Keep this draft")
   assert.match(root.textContent, /changed in another Raya window/)
-  const infoToggle = button("Details")
+  const infoToggle = button("Info")
   infoToggle.click()
   assert.equal(infoToggle.getAttribute("aria-expanded"), "true")
   await new Promise((resolve) => setImmediate(resolve))
@@ -743,7 +746,7 @@ try {
   await Promise.resolve()
   assert.equal(pane.scrollTop, 40)
   assert.match(root.textContent, /The later receipt stayed in place/)
-  button("Routines").click()
+  root.querySelector('[aria-label="Back to Acceptance Team"]').click()
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(root.querySelector(".routines-thread[role='region']"), null)
   assert.equal(document.activeElement, root.querySelector('[data-routine-worker="routine"]'))

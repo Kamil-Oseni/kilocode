@@ -21,7 +21,7 @@ import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { runPresence } from "../../utils/run-presence"
 import type { AgentInfo, ConnectionState, ExtensionMessage } from "../../types/messages"
-import { action, reason, select, type Execution } from "./run"
+import { action, select, type Execution } from "./run"
 import { compile, initial, populate } from "../../../../src/shared/routine-schedule"
 import { ScheduleEditor } from "./ScheduleEditor"
 import { RunReview } from "./RunReview"
@@ -607,11 +607,8 @@ function blocked(command: ReturnType<typeof action>, access: Agent["access"], ca
 
 const Person: Component<{
   item: Agent
-  run?: Run
   box?: Box
   stale?: string
-  busy: boolean
-  live: boolean
   picked: boolean
   manage: boolean
   current: boolean
@@ -632,8 +629,6 @@ const Person: Component<{
 }> = (props) => {
   const [menu, setMenu] = createSignal(false)
   let row: HTMLLIElement | undefined
-  const resume = () => (!props.item.enabled ? `${props.panel}-${props.item.id}-resume` : undefined)
-  const hold = () => (props.item.enabled && props.live ? `${props.panel}-${props.item.id}-hold` : undefined)
   const call = (fn: () => void) => {
     setMenu(false)
     fn()
@@ -680,24 +675,11 @@ const Person: Component<{
             History may be stale: {props.stale}
           </span>
         </Show>
-        <Show when={props.run?.outcome?.summary}>
-          <span class="routines-note routines-result-summary">Recorded result: {props.run?.outcome?.summary}</span>
-        </Show>
-        <Show when={props.run}>{(run) => <span class="routines-note">{reason(run())}</span>}</Show>
         <Show when={props.item.execution?.state === "recovery"}>
           <span class="routines-note">{recoveryNote(props.item)}</span>
         </Show>
-        <Show when={props.run?.blockedReason}>
-          <span class="routines-note">{props.run?.blockedReason}</span>
-        </Show>
-        <Show when={props.item.note}>
-          <span class="routines-note">{props.item.note}</span>
-        </Show>
         <Show when={unzoned(props.item)}>
-          <span class="routines-note">
-            Automatic runs need timezone review. Choose Edit schedule; manual runs remain available when otherwise
-            permitted.
-          </span>
+          <span class="routines-note">Timezone needs review</span>
         </Show>
       </button>
       <div class="routines-side">
@@ -730,13 +712,7 @@ const Person: Component<{
           >
             {caption(props.command, props.item)}
           </Button>
-          <Button
-            size="small"
-            variant="ghost"
-            role="menuitem"
-            aria-describedby={resume() ?? hold()}
-            onClick={() => call(props.onToggle)}
-          >
+          <Button size="small" variant="ghost" role="menuitem" onClick={() => call(props.onToggle)}>
             {props.item.enabled ? "Pause" : "Enable"}
           </Button>
           <Button size="small" variant="ghost" role="menuitem" onClick={() => call(props.onEdit)}>
@@ -777,18 +753,6 @@ const Person: Component<{
           </Button>
         </div>
       </div>
-      <Show when={!props.item.enabled}>
-        <p id={resume()} class="routines-hint routines-row-hint">
-          Enabling allows future runs and starts a fresh consecutive-block count. Earlier runs remain in history.
-          Resolve the cause of a pause before enabling again.
-          <Show when={props.live}> The current run continues until it settles.</Show>
-        </p>
-      </Show>
-      <Show when={props.item.enabled && props.live}>
-        <p id={hold()} class="routines-hint routines-row-hint">
-          Pausing stops later starts. The current run continues until it settles.
-        </p>
-      </Show>
     </li>
   )
 }
@@ -1782,6 +1746,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   })
   const worker = createMemo(() => agents().find((item) => item.id === chosen()))
   const detail = createMemo(() => showing(screen(), !!chosen(), !!currentOrganization(), !!editingOrganization()))
+  const detailLabel = createMemo(() => (chosen() && currentOrganization() ? currentOrganization()!.name : "Routines"))
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
   const ask = (text: string) => props.onAskRaya?.(text)
@@ -1803,7 +1768,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         </Show>
         <Show when={detail()}>
           <Button class="routines-detail-back" variant="ghost" size="small" icon="arrow-left" onClick={back}>
-            Routines
+            {detailLabel()}
           </Button>
         </Show>
         <h2 class="routines-title" tabIndex={-1}>
@@ -1853,9 +1818,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       fallback={
                         <>
                           <strong>Workers</strong>
-                          <Button variant="ghost" size="small" onClick={() => setManage(true)}>
-                            Manage
-                          </Button>
                           <Button
                             size="small"
                             icon="plus"
@@ -1931,27 +1893,37 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       onInput={(event) => setQuery(event.currentTarget.value)}
                     />
                   </label>
-                  <div class="routines-filters" role="group" aria-label="Inbox filters">
-                    <Button size="small" variant={tone(attention() === "all")} onClick={() => setAttention("all")}>
-                      All
-                    </Button>
-                    <Button
-                      size="small"
-                      variant={tone(attention() === "unread")}
-                      onClick={() => setAttention("unread")}
-                    >
-                      Unread
-                    </Button>
-                    <Button size="small" variant={tone(attention() === "needs")} onClick={() => setAttention("needs")}>
-                      Needs attention
-                    </Button>
-                  </div>
-                  <div class="routines-secondary">
-                    <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
-                      Refresh
-                    </Button>
-                    <Archive onOpenSession={props.onOpenSession} />
-                  </div>
+                  <details class="routines-roster-more">
+                    <summary>View options</summary>
+                    <div class="routines-filters" role="group" aria-label="Inbox filters">
+                      <Button size="small" variant={tone(attention() === "all")} onClick={() => setAttention("all")}>
+                        All
+                      </Button>
+                      <Button
+                        size="small"
+                        variant={tone(attention() === "unread")}
+                        onClick={() => setAttention("unread")}
+                      >
+                        Unread
+                      </Button>
+                      <Button
+                        size="small"
+                        variant={tone(attention() === "needs")}
+                        onClick={() => setAttention("needs")}
+                      >
+                        Needs attention
+                      </Button>
+                    </div>
+                    <div class="routines-secondary">
+                      <Button variant="ghost" size="small" onClick={() => setManage(true)}>
+                        Manage workers
+                      </Button>
+                      <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
+                        Refresh
+                      </Button>
+                      <Archive onOpenSession={props.onOpenSession} />
+                    </div>
+                  </details>
                 </div>
               </Show>
               <ul class="routines-list">
@@ -1962,11 +1934,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     return (
                       <Person
                         item={item}
-                        run={run()}
                         box={boxes()[item.id]}
                         stale={stale()[item.id]}
-                        busy={!!busy()[item.id]}
-                        live={live(item, runs())}
                         picked={!!picked()[item.id]}
                         manage={manage()}
                         current={chosen() === item.id}
@@ -2030,6 +1999,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     onInspect={() => inspect(item())}
                     onToggle={() => toggle(item())}
                     onBack={leave}
+                    backLabel={currentOrganization()?.name}
                   />
                 )
               }}
@@ -2080,14 +2050,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     </div>
                   </div>
                   <div class="routines-thread-body">
-                    <Show when={item.purpose}>
-                      <p class="routines-organization-purpose">{item.purpose}</p>
+                    <Show when={item.purpose || item.policy}>
+                      <p class="routines-organization-purpose">{item.purpose || item.policy}</p>
                     </Show>
-                    <Show when={item.policy}>
-                      <h3>Operating policy</h3>
-                      <p class="routines-organization-policy">{item.policy}</p>
-                    </Show>
-                    <ReportSetting organizationID={item.id} connected={connection() === "connected"} />
                     <h3>Team</h3>
                     <ol class="routines-organization-members">
                       <For each={item.members}>
@@ -2099,13 +2064,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                               <button type="button" onClick={() => choose(member.agentID)} disabled={!agent()}>
                                 <span>{agent()?.name ?? "Archived worker"}</span>
                                 <span>{member.role}</span>
-                                <span>
-                                  {agent()?.capabilities.some(
-                                    (capability) => capability.toLowerCase() === "organization:provision",
-                                  )
-                                    ? "Can create workers"
-                                    : "Cannot create workers"}
-                                </span>
                                 <Show when={supervisor()}>
                                   {(lead) => (
                                     <span>
@@ -2120,6 +2078,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         }}
                       </For>
                     </ol>
+                    <details class="routines-organization-details">
+                      <summary>Organization details</summary>
+                      <Show when={item.policy}>
+                        <h3>Operating policy</h3>
+                        <p class="routines-organization-policy">{item.policy}</p>
+                      </Show>
+                      <ReportSetting organizationID={item.id} connected={connection() === "connected"} />
+                    </details>
                     <OrganizationActivity
                       id={item.id}
                       item={item}

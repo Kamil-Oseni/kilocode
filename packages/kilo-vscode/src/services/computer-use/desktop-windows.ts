@@ -160,6 +160,26 @@ public static class RayaDesktopNative {
     if (SendInput(1, new[] { input }, Marshal.SizeOf(typeof(Input))) != 1) throw new InvalidOperationException("Windows refused desktop mouse input");
   }
 
+  public static void Scroll(int deltaX, int deltaY) {
+    var inputs = new List<Input>();
+    if (deltaY != 0) {
+      inputs.Add(new Input {
+        Type = 0,
+        Value = new InputUnion { Mouse = new MouseInput { Flags = 0x0800, Data = unchecked((uint)deltaY) } }
+      });
+    }
+    if (deltaX != 0) {
+      inputs.Add(new Input {
+        Type = 0,
+        Value = new InputUnion { Mouse = new MouseInput { Flags = 0x1000, Data = unchecked((uint)deltaX) } }
+      });
+    }
+    if (inputs.Count == 0) throw new InvalidOperationException("Desktop scroll requires non-zero movement");
+    var batch = inputs.ToArray();
+    if (SendInput((uint)batch.Length, batch, Marshal.SizeOf(typeof(Input))) != (uint)batch.Length)
+      throw new InvalidOperationException("Windows refused complete desktop scroll input");
+  }
+
   public static void Move(int x, int y) {
     ValidatePoint(x, y);
     if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows refused desktop pointer movement");
@@ -417,14 +437,7 @@ switch ($action.operation) {
   }
   "type" { [RayaDesktopNative]::Text([string]$action.text) }
   "scroll" {
-    if ($action.deltaY -ne 0) {
-      $data = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int32][Math]::Round($action.deltaY)), 0)
-      [RayaDesktopNative]::Mouse(0x0800, $data)
-    }
-    if ($action.deltaX -ne 0) {
-      $data = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int32][Math]::Round($action.deltaX)), 0)
-      [RayaDesktopNative]::Mouse(0x1000, $data)
-    }
+    [RayaDesktopNative]::Scroll([int][Math]::Round($action.deltaX), [int][Math]::Round($action.deltaY))
   }
   "key" {
     $keys = @{

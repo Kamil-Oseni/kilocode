@@ -208,6 +208,31 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("Windows refused complete desktop text input")
   })
 
+  it("batches both scroll axes into one native dispatch", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner)
+    await driver.perform(
+      {
+        operation: "scroll",
+        windowID: "0x123",
+        observationID: "obs-scroll",
+        deltaX: -120,
+        deltaY: 240,
+      },
+      { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
+    )
+
+    expect(test.scripts[0]).toContain("unchecked((uint)deltaY)")
+    expect(test.scripts[0]).toContain("unchecked((uint)deltaX)")
+    expect(test.scripts[0]).toContain("SendInput((uint)batch.Length, batch")
+    expect(test.scripts[0]).toContain("Windows refused complete desktop scroll input")
+    expect(test.scripts[0]).toContain(
+      "[RayaDesktopNative]::Scroll([int][Math]::Round($action.deltaX), [int][Math]::Round($action.deltaY))",
+    )
+    expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse(0x0800, $data)")
+    expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse(0x1000, $data)")
+  })
+
   it("rejects malformed native output", async () => {
     const test = harness([JSON.stringify({ windowID: "0x123" })])
     const driver = new WindowsDesktopDriver(test.runner)

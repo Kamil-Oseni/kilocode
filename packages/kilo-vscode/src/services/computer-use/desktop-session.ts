@@ -134,8 +134,9 @@ export class DesktopSession {
       return
     }
     if (action.operation === "scroll") {
-      if (![action.deltaX, action.deltaY].every(Number.isFinite))
-        throw new Error("Desktop scroll deltas must be finite numbers")
+      if (![action.deltaX, action.deltaY].every((value) => Number.isFinite(value) && value >= -1_200 && value <= 1_200))
+        throw new Error("Desktop scroll deltas must be finite values from -1200 through 1200")
+      if (action.deltaX === 0 && action.deltaY === 0) throw new Error("Desktop scroll requires non-zero movement")
       return
     }
     if (action.operation === "type" && action.text.length > 200_000)

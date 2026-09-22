@@ -1,9 +1,9 @@
 // raya_change - model-facing native desktop tool tests
 import { expect } from "bun:test"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { Key } from "@/kilocode/desktop/protocol"
+import { Key, ScrollRequest } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
-import { DesktopClickTool, DesktopKeyTool, DesktopTypeTool } from "@/kilocode/tool/desktop-host"
+import { DesktopClickTool, DesktopKeyTool, DesktopScrollTool, DesktopTypeTool } from "@/kilocode/tool/desktop-host"
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
@@ -30,7 +30,9 @@ it.instance(
                   ? ("type" as const)
                   : input.operation === "key"
                     ? ("key" as const)
-                    : ("click" as const),
+                    : input.operation === "scroll"
+                      ? ("scroll" as const)
+                      : ("click" as const),
               receipt: {
                 version: 1 as const,
                 requestID: "desktop_click_test",
@@ -156,6 +158,48 @@ it.instance(
       expect(Schema.is(Key)("F12")).toBe(true)
       expect(Schema.is(Key)("F13")).toBe(false)
       expect(Schema.is(Key)(";")).toBe(false)
+
+      const scrolled = yield* DesktopScrollTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) =>
+          tool.execute(
+            {
+              window_id: "window_seen",
+              observation_id: ObservationID.make("observation_scrolled"),
+              delta_x: 120,
+              delta_y: -240,
+            },
+            ctx,
+          ),
+        ),
+      )
+      expect(asks[3]).toEqual(
+        expect.objectContaining({
+          permission: "desktop_scroll",
+          patterns: ["window_seen:120,-240"],
+          always: [],
+        }),
+      )
+      expect(calls[3]).toEqual({
+        operation: "scroll",
+        sessionID: ctx.sessionID,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_scrolled"),
+        deltaX: 120,
+        deltaY: -240,
+      })
+      expect(scrolled.title).toBe("Scrolled desktop")
+      const base = {
+        id: "desktop_scroll_schema",
+        sessionID: ctx.sessionID,
+        operation: "scroll" as const,
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_scroll_schema"),
+      }
+      expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 0 })).toBe(false)
+      expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 1_201 })).toBe(false)
+      expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 120 })).toBe(true)
     }),
   { git: true },
 )

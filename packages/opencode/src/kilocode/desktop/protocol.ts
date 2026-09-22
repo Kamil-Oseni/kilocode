@@ -11,6 +11,11 @@ export type RequestID = Schema.Schema.Type<typeof RequestID>
 
 const Identity = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
 const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
+export const ScrollDelta = Schema.Number.check(
+  Schema.isFinite(),
+  Schema.isGreaterThanOrEqualTo(-1_200),
+  Schema.isLessThanOrEqualTo(1_200),
+)
 const Base = { id: RequestID, sessionID: SessionID }
 export const Key = Schema.Union([
   Schema.Literals([
@@ -78,7 +83,20 @@ export const KeyRequest = Schema.Struct({
   modifiers: Schema.Array(Modifier).check(Schema.isMaxLength(4)),
 })
 
-export const Request = Schema.Union([ObserveRequest, ClickRequest, TypeRequest, KeyRequest]).annotate({
+export const ScrollRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("scroll"),
+  windowID: Identity,
+  observationID: ObservationID,
+  deltaX: ScrollDelta,
+  deltaY: ScrollDelta,
+}).check(
+  Schema.makeFilter((value) =>
+    value.deltaX !== 0 || value.deltaY !== 0 ? undefined : "Desktop scroll requires non-zero movement.",
+  ),
+)
+
+export const Request = Schema.Union([ObserveRequest, ClickRequest, TypeRequest, KeyRequest, ScrollRequest]).annotate({
   identifier: "DesktopRequest",
 })
 export type Request = Schema.Schema.Type<typeof Request>
@@ -108,7 +126,12 @@ export const KeyResult = Schema.Struct({
   receipt: Receipt,
 })
 
-export const Result = Schema.Union([ObserveResult, ClickResult, TypeResult, KeyResult]).annotate({
+export const ScrollResult = Schema.Struct({
+  operation: Schema.Literal("scroll"),
+  receipt: Receipt,
+})
+
+export const Result = Schema.Union([ObserveResult, ClickResult, TypeResult, KeyResult, ScrollResult]).annotate({
   identifier: "DesktopResult",
 })
 export type Result = Schema.Schema.Type<typeof Result>

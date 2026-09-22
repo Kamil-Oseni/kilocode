@@ -199,14 +199,24 @@ export class DesktopBridge {
       })
       return { operation: "type", receipt: { ...receipt, finishedAt: Date.now() } }
     }
+    if (request.operation === "key") {
+      await this.session.execute({
+        operation: "key",
+        windowID: request.windowID,
+        observationID: request.observationID,
+        key: request.key,
+        modifiers: request.modifiers,
+      })
+      return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
+    }
     await this.session.execute({
-      operation: "key",
+      operation: "scroll",
       windowID: request.windowID,
       observationID: request.observationID,
-      key: request.key,
-      modifiers: request.modifiers,
+      deltaX: request.deltaX,
+      deltaY: request.deltaY,
     })
-    return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
+    return { operation: "scroll", receipt: { ...receipt, finishedAt: Date.now() } }
   }
 
   private async deliver(requestID: string, directory: string, receipt: Receipt): Promise<void> {

@@ -197,4 +197,32 @@ describe("desktop observation bridge", () => {
     })
     test.bridge.dispose()
   })
+
+  it("scrolls once by bounded deltas against the fresh foreground observation", async () => {
+    const test = setup()
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const input: DesktopRequest = {
+      id: "desktop_scroll_1",
+      sessionID: "ses_desktop",
+      operation: "scroll",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      deltaX: 120,
+      deltaY: -240,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: input } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([expect.objectContaining({ operation: "scroll", deltaX: 120, deltaY: -240 })])
+    expect(test.replies[1]).toMatchObject({
+      requestID: input.id,
+      result: { operation: "scroll", receipt: { effect: "interact", outcome: "confirmed" } },
+    })
+    test.bridge.dispose()
+  })
 })

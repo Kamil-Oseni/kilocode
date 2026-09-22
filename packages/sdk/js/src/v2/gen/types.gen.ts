@@ -1138,6 +1138,15 @@ export type DesktopRequest =
         | string
       modifiers: Array<"alt" | "control" | "meta" | "shift">
     }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "scroll"
+      windowID: string
+      observationID: ComputerUseObservationId
+      deltaX: number
+      deltaY: number
+    }
 
 export type CanvasRequestId = string
 
@@ -5726,6 +5735,10 @@ export type DesktopResult =
     }
   | {
       operation: "key"
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "scroll"
       receipt: ComputerUseReceipt
     }
 

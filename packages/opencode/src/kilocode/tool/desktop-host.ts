@@ -1,7 +1,7 @@
 // raya_change - model-facing native desktop observation tool
 import { Desktop, HostError, type Input } from "@/kilocode/desktop/service"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { Key, Modifier } from "@/kilocode/desktop/protocol"
+import { Key, Modifier, ScrollDelta } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -218,4 +218,60 @@ export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service,
   }),
 )
 
-export const DesktopTools = [DesktopObserveTool, DesktopClickTool, DesktopTypeTool, DesktopKeyTool]
+const ScrollParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_observe.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh observation ID returned by desktop_observe. It can be used only once.",
+  }),
+  delta_x: Schema.optional(ScrollDelta).annotate({
+    description: "Horizontal Windows wheel delta from -1200 through 1200. Defaults to 0.",
+  }),
+  delta_y: ScrollDelta.annotate({
+    description: "Vertical Windows wheel delta from -1200 through 1200. At least one delta must be non-zero.",
+  }),
+}).check(
+  Schema.makeFilter((value) =>
+    (value.delta_x ?? 0) !== 0 || value.delta_y !== 0 ? undefined : "Desktop scroll requires non-zero movement.",
+  ),
+)
+
+export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Service, "desktop_scroll">(
+  "desktop_scroll",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Scroll the foreground window by bounded horizontal and vertical wheel deltas grounded by a fresh desktop_observe result. The host refuses changed windows, stale observations, reuse, and manual takeover before dispatch.",
+      parameters: ScrollParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const x = params.delta_x ?? 0
+          const amount = `${params.window_id}:${x},${params.delta_y}`
+          yield* ctx.ask({ permission: "desktop_scroll", patterns: [amount], always: [], metadata: {} })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "scroll",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              deltaX: x,
+              deltaY: params.delta_y,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "scroll")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: "Scrolled desktop",
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
+export const DesktopTools = [DesktopObserveTool, DesktopClickTool, DesktopTypeTool, DesktopKeyTool, DesktopScrollTool]

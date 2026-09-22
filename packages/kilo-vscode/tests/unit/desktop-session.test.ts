@@ -67,6 +67,24 @@ describe("native desktop session boundary", () => {
         y: 0.5,
       }),
     ).rejects.toThrow(/normalized values/i)
+    await expect(
+      session.execute({
+        operation: "scroll",
+        windowID: frame.windowID,
+        observationID: frame.observation.id,
+        deltaX: 0,
+        deltaY: 0,
+      }),
+    ).rejects.toThrow(/non-zero movement/i)
+    await expect(
+      session.execute({
+        operation: "scroll",
+        windowID: frame.windowID,
+        observationID: frame.observation.id,
+        deltaX: 0,
+        deltaY: 1_201,
+      }),
+    ).rejects.toThrow(/-1200 through 1200/i)
     expect(driver.actions).toEqual([])
   })
 

@@ -1,17 +1,21 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `16a90b211a` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+be55fc2e84.kamil-oseni.1790107250386` installs grounded desktop window switching and mixed-DPI coordinate safety. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `16a90b211a` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+933908534b.kamil-oseni.1790107975074` installs grounded window switching, mixed-DPI coordinate safety and exact physical pointer verification. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
 
+## ChatGPT 2026-09-22 16:15 America/Toronto - exact physical pointer installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+933908534b.kamil-oseni.1790107975074` is installed without a forced reload. Retained VSIX `raya.1a763219038662312768430d4818c26f553445ce5c786263f63d0852cb3f4f1c.vsix` is **522,220,856 bytes**, SHA-256 `1A763219038662312768430D4818C26F553445CE5C786263F63D0852CB3F4F1C`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. SDK output was unchanged, the CLI was reused, and extension types, webview types, lint and production bundling passed. Retention pruned one old vault package, staged package and extension. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains.
+
 ## ChatGPT 2026-09-22 16:10 America/Toronto - preserve exact physical pointer verification
 
 Preserve product commit `16a90b211a`. Native pointer movement first proves the requested pixel lies inside the physical virtual desktop, calls `SetCursorPos`, then requires `GetCursorPos` to return that exact point before any click. Drag validates its endpoint before down/move/up dispatch and verifies the final physical pixel after a complete native batch. Refusal before dispatch remains safe; mismatch after a complete batch is an unknown outcome and must not be retried automatically.
 
-Evidence passes **32 focused tests / 117 assertions**, extension typecheck, ESLint, Knip, targeted formatting and a real embedded-C# compilation/enumeration smoke. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `be55fc2e84`; include this source in the next coherent capped snapshot. Live exact-point action remains installed-host acceptance.
+Evidence passes **32 focused tests / 117 assertions**, extension typecheck, ESLint, Knip, targeted formatting and a real embedded-C# compilation/enumeration smoke. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is installed in the receipt above. Live exact-point action remains installed-host acceptance.
 
 ## ChatGPT 2026-09-22 16:02 America/Toronto - mixed-DPI grounding installation receipt
 

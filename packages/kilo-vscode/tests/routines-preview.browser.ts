@@ -259,9 +259,18 @@ for (const width of [320, 900]) {
 
     await page.goto("/?state=light-routines&target=organization")
     await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
-    await expect(page.getByRole("button", { name: "Assign work" })).toBeVisible()
+    const assign = page.getByRole("button", { name: "Assign work" })
+    await expect(assign).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.screenshot({ path: info.outputPath("organization.png"), fullPage: true })
+
+    await assign.click()
+    const dialog = page.getByRole("dialog", { name: "Give Website Builders work" })
+    await expect(dialog.getByLabel("Describe the work")).toBeFocused()
+    await expect(dialog.getByLabel("Responsible worker")).toBeHidden()
+    await expect(dialog.getByRole("button", { name: "Choose details myself" })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath("assignment.png"), fullPage: true })
 
     await page.emulateMedia({ forcedColors: "none" })
     const result = await new AxeBuilder({ page })

@@ -109,6 +109,35 @@ export class DesktopBridge {
     const startedAt = Date.now()
     this.active.set(request.id, controller)
     try {
+      if (request.operation === "click") {
+        await this.session.execute({
+          operation: "pointer",
+          action: request.action,
+          windowID: request.windowID,
+          observationID: request.observationID,
+          x: request.x,
+          y: request.y,
+          button: request.button,
+        })
+        if (controller.signal.aborted) return
+        const result: DesktopResult = {
+          operation: "click",
+          receipt: {
+            version: 1,
+            requestID: request.id,
+            startedAt,
+            finishedAt: Date.now(),
+            effect: "interact",
+            outcome: "confirmed",
+            target: { surface: "desktop", windowID: request.windowID },
+            observationID: request.observationID,
+          },
+        }
+        receipt.result = result
+        receipt.failure = undefined
+        await this.deliver(request.id, directory, receipt)
+        return
+      }
       const frame = await this.observe()
       if (controller.signal.aborted) return
       const result: DesktopResult = {
@@ -142,8 +171,14 @@ export class DesktopBridge {
           requestID: request.id,
           startedAt,
           finishedAt: Date.now(),
-          effect: "observe",
+          effect: request.operation === "observe" ? "observe" : "interact",
           outcome: "unknown",
+          ...(request.operation === "click"
+            ? {
+                target: { surface: "desktop" as const, windowID: request.windowID },
+                observationID: request.observationID,
+              }
+            : {}),
         },
       }
       await this.deliver(request.id, directory, receipt)

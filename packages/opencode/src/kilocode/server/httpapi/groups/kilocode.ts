@@ -474,7 +474,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: DesktopReplyPayload,
           success: described(Schema.Boolean, "Desktop reply accepted"),
-          error: HttpApiError.NotFound,
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({ identifier: "kilocode.desktop.reply", summary: "Reply to a desktop request" }),
         ),

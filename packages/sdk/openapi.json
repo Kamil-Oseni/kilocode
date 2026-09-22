@@ -16952,11 +16952,18 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
                 }
               }
             }
@@ -67415,22 +67422,70 @@
         "type": "string"
       },
       "DesktopRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/DesktopRequestID"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["observe"]
+              }
+            },
+            "required": ["id", "sessionID", "operation"],
+            "additionalProperties": false
           },
-          "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
-          },
-          "operation": {
-            "type": "string",
-            "enum": ["observe"]
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["click"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "action": {
+                "type": "string",
+                "enum": ["click", "double_click"]
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "button": {
+                "type": "string",
+                "enum": ["left", "right"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "action", "x", "y", "button"],
+            "additionalProperties": false
           }
-        },
-        "required": ["id", "sessionID", "operation"],
-        "additionalProperties": false
+        ]
       },
       "CanvasRequestID": {
         "type": "string"
@@ -81641,38 +81696,56 @@
         "additionalProperties": false
       },
       "DesktopResult": {
-        "type": "object",
-        "properties": {
-          "operation": {
-            "type": "string",
-            "enum": ["observe"]
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["observe"]
+              },
+              "width": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "mime": {
+                "type": "string",
+                "enum": ["image/png", "image/jpeg"]
+              },
+              "data": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000000
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "width", "height", "mime", "data", "observation", "receipt"],
+            "additionalProperties": false
           },
-          "width": {
-            "type": "integer",
-            "exclusiveMinimum": 0
-          },
-          "height": {
-            "type": "integer",
-            "exclusiveMinimum": 0
-          },
-          "mime": {
-            "type": "string",
-            "enum": ["image/png", "image/jpeg"]
-          },
-          "data": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 20000000
-          },
-          "observation": {
-            "$ref": "#/components/schemas/ComputerUseObservation"
-          },
-          "receipt": {
-            "$ref": "#/components/schemas/ComputerUseReceipt"
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["click"]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": ["operation", "receipt"],
+            "additionalProperties": false
           }
-        },
-        "required": ["operation", "width", "height", "mime", "data", "observation", "receipt"],
-        "additionalProperties": false
+        ]
       },
       "DesktopFailure": {
         "type": "object",

@@ -1077,11 +1077,23 @@ export type BrowserRequest =
 
 export type DesktopRequestId = string
 
-export type DesktopRequest = {
-  id: DesktopRequestId
-  sessionID: string
-  operation: "observe"
-}
+export type DesktopRequest =
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "observe"
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "click"
+      windowID: string
+      observationID: ComputerUseObservationId
+      action: "click" | "double_click"
+      x: number
+      y: number
+      button: "left" | "right"
+    }
 
 export type CanvasRequestId = string
 
@@ -5650,15 +5662,20 @@ export type BrowserFailure = {
   receipt?: ComputerUseReceipt
 }
 
-export type DesktopResult = {
-  operation: "observe"
-  width: number
-  height: number
-  mime: "image/png" | "image/jpeg"
-  data: string
-  observation: ComputerUseObservation
-  receipt: ComputerUseReceipt
-}
+export type DesktopResult =
+  | {
+      operation: "observe"
+      width: number
+      height: number
+      mime: "image/png" | "image/jpeg"
+      data: string
+      observation: ComputerUseObservation
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "click"
+      receipt: ComputerUseReceipt
+    }
 
 export type DesktopFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "timeout" | "unsupported"
@@ -19817,9 +19834,9 @@ export type KilocodeDesktopReplyData = {
 
 export type KilocodeDesktopReplyErrors = {
   /**
-   * Bad request
+   * BadRequest | InvalidRequestError
    */
-  400: BadRequestError
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
   /**
    * Not found
    */

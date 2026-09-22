@@ -320,9 +320,10 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { requestID: DesktopRequestID }
       payload: typeof DesktopReplyPayload.Type
     }) {
-      yield* desktop
-        .reply({ requestID: ctx.params.requestID, result: ctx.payload.result })
-        .pipe(Effect.catchTag("Desktop.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      yield* desktop.reply({ requestID: ctx.params.requestID, result: ctx.payload.result }).pipe(
+        Effect.catchTag("Desktop.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("Desktop.InvalidReplyError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
       return true
     })
     const desktopReject = Effect.fn("KilocodeHttpApi.desktopReject")(function* (ctx: {

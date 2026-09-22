@@ -1,6 +1,6 @@
 // raya_change - native desktop observation host protocol
 import { BusEvent } from "@/bus/bus-event"
-import { Observation, Receipt } from "@/kilocode/computer-use/protocol"
+import { Observation, ObservationID, Receipt } from "@/kilocode/computer-use/protocol"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 
@@ -9,14 +9,30 @@ export const RequestID = Schema.String.pipe(Schema.brand("DesktopRequestID")).an
 })
 export type RequestID = Schema.Schema.Type<typeof RequestID>
 
-export const Request = Schema.Struct({
-  id: RequestID,
-  sessionID: SessionID,
+const Identity = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
+const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
+const Base = { id: RequestID, sessionID: SessionID }
+
+export const ObserveRequest = Schema.Struct({
+  ...Base,
   operation: Schema.Literal("observe"),
-}).annotate({ identifier: "DesktopRequest" })
+})
+
+export const ClickRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("click"),
+  windowID: Identity,
+  observationID: ObservationID,
+  action: Schema.Literals(["click", "double_click"]),
+  x: Unit,
+  y: Unit,
+  button: Schema.Literals(["left", "right"]),
+})
+
+export const Request = Schema.Union([ObserveRequest, ClickRequest]).annotate({ identifier: "DesktopRequest" })
 export type Request = Schema.Schema.Type<typeof Request>
 
-export const Result = Schema.Struct({
+export const ObserveResult = Schema.Struct({
   operation: Schema.Literal("observe"),
   width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
@@ -24,7 +40,14 @@ export const Result = Schema.Struct({
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
   observation: Observation,
   receipt: Receipt,
-}).annotate({ identifier: "DesktopResult" })
+})
+
+export const ClickResult = Schema.Struct({
+  operation: Schema.Literal("click"),
+  receipt: Receipt,
+})
+
+export const Result = Schema.Union([ObserveResult, ClickResult]).annotate({ identifier: "DesktopResult" })
 export type Result = Schema.Schema.Type<typeof Result>
 
 export const ErrorCode = Schema.Literals(["cancelled", "disconnected", "invalid_request", "timeout", "unsupported"])

@@ -10,6 +10,7 @@ const request: DesktopRequest = { id: "desktop_1", sessionID: "ses_desktop", ope
 function setup() {
   const replies: unknown[] = []
   const rejects: unknown[] = []
+  const actions: unknown[] = []
   const events = new Set<(event: SSEPayload, directory?: string) => void>()
   const states = new Set<(state: ConnectionState, error?: Error) => void>()
   const driver: DesktopDriver = {
@@ -22,7 +23,9 @@ function setup() {
       data: "cG5n",
     }),
     current: async () => ({ windowID: "window_1", location: "process|title|bounds" }),
-    perform: async () => undefined,
+    perform: async (action) => {
+      actions.push(action)
+    },
   }
   const client = {
     kilocode: {
@@ -57,7 +60,7 @@ function setup() {
     observed += 1
     return session.observe()
   })
-  return { bridge, events, replies, rejects, observed: () => observed }
+  return { bridge, events, replies, rejects, actions, observed: () => observed }
 }
 
 describe("desktop observation bridge", () => {
@@ -95,6 +98,44 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(test.observed()).toBe(1)
     expect(test.replies).toHaveLength(2)
+    test.bridge.dispose()
+  })
+
+  it("dispatches a click once against the exact fresh observation", async () => {
+    const test = setup()
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const click: DesktopRequest = {
+      id: "desktop_2",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([expect.objectContaining({ operation: "pointer", action: "click", x: 0.5, y: 0.25 })])
+    expect(test.replies[1]).toMatchObject({
+      requestID: click.id,
+      result: { operation: "click", receipt: { effect: "interact", outcome: "confirmed" } },
+    })
+    for (const listener of test.events)
+      listener(
+        { type: "kilocode.desktop.requested", properties: { ...click, id: "desktop_3" } } as SSEPayload,
+        "C:\\workspace",
+      )
+    await Bun.sleep(20)
+    expect(test.actions).toHaveLength(1)
+    expect(test.rejects).toHaveLength(1)
     test.bridge.dispose()
   })
 })

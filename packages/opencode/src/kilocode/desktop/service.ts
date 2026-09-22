@@ -8,7 +8,8 @@ import { Context, Deferred, Duration, Effect, Layer, LayerMap, Schema } from "ef
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ErrorCode, Event, type Failure, type Request, RequestID, type Result } from "./protocol"
 
-export type Input = Omit<Request, "id">
+type WithoutID<T> = T extends unknown ? Omit<T, "id"> : never
+export type Input = WithoutID<Request>
 
 export class HostError extends Schema.TaggedErrorClass<HostError>()("DesktopHostError", {
   code: ErrorCode,
@@ -20,6 +21,10 @@ export class HostError extends Schema.TaggedErrorClass<HostError>()("DesktopHost
 }
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Desktop.NotFoundError", {
+  requestID: RequestID,
+}) {}
+
+export class InvalidReplyError extends Schema.TaggedErrorClass<InvalidReplyError>()("Desktop.InvalidReplyError", {
   requestID: RequestID,
 }) {}
 
@@ -37,7 +42,10 @@ export interface Interface {
   readonly request: (input: Input) => Effect.Effect<Result, HostError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
   readonly cancelSession: (sessionID: Request["sessionID"]) => Effect.Effect<void>
-  readonly reply: (input: { requestID: RequestID; result: Result }) => Effect.Effect<void, NotFoundError>
+  readonly reply: (input: {
+    requestID: RequestID
+    result: Result
+  }) => Effect.Effect<void, NotFoundError | InvalidReplyError>
   readonly reject: (input: { requestID: RequestID; error: Failure }) => Effect.Effect<void, NotFoundError>
 }
 
@@ -150,6 +158,8 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         const pending = (yield* StateService).pending
         const entry = pending.get(input.requestID)
         if (!entry) return yield* new NotFoundError({ requestID: input.requestID })
+        if (entry.info.operation !== input.result.operation)
+          return yield* new InvalidReplyError({ requestID: input.requestID })
         pending.delete(input.requestID)
         return yield* Deferred.succeed(entry.deferred, input.result)
       })

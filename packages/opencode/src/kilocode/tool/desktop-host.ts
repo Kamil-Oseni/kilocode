@@ -1,5 +1,6 @@
 // raya_change - model-facing native desktop observation tool
 import { Desktop, HostError, type Input } from "@/kilocode/desktop/service"
+import { ObservationID } from "@/kilocode/computer-use/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -30,6 +31,8 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
         Effect.gen(function* () {
           yield* ctx.ask({ permission: "desktop_observe", patterns: ["foreground-window"], always: [], metadata: {} })
           const result = yield* run(desktop, { operation: "observe", sessionID: ctx.sessionID }, ctx.abort)
+          if (result.operation !== "observe")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
           const summary = {
             width: result.width,
             height: result.height,
@@ -54,4 +57,58 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
   }),
 )
 
-export const DesktopTools = [DesktopObserveTool]
+const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
+const ClickParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact opaque window identity returned by desktop_observe.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh observation ID returned by desktop_observe. It can be used only once.",
+  }),
+  x: Unit.annotate({ description: "Horizontal position normalized from 0 at the left to 1 at the right." }),
+  y: Unit.annotate({ description: "Vertical position normalized from 0 at the top to 1 at the bottom." }),
+  action: Schema.optional(Schema.Literals(["click", "double_click"])).annotate({
+    description: "Defaults to a single click.",
+  }),
+  button: Schema.optional(Schema.Literals(["left", "right"])).annotate({ description: "Defaults to left." }),
+})
+
+export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Service, "desktop_click">(
+  "desktop_click",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Click exact normalized coordinates in the foreground window grounded by a fresh desktop_observe result. The host refuses changed windows, stale observations, reuse, and manual takeover before dispatch.",
+      parameters: ClickParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const point = `${params.window_id}:${params.x.toFixed(4)},${params.y.toFixed(4)}`
+          yield* ctx.ask({ permission: "desktop_click", patterns: [point], always: [], metadata: {} })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "click",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              action: params.action ?? "click",
+              button: params.button ?? "left",
+              x: params.x,
+              y: params.y,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "click")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: params.action === "double_click" ? "Double-clicked desktop" : "Clicked desktop",
+            output: JSON.stringify({ receipt: result.receipt }, undefined, 2),
+            metadata: {},
+          }
+        }),
+    }
+  }),
+)
+
+export const DesktopTools = [DesktopObserveTool, DesktopClickTool]

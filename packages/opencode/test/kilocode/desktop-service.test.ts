@@ -40,10 +40,38 @@ it.instance(
         target: observation.target,
         observationID: observation.id,
       }
-      const result = { operation: "observe" as const, width: 10, height: 8, mime: "image/png" as const, data: "cG5n", observation, receipt }
+      const result = {
+        operation: "observe" as const,
+        width: 10,
+        height: 8,
+        mime: "image/png" as const,
+        data: "cG5n",
+        observation,
+        receipt,
+      }
       yield* desktop.reply({ requestID: request.id, result })
       expect(yield* Fiber.join(fiber)).toEqual(result)
       expect(yield* desktop.list()).toEqual([])
+
+      const click = yield* desktop
+        .request({
+          operation: "click",
+          sessionID,
+          windowID: "window_1",
+          observationID: observation.id,
+          action: "click",
+          button: "left",
+          x: 0.5,
+          y: 0.25,
+        })
+        .pipe(Effect.forkChild)
+      const clickRequest = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+      const mismatch = yield* desktop.reply({ requestID: clickRequest.id, result }).pipe(Effect.flip)
+      expect(mismatch._tag).toBe("Desktop.InvalidReplyError")
+      const clickReceipt = { ...receipt, requestID: clickRequest.id, effect: "interact" as const }
+      const clicked = { operation: "click" as const, receipt: clickReceipt }
+      yield* desktop.reply({ requestID: clickRequest.id, result: clicked })
+      expect(yield* Fiber.join(click)).toEqual(clicked)
     }),
   { git: true },
 )

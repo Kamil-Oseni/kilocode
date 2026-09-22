@@ -38,6 +38,7 @@ import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
 type State = {
   hooks: Hooks[]
+  origins: WeakMap<Hooks, { trusted: boolean; source: string }> // kilocode_change
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -56,6 +57,7 @@ export interface Interface {
     output: Output,
   ) => Effect.Effect<Output>
   readonly list: () => Effect.Effect<Hooks[]>
+  readonly sources?: () => Effect.Effect<Array<{ hook: Hooks; trusted: boolean; source: string }>> // kilocode_change
   readonly init: () => Effect.Effect<void>
 }
 
@@ -119,18 +121,30 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
   return result
 }
 
-async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+// kilocode_change start - retain plugin declaration trust through hook registration
+async function applyPlugin(
+  load: PluginLoader.Loaded,
+  input: PluginInput,
+  hooks: Hooks[],
+  origins: State["origins"], // kilocode_change
+  trusted: boolean,
+) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
     await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    const hook = await (plugin as PluginModule).server(input, load.options)
+    hooks.push(hook)
+    origins.set(hook, { trusted, source: load.spec }) // kilocode_change
     return
   }
 
   for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+    const hook = await server(input, load.options)
+    hooks.push(hook)
+    origins.set(hook, { trusted, source: load.spec }) // kilocode_change
   }
 }
+// kilocode_change end
 
 const layer = Layer.effect(
   Service,
@@ -142,6 +156,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const origins = new WeakMap<Hooks, { trusted: boolean; source: string }>() // kilocode_change
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -183,7 +198,12 @@ const layer = Layer.effect(
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
-          if (init._tag === "Some") hooks.push(init.value)
+          // kilocode_change start - built-in plugins are trusted Routine hosts
+          if (init._tag === "Some") {
+            hooks.push(init.value)
+            origins.set(init.value, { trusted: true, source: "builtin" })
+          }
+          // kilocode_change end
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
@@ -195,6 +215,9 @@ const layer = Layer.effect(
           PluginLoader.loadExternal({
             items: plugins,
             kind: "server",
+            // kilocode_change start - preserve the declaring config scope through runtime registration
+            finish: async (load, origin) => ({ load, origin }),
+            // kilocode_change end
             report: {
               start(candidate) {},
               missing(candidate, _retry, message) {},
@@ -224,13 +247,15 @@ const layer = Layer.effect(
             },
           }),
         )
-        for (const load of loaded) {
-          if (!load) continue
+        // kilocode_change start - register external hooks with their declaring config scope
+        for (const item of loaded) {
+          if (!item) continue
+          const load = item.load
 
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, hooks),
+            try: () => applyPlugin(load, input, hooks, origins, item.origin.scope === "global"),
             catch: (err) => {
               const message = errorMessage(err)
               return message
@@ -248,6 +273,7 @@ const layer = Layer.effect(
             }),
           )
         }
+        // kilocode_change end
 
         // Notify plugins of current config
         for (const hook of hooks) {
@@ -285,7 +311,7 @@ const layer = Layer.effect(
           ),
         )
 
-        return { hooks }
+        return { hooks, origins } // kilocode_change
       }),
     )
 
@@ -309,11 +335,18 @@ const layer = Layer.effect(
       return s.hooks
     })
 
+    // kilocode_change start - Routine tool admission needs the origin trust discarded by list()
+    const sources = Effect.fn("Plugin.sources")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.hooks.map((hook) => ({ hook, ...(s.origins.get(hook) ?? { trusted: false, source: "unknown" }) }))
+    })
+    // kilocode_change end
+
     const init = Effect.fn("Plugin.init")(function* () {
       yield* InstanceState.get(state)
     })
 
-    return Service.of({ trigger, list, init })
+    return Service.of({ trigger, list, sources, init }) // kilocode_change
   }),
 )
 

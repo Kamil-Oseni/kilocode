@@ -159,6 +159,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     agent: input.agent,
     permission: input.session.permission,
     networkRestricted: restricted, // kilocode_change - let the registry suppress code-mode in restricted sessions
+    trustedOnly: input.session.metadata?.rayaRoutine !== undefined, // kilocode_change - fail closed on local plugin tools in Routines
   })) {
     const base = ToolJsonSchema.fromTool(item)
     const schema = ProviderTransform.schema(input.model, base)

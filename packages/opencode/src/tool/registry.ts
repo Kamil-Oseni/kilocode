@@ -82,6 +82,7 @@ import { Storage } from "@/storage/storage" // kilocode_change // raya_change - 
 import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
 import { Desktop } from "@/kilocode/desktop/service" // kilocode_change // raya_change - native desktop host
 import { Canvas } from "@/kilocode/canvas/service" // kilocode_change // raya_change - Milestone E canvas bridge
+import { ToolTrust } from "@/kilocode/tool/trust" // kilocode_change
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -112,6 +113,7 @@ export interface Interface {
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
     networkRestricted?: boolean // kilocode_change - hide network-backed code-mode catalogs in restricted sessions
+    trustedOnly?: boolean // kilocode_change - Routine sessions reject project/local plugin tools
   }) => Effect.Effect<Tool.Def[]>
   // kilocode_change end
 }
@@ -252,16 +254,20 @@ const layer = Layer.effect(
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
-            custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+            custom.push(ToolTrust.mark(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def), false)) // kilocode_change - loose scripts are untrusted for Routines
           }
         }
 
-        const plugins = yield* plugin.list()
-        for (const p of plugins) {
-          for (const [id, def] of Object.entries(p.tool ?? {})) {
-            custom.push(fromPlugin(id, def))
+        // kilocode_change start - preserve global/internal plugin trust for Routine admission
+        const plugins = plugin.sources
+          ? yield* plugin.sources()
+          : (yield* plugin.list()).map((hook) => ({ hook, trusted: false, source: "unknown" }))
+        for (const item of plugins) {
+          for (const [id, def] of Object.entries(item.hook.tool ?? {})) {
+            custom.push(ToolTrust.mark(fromPlugin(id, def), item.trusted))
           }
         }
+        // kilocode_change end
 
         // kilocode_change start
         const cfg = yield* config.get()
@@ -376,6 +382,7 @@ const layer = Layer.effect(
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const cfg = yield* config.get() // kilocode_change
       const filtered = (yield* all()).filter((tool) => {
+        if (input.trustedOnly && !ToolNetwork.isBuiltin(tool) && !ToolTrust.check(tool)) return false // kilocode_change
         if (!KiloToolRegistry.available(tool, input.agent)) return false // kilocode_change
         if (tool.id === WebSearchTool.id) {
           if (cfg.web_search === true) return true // kilocode_change

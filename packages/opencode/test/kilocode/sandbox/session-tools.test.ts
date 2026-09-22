@@ -46,8 +46,9 @@ const agent: Agent.Info = {
   options: {},
 }
 const approvals: Permission.AskInput[] = []
+const registrations: boolean[] = []
 
-function session(directory: string): Session.Info {
+function session(directory: string, routine = false): Session.Info {
   return {
     id: sessionID,
     slug: "sandbox-session-tools",
@@ -56,6 +57,7 @@ function session(directory: string): Session.Info {
     title: "Sandbox worktree isolation",
     version: "test",
     permission: Permission.fromConfig({ "*": "allow" }),
+    ...(routine ? { metadata: { rayaRoutine: { agentID: "routine", runID: "run" } } } : {}),
     time: { created: 0, updated: 0 },
   }
 }
@@ -153,18 +155,26 @@ const registry = Layer.effect(
       ids: () => Effect.succeed(list.map((item) => item.id)),
       all: () => Effect.succeed(list),
       named: () => Effect.die(new Error("named tools are not used by this test")),
-      tools: () => Effect.succeed(list),
+      tools: (input) =>
+        Effect.sync(() => {
+          registrations.push(input.trustedOnly === true)
+          return list
+        }),
     })
   }),
 ).pipe(Layer.provideMerge(base))
 const it = testEffect(registry)
 const mac = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec") ? it.live : it.live.skip
 
-function resolve(ctx: InstanceContext, metadataCalls: { toolCallID: string; value: Record<string, any> }[] = []) {
+function resolve(
+  ctx: InstanceContext,
+  metadataCalls: { toolCallID: string; value: Record<string, any> }[] = [],
+  routine = false,
+) {
   return SessionTools.resolve({
     agent,
     model,
-    session: session(ctx.directory),
+    session: session(ctx.directory, routine),
     processor: {
       message: message(ctx),
       // capture metadata writes so tests can assert on recorded approval provenance
@@ -181,6 +191,16 @@ function resolve(ctx: InstanceContext, metadataCalls: { toolCallID: string; valu
     memoryCache: {},
   }).pipe(Effect.provideService(InstanceRef, ctx))
 }
+
+it.live("requests trusted plugin tools only for Routine sessions", () =>
+  Effect.gen(function* () {
+    const dirs = yield* fixture()
+    const start = registrations.length
+    yield* resolve(dirs.ctx)
+    yield* resolve(dirs.ctx, [], true)
+    expect(registrations.slice(start)).toEqual([false, true])
+  }),
+)
 
 function call(tool: AITool, input: unknown, id: string) {
   const options: ToolExecutionOptions = {

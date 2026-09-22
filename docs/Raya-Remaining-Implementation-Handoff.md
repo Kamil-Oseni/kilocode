@@ -1,17 +1,21 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `2a8e6b8176` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+9af3008710.kamil-oseni.1790111074782` installs grounded window switching, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `2a8e6b8176` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+8461b3d974.kamil-oseni.1790112002819` installs grounded window switching, visible physical capture bounds, atomic mixed-DPI pointer gestures, atomic text entry and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
 
+## ChatGPT 2026-09-22 17:22 America/Toronto - visible desktop grounding installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+8461b3d974.kamil-oseni.1790112002819` is installed without a forced reload. Retained VSIX `raya.48a20b2ab85472ce0e613fb6c328d94bb86290f618b5ef311b20b872e0ee656a.vsix` is **522,223,902 bytes**, SHA-256 `48A20B2AB85472CE0E613FB6C328D94BB86290F618B5EF311B20B872E0EE656A`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. SDK output was unchanged, the verified CLI was reused, and sequential validation passed both typechecks, lint and production bundling. Cleanup removed one old vault package, staged package and extension; C: has **127,364,157,440 bytes free**. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains.
+
 ## ChatGPT 2026-09-22 17:17 America/Toronto - preserve visible physical observation bounds
 
 Preserve product commit `2a8e6b8176`. `Get-RayaWindow` must intersect the foreground native rectangle with the physical virtual desktop before capture. Keep the resulting visible rectangle identical across the location fingerprint, returned frame dimensions, `CopyFromScreen` origin and normalized pointer/drag mapping. Do not restore full off-screen bounds: the model would otherwise ground actions against pixels it cannot see and the native safety boundary must refuse.
 
-Evidence passes **33 focused tests / 134 assertions**, extension typecheck, ESLint, Knip, targeted formatting, the marker guard and real embedded-C# compilation/enumeration. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `9af3008710`; include this source in the next coherent capped snapshot. A real partially off-screen foreground window remains installed-host acceptance.
+Evidence passes **33 focused tests / 134 assertions**, extension typecheck, ESLint, Knip, targeted formatting, the marker guard and real embedded-C# compilation/enumeration. The protected push passed all 29 JavaScript/TypeScript package typechecks. This source is installed in the receipt above. A real partially off-screen foreground window remains installed-host acceptance.
 
 ## ChatGPT 2026-09-22 17:06 America/Toronto - atomic desktop text installation receipt
 

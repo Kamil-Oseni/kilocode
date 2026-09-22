@@ -716,6 +716,41 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.screenshot({ path: info.outputPath("organization-editor.png"), fullPage: true })
 })
 
+test("narrow organization editor reveals one settings group at a time", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Website Builders 3" }).click()
+  await page.getByRole("button", { name: "Settings" }).click()
+
+  await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible()
+  await expect(page.getByLabel("Operating policy")).toBeHidden()
+  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeHidden()
+
+  await page.getByText("Policy and spending", { exact: true }).click()
+  await expect(page.getByLabel("Operating policy")).toBeVisible()
+  await page.getByText("Policy and spending", { exact: true }).click()
+  const counsel = page.locator(".routines-organization-edit-members > li").filter({
+    has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
+  })
+  await counsel.getByText("Worker settings", { exact: true }).click()
+  await expect(counsel.getByLabel("Role")).toBeVisible()
+  await counsel.getByText("Worker settings", { exact: true }).click()
+  await page.getByText("Who can assign work", { exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeVisible()
+  await page.getByText("Who can assign work", { exact: true }).click()
+  await page.getByText("Archive organization", { exact: true }).click()
+  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeVisible()
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const result = await new AxeBuilder({ page })
+    .include(".routines-view")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze()
+  expect(result.violations).toEqual([])
+  await page.screenshot({ path: info.outputPath("organization-editor-narrow.png"), fullPage: true })
+})
+
 test("production schedule preview keeps selected weekdays and timezone before confirmation", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")

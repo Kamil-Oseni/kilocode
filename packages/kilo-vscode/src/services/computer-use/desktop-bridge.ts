@@ -18,7 +18,7 @@ export interface DesktopConnection {
   getClient(): KiloClient
 }
 
-type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure }
+type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure; delivered?: boolean }
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type ActionRequest = Exclude<DesktopRequest, CaptureRequest>
 type ActionResult = Exclude<DesktopResult, { operation: "observe" | "watch" }>
@@ -97,6 +97,7 @@ export class DesktopBridge {
       await this.deliver(request.id, directory, prior)
       return
     }
+    this.compact()
     if (this.receipts.size >= 256) {
       await this.deliver(request.id, directory, {
         fingerprint,
@@ -286,9 +287,26 @@ export class DesktopBridge {
       const response = receipt.result
         ? await client.reply({ requestID, directory, result: receipt.result })
         : await client.reject({ requestID, directory, error: receipt.failure! })
-      if (response.error) console.error("[Raya] Desktop result delivery failed; retained receipt prevents replay")
+      if (response.error || response.data !== true) {
+        console.error("[Raya] Desktop result delivery failed; retained receipt prevents replay")
+        return
+      }
+      if (this.receipts.get(requestID) !== receipt) return
+      receipt.delivered = true
+      await this.retain(receipt).catch((error) =>
+        console.error("[Raya] Desktop receipt acknowledgement persistence failed; stale receipt remains safe", error),
+      )
     } catch (error) {
       console.error("[Raya] Desktop result delivery failed; retained receipt prevents replay", error)
+    }
+  }
+
+  private compact(): void {
+    if (this.receipts.size < 256) return
+    for (const [id, receipt] of this.receipts) {
+      if (!receipt.delivered) continue
+      this.receipts.delete(id)
+      if (this.receipts.size < 256) return
     }
   }
 
@@ -318,7 +336,10 @@ export class DesktopBridge {
     if (!this.store || !receipt.result || !persistable(receipt.result)) return Promise.resolve()
     this.writes = this.writes.then(() => {
       const items = [...this.receipts.entries()]
-        .filter((entry): entry is [string, Receipt & { result: ActionResult }] => persistable(entry[1].result))
+        .filter(
+          (entry): entry is [string, Receipt & { result: ActionResult }] =>
+            !entry[1].delivered && persistable(entry[1].result),
+        )
         .map(([key, value]) => ({ id: key, fingerprint: value.fingerprint, result: value.result }))
         .slice(-256)
       return Promise.resolve(this.store!.update(journal, { version: 1, items }))

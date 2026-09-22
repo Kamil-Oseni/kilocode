@@ -128,6 +128,20 @@ describe("desktop observation bridge", () => {
     test.bridge.dispose()
   })
 
+  it("retires acknowledged receipts so prolonged desktop use does not reach the journal limit", async () => {
+    const test = setup()
+    for (const index of Array.from({ length: 257 }, (_, value) => value)) {
+      const next = { ...request, id: `desktop_long_${index}` }
+      for (const listener of test.events)
+        listener({ type: "kilocode.desktop.requested", properties: next } as SSEPayload, "C:\\workspace")
+      await Bun.sleep(0)
+    }
+    expect(test.observed()).toBe(257)
+    expect(test.replies).toHaveLength(257)
+    expect(test.rejects).toEqual([])
+    test.bridge.dispose()
+  })
+
   it("delivers a bounded grounded frame sequence with one receipt", async () => {
     const test = setup()
     const watch: DesktopRequest = {
@@ -241,6 +255,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
+    expect(store.read()).toEqual({ version: 1, items: [] })
     second.bridge.dispose()
   })
 

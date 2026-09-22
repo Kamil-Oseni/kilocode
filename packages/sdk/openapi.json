@@ -16852,6 +16852,239 @@
         ]
       }
     },
+    "/kilocode/desktop": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.desktop.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending desktop host requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DesktopRequest"
+                  },
+                  "description": "Pending desktop host requests"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List pending desktop requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.desktop.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/desktop/{requestID}/reply": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.desktop.reply",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/DesktopRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Desktop reply accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Desktop reply accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reply to a desktop request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "$ref": "#/components/schemas/DesktopResult"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.desktop.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/desktop/{requestID}/reject": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.desktop.reject",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/DesktopRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Desktop rejection accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Desktop rejection accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reject a desktop request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "$ref": "#/components/schemas/DesktopFailure"
+                  }
+                },
+                "required": ["error"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.desktop.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/canvas": {
       "get": {
         "tags": ["kilocode"],
@@ -64046,6 +64279,12 @@
             "$ref": "#/components/schemas/EventKilocodeBrowserCancelled"
           },
           {
+            "$ref": "#/components/schemas/EventKilocodeDesktopRequested"
+          },
+          {
+            "$ref": "#/components/schemas/EventKilocodeDesktopCancelled"
+          },
+          {
             "$ref": "#/components/schemas/EventKilocodeCanvasRequested"
           },
           {
@@ -67172,6 +67411,27 @@
           }
         ]
       },
+      "DesktopRequestID": {
+        "type": "string"
+      },
+      "DesktopRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DesktopRequestID"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "operation": {
+            "type": "string",
+            "enum": ["observe"]
+          }
+        },
+        "required": ["id", "sessionID", "operation"],
+        "additionalProperties": false
+      },
       "CanvasRequestID": {
         "type": "string"
       },
@@ -69363,6 +69623,12 @@
               },
               {
                 "$ref": "#/components/schemas/EventKilocodeBrowserCancelled"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeDesktopRequested"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeDesktopCancelled"
               },
               {
                 "$ref": "#/components/schemas/EventKilocodeCanvasRequested"
@@ -81374,6 +81640,59 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
+      "DesktopResult": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["observe"]
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "mime": {
+            "type": "string",
+            "enum": ["image/png", "image/jpeg"]
+          },
+          "data": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000000
+          },
+          "observation": {
+            "$ref": "#/components/schemas/ComputerUseObservation"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComputerUseReceipt"
+          }
+        },
+        "required": ["operation", "width", "height", "mime", "data", "observation", "receipt"],
+        "additionalProperties": false
+      },
+      "DesktopFailure": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["cancelled", "disconnected", "invalid_request", "timeout", "unsupported"]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComputerUseReceipt"
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
       "CanvasResult": {
         "type": "object",
         "properties": {
@@ -87278,6 +87597,55 @@
             "properties": {
               "requestID": {
                 "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["cancelled", "disposed", "timeout"]
+              }
+            },
+            "required": ["requestID", "sessionID", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeDesktopRequested": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.desktop.requested"]
+          },
+          "properties": {
+            "$ref": "#/components/schemas/DesktopRequest"
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeDesktopCancelled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.desktop.cancelled"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "$ref": "#/components/schemas/DesktopRequestID"
               },
               "sessionID": {
                 "type": "string",

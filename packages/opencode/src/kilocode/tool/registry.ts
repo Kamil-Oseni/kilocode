@@ -38,6 +38,8 @@ import { ChiefRouteTool } from "./chief-route" // raya_change - Milestone B inte
 import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C selectable options
 import { BrowserTools } from "./browser-host" // raya_change - Milestone F browser tools
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
+import { DesktopTools } from "./desktop-host"
+import { Desktop } from "@/kilocode/desktop/service"
 import { CanvasTools } from "./canvas-host" // raya_change - Milestone E canvas tools
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import { DiscoverCapabilitiesTool } from "./discover-capabilities"
@@ -97,6 +99,7 @@ export namespace KiloToolRegistry {
       runs?: Pick<SessionRunState.Interface, "inspect">
     }, // raya_change - Milestone A
     browser?: Browser.Interface, // raya_change - Milestone F browser bridge
+    desktop?: Desktop.Interface,
     canvas?: Canvas.Interface, // raya_change - Milestone E canvas bridge
   ) {
     return Effect.gen(function* () {
@@ -127,6 +130,9 @@ export namespace KiloToolRegistry {
         ? yield* Effect.all(BrowserTools).pipe(Effect.provideService(Browser.Service, browser))
         : undefined
       // raya_change end
+      const desktopTools = desktop
+        ? yield* Effect.all(DesktopTools).pipe(Effect.provideService(Desktop.Service, desktop))
+        : undefined
       // raya_change start - Milestone E canvas tools
       const canvasTools = canvas
         ? yield* Effect.all(CanvasTools).pipe(Effect.provideService(Canvas.Service, canvas))
@@ -176,6 +182,7 @@ export namespace KiloToolRegistry {
           presentation,
           pdf,
           browser: browserTools, // raya_change - Milestone F browser tools
+          desktop: desktopTools,
           canvas: canvasTools, // raya_change - Milestone E canvas tools
           ...goal,
           scheduleTask: routines?.scheduleTask,
@@ -214,6 +221,7 @@ export namespace KiloToolRegistry {
         presentation,
         pdf,
         browser: browserTools, // raya_change - Milestone F browser tools
+        desktop: desktopTools,
         canvas: canvasTools, // raya_change - Milestone E canvas tools
         ...goal,
         scheduleTask: routines?.scheduleTask,
@@ -258,6 +266,7 @@ export namespace KiloToolRegistry {
       chief?: Tool.Info // raya_change - Milestone B
       ask?: Tool.Info // raya_change - Milestone C
       browser?: Tool.Info[] // raya_change - Milestone F
+      desktop?: Tool.Info[]
       canvas?: Tool.Info[] // raya_change - Milestone E
       scheduleTask?: Tool.Info
       inspectRoutines?: Tool.Info
@@ -301,6 +310,7 @@ export namespace KiloToolRegistry {
       const healRefine = tools.healRefine ? yield* Tool.init(tools.healRefine) : undefined // raya_change - hybrid self-heal
       const healVerify = tools.healVerify ? yield* Tool.init(tools.healVerify) : undefined
       const browser = tools.browser ? yield* Effect.all(tools.browser.map(Tool.init)) : [] // raya_change - Milestone F
+      const desktop = tools.desktop ? yield* Effect.all(tools.desktop.map(Tool.init)) : []
       const canvas = tools.canvas ? yield* Effect.all(tools.canvas.map(Tool.init)) : [] // raya_change - Milestone E
       const scheduleTask = tools.scheduleTask ? yield* Tool.init(tools.scheduleTask) : undefined
       const inspectRoutines = tools.inspectRoutines ? yield* Tool.init(tools.inspectRoutines) : undefined
@@ -351,6 +361,7 @@ export namespace KiloToolRegistry {
         presentation,
         pdf,
         browser, // raya_change - Milestone F
+        desktop,
         canvas, // raya_change - Milestone E
         scheduleTask,
         inspectRoutines,
@@ -453,6 +464,7 @@ export namespace KiloToolRegistry {
       chief?: Tool.Def // raya_change - Milestone B
       ask?: Tool.Def // raya_change - Milestone C
       browser?: Tool.Def[] // raya_change - Milestone F
+      desktop?: Tool.Def[]
       canvas?: Tool.Def[] // raya_change - Milestone E
       scheduleTask?: Tool.Def
       inspectRoutines?: Tool.Def
@@ -504,6 +516,7 @@ export namespace KiloToolRegistry {
       ...(tools.presentation ? [tools.presentation] : []),
       ...(tools.pdf ? [tools.pdf] : []),
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.browser ?? []) : []), // raya_change - Milestone F
+      ...(Flag.KILO_CLIENT === "vscode" ? (tools.desktop ?? []) : []),
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.canvas ?? []) : []), // raya_change - Milestone E
       ...(tools.scheduleTask ? [tools.scheduleTask] : []),
       ...(tools.inspectRoutines ? [tools.inspectRoutines] : []),

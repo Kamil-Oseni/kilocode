@@ -80,6 +80,7 @@ import { McpCatalog } from "@/mcp/catalog"
 import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change // raya_change - Milestone A goal storage
 import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
+import { Desktop } from "@/kilocode/desktop/service" // kilocode_change // raya_change - native desktop host
 import { Canvas } from "@/kilocode/canvas/service" // kilocode_change // raya_change - Milestone E canvas bridge
 
 export function webSearchEnabled(
@@ -154,12 +155,14 @@ const layer = Layer.effect(
     const manager = Option.getOrUndefined(yield* Effect.serviceOption(AgentManager.Service))
     const notebook = Option.getOrUndefined(yield* Effect.serviceOption(Notebook.Service))
     const browser = Option.getOrUndefined(yield* Effect.serviceOption(Browser.Service)) // kilocode_change // raya_change - Milestone F
+    const desktop = Option.getOrUndefined(yield* Effect.serviceOption(Desktop.Service)) // kilocode_change // raya_change
     const canvas = Option.getOrUndefined(yield* Effect.serviceOption(Canvas.Service)) // kilocode_change // raya_change - Milestone E
     const kiloToolInfos = yield* KiloToolRegistry.infos(
       manager,
       notebook,
       storage ? { storage, sessions, runs } : undefined,
       browser, // kilocode_change // raya_change - Milestone F browser tools
+      desktop, // kilocode_change // raya_change - native desktop tools
       canvas, // kilocode_change // raya_change - Milestone E canvas tools
     ).pipe(Effect.provide(MemoryService.layer)) // kilocode_change // raya_change - Milestone A goal tools
     // kilocode_change end
@@ -553,6 +556,7 @@ export const node = LayerNode.suspend(() =>
       AgentManager.node,
       Notebook.node,
       Browser.node, // kilocode_change // raya_change - Milestone F browser bridge
+      Desktop.node, // kilocode_change // raya_change - native desktop host
       Canvas.node, // kilocode_change // raya_change - Milestone E canvas bridge
       RepositoryCache.node,
       KiloSessions.node,

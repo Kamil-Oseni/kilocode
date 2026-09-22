@@ -79,6 +79,9 @@ import type {
   ConfigUpdateResponses,
   ConfigWarningsErrors,
   ConfigWarningsResponses,
+  DesktopFailure,
+  DesktopRequestId,
+  DesktopResult,
   EnhancePromptEnhanceErrors,
   EnhancePromptEnhanceResponses,
   EventSubscribeResponses,
@@ -223,6 +226,12 @@ import type {
   KilocodeDesignSystemGetResponses,
   KilocodeDesignSystemSetErrors,
   KilocodeDesignSystemSetResponses,
+  KilocodeDesktopListErrors,
+  KilocodeDesktopListResponses,
+  KilocodeDesktopRejectErrors,
+  KilocodeDesktopRejectResponses,
+  KilocodeDesktopReplyErrors,
+  KilocodeDesktopReplyResponses,
   KilocodeGoalClearErrors,
   KilocodeGoalClearResponses,
   KilocodeGoalCreateErrors,
@@ -8275,6 +8284,118 @@ export class Browser extends HeyApiClient {
   }
 }
 
+export class Desktop extends HeyApiClient {
+  /**
+   * List pending desktop requests
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeDesktopListResponses, KilocodeDesktopListErrors, ThrowOnError>({
+      url: "/kilocode/desktop",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to a desktop request
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: DesktopRequestId
+      directory?: string
+      workspace?: string
+      result?: DesktopResult
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "result" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeDesktopReplyResponses,
+      KilocodeDesktopReplyErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/desktop/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject a desktop request
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: DesktopRequestId
+      directory?: string
+      workspace?: string
+      error?: DesktopFailure
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "error" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeDesktopRejectResponses,
+      KilocodeDesktopRejectErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/desktop/{requestID}/reject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Canvas extends HeyApiClient {
   /**
    * List pending canvas requests
@@ -12566,6 +12687,11 @@ export class Kilocode extends HeyApiClient {
   private _browser?: Browser
   get browser(): Browser {
     return (this._browser ??= new Browser({ client: this.client }))
+  }
+
+  private _desktop?: Desktop
+  get desktop(): Desktop {
+    return (this._desktop ??= new Desktop({ client: this.client }))
   }
 
   private _canvas?: Canvas

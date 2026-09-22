@@ -34,6 +34,7 @@ import { Question } from "@/question"
 import { Notebook } from "@/kilocode/notebook/service"
 import { AgentManager } from "@/kilocode/agent-manager/service"
 import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
+import { Desktop } from "@/kilocode/desktop/service" // kilocode_change // raya_change - native desktop host
 import { Canvas } from "@/kilocode/canvas/service" // kilocode_change // raya_change - Milestone E canvas bridge
 import { KiloViewers } from "@/kilocode/presence/service"
 // kilocode_change end
@@ -325,6 +326,7 @@ export function createRoutes(
       AgentManager.defaultLayer,
       Notebook.defaultLayer,
       Browser.defaultLayer, // kilocode_change // raya_change - Milestone F browser bridge
+      Desktop.defaultLayer, // kilocode_change // raya_change - native desktop host
       Canvas.defaultLayer, // kilocode_change // raya_change - Milestone E canvas bridge
       KiloViewers.defaultLayer,
       SyncEvent.defaultLayer,

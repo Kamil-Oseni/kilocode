@@ -464,6 +464,7 @@ export function prepare(cfg: Config.Info): KiloData {
           browser_screenshot: "allow" as const,
           browser_evaluate: "allow" as const,
           browser_smoke_test: "allow" as const, // raya_change - Milestone G authenticated smoke tests
+          desktop_observe: "allow" as const,
           create_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
           update_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
         }
@@ -904,6 +905,7 @@ export function patchAgents(
           browser_screenshot: "allow",
           browser_evaluate: "allow",
           browser_smoke_test: "allow",
+          desktop_observe: "allow",
           create_canvas: "allow",
           update_canvas: "allow",
         }),

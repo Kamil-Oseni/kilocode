@@ -74,6 +74,12 @@ import {
   Result as BrowserResult,
 } from "@/kilocode/browser/protocol"
 // raya_change end
+import {
+  Failure as DesktopFailure,
+  Request as DesktopRequest,
+  RequestID as DesktopRequestID,
+  Result as DesktopResult,
+} from "@/kilocode/desktop/protocol"
 // raya_change start - Milestone E canvas API contracts
 import {
   Failure as CanvasFailure,
@@ -190,6 +196,8 @@ export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
 export const SelfHealVerificationPublishPayload = RayaSelfHeal.VerificationPublish // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
 export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
+export const DesktopReplyPayload = Schema.Struct({ result: DesktopResult })
+export const DesktopRejectPayload = Schema.Struct({ error: DesktopFailure })
 export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
 export const CanvasRejectPayload = Schema.Struct({ error: CanvasFailure }) // raya_change - Milestone E
 
@@ -224,6 +232,9 @@ export const KilocodePaths = {
   browserUploadRelease: `${root}/browser/uploads/:uploadID/files/:fileID/release`,
   browserReply: `${root}/browser/:requestID/reply`, // raya_change - Milestone F browser host API
   browserReject: `${root}/browser/:requestID/reject`, // raya_change - Milestone F browser host API
+  desktopList: `${root}/desktop`,
+  desktopReply: `${root}/desktop/:requestID/reply`,
+  desktopReject: `${root}/desktop/:requestID/reject`,
   canvasList: `${root}/canvas`, // raya_change - Milestone E canvas host API
   canvasReply: `${root}/canvas/:requestID/reply`, // raya_change - Milestone E canvas host API
   canvasReject: `${root}/canvas/:requestID/reject`, // raya_change - Milestone E canvas host API
@@ -452,6 +463,30 @@ export const KilocodeApi = HttpApi.make("kilocode")
           }),
         ),
         // raya_change end
+        HttpApiEndpoint.get("desktopList", KilocodePaths.desktopList, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(DesktopRequest), "Pending desktop host requests"),
+        }).annotateMerge(
+          OpenApi.annotations({ identifier: "kilocode.desktop.list", summary: "List pending desktop requests" }),
+        ),
+        HttpApiEndpoint.post("desktopReply", KilocodePaths.desktopReply, {
+          params: { requestID: DesktopRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: DesktopReplyPayload,
+          success: described(Schema.Boolean, "Desktop reply accepted"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({ identifier: "kilocode.desktop.reply", summary: "Reply to a desktop request" }),
+        ),
+        HttpApiEndpoint.post("desktopReject", KilocodePaths.desktopReject, {
+          params: { requestID: DesktopRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: DesktopRejectPayload,
+          success: described(Schema.Boolean, "Desktop rejection accepted"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({ identifier: "kilocode.desktop.reject", summary: "Reject a desktop request" }),
+        ),
         // raya_change start - Milestone E canvas host API
         HttpApiEndpoint.get("canvasList", KilocodePaths.canvasList, {
           query: WorkspaceRoutingQuery,

@@ -121,6 +121,8 @@ export type Event =
   | EventKiloSessionsRemoteStatusChanged
   | EventKilocodeBrowserRequested
   | EventKilocodeBrowserCancelled
+  | EventKilocodeDesktopRequested
+  | EventKilocodeDesktopCancelled
   | EventKilocodeCanvasRequested
   | EventKilocodeCanvasCancelled
   | EventMemoryStatus1
@@ -1073,6 +1075,14 @@ export type BrowserRequest =
       }>
     }
 
+export type DesktopRequestId = string
+
+export type DesktopRequest = {
+  id: DesktopRequestId
+  sessionID: string
+  operation: "observe"
+}
+
 export type CanvasRequestId = string
 
 export type CanvasRequest =
@@ -1817,6 +1827,8 @@ export type GlobalEvent = {
     | EventKiloSessionsRemoteStatusChanged
     | EventKilocodeBrowserRequested
     | EventKilocodeBrowserCancelled
+    | EventKilocodeDesktopRequested
+    | EventKilocodeDesktopCancelled
     | EventKilocodeCanvasRequested
     | EventKilocodeCanvasCancelled
     | EventMemoryStatus
@@ -5638,6 +5650,22 @@ export type BrowserFailure = {
   receipt?: ComputerUseReceipt
 }
 
+export type DesktopResult = {
+  operation: "observe"
+  width: number
+  height: number
+  mime: "image/png" | "image/jpeg"
+  data: string
+  observation: ComputerUseObservation
+  receipt: ComputerUseReceipt
+}
+
+export type DesktopFailure = {
+  code: "cancelled" | "disconnected" | "invalid_request" | "timeout" | "unsupported"
+  message: string
+  receipt?: ComputerUseReceipt
+}
+
 export type CanvasResult = {
   operation: "create" | "update"
   name: string
@@ -7311,6 +7339,22 @@ export type EventKilocodeBrowserCancelled = {
   type: "kilocode.browser.cancelled"
   properties: {
     requestID: BrowserRequestId
+    sessionID: string
+    reason: "cancelled" | "disposed" | "timeout"
+  }
+}
+
+export type EventKilocodeDesktopRequested = {
+  id: string
+  type: "kilocode.desktop.requested"
+  properties: DesktopRequest
+}
+
+export type EventKilocodeDesktopCancelled = {
+  id: string
+  type: "kilocode.desktop.cancelled"
+  properties: {
+    requestID: DesktopRequestId
     sessionID: string
     reason: "cancelled" | "disposed" | "timeout"
   }
@@ -19728,6 +19772,106 @@ export type KilocodeBrowserRejectResponses = {
 }
 
 export type KilocodeBrowserRejectResponse = KilocodeBrowserRejectResponses[keyof KilocodeBrowserRejectResponses]
+
+export type KilocodeDesktopListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/desktop"
+}
+
+export type KilocodeDesktopListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeDesktopListError = KilocodeDesktopListErrors[keyof KilocodeDesktopListErrors]
+
+export type KilocodeDesktopListResponses = {
+  /**
+   * Pending desktop host requests
+   */
+  200: Array<DesktopRequest>
+}
+
+export type KilocodeDesktopListResponse = KilocodeDesktopListResponses[keyof KilocodeDesktopListResponses]
+
+export type KilocodeDesktopReplyData = {
+  body?: {
+    result: DesktopResult
+  }
+  path: {
+    requestID: DesktopRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/desktop/{requestID}/reply"
+}
+
+export type KilocodeDesktopReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeDesktopReplyError = KilocodeDesktopReplyErrors[keyof KilocodeDesktopReplyErrors]
+
+export type KilocodeDesktopReplyResponses = {
+  /**
+   * Desktop reply accepted
+   */
+  200: boolean
+}
+
+export type KilocodeDesktopReplyResponse = KilocodeDesktopReplyResponses[keyof KilocodeDesktopReplyResponses]
+
+export type KilocodeDesktopRejectData = {
+  body?: {
+    error: DesktopFailure
+  }
+  path: {
+    requestID: DesktopRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/desktop/{requestID}/reject"
+}
+
+export type KilocodeDesktopRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeDesktopRejectError = KilocodeDesktopRejectErrors[keyof KilocodeDesktopRejectErrors]
+
+export type KilocodeDesktopRejectResponses = {
+  /**
+   * Desktop rejection accepted
+   */
+  200: boolean
+}
+
+export type KilocodeDesktopRejectResponse = KilocodeDesktopRejectResponses[keyof KilocodeDesktopRejectResponses]
 
 export type KilocodeCanvasListData = {
   body?: never

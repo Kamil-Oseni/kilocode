@@ -103,7 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
   )
   // raya_change end
 
-  const desktop = new DesktopAutomationService()
+  const desktop = new DesktopAutomationService(connectionService)
   context.subscriptions.push(
     desktop,
     vscode.commands.registerCommand("raya.openComputerUse", () =>

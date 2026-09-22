@@ -56,6 +56,8 @@ import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feed
 import { Conflict as PublicationConflict } from "@/kilocode/self-heal/publication"
 import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
+import type { RequestID as DesktopRequestID } from "@/kilocode/desktop/protocol"
+import { Desktop } from "@/kilocode/desktop/service"
 import type { RequestID as CanvasRequestID } from "@/kilocode/canvas/protocol" // raya_change - Milestone E
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import {
@@ -82,6 +84,8 @@ import {
   SelfHealUpdatePayload, // raya_change
   BrowserReplyPayload, // raya_change - Milestone F browser API
   BrowserRejectPayload, // raya_change - Milestone F browser API
+  DesktopReplyPayload,
+  DesktopRejectPayload,
   CanvasReplyPayload, // raya_change - Milestone E canvas API
   CanvasRejectPayload, // raya_change - Milestone E canvas API
 } from "../groups/kilocode"
@@ -96,6 +100,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const manager = yield* AgentManager.Service
     const notebook = yield* Notebook.Service
     const browser = yield* Browser.Service // raya_change - Milestone F browser bridge
+    const desktop = yield* Desktop.Service
     const canvas = yield* Canvas.Service // raya_change - Milestone E canvas bridge
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
@@ -308,6 +313,27 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return true
     })
     // raya_change end
+    const desktopList = Effect.fn("KilocodeHttpApi.desktopList")(function* () {
+      return yield* desktop.list()
+    })
+    const desktopReply = Effect.fn("KilocodeHttpApi.desktopReply")(function* (ctx: {
+      params: { requestID: DesktopRequestID }
+      payload: typeof DesktopReplyPayload.Type
+    }) {
+      yield* desktop
+        .reply({ requestID: ctx.params.requestID, result: ctx.payload.result })
+        .pipe(Effect.catchTag("Desktop.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return true
+    })
+    const desktopReject = Effect.fn("KilocodeHttpApi.desktopReject")(function* (ctx: {
+      params: { requestID: DesktopRequestID }
+      payload: typeof DesktopRejectPayload.Type
+    }) {
+      yield* desktop
+        .reject({ requestID: ctx.params.requestID, error: ctx.payload.error })
+        .pipe(Effect.catchTag("Desktop.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return true
+    })
 
     // raya_change start - Milestone E canvas host API
     const canvasList = Effect.fn("KilocodeHttpApi.canvasList")(function* () {
@@ -652,14 +678,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const organizationCreate = Effect.fn("KilocodeHttpApi.organizationCreate")(function* (ctx: {
       payload: OrganizationCreate
     }) {
-      return yield* organizations
-        .create(ctx.payload)
-        .pipe(
-          Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
-            Effect.fail(new InvalidRequestError({ message: err.message })),
-          ),
-          Effect.catchTag("RayaTaskOrganization.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
-        )
+      return yield* organizations.create(ctx.payload).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+      )
     })
     const organizationGet = Effect.fn("KilocodeHttpApi.organizationGet")(function* (ctx: {
       params: { organizationID: string }
@@ -1011,16 +1035,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       payload: typeof RayaSelfHeal.VerificationPublish.Type
     }) {
       if (!(yield* healing.get(ctx.params.itemID))) return yield* new HttpApiError.NotFound({})
-      return yield* healing
-        .publish(ctx.params.itemID, ctx.payload)
-        .pipe(
-          Effect.catch((err): Effect.Effect<never, HttpApiError.Conflict | UnknownError> => {
-            if (Schema.is(PublicationConflict)(err)) return Effect.fail(new HttpApiError.Conflict({}))
-            return Effect.fail(
-              new UnknownError({ message: "Self-heal verification storage is unavailable.", ref: ctx.params.itemID }),
-            )
-          }),
-        )
+      return yield* healing.publish(ctx.params.itemID, ctx.payload).pipe(
+        Effect.catch((err): Effect.Effect<never, HttpApiError.Conflict | UnknownError> => {
+          if (Schema.is(PublicationConflict)(err)) return Effect.fail(new HttpApiError.Conflict({}))
+          return Effect.fail(
+            new UnknownError({ message: "Self-heal verification storage is unavailable.", ref: ctx.params.itemID }),
+          )
+        }),
+      )
     })
 
     const selfHealUpdate = Effect.fn("KilocodeHttpApi.selfHealUpdate")(function* (ctx: {
@@ -1054,6 +1076,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("browserUploadRelease", browserUploadRelease)
         .handle("browserReply", browserReply)
         .handle("browserReject", browserReject)
+        .handle("desktopList", desktopList)
+        .handle("desktopReply", desktopReply)
+        .handle("desktopReject", desktopReject)
         // raya_change end
         // raya_change start - Milestone E canvas host API
         .handle("canvasList", canvasList)

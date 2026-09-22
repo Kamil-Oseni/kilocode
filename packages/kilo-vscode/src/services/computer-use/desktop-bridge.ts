@@ -19,7 +19,9 @@ export interface DesktopConnection {
 }
 
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure }
-type ActionRequest = Exclude<DesktopRequest, { operation: "observe" }>
+type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
+type ActionRequest = Exclude<DesktopRequest, CaptureRequest>
+type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
 
 export class DesktopBridge {
   private readonly active = new Map<string, AbortController>()
@@ -32,7 +34,7 @@ export class DesktopBridge {
   constructor(
     private readonly connection: DesktopConnection,
     private readonly session: DesktopSession,
-    private readonly observe: () => ReturnType<DesktopSession["observe"]>,
+    private readonly capture: (request: CaptureRequest, signal: AbortSignal) => Promise<Frame[]>,
   ) {
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
     this.offState = connection.onStateChange((state) => this.state(state))
@@ -110,34 +112,11 @@ export class DesktopBridge {
     const startedAt = Date.now()
     this.active.set(request.id, controller)
     try {
-      if (request.operation !== "observe") {
-        const result = await this.interact(request, startedAt)
-        if (controller.signal.aborted) return
-        receipt.result = result
-        receipt.failure = undefined
-        await this.deliver(request.id, directory, receipt)
-        return
-      }
-      const frame = await this.observe()
+      const result =
+        request.operation === "observe" || request.operation === "watch"
+          ? await this.observe(request, startedAt, controller.signal)
+          : await this.interact(request, startedAt)
       if (controller.signal.aborted) return
-      const result: DesktopResult = {
-        operation: "observe",
-        width: frame.width,
-        height: frame.height,
-        mime: frame.mime,
-        data: frame.data,
-        observation: frame.observation,
-        receipt: {
-          version: 1,
-          requestID: request.id,
-          startedAt,
-          finishedAt: Date.now(),
-          effect: "observe",
-          outcome: "confirmed",
-          target: frame.observation.target,
-          observationID: frame.observation.id,
-        },
-      }
       receipt.result = result
       receipt.failure = undefined
       await this.deliver(request.id, directory, receipt)
@@ -151,9 +130,9 @@ export class DesktopBridge {
           requestID: request.id,
           startedAt,
           finishedAt: Date.now(),
-          effect: request.operation === "observe" ? "observe" : "interact",
+          effect: request.operation === "observe" || request.operation === "watch" ? "observe" : "interact",
           outcome: "unknown",
-          ...(request.operation !== "observe"
+          ...(request.operation !== "observe" && request.operation !== "watch"
             ? {
                 target: { surface: "desktop" as const, windowID: request.windowID },
                 observationID: request.observationID,
@@ -164,6 +143,49 @@ export class DesktopBridge {
       await this.deliver(request.id, directory, receipt)
     } finally {
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
+    }
+  }
+
+  private async observe(request: CaptureRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
+    const frames = await this.capture(request, signal)
+    if (request.operation === "watch") {
+      const last = frames.at(-1)
+      if (frames.length !== request.frameCount || !last)
+        throw new Error("Desktop watch returned an incomplete frame sequence")
+      return {
+        operation: "watch",
+        frames,
+        receipt: {
+          version: 1,
+          requestID: request.id,
+          startedAt,
+          finishedAt: Date.now(),
+          effect: "observe",
+          outcome: "confirmed",
+          target: last.observation.target,
+          observationID: last.observation.id,
+        },
+      }
+    }
+    const frame = frames[0]
+    if (!frame || frames.length !== 1) throw new Error("Desktop observation returned an invalid frame sequence")
+    return {
+      operation: "observe",
+      width: frame.width,
+      height: frame.height,
+      mime: frame.mime,
+      data: frame.data,
+      observation: frame.observation,
+      receipt: {
+        version: 1,
+        requestID: request.id,
+        startedAt,
+        finishedAt: Date.now(),
+        effect: "observe",
+        outcome: "confirmed",
+        target: frame.observation.target,
+        observationID: frame.observation.id,
+      },
     }
   }
 

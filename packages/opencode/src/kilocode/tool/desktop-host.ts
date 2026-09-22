@@ -1,7 +1,7 @@
 // raya_change - model-facing native desktop observation tool
 import { Desktop, HostError, type Input } from "@/kilocode/desktop/service"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { Key, Modifier, ScrollDelta } from "@/kilocode/desktop/protocol"
+import { Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -52,6 +52,62 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
                 url: `data:${result.mime};base64,${result.data}`,
               },
             ],
+          }
+        }),
+    }
+  }),
+)
+
+const WatchParams = Schema.Struct({
+  frames: WatchCount.annotate({ description: "Number of sampled frames, from 2 through 4." }),
+  interval_ms: WatchInterval.annotate({ description: "Delay between samples, from 250 through 2000 milliseconds." }),
+})
+
+export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number }, Desktop.Service, "desktop_watch">(
+  "desktop_watch",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Sample a short, bounded sequence of 2–4 foreground Windows application frames for live visual processing. Raya shows one visible cancellable capture indicator, stores each frame in this tool result, and sends no desktop input.",
+      parameters: WatchParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const pattern = `foreground-window:${params.frames}x${params.interval_ms}ms`
+          yield* ctx.ask({ permission: "desktop_watch", patterns: [pattern], always: [], metadata: {} })
+          const result = yield* run(
+            desktop,
+            {
+              operation: "watch",
+              sessionID: ctx.sessionID,
+              frameCount: params.frames,
+              intervalMs: params.interval_ms,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "watch")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: `Captured ${result.frames.length} desktop frames`,
+            output: JSON.stringify(
+              {
+                frames: result.frames.map((frame) => ({
+                  width: frame.width,
+                  height: frame.height,
+                  observation: frame.observation,
+                })),
+                receipt: result.receipt,
+              },
+              undefined,
+              2,
+            ),
+            metadata: { frames: result.frames.length },
+            attachments: result.frames.map((frame, index) => ({
+              type: "file" as const,
+              mime: frame.mime,
+              filename: `desktop-frame-${index + 1}.${frame.mime === "image/png" ? "png" : "jpg"}`,
+              url: `data:${frame.mime};base64,${frame.data}`,
+            })),
           }
         }),
     }
@@ -274,4 +330,11 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
   }),
 )
 
-export const DesktopTools = [DesktopObserveTool, DesktopClickTool, DesktopTypeTool, DesktopKeyTool, DesktopScrollTool]
+export const DesktopTools = [
+  DesktopObserveTool,
+  DesktopWatchTool,
+  DesktopClickTool,
+  DesktopTypeTool,
+  DesktopKeyTool,
+  DesktopScrollTool,
+]

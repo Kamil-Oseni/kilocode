@@ -11,6 +11,16 @@ export type RequestID = Schema.Schema.Type<typeof RequestID>
 
 const Identity = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
 const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
+export const WatchCount = Schema.Number.check(
+  Schema.isInt(),
+  Schema.isGreaterThanOrEqualTo(2),
+  Schema.isLessThanOrEqualTo(4),
+)
+export const WatchInterval = Schema.Number.check(
+  Schema.isInt(),
+  Schema.isGreaterThanOrEqualTo(250),
+  Schema.isLessThanOrEqualTo(2_000),
+)
 export const ScrollDelta = Schema.Number.check(
   Schema.isFinite(),
   Schema.isGreaterThanOrEqualTo(-1_200),
@@ -55,6 +65,13 @@ export const ObserveRequest = Schema.Struct({
   operation: Schema.Literal("observe"),
 })
 
+export const WatchRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("watch"),
+  frameCount: WatchCount,
+  intervalMs: WatchInterval,
+})
+
 export const ClickRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("click"),
@@ -96,9 +113,14 @@ export const ScrollRequest = Schema.Struct({
   ),
 )
 
-export const Request = Schema.Union([ObserveRequest, ClickRequest, TypeRequest, KeyRequest, ScrollRequest]).annotate({
-  identifier: "DesktopRequest",
-})
+export const Request = Schema.Union([
+  ObserveRequest,
+  WatchRequest,
+  ClickRequest,
+  TypeRequest,
+  KeyRequest,
+  ScrollRequest,
+]).annotate({ identifier: "DesktopRequest" })
 export type Request = Schema.Schema.Type<typeof Request>
 
 export const ObserveResult = Schema.Struct({
@@ -108,6 +130,20 @@ export const ObserveResult = Schema.Struct({
   mime: Schema.Literals(["image/png", "image/jpeg"]),
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
   observation: Observation,
+  receipt: Receipt,
+})
+
+export const WatchFrame = Schema.Struct({
+  width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  mime: Schema.Literals(["image/png", "image/jpeg"]),
+  data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
+  observation: Observation,
+})
+
+export const WatchResult = Schema.Struct({
+  operation: Schema.Literal("watch"),
+  frames: Schema.Array(WatchFrame).check(Schema.isMinLength(2), Schema.isMaxLength(4)),
   receipt: Receipt,
 })
 
@@ -131,9 +167,14 @@ export const ScrollResult = Schema.Struct({
   receipt: Receipt,
 })
 
-export const Result = Schema.Union([ObserveResult, ClickResult, TypeResult, KeyResult, ScrollResult]).annotate({
-  identifier: "DesktopResult",
-})
+export const Result = Schema.Union([
+  ObserveResult,
+  WatchResult,
+  ClickResult,
+  TypeResult,
+  KeyResult,
+  ScrollResult,
+]).annotate({ identifier: "DesktopResult" })
 export type Result = Schema.Schema.Type<typeof Result>
 
 export const ErrorCode = Schema.Literals(["cancelled", "disconnected", "invalid_request", "timeout", "unsupported"])

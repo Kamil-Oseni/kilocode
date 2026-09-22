@@ -1,9 +1,15 @@
 // raya_change - model-facing native desktop tool tests
 import { expect } from "bun:test"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { Key, ScrollRequest } from "@/kilocode/desktop/protocol"
+import { Key, ScrollRequest, WatchRequest } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
-import { DesktopClickTool, DesktopKeyTool, DesktopScrollTool, DesktopTypeTool } from "@/kilocode/tool/desktop-host"
+import {
+  DesktopClickTool,
+  DesktopKeyTool,
+  DesktopScrollTool,
+  DesktopTypeTool,
+  DesktopWatchTool,
+} from "@/kilocode/tool/desktop-host"
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
@@ -24,6 +30,32 @@ it.instance(
         request: (input) =>
           Effect.sync(() => {
             calls.push(input)
+            if (input.operation === "watch") {
+              return {
+                operation: "watch" as const,
+                frames: Array.from({ length: input.frameCount }, (_, index) => ({
+                  width: 20,
+                  height: 10,
+                  mime: "image/png" as const,
+                  data: "cG5n",
+                  observation: {
+                    version: 1 as const,
+                    id: ObservationID.make(`observation_watch_${index}`),
+                    observedAt: index + 1,
+                    validUntil: index + 10_000,
+                    target: { surface: "desktop" as const, windowID: "window_seen" },
+                  },
+                })),
+                receipt: {
+                  version: 1 as const,
+                  requestID: "desktop_watch_test",
+                  startedAt: 1,
+                  finishedAt: 2,
+                  effect: "observe" as const,
+                  outcome: "confirmed" as const,
+                },
+              }
+            }
             return {
               operation:
                 input.operation === "type"
@@ -200,6 +232,31 @@ it.instance(
       expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 0 })).toBe(false)
       expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 1_201 })).toBe(false)
       expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 120 })).toBe(true)
+
+      const watched = yield* DesktopWatchTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) => tool.execute({ frames: 3, interval_ms: 500 }, ctx)),
+      )
+      expect(asks[4]).toEqual(
+        expect.objectContaining({
+          permission: "desktop_watch",
+          patterns: ["foreground-window:3x500ms"],
+          always: [],
+        }),
+      )
+      expect(calls[4]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
+      expect(watched.title).toBe("Captured 3 desktop frames")
+      expect(watched.attachments).toHaveLength(3)
+      expect(watched.attachments?.map((item) => item.filename)).toEqual([
+        "desktop-frame-1.png",
+        "desktop-frame-2.png",
+        "desktop-frame-3.png",
+      ])
+      const watch = { id: "watch_schema", sessionID: ctx.sessionID, operation: "watch" as const }
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 1, intervalMs: 500 })).toBe(false)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 3, intervalMs: 249 })).toBe(false)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 4, intervalMs: 2_000 })).toBe(true)
     }),
   { git: true },
 )

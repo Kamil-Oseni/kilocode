@@ -1086,6 +1086,13 @@ export type DesktopRequest =
   | {
       id: DesktopRequestId
       sessionID: string
+      operation: "watch"
+      frameCount: number
+      intervalMs: number
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
       operation: "click"
       windowID: string
       observationID: ComputerUseObservationId
@@ -5723,6 +5730,17 @@ export type DesktopResult =
       mime: "image/png" | "image/jpeg"
       data: string
       observation: ComputerUseObservation
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "watch"
+      frames: Array<{
+        width: number
+        height: number
+        mime: "image/png" | "image/jpeg"
+        data: string
+        observation: ComputerUseObservation
+      }>
       receipt: ComputerUseReceipt
     }
   | {

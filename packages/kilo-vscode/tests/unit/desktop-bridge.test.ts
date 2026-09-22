@@ -56,9 +56,14 @@ function setup() {
   }
   const session = new DesktopSession(driver)
   let observed = 0
-  const bridge = new DesktopBridge(connection, session, async () => {
-    observed += 1
-    return session.observe()
+  const bridge = new DesktopBridge(connection, session, async (input) => {
+    const count = input.operation === "watch" ? input.frameCount : 1
+    const frames = []
+    for (const _index of Array.from({ length: count }, (_, index) => index)) {
+      observed += 1
+      frames.push(await session.observe())
+    }
+    return frames
   })
   return { bridge, events, replies, rejects, actions, observed: () => observed }
 }
@@ -98,6 +103,35 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(test.observed()).toBe(1)
     expect(test.replies).toHaveLength(2)
+    test.bridge.dispose()
+  })
+
+  it("delivers a bounded grounded frame sequence with one receipt", async () => {
+    const test = setup()
+    const watch: DesktopRequest = {
+      id: "desktop_watch_1",
+      sessionID: "ses_desktop",
+      operation: "watch",
+      frameCount: 3,
+      intervalMs: 500,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: watch } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(3)
+    expect(test.rejects).toEqual([])
+    expect(test.replies[0]).toMatchObject({
+      requestID: watch.id,
+      result: {
+        operation: "watch",
+        frames: [
+          { width: 20, height: 10, observation: { target: { surface: "desktop", windowID: "window_1" } } },
+          { width: 20, height: 10, observation: { target: { surface: "desktop", windowID: "window_1" } } },
+          { width: 20, height: 10, observation: { target: { surface: "desktop", windowID: "window_1" } } },
+        ],
+        receipt: { requestID: watch.id, effect: "observe", outcome: "confirmed" },
+      },
+    })
     test.bridge.dispose()
   })
 

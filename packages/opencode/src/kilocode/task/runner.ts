@@ -95,6 +95,14 @@ function kind(role: string, objective: string) {
   return "code" as const
 }
 
+function plain(value: string, max = 512) {
+  return value
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+}
+
 function workspace() {
   return Effect.gen(function* () {
     const mod = yield* Effect.promise(() => import("@/project/instance-store"))
@@ -139,6 +147,13 @@ function open<A, E, R>(dir: string | undefined, effect: Effect.Effect<A, E, R>) 
 }
 
 export namespace RayaTaskRunner {
+  type Review = {
+    sessionID: SessionID
+    requestID: string
+    permission: string
+    patterns: string[]
+    callID?: string
+  }
   type Trigger =
     | { kind: "timer"; selected: Extract<RayaTask.Trigger, { kind: "timer" }> }
     | { kind: "event"; source: string; filter?: string; receivedAt: number }
@@ -1338,6 +1353,45 @@ export namespace RayaTaskRunner {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
       const scope = yield* Effect.scope
+      const reviews = new Map<string, Review>()
+      const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
+      const receipt = Effect.fn("RayaTaskRunner.permissionReceipt")(function* (review: Review, reply: string) {
+        if (!inbox) return
+        const items = yield* runner.tasks.list()
+        for (const item of items) {
+          const runs = yield* runner.tasks.runsFor(item.id)
+          const run = runs.findLast((entry) => entry.sessionID === review.sessionID)
+          if (!run) continue
+          const decision =
+            reply === "once"
+              ? "Approved for this call"
+              : reply === "always"
+                ? "Approved with 'always allow' selected"
+                : "Rejected"
+          const patterns = review.patterns.slice(0, 8).map((pattern) => `- ${plain(pattern)}`)
+          const body = [
+            "Authority receipt",
+            `Worker: ${plain(item.name, 256)}`,
+            `Run: ${plain(run.id, 256)}`,
+            `Permission: ${plain(review.permission, 256)}`,
+            `Decision: ${decision}`,
+            ...(patterns.length ? ["Requested scope:", ...patterns] : []),
+            `Request: ${plain(review.requestID, 256)}`,
+            ...(review.callID ? [`Tool call: ${plain(review.callID, 256)}`] : []),
+            "This receipt records the decision. It does not change the worker's saved access.",
+          ]
+            .join("\n")
+            .slice(0, 8000)
+          yield* inbox.publish({
+            agentID: item.id,
+            source: `authority:${createHash("sha256").update(review.requestID).digest("hex").slice(0, 40)}`,
+            kind: "system",
+            body,
+            sessionID: review.sessionID,
+          })
+          return
+        }
+      })
       yield* Effect.acquireRelease(
         input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
           const sid = event.properties.sessionID
@@ -1360,7 +1414,8 @@ export namespace RayaTaskRunner {
           const replied = new Set(["permission.replied", "question.replied", "question.rejected"])
           const listener = (event: GlobalEvent) => {
             const type = event.payload?.type
-            const raw = event.payload?.properties?.sessionID
+            const data = event.payload?.properties ?? event.payload?.data
+            const raw = data?.sessionID
             if (!type || typeof raw !== "string") return
             const waiting = asked.has(type)
             if (!waiting && !replied.has(type)) return
@@ -1372,8 +1427,34 @@ export namespace RayaTaskRunner {
               }
             })()
             if (!sid) return
+            if (type === "permission.asked") {
+              const requestID = typeof data?.id === "string" ? data.id : undefined
+              const permission = typeof data?.permission === "string" ? data.permission : undefined
+              const patterns = Array.isArray(data?.patterns)
+                ? data.patterns.filter((value: unknown): value is string => typeof value === "string")
+                : []
+              if (requestID && permission)
+                reviews.set(requestID, {
+                  sessionID: sid,
+                  requestID,
+                  permission,
+                  patterns,
+                  ...(typeof data?.tool?.callID === "string" ? { callID: data.tool.callID } : {}),
+                })
+            }
+            const review =
+              type === "permission.replied" && typeof data?.requestID === "string"
+                ? reviews.get(data.requestID)
+                : undefined
+            const saved =
+              review && typeof data?.reply === "string"
+                ? receipt(review, data.reply).pipe(
+                    Effect.tap(() => Effect.sync(() => reviews.delete(review.requestID))),
+                  )
+                : Effect.void
             bridge.fork(
               runner.park(sid, waiting).pipe(
+                Effect.andThen(saved),
                 Effect.catchCause((cause) =>
                   Cause.hasInterrupts(cause)
                     ? Effect.failCause(cause)

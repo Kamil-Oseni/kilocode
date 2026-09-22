@@ -1,11 +1,17 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `3698246d87` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+254415a8c7.kamil-oseni.1790109807314` installs grounded window switching, atomic mixed-DPI pointer gestures and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `05588f541c` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+254415a8c7.kamil-oseni.1790109807314` installs grounded window switching, atomic mixed-DPI pointer gestures and atomic two-axis scrolling. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 17:00 America/Toronto - preserve atomic desktop text entry
+
+Preserve product commit `05588f541c`. One `desktop_type` action must remain one complete Unicode `SendInput` batch rather than one native call per character. This is the Windows guarantee that the requested text cannot be interleaved with unrelated user or injected input. Confirm success only when every down/up event was inserted. After an odd partial count, release `inputs[accepted]`, the exact unmatched key-down, then surface the action as unknown without automatic replay.
+
+Evidence passes **33 focused tests / 131 assertions**, including **10 driver tests / 59 assertions** after correcting the recovery index. Extension typecheck, ESLint, Knip, targeted formatting, the marker guard and real embedded-C# compilation/enumeration pass. The protected push passed all 29 JavaScript/TypeScript package typechecks. The installed snapshot still ends at `254415a8c7`; include this source in the next coherent capped snapshot. Live text entry remains installed-host acceptance.
 
 ## ChatGPT 2026-09-22 16:48 America/Toronto - atomic desktop scrolling installation receipt
 

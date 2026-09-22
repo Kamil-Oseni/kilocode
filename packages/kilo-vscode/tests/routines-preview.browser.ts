@@ -267,6 +267,8 @@ for (const width of [320, 900]) {
     await assign.click()
     const dialog = page.getByRole("dialog", { name: "Give Website Builders work" })
     await expect(dialog.getByLabel("Describe the work")).toBeFocused()
+    await expect(dialog.locator("form.routines-assignment-simple")).toHaveCSS("box-shadow", "none")
+    await expect(dialog.getByLabel("Describe the work")).toHaveCSS("border-style", "solid")
     await expect(dialog.getByLabel("Responsible worker")).toBeHidden()
     await expect(dialog.getByRole("button", { name: "Choose details myself" })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

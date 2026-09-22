@@ -2869,6 +2869,30 @@ html[data-theme="kilo-vscode"] .routines-assignment-intro p {
   line-height: 1.5;
 }
 
+html[data-theme="kilo-vscode"] .routines-assignment-simple {
+  padding: var(--raya-space-12);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-simple:focus-within {
+  border-color: transparent;
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-simple textarea {
+  border: var(--raya-hairline, 1px) solid
+    color-mix(in srgb, var(--border-base, var(--vscode-widget-border)) 72%, transparent);
+  border-radius: var(--raya-radius-md, 6px);
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-simple textarea:focus {
+  border-color: var(--vscode-focusBorder, Highlight);
+  outline: 1px solid var(--vscode-focusBorder, Highlight);
+  outline-offset: -1px;
+}
+
 html[data-theme="kilo-vscode"] .routines-assignment-simple-actions {
   justify-content: space-between;
 }

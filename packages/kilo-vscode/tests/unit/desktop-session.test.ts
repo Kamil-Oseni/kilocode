@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import {
+  CAPTURE,
   DesktopSession,
   type DesktopAction,
   type DesktopDriver,
@@ -8,6 +9,7 @@ import {
 
 class Driver implements DesktopDriver {
   target = { windowID: "window-1", location: "Editor" }
+  frame = { width: 1280, height: 720, mime: "image/png" as const, data: "png" }
   readonly actions: DesktopAction[] = []
   readonly focused: string[] = []
   list: DesktopWindow[] = [
@@ -27,7 +29,7 @@ class Driver implements DesktopDriver {
   cancelled = 0
 
   async observe() {
-    return { ...this.target, width: 1280, height: 720, mime: "image/png" as const, data: "png" }
+    return { ...this.target, ...this.frame }
   }
 
   async current() {
@@ -104,6 +106,27 @@ describe("native desktop session boundary", () => {
     await session.execute(action)
     await expect(session.execute(action)).rejects.toThrow(/unknown or was already used/i)
     expect(driver.actions).toEqual([action])
+  })
+
+  it("refuses oversized or over-encoded frames before issuing an observation", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    driver.frame = { ...driver.frame, width: CAPTURE.edge + 1, height: 1 }
+    await expect(session.observe()).rejects.toThrow(/safe capture bounds/i)
+    driver.frame = { ...driver.frame, width: CAPTURE.edge, height: CAPTURE.edge }
+    await expect(session.observe()).rejects.toThrow(/safe capture bounds/i)
+    driver.frame = { ...driver.frame, width: 1280, height: 720, data: "x".repeat(CAPTURE.data + 1) }
+    await expect(session.observe()).rejects.toThrow(/encoded image limit/i)
+
+    driver.frame = { width: 1280, height: 720, mime: "image/png", data: "png" }
+    const frame = await session.observe()
+    await session.execute({
+      operation: "key",
+      windowID: frame.windowID,
+      observationID: frame.observation.id,
+      key: "Enter",
+    })
+    expect(driver.actions).toHaveLength(1)
   })
 
   it("refuses changed windows and invalid coordinates before dispatch", async () => {

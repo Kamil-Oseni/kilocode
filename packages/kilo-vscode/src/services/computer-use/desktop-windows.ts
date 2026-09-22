@@ -1,12 +1,44 @@
 import { execFile, type ChildProcess } from "node:child_process"
-import type { DesktopAction, DesktopDriver, DesktopFrame, DesktopWindow } from "./desktop-session"
+import {
+  CAPTURE,
+  type DesktopAction,
+  type DesktopDriver,
+  type DesktopFrame,
+  type DesktopWindow,
+} from "./desktop-session"
 
 const native = String.raw`
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+
+public sealed class RayaBoundedStream : MemoryStream {
+  private readonly long limit;
+
+  public RayaBoundedStream(long limit) {
+    if (limit <= 0) throw new ArgumentOutOfRangeException("limit");
+    this.limit = limit;
+  }
+
+  public override void SetLength(long value) {
+    if (value > limit) throw new InvalidOperationException("Desktop capture exceeds the encoded image limit");
+    base.SetLength(value);
+  }
+
+  public override void Write(byte[] buffer, int offset, int count) {
+    if (count < 0 || Position > limit - count)
+      throw new InvalidOperationException("Desktop capture exceeds the encoded image limit");
+    base.Write(buffer, offset, count);
+  }
+
+  public override void WriteByte(byte value) {
+    if (Position >= limit) throw new InvalidOperationException("Desktop capture exceeds the encoded image limit");
+    base.WriteByte(value);
+  }
+}
 
 public static class RayaDesktopNative {
   public delegate bool EnumWindowsProc(IntPtr handle, IntPtr state);
@@ -80,13 +112,38 @@ public static class RayaDesktopNative {
   [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
   [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr handle, uint flags);
   [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+  [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr handle);
+  [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr handle, IntPtr context);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, Input[] inputs, int size);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
+  [DllImport("gdi32.dll", SetLastError = true)]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  private static extern bool StretchBlt(IntPtr destination, int targetX, int targetY, int targetWidth, int targetHeight, IntPtr source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, uint operation);
+  [DllImport("gdi32.dll")] private static extern int SetStretchBltMode(IntPtr context, int mode);
+  [DllImport("gdi32.dll")]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  private static extern bool SetBrushOrgEx(IntPtr context, int x, int y, out Point previous);
 
   public static void EnableDpiAwareness() {
     var previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
     if (previous == IntPtr.Zero)
       throw new InvalidOperationException("Windows refused per-monitor DPI awareness; desktop coordinates are unsafe");
+  }
+
+  public static void Capture(IntPtr destination, int targetWidth, int targetHeight, int sourceX, int sourceY, int sourceWidth, int sourceHeight) {
+    var source = GetDC(IntPtr.Zero);
+    if (source == IntPtr.Zero) throw new InvalidOperationException("Windows screen capture context is unavailable");
+    try {
+      if (SetStretchBltMode(destination, 4) == 0)
+        throw new InvalidOperationException("Windows refused high-quality desktop capture scaling");
+      Point previous;
+      if (!SetBrushOrgEx(destination, 0, 0, out previous))
+        throw new InvalidOperationException("Windows refused desktop capture alignment");
+      if (!StretchBlt(destination, 0, 0, targetWidth, targetHeight, source, sourceX, sourceY, sourceWidth, sourceHeight, 0x00CC0020))
+        throw new InvalidOperationException("Windows refused scaled desktop capture");
+    } finally {
+      ReleaseDC(IntPtr.Zero, source);
+    }
   }
 
   private static WindowInfo Describe(IntPtr handle) {
@@ -369,20 +426,64 @@ function Get-RayaWindow {
 
 const observe = `${setup}
 Add-Type -AssemblyName System.Drawing
+function Test-RayaImage($stream) {
+  if ($stream.Length -le 0) { throw "Desktop capture encoder returned no image" }
+  $stream.Position = 0
+  try {
+    $check = [Drawing.Image]::FromStream($stream, $false, $true)
+    $check.Dispose()
+  } catch {
+    throw "Desktop capture encoder returned an incomplete image"
+  } finally {
+    $stream.Position = $stream.Length
+  }
+}
 $window = Get-RayaWindow
-$image = New-Object Drawing.Bitmap $window.Width, $window.Height
+$scale = [Math]::Min(1.0, [Math]::Min(${CAPTURE.edge}.0 / $window.Width, ${CAPTURE.edge}.0 / $window.Height))
+$area = [double]$window.Width * [double]$window.Height
+if ($area -gt ${CAPTURE.pixels}) { $scale = [Math]::Min($scale, [Math]::Sqrt(${CAPTURE.pixels}.0 / $area)) }
+$width = [Math]::Max(1, [int][Math]::Floor($window.Width * $scale))
+$height = [Math]::Max(1, [int][Math]::Floor($window.Height * $scale))
+$image = New-Object Drawing.Bitmap $width, $height
 $graphics = [Drawing.Graphics]::FromImage($image)
-$stream = New-Object IO.MemoryStream
+$stream = New-Object RayaBoundedStream ${CAPTURE.bytes}
+$mime = "image/png"
 try {
-  $graphics.CopyFromScreen($window.Rect.Left, $window.Rect.Top, 0, 0, $image.Size, [Drawing.CopyPixelOperation]::SourceCopy)
-  $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+  if ($width -eq $window.Width -and $height -eq $window.Height) {
+    $graphics.CopyFromScreen($window.Rect.Left, $window.Rect.Top, 0, 0, $image.Size, [Drawing.CopyPixelOperation]::SourceCopy)
+  } else {
+    $context = $graphics.GetHdc()
+    try {
+      [RayaDesktopNative]::Capture($context, $width, $height, $window.Rect.Left, $window.Rect.Top, $window.Width, $window.Height)
+    } finally {
+      $graphics.ReleaseHdc($context)
+    }
+  }
+  try {
+    $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+    Test-RayaImage $stream
+  } catch {
+    $stream.Dispose()
+    $stream = New-Object RayaBoundedStream ${CAPTURE.bytes}
+    $codec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq "image/jpeg" | Select-Object -First 1
+    if (-not $codec) { throw "Windows JPEG encoder is unavailable" }
+    $parameters = New-Object Drawing.Imaging.EncoderParameters 1
+    $parameters.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), ([long]88)
+    try {
+      $image.Save($stream, $codec, $parameters)
+      Test-RayaImage $stream
+    } finally {
+      $parameters.Dispose()
+    }
+    $mime = "image/jpeg"
+  }
   [pscustomobject]@{
     windowID = $window.WindowID
     location = $window.Location
-    width = $window.Width
-    height = $window.Height
-    mime = "image/png"
-    data = [Convert]::ToBase64String($stream.ToArray())
+    width = $width
+    height = $height
+    mime = $mime
+    data = [Convert]::ToBase64String($stream.GetBuffer(), 0, [int]$stream.Length)
   } | ConvertTo-Json -Compress
 } finally {
   $stream.Dispose()
@@ -525,7 +626,7 @@ function runner(): Runner {
         const process = execFile(
           "powershell.exe",
           ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "[Console]::In.ReadToEnd() | Invoke-Expression"],
-          { windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
+          { windowsHide: true, maxBuffer: 21 * 1024 * 1024 },
           (error, stdout, stderr) => {
             if (child === process) child = undefined
             if (error) {
@@ -567,8 +668,16 @@ export class WindowsDesktopDriver implements DesktopDriver {
       typeof result.location !== "string" ||
       typeof result.width !== "number" ||
       typeof result.height !== "number" ||
-      result.mime !== "image/png" ||
-      typeof result.data !== "string"
+      !Number.isInteger(result.width) ||
+      !Number.isInteger(result.height) ||
+      result.width <= 0 ||
+      result.height <= 0 ||
+      result.width > CAPTURE.edge ||
+      result.height > CAPTURE.edge ||
+      result.width * result.height > CAPTURE.pixels ||
+      (result.mime !== "image/png" && result.mime !== "image/jpeg") ||
+      typeof result.data !== "string" ||
+      Buffer.byteLength(result.data, "ascii") > CAPTURE.data
     )
       throw new Error("Windows desktop observation is incomplete")
     return {

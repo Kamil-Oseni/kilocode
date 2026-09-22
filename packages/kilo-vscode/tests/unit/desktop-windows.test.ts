@@ -43,6 +43,21 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("$visible.Left = [Math]::Max($rect.Left, $desktopLeft)")
     expect(test.scripts[0]).toContain("$visible.Right = [Math]::Min($rect.Right, $desktopLeft + $desktopWidth)")
     expect(test.scripts[0]).toContain("Rect = $visible")
+    expect(test.scripts[0]).toContain("$area = [double]$window.Width * [double]$window.Height")
+    expect(test.scripts[0]).toContain("StretchBlt(destination, 0, 0, targetWidth, targetHeight")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Capture($context, $width, $height")
+    expect(test.scripts[0]).not.toContain("$tileSize")
+    expect(test.scripts[0]).toContain("New-Object RayaBoundedStream 15000000")
+    expect(test.scripts[0]).toContain('$mime = "image/jpeg"')
+    expect(test.scripts[0]).toContain("function Test-RayaImage($stream)")
+    expect(test.scripts[0]).toContain("[Drawing.Image]::FromStream($stream, $false, $true)")
+    expect(test.scripts[0]).toContain(
+      'throw new InvalidOperationException("Desktop capture exceeds the encoded image limit")',
+    )
+    expect(test.scripts[0]).toContain("$stream.GetBuffer(), 0, [int]$stream.Length")
+    expect(test.scripts[0]).not.toContain("$stream.ToArray()")
+    expect(test.scripts[0]).toContain("width = $width")
+    expect(test.scripts[0]).toContain("height = $height")
     expect(test.scripts[0]).toContain("SetThreadDpiAwarenessContext(new IntPtr(-4))")
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[0]).toContain("desktop coordinates are unsafe")
@@ -258,5 +273,46 @@ describe("Windows native desktop driver", () => {
     const test = harness([JSON.stringify({ windowID: "0x123" })])
     const driver = new WindowsDesktopDriver(test.runner)
     await expect(driver.observe()).rejects.toThrow(/observation is incomplete/i)
+  })
+
+  it("rejects native observations outside the bounded capture envelope", async () => {
+    const test = harness([
+      JSON.stringify({
+        windowID: "0x123",
+        location: "pid:5;title:Editor;bounds:0,0,8192,2160",
+        width: 4097,
+        height: 2023,
+        mime: "image/png",
+        data: "png",
+      }),
+      JSON.stringify({
+        windowID: "0x123",
+        location: "pid:5;title:Editor;bounds:0,0,4096,4096",
+        width: 4096,
+        height: 4096,
+        mime: "image/png",
+        data: "png",
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    await expect(driver.observe()).rejects.toThrow(/observation is incomplete/i)
+    await expect(driver.observe()).rejects.toThrow(/observation is incomplete/i)
+  })
+
+  it("accepts the bounded JPEG fallback", async () => {
+    const test = harness([
+      JSON.stringify({
+        windowID: "0x123",
+        location: "pid:5;title:Editor;bounds:0,0,3840,2160",
+        width: 3840,
+        height: 2160,
+        mime: "image/jpeg",
+        data: "jpeg",
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    expect(await driver.observe()).toMatchObject({ width: 3840, height: 2160, mime: "image/jpeg", data: "jpeg" })
   })
 })

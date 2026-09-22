@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 import { ObservationLedger, type ComputerObservation, type ComputerTarget } from "./observation-ledger"
 
+export const CAPTURE = { edge: 4_096, pixels: 8_294_400, bytes: 15_000_000, data: 20_000_000 } as const
+
 export type DesktopFrame = {
   windowID: string
   location?: string
@@ -80,8 +82,23 @@ export class DesktopSession {
 
   async observe(): Promise<DesktopFrame & { observation: DesktopObservation }> {
     const frame = await this.driver.observe()
-    if (!Number.isInteger(frame.width) || frame.width <= 0 || !Number.isInteger(frame.height) || frame.height <= 0)
-      throw new Error("Desktop observation dimensions must be positive integers")
+    if (
+      !Number.isInteger(frame.width) ||
+      frame.width <= 0 ||
+      !Number.isInteger(frame.height) ||
+      frame.height <= 0 ||
+      frame.width > CAPTURE.edge ||
+      frame.height > CAPTURE.edge ||
+      frame.width * frame.height > CAPTURE.pixels
+    )
+      throw new Error("Desktop observation dimensions exceed the safe capture bounds")
+    if (
+      (frame.mime !== "image/png" && frame.mime !== "image/jpeg") ||
+      typeof frame.data !== "string" ||
+      !frame.data ||
+      frame.data.length > CAPTURE.data
+    )
+      throw new Error("Desktop observation exceeds the encoded image limit")
     if (!frame.windowID) throw new Error("Desktop observation requires an exact window identity")
     const observation = this.observations.issue(
       {

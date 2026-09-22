@@ -52,11 +52,12 @@ function setup() {
     getClient: () => client,
   }
   const session = new DesktopSession(driver)
-  let shown = 0
+  let observed = 0
   const bridge = new DesktopBridge(connection, session, async () => {
-    shown += 1
+    observed += 1
+    return session.observe()
   })
-  return { bridge, events, replies, rejects, shown: () => shown }
+  return { bridge, events, replies, rejects, observed: () => observed }
 }
 
 describe("desktop observation bridge", () => {
@@ -65,7 +66,7 @@ describe("desktop observation bridge", () => {
     for (const listener of test.events)
       listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
     await Bun.sleep(20)
-    expect(test.shown()).toBe(1)
+    expect(test.observed()).toBe(1)
     expect(test.rejects).toEqual([])
     expect(test.replies).toHaveLength(1)
     expect(test.replies[0]).toMatchObject({
@@ -92,7 +93,7 @@ describe("desktop observation bridge", () => {
     for (const listener of test.events)
       listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
     await Bun.sleep(20)
-    expect(test.shown()).toBe(1)
+    expect(test.observed()).toBe(1)
     expect(test.replies).toHaveLength(2)
     test.bridge.dispose()
   })

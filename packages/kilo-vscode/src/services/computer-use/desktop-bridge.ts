@@ -31,7 +31,7 @@ export class DesktopBridge {
   constructor(
     private readonly connection: DesktopConnection,
     private readonly session: DesktopSession,
-    private readonly show: () => Promise<void>,
+    private readonly observe: () => ReturnType<DesktopSession["observe"]>,
   ) {
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
     this.offState = connection.onStateChange((state) => this.state(state))
@@ -109,9 +109,8 @@ export class DesktopBridge {
     const startedAt = Date.now()
     this.active.set(request.id, controller)
     try {
-      await this.show()
+      const frame = await this.observe()
       if (controller.signal.aborted) return
-      const frame = await this.session.observe()
       const result: DesktopResult = {
         operation: "observe",
         width: frame.width,

@@ -14,7 +14,16 @@ export class DesktopAutomationService implements vscode.Disposable {
     if (process.platform !== "win32") return
     this.session = new DesktopSession(new WindowsDesktopDriver())
     this.panel = new DesktopPanel(this.session)
-    this.bridge = new DesktopBridge(connection, this.session, () => this.show())
+    this.bridge = new DesktopBridge(connection, this.session, async () =>
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Raya is looking at the foreground window",
+          cancellable: false,
+        },
+        () => this.session!.observe(),
+      ),
+    )
   }
 
   async show(): Promise<void> {

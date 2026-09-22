@@ -15,6 +15,7 @@ import { BrowserUploads, type UploadFile, type UploadInfo, type UploadTransport 
 import { filename, save } from "./browser-save"
 import { BrowserTransfers, type TransferInfo, type TransferOrigin, type TransferPage } from "./browser-transfer"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
+import { ObservationLedger, type ComputerObservation, type ComputerTarget } from "../computer-use/observation-ledger"
 
 export type BrowserAction = {
   tabID?: string
@@ -104,13 +105,7 @@ export type BrowserResult = {
   | SmokeResult
 )
 
-type BrowserObservation = {
-  version: 1
-  id: string
-  observedAt: number
-  validUntil: number
-  target: { surface: "browser"; windowID: string; documentID?: string; location?: string }
-}
+type BrowserObservation = ComputerObservation & { target: ComputerTarget & { surface: "browser" } }
 
 export type BrowserFrame = {
   tabID: string
@@ -290,7 +285,7 @@ export class BrowserSession {
   private readonly identities = new Map<BrowserPage, string>()
   private readonly openers = new Map<BrowserPage, Promise<string | undefined>>()
   private readonly inventories = new Set<(tabs: BrowserTab[]) => void>()
-  private readonly observations = new Map<string, { value: BrowserObservation; revision: number }>()
+  private readonly observations = new ObservationLedger("Browser")
   private page: BrowserPage | undefined
   private cdp: BrowserCDP | undefined
   private start: Promise<void> | undefined
@@ -780,45 +775,39 @@ export class BrowserSession {
 
   private observe(result: BrowserResult): BrowserObservation {
     if (!result.tabID) throw new TargetError("Browser snapshot did not preserve its tab identity")
-    const observedAt = Date.now()
-    const value: BrowserObservation = {
-      version: 1,
-      id: randomUUID(),
-      observedAt,
-      validUntil: observedAt + 60_000,
-      target: {
+    return this.observations.issue(
+      {
         surface: "browser",
         windowID: result.tabID,
         ...(result.frameID ? { documentID: result.frameID } : {}),
         ...("url" in result && result.url ? { location: result.frameURL ?? result.url } : {}),
       },
-    }
-    this.observations.set(value.id, { value, revision: this.revision })
-    while (this.observations.size > 256) this.observations.delete(this.observations.keys().next().value!)
-    return value
+      this.revision,
+    )
   }
 
   private consume(action: BrowserAction): void {
     if (!action.observationID) return
-    const record = this.observations.get(action.observationID)
-    this.observations.delete(action.observationID)
-    if (!record) throw new TargetError("Browser observation is unknown or was already used; take a fresh snapshot")
-    if (record.value.validUntil < Date.now())
-      throw new TargetError("Browser observation expired; take a fresh snapshot")
-    if (record.revision !== this.revision)
-      throw new TargetError("Browser observation became stale after manual control; take a fresh snapshot")
-    if (record.value.target.windowID !== action.tabID || record.value.target.documentID !== action.frameID)
-      throw new TargetError("Browser observation belongs to a different tab or frame; no action was dispatched")
     const page = this.resolve(action.tabID)
     const location = action.frameID ? this.document(action.tabID, action.frameID).frame.url() : page.url()
-    if (record.value.target.location !== location)
-      throw new TargetError("Browser observation became stale after navigation; take a fresh snapshot")
+    try {
+      this.observations.consume(
+        action.observationID,
+        {
+          surface: "browser",
+          windowID: action.tabID!,
+          ...(action.frameID ? { documentID: action.frameID } : {}),
+          location,
+        },
+        this.revision,
+      )
+    } catch (error) {
+      throw new TargetError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   private invalidate(tabID?: string): void {
-    for (const [id, record] of this.observations) {
-      if (!tabID || record.value.target.windowID === tabID) this.observations.delete(id)
-    }
+    this.observations.invalidate("browser", tabID)
   }
 
   private async executeAction(

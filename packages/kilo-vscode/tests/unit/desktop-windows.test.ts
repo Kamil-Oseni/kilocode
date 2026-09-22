@@ -117,6 +117,10 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("SendInput(3, inputs")
     expect(test.scripts[0]).toContain("Mouse(up, 0)")
     expect(test.scripts[0]).toContain("GetSystemMetrics(76)")
+    expect(test.scripts[0]).toContain("ValidatePoint(expectedX, expectedY)")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Move($startX, $startY)")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Drag($absoluteX, $absoluteY, $endX, $endY, $down, $up)")
+    expect(test.scripts[0]).toContain("Windows did not finish the drag at the exact desktop point")
   })
 
   it("batches click press and release with a recovery release", async () => {
@@ -139,6 +143,29 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("Mouse(up, 0)")
     expect(test.scripts[0]).toContain('[RayaDesktopNative]::Click($down, $up, $action.action -eq "double_click")')
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse($down, 0)")
+  })
+
+  it("refuses off-screen pointer targets and verifies exact native placement", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner)
+    await driver.perform(
+      {
+        operation: "pointer",
+        action: "click",
+        windowID: "0x123",
+        observationID: "obs-point",
+        x: 0.5,
+        y: 0.5,
+        button: "left",
+      },
+      { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
+    )
+
+    expect(test.scripts[0]).toContain("ValidatePoint(x, y)")
+    expect(test.scripts[0]).toContain("GetCursorPos(out point)")
+    expect(test.scripts[0]).toContain("Desktop point is outside the physical virtual desktop")
+    expect(test.scripts[0]).toContain("[RayaDesktopNative]::Move($x, $y)")
+    expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::SetCursorPos($x, $y)")
   })
 
   it("batches complete key chords and recovers every release after partial dispatch", async () => {

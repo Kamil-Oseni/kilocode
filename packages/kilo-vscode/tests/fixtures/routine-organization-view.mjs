@@ -123,6 +123,17 @@ try {
         objective: "Build the approved landing page",
         time: 1,
         updated: 2,
+      },
+      {
+        id: "work_complete",
+        sender: { id: sender, name: "Design Lead", role: "Designer", archived: false },
+        recipient: { id: recipient, name: "Frontend Lead", role: "Developer", archived: false },
+        organizationID,
+        source: "delegate:complete",
+        state: "completed",
+        objective: "Prepare the approved homepage file",
+        time: 1,
+        updated: 2,
         artifacts: [
           {
             path: "C:/Projects/Client/approved-homepage.fig",
@@ -134,7 +145,7 @@ try {
       },
     ],
     summary: {
-      total: 1,
+      total: 2,
       active: 1,
       needsAttention: 0,
       uncertain: 0,
@@ -145,13 +156,26 @@ try {
     },
   })
   await new Promise((resolve) => setImmediate(resolve))
+  assert.match(root.textContent, /Current 1/)
+  assert.match(root.textContent, /History 1/)
+  assert.match(root.textContent, /Build the approved landing page/)
+  assert.doesNotMatch(root.textContent, /Prepare the approved homepage file/)
+  assert.equal(root.querySelector('input[placeholder="Outcome or report"]'), null)
+  const history = [...root.querySelectorAll(".routines-organization-work-views button")].find(
+    (button) => button.textContent.trim() === "History 1",
+  )
+  assert.ok(history)
+  history.click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.doesNotMatch(root.textContent, /Build the approved landing page/)
+  assert.match(root.textContent, /Prepare the approved homepage file/)
   assert.match(root.textContent, /Files handed off/)
   assert.match(root.textContent, /approved-homepage\.fig/)
   assert.match(root.textContent, /Verified · dddddddddddd/)
   const search = root.querySelector('input[placeholder="Outcome or report"]')
   search.value = "approved-homepage.fig"
   search.dispatchEvent(new window.Event("input", { bubbles: true }))
-  assert.match(root.textContent, /Build the approved landing page/)
+  assert.match(root.textContent, /Prepare the approved homepage file/)
   search.value = "missing-file.pdf"
   search.dispatchEvent(new window.Event("input", { bubbles: true }))
   assert.match(root.textContent, /No work matches these filters/)

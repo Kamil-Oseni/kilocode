@@ -124,6 +124,8 @@ export const OrganizationAssignment: Component<{
   const [intent, setIntent] = createSignal("")
   const [manual, setManual] = createSignal(!!props.parent)
   const source = `organization${props.parent ? "-follow" : ""}:${props.item.id}:${crypto.randomUUID()}`
+  let intentField: HTMLTextAreaElement | undefined
+  let recipientField: HTMLSelectElement | undefined
 
   createEffect(() => {
     const available = senders()
@@ -278,6 +280,7 @@ export const OrganizationAssignment: Component<{
               <label class="routines-field" for={`${uid}-intent`}>
                 <span class="sr-only">Describe the work</span>
                 <textarea
+                  ref={intentField}
                   id={`${uid}-intent`}
                   value={intent()}
                   maxlength={8000}
@@ -288,7 +291,15 @@ export const OrganizationAssignment: Component<{
                 />
               </label>
               <div class="dialog-confirm-actions routines-assignment-simple-actions">
-                <Button type="button" variant="ghost" size="large" onClick={() => setManual(true)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="large"
+                  onClick={() => {
+                    setManual(true)
+                    queueMicrotask(() => recipientField?.focus())
+                  }}
+                >
                   Choose details myself
                 </Button>
                 <Button type="submit" size="large" disabled={!intent().trim()}>
@@ -298,155 +309,165 @@ export const OrganizationAssignment: Component<{
             </form>
           }
         >
-        <form
-          class="routines-assignment"
-          onSubmit={(event) => {
-            event.preventDefault()
-            submit()
-          }}
-        >
-          <Show when={error()}>
-            <p class="routines-error" role="alert">
-              {error()}
-            </p>
-          </Show>
-          <Show when={props.parent}>
-            {(parent) => (
-              <div class="routines-assignment-parent">
-                <span>Following</span>
-                <p>{parent().objective}</p>
-              </div>
-            )}
-          </Show>
-          <div class="routines-assignment-route">
-            <label class="routines-field" for={`${uid}-recipient`}>
-              Responsible worker
-              <select
-                id={`${uid}-recipient`}
-                value={recipient()}
-                disabled={!!sent()}
-                autofocus
-                onChange={(event) => setRecipient(event.currentTarget.value)}
-              >
-                <For each={targets()}>
-                  {(person) => <option value={person.agent.id}>{person.agent.name + " · " + person.role}</option>}
-                </For>
-              </select>
-            </label>
-            <Show
-              when={props.parent}
-              fallback={
-                <label class="routines-field" for={`${uid}-sender`}>
-                  Assigned by
-                  <select
-                    id={`${uid}-sender`}
-                    value={sender()}
-                    disabled={!!sent()}
-                    onChange={(event) => setSender(event.currentTarget.value)}
-                  >
-                    <For each={senders()}>
-                      {(person) => <option value={person.agent.id}>{person.agent.name + " · " + person.role}</option>}
-                    </For>
-                  </select>
-                </label>
-              }
-            >
-              <div class="routines-field">
-                <span>Assigned by</span>
-                <strong class="routines-assignment-person">
-                  {props.parent!.recipient.name + " · " + props.parent!.recipient.role}
-                </strong>
-              </div>
+          <form
+            class="routines-assignment"
+            onSubmit={(event) => {
+              event.preventDefault()
+              submit()
+            }}
+          >
+            <Show when={error()}>
+              <p class="routines-error" role="alert">
+                {error()}
+              </p>
             </Show>
-          </div>
-          <label class="routines-field" for={`${uid}-objective`}>
-            Outcome
-            <textarea
-              id={`${uid}-objective`}
-              value={objective()}
-              maxlength={8000}
-              rows={4}
-              disabled={!!sent()}
-              placeholder="What should this worker deliver?"
-              onInput={(event) => setObjective(event.currentTarget.value)}
-            />
-          </label>
-          <details class="routines-assignment-details" open={bounded()}>
-            <summary>Details</summary>
-            <label class="routines-field" for={`${uid}-expected`}>
-              Expected result
-              <textarea
-                id={`${uid}-expected`}
-                value={expected()}
-                maxlength={8000}
-                rows={2}
-                disabled={!!sent()}
-                onInput={(event) => setExpected(event.currentTarget.value)}
-              />
-            </label>
-            <label class="routines-field" for={`${uid}-context`}>
-              Context
-              <textarea
-                id={`${uid}-context`}
-                value={context()}
-                maxlength={8000}
-                rows={3}
-                disabled={!!sent()}
-                onInput={(event) => setContext(event.currentTarget.value)}
-              />
-            </label>
+            <Show when={props.parent}>
+              {(parent) => (
+                <div class="routines-assignment-parent">
+                  <span>Following</span>
+                  <p>{parent().objective}</p>
+                </div>
+              )}
+            </Show>
             <div class="routines-assignment-route">
-              <label class="routines-field" for={`${uid}-deadline`}>
-                Deadline
-                <input
-                  id={`${uid}-deadline`}
-                  type="datetime-local"
-                  min={local(Date.now() + 60_000)}
-                  value={deadline()}
+              <label class="routines-field" for={`${uid}-recipient`}>
+                Responsible worker
+                <select
+                  ref={recipientField}
+                  id={`${uid}-recipient`}
+                  value={recipient()}
                   disabled={!!sent()}
-                  aria-invalid={deadline() !== "" && !(due()! > Date.now())}
-                  onInput={(event) => setDeadline(event.currentTarget.value)}
-                />
+                  autofocus
+                  onChange={(event) => setRecipient(event.currentTarget.value)}
+                >
+                  <For each={targets()}>
+                    {(person) => <option value={person.agent.id}>{person.agent.name + " · " + person.role}</option>}
+                  </For>
+                </select>
               </label>
-              <label class="routines-field" for={`${uid}-budget`}>
-                Budget (USD)
-                <input
-                  id={`${uid}-budget`}
-                  type="number"
-                  min="1"
-                  max={(ceiling() ?? 1_000_000).toString()}
-                  step="1"
-                  value={budget()}
-                  disabled={!!sent()}
-                  aria-invalid={
-                    bounded()
-                      ? !Number.isSafeInteger(cost()) || (cost() ?? Infinity) > ceiling()!
-                      : budget() !== "" && !Number.isSafeInteger(cost())
-                  }
-                  onInput={(event) => setBudget(event.currentTarget.value)}
-                />
-                <Show when={ceiling() !== undefined}>
-                  <span class="routines-hint">
-                    {props.parent
-                      ? `This follow-on must stay within its parent's ${money(ceiling()!)} budget.`
-                      : `${money(ceiling()!)} remains available across organization work.`}
-                  </span>
-                </Show>
-              </label>
+              <Show
+                when={props.parent}
+                fallback={
+                  <label class="routines-field" for={`${uid}-sender`}>
+                    Assigned by
+                    <select
+                      id={`${uid}-sender`}
+                      value={sender()}
+                      disabled={!!sent()}
+                      onChange={(event) => setSender(event.currentTarget.value)}
+                    >
+                      <For each={senders()}>
+                        {(person) => <option value={person.agent.id}>{person.agent.name + " · " + person.role}</option>}
+                      </For>
+                    </select>
+                  </label>
+                }
+              >
+                <div class="routines-field">
+                  <span>Assigned by</span>
+                  <strong class="routines-assignment-person">
+                    {props.parent!.recipient.name + " · " + props.parent!.recipient.role}
+                  </strong>
+                </div>
+              </Show>
             </div>
-          </details>
-          <div class="dialog-confirm-actions">
-            <Button type="button" variant="ghost" size="large" disabled={!!sent()} onClick={() => setManual(false)}>
-              Use Raya instead
-            </Button>
-            <Button variant="secondary" size="large" disabled={!!sent()} onClick={() => dialog.close()}>
-              Cancel
-            </Button>
-            <Button type="submit" size="large" disabled={!valid() || !!sent()}>
-              {sent() ? "Assigning" : props.parent ? "Assign follow-on" : "Assign work"}
-            </Button>
-          </div>
-        </form>
+            <label class="routines-field" for={`${uid}-objective`}>
+              Outcome
+              <textarea
+                id={`${uid}-objective`}
+                value={objective()}
+                maxlength={8000}
+                rows={4}
+                disabled={!!sent()}
+                placeholder="What should this worker deliver?"
+                onInput={(event) => setObjective(event.currentTarget.value)}
+              />
+            </label>
+            <details class="routines-assignment-details" open={bounded()}>
+              <summary>Details</summary>
+              <label class="routines-field" for={`${uid}-expected`}>
+                Expected result
+                <textarea
+                  id={`${uid}-expected`}
+                  value={expected()}
+                  maxlength={8000}
+                  rows={2}
+                  disabled={!!sent()}
+                  onInput={(event) => setExpected(event.currentTarget.value)}
+                />
+              </label>
+              <label class="routines-field" for={`${uid}-context`}>
+                Context
+                <textarea
+                  id={`${uid}-context`}
+                  value={context()}
+                  maxlength={8000}
+                  rows={3}
+                  disabled={!!sent()}
+                  onInput={(event) => setContext(event.currentTarget.value)}
+                />
+              </label>
+              <div class="routines-assignment-route">
+                <label class="routines-field" for={`${uid}-deadline`}>
+                  Deadline
+                  <input
+                    id={`${uid}-deadline`}
+                    type="datetime-local"
+                    min={local(Date.now() + 60_000)}
+                    value={deadline()}
+                    disabled={!!sent()}
+                    aria-invalid={deadline() !== "" && !(due()! > Date.now())}
+                    onInput={(event) => setDeadline(event.currentTarget.value)}
+                  />
+                </label>
+                <label class="routines-field" for={`${uid}-budget`}>
+                  Budget (USD)
+                  <input
+                    id={`${uid}-budget`}
+                    type="number"
+                    min="1"
+                    max={(ceiling() ?? 1_000_000).toString()}
+                    step="1"
+                    value={budget()}
+                    disabled={!!sent()}
+                    aria-invalid={
+                      bounded()
+                        ? !Number.isSafeInteger(cost()) || (cost() ?? Infinity) > ceiling()!
+                        : budget() !== "" && !Number.isSafeInteger(cost())
+                    }
+                    onInput={(event) => setBudget(event.currentTarget.value)}
+                  />
+                  <Show when={ceiling() !== undefined}>
+                    <span class="routines-hint">
+                      {props.parent
+                        ? `This follow-on must stay within its parent's ${money(ceiling()!)} budget.`
+                        : `${money(ceiling()!)} remains available across organization work.`}
+                    </span>
+                  </Show>
+                </label>
+              </div>
+            </details>
+            <div class="dialog-confirm-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                size="large"
+                disabled={!!sent()}
+                onClick={() => {
+                  setManual(false)
+                  queueMicrotask(() => intentField?.focus())
+                }}
+              >
+                Use Raya instead
+              </Button>
+              <Button variant="secondary" size="large" disabled={!!sent()} onClick={() => dialog.close()}>
+                Cancel
+              </Button>
+              <Button type="submit" size="large" disabled={!valid() || !!sent()}>
+                {sent() ? "Assigning" : props.parent ? "Assign follow-on" : "Assign work"}
+              </Button>
+            </div>
+          </form>
         </Show>
       </Show>
     </Dialog>

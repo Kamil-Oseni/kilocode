@@ -121,6 +121,10 @@ function live(state: Work["state"]) {
   return state === "queued" || state === "accepted" || state === "running" || state === "needs_input"
 }
 
+function finished(state: Work["state"]) {
+  return !live(state)
+}
+
 function label(state: Work["state"]) {
   if (state === "needs_input") return "Waiting for your answer"
   if (state === "accepted") return "Starting"
@@ -169,8 +173,10 @@ export const OrganizationActivity: Component<{
   const [query, setQuery] = createSignal("")
   const [phase, setPhase] = createSignal("all")
   const [worker, setWorker] = createSignal("all")
+  const [view, setView] = createSignal<"current" | "history">("current")
   let request = ""
   let after: string | undefined
+  let chosen = false
 
   const available = () => {
     const total = summary()
@@ -242,6 +248,7 @@ export const OrganizationActivity: Component<{
     else setItems((prior) => [...prior, ...rows.filter((row) => !prior.some((item) => item.id === row.id))])
     setNext(msg.next)
     setSummary(msg.summary)
+    if (!after && !chosen) setView(msg.summary.active ? "current" : "history")
   }
 
   const lineage = (msg: Extract<ExtensionMessage, { type: "routineDelegateChain" }>) => {
@@ -308,9 +315,11 @@ export const OrganizationActivity: Component<{
   onCleanup(unsub)
   onMount(() => load())
 
+  const current = createMemo(() => items().filter((item) => live(item.state)))
+  const history = createMemo(() => items().filter((item) => finished(item.state)))
   const workers = createMemo(() => {
     const found = new Map<string, string>()
-    for (const item of items()) {
+    for (const item of history()) {
       found.set(item.sender.id, item.sender.name)
       found.set(item.recipient.id, item.recipient.name)
     }
@@ -318,7 +327,8 @@ export const OrganizationActivity: Component<{
   })
   const visible = createMemo(() => {
     const term = query().trim().toLowerCase()
-    return items().filter((item) => {
+    const source = view() === "current" ? current() : history()
+    return source.filter((item) => {
       if (phase() !== "all" && item.state !== phase()) return false
       if (worker() !== "all" && item.sender.id !== worker() && item.recipient.id !== worker()) return false
       if (!term) return true
@@ -335,8 +345,16 @@ export const OrganizationActivity: Component<{
 
   createEffect(() => {
     props.id
+    chosen = false
+    setView("current")
     clear()
   })
+
+  const chooseView = (next: "current" | "history") => {
+    chosen = true
+    setView(next)
+    clear()
+  }
 
   const name = (id: string) => {
     for (const item of items()) {
@@ -450,6 +468,16 @@ export const OrganizationActivity: Component<{
         )}
       </Show>
       <Show when={items().length}>
+        <div class="routines-organization-work-views" role="group" aria-label="Organization work">
+          <button type="button" aria-pressed={view() === "current"} onClick={() => chooseView("current")}>
+            Current <span>{summary()?.active ?? current().length}</span>
+          </button>
+          <button type="button" aria-pressed={view() === "history"} onClick={() => chooseView("history")}>
+            History <span>{Math.max((summary()?.total ?? items().length) - (summary()?.active ?? 0), 0)}</span>
+          </button>
+        </div>
+      </Show>
+      <Show when={view() === "history" && history().length}>
         <details class="routines-organization-filter">
           <summary>Filter work</summary>
           <div class="routines-organization-work-filters" aria-label="Filter work">
@@ -467,7 +495,9 @@ export const OrganizationActivity: Component<{
               State
               <select value={phase()} onChange={(event) => setPhase(event.currentTarget.value)}>
                 <option value="all">All states</option>
-                <For each={[...states]}>{(state) => <option value={state}>{label(state)}</option>}</For>
+                <For each={[...states].filter(finished)}>
+                  {(state) => <option value={state}>{label(state)}</option>}
+                </For>
               </select>
             </label>
             <label class="routines-field">
@@ -484,7 +514,7 @@ export const OrganizationActivity: Component<{
             </Show>
           </div>
           <p class="routines-organization-work-count" role="status">
-            Showing {visible().length} of {items().length} loaded
+            Showing {visible().length} of {history().length} loaded
           </p>
         </details>
       </Show>
@@ -621,7 +651,13 @@ export const OrganizationActivity: Component<{
         </ol>
       </Show>
       <Show when={items().length && !visible().length}>
-        <p class="routines-empty">No work matches these filters.</p>
+        <p class="routines-empty">
+          {view() === "current"
+            ? "No work is active right now. Finished requests are in History."
+            : query() || phase() !== "all" || worker() !== "all"
+              ? "No work matches these filters."
+              : "No finished work yet."}
+        </p>
       </Show>
       <Show when={!items().length && !error()}>
         <p class="routines-empty">{busy() ? "Loading work…" : "No delegated work yet."}</p>
@@ -634,7 +670,7 @@ export const OrganizationActivity: Component<{
           Retry work
         </Button>
       </Show>
-      <Show when={next()}>
+      <Show when={view() === "history" && next()}>
         <Button variant="ghost" size="small" disabled={busy()} onClick={() => load(next())}>
           Load earlier work
         </Button>

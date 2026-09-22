@@ -1326,6 +1326,43 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
   border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
 
+.routines-organization-work-views {
+  display: flex;
+  gap: var(--raya-space-16);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-organization-work-views button {
+  display: inline-flex;
+  gap: var(--raya-space-4);
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0 var(--raya-space-6);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font: inherit;
+  cursor: pointer;
+}
+
+.routines-organization-work-views button[aria-pressed="true"] {
+  border-bottom-color: var(--border-accent, var(--vscode-focusBorder));
+  color: var(--text-base, var(--vscode-foreground));
+  font-weight: 500;
+}
+
+.routines-organization-work-views button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, Highlight);
+  outline-offset: 2px;
+}
+
+.routines-organization-work-views span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+  font-weight: 400;
+}
+
 .routines-organization-work-filters {
   display: grid;
   grid-template-columns: minmax(10rem, 1fr) repeat(2, minmax(8rem, 0.55fr)) auto;
@@ -2281,6 +2318,11 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
 
 .routines-row[data-current="true"] {
   background: var(--surface-raised, var(--vscode-list-hoverBackground));
+}
+
+.routines-row[data-current="true"] .routines-job,
+.routines-row[data-current="true"] .routines-time {
+  color: var(--text-base, var(--vscode-foreground));
 }
 
 @media (max-width: 42rem) {

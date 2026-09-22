@@ -457,6 +457,8 @@ const preview = (message: WebviewMessage) => {
         needsAttention: rows.filter((item) => item.state === "needs_input" || item.state === "failed").length,
         uncertain: 0,
         recordedCost,
+        standaloneCost: 0,
+        coordinatorCost: 0,
         committedCost,
       },
       ...(message.cursor ? {} : { next: "older" }),

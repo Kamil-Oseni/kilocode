@@ -381,8 +381,10 @@ const layer = Layer.effect(
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const cfg = yield* config.get() // kilocode_change
+      const authority = input.trustedOnly ? Permission.merge(input.agent.permission, input.permission ?? []) : undefined // kilocode_change
       const filtered = (yield* all()).filter((tool) => {
         if (input.trustedOnly && !ToolNetwork.isBuiltin(tool) && !ToolTrust.check(tool)) return false // kilocode_change
+        if (authority && Permission.evaluate(tool.id, "*", authority).action === "deny") return false // kilocode_change
         if (!KiloToolRegistry.available(tool, input.agent)) return false // kilocode_change
         if (tool.id === WebSearchTool.id) {
           if (cfg.web_search === true) return true // kilocode_change

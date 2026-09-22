@@ -274,17 +274,22 @@ public static class RayaDesktopNative {
   }
 
   public static void Text(string text) {
-    foreach (var character in text) {
+    var inputs = new Input[checked(text.Length * 2)];
+    for (var position = 0; position < text.Length; position++) {
       var down = new Input {
         Type = 1,
-        Value = new InputUnion { Keyboard = new KeyboardInput { Scan = character, Flags = 4u } }
+        Value = new InputUnion { Keyboard = new KeyboardInput { Scan = text[position], Flags = 4u } }
       };
       var up = down;
       up.Value.Keyboard.Flags = 6u;
-      if (SendInput(2, new[] { down, up }, Marshal.SizeOf(typeof(Input))) == 2) continue;
-      SendInput(1, new[] { up }, Marshal.SizeOf(typeof(Input)));
-      throw new InvalidOperationException("Windows refused complete desktop text input");
+      inputs[position * 2] = down;
+      inputs[(position * 2) + 1] = up;
     }
+    var accepted = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input)));
+    if (accepted == (uint)inputs.Length) return;
+    if (accepted % 2 == 1 && accepted < (uint)inputs.Length)
+      SendInput(1, new[] { inputs[accepted] }, Marshal.SizeOf(typeof(Input)));
+    throw new InvalidOperationException("Windows refused complete desktop text input");
   }
 }
 `

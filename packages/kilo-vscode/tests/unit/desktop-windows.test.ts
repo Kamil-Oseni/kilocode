@@ -196,7 +196,7 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Key($key, $false)")
   })
 
-  it("attempts Unicode key-up recovery after partial text dispatch", async () => {
+  it("batches complete Unicode text and recovers an unmatched key-down after partial dispatch", async () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     await driver.perform(
@@ -204,7 +204,11 @@ describe("Windows native desktop driver", () => {
       { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
     )
 
-    expect(test.scripts[0]).toContain("SendInput(1, new[] { up }")
+    expect(test.scripts[0]).toContain("new Input[checked(text.Length * 2)]")
+    expect(test.scripts[0]).toContain("SendInput((uint)inputs.Length, inputs")
+    expect(test.scripts[0]).toContain("accepted % 2 == 1")
+    expect(test.scripts[0]).toContain("inputs[accepted]")
+    expect(test.scripts[0]).not.toContain("foreach (var character in text)")
     expect(test.scripts[0]).toContain("Windows refused complete desktop text input")
   })
 

@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 03:00 America/Toronto - organization settings acceptance follows progressive disclosure
+
+**Status: stale acceptance repaired, visually inspected and pushed; runtime bytes are unchanged.** The organization-editor browser journey still expected the pre-overhaul screen where policy, every worker setting, delegation permissions and archive controls were all visible together. Against the current product, it failed before exercising any saved behavior because **Team and reporting** no longer exists as an always-open heading.
+
+The production-component journey now proves the intended hierarchy directly. **Policy and spending**, the selected Counsel worker's **Worker settings**, **Who can assign work** and **Archive organization** all begin closed. The test opens only the section needed for each action, verifies the current authority and spending explanations, changes worker-creation authority and one exact delegation direction, saves the renamed organization, reads the saved policy and available budget back, then opens archive deliberately and cancels it. Axe WCAG A/AA and horizontal-overflow checks still pass. The focused Chromium case passes **1 test in 17.8 seconds**, and the final 900px screenshot was inspected directly.
+
+Targeted Prettier and ESLint pass. The protected push passed all **29 relevant JavaScript/TypeScript package typechecks** and skipped JetBrains. Test commit `9556f6741d` is on `origin/main`. Because this commit changes only executable acceptance, the installed product remains `eden.raya@7.4.23-snapshot+b7860353a0.kamil-oseni.1790059790292`; rebuilding identical runtime bytes would add no installed behavior.
+
 ## ChatGPT 2026-09-22 02:52 America/Toronto - advanced assignment reveals only required choices
 
 **Status: another bounded `FUT-ORG-01` UX defect is implemented, visually inspected, pushed and installed.** An organization spending limit previously forced the advanced assignment disclosure open because its required work budget lived beside optional expected-result, context and deadline inputs. Choosing details manually therefore revealed every field at once. Required **Work budget (USD)** now stays in the main assignment path, while **Optional details** begins closed. Organizations without a shared limit keep their optional budget inside that disclosure. The ambiguous **Use Raya instead** action now says **Let Raya choose**.

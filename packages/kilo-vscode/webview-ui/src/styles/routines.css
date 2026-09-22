@@ -1471,6 +1471,22 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .routines-assignment-manual-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .routines-assignment-manual-actions [data-component="button"] {
+    width: 100%;
+  }
+
+  .routines-assignment-manual-actions [data-component="button"]:last-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: stretch;
+    justify-content: center;
+  }
+
   .routines-organization-work-state {
     width: 100%;
     margin-left: 0;

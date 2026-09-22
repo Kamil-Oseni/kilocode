@@ -383,8 +383,29 @@ export const OrganizationAssignment: Component<{
                 onInput={(event) => setObjective(event.currentTarget.value)}
               />
             </label>
-            <details class="routines-assignment-details" open={bounded()}>
-              <summary>Details</summary>
+            <Show when={bounded()}>
+              <label class="routines-field" for={`${uid}-budget`}>
+                Work budget (USD)
+                <input
+                  id={`${uid}-budget`}
+                  type="number"
+                  min="1"
+                  max={ceiling()!.toString()}
+                  step="1"
+                  value={budget()}
+                  disabled={!!sent()}
+                  aria-invalid={!Number.isSafeInteger(cost()) || (cost() ?? Infinity) > ceiling()!}
+                  onInput={(event) => setBudget(event.currentTarget.value)}
+                />
+                <span class="routines-hint">
+                  {props.parent
+                    ? `This follow-on must stay within its parent's ${money(ceiling()!)} budget.`
+                    : `${money(ceiling()!)} remains available across organization work.`}
+                </span>
+              </label>
+            </Show>
+            <details class="routines-assignment-details">
+              <summary>Optional details</summary>
               <label class="routines-field" for={`${uid}-expected`}>
                 Expected result
                 <textarea
@@ -420,34 +441,25 @@ export const OrganizationAssignment: Component<{
                     onInput={(event) => setDeadline(event.currentTarget.value)}
                   />
                 </label>
-                <label class="routines-field" for={`${uid}-budget`}>
-                  Budget (USD)
-                  <input
-                    id={`${uid}-budget`}
-                    type="number"
-                    min="1"
-                    max={(ceiling() ?? 1_000_000).toString()}
-                    step="1"
-                    value={budget()}
-                    disabled={!!sent()}
-                    aria-invalid={
-                      bounded()
-                        ? !Number.isSafeInteger(cost()) || (cost() ?? Infinity) > ceiling()!
-                        : budget() !== "" && !Number.isSafeInteger(cost())
-                    }
-                    onInput={(event) => setBudget(event.currentTarget.value)}
-                  />
-                  <Show when={ceiling() !== undefined}>
-                    <span class="routines-hint">
-                      {props.parent
-                        ? `This follow-on must stay within its parent's ${money(ceiling()!)} budget.`
-                        : `${money(ceiling()!)} remains available across organization work.`}
-                    </span>
-                  </Show>
-                </label>
+                <Show when={!bounded()}>
+                  <label class="routines-field" for={`${uid}-budget`}>
+                    Optional budget (USD)
+                    <input
+                      id={`${uid}-budget`}
+                      type="number"
+                      min="1"
+                      max="1000000"
+                      step="1"
+                      value={budget()}
+                      disabled={!!sent()}
+                      aria-invalid={budget() !== "" && !Number.isSafeInteger(cost())}
+                      onInput={(event) => setBudget(event.currentTarget.value)}
+                    />
+                  </label>
+                </Show>
               </div>
             </details>
-            <div class="dialog-confirm-actions">
+            <div class="dialog-confirm-actions routines-assignment-manual-actions">
               <Button
                 type="button"
                 variant="ghost"
@@ -458,7 +470,7 @@ export const OrganizationAssignment: Component<{
                   queueMicrotask(() => intentField?.focus())
                 }}
               >
-                Use Raya instead
+                Let Raya choose
               </Button>
               <Button variant="secondary" size="large" disabled={!!sent()} onClick={() => dialog.close()}>
                 Cancel

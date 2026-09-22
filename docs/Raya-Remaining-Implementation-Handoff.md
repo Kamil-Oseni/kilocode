@@ -1,11 +1,15 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `e449b44ca9` is on `origin/main`; installed snapshot `eden.raya@7.4.23-snapshot+3439d0929a.kamil-oseni.1790095303466` predates the new grounded desktop window listing and switching slice. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate delivery action is the capped snapshot installation and live observation boundary recorded below.
+> **Goal status: ACTIVE — implementation is continuing one coherent slice at a time.** Product source `e449b44ca9` is on `origin/main`; snapshot `eden.raya@7.4.23-snapshot+4cf3bb6720.kamil-oseni.1790106027566` installs the grounded desktop window listing and switching slice. `FUT-ADM-01` is Verified. The owner accepted ordinary-chat clocks and hover detail for `FUT-CHAT-01`; the elapsed-chat timeline marker still needs installed-host observation. `FUT-ORG-01` remains in progress after accepted persistence, tracked Work and navigation behavior. The next immediate boundary is live installed-host window listing and focus observation after a normal reload.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+
+## ChatGPT 2026-09-22 15:44 America/Toronto - grounded window switching installation receipt
+
+Snapshot `eden.raya@7.4.23-snapshot+4cf3bb6720.kamil-oseni.1790106027566` is installed without a forced reload. Retained VSIX `raya.98a5e766aad2ec950bc29cb3889f738f392b814c97d6f372a62bdaee16790722.vsix` is **522,219,302 bytes**, SHA-256 `98A5E766AAD2EC950BC29CB3889F738F392B814C97D6F372A62BDAEE16790722`; bundled CLI is **232,211,456 bytes**, SHA-256 `9DBD7C0F8BE317E9EEB8B6CAFCC36D1A494CB339E9EAC5D57C9CEFB344FF67B5`. The workflow rebuilt the changed CLI and SDK, passed both typechecks, lint, bundle and three CLI smoke checks, and pruned one old vault package, staged package and extension. VS Code independently returned the exact identity; no Bun/tsgo/tsgolint process remains. After a normal host reload, live `desktop_windows` and `desktop_focus` observation remains the sole acceptance boundary for this slice.
 
 ## ChatGPT 2026-09-22 15:32 America/Toronto - preserve grounded desktop window switching
 

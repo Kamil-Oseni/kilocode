@@ -59,6 +59,7 @@ public static class RayaDesktopNative {
   }
 
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
   [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr state);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr handle);
@@ -134,6 +135,7 @@ public static class RayaDesktopNative {
     var info = Describe(handle);
     if (info == null || info.Location != location || info.X != x || info.Y != y || info.Width != width || info.Height != height || info.Minimized != minimized || info.Foreground != foreground)
       throw new InvalidOperationException("Desktop window changed before focus");
+    ValidateIdleInput();
     uint ignored;
     var current = GetCurrentThreadId();
     var before = GetForegroundWindow();
@@ -163,6 +165,7 @@ public static class RayaDesktopNative {
   }
 
   public static void Scroll(int deltaX, int deltaY) {
+    ValidateIdleInput();
     var inputs = new List<Input>();
     if (deltaY != 0) {
       inputs.Add(new Input {
@@ -185,6 +188,7 @@ public static class RayaDesktopNative {
   public static void Move(int x, int y) {
     ValidatePoint(x, y);
     ValidateTarget(x, y);
+    ValidateIdleInput();
     if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows refused desktop pointer movement");
     Point point;
     if (!GetCursorPos(out point) || point.X != x || point.Y != y)
@@ -196,6 +200,7 @@ public static class RayaDesktopNative {
     ValidatePoint(expectedEndX, expectedEndY);
     ValidateTarget(expectedStartX, expectedStartY);
     ValidateTarget(expectedEndX, expectedEndY);
+    ValidateIdleInput();
     var inputs = new[] {
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = startX, Y = startY, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
@@ -231,9 +236,17 @@ public static class RayaDesktopNative {
       throw new InvalidOperationException("Another application covers the grounded desktop point");
   }
 
+  private static void ValidateIdleInput() {
+    for (var key = 1; key < 256; key++) {
+      if ((GetAsyncKeyState(key) & 0x8000) != 0)
+        throw new InvalidOperationException("Manual keyboard or pointer input is held; desktop control was not dispatched");
+    }
+  }
+
   public static void Click(int x, int y, int expectedX, int expectedY, uint down, uint up, bool twice) {
     ValidatePoint(expectedX, expectedY);
     ValidateTarget(expectedX, expectedY);
+    ValidateIdleInput();
     var inputs = new List<Input> {
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = x, Y = y, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = down } } },
@@ -254,6 +267,7 @@ public static class RayaDesktopNative {
   }
 
   public static void Chord(ushort key, ushort[] modifiers) {
+    ValidateIdleInput();
     var inputs = new Input[(modifiers.Length * 2) + 2];
     var index = 0;
     foreach (var modifier in modifiers) {
@@ -291,6 +305,7 @@ public static class RayaDesktopNative {
   }
 
   public static void Text(string text) {
+    ValidateIdleInput();
     var inputs = new Input[checked(text.Length * 2)];
     for (var position = 0; position < text.Length; position++) {
       var down = new Input {

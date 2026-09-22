@@ -85,6 +85,7 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[1]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[1]).toContain("AttachThreadInput")
     expect(test.scripts[1]).toContain("attempt < 10")
+    expect(test.scripts[1]).toContain("ValidateIdleInput()")
   })
 
   it("passes actions as encoded JSON instead of interpolated text", async () => {
@@ -155,6 +156,8 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("Windows did not click the exact desktop point")
     expect(test.scripts[0]).toContain("ValidateTarget(expectedX, expectedY)")
     expect(test.scripts[0]).toContain("Another application covers the grounded desktop point")
+    expect(test.scripts[0]).toContain("GetAsyncKeyState(key) & 0x8000")
+    expect(test.scripts[0]).toContain("Manual keyboard or pointer input is held")
     expect(test.scripts[0]).toContain('if ($action.action -eq "move") {')
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse($down, 0)")
   })
@@ -202,6 +205,9 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("Release(key)")
     expect(test.scripts[0]).toContain("Release(modifiers[position])")
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::Chord([uint16]$key, [uint16[]]$held)")
+    expect(test.scripts[0]).toContain(
+      "public static void Chord(ushort key, ushort[] modifiers) {\n    ValidateIdleInput();",
+    )
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Key($key, $false)")
   })
 
@@ -214,6 +220,7 @@ describe("Windows native desktop driver", () => {
     )
 
     expect(test.scripts[0]).toContain("new Input[checked(text.Length * 2)]")
+    expect(test.scripts[0]).toContain("public static void Text(string text) {\n    ValidateIdleInput();")
     expect(test.scripts[0]).toContain("SendInput((uint)inputs.Length, inputs")
     expect(test.scripts[0]).toContain("accepted % 2 == 1")
     expect(test.scripts[0]).toContain("inputs[accepted]")
@@ -239,6 +246,7 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("unchecked((uint)deltaX)")
     expect(test.scripts[0]).toContain("SendInput((uint)batch.Length, batch")
     expect(test.scripts[0]).toContain("Windows refused complete desktop scroll input")
+    expect(test.scripts[0]).toContain("public static void Scroll(int deltaX, int deltaY) {\n    ValidateIdleInput();")
     expect(test.scripts[0]).toContain(
       "[RayaDesktopNative]::Scroll([int][Math]::Round($action.deltaX), [int][Math]::Round($action.deltaY))",
     )

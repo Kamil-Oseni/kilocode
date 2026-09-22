@@ -9,7 +9,7 @@ import type {
   BrowserLaunch,
   BrowserPage,
 } from "../../src/services/browser-automation/browser-session"
-import { BrowserSession, evaluate } from "../../src/services/browser-automation/browser-session"
+import { BrowserOutcomeError, BrowserSession, evaluate } from "../../src/services/browser-automation/browser-session"
 
 class FakeCDP implements BrowserCDP {
   readonly commands: Array<{ method: string; params?: Record<string, unknown> }> = []
@@ -461,17 +461,23 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
-  it("keeps agent control after an uncertain click so a fresh request can continue", async () => {
+  it("blocks a fresh request after the bridge marks an uncertain click until explicit resume", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-uncertain-"))
     const fake = harness()
-    const session = new BrowserSession("retry-exhausted-profile", fake.launch)
+    const session = new BrowserSession(dir, fake.launch)
     await session.ready()
     fake.pages[0]!.failClicks = 3
 
-    await expect(session.execute({ operation: "click", selector: "#missing" })).rejects.toThrow("may have taken effect")
+    const failure = await session.execute({ operation: "click", selector: "#missing" }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(BrowserOutcomeError)
+    session.interlock((failure as Error).message)
 
     expect(fake.pages[0]!.clickAttempts).toBe(1)
-    expect(session.current()).toEqual({ control: "agent", busy: false })
+    expect(session.current()).toMatchObject({ control: "manual", busy: false, reason: expect.stringContaining("may") })
     fake.pages[0]!.failClicks = 0
+    await expect(session.execute({ operation: "click", selector: "#blocked" })).rejects.toThrow(/explicitly resume/i)
+    expect(fake.pages[0]!.clickAttempts).toBe(1)
+    session.resume()
     await session.execute({ operation: "click", selector: "#agent-resumed" })
     expect(fake.pages[0]!.clicks).toEqual(["#agent-resumed"])
     await session.dispose()

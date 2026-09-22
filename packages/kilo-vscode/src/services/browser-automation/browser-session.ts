@@ -236,7 +236,7 @@ export function evaluate(source: string): unknown {
   return execute(prepare(source))
 }
 
-class OutcomeError extends Error {
+export class BrowserOutcomeError extends Error {
   readonly name = "BrowserOutcomeError"
 
   constructor(operation: string, detail: string) {
@@ -303,8 +303,10 @@ export class BrowserSession {
   private width = 1280 // raya_change - layout viewport width; tracks the panel so CSS breakpoints fire
   private height = 720 // raya_change - layout viewport height; tracks the panel
   private state: BrowserState = { control: "agent", busy: false }
+  private blocked: string | undefined
   private readonly listeners = new Set<(frame: BrowserFrame) => void>()
   private readonly states = new Set<(state: BrowserState) => void>()
+  private readonly resumes = new Set<() => void>()
 
   constructor(
     readonly profile: string,
@@ -588,11 +590,23 @@ export class BrowserSession {
     return () => this.states.delete(listener)
   }
 
+  onResume(listener: () => void): () => void {
+    this.resumes.add(listener)
+    return () => this.resumes.delete(listener)
+  }
+
   resume(): void {
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
     this.revision += 1
+    this.blocked = undefined
     this.update({ control: "agent", busy: false })
+    for (const listener of this.resumes) listener()
+  }
+
+  interlock(reason: string): void {
+    this.blocked = reason
+    this.takeControl(reason)
   }
 
   takeControl(reason = "You took manual control of the browser."): void {
@@ -904,10 +918,12 @@ export class BrowserSession {
       void result.catch(() => undefined)
       this.update({ control: "manual", busy: false, reason })
       if (!closed)
-        throw new TargetError(
+        throw new BrowserOutcomeError(
+          action.operation,
           `The ${action.operation} action timed out and browser shutdown was not confirmed. Use browser profile retry before continuing.`,
         )
-      throw new TargetError(
+      throw new BrowserOutcomeError(
+        action.operation,
         `The ${action.operation} action timed out and its outcome is unknown. Raya restarted the browser runtime and preserved its profile. List tabs and inspect the destination before repeating the action.`,
       )
     }
@@ -1128,7 +1144,13 @@ export class BrowserSession {
   ): Promise<BrowserResult> {
     await this.ready()
     // A new tool call is an explicit instruction to return control to the agent.
-    if (this.state.control === "manual") this.resume()
+    if (this.state.control === "manual") {
+      if (this.blocked)
+        throw new TargetError(
+          `${this.blocked} Inspect the destination, then explicitly resume browser control before another action.`,
+        )
+      this.resume()
+    }
     this.update({ control: "agent", busy: true })
     const revision = this.revision
     this.running += 1
@@ -1169,7 +1191,7 @@ export class BrowserSession {
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      if (state.dispatched) throw new OutcomeError(action.operation, detail)
+      if (state.dispatched) throw new BrowserOutcomeError(action.operation, detail)
       if (error instanceof TargetError) throw error
       if (this.state.control === "manual") throw error
       if (action.operation !== "snapshot" && action.operation !== "screenshot")
@@ -1213,7 +1235,7 @@ export class BrowserSession {
       await run(page)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      throw new OutcomeError("navigation", detail)
+      throw new BrowserOutcomeError("navigation", detail)
     }
   }
 
@@ -1613,6 +1635,7 @@ export class BrowserSession {
     if (!preserve) {
       this.listeners.clear()
       this.states.clear()
+      this.resumes.clear()
       this.inventories.clear()
     }
     this.tabs.clear()

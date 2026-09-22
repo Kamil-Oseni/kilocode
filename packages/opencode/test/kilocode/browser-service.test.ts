@@ -3,6 +3,7 @@ import { expect } from "bun:test"
 import { Bus } from "@/bus"
 import { Browser, HostError } from "@/kilocode/browser/service"
 import { Event, type Request } from "@/kilocode/browser/protocol"
+import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { SessionID } from "@/session/schema"
 import { Effect, Fiber, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
@@ -54,15 +55,29 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const browser = yield* Browser.Service
-      const fiber = yield* browser.request({ operation: "snapshot", sessionID }).pipe(Effect.forkChild)
+      const observationID = ObservationID.make("obs_browser_uncertain")
+      const fiber = yield* browser
+        .request({ operation: "click", sessionID, tabID: "tab_seen", observationID, selector: "#save" })
+        .pipe(Effect.forkChild)
       const pending = yield* browser.list().pipe(Effect.repeat({ until: (items) => items.length === 1 }))
+      const receipt = {
+        version: 1 as const,
+        requestID: pending[0].id,
+        startedAt: 1,
+        finishedAt: 2,
+        effect: "interact" as const,
+        outcome: "unknown" as const,
+        target: { surface: "browser" as const, windowID: "tab_seen" },
+        observationID,
+      }
       yield* browser.reject({
         requestID: pending[0].id,
-        error: { code: "disconnected", message: "Browser runtime is unavailable" },
+        error: { code: "disconnected", message: "Browser click completion is uncertain", receipt },
       })
       const err = yield* Fiber.join(fiber).pipe(Effect.flip)
       expect(err).toBeInstanceOf(HostError)
-      expect(err.message).toContain("unavailable")
+      expect(err.receipt).toEqual(receipt)
+      expect(err.message).toContain("Do not automatically retry")
 
       const timeout = yield* browser.request({ operation: "snapshot", sessionID }).pipe(Effect.flip)
       expect(timeout.code).toBe("timeout")

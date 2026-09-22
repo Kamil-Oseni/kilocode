@@ -2,9 +2,14 @@
 import { describe, expect, it } from "bun:test"
 import type { BrowserRequest, KiloClient } from "@kilocode/sdk/v2/client"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
-import type { BrowserConnection, BrowserHost } from "../../src/services/browser-automation/browser-bridge"
+import type {
+  BrowserConnection,
+  BrowserHost,
+  BrowserReceiptStore,
+} from "../../src/services/browser-automation/browser-bridge"
 import { DialogPendingError } from "../../src/services/browser-automation/browser-dialog"
 import { BrowserBridge } from "../../src/services/browser-automation/browser-bridge"
+import { BrowserOutcomeError } from "../../src/services/browser-automation/browser-session"
 
 describe("Raya browser bridge", () => {
   it("binds staged upload API calls to the authoritative task and preserves lost acknowledgements", async () => {
@@ -689,6 +694,109 @@ describe("Raya browser bridge", () => {
     bridge.dispose()
   })
 
+  it("persists an active action across disconnect and blocks a fresh request after restart", async () => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const store = memory()
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({}),
+          reject: async () => ({}),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    let calls = 0
+    const first = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls++
+          entered.resolve()
+          await release.promise
+          return { operation: "click", tabID: "tab_seen", url: "https://example.test", title: "Example" }
+        },
+        cancel: () => undefined,
+      },
+      store,
+    )
+    connection.state("connected")
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_disconnect_action",
+        sessionID: "ses_test",
+        operation: "click",
+        tabID: "tab_seen",
+        observationID: "obs_seen",
+        selector: "#save",
+      },
+    })
+    await entered.promise
+    connection.state("disconnected")
+    release.resolve()
+    await Bun.sleep(0)
+    const saved = store.read() as { blocked: string[] }
+    expect(saved.blocked).toHaveLength(1)
+    expect(saved.blocked[0]).toMatch(/^[a-f0-9]{64}$/)
+    expect(saved).toMatchObject({
+      version: 1,
+      items: [
+        {
+          id: "brr_disconnect_action",
+          failure: { code: "disconnected", receipt: { outcome: "unknown" } },
+        },
+      ],
+    })
+    first.dispose()
+
+    const failures: unknown[] = []
+    const next = harness({
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({}),
+          reject: async (value: unknown) => {
+            failures.push(value)
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient)
+    const second = new BrowserBridge(
+      next.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls++
+          return { operation: "click", tabID: "tab_seen", url: "https://example.test", title: "Example" }
+        },
+      },
+      store,
+    )
+    next.event({
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_after_disconnect",
+        sessionID: "ses_test",
+        operation: "click",
+        tabID: "tab_seen",
+        observationID: "obs_after",
+        selector: "#save",
+      },
+    })
+    await Bun.sleep(20)
+    expect(calls).toBe(1)
+    expect(failures[0]).toMatchObject({
+      requestID: "brr_after_disconnect",
+      error: { message: expect.stringContaining("explicitly resume") },
+    })
+    second.dispose()
+  })
+
   it("returns a structured smoke report through the CLI bridge", async () => {
     const actions: BrowserRequest[] = []
     const replies: Record<string, unknown>[] = []
@@ -829,7 +937,138 @@ describe("Raya browser bridge", () => {
     })
     bridge.dispose()
   })
+
+  it("persists uncertain actions, blocks fresh IDs, and resumes only after explicit inspection", async () => {
+    const store = memory()
+    const request = {
+      id: "brr_uncertain",
+      sessionID: "ses_test",
+      operation: "click" as const,
+      tabID: "tab_seen",
+      observationID: "obs_seen",
+      selector: "#save",
+    }
+    const firstFailures: unknown[] = []
+    const firstClient = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({}),
+          reject: async (value: unknown) => {
+            firstFailures.push(value)
+            return { error: { message: "offline" } }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const firstConnection = harness(firstClient)
+    const paused: string[] = []
+    let calls = 0
+    const first = new BrowserBridge(
+      firstConnection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls++
+          throw new BrowserOutcomeError("click", "The click acknowledgement was lost")
+        },
+        uncertain: async (_directory, reason) => paused.push(reason),
+      },
+      store,
+    )
+    firstConnection.event({ type: "kilocode.browser.requested", properties: request })
+    await Bun.sleep(20)
+    expect(calls).toBe(1)
+    expect(paused[0]).toContain("may have taken effect")
+    expect(firstFailures[0]).toMatchObject({
+      requestID: request.id,
+      error: { receipt: { requestID: request.id, outcome: "unknown" } },
+    })
+    const saved = store.read() as { blocked: string[] }
+    expect(saved.blocked).toHaveLength(1)
+    expect(saved.blocked[0]).toMatch(/^[a-f0-9]{64}$/)
+    expect(saved).toMatchObject({
+      version: 1,
+      items: [{ id: request.id, failure: { receipt: { requestID: request.id, outcome: "unknown" } } }],
+    })
+    first.dispose()
+
+    const failures: unknown[] = []
+    const replies: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [request] }),
+          reply: async (value: unknown) => {
+            replies.push(value)
+            return {}
+          },
+          reject: async (value: unknown) => {
+            failures.push(value)
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const second = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async (action) => {
+          calls++
+          return { operation: action.operation, tabID: "tab_seen", url: "https://example.test", title: "Example" }
+        },
+        uncertain: async (_directory, reason) => paused.push(reason),
+      },
+      store,
+    )
+    connection.state("connected")
+    await Bun.sleep(20)
+    expect(calls).toBe(1)
+    expect(failures[0]).toMatchObject({
+      requestID: request.id,
+      error: { receipt: { requestID: request.id, outcome: "unknown" } },
+    })
+
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: { ...request, id: "brr_fresh_blocked", observationID: "obs_fresh" },
+    })
+    await Bun.sleep(20)
+    expect(calls).toBe(1)
+    expect(failures.at(-1)).toMatchObject({
+      requestID: "brr_fresh_blocked",
+      error: { message: expect.stringContaining("explicitly resume") },
+    })
+
+    second.resume("C:\\workspace")
+    await Bun.sleep(0)
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: { ...request, id: "brr_fresh_resumed", observationID: "obs_resumed" },
+    })
+    await Bun.sleep(20)
+    expect(calls).toBe(2)
+    expect(replies.at(-1)).toMatchObject({
+      requestID: "brr_fresh_resumed",
+      result: { operation: "click", receipt: { outcome: "confirmed" } },
+    })
+    expect(store.read()).toEqual({ version: 1, items: [], blocked: [] })
+    second.dispose()
+  })
 })
+
+function memory(seed?: unknown) {
+  let value: unknown = seed
+  return {
+    get: <T>(_key: string) => value as T | undefined,
+    update: async (_key: string, next: unknown) => {
+      value = structuredClone(next)
+    },
+    read: () => value,
+  } satisfies BrowserReceiptStore & { read(): unknown }
+}
 
 function harness(client: KiloClient) {
   let event: (event: SSEPayload, directory?: string) => void = () => undefined

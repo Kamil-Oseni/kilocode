@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import { InstanceRef } from "@/effect/instance-ref"
 import { registerDisposer } from "@/effect/instance-registry"
 import { Identifier } from "@/id/id"
+import { Receipt } from "@/kilocode/computer-use/protocol"
 import { capture } from "@/kilocode/instance"
 import { Context, Deferred, Duration, Effect, Layer, LayerMap, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
@@ -17,8 +18,11 @@ export type Input = WithoutID<Request>
 export class HostError extends Schema.TaggedErrorClass<HostError>()("BrowserHostError", {
   code: ErrorCode,
   detail: Schema.String,
+  receipt: Schema.optional(Receipt),
 }) {
   override get message() {
+    if (this.receipt?.outcome === "unknown")
+      return `${this.detail}\nThe browser request may already have affected the destination. Do not automatically retry it. Inspect the destination first and ask the user if the result cannot be verified safely.`
     return this.detail
   }
 }
@@ -190,7 +194,10 @@ export function layer(timeout: Duration.Input = "2 minutes") {
           return yield* new NotFoundError({ requestID: input.requestID })
         }
         pending.delete(input.requestID)
-        yield* Deferred.fail(entry.deferred, new HostError({ code: input.error.code, detail: input.error.message }))
+        yield* Deferred.fail(
+          entry.deferred,
+          new HostError({ code: input.error.code, detail: input.error.message, receipt: input.error.receipt }),
+        )
       })
 
       return Service.of({

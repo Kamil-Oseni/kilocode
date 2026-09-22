@@ -21,20 +21,26 @@ export class BrowserAutomationService implements vscode.Disposable {
     context: vscode.ExtensionContext,
   ) {
     this.root = join(context.globalStorageUri.fsPath, "browser-workspaces")
-    this.bridge = new BrowserBridge(connection, {
-      show: async (directory) => {
-        if (!directory) throw new Error("Browser requests require an authoritative workspace directory")
-        await (await this.entry(directory)).panel.show(true)
+    this.bridge = new BrowserBridge(
+      connection,
+      {
+        show: async (directory) => {
+          if (!directory) throw new Error("Browser requests require an authoritative workspace directory")
+          await (await this.entry(directory)).panel.show(true)
+        },
+        execute: async (action) => {
+          if (!action.origin?.directory)
+            throw new Error("Browser requests require an authoritative workspace directory")
+          return (await this.entry(action.origin.directory)).session.execute(action)
+        },
+        cancel: () => {
+          for (const entry of this.entries.values())
+            entry.session.takeControl("The agent browser action was paused or cancelled.")
+        },
+        uncertain: async (directory, reason) => (await this.entry(directory)).session.interlock(reason),
       },
-      execute: async (action) => {
-        if (!action.origin?.directory) throw new Error("Browser requests require an authoritative workspace directory")
-        return (await this.entry(action.origin.directory)).session.execute(action)
-      },
-      cancel: () => {
-        for (const entry of this.entries.values())
-          entry.session.takeControl("The agent browser action was paused or cancelled.")
-      },
-    })
+      context.globalState,
+    )
   }
 
   private async entry(directory: string) {
@@ -47,12 +53,16 @@ export class BrowserAutomationService implements vscode.Disposable {
         "Four workspace browsers are open. Close an unused workspace browser panel before opening another.",
       )
     const session = new BrowserSession(owned.path, undefined, join(owned.path, "artifacts"), owned.owner)
+    const resume = session.onResume(() => this.bridge.resume(directory))
     let closing = false
     const close = () => {
       if (closing) return
       closing = true
       void session.dispose().then(
-        () => this.entries.delete(owned.owner.profileID),
+        () => {
+          resume()
+          this.entries.delete(owned.owner.profileID)
+        },
         () => {
           closing = false
           console.error("[Raya] Workspace browser closure was not confirmed; retry its profile before continuing.")

@@ -198,7 +198,7 @@ describe("tool.task planned Auto Chief branch", () => {
           text: expect.not.stringContaining("Ignored caller label"),
         })
         const branch = (yield* branches.read(chat.id))?.branches.find((item) => item.id === "safety")
-        expect(branch).toMatchObject({ state: "admitted", callID: "call-safety", sessionID: result.metadata.sessionId })
+        expect(branch).toMatchObject({ state: "completed", callID: "call-safety", sessionID: result.metadata.sessionId })
         const child = yield* sessions.get(result.metadata.sessionId)
         expect(TaskAuthority.read(child.metadata)).toBe("read")
         expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")

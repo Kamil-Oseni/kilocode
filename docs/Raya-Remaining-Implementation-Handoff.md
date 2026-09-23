@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 11:39 America/Toronto - terminal branch receipt handoff
+
+The exact admitted child run now settles its branch on terminal exit. Completion, ordinary failure, interruption and defect/uncertain outcome remain separate. The ledger stores no raw child output or error text, and a terminal state does not count as reviewed evidence. An admitted child stranded by process loss or restart remains blocked until a cautious reconciliation path proves its real outcome. Next implement that path and a child-result review tool, then test background stop/pause and all-branch synthesis before registering `chief_plan` or changing Auto's one-child prompt.
+
 ## ChatGPT 2026-09-23 11:02 America/Toronto - plan-to-task admission handoff
 
 The unregistered `chief_plan` tool validates proposed branches against the original bound user message, active goal, current Auto request, eligible agents and parent policy, then stores planned rows without launching. `task.branch_id` is the sole planned-branch selector; `task` takes specialist, exact brief and access from the saved row, not caller substitutions. Duplicate or stale branches fail. Admission happens under the goal mutation lock before the child prompt. A losing admission releases its lease; session creation may leave one inert unadmitted child because it cannot reserve an ID ahead of time. Verify its cleanup before enabling fanout.

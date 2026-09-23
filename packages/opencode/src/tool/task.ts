@@ -34,6 +34,7 @@ import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse f
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - bind planned Auto branches to child calls
 import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - saved branch preflight
+import { ChiefBranchOutcome } from "@/kilocode/chief/outcome" // kilocode_change - exact child terminal receipt
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -587,7 +588,25 @@ export const TaskTool = Tool.define(
             }),
         )
 
-      const work = () => runTask().pipe(Effect.ensuring(lease.release.pipe(Effect.orDie)))
+      // kilocode_change start - settle the exact planned child on every terminal path
+      const work = () =>
+        runTask().pipe(
+          Effect.onExit((exit) =>
+            branch && plan && branches && ctx.callID
+              ? ChiefBranchOutcome.record({
+                  branches,
+                  goalID: ctx.sessionID,
+                  goalCreatedAt: plan.goalCreatedAt,
+                  branchID: branch.id,
+                  callID: ctx.callID,
+                  sessionID: nextSession.id,
+                  exit,
+                })
+              : Effect.void,
+          ),
+          Effect.ensuring(lease.release.pipe(Effect.orDie)),
+        )
+      // kilocode_change end
       const backgroundRun = withCostPropagation(
         work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))),
       ) // kilocode_change

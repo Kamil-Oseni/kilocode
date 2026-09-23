@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:10 America/Toronto - parent task provenance and restart gate
+
+Completion now requires an unambiguous persisted parent `task` part with the exact admitted call, parent and child identities, alongside each child reply and reviewed tool evidence. A background branch needs its matching completed in-memory job; if the registry is empty after restart, completion remains blocked. Foreground task completion can be reconstructed from its parent receipt. Add explicit background recovery that proves the child outcome without replaying it, then implement Chief inspection/review and all-branch synthesis. `chief_plan` remains unregistered, and no installed-host claim follows from these source tests.
+
 ## ChatGPT 2026-09-23 11:49 America/Toronto - child reply evidence handoff
 
 Branch review now refuses a child tool receipt without a later completed, nonempty assistant reply in that child conversation. Completion rechecks both against the saved child transcript, including after restart. Do not treat this as semantic review: build a Chief result-inspection step, exact parent task/result lineage, explicit acceptance of each brief and cautious recovery when the background job registry is unavailable. The plan tool remains unregistered.

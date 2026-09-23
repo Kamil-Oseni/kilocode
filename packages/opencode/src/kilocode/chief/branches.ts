@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import type { Session } from "@/session/session"
+import type { MessageV2 } from "@/session/message-v2"
 import { SessionID } from "@/session/schema"
 import type { BackgroundJob } from "@/background/job"
 import { mutation } from "@/kilocode/goal/mutation"
@@ -299,9 +300,30 @@ export namespace ChiefBranches {
         )
       if (!background) return yield* Effect.fail(new Error("Auto Chief background status is unavailable"))
       const jobs = yield* background.list()
-      if (jobs.some((job) => record.branches.some((item) => item.sessionID === job.id) && job.status !== "completed"))
-        return yield* Effect.fail(new Error("Auto Chief background work is unfinished or failed"))
+      if (!sessions) return yield* Effect.fail(new Error("Auto Chief parent task receipts are unavailable"))
+      const parent = yield* sessions.messages({ sessionID: id })
       for (const item of record.branches) {
+        const receipts = parent.flatMap((row) =>
+          row.info.role === "assistant"
+            ? row.parts.filter(
+                (part): part is MessageV2.ToolPart =>
+                  part.type === "tool" &&
+                  part.tool === "task" &&
+                  part.callID === item.callID &&
+                  part.state.status === "completed" &&
+                  part.state.metadata?.parentSessionId === id &&
+                  part.state.metadata?.sessionId === item.sessionID,
+              )
+            : [],
+        )
+        const receipt = receipts[0]
+        if (receipts.length !== 1 || receipt?.state.status !== "completed")
+          return yield* Effect.fail(new Error(`Auto Chief parent task receipt is missing or ambiguous: ${item.name}`))
+        const job = jobs.find((entry) => entry.id === item.sessionID)
+        if (job?.status !== undefined && job.status !== "completed")
+          return yield* Effect.fail(new Error(`Auto Chief background work is unfinished or failed: ${item.name}`))
+        if (receipt.state.metadata?.background === true && job?.status !== "completed")
+          return yield* Effect.fail(new Error(`Auto Chief background outcome is unavailable: ${item.name}`))
         if (!item.review || !(yield* evidence(item, item.review)))
           return yield* Effect.fail(new Error(`Auto Chief branch evidence changed: ${item.name}`))
       }

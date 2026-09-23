@@ -129,6 +129,22 @@ describe("Auto Chief branch ledger", () => {
           state: "completed",
           result: "Findings returned",
         })
+        const parent = rows.get(id) ?? []
+        parent.push({
+          info: { id: `parent-${index}`, role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "task",
+              callID: `task-${index}`,
+              state: {
+                status: "completed",
+                metadata: { parentSessionId: id, sessionId: child, background: index === 0 },
+              },
+            },
+          ],
+        } as unknown as MessageV2.WithParts)
+        rows.set(id, parent)
         if (index === 1)
           expect(
             Exit.isFailure(
@@ -174,7 +190,13 @@ describe("Auto Chief branch ledger", () => {
       jobs = [{ id: children[0], status: "error" }]
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
       jobs = []
+      expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
+      jobs = [{ id: children[0], status: "completed" }]
       yield* ledger.completion(id, createdAt)
+      const parent = rows.get(id)!
+      rows.delete(id)
+      expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
+      rows.set(id, parent)
       rows.delete(children[1])
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
     }),

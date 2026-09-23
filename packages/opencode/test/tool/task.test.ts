@@ -211,6 +211,119 @@ describe("tool.task planned Auto Chief branch", () => {
   )
 
   planned.instance(
+    "runs two saved read-only branches concurrently with distinct briefs",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const jobs = yield* BackgroundJob.Service
+        const { chat, assistant } = yield* seed()
+        yield* clean(storage, chat.id)
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(
+          chat.id,
+          "Review the product",
+          assistant.parentID,
+          undefined,
+          undefined,
+          undefined,
+          { concurrentChildren: 2 },
+        )
+        if (!goal.intent) throw new Error("expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
+        const branches = ChiefBranches.make(storage)
+        yield* branches.start({
+          goalID: chat.id,
+          goalCreatedAt: goal.createdAt,
+          requestID: assistant.parentID,
+          branches: [
+            {
+              id: "safety",
+              name: "Safety audit",
+              specialist: "researcher",
+              access: "read",
+              brief: {
+                objective: "Audit authorization",
+                constraints: ["Do not edit"],
+                expectedReturn: "Safety findings",
+              },
+            },
+            {
+              id: "design",
+              name: "UX audit",
+              specialist: "designer",
+              access: "read",
+              brief: { objective: "Audit navigation", constraints: ["Do not edit"], expectedReturn: "UX findings" },
+            },
+          ],
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: "Review the entire product", [RayaChief.phaseKey]: "task" },
+        })
+        const ready = yield* Deferred.make<void>()
+        const done = yield* Deferred.make<void>()
+        const seen: SessionPrompt.PromptInput[] = []
+        const ops: TaskPromptOps = {
+          ...stubOps(),
+          prompt: (input) => {
+            if (input.sessionID === chat.id) return Effect.succeed(reply(input, "injected"))
+            return Effect.gen(function* () {
+              seen.push(input)
+              if (seen.length === 2) yield* Deferred.succeed(ready, undefined)
+              yield* Deferred.await(done)
+              return reply(input, `${input.agent} findings`)
+            })
+          },
+        }
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const ctx = (callID: string) => ({
+          sessionID: chat.id,
+          messageID: assistant.id,
+          callID,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: ops },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        const safety = yield* def.execute(
+          { description: "Safety audit", branch_id: "safety", background: true },
+          ctx("call-safety"),
+        )
+        const design = yield* def.execute(
+          { description: "UX audit", branch_id: "design", background: true },
+          ctx("call-design"),
+        )
+        yield* Deferred.await(ready)
+        expect(safety.metadata.background).toBe(true)
+        expect(design.metadata.background).toBe(true)
+        expect(safety.metadata.sessionId).not.toBe(design.metadata.sessionId)
+        expect((yield* jobs.get(safety.metadata.sessionId))?.status).toBe("running")
+        expect((yield* jobs.get(design.metadata.sessionId))?.status).toBe("running")
+        expect(seen.find((item) => item.agent === "researcher")?.parts[0]).toMatchObject({
+          type: "text",
+          text: expect.stringContaining("Audit authorization"),
+        })
+        expect(seen.find((item) => item.agent === "designer")?.parts[0]).toMatchObject({
+          type: "text",
+          text: expect.stringContaining("Audit navigation"),
+        })
+        for (const result of [safety, design]) {
+          expect(TaskAuthority.read((yield* sessions.get(result.metadata.sessionId)).metadata)).toBe("read")
+        }
+        yield* Deferred.succeed(done, undefined)
+        for (const result of [safety, design]) {
+          expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.status).toBe("completed")
+        }
+        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual(["completed", "completed"])
+      }),
+    20_000,
+  )
+
+  planned.instance(
     "releases the child lease if admission loses a race, without prompting the orphan",
     () =>
       Effect.gen(function* () {

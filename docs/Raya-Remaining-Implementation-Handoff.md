@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:55 America/Toronto - planned read-only branch concurrency
+
+Two saved Chief branches can run as separate background jobs at the same time under a two-child goal limit, with different saved briefs, specialists and read-only child authority. The focused integration case passes. The full task suite had one 5-second timeout under concurrent typecheck load; that case passed in isolation. Automatic fanout remains disabled. Next prove failure, cancellation and uncertain terminal behavior for multiple active branches, then exact all-branch synthesis and stop/restart behavior before registering Chief planning and review tools.
+
 ## ChatGPT 2026-09-23 12:48 America/Toronto - inspected Chief branch review
 
 `chief_review` is implemented but unregistered. It requires an active bound goal in Chief's goal phase, exact child lineage, a completed branch, a saved `chief_inspect` call after the branch terminal result, a matching completed child tool reference and a concise assessment. The ledger persists the assessment with review evidence and keeps the terminal timestamp stable for idempotent retries. Next prove bounded parallel admission and completion, failure/cancel/unknown behavior under real background jobs, all-branch synthesis and restart/stop before exposing `chief_plan`, `chief_inspect` or `chief_review` in Auto.

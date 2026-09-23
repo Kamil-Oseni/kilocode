@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:48 America/Toronto - explicit Chief branch review receipt
+
+**Status: source verified; review tool unregistered.** A completed branch can now be accepted only after a saved `chief_inspect` tool call newer than that branch's terminal receipt. Chief supplies a concise assessment and cites an exact child tool part. The ledger verifies the child transcript and final reply before saving the assessment, and an identical repeated review is idempotent. Missing inspection, unrelated evidence, changed child lineage or stale goal request fail closed. The branch's terminal timestamp remains stable while the review has its own time, so retries cannot invalidate their own prerequisite. Focused review/ledger/inspection tests pass **7 tests / 37 assertions** and CLI typecheck passes. This is a structural evidence and model-assessment boundary, not proof of semantic quality from tests. Full fanout scheduling, all-branch synthesis, pause/stop and installed restart acceptance remain unfinished.
+
 ## ChatGPT 2026-09-23 12:39 America/Toronto - bounded read-only Chief result inspection
 
 **Status: source verified; tool unregistered.** A new Chief inspection tool reads the exact active goal and saved request, verifies each admitted child still belongs to the parent, and returns branch state, a bounded final child reply and up to 20 exact completed child tool references. It does not start work, change authority or mark a branch reviewed. Stale request and changed child lineage fail closed. Its focused live-storage test passes **1 test / 4 assertions** and CLI typecheck passes. Next add an explicit review decision tied to these inspected references and the original brief, then test all-branch synthesis and production restart behavior before exposing fanout.

@@ -31,6 +31,7 @@ export namespace ChiefBranches {
         callID: Schema.String,
         messageID: Schema.String,
         partID: Schema.String,
+        assessment: Schema.optional(Schema.String),
         at: Schema.Number,
       }),
     ),
@@ -257,6 +258,7 @@ export namespace ChiefBranches {
       callID: string
       sessionID: SessionID
       evidence: { callID: string; messageID: string; partID: string }
+      assessment?: string
     }) {
       return yield* mutation(
         storage,
@@ -267,17 +269,24 @@ export namespace ChiefBranches {
           const item = old.branches.find((entry) => entry.id === input.branchID)
           if (!item || item.callID !== input.callID || item.sessionID !== input.sessionID || item.state !== "completed")
             throw new Error("Only the completed, admitted branch can be reviewed")
+          const assessment = input.assessment?.trim()
+          if (input.assessment !== undefined && (!assessment || assessment.length > 2_000))
+            throw new Error("Auto Chief branch assessment must be concise and nonempty")
           if (!(yield* evidence(item, input.evidence))) throw new Error("Auto Chief branch evidence was not found")
           if (item.review) {
             if (
               item.review.callID === input.evidence.callID &&
               item.review.messageID === input.evidence.messageID &&
-              item.review.partID === input.evidence.partID
+              item.review.partID === input.evidence.partID &&
+              item.review.assessment === assessment
             )
               return item
             throw new Error("Auto Chief branch was already reviewed with different evidence")
           }
-          const next: Branch = { ...item, review: { ...input.evidence, at: Date.now() }, updatedAt: Date.now() }
+          const next: Branch = {
+            ...item,
+            review: { ...input.evidence, ...(assessment ? { assessment } : {}), at: Date.now() },
+          }
           yield* storage.replace(key(input.goalID), {
             ...old,
             branches: old.branches.map((entry) => (entry.id === item.id ? next : entry)),

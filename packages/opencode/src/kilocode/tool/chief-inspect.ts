@@ -76,6 +76,7 @@ export function chiefInspectTool(deps: {
               specialist: item.specialist,
               access: item.access,
               state: item.state,
+              callID: item.callID,
               reviewed: !!item.review,
               report,
               evidence,

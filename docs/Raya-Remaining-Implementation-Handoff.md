@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:48 America/Toronto - inspected Chief branch review
+
+`chief_review` is implemented but unregistered. It requires an active bound goal in Chief's goal phase, exact child lineage, a completed branch, a saved `chief_inspect` call after the branch terminal result, a matching completed child tool reference and a concise assessment. The ledger persists the assessment with review evidence and keeps the terminal timestamp stable for idempotent retries. Next prove bounded parallel admission and completion, failure/cancel/unknown behavior under real background jobs, all-branch synthesis and restart/stop before exposing `chief_plan`, `chief_inspect` or `chief_review` in Auto.
+
 ## ChatGPT 2026-09-23 12:39 America/Toronto - result inspection before review
 
 `chief_inspect` is implemented but unregistered. It binds the active goal and original request, verifies the saved child-parent relationship, and gives Auto Chief a bounded final reply plus exact child tool references for each branch without accepting results. The next tool must record an explicit branch assessment using a reference from this view, and goal completion must still require every distinct branch's reviewed evidence. Keep both tools hidden until synthesis, restart, pause/stop, cost and concurrent-admission tests are complete.

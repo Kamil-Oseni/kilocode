@@ -133,7 +133,9 @@ it.instance("lists visible windows and focuses one exact observed target", () =>
     const focused = yield* DesktopFocusTool.pipe(
       Effect.provideService(Desktop.Service, host),
       Effect.flatMap(Tool.init),
-      Effect.flatMap((tool) => tool.execute({ window_id: "window_seen", observation_id: observation.id }, ctx)),
+      Effect.flatMap((tool) =>
+        tool.execute({ window_id: "window_seen", observation_id: observation.id, sensitive_category: "ordinary" }, ctx),
+      ),
     )
 
     expect(asks).toEqual([
@@ -314,6 +316,7 @@ it.instance(
               y: 0.75,
               action: "double_click",
               button: "right",
+              sensitive_category: "ordinary",
             },
             ctx,
           ),
@@ -346,6 +349,7 @@ it.instance(
               observation_id: ObservationID.make("observation_moved"),
               x: 0.5,
               y: 0.125,
+              sensitive_category: "ordinary",
             },
             ctx,
           ),
@@ -373,6 +377,7 @@ it.instance(
               window_id: "window_seen",
               observation_id: ObservationID.make("observation_typed"),
               text: "Exact text",
+              sensitive_category: "ordinary",
             },
             ctx,
           ),
@@ -405,6 +410,7 @@ it.instance(
               observation_id: ObservationID.make("observation_keyed"),
               key: "Enter",
               modifiers: ["control", "control", "shift"],
+              sensitive_category: "ordinary",
             },
             ctx,
           ),
@@ -440,6 +446,7 @@ it.instance(
               observation_id: ObservationID.make("observation_scrolled"),
               delta_x: 120,
               delta_y: -240,
+              sensitive_category: "ordinary",
             },
             ctx,
           ),
@@ -510,6 +517,7 @@ it.instance(
               end_x: 0.875,
               end_y: 0.75,
               button: "right",
+              sensitive_category: "ordinary",
             },
             ctx,
           ),
@@ -558,6 +566,9 @@ it.instance(
         "observe",
         "pointer",
       ])
+      expect(
+        calls.filter((input) => input.operation === "authorize").every((input) => input.sensitive === false),
+      ).toBe(true)
     }),
   { git: true },
 )

@@ -1,7 +1,11 @@
 // raya_change - model-facing native desktop observation tool
 import { Desktop, HostError, type Input } from "@/kilocode/desktop/service"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { SensitiveCategory, type SensitiveCategory as SensitiveKind } from "@/kilocode/computer-use/lease"
+import {
+  ActionClassification,
+  type ActionClassification as Classification,
+  type SensitiveCategory as SensitiveKind,
+} from "@/kilocode/computer-use/lease"
 import { Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
@@ -20,13 +24,17 @@ function run(desktop: Desktop.Interface, input: Input, signal: AbortSignal) {
   return desktop.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
 }
 
+function classified(value: Classification): SensitiveKind | false {
+  return value === "ordinary" ? false : value
+}
+
 function approve(
   desktop: Desktop.Interface,
   ctx: Tool.Context,
   input: Parameters<Tool.Context["ask"]>[0] & {
     action: "observe" | "pointer" | "keyboard" | "scroll" | "window"
     windowID?: string
-    sensitive?: SensitiveKind
+    sensitive?: SensitiveKind | false
   },
 ) {
   return Effect.gen(function* () {
@@ -42,9 +50,12 @@ function approve(
       },
       ctx.abort,
     )
-    if (result.operation !== "authorize") return yield* Effect.die(new Error("Desktop host returned the wrong result"))
-    if (result.decision === "deny") return yield* Effect.die(new Error(`Desktop control denied: ${result.reason}`))
-    if (result.decision === "ask")
+    const auth =
+      result.operation === "authorize"
+        ? result
+        : yield* Effect.die(new Error("Desktop host returned the wrong result"))
+    if (auth.decision === "deny") yield* Effect.die(new Error(`Desktop control denied: ${auth.reason}`))
+    if (auth.decision === "ask")
       yield* ctx.ask({
         permission: input.permission,
         patterns: input.patterns,
@@ -136,6 +147,7 @@ const FocusParams = Schema.Struct({
   observation_id: ObservationID.annotate({
     description: "Fresh desktop_windows observation ID. It can be used only once.",
   }),
+  sensitive_category: ActionClassification,
 })
 
 export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Service, "desktop_focus">(
@@ -151,6 +163,7 @@ export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Serv
           yield* approve(desktop, ctx, {
             action: "window",
             windowID: params.window_id,
+            sensitive: classified(params.sensitive_category),
             permission: "desktop_focus",
             patterns: [params.window_id],
             always: [],
@@ -241,10 +254,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
 )
 
 const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
-const Sensitive = Schema.optional(SensitiveCategory).annotate({
-  description:
-    "Required when this action sends or publishes content, spends money, handles credentials, installs software, changes system security, permanently deletes, discloses private data, accepts legal terms, or commits/deploys/publishes work.",
-})
+const Sensitive = ActionClassification
 const ClickParams = Schema.Struct({
   window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
     description: "Exact opaque window identity returned by desktop_observe.",
@@ -270,6 +280,7 @@ const MoveParams = Schema.Struct({
   }),
   x: Unit.annotate({ description: "Horizontal position normalized from 0 at the left to 1 at the right." }),
   y: Unit.annotate({ description: "Vertical position normalized from 0 at the top to 1 at the bottom." }),
+  sensitive_category: Sensitive,
 })
 
 export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Service, "desktop_move">(
@@ -286,6 +297,7 @@ export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Servic
           yield* approve(desktop, ctx, {
             action: "pointer",
             windowID: params.window_id,
+            sensitive: classified(params.sensitive_category),
             permission: "desktop_move",
             patterns: [point],
             always: [],
@@ -355,7 +367,7 @@ export const DesktopDragTool = Tool.define<typeof DragParams, {}, Desktop.Servic
             patterns: [`${params.window_id}:${button}:${start}->${end}`],
             always: [],
             metadata: {},
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
           })
           const result = yield* run(
             desktop,
@@ -401,7 +413,7 @@ export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Serv
             patterns: [point],
             always: [],
             metadata: {},
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
           })
           const result = yield* run(
             desktop,
@@ -459,7 +471,7 @@ export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Servic
             patterns: [params.window_id],
             always: [],
             metadata: { length: params.text.length },
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
           })
           const result = yield* run(
             desktop,
@@ -518,7 +530,7 @@ export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service,
             patterns: [`${params.window_id}:${chord}`],
             always: [],
             metadata: {},
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
           })
           const result = yield* run(
             desktop,
@@ -556,6 +568,7 @@ const ScrollParams = Schema.Struct({
   delta_y: ScrollDelta.annotate({
     description: "Vertical Windows wheel delta from -1200 through 1200. At least one delta must be non-zero.",
   }),
+  sensitive_category: Sensitive,
 }).check(
   Schema.makeFilter((value) =>
     (value.delta_x ?? 0) !== 0 || value.delta_y !== 0 ? undefined : "Desktop scroll requires non-zero movement.",
@@ -577,6 +590,7 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
           yield* approve(desktop, ctx, {
             action: "scroll",
             windowID: params.window_id,
+            sensitive: classified(params.sensitive_category),
             permission: "desktop_scroll",
             patterns: [amount],
             always: [],

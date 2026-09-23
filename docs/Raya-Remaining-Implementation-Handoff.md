@@ -6,9 +6,15 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 22:33 America/Toronto - preserve mandatory effect classification
+
+Effectful model tools now require an explicit `ordinary` or one-of-nine sensitive classification. Preserve this as a required schema field for desktop focus/move/click/drag/type/key/scroll and browser navigate/click/type/select/scroll/evaluate/smoke, tab mutations, dialog responses, download starts and upload selections. Read-only operations and cancellation intentionally remain classification-free. `ordinary` becomes protocol `false`; sensitive values remain opaque categories only.
+
+This prevents omission, not dishonest or mistaken classification. Do not install Autonomous Desktop Mode yet. Add local deterministic browser checks where URL and accessible target semantics are trustworthy, then use correlated UI Automation state to verify desktop intent. Until those layers and the Windows-wide Pause shortcut exist, keep `FUT-CU-01` In progress and retain the legacy prompt fallback.
+
 ## ChatGPT 2026-09-22 22:09 America/Toronto - preserve the cross-surface lease and revocation tombstone
 
-The uncommitted next checkpoint makes `ComputerUseLeaseStore` the single extension-host authority for browser and desktop tools. Browser `authorize` is non-mutating and outside the receipt journal. Every browser tool negotiates before its legacy permission call, then the browser bridge revalidates locally immediately before showing the panel or dispatching Playwright. Preserve **allow skips prompt / ask preserves prompt / deny stops**.
+Product commit `c2074f86fb` makes `ComputerUseLeaseStore` the single extension-host authority for browser and desktop tools. Browser `authorize` is non-mutating and outside the receipt journal. Every browser tool negotiates before its legacy permission call, then the browser bridge revalidates locally immediately before showing the panel or dispatching Playwright. Preserve **allow skips prompt / ask preserves prompt / deny stops**.
 
 Do not simplify away `sessions`, `revoked` or `review`. An active grant records every allowed session. Stop moves those session IDs to revocation tombstones before awaiting persistence. Native browser and desktop dispatch therefore deny work that was authorized just before Stop. A genuinely new panel review clears only its own tombstone, allowing the user to grant control again. A never-authorized task still receives **ask**, so the compatibility permission path works.
 

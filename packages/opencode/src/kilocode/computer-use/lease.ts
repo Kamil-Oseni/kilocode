@@ -40,6 +40,13 @@ export const SensitiveCategory = Schema.Literals([
 ])
 export type SensitiveCategory = Schema.Schema.Type<typeof SensitiveCategory>
 
+export const ActionClassification = Schema.Union([Schema.Literal("ordinary"), SensitiveCategory]).annotate({
+  description:
+    "Classify the intended effect as ordinary or as one sensitive policy category before local dispatch.",
+})
+export type ActionClassification = Schema.Schema.Type<typeof ActionClassification>
+export const ClassifiedAction = Schema.Struct({ sensitive_category: ActionClassification })
+
 export const SensitiveRule = Schema.Literals(["allow_session", "allow_always", "ask", "deny"])
 export type SensitiveRule = Schema.Schema.Type<typeof SensitiveRule>
 

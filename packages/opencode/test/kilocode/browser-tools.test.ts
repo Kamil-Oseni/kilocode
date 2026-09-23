@@ -208,6 +208,7 @@ describe("browser host tools", () => {
             selector: "input[type=file]",
             destination: "https://example.test/form",
             paths: [source],
+            sensitive_category: "ordinary",
           },
           ctx,
         )
@@ -251,6 +252,7 @@ describe("browser host tools", () => {
             tab_id: "tab_seen",
             observation_id: ObservationID.make("obs_download"),
             selector: { kind: "role", role: "button", name: "Export" },
+            sensitive_category: "ordinary",
           },
           ctx,
         )
@@ -338,7 +340,12 @@ describe("browser host tools", () => {
         )
         const failed = yield* click
           .execute(
-            { tab_id: "tab_seen", observation_id: ObservationID.make("obs_dialog"), selector: "#save" },
+            {
+              tab_id: "tab_seen",
+              observation_id: ObservationID.make("obs_dialog"),
+              selector: "#save",
+              sensitive_category: "ordinary",
+            },
             context([]),
           )
           .pipe(Effect.exit)
@@ -352,7 +359,13 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
         yield* dialog.execute(
-          { action: "accept", tab_id: "tab_seen", dialog_id: "dialog_seen", text: "Ada" },
+          {
+            action: "accept",
+            tab_id: "tab_seen",
+            dialog_id: "dialog_seen",
+            text: "Ada",
+            sensitive_category: "ordinary",
+          },
           context([]),
         )
         yield* dialog.execute({ action: "list", tab_id: "tab_seen", operation_id: "op_seen" }, context([]))
@@ -394,6 +407,7 @@ describe("browser host tools", () => {
             frame_id: "frame_child",
             observation_id: ObservationID.make("obs_frame"),
             selector: "button",
+            sensitive_category: "ordinary",
           },
           ctx,
         )
@@ -415,9 +429,9 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
         yield* tabs.execute({ action: "list" }, ctx)
-        yield* tabs.execute({ action: "open", url: "https://example.com" }, ctx)
-        yield* tabs.execute({ action: "select", tab_id: "tab_seen" }, ctx)
-        yield* tabs.execute({ action: "close", tab_id: "tab_seen" }, ctx)
+        yield* tabs.execute({ action: "open", url: "https://example.com", sensitive_category: "ordinary" }, ctx)
+        yield* tabs.execute({ action: "select", tab_id: "tab_seen", sensitive_category: "ordinary" }, ctx)
+        yield* tabs.execute({ action: "close", tab_id: "tab_seen", sensitive_category: "ordinary" }, ctx)
         const effects = calls.filter((call) => call.operation !== "authorize")
         expect(effects.map((call) => (call.operation === "tabs" ? call.action : call.operation))).toEqual([
           "list",
@@ -436,6 +450,7 @@ describe("browser host tools", () => {
               selector: string
               tab_id: string
               observation_id: typeof ObservationID.Type
+              sensitive_category: "ordinary"
             },
             ctx,
           )
@@ -443,10 +458,11 @@ describe("browser host tools", () => {
         expect(failed._tag).toBe("Failure")
         const ungrounded = yield* click
           .execute(
-            { tab_id: "tab_seen", selector: "#save" } as {
+            { tab_id: "tab_seen", selector: "#save", sensitive_category: "ordinary" } as {
               selector: string
               tab_id: string
               observation_id: typeof ObservationID.Type
+              sensitive_category: "ordinary"
             },
             ctx,
           )
@@ -469,7 +485,12 @@ describe("browser host tools", () => {
         )
         const selector = { kind: "role" as const, role: "button", name: "Save", scope: "#form" }
         yield* tool.execute(
-          { tab_id: "tab_test", observation_id: ObservationID.make("obs_semantic"), selector },
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_semantic"),
+            selector,
+            sensitive_category: "ordinary",
+          },
           context(asks),
         )
         expect(calls.find((call) => call.operation === "click")).toMatchObject({ operation: "click", selector })
@@ -482,6 +503,7 @@ describe("browser host tools", () => {
               tab_id: "tab_test",
               observation_id: ObservationID.make("obs_invalid"),
               selector: { kind: "role", role: "button" } as typeof Selector.Type,
+              sensitive_category: "ordinary",
             },
             context(asks),
           )
@@ -582,10 +604,15 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
 
-        yield* navigate.execute({ url: "https://example.com" }, ctx)
+        yield* navigate.execute({ url: "https://example.com", sensitive_category: "ordinary" }, ctx)
         const tree = yield* snapshot.execute({}, ctx)
         yield* click.execute(
-          { tab_id: "tab_test", observation_id: ObservationID.make("obs_seen"), selector: "e1" },
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_seen"),
+            selector: "e1",
+            sensitive_category: "ordinary",
+          },
           ctx,
         )
         yield* type.execute(
@@ -595,6 +622,7 @@ describe("browser host tools", () => {
             selector: "#name",
             text: "Raya",
             submit: true,
+            sensitive_category: "ordinary",
           },
           ctx,
         )
@@ -604,6 +632,7 @@ describe("browser host tools", () => {
             observation_id: ObservationID.make("obs_select"),
             selector: "#role",
             values: ["admin"],
+            sensitive_category: "ordinary",
           },
           ctx,
         )
@@ -614,6 +643,7 @@ describe("browser host tools", () => {
             delta_x: 4,
             delta_y: 500,
             selector: "#main",
+            sensitive_category: "ordinary",
           },
           ctx,
         )
@@ -623,12 +653,14 @@ describe("browser host tools", () => {
             tab_id: "tab_test",
             observation_id: ObservationID.make("obs_evaluate"),
             expression: "() => ({ ok: true })",
+            sensitive_category: "ordinary",
           },
           ctx,
         )
         const report = yield* smoke.execute(
           {
             tab_id: "tab_test",
+            sensitive_category: "ordinary",
             name: "sample-app",
             mode: "scripted",
             steps: [
@@ -647,6 +679,9 @@ describe("browser host tools", () => {
         )
 
         const effects = calls.filter((item) => item.operation !== "authorize")
+        const authorizations = calls.filter((item) => item.operation === "authorize")
+        expect(authorizations).toHaveLength(9)
+        expect(authorizations.every((item) => item.sensitive === false)).toBe(true)
         expect(effects.map((item) => item.operation)).toEqual([
           "navigate",
           "snapshot",

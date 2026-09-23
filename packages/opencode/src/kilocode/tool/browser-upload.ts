@@ -11,7 +11,7 @@ import { Browser } from "@/kilocode/browser/service"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { FrameID, Selector, TabID } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { SensitiveCategory } from "@/kilocode/computer-use/lease"
+import { ActionClassification } from "@/kilocode/computer-use/lease"
 import type { UploadFile } from "@/kilocode/browser/upload-schema"
 
 const Params = Schema.Union([
@@ -26,9 +26,7 @@ const Params = Schema.Union([
       Schema.isMinLength(1),
       Schema.isMaxLength(100),
     ),
-    sensitive_category: Schema.optional(SensitiveCategory).annotate({
-      description: "Use disclosure when the selected files contain private information sent outside the computer.",
-    }),
+    sensitive_category: ActionClassification,
   }),
   Schema.Struct({ action: Schema.Literal("list") }),
   Schema.Struct({ action: Schema.Literals(["inspect", "cancel"]), upload_id: Schema.String.check(Schema.isUUID()) }),
@@ -52,7 +50,8 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
             sessionID: ctx.sessionID,
             surface: "browser",
             action: "files",
-            sensitive: params.action === "start" ? (params.sensitive_category ?? false) : false,
+            sensitive:
+              params.action === "start" && params.sensitive_category !== "ordinary" ? params.sensitive_category : false,
             ...(params.action === "start" ? { windowID: params.tab_id } : {}),
           })
           if (authorization.operation !== "authorize")

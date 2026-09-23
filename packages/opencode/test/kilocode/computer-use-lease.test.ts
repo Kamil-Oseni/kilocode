@@ -1,6 +1,6 @@
 // raya_change - autonomous Computer Use capability lease contract tests
 import { describe, expect, test } from "bun:test"
-import { GrantID, Lease, decide, type Request } from "@/kilocode/computer-use/lease"
+import { ClassifiedAction, GrantID, Lease, decide, type Request } from "@/kilocode/computer-use/lease"
 import { Schema } from "effect"
 
 const base: Lease = {
@@ -39,6 +39,13 @@ const request: Request = {
 }
 
 describe("Computer Use capability lease", () => {
+  test("requires an explicit ordinary or sensitive classification for effectful actions", () => {
+    expect(Schema.is(ClassifiedAction)({})).toBe(false)
+    expect(Schema.is(ClassifiedAction)({ sensitive_category: "unknown" })).toBe(false)
+    expect(Schema.is(ClassifiedAction)({ sensitive_category: "ordinary" })).toBe(true)
+    expect(Schema.is(ClassifiedAction)({ sensitive_category: "communications" })).toBe(true)
+  })
+
   test("decodes a bounded versioned lease and authorizes an ordinary scoped action", () => {
     const lease = Schema.decodeUnknownSync(Lease)(base)
     expect(decide(lease, request, 500)).toEqual({ decision: "allow", reason: "authorized" })

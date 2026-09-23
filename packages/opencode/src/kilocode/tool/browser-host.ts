@@ -3,7 +3,11 @@ import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
 import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { SensitiveCategory, type SensitiveCategory as SensitiveKind } from "@/kilocode/computer-use/lease"
+import {
+  ActionClassification,
+  type ActionClassification as Classification,
+  type SensitiveCategory as SensitiveKind,
+} from "@/kilocode/computer-use/lease"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 import { BrowserUploadTool } from "./browser-upload"
@@ -57,13 +61,17 @@ function run(browser: Browser.Interface, input: Input, signal: AbortSignal) {
   return browser.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
 }
 
+function classified(value: Classification): SensitiveKind | false {
+  return value === "ordinary" ? false : value
+}
+
 function approve(
   browser: Browser.Interface,
   ctx: Tool.Context,
   input: Parameters<Tool.Context["ask"]>[0] & {
     action: "observe" | "browser" | "scroll" | "files"
     tabID?: string
-    sensitive?: SensitiveKind
+    sensitive?: SensitiveKind | false
   },
 ) {
   return Effect.gen(function* () {
@@ -79,9 +87,12 @@ function approve(
       },
       ctx.abort,
     )
-    if (result.operation !== "authorize") return yield* Effect.die(new Error("Browser host returned the wrong result"))
-    if (result.decision === "deny") return yield* Effect.die(new Error(`Browser control denied: ${result.reason}`))
-    if (result.decision === "ask")
+    const auth =
+      result.operation === "authorize"
+        ? result
+        : yield* Effect.die(new Error("Browser host returned the wrong result"))
+    if (auth.decision === "deny") yield* Effect.die(new Error(`Browser control denied: ${auth.reason}`))
+    if (auth.decision === "ask")
       yield* ctx.ask({
         permission: input.permission,
         patterns: input.patterns,
@@ -91,13 +102,11 @@ function approve(
   })
 }
 
-const Sensitive = Schema.optional(SensitiveCategory).annotate({
-  description:
-    "Required when this action sends or publishes content, spends money, handles credentials, installs software, changes system security, permanently deletes, discloses private data, accepts legal terms, or commits/deploys/publishes work.",
-})
+const Sensitive = ActionClassification
 
 const NavigateParams = Schema.Struct({
   ...Bootstrap,
+  sensitive_category: Sensitive,
   url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)).annotate({
     description: "Absolute URL to open in the shared browser.",
   }),
@@ -120,6 +129,7 @@ export const BrowserNavigateTool = Tool.define<
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_navigate",
             patterns: [params.url],
             always: [params.url],
@@ -189,7 +199,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_click",
             patterns: [target(params.selector)],
             always: [target(params.selector)],
@@ -234,7 +244,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_type",
             patterns: [target(params.selector)],
             always: [target(params.selector)],
@@ -283,7 +293,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_select",
             patterns: [target(params.selector)],
             always: [target(params.selector)],
@@ -314,6 +324,7 @@ const ScrollParams = Schema.Struct({
   delta_x: Schema.optional(Schema.Number).annotate({ description: "Horizontal pixels. Defaults to 0." }),
   delta_y: Schema.Number.annotate({ description: "Vertical pixels; positive scrolls down." }),
   selector: Schema.optional(Selector).annotate({ description: "Optional scrollable element selector." }),
+  sensitive_category: Sensitive,
 })
 export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string }, Browser.Service, "browser_scroll">(
   "browser_scroll",
@@ -328,6 +339,7 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
           yield* approve(browser, ctx, {
             action: "scroll",
             tabID: params.tab_id,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_scroll",
             patterns: [pattern],
             always: [pattern],
@@ -433,7 +445,7 @@ export const BrowserEvaluateTool = Tool.define<
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
-            sensitive: params.sensitive_category,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_evaluate",
             patterns: ["*"],
             always: ["*"],
@@ -460,6 +472,7 @@ export const BrowserEvaluateTool = Tool.define<
 // raya_change start - Milestone G structured smoke evidence tool
 const SmokeParams = Schema.Struct({
   ...Identity,
+  sensitive_category: Sensitive,
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
   mode: Schema.optional(Schema.Literals(["scripted", "exploratory"])).annotate({
     description: "Use exploratory when the agent derived this walkthrough dynamically. Defaults to scripted.",
@@ -484,6 +497,7 @@ export const BrowserSmokeTestTool = Tool.define<
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
+            sensitive: classified(params.sensitive_category),
             permission: "browser_smoke_test",
             patterns: [params.name],
             always: [params.name],
@@ -527,9 +541,10 @@ const TabsParams = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("open"),
     url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)),
+    sensitive_category: Sensitive,
   }),
-  Schema.Struct({ action: Schema.Literal("select"), ...Identity }),
-  Schema.Struct({ action: Schema.Literal("close"), ...Identity }),
+  Schema.Struct({ action: Schema.Literal("select"), ...Identity, sensitive_category: Sensitive }),
+  Schema.Struct({ action: Schema.Literal("close"), ...Identity, sensitive_category: Sensitive }),
 ])
 export const BrowserTabsTool = Tool.define<typeof TabsParams, { url?: string }, Browser.Service, "browser_tabs">(
   "browser_tabs",
@@ -544,6 +559,7 @@ export const BrowserTabsTool = Tool.define<typeof TabsParams, { url?: string }, 
           yield* approve(browser, ctx, {
             action: params.action === "list" ? "observe" : "browser",
             tabID: "tab_id" in params ? params.tab_id : undefined,
+            sensitive: params.action === "list" ? false : classified(params.sensitive_category),
             permission: "browser_tabs",
             patterns: [params.action],
             always: [params.action],
@@ -618,11 +634,13 @@ const DialogParams = Schema.Union([
     ...Identity,
     dialog_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
     text: Schema.optional(Schema.String.check(Schema.isMaxLength(10_000))),
+    sensitive_category: Sensitive,
   }),
   Schema.Struct({
     action: Schema.Literal("dismiss"),
     ...Identity,
     dialog_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    sensitive_category: Sensitive,
   }),
 ])
 export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string }, Browser.Service, "browser_dialog">(
@@ -638,6 +656,7 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
           yield* approve(browser, ctx, {
             action: params.action === "list" ? "observe" : "browser",
             tabID: params.tab_id,
+            sensitive: params.action === "list" ? false : classified(params.sensitive_category),
             permission: "browser_dialog",
             patterns: [params.tab_id],
             always: [params.tab_id],
@@ -676,7 +695,13 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
 )
 
 const DownloadParams = Schema.Union([
-  Schema.Struct({ action: Schema.Literal("start"), ...Identity, ...Grounded, selector: Selector }),
+  Schema.Struct({
+    action: Schema.Literal("start"),
+    ...Identity,
+    ...Grounded,
+    selector: Selector,
+    sensitive_category: Sensitive,
+  }),
   Schema.Struct({
     action: Schema.Literal("list"),
     offset: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -718,6 +743,7 @@ export const BrowserDownloadTool = Tool.define<
           yield* approve(browser, ctx, {
             action: "files",
             tabID: "tab_id" in params ? params.tab_id : undefined,
+            sensitive: params.action === "start" ? classified(params.sensitive_category) : false,
             permission: "browser_download",
             patterns: [pattern],
             always: [pattern],

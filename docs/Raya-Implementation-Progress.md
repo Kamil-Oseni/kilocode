@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:22 America/Toronto - recover only proven terminal Chief child work
+
+**Status: source verified; automatic fanout remains disabled.** When a stopped backend left a Chief branch admitted, reconciliation now checks the one exact parent `task` receipt, child session lineage, saved child-input identity and final assistant message for that input turn. It records `completed` only when those durable facts prove a successful result; missing, duplicate, mismatched or later-error evidence remains `unknown`. It never starts or replays the child. The focused ledger and inspection suite passes **10 tests / 68 assertions**, including duplicate parent receipt and earlier-reply-then-error cases; CLI typecheck passes. The installed `cff303e7f5` snapshot predates this source change. Multi-process owner identity, same-process scope loss and a real installed restart matrix remain open before tool registration.
+
 ## ChatGPT 2026-09-23 15:14 America/Toronto - installed named specialist activity snapshot
 
 **Status: installed; real conversation visual review pending.** Commit `cff303e7f5` was pushed and snapshot `7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403` passed SDK generation, Windows CLI build and smoke tests, extension typechecks/lint, packaging and VS Code installation. It includes stopped-owner Chief reconciliation, safe replacement of an unstarted revised plan, and the named specialist activity rows. The Chief tools remain unregistered. Searchable child reports and the new activity hierarchy still need installed-host observation with real persisted and parallel child conversations.

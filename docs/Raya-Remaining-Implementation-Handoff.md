@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:22 America/Toronto - exact terminal-receipt reconstruction
+
+Chief reconciliation now uses exact saved parent task and child-input identities plus child lineage and the final assistant message for that turn. Only a unique, successful terminal chain from a proven stopped owner becomes `completed`; ambiguous, absent or later-error evidence becomes `unknown`, with no replay. Focused adverse cases cover duplicate parent receipts and a later error after an earlier reply. The focused ledger/inspection suite passes 10 tests / 68 assertions and CLI typecheck passes. This is source-only after installed `cff303e7f5`. Still required: real installed restart, stopped scope within a live process, multi-process/PID reuse behavior and Chief tool activation gating.
+
 ## ChatGPT 2026-09-23 15:14 America/Toronto - installed named activity snapshot
 
 `cff303e7f5` is pushed and installed as `7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403`. SDK/CLI build, binary smoke tests, extension typechecks and lint, and packaging passed. This snapshot includes the named specialist rows plus the source-verified Chief stop-owner reconciliation and safe pre-admission replanning. Observe a real parallel-agent conversation and a persisted completed child report in the installed host before marking those UI behaviors accepted. Chief automatic fanout remains disabled pending terminal-receipt reconstruction and stop/restart tests.

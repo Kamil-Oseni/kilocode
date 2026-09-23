@@ -144,6 +144,149 @@ describe("Auto Chief branch ledger", () => {
     }),
   )
 
+  it.live("recovers only an exact terminal parent and child receipt from a stopped backend", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      const children = plan.map(() => SessionID.make(`ses_child_${crypto.randomUUID()}`))
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
+      for (const [index, item] of plan.entries())
+        yield* ledger.admit({
+          goalID: id,
+          goalCreatedAt: createdAt,
+          branchID: item.id,
+          callID: `call-${item.id}`,
+          sessionID: children[index],
+          access: item.access,
+        })
+      const probe = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+        encoding: "utf8",
+      })
+      expect(probe.status).toBe(0)
+      const dead = { ...owner(), pid: Number(probe.stdout) }
+      expect(stopped(dead)).toBe(true)
+      const saved = yield* ledger.read(id)
+      if (!saved) throw new Error("Expected the admitted branch plan")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) => ({ ...item, owner: dead })),
+      })
+      const receipt = (index: number) => ({
+        type: "tool",
+        tool: "task",
+        callID: `call-${plan[index].id}`,
+        state: {
+          status: "completed",
+          metadata: { parentSessionId: id, sessionId: children[index], childMessageID: `msg-child-${index}` },
+        },
+      })
+      const parent = [
+        { info: { role: "assistant" }, parts: [receipt(0), receipt(1), { ...receipt(1), state: { status: "error" } }] },
+      ] as unknown as MessageV2.WithParts[]
+      const rows = new Map<string, MessageV2.WithParts[]>([
+        [id, parent],
+        ...children.map(
+          (child, index) =>
+            [
+              child,
+              [
+                { info: { role: "user", id: `msg-child-${index}` }, parts: [{ type: "text", text: "Run" }] },
+                {
+                  info: { role: "assistant", time: { completed: Date.now() } },
+                  parts: [{ type: "text", text: "Verified result" }],
+                },
+              ] as unknown as MessageV2.WithParts[],
+            ] as const,
+        ),
+      ])
+      const sessions = {
+        get: (sessionID: SessionID) => Effect.succeed({ parentID: id, id: sessionID } as Session.Info),
+        messages: ({ sessionID }: { sessionID: SessionID }) => Effect.succeed(rows.get(sessionID) ?? []),
+      } as Pick<Session.Interface, "get" | "messages">
+      const restarted = ChiefBranches.make(storage, sessions)
+      const recovered = yield* restarted.reconcile(id, createdAt)
+      expect(recovered.branches.map((item) => item.state)).toEqual(["completed", "unknown"])
+      expect(recovered.branches[0].result).toContain("Exact saved parent receipt")
+      expect(recovered.branches[1].result).toContain("Do not replay automatically")
+      expect((yield* restarted.reconcile(id, createdAt)).branches).toEqual(recovered.branches)
+    }),
+  )
+
+  it.live("does not recover an earlier reply when the bound child turn later errors", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
+      yield* ledger.admit({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: "call-audit",
+        sessionID: child,
+        access: "read",
+      })
+      const saved = yield* ledger.read(id)
+      if (!saved) throw new Error("Expected the admitted branch plan")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) =>
+          item.id === "audit" ? { ...item, owner: { ...owner(), pid: 2_147_483_647 } } : item,
+        ),
+      })
+      const rows = new Map<string, MessageV2.WithParts[]>([
+        [
+          id,
+          [
+            {
+              info: { role: "assistant" },
+              parts: [
+                {
+                  type: "tool",
+                  tool: "task",
+                  callID: "call-audit",
+                  state: {
+                    status: "completed",
+                    metadata: { parentSessionId: id, sessionId: child, childMessageID: "msg-child" },
+                  },
+                },
+              ],
+            },
+          ] as unknown as MessageV2.WithParts[],
+        ],
+        [
+          child,
+          [
+            { info: { role: "user", id: "msg-child" }, parts: [] },
+            { info: { role: "assistant", time: { completed: 1 } }, parts: [{ type: "text", text: "Partial" }] },
+            {
+              info: {
+                role: "assistant",
+                error: { name: "Error", data: { message: "Failed" } },
+                time: { completed: 2 },
+              },
+              parts: [],
+            },
+          ] as unknown as MessageV2.WithParts[],
+        ],
+      ])
+      const sessions = {
+        get: () => Effect.succeed({ parentID: id } as Session.Info),
+        messages: ({ sessionID }: { sessionID: SessionID }) => Effect.succeed(rows.get(sessionID) ?? []),
+      } as Pick<Session.Interface, "get" | "messages">
+      const recovered = yield* ChiefBranches.make(storage, sessions).reconcile(id, createdAt)
+      expect(recovered.branches[0].state).toBe("unknown")
+    }),
+  )
+
   it.live("persists exact independent branches and refuses duplicate or widened admission", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

@@ -106,7 +106,7 @@ export namespace ChiefBranches {
 
   export function make(
     storage: Store,
-    sessions?: Pick<Session.Interface, "messages">,
+    sessions?: Pick<Session.Interface, "messages"> & Partial<Pick<Session.Interface, "get">>,
     background?: Pick<BackgroundJob.Interface, "list">,
   ) {
     const read = Effect.fn("ChiefBranches.read")(function* (id: SessionID) {
@@ -238,6 +238,46 @@ export namespace ChiefBranches {
           if (revision !== undefined) yield* active(id, createdAt, revision)
           const stale = old.branches.filter((item) => item.state === "admitted" && stopped(item.owner))
           if (!stale.length) return old
+          const proven = new Set<string>()
+          if (sessions?.get) {
+            const parent = yield* sessions.messages({ sessionID: id })
+            for (const item of stale) {
+              if (!item.callID || !item.sessionID) continue
+              const receipts = parent.flatMap((row) =>
+                row.info.role === "assistant"
+                  ? row.parts.filter(
+                      (part): part is MessageV2.ToolPart =>
+                        part.type === "tool" && part.tool === "task" && part.callID === item.callID,
+                    )
+                  : [],
+              )
+              const receipt = receipts[0]
+              if (
+                receipts.length !== 1 ||
+                receipt.state.status !== "completed" ||
+                receipt.state.metadata?.parentSessionId !== id ||
+                receipt.state.metadata?.sessionId !== item.sessionID ||
+                typeof receipt.state.metadata?.childMessageID !== "string"
+              )
+                continue
+              const message = receipt.state.metadata?.childMessageID
+              const child = yield* sessions.get(item.sessionID)
+              if (child?.parentID !== id) continue
+              const rows = yield* sessions.messages({ sessionID: item.sessionID })
+              const input = rows.findIndex((row) => row.info.role === "user" && row.info.id === message)
+              if (input < 0) continue
+              const next = rows.findIndex((row, index) => index > input && row.info.role === "user")
+              const turn = rows.slice(input + 1, next < 0 ? undefined : next)
+              const final = turn.findLast((row) => row.info.role === "assistant")
+              if (
+                final?.info.role === "assistant" &&
+                !final.info.error &&
+                typeof final.info.time.completed === "number" &&
+                final.parts.some((part) => part.type === "text" && part.text.trim().length > 0)
+              )
+                proven.add(item.id)
+            }
+          }
           const now = Date.now()
           const next: Record = {
             ...old,
@@ -245,9 +285,10 @@ export namespace ChiefBranches {
               stale.includes(item)
                 ? {
                     ...item,
-                    state: "unknown",
-                    result:
-                      "The admitting backend stopped before a terminal child result was saved. Do not replay automatically.",
+                    state: proven.has(item.id) ? "completed" : "unknown",
+                    result: proven.has(item.id)
+                      ? "Exact saved parent receipt and terminal child reply recovered after backend restart; inspect before review."
+                      : "The admitting backend stopped before a terminal child result was proven. Do not replay automatically.",
                     updatedAt: now,
                   }
                 : item,

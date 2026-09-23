@@ -25,7 +25,7 @@ export function chiefInspectTool(deps: {
           if (RayaChief.phase(parent.metadata) !== "task" && RayaChief.phase(parent.metadata) !== "goal")
             throw new Error("Auto Chief branch inspection is unavailable in this phase")
           const goal = yield* deps.goals.get(ctx.sessionID)
-          const ledger = ChiefBranches.make(deps.storage)
+          const ledger = ChiefBranches.make(deps.storage, deps.sessions)
           const plan = yield* ledger.read(ctx.sessionID)
           if (!plan || !ChiefBranches.matches(plan, goal))
             throw new Error("Auto Chief branch plan no longer matches the active request")

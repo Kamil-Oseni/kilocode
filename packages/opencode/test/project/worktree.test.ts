@@ -178,6 +178,111 @@ describe("Worktree", () => {
   })
 
   describe("create + remove lifecycle", () => {
+    // kilocode_change start - awaited creation must not report an incomplete workspace as ready
+    it.instance(
+      "plan reserves an identity without creating a worktree, then createReadyFromInfo uses it",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          const info = yield* svc.plan({ name: `planned-${Date.now()}` })
+          expect((yield* svc.list()).some((item) => normalize(item.directory) === normalize(info.directory))).toBe(
+            false,
+          )
+          const before = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+          expect(normalize(before)).not.toContain(normalize(info.directory))
+
+          yield* svc.createReadyFromInfo(info)
+          expect((yield* svc.list()).some((item) => normalize(item.directory) === normalize(info.directory))).toBe(true)
+          const head = yield* git(info.directory, ["rev-parse", "HEAD"])
+          expect(head.trim()).toMatch(/^[a-f0-9]{40}$/)
+          yield* removeCreatedWorktree(info.directory)
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "createReady returns after checkout and startup complete",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const events: string[] = []
+          const on = (evt: GlobalEvent) => {
+            events.push(evt.payload.type)
+          }
+          GlobalBus.on("event", on)
+          yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
+
+          const info = yield* svc.createReady({ name: `awaited-${Date.now()}` })
+          expect(events).toContain(Worktree.Event.Ready.type)
+          expect(events).toContain(Worktree.Event.SetupReady.type)
+          expect(events).not.toContain(Worktree.Event.Failed.type)
+          const head = yield* git(info.directory, ["rev-parse", "HEAD"])
+          expect(head.trim()).toMatch(/^[a-f0-9]{40}$/)
+          yield* removeCreatedWorktree(info.directory)
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "createReady fails and withholds setup-ready when the startup command fails",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const name = `awaited-failure-${Date.now()}`
+          const events: string[] = []
+          const on = (evt: GlobalEvent) => {
+            if (evt.directory?.includes(name)) events.push(evt.payload.type)
+          }
+          GlobalBus.on("event", on)
+          yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
+
+          const exit = yield* Effect.exit(svc.createReady({ name, startCommand: "exit 37" }))
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.StartCommandFailedError)
+          }
+          expect(events).toContain(Worktree.Event.Ready.type)
+          expect(events).toContain(Worktree.Event.Failed.type)
+          expect(events).not.toContain(Worktree.Event.SetupReady.type)
+
+          const info = (yield* svc.list()).find((item) => item.name === name)
+          expect(info).toBeDefined()
+          if (info) yield* removeCreatedWorktree(info.directory)
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "createReady can be interrupted without reporting setup-ready",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const name = `awaited-cancel-${Date.now()}`
+          const ready = yield* Deferred.make<void>()
+          const events: string[] = []
+          const on = (evt: GlobalEvent) => {
+            if (!evt.directory?.includes(name)) return
+            events.push(evt.payload.type)
+            if (evt.payload.type === Worktree.Event.Ready.type) Deferred.doneUnsafe(ready, Effect.void)
+          }
+          GlobalBus.on("event", on)
+          yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
+
+          const cmd = process.platform === "win32" ? "ping -n 31 127.0.0.1 >NUL" : "sleep 30"
+          const fiber = yield* svc.createReady({ name, startCommand: cmd }).pipe(Effect.forkScoped)
+          yield* Deferred.await(ready)
+          yield* Fiber.interrupt(fiber)
+          expect(events).not.toContain(Worktree.Event.SetupReady.type)
+
+          const info = (yield* svc.list()).find((item) => item.name === name)
+          expect(info).toBeDefined()
+          if (info) yield* removeCreatedWorktree(info.directory)
+        }),
+      { git: true },
+    )
+    // kilocode_change end
+
     it.instance(
       "create returns worktree info and remove cleans up",
       () =>

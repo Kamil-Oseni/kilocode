@@ -26,6 +26,18 @@ export namespace ChiefBranches {
     scope: Schema.optional(Schema.Array(Schema.String)),
     independence: Schema.optional(Schema.String),
     authority: Schema.optional(Schema.String),
+    worktree: Schema.optional(
+      Schema.Struct({
+        name: Schema.String,
+        directory: Schema.String,
+        branch: Schema.String,
+        baseCommit: Schema.String,
+        callID: Schema.String,
+        phase: Schema.Literals(["reserved", "ready", "unknown"]),
+        owner: Schema.Struct({ host: Schema.String, pid: Schema.Number, birth: Schema.optional(Schema.String) }),
+        updatedAt: Schema.Number,
+      }),
+    ),
     state: Schema.Literals(["planned", "admitted", "completed", "failed", "cancelled", "unknown"]),
     callID: Schema.optional(Schema.String),
     sessionID: Schema.optional(SessionID),
@@ -194,7 +206,7 @@ export namespace ChiefBranches {
               ) === JSON.stringify(input.branches)
             )
               return old
-            if (old.branches.some((item) => item.state !== "planned") || old.revision === revision)
+            if (old.branches.some((item) => item.state !== "planned" || item.worktree) || old.revision === revision)
               throw new Error("An Auto Chief branch plan already exists for this goal")
           }
           const now = Date.now()
@@ -208,6 +220,138 @@ export namespace ChiefBranches {
             branches: input.branches.map((item) => ({ ...item, state: "planned", updatedAt: now })),
           }
           yield* storage.replace(key(input.goalID), next)
+          return next
+        }),
+      )
+    })
+
+    const reserveWorktree = Effect.fn("ChiefBranches.reserveWorktree")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      branchID: string
+      callID: string
+      name: string
+      directory: string
+      branch: string
+      baseCommit: string
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const old = yield* read(input.goalID)
+          if (!old || old.goalCreatedAt !== input.goalCreatedAt || old.version !== 2)
+            throw new Error("Auto Chief branch plan changed")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
+          const item = old.branches.find((entry) => entry.id === input.branchID)
+          if (!item || item.access !== "edit" || item.state !== "planned")
+            throw new Error("Only a planned editing branch can reserve a worktree")
+          if (
+            !input.name.trim() ||
+            !input.directory.trim() ||
+            !input.branch.trim() ||
+            !/^[0-9a-f]{40}$|^[0-9a-f]{64}$/i.test(input.baseCommit)
+          )
+            throw new Error("Auto Chief worktree identity is incomplete")
+          const identity = {
+            name: input.name,
+            directory: input.directory,
+            branch: input.branch,
+            baseCommit: input.baseCommit,
+            callID: input.callID,
+          }
+          if (item.worktree) {
+            if (
+              item.worktree.name === identity.name &&
+              item.worktree.directory === identity.directory &&
+              item.worktree.branch === identity.branch &&
+              item.worktree.baseCommit === identity.baseCommit &&
+              item.worktree.callID === identity.callID
+            )
+              return item.worktree
+            throw new Error("Auto Chief editing branch already reserved a different worktree")
+          }
+          if (
+            old.branches.some(
+              (entry) =>
+                entry.worktree?.directory.toLowerCase() === input.directory.toLowerCase() ||
+                entry.worktree?.branch.toLowerCase() === input.branch.toLowerCase(),
+            )
+          )
+            throw new Error("Auto Chief worktree identity is already reserved")
+          const worktree = { ...identity, phase: "reserved" as const, owner: durable(), updatedAt: Date.now() }
+          yield* storage.replace(key(input.goalID), {
+            ...old,
+            branches: old.branches.map((entry) => (entry.id === item.id ? { ...entry, worktree } : entry)),
+          } satisfies Record)
+          return worktree
+        }),
+      )
+    })
+
+    const readyWorktree = Effect.fn("ChiefBranches.readyWorktree")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      branchID: string
+      callID: string
+      directory: string
+      baseCommit: string
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const old = yield* read(input.goalID)
+          if (!old || old.goalCreatedAt !== input.goalCreatedAt || old.version !== 2)
+            throw new Error("Auto Chief branch plan changed")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
+          const item = old.branches.find((entry) => entry.id === input.branchID)
+          const worktree = item?.worktree
+          if (
+            !item ||
+            item.state !== "planned" ||
+            !worktree ||
+            worktree.callID !== input.callID ||
+            worktree.directory !== input.directory ||
+            worktree.baseCommit !== input.baseCommit
+          )
+            throw new Error("Auto Chief worktree readiness does not match its reservation")
+          if (worktree.phase === "ready") return worktree
+          if (worktree.phase !== "reserved") throw new Error("Auto Chief worktree outcome is uncertain")
+          const next = { ...worktree, phase: "ready" as const, updatedAt: Date.now() }
+          yield* storage.replace(key(input.goalID), {
+            ...old,
+            branches: old.branches.map((entry) => (entry.id === item.id ? { ...entry, worktree: next } : entry)),
+          } satisfies Record)
+          return next
+        }),
+      )
+    })
+
+    const uncertainWorktree = Effect.fn("ChiefBranches.uncertainWorktree")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      branchID: string
+      callID: string
+      directory: string
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const old = yield* read(input.goalID)
+          if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
+          const item = old.branches.find((entry) => entry.id === input.branchID)
+          const worktree = item?.worktree
+          if (!item || !worktree || worktree.callID !== input.callID || worktree.directory !== input.directory)
+            throw new Error("Auto Chief worktree outcome does not match its reservation")
+          if (worktree.phase === "unknown") return worktree
+          if (worktree.phase !== "reserved") throw new Error("Auto Chief ready worktree cannot become uncertain")
+          const next = { ...worktree, phase: "unknown" as const, updatedAt: Date.now() }
+          yield* storage.replace(key(input.goalID), {
+            ...old,
+            branches: old.branches.map((entry) => (entry.id === item.id ? { ...entry, worktree: next } : entry)),
+          } satisfies Record)
           return next
         }),
       )
@@ -275,7 +419,10 @@ export namespace ChiefBranches {
           if (!old || old.goalCreatedAt !== createdAt) throw new Error("Auto Chief branch plan changed")
           if (revision !== undefined) yield* active(id, createdAt, revision)
           const stale = old.branches.filter((item) => item.state === "admitted" && stopped(item.owner))
-          if (!stale.length) return old
+          const pending = old.branches.filter(
+            (item) => item.worktree?.phase === "reserved" && stopped(item.worktree.owner),
+          )
+          if (!stale.length && !pending.length) return old
           const proven = new Set<string>()
           if (sessions?.get) {
             const parent = yield* sessions.messages({ sessionID: id })
@@ -319,18 +466,24 @@ export namespace ChiefBranches {
           const now = Date.now()
           const next: Record = {
             ...old,
-            branches: old.branches.map((item) =>
-              stale.includes(item)
+            branches: old.branches.map((item) => {
+              const branch = pending.includes(item)
                 ? {
                     ...item,
-                    state: proven.has(item.id) ? "completed" : "unknown",
-                    result: proven.has(item.id)
-                      ? "Exact saved parent receipt and terminal child reply recovered after backend restart; inspect before review."
-                      : "The admitting backend stopped before a terminal child result was proven. Do not replay automatically.",
+                    worktree: { ...item.worktree!, phase: "unknown" as const, updatedAt: now },
                     updatedAt: now,
                   }
-                : item,
-            ),
+                : item
+              if (!stale.includes(item)) return branch
+              return {
+                ...branch,
+                state: proven.has(item.id) ? ("completed" as const) : ("unknown" as const),
+                result: proven.has(item.id)
+                  ? "Exact saved parent receipt and terminal child reply recovered after backend restart; inspect before review."
+                  : "The admitting backend stopped before a terminal child result was proven. Do not replay automatically.",
+                updatedAt: now,
+              }
+            }),
           }
           yield* storage.replace(key(id), next)
           return next
@@ -543,6 +696,18 @@ export namespace ChiefBranches {
       }
     })
 
-    return { read, start, admit, reconcile, settle, review, synthesize, completion }
+    return {
+      read,
+      start,
+      reserveWorktree,
+      readyWorktree,
+      uncertainWorktree,
+      admit,
+      reconcile,
+      settle,
+      review,
+      synthesize,
+      completion,
+    }
   }
 }

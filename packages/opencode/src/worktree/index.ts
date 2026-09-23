@@ -120,8 +120,11 @@ function failedRemoves(...chunks: string[]) {
 
 export interface Interface {
   readonly makeWorktreeInfo: (options?: { name?: string; detached?: boolean }) => Effect.Effect<Info, Error>
+  readonly plan: (options?: { name?: string; detached?: boolean }) => Effect.Effect<Info, Error> // kilocode_change
   readonly createFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void, Error>
   readonly create: (input?: CreateInput) => Effect.Effect<Info, Error>
+  readonly createReadyFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void, Error> // kilocode_change
+  readonly createReady: (input?: CreateInput) => Effect.Effect<Info, Error> // kilocode_change
   readonly list: () => Effect.Effect<(Omit<Info, "branch"> & { branch?: string })[], Error>
   readonly remove: (input: RemoveInput) => Effect.Effect<boolean, Error>
   readonly reset: (input: ResetInput) => Effect.Effect<boolean, Error>
@@ -236,36 +239,31 @@ const layer: Layer.Layer<
       const projectID = ctx.project.id
       const extra = startCommand?.trim()
 
+      // kilocode_change start - surface asynchronous setup failures to awaited callers
+      const fail = (error: CreateFailedError | StartCommandFailedError) =>
+        Effect.gen(function* () {
+          yield* Effect.logError("worktree bootstrap failed", { directory: info.directory, message: error.message })
+          GlobalBus.emit("event", {
+            directory: info.directory,
+            project: projectID,
+            workspace: workspaceID,
+            payload: { type: Event.Failed.type, properties: { message: error.message } },
+          })
+          return yield* error
+        })
+      // kilocode_change end
+
       const populated = yield* git(["reset", "--hard"], { cwd: info.directory })
       if (populated.code !== 0) {
         const message = populated.stderr || populated.text || "Failed to populate worktree"
-        yield* Effect.logError("worktree checkout failed", { directory: info.directory, message })
-        GlobalBus.emit("event", {
-          directory: info.directory,
-          project: ctx.project.id,
-          workspace: workspaceID,
-          payload: { type: Event.Failed.type, properties: { message } },
-        })
-        return
+        return yield* fail(new CreateFailedError({ message })) // kilocode_change
       }
 
-      const booted = yield* store.load({ directory: info.directory }).pipe(
-        Effect.as(true),
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            const message = errorMessage(error)
-            yield* Effect.logError("worktree bootstrap failed", { directory: info.directory, message })
-            GlobalBus.emit("event", {
-              directory: info.directory,
-              project: ctx.project.id,
-              workspace: workspaceID,
-              payload: { type: Event.Failed.type, properties: { message } },
-            })
-            return false
-          }),
-        ),
-      )
-      if (!booted) return
+      // kilocode_change start - do not report readiness after failed bootstrap
+      yield* store
+        .load({ directory: info.directory })
+        .pipe(Effect.catch((error) => fail(new CreateFailedError({ message: errorMessage(error) }))))
+      // kilocode_change end
 
       GlobalBus.emit("event", {
         directory: info.directory,
@@ -277,7 +275,10 @@ const layer: Layer.Layer<
         },
       })
 
-      yield* runStartScripts(info.directory, { projectID, extra })
+      // kilocode_change start - setup-ready requires successful startup commands
+      const started = yield* runStartScripts(info.directory, { projectID, extra })
+      if (!started) return yield* fail(new StartCommandFailedError({ message: "Worktree start command failed" }))
+      // kilocode_change end
 
       // kilocode_change start - signal full readiness once setup also completes
       GlobalBus.emit("event", {
@@ -305,6 +306,22 @@ const layer: Layer.Layer<
       yield* createFromInfo(info, input?.startCommand)
       return info
     })
+
+    // kilocode_change start - reserve identity before mutation, then await the actual bootstrap
+    const plan = makeWorktreeInfo
+    const createReadyFromInfo = Effect.fn("Worktree.createReadyFromInfo")(function* (
+      info: Info,
+      startCommand?: string,
+    ) {
+      yield* setup(info)
+      yield* boot(info, startCommand)
+    })
+    const createReady = Effect.fn("Worktree.createReady")(function* (input?: CreateInput) {
+      const info = yield* plan({ name: input?.name })
+      yield* createReadyFromInfo(info, input?.startCommand)
+      return info
+    })
+    // kilocode_change end
 
     const canonical = Effect.fnUntraced(function* (input: string) {
       const abs = pathSvc.resolve(input)
@@ -503,8 +520,7 @@ const layer: Layer.Layer<
       const startup = project?.commands?.start?.trim() ?? ""
       const ok = yield* runStartScript(directory, startup, "project")
       if (!ok) return false
-      yield* runStartScript(directory, input.extra ?? "", "worktree")
-      return true
+      return yield* runStartScript(directory, input.extra ?? "", "worktree") // kilocode_change
     })
 
     const prune = Effect.fnUntraced(function* (root: string, entries: string[]) {
@@ -621,7 +637,19 @@ const layer: Layer.Layer<
       return true
     })
 
-    return Service.of({ makeWorktreeInfo, createFromInfo, create, list, remove, reset })
+    // kilocode_change start
+    return Service.of({
+      makeWorktreeInfo,
+      plan,
+      createFromInfo,
+      create,
+      createReadyFromInfo,
+      createReady,
+      list,
+      remove,
+      reset,
+    })
+    // kilocode_change end
   }),
 )
 

@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 19:09 America/Toronto - worktree reservation foundation
+
+The owner wants deliberate specialist selection and Codex-like parent-chat clarity: short useful subagent names, recognizable role icons, visible read/edit access, concise chronological progress and messages, and full reports on demand. Existing Chief activity and tabs approximate this but are not accepted from a live installed parallel run. Do not spawn specialists merely to decorate an answer.
+
+Source now has durable per-edit-branch worktree identities and reserved/ready/unknown phases, plus `Worktree.plan` and `createReadyFromInfo` so reservation can precede Git mutation and startup can be awaited. Ledger reconciliation marks a proven stopped reservation unknown. The `task` tool has not yet been wired to these APIs: it still creates and prompts edit children in the parent directory. Next resolve HEAD and dirty-parent policy, plan and reserve the exact worktree, await setup, mark ready, create and prompt the child under `InstanceStore.provide({ directory: worktree.directory }, ...)`, inherit sandbox restrictions from the parent directory, and bind admission to the ready identity. On failure retain the partial worktree for review and do not replay an unknown creation. Then add fixed-base diff/review including untracked files and explicit integration, with adverse tests before enabling independent parallel edit claims. The current source is not a user-visible installed snapshot.
+
 ## ChatGPT 2026-09-23 18:51 America/Toronto - installed exact-plan review receipt
 
 `a9d92b6d29` is pushed and installed as `7.4.23-snapshot+a9d92b6d29.kamil-oseni.1790203684868`. The freshly rebuilt CLI passed three smoke tests; SDK generation caused no tracked diff; typechecks, lint, production bundle, VSIX packaging and installation passed. VS Code lists the version. Retained rollback VSIX SHA-256: `2F152AF3DD5C916FA42C3072B20E206DE58126F320CC7A29834514AE979DC63D`; bundled CLI SHA-256: `97C6BD82E47E338469096828CCF942C50E71A655DE4BD5CE8CA5130B8B91BD57`. Computer Use has no live UI surface here, so real plan/review identity in the open host is unverified. The next backend slice should address concurrent edit isolation before presenting parallel write access as independent.

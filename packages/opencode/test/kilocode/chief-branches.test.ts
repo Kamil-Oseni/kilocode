@@ -46,6 +46,82 @@ const cleanup = (storage: Storage.Interface, id: SessionID) =>
   )
 
 describe("Auto Chief branch ledger", () => {
+  it.live("reserves one durable edit worktree and refuses changed or uncertain identities", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      yield* ledger.start({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        requestID: "route-edit",
+        branches: [
+          { ...plan[0], access: "edit" },
+          { ...plan[1], access: "edit" },
+        ],
+      })
+      const input = {
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: "call-edit",
+        name: "chief-audit",
+        directory: "C:\\worktrees\\chief-audit",
+        branch: "opencode/chief-audit",
+        baseCommit: "a".repeat(40),
+      }
+      const reserved = yield* ledger.reserveWorktree(input)
+      expect(reserved.phase).toBe("reserved")
+      expect(yield* ChiefBranches.make(storage).reserveWorktree(input)).toEqual(reserved)
+      expect(
+        Exit.isFailure(
+          yield* ledger.reserveWorktree({ ...input, directory: "C:\\worktrees\\other" }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(
+        Exit.isFailure(
+          yield* ledger.reserveWorktree({ ...input, branchID: "design", callID: "call-design" }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      const ready = yield* ledger.readyWorktree(input)
+      expect(ready.phase).toBe("ready")
+      expect((yield* ledger.read(id))?.branches[0].worktree?.baseCommit).toBe(input.baseCommit)
+      expect(Exit.isFailure(yield* ledger.uncertainWorktree(input).pipe(Effect.exit))).toBe(true)
+      expect(
+        Exit.isFailure(yield* ledger.readyWorktree({ ...input, directory: "C:\\worktrees\\other" }).pipe(Effect.exit)),
+      ).toBe(true)
+      const other = {
+        ...input,
+        branchID: "design",
+        callID: "call-design",
+        name: "chief-design",
+        directory: "C:\\worktrees\\chief-design",
+        branch: "opencode/chief-design",
+      }
+      yield* ledger.reserveWorktree(other)
+      const probe = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+        encoding: "utf8",
+      })
+      expect(probe.status).toBe(0)
+      const saved = yield* ledger.read(id)
+      if (!saved) throw new Error("Expected the reserved worktree")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) =>
+          item.id === "design" && item.worktree
+            ? { ...item, worktree: { ...item.worktree, owner: { ...item.worktree.owner, pid: Number(probe.stdout) } } }
+            : item,
+        ),
+      })
+      expect((yield* ledger.reconcile(id, createdAt)).branches[1].worktree?.phase).toBe("unknown")
+      expect((yield* ledger.uncertainWorktree(other)).phase).toBe("unknown")
+      expect(Exit.isFailure(yield* ledger.readyWorktree(other).pipe(Effect.exit))).toBe(true)
+    }),
+  )
+
   it.live("settles an admitted branch when its job scope closes in a live backend", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

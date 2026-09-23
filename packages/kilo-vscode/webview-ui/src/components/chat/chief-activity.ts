@@ -118,6 +118,8 @@ function receipts(plan: ChiefPart, branches: ChiefBranch[], later: readonly Chie
       for (const item of items) reports.set(item.id, item)
     }
     if (inspected && part.tool === "chief_review" && part.state.status === "completed") {
+      const receipt = metadata(part)
+      if ((receipt.requestID !== undefined || receipt.goalCreatedAt !== undefined) && !related(plan, part)) continue
       const id = text(part.state.input?.branch_id) ?? text(metadata(part).branchID)
       if (id && branches.some((branch) => branch.id === id)) reviews.add(id)
     }

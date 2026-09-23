@@ -70,6 +70,13 @@ describe("chiefActivity", () => {
       "reviewed",
       "working",
     ])
+    const tagged: ChiefPart = {
+      ...review,
+      state: { ...review.state, metadata: { branchID: "docs", requestID: "other-request", goalCreatedAt: 1 } },
+    }
+    expect(chiefActivity(plan, [plan, current, tagged])?.branches[0]?.state).toBe("ready")
+    tagged.state.metadata = { branchID: "docs", requestID: "request", goalCreatedAt: 1 }
+    expect(chiefActivity(plan, [plan, current, tagged])?.branches[0]?.state).toBe("reviewed")
     const next: ChiefPart = {
       ...plan,
       id: "next",

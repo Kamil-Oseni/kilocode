@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 18:44 America/Toronto - correlate Chief review receipts and audit edit isolation
+
+New `chief_review` results now carry the saved request ID and goal creation time alongside the branch ID. Parent-chat activity accepts a tagged review only for that exact plan; older untagged receipts remain readable within their existing plan segment. Focused CLI and webview adverse tests cover the new identity and a same-branch review from another request. This closes a presentation identity gap, not the full agent acceptance gate.
+
+An independent read-only source audit found that simultaneous Chief edit branches still share the parent workspace: the plan validates distinct scope strings but neither isolates child directories nor enforces those scopes on file and shell mutations. It also found fanout is limited to an already-active goal and a review checks that cited child evidence exists without proving it supports the conclusion. The next architectural slice is real branch-owned worktree isolation and merge/review handling for concurrent edits, or an exact mutation boundary that enforces branch-owned paths across all write-capable tools. Test overlapping nested paths, shell writes, cancellation, restart, and conflicting results. Do not claim parallel edit authority is isolated or mark `FUT-AGENT-01/02` Verified.
+
 ## ChatGPT 2026-09-23 18:38 America/Toronto - specialist activity snapshot installed
 
 Commit `f80c12bf3a` is pushed and installed as `7.4.23-snapshot+f80c12bf3a.kamil-oseni.1790202987216`; VS Code lists the exact version. The retained rollback VSIX SHA-256 is `C408F972134824B8B2DFBAC32D2E7314CC83198640177E615190D9A40FCFF0FD`. The low-memory workflow passed SDK preparation, extension/webview typechecks, lint, production bundling, packaging and installation. Computer Use still exposes no app or browser surface in this run, so live specialist activity, responsive layout and restart acceptance are unproven. Continue with a real two-specialist run and compare the parent summary against each child's saved brief, access, status and report.

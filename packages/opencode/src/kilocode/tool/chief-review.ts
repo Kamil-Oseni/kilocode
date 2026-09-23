@@ -67,7 +67,12 @@ export function chiefReviewTool(deps: {
           return {
             title: `${branch.name} reviewed`,
             output: `Accepted ${branch.name} with saved child evidence.`,
-            metadata: { branchID: branch.id, reviewedAt: saved.review.at },
+            metadata: {
+              branchID: branch.id,
+              requestID: plan.requestID,
+              goalCreatedAt: plan.goalCreatedAt,
+              reviewedAt: saved.review.at,
+            },
           }
         }).pipe(Effect.orDie),
     }),

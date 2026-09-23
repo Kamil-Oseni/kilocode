@@ -160,6 +160,8 @@ describe("Auto Chief branch review", () => {
       expect(Exit.isFailure(yield* def.execute({ ...input, assessment: "  " }, ctx).pipe(Effect.exit))).toBe(true)
       const result = yield* def.execute(input, ctx)
       expect(result.metadata.branchID).toBe("audit")
+      expect(result.metadata.requestID).toBe(user)
+      expect(result.metadata.goalCreatedAt).toBe(createdAt)
       expect((yield* branches.read(id))?.branches[0]?.review).toMatchObject({
         ...input.evidence,
         assessment: input.assessment,

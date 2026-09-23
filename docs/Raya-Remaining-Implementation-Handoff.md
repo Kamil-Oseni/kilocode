@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:35 America/Toronto - sibling cancellation and fresh-process Chief recovery
+
+The task integration suite proves that a cancelled running Chief child does not stop its sibling and cannot be replayed. A separate-process fixture now persists an actual admitting owner, kills that process, and verifies that a fresh process reads the same branch IDs, reconciles the stopped-owner admission to `unknown`, leaves the sibling planned, and refuses replay. The full task suite passes 46 tests / 257 assertions, the new restart test passes, and CLI typecheck passes. This is source-only after installed `cff303e7f5`; no production behavior changed in this checkpoint. Next test a stopped task scope with a still-live backend, PID reuse or owner-epoch ambiguity, and the installed-host stop/restart matrix before registering Chief tools. The Codex-like named activity is only partly delivered: real parallel-conversation visual acceptance and useful multi-agent summaries remain open.
+
 ## ChatGPT 2026-09-23 15:22 America/Toronto - exact terminal-receipt reconstruction
 
 Chief reconciliation now uses exact saved parent task and child-input identities plus child lineage and the final assistant message for that turn. Only a unique, successful terminal chain from a proven stopped owner becomes `completed`; ambiguous, absent or later-error evidence becomes `unknown`, with no replay. Focused adverse cases cover duplicate parent receipts and a later error after an earlier reply. The focused ledger/inspection suite passes 10 tests / 68 assertions and CLI typecheck passes. This is source-only after installed `cff303e7f5`. Still required: real installed restart, stopped scope within a live process, multi-process/PID reuse behavior and Chief tool activation gating.

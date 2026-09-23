@@ -438,6 +438,114 @@ describe("tool.task planned Auto Chief branch", () => {
   )
 
   planned.instance(
+    "cancels one running Chief branch without replaying or stopping its sibling",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const jobs = yield* BackgroundJob.Service
+        const { chat, assistant } = yield* seed()
+        yield* clean(storage, chat.id)
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(
+          chat.id,
+          "Review the product",
+          assistant.parentID,
+          undefined,
+          undefined,
+          undefined,
+          { concurrentChildren: 2 },
+        )
+        if (!goal.intent) throw new Error("expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
+        const branches = ChiefBranches.make(storage)
+        yield* branches.start({
+          goalID: chat.id,
+          goalCreatedAt: goal.createdAt,
+          requestID: assistant.parentID,
+          branches: [
+            {
+              id: "safety",
+              name: "Safety audit",
+              specialist: "researcher",
+              access: "read",
+              brief: { objective: "Audit authorization", constraints: [], expectedReturn: "Safety findings" },
+            },
+            {
+              id: "design",
+              name: "UX audit",
+              specialist: "designer",
+              access: "read",
+              brief: { objective: "Audit navigation", constraints: [], expectedReturn: "UX findings" },
+            },
+          ],
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: "Review the entire product", [RayaChief.phaseKey]: "task" },
+        })
+        const ready = yield* Deferred.make<void>()
+        const done = yield* Deferred.make<void>()
+        let started = 0
+        const ops: TaskPromptOps = {
+          ...stubOps(),
+          prompt: (input) => {
+            if (input.sessionID === chat.id) return Effect.succeed(reply(input, "injected"))
+            return Effect.gen(function* () {
+              started += 1
+              if (started === 2) yield* Deferred.succeed(ready, undefined)
+              yield* Deferred.await(done)
+              return reply(input, `${input.agent} findings`)
+            })
+          },
+        }
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const ctx = (callID: string) => ({
+          sessionID: chat.id,
+          messageID: assistant.id,
+          callID,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: ops },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        const safety = yield* def.execute(
+          { description: "Safety audit", branch_id: "safety", background: true },
+          ctx("call-safety"),
+        )
+        const design = yield* def.execute(
+          { description: "UX audit", branch_id: "design", background: true },
+          ctx("call-design"),
+        )
+        yield* Deferred.await(ready)
+        const selected = yield* jobs.get(design.metadata.sessionId)
+        if (!selected?.revision) throw new Error("expected a running design job revision")
+        expect(selected.status).toBe("running")
+        expect((yield* jobs.cancel(design.metadata.sessionId, selected.revision))?.status).toBe("cancelled")
+        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual([
+          "admitted",
+          "cancelled",
+        ])
+        yield* Deferred.succeed(done, undefined)
+        expect((yield* jobs.wait({ id: safety.metadata.sessionId })).info?.status).toBe("completed")
+        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual([
+          "completed",
+          "cancelled",
+        ])
+        expect(
+          Exit.isFailure(
+            yield* def.execute({ description: "UX audit", branch_id: "design" }, ctx("retry")).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(started).toBe(2)
+      }),
+    20_000,
+  )
+
+  planned.instance(
     "releases the child lease if admission loses a race, without prompting the orphan",
     () =>
       Effect.gen(function* () {

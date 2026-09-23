@@ -46,6 +46,88 @@ const cleanup = (storage: Storage.Interface, id: SessionID) =>
   )
 
 describe("Auto Chief branch ledger", () => {
+  it.live("reconciles a stopped integration owner as unknown without replay", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      const saved = yield* ledger.start({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        requestID: "review-edit",
+        branches: [{ ...plan[0], access: "edit" }, plan[1]],
+      })
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) =>
+          item.id === "audit"
+            ? {
+                ...item,
+                state: "completed",
+                review: {
+                  callID: "review",
+                  messageID: "message",
+                  partID: "part",
+                  digest: "b".repeat(64),
+                  at: Date.now(),
+                },
+                worktree: {
+                  name: "edit",
+                  directory: "C:\\worktrees\\edit",
+                  branch: "opencode/edit",
+                  baseCommit: "a".repeat(40),
+                  callID: "edit",
+                  phase: "ready",
+                  owner: { host: "test", pid: process.pid },
+                  updatedAt: Date.now(),
+                },
+              }
+            : item,
+        ),
+      })
+      const input = {
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: "merge",
+        digest: "b".repeat(64),
+        target: "C:\\parent",
+      }
+      yield* ledger.reserveIntegration(input)
+      const probe = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+        encoding: "utf8",
+      })
+      expect(probe.status).toBe(0)
+      const reserved = yield* ledger.read(id)
+      if (!reserved) throw new Error("Expected an integration reservation")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...reserved,
+        branches: reserved.branches.map((item) =>
+          item.id === "audit" && item.worktree?.integration
+            ? {
+                ...item,
+                worktree: {
+                  ...item.worktree,
+                  integration: {
+                    ...item.worktree.integration,
+                    owner: { ...item.worktree.integration.owner, pid: Number(probe.stdout) },
+                  },
+                },
+              }
+            : item,
+        ),
+      })
+      expect((yield* ledger.reconcile(id, createdAt)).branches[0].worktree?.integration?.phase).toBe("unknown")
+      expect(Exit.isFailure(yield* ledger.reserveIntegration(input).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* ledger.settleIntegration({ ...input, phase: "integrated" }).pipe(Effect.exit))).toBe(
+        true,
+      )
+    }),
+  )
+
   it.live("refuses to finish a reviewed edit before its worktree is integrated", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -65,11 +147,49 @@ describe("Auto Chief branch ledger", () => {
         branches: saved.branches.map((item) => ({
           ...item,
           state: "completed",
-          review: { callID: "review", messageID: "message", partID: "part", at: Date.now() },
+          review: {
+            callID: "review",
+            messageID: "message",
+            partID: "part",
+            ...(item.access === "edit" ? { digest: "b".repeat(64) } : {}),
+            at: Date.now(),
+          },
+          ...(item.access === "edit"
+            ? {
+                worktree: {
+                  name: "edit",
+                  directory: "C:\\worktrees\\edit",
+                  branch: "opencode/edit",
+                  baseCommit: "a".repeat(40),
+                  callID: "edit",
+                  phase: "ready",
+                  owner: { host: "test", pid: process.pid },
+                  updatedAt: Date.now(),
+                },
+              }
+            : {}),
         })),
       })
       const err = yield* ledger.completion(id, createdAt).pipe(Effect.flip)
       expect(err.message).toContain("isolated in worktrees")
+      const input = {
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: "integrate",
+        digest: "b".repeat(64),
+        target: "C:\\parent",
+      }
+      expect(
+        Exit.isFailure(yield* ledger.reserveIntegration({ ...input, digest: "c".repeat(64) }).pipe(Effect.exit)),
+      ).toBe(true)
+      expect((yield* ledger.reserveIntegration(input)).phase).toBe("reserved")
+      expect(Exit.isFailure(yield* ledger.reserveIntegration(input).pipe(Effect.exit))).toBe(true)
+      expect((yield* ledger.settleIntegration({ ...input, phase: "integrated" })).phase).toBe("integrated")
+      expect(Exit.isFailure(yield* ledger.settleIntegration({ ...input, phase: "unknown" }).pipe(Effect.exit))).toBe(
+        true,
+      )
+      expect((yield* ledger.completion(id, createdAt).pipe(Effect.flip)).message).toContain("not synthesized")
     }),
   )
 

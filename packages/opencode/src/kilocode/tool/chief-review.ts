@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import { RayaChief } from "@/kilocode/chief"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { ChiefEdits } from "@/kilocode/chief/edits"
 import type { RayaGoal } from "@/kilocode/goal"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
@@ -15,6 +16,7 @@ export function chiefReviewTool(deps: {
   const parameters = Schema.Struct({
     branch_id: Schema.String,
     assessment: Schema.String,
+    digest: Schema.optional(Schema.String),
     evidence: Schema.Struct({ callID: Schema.String, messageID: Schema.String, partID: Schema.String }),
   })
   return Tool.define(
@@ -50,10 +52,26 @@ export function chiefReviewTool(deps: {
                   part.state.status === "completed" &&
                   part.state.metadata?.requestID === plan.requestID &&
                   part.state.metadata?.goalCreatedAt === plan.goalCreatedAt &&
+                  (branch.access !== "edit" ||
+                    (part.state.metadata?.digests as Record<string, string> | undefined)?.[branch.id] ===
+                      input.digest) &&
                   part.state.time.end >= branch.updatedAt,
               ),
           )
           if (!inspected) throw new Error("Inspect the completed branch before reviewing it")
+          if (branch.access === "edit") {
+            if (branch.worktree?.phase !== "ready") throw new Error("Auto Chief edit worktree is not ready")
+            const edits = yield* Effect.tryPromise(() =>
+              ChiefEdits.preview({
+                directory: branch.worktree!.directory,
+                baseCommit: branch.worktree!.baseCommit,
+                maxFiles: 20,
+                maxBytes: 24 * 1024,
+              }),
+            )
+            if (!edits.digest || edits.digest !== input.digest)
+              throw new Error("Auto Chief edit changed after inspection or cannot be reviewed completely")
+          }
           const saved = yield* branches.review({
             goalID: ctx.sessionID,
             goalCreatedAt: plan.goalCreatedAt,
@@ -61,6 +79,7 @@ export function chiefReviewTool(deps: {
             callID: branch.callID,
             sessionID: branch.sessionID,
             evidence: input.evidence,
+            digest: input.digest,
             assessment: input.assessment,
           })
           if (!saved.review) throw new Error("Auto Chief review receipt was not saved")

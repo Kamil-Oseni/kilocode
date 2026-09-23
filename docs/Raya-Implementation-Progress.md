@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 19:57 America/Toronto - bound Chief edit review to a saved diff
+
+The isolated Chief worktree now has a read-only, size-capped fixed-base preview covering committed, staged, working and untracked changes. It reports conflicts, binary files and incomplete previews without presenting them as complete text patches. A complete preview has a SHA-256 fingerprint; `chief_inspect` presents the files and binds that fingerprint to its exact inspection receipt. `chief_review` re-reads the worktree and records the same fingerprint only if the inspected snapshot is still current. The integration ledger reserves one attempt, rejects a changed review or duplicate attempt, and reconciles a proven stopped owner to unknown rather than replaying native effects. Real Git preview and ledger tests pass; CLI typecheck and targeted lint pass. This is source-only. No apply tool or parent-checkout conflict check exists yet, so editing branches still cannot satisfy goal completion. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-23 19:36 America/Toronto - execute Chief edit children in isolated worktrees
 
 Planned editing specialists now reserve an exact Git worktree before mutation, pin its base to the parent commit, await checkout and startup, then create the child session and run its prompt under the child worktree's instance context. A real task test writes from the child prompt and confirms the parent checkout stays untouched; it also confirms a dirty parent is rejected before reservation and the saved base matches the child HEAD. A repeat reservation is refused so an interrupted native creation cannot be replayed automatically. Chief admission requires a ready worktree for the exact call. Goal completion now refuses unintegrated editing branches instead of treating an isolated report as merged work.

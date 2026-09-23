@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect"
 import type { Session } from "@/session/session"
 import type { RayaGoal } from "@/kilocode/goal"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { ChiefEdits } from "@/kilocode/chief/edits"
 import { RayaChief } from "@/kilocode/chief"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
@@ -31,7 +32,20 @@ export function chiefInspectTool(deps: {
             throw new Error("Auto Chief branch plan no longer matches the active request")
           const current = yield* ledger.reconcile(ctx.sessionID, plan.goalCreatedAt, plan.revision)
           const branches = []
+          const digests: Record<string, string> = {}
           for (const item of current.branches) {
+            const edits =
+              item.access === "edit" && item.worktree?.phase === "ready"
+                ? yield* Effect.tryPromise(() =>
+                    ChiefEdits.preview({
+                      directory: item.worktree!.directory,
+                      baseCommit: item.worktree!.baseCommit,
+                      maxFiles: 20,
+                      maxBytes: 24 * 1024,
+                    }),
+                  )
+                : undefined
+            if (edits?.digest) digests[item.id] = edits.digest
             if (!item.sessionID) {
               branches.push({
                 id: item.id,
@@ -42,6 +56,7 @@ export function chiefInspectTool(deps: {
                 independence: item.independence,
                 authority: item.authority,
                 state: item.state,
+                edits,
               })
               continue
             }
@@ -78,6 +93,8 @@ export function chiefInspectTool(deps: {
               state: item.state,
               callID: item.callID,
               reviewed: !!item.review,
+              edits,
+              integration: item.worktree?.integration?.phase,
               report,
               evidence,
             })
@@ -85,7 +102,7 @@ export function chiefInspectTool(deps: {
           return {
             title: "Auto Chief branch results",
             output: JSON.stringify({ requestID: plan.requestID, branches }, null, 2),
-            metadata: { goalCreatedAt: plan.goalCreatedAt, requestID: plan.requestID },
+            metadata: { goalCreatedAt: plan.goalCreatedAt, requestID: plan.requestID, digests },
           }
         }).pipe(Effect.orDie),
     }),

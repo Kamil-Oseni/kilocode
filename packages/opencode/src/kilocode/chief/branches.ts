@@ -35,6 +35,16 @@ export namespace ChiefBranches {
         callID: Schema.String,
         phase: Schema.Literals(["reserved", "ready", "unknown"]),
         owner: Schema.Struct({ host: Schema.String, pid: Schema.Number, birth: Schema.optional(Schema.String) }),
+        integration: Schema.optional(
+          Schema.Struct({
+            phase: Schema.Literals(["reserved", "integrated", "unknown"]),
+            digest: Schema.String,
+            callID: Schema.String,
+            target: Schema.String,
+            owner: Schema.Struct({ host: Schema.String, pid: Schema.Number, birth: Schema.optional(Schema.String) }),
+            updatedAt: Schema.Number,
+          }),
+        ),
         updatedAt: Schema.Number,
       }),
     ),
@@ -51,6 +61,7 @@ export namespace ChiefBranches {
         callID: Schema.String,
         messageID: Schema.String,
         partID: Schema.String,
+        digest: Schema.optional(Schema.String),
         assessment: Schema.optional(Schema.String),
         at: Schema.Number,
       }),
@@ -357,6 +368,97 @@ export namespace ChiefBranches {
       )
     })
 
+    const reserveIntegration = Effect.fn("ChiefBranches.reserveIntegration")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      branchID: string
+      callID: string
+      digest: string
+      target: string
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const old = yield* read(input.goalID)
+          if (!old || old.goalCreatedAt !== input.goalCreatedAt || old.version !== 2)
+            throw new Error("Auto Chief branch plan changed")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
+          const item = old.branches.find((entry) => entry.id === input.branchID)
+          const worktree = item?.worktree
+          if (
+            !item ||
+            item.access !== "edit" ||
+            item.state !== "completed" ||
+            !item.review ||
+            worktree?.phase !== "ready"
+          )
+            throw new Error("Only a reviewed, completed edit branch can be integrated")
+          if (item.review.digest !== input.digest) throw new Error("Auto Chief edit differs from its reviewed snapshot")
+          if (!input.callID.trim() || !input.target.trim() || !/^[0-9a-f]{64}$/i.test(input.digest))
+            throw new Error("Auto Chief integration identity is incomplete")
+          if (worktree.integration)
+            throw new Error("Auto Chief integration already has an outcome; inspect before retrying")
+          if (old.branches.some((entry) => entry.worktree?.integration?.phase === "reserved"))
+            throw new Error("Another Auto Chief integration is already in progress")
+          const integration = {
+            phase: "reserved" as const,
+            digest: input.digest,
+            callID: input.callID,
+            target: input.target,
+            owner: durable(),
+            updatedAt: Date.now(),
+          }
+          yield* storage.replace(key(input.goalID), {
+            ...old,
+            branches: old.branches.map((entry) =>
+              entry.id === item.id ? { ...entry, worktree: { ...worktree, integration } } : entry,
+            ),
+          } satisfies Record)
+          return integration
+        }),
+      )
+    })
+
+    const settleIntegration = Effect.fn("ChiefBranches.settleIntegration")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      branchID: string
+      callID: string
+      digest: string
+      phase: "integrated" | "unknown"
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const old = yield* read(input.goalID)
+          if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
+          const item = old.branches.find((entry) => entry.id === input.branchID)
+          const worktree = item?.worktree
+          const integration = worktree?.integration
+          if (
+            !item ||
+            !worktree ||
+            !integration ||
+            integration.callID !== input.callID ||
+            integration.digest !== input.digest
+          )
+            throw new Error("Auto Chief integration receipt does not match its reservation")
+          if (integration.phase === input.phase) return integration
+          if (integration.phase !== "reserved") throw new Error("Auto Chief integration outcome is already settled")
+          const next = { ...integration, phase: input.phase, updatedAt: Date.now() }
+          yield* storage.replace(key(input.goalID), {
+            ...old,
+            branches: old.branches.map((entry) =>
+              entry.id === item.id ? { ...entry, worktree: { ...worktree, integration: next } } : entry,
+            ),
+          } satisfies Record)
+          return next
+        }),
+      )
+    })
+
     const admit = Effect.fn("ChiefBranches.admit")(function* (input: {
       goalID: SessionID
       goalCreatedAt: number
@@ -424,7 +526,10 @@ export namespace ChiefBranches {
           const pending = old.branches.filter(
             (item) => item.worktree?.phase === "reserved" && stopped(item.worktree.owner),
           )
-          if (!stale.length && !pending.length) return old
+          const integrations = old.branches.filter(
+            (item) => item.worktree?.integration?.phase === "reserved" && stopped(item.worktree.integration.owner),
+          )
+          if (!stale.length && !pending.length && !integrations.length) return old
           const proven = new Set<string>()
           if (sessions?.get) {
             const parent = yield* sessions.messages({ sessionID: id })
@@ -469,16 +574,27 @@ export namespace ChiefBranches {
           const next: Record = {
             ...old,
             branches: old.branches.map((item) => {
+              const worktree = item.worktree
               const branch = pending.includes(item)
                 ? {
                     ...item,
-                    worktree: { ...item.worktree!, phase: "unknown" as const, updatedAt: now },
+                    worktree: { ...worktree!, phase: "unknown" as const, updatedAt: now },
                     updatedAt: now,
                   }
                 : item
-              if (!stale.includes(item)) return branch
+              const adjusted =
+                integrations.includes(item) && worktree?.integration
+                  ? {
+                      ...branch,
+                      worktree: {
+                        ...worktree,
+                        integration: { ...worktree.integration, phase: "unknown" as const, updatedAt: now },
+                      },
+                    }
+                  : branch
+              if (!stale.includes(item)) return adjusted
               return {
-                ...branch,
+                ...adjusted,
                 state: proven.has(item.id) ? ("completed" as const) : ("unknown" as const),
                 result: proven.has(item.id)
                   ? "Exact saved parent receipt and terminal child reply recovered after backend restart; inspect before review."
@@ -561,6 +677,7 @@ export namespace ChiefBranches {
       callID: string
       sessionID: SessionID
       evidence: { callID: string; messageID: string; partID: string }
+      digest?: string
       assessment?: string
     }) {
       return yield* mutation(
@@ -574,6 +691,13 @@ export namespace ChiefBranches {
           const item = old.branches.find((entry) => entry.id === input.branchID)
           if (!item || item.callID !== input.callID || item.sessionID !== input.sessionID || item.state !== "completed")
             throw new Error("Only the completed, admitted branch can be reviewed")
+          if (
+            item.access === "edit" &&
+            (item.worktree?.phase !== "ready" || !/^[0-9a-f]{64}$/i.test(input.digest ?? ""))
+          )
+            throw new Error("An editing branch needs its exact ready-worktree diff fingerprint")
+          if (item.access === "read" && input.digest)
+            throw new Error("A read-only branch cannot claim an edit fingerprint")
           const assessment = input.assessment?.trim()
           if (input.assessment !== undefined && (!assessment || assessment.length > 2_000))
             throw new Error("Auto Chief branch assessment must be concise and nonempty")
@@ -583,6 +707,7 @@ export namespace ChiefBranches {
               item.review.callID === input.evidence.callID &&
               item.review.messageID === input.evidence.messageID &&
               item.review.partID === input.evidence.partID &&
+              item.review.digest === input.digest &&
               item.review.assessment === assessment
             )
               return item
@@ -590,7 +715,12 @@ export namespace ChiefBranches {
           }
           const next: Branch = {
             ...item,
-            review: { ...input.evidence, ...(assessment ? { assessment } : {}), at: Date.now() },
+            review: {
+              ...input.evidence,
+              ...(input.digest ? { digest: input.digest } : {}),
+              ...(assessment ? { assessment } : {}),
+              at: Date.now(),
+            },
           }
           yield* storage.replace(key(input.goalID), {
             ...old,
@@ -659,7 +789,9 @@ export namespace ChiefBranches {
             `Auto Chief branches are unfinished or unreviewed: ${pending.map((item) => `${item.name} (${item.state})`).join(", ")}`,
           ),
         )
-      const edits = record.branches.filter((item) => item.access === "edit")
+      const edits = record.branches.filter(
+        (item) => item.access === "edit" && item.worktree?.integration?.phase !== "integrated",
+      )
       if (edits.length)
         return yield* Effect.fail(
           new Error(
@@ -711,6 +843,8 @@ export namespace ChiefBranches {
       reserveWorktree,
       readyWorktree,
       uncertainWorktree,
+      reserveIntegration,
+      settleIntegration,
       admit,
       reconcile,
       settle,

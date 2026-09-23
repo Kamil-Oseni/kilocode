@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `cff303e7f5` (`7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403`); Chief branch safety source is included, but automatic fanout remains disabled. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed snapshot. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `ba1ef8f8ba` (`7.4.23-snapshot+ba1ef8f8ba.kamil-oseni.1790193212356`); Chief branch safety and exact child-turn reporting are included, but automatic fanout remains disabled. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 15:58 America/Toronto - installed source, active host unverified
+
+`ba1ef8f8ba` was built and installed as `7.4.23-snapshot+ba1ef8f8ba.kamil-oseni.1790193212356` with the low-memory workflow. SDK generation, Windows CLI and worker smoke tests, extension/webview typechecks, lint, packaging and VS Code installation passed. Independent hashes of the retained VSIX and installed CLI match the package vault manifest (`525FE83E3B00F2C8D6B795E2EAD7A6D835D505293377E7D9A55A4306F6DC6450` and `52E3E6A0F3F95CE7DE07240BB9FCB46B5E70F976BB07F132427682DA51E65FED`). The vault active pointer still references older `da42542ba4`, and Computer Use exposes no app surface or Windows window listing here. Do not claim the open host loaded this build or that real parallel-agent chat has been visually accepted. Next reload or observe the installed VS Code host when possible, then run real persisted report, stop/restart and multi-agent UI acceptance. Chief tools remain unregistered.
 
 ## ChatGPT 2026-09-23 15:51 America/Toronto - normal live-backend scope closure
 

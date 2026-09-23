@@ -16,7 +16,7 @@ export function chiefInspectTool(deps: {
     "chief_inspect",
     Effect.succeed({
       description:
-        "Inspect saved Auto Chief branches, their actual completed replies and exact child tool evidence before reviewing results. This is read-only and does not start workers or accept work.",
+        "Inspect saved Auto Chief branches, their actual completed replies and exact child tool evidence before reviewing results. Reconcile a provably stopped admitting backend as unknown; never replay its child.",
       parameters: Schema.Struct({}),
       execute: (_input, ctx) =>
         Effect.gen(function* () {
@@ -25,11 +25,13 @@ export function chiefInspectTool(deps: {
           if (RayaChief.phase(parent.metadata) !== "task" && RayaChief.phase(parent.metadata) !== "goal")
             throw new Error("Auto Chief branch inspection is unavailable in this phase")
           const goal = yield* deps.goals.get(ctx.sessionID)
-          const plan = yield* ChiefBranches.make(deps.storage).read(ctx.sessionID)
+          const ledger = ChiefBranches.make(deps.storage)
+          const plan = yield* ledger.read(ctx.sessionID)
           if (!plan || !ChiefBranches.matches(plan, goal))
             throw new Error("Auto Chief branch plan no longer matches the active request")
+          const current = yield* ledger.reconcile(ctx.sessionID, plan.goalCreatedAt, plan.revision)
           const branches = []
-          for (const item of plan.branches) {
+          for (const item of current.branches) {
             if (!item.sessionID) {
               branches.push({ id: item.id, name: item.name, specialist: item.specialist, state: item.state })
               continue

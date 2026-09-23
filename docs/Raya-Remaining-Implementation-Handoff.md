@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 14:58 America/Toronto - admitted-child recovery checkpoint
+
+New Chief admissions retain the admitting backend owner. `chief_inspect` can idempotently reconcile a branch to `unknown` after proving that owner process stopped; it does not infer failure from an empty in-memory job list or replay the child. Missing owner evidence remains unresolved. Focused ledger tests include a real terminated process, live-owner refusal, legacy-owner refusal, exact identity retention and repeat recovery. This source change is unregistered and not in the installed `51f71798c5` snapshot. Next reconstruct a proven terminal outcome from exact durable parent/child receipts where possible, cover same-process scope loss and multi-process races, then perform installed-host restart/stop acceptance before registering Chief fanout.
+
 ## ChatGPT 2026-09-23 14:51 America/Toronto - installed snapshot and next acceptance
 
 `51f71798c5` is pushed and installed as `7.4.23-snapshot+51f71798c5.kamil-oseni.1790189260260`. SDK and CLI build, Windows binary smoke tests, extension typechecks/lint, packaging and the normal push hook passed. Check completed specialist-name and report search in a real persisted conversation after VS Code loads the new extension. Chief fanout is still unregistered. Next source slice: reconcile an admitted child after backend process loss without replay or treating a missing in-memory job as proof of failure; then test stop, restart, changed target and inspected synthesis on the installed host before enabling fanout.

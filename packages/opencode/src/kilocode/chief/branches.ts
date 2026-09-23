@@ -5,6 +5,7 @@ import type { MessageV2 } from "@/session/message-v2"
 import { SessionID } from "@/session/schema"
 import type { BackgroundJob } from "@/background/job"
 import { mutation } from "@/kilocode/goal/mutation"
+import { owner, stopped } from "@/kilocode/task/owner"
 
 /** Durable admission and result ledger for one bounded Auto Chief fanout. */
 export namespace ChiefBranches {
@@ -25,6 +26,7 @@ export namespace ChiefBranches {
     state: Schema.Literals(["planned", "admitted", "completed", "failed", "cancelled", "unknown"]),
     callID: Schema.optional(Schema.String),
     sessionID: Schema.optional(SessionID),
+    owner: Schema.optional(Schema.Struct({ host: Schema.String, pid: Schema.Number })),
     result: Schema.optional(Schema.String),
     review: Schema.optional(
       Schema.Struct({
@@ -208,12 +210,49 @@ export namespace ChiefBranches {
             state: "admitted",
             callID: input.callID,
             sessionID: input.sessionID,
+            owner: owner(),
             updatedAt: Date.now(),
           }
           yield* storage.replace(key(input.goalID), {
             ...old,
             branches: old.branches.map((entry) => (entry.id === item.id ? next : entry)),
           } satisfies Record)
+          return next
+        }),
+      )
+    })
+
+    /** A proven dead owner can leave effects unknown, but can never authorize replay. */
+    const reconcile = Effect.fn("ChiefBranches.reconcile")(function* (
+      id: SessionID,
+      createdAt: number,
+      revision?: string,
+    ) {
+      return yield* mutation(
+        storage,
+        id,
+        Effect.gen(function* () {
+          const old = yield* read(id)
+          if (!old || old.goalCreatedAt !== createdAt) throw new Error("Auto Chief branch plan changed")
+          if (revision !== undefined) yield* active(id, createdAt, revision)
+          const stale = old.branches.filter((item) => item.state === "admitted" && stopped(item.owner))
+          if (!stale.length) return old
+          const now = Date.now()
+          const next: Record = {
+            ...old,
+            branches: old.branches.map((item) =>
+              stale.includes(item)
+                ? {
+                    ...item,
+                    state: "unknown",
+                    result:
+                      "The admitting backend stopped before a terminal child result was saved. Do not replay automatically.",
+                    updatedAt: now,
+                  }
+                : item,
+            ),
+          }
+          yield* storage.replace(key(id), next)
           return next
         }),
       )
@@ -431,6 +470,6 @@ export namespace ChiefBranches {
       }
     })
 
-    return { read, start, admit, settle, review, synthesize, completion }
+    return { read, start, admit, reconcile, settle, review, synthesize, completion }
   }
 }

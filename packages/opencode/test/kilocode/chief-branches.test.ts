@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { spawnSync } from "node:child_process"
 import { Cause, Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -10,6 +11,7 @@ import type { Session } from "@/session/session"
 import type { BackgroundJob } from "@/background/job"
 import type { MessageV2 } from "@/session/message-v2"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { owner, stopped } from "@/kilocode/task/owner"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
@@ -39,6 +41,68 @@ const cleanup = (storage: Storage.Interface, id: SessionID) =>
   )
 
 describe("Auto Chief branch ledger", () => {
+  it.live("reconciles only a proven stopped owner's admitted child as unknown without replay", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
+      const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
+      const input = {
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: "task-1",
+        sessionID: child,
+        access: "read" as const,
+      }
+      const admitted = yield* ledger.admit(input)
+      expect(admitted.owner).toEqual(owner())
+      expect((yield* ChiefBranches.make(storage).reconcile(id, createdAt)).branches[0].state).toBe("admitted")
+
+      const legacy = yield* ledger.read(id)
+      if (!legacy) throw new Error("Expected the admitted branch plan")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...legacy,
+        branches: legacy.branches.map((item) => (item.id === "audit" ? { ...item, owner: undefined } : item)),
+      })
+      expect((yield* ledger.reconcile(id, createdAt)).branches[0].state).toBe("admitted")
+
+      const probe = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+        encoding: "utf8",
+      })
+      expect(probe.status).toBe(0)
+      const dead = { ...owner(), pid: Number(probe.stdout) }
+      expect(stopped(dead)).toBe(true)
+      const saved = yield* ledger.read(id)
+      if (!saved) throw new Error("Expected the admitted branch plan")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) => (item.id === "audit" ? { ...item, owner: dead } : item)),
+      })
+      const recovered = yield* ChiefBranches.make(storage).reconcile(id, createdAt)
+      expect(recovered.branches[0]).toMatchObject({
+        state: "unknown",
+        callID: "task-1",
+        sessionID: child,
+      })
+      expect(recovered.branches[0].result).toContain("Do not replay automatically")
+      expect(recovered.branches[1].state).toBe("planned")
+      expect((yield* ledger.reconcile(id, createdAt)).branches[0]).toEqual(recovered.branches[0])
+      expect(Exit.isFailure(yield* ledger.admit(input).pipe(Effect.exit))).toBe(true)
+      expect(
+        Exit.isFailure(
+          yield* ledger
+            .settle({ ...input, state: "completed", result: "Late success cannot replace unknown" })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }),
+  )
+
   it.live("persists exact independent branches and refuses duplicate or widened admission", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

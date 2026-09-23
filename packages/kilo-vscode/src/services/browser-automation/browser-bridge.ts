@@ -376,6 +376,24 @@ export class BrowserBridge {
     }
   }
 
+  private check(request: ActionRequest): void {
+    const decision = this.validate?.(authorization(request))
+    if (!("authorization" in request)) {
+      if (decision?.decision === "deny") throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
+      return
+    }
+    if (request.authorization.source === "lease") {
+      if (!decision || decision.decision !== "allow")
+        throw new Error(
+          `Browser lease authorization is no longer valid: ${decision?.reason ?? "local revalidation is unavailable"}`,
+        )
+      if (decision.grantID !== request.authorization.grantID)
+        throw new Error("Browser lease authorization changed grants before dispatch")
+      return
+    }
+    if (decision?.decision === "deny") throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
+  }
+
   private async run(request: BrowserRequest, directory: string, recovered = false): Promise<void> {
     if (this.disposed) return
     if (request.operation === "authorize") {
@@ -395,22 +413,7 @@ export class BrowserBridge {
     this.active.set(request.id, { controller, request, directory, startedAt, receipt })
     const state = { completed: false }
     try {
-      const auth = authorization(request)
-      const decision = this.validate?.(auth)
-      if ("authorization" in request) {
-        if (request.authorization.source === "lease") {
-          if (!decision || decision.decision !== "allow")
-            throw new Error(
-              `Browser lease authorization is no longer valid: ${decision?.reason ?? "local revalidation is unavailable"}`,
-            )
-          if (decision.grantID !== request.authorization.grantID)
-            throw new Error("Browser lease authorization changed grants before dispatch")
-        } else if (decision?.decision === "deny") {
-          throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
-        }
-      } else if (decision?.decision === "deny") {
-        throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
-      }
+      this.check(request)
       await this.show(request, directory)
       if (controller.signal.aborted) return
       const value = await this.host.execute({

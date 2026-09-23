@@ -50,6 +50,7 @@ it.instance(
         semantics: {
           source: "windows_ui_automation" as const,
           status: "available" as const,
+          viewport: { x: 0, y: 0, width: 10, height: 8 },
           controls: [
             {
               controlID: "42.7",
@@ -79,6 +80,7 @@ it.instance(
           sessionID,
           windowID: "window_1",
           observationID: observation.id,
+          sensitive: false,
           action: "click",
           button: "left",
           x: 0.5,
@@ -127,7 +129,7 @@ it.instance(
       expect(yield* Fiber.join(windows)).toEqual(listed)
 
       const focus = yield* desktop
-        .request({ operation: "focus", sessionID, windowID: "window_1", observationID: catalog.id })
+        .request({ operation: "focus", sessionID, windowID: "window_1", observationID: catalog.id, sensitive: false })
         .pipe(Effect.forkChild)
       const focusRequest = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
       const focused = {

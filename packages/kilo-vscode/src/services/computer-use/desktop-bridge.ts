@@ -310,6 +310,7 @@ export class DesktopBridge {
         action: "move",
         windowID: request.windowID,
         observationID: request.observationID,
+        sensitive: request.sensitive,
         x: request.x,
         y: request.y,
       })
@@ -320,6 +321,7 @@ export class DesktopBridge {
         operation: "drag",
         windowID: request.windowID,
         observationID: request.observationID,
+        sensitive: request.sensitive,
         startX: request.startX,
         startY: request.startY,
         endX: request.endX,
@@ -334,6 +336,7 @@ export class DesktopBridge {
         action: request.action,
         windowID: request.windowID,
         observationID: request.observationID,
+        sensitive: request.sensitive,
         x: request.x,
         y: request.y,
         button: request.button,
@@ -345,6 +348,7 @@ export class DesktopBridge {
         operation: "type",
         windowID: request.windowID,
         observationID: request.observationID,
+        sensitive: request.sensitive,
         text: request.text,
       })
       return { operation: "type", receipt: { ...receipt, finishedAt: Date.now() } }
@@ -354,6 +358,7 @@ export class DesktopBridge {
         operation: "key",
         windowID: request.windowID,
         observationID: request.observationID,
+        sensitive: request.sensitive,
         key: request.key,
         modifiers: request.modifiers,
       })
@@ -363,6 +368,7 @@ export class DesktopBridge {
       operation: "scroll",
       windowID: request.windowID,
       observationID: request.observationID,
+      sensitive: request.sensitive,
       deltaX: request.deltaX,
       deltaY: request.deltaY,
     })
@@ -463,7 +469,7 @@ function authorization(request: Exclude<DesktopRequest, AuthorizeRequest>): Auth
     surface: "desktop",
     action,
     ...("windowID" in request ? { windowID: request.windowID } : {}),
-    sensitive: false,
+    sensitive: "sensitive" in request ? request.sensitive : false,
   }
 }
 

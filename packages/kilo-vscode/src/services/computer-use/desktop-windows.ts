@@ -500,6 +500,7 @@ function Get-RayaControls($window) {
   [pscustomobject]@{
     source = 'windows_ui_automation'
     status = 'available'
+    viewport = [pscustomobject]@{ x = $window.Rect.Left; y = $window.Rect.Top; width = $window.Width; height = $window.Height }
     controls = @($controls)
     truncated = $queue.Count -gt 0
   }
@@ -571,6 +572,7 @@ try {
     $semantics = [pscustomobject]@{
       source = 'windows_ui_automation'
       status = 'unavailable'
+      viewport = [pscustomobject]@{ x = $window.Rect.Left; y = $window.Rect.Top; width = $window.Width; height = $window.Height }
       controls = @()
       truncated = $false
     }
@@ -805,6 +807,22 @@ function state(input: Record<string, unknown>) {
   }
 }
 
+function viewport(value: unknown): DesktopSemantics["viewport"] {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Windows UI Automation viewport is invalid")
+  const input = value as Record<string, unknown>
+  if (![input.x, input.y, input.width, input.height].every(Number.isInteger))
+    throw new Error("Windows UI Automation viewport bounds are invalid")
+  if ((input.width as number) <= 0 || (input.height as number) <= 0)
+    throw new Error("Windows UI Automation viewport is empty")
+  return {
+    x: input.x as number,
+    y: input.y as number,
+    width: input.width as number,
+    height: input.height as number,
+  }
+}
+
 function actions(value: unknown): DesktopControl["actions"] {
   if (!Array.isArray(value) || value.length > semanticActions.size)
     throw new Error("Windows UI Automation control actions are incomplete")
@@ -851,7 +869,13 @@ function semantics(value: unknown): DesktopSemantics | undefined {
   const controls = input.controls.map(control)
   if (input.status === "unavailable" && (controls.length > 0 || input.truncated))
     throw new Error("Unavailable Windows UI Automation observation contains controls")
-  return { source: input.source, status: input.status, controls, truncated: input.truncated }
+  return {
+    source: input.source,
+    status: input.status,
+    viewport: viewport(input.viewport),
+    controls,
+    truncated: input.truncated,
+  }
 }
 
 function image(

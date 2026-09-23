@@ -4,12 +4,13 @@ import {
   DesktopSession,
   type DesktopAction,
   type DesktopDriver,
+  type DesktopFrame,
   type DesktopWindow,
 } from "../../src/services/computer-use/desktop-session"
 
 class Driver implements DesktopDriver {
   target = { windowID: "window-1", location: "Editor" }
-  frame = {
+  frame: Omit<DesktopFrame, "windowID" | "location"> = {
     width: 1280,
     height: 720,
     mime: "image/png" as const,
@@ -105,6 +106,7 @@ describe("native desktop session boundary", () => {
       action: "click",
       windowID: frame.windowID,
       observationID: frame.observation.id,
+      sensitive: false,
       x: 0.5,
       y: 0.25,
     }
@@ -112,6 +114,50 @@ describe("native desktop session boundary", () => {
     await session.execute(action)
     await expect(session.execute(action)).rejects.toThrow(/unknown or was already used/i)
     expect(driver.actions).toEqual([action])
+  })
+
+  it("consumes and refuses a misclassified accessible sensitive target before native dispatch", async () => {
+    const driver = new Driver()
+    driver.frame = {
+      ...driver.frame,
+      semantics: {
+        source: "windows_ui_automation",
+        status: "available",
+        viewport: { x: 0, y: 0, width: 1280, height: 720 },
+        controls: [
+          {
+            controlID: "send",
+            role: "Button",
+            name: "Send message",
+            x: 576,
+            y: 324,
+            width: 128,
+            height: 72,
+            enabled: true,
+            focused: false,
+            actions: ["invoke"],
+          },
+        ],
+        truncated: false,
+      },
+    }
+    const session = new DesktopSession(driver)
+    const frame = await session.observe()
+    const action: DesktopAction = {
+      operation: "pointer",
+      action: "click",
+      windowID: frame.windowID,
+      observationID: frame.observation.id,
+      sensitive: false,
+      x: 0.5,
+      y: 0.5,
+    }
+
+    await expect(session.execute(action)).rejects.toThrow(/sensitive_category=communications/i)
+    await expect(session.execute({ ...action, sensitive: "communications" })).rejects.toThrow(
+      /unknown or was already used/i,
+    )
+    expect(driver.actions).toEqual([])
   })
 
   it("refuses oversized or over-encoded frames before issuing an observation", async () => {
@@ -142,6 +188,7 @@ describe("native desktop session boundary", () => {
       operation: "key",
       windowID: frame.windowID,
       observationID: frame.observation.id,
+      sensitive: false,
       key: "Enter",
     })
     expect(driver.actions).toHaveLength(1)
@@ -157,6 +204,7 @@ describe("native desktop session boundary", () => {
         operation: "type",
         windowID: changed.windowID,
         observationID: changed.observation.id,
+        sensitive: false,
         text: "unsafe",
       }),
     ).rejects.toThrow(/different window/i)
@@ -168,6 +216,7 @@ describe("native desktop session boundary", () => {
         action: "click",
         windowID: frame.windowID,
         observationID: frame.observation.id,
+        sensitive: false,
         x: 1.1,
         y: 0.5,
       }),
@@ -177,6 +226,7 @@ describe("native desktop session boundary", () => {
         operation: "scroll",
         windowID: frame.windowID,
         observationID: frame.observation.id,
+        sensitive: false,
         deltaX: 0,
         deltaY: 0,
       }),
@@ -186,6 +236,7 @@ describe("native desktop session boundary", () => {
         operation: "scroll",
         windowID: frame.windowID,
         observationID: frame.observation.id,
+        sensitive: false,
         deltaX: 0,
         deltaY: 1_201,
       }),
@@ -195,6 +246,7 @@ describe("native desktop session boundary", () => {
         operation: "drag",
         windowID: frame.windowID,
         observationID: frame.observation.id,
+        sensitive: false,
         startX: 0.5,
         startY: 0.5,
         endX: 0.5,
@@ -220,6 +272,7 @@ describe("native desktop session boundary", () => {
         operation: "key",
         windowID: stale.windowID,
         observationID: stale.observation.id,
+        sensitive: false,
         key: "Enter",
       }),
     ).rejects.toThrow(/resume agent desktop control/i)
@@ -229,6 +282,7 @@ describe("native desktop session boundary", () => {
         operation: "key",
         windowID: stale.windowID,
         observationID: stale.observation.id,
+        sensitive: false,
         key: "Enter",
       }),
     ).rejects.toThrow(/unknown or was already used/i)

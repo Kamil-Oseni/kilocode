@@ -35,6 +35,7 @@ describe("Windows native desktop driver", () => {
         semantics: {
           source: "windows_ui_automation",
           status: "available",
+          viewport: { x: 0, y: 0, width: 1280, height: 720 },
           truncated: false,
           controls: [
             {
@@ -68,6 +69,7 @@ describe("Windows native desktop driver", () => {
       semantics: {
         source: "windows_ui_automation",
         status: "available",
+        viewport: { x: 0, y: 0, width: 1280, height: 720 },
         truncated: false,
         controls: [expect.objectContaining({ controlID: "42.7", role: "Button", name: "Save", actions: ["invoke"] })],
       },
@@ -157,7 +159,13 @@ describe("Windows native desktop driver", () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     const text = 'hello `$(Get-ChildItem) "world"'
-    const action = { operation: "type" as const, windowID: "0x123", observationID: "obs-1", text }
+    const action = {
+      operation: "type" as const,
+      windowID: "0x123",
+      observationID: "obs-1",
+      sensitive: false as const,
+      text,
+    }
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" }
     await driver.perform(action, target)
 
@@ -175,6 +183,7 @@ describe("Windows native desktop driver", () => {
       operation: "drag" as const,
       windowID: "0x123",
       observationID: "obs-drag",
+      sensitive: false,
       startX: 0.2,
       startY: 0.3,
       endX: 0.8,
@@ -206,6 +215,7 @@ describe("Windows native desktop driver", () => {
         action: "double_click",
         windowID: "0x123",
         observationID: "obs-click",
+        sensitive: false,
         x: 0.25,
         y: 0.75,
         button: "right",
@@ -236,6 +246,7 @@ describe("Windows native desktop driver", () => {
         action: "move",
         windowID: "0x123",
         observationID: "obs-point",
+        sensitive: false,
         x: 0.5,
         y: 0.5,
         button: "left",
@@ -260,6 +271,7 @@ describe("Windows native desktop driver", () => {
         operation: "key",
         windowID: "0x123",
         observationID: "obs-key",
+        sensitive: false,
         key: "Enter",
         modifiers: ["control", "shift"],
       },
@@ -280,7 +292,7 @@ describe("Windows native desktop driver", () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     await driver.perform(
-      { operation: "type", windowID: "0x123", observationID: "obs-type", text: "A" },
+      { operation: "type", windowID: "0x123", observationID: "obs-type", sensitive: false, text: "A" },
       { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" },
     )
 
@@ -301,6 +313,7 @@ describe("Windows native desktop driver", () => {
         operation: "scroll",
         windowID: "0x123",
         observationID: "obs-scroll",
+        sensitive: false,
         deltaX: -120,
         deltaY: 240,
       },
@@ -343,6 +356,7 @@ describe("Windows native desktop driver", () => {
         semantics: {
           source: "windows_ui_automation",
           status: "available",
+          viewport: { x: 0, y: 0, width: 1280, height: 720 },
           truncated: false,
           controls: [{ controlID: "x", role: "Button", width: -1 }],
         },
@@ -352,6 +366,7 @@ describe("Windows native desktop driver", () => {
         semantics: {
           source: "windows_ui_automation",
           status: "available",
+          viewport: { x: 0, y: 0, width: 1280, height: 720 },
           truncated: true,
           controls: Array.from({ length: 257 }, (_, index) => ({
             controlID: String(index),
@@ -388,6 +403,7 @@ describe("Windows native desktop driver", () => {
         semantics: {
           source: "windows_ui_automation",
           status: "unavailable",
+          viewport: { x: 0, y: 0, width: 1280, height: 720 },
           truncated: false,
           controls: [],
         },
@@ -398,6 +414,7 @@ describe("Windows native desktop driver", () => {
     expect((await driver.observe()).semantics).toEqual({
       source: "windows_ui_automation",
       status: "unavailable",
+      viewport: { x: 0, y: 0, width: 1280, height: 720 },
       truncated: false,
       controls: [],
     })

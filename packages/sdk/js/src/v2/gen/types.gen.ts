@@ -1139,6 +1139,17 @@ export type DesktopRequest =
       operation: "focus"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
     }
   | {
       id: DesktopRequestId
@@ -1146,6 +1157,17 @@ export type DesktopRequest =
       operation: "move"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
       x: number
       y: number
     }
@@ -1155,6 +1177,17 @@ export type DesktopRequest =
       operation: "drag"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
       startX: number
       startY: number
       endX: number
@@ -1167,6 +1200,17 @@ export type DesktopRequest =
       operation: "click"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
       action: "click" | "double_click"
       x: number
       y: number
@@ -1178,6 +1222,17 @@ export type DesktopRequest =
       operation: "type"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
       text: string
     }
   | {
@@ -1186,6 +1241,17 @@ export type DesktopRequest =
       operation: "key"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
       key:
         | "Backspace"
         | "Tab"
@@ -1222,6 +1288,17 @@ export type DesktopRequest =
       operation: "scroll"
       windowID: string
       observationID: ComputerUseObservationId
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
       deltaX: number
       deltaY: number
     }
@@ -5824,6 +5901,12 @@ export type DesktopResult =
       semantics?: {
         source: "windows_ui_automation"
         status: "available" | "unavailable"
+        viewport: {
+          x: number
+          y: number
+          width: number
+          height: number
+        }
         controls: Array<{
           controlID: string
           role: string
@@ -5875,6 +5958,12 @@ export type DesktopResult =
         semantics?: {
           source: "windows_ui_automation"
           status: "available" | "unavailable"
+          viewport: {
+            x: number
+            y: number
+            width: number
+            height: number
+          }
           controls: Array<{
             controlID: string
             role: string

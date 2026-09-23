@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto"
 import { ObservationLedger, type ComputerObservation, type ComputerTarget } from "./observation-ledger"
+import type { SensitiveCategory } from "./lease-store"
+import { mismatch } from "./desktop-sensitive"
 
 export const CAPTURE = { edge: 4_096, pixels: 8_294_400, bytes: 15_000_000, data: 20_000_000 } as const
 
@@ -21,6 +23,7 @@ export type DesktopControl = {
 export type DesktopSemantics = {
   source: "windows_ui_automation"
   status: "available" | "unavailable"
+  viewport: { x: number; y: number; width: number; height: number }
   controls: DesktopControl[]
   truncated: boolean
 }
@@ -57,6 +60,7 @@ export type DesktopWindow = {
 export type DesktopAction = {
   windowID: string
   observationID: string
+  sensitive: SensitiveCategory | false
 } & (
   | { operation: "pointer"; action: "move" | "click" | "double_click"; x: number; y: number; button?: "left" | "right" }
   | {
@@ -101,6 +105,7 @@ type DesktopObservation = ComputerObservation & { target: ComputerTarget & { sur
 
 export class DesktopSession {
   private readonly observations = new ObservationLedger("Desktop")
+  private readonly semantics = new Map<string, DesktopSemantics>()
   private readonly listeners = new Set<(state: DesktopState) => void>()
   private state: DesktopState = { control: "agent", busy: false }
   private revision = 0
@@ -157,6 +162,7 @@ export class DesktopSession {
       },
       this.revision,
     )
+    this.retain(observation.id, frame.semantics)
     return { ...frame, observation }
   }
 
@@ -180,6 +186,7 @@ export class DesktopSession {
       if (this.state.control === "manual" || revision !== this.revision)
         throw new Error("Desktop window switch cancelled for manual takeover; no action was dispatched")
       this.observations.invalidate("desktop")
+      this.semantics.clear()
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
@@ -208,6 +215,8 @@ export class DesktopSession {
       this.validate(action)
       if (action.windowID !== current.windowID)
         throw new Error("Desktop action targets a different window; no action was dispatched")
+      const semantic = this.semantics.get(action.observationID)
+      this.semantics.delete(action.observationID)
       this.observations.consume(
         action.observationID,
         {
@@ -217,10 +226,13 @@ export class DesktopSession {
         },
         this.revision,
       )
+      const reason = mismatch(action, semantic)
+      if (reason) throw new Error(reason)
       const revision = this.revision
       if (this.state.control === "manual" || revision !== this.revision)
         throw new Error("Desktop action cancelled for manual takeover; no action was dispatched")
       this.observations.invalidate("desktop", current.windowID)
+      this.semantics.clear()
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
@@ -244,6 +256,7 @@ export class DesktopSession {
   takeControl(reason = "You took manual control of the desktop."): void {
     this.revision += 1
     this.observations.invalidate("desktop")
+    this.semantics.clear()
     this.driver.cancel?.()
     this.update({ control: "manual", busy: this.active > 0, reason })
   }
@@ -251,6 +264,7 @@ export class DesktopSession {
   resume(): void {
     this.revision += 1
     this.observations.invalidate("desktop")
+    this.semantics.clear()
     this.update({ control: "agent", busy: this.active > 0 })
   }
 
@@ -305,6 +319,12 @@ export class DesktopSession {
         throw new Error("Desktop window list contains invalid process or bounds metadata")
       ids.add(window.windowID)
     }
+  }
+
+  private retain(id: string, semantics: DesktopSemantics | undefined): void {
+    if (!semantics) return
+    this.semantics.set(id, semantics)
+    while (this.semantics.size > 256) this.semantics.delete(this.semantics.keys().next().value!)
   }
 
   private catalog(windows: DesktopWindow[]): ComputerTarget & { surface: "desktop" } {

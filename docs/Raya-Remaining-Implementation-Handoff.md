@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 00:34 America/Toronto - preserve desktop semantic enforcement
+
+Actual desktop effect requests now require `sensitive: false | SensitiveCategory`; do not let the execution request silently discard the category negotiated during authorization. `DesktopSession` retains the exact bounded UI Automation snapshot by observation ID and checks it after exact foreground identity validation and one-use observation consumption but before native dispatch. Coordinate mapping uses the snapshot's explicit physical viewport. Known click, drag and focused keyboard targets must match the declared policy category; a mismatch consumes the observation and requires a fresh one. Multiple known categories across a drag fail closed.
+
+The classifier intentionally uses positive English matches from accessible names and automation IDs only. Do not inspect typed text, control values, credentials or clipboard data. An unavailable or unknown semantic target continues through the model declaration and lease policy rather than receiving a guessed category. Focused evidence is 46 extension tests / 205 assertions and 6 CLI tests / 70 assertions, with both typechecks passing. A real probe correlated 91 controls to a 1928 x 1040 viewport at physical x=1912 and measured 51.4525 ms acquisition, 122.0682 ms preparation, 835.0737 ms UIA and 3,001.5871 ms total. Preserve these as baseline measurements, not latency claims.
+
+Next build a persistent cancellable Windows capture/UIA worker and compare WGC with DXGI while preserving exact target, viewport, timing and cancellation behavior. Keep the snapshot uninstalled and `FUT-CU-01` In progress until the installed emergency, restart, disconnect, changed-target and sensitive-policy matrix passes.
+
 ## ChatGPT 2026-09-22 23:49 America/Toronto - preserve correlated UI Automation observations
 
 Foreground frame results now optionally carry `semantics` from Windows UI Automation and `timing.semanticsMs`. Preserve the bounds: 256 returned controls after at most 1,024 visited Control View nodes. Controls include runtime identity, role/name/automation ID, physical bounds, enabled/focused/selected state and only the fixed supported-action vocabulary. Do not add text values, secrets or clipboard data to this path. An unavailable tree must be explicit and empty; malformed or over-capacity output fails before observation issuance.

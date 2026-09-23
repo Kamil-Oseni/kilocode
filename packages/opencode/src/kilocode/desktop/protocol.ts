@@ -28,6 +28,8 @@ export const ScrollDelta = Schema.Number.check(
   Schema.isLessThanOrEqualTo(1_200),
 )
 const Base = { id: RequestID, sessionID: SessionID }
+const Sensitive = Schema.Union([Schema.Boolean, SensitiveCategory])
+const ClassifiedSensitive = Schema.Union([Schema.Literal(false), SensitiveCategory])
 export const Key = Schema.Union([
   Schema.Literals([
     "Backspace",
@@ -84,7 +86,7 @@ export const AuthorizeRequest = Schema.Struct({
   surface: Schema.Literal("desktop"),
   action: LeaseAction,
   windowID: Schema.optional(Identity),
-  sensitive: Schema.Union([Schema.Boolean, SensitiveCategory]),
+  sensitive: Sensitive,
 })
 
 export const ClickRequest = Schema.Struct({
@@ -92,6 +94,7 @@ export const ClickRequest = Schema.Struct({
   operation: Schema.Literal("click"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
   action: Schema.Literals(["click", "double_click"]),
   x: Unit,
   y: Unit,
@@ -103,6 +106,7 @@ export const FocusRequest = Schema.Struct({
   operation: Schema.Literal("focus"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
 })
 
 export const MoveRequest = Schema.Struct({
@@ -110,6 +114,7 @@ export const MoveRequest = Schema.Struct({
   operation: Schema.Literal("move"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
   x: Unit,
   y: Unit,
 })
@@ -119,6 +124,7 @@ export const DragRequest = Schema.Struct({
   operation: Schema.Literal("drag"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
   startX: Unit,
   startY: Unit,
   endX: Unit,
@@ -137,6 +143,7 @@ export const TypeRequest = Schema.Struct({
   operation: Schema.Literal("type"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
   text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
 })
 
@@ -145,6 +152,7 @@ export const KeyRequest = Schema.Struct({
   operation: Schema.Literal("key"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
   key: Key,
   modifiers: Schema.Array(Modifier).check(Schema.isMaxLength(4)),
 })
@@ -154,6 +162,7 @@ export const ScrollRequest = Schema.Struct({
   operation: Schema.Literal("scroll"),
   windowID: Identity,
   observationID: ObservationID,
+  sensitive: ClassifiedSensitive,
   deltaX: ScrollDelta,
   deltaY: ScrollDelta,
 }).check(
@@ -211,6 +220,12 @@ export const SemanticControl = Schema.Struct({
 export const Semantics = Schema.Struct({
   source: Schema.Literal("windows_ui_automation"),
   status: Schema.Literals(["available", "unavailable"]),
+  viewport: Schema.Struct({
+    x: Schema.Number.check(Schema.isInt()),
+    y: Schema.Number.check(Schema.isInt()),
+    width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+    height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  }),
   controls: Schema.Array(SemanticControl).check(Schema.isMaxLength(256)),
   truncated: Schema.Boolean,
 })

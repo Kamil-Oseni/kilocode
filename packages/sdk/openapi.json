@@ -67612,9 +67612,31 @@
               },
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
               }
             },
-            "required": ["id", "sessionID", "operation", "windowID", "observationID"],
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive"],
             "additionalProperties": false
           },
           {
@@ -67639,6 +67661,28 @@
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
               },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              },
               "x": {
                 "type": "number",
                 "minimum": 0,
@@ -67650,7 +67694,7 @@
                 "maximum": 1
               }
             },
-            "required": ["id", "sessionID", "operation", "windowID", "observationID", "x", "y"],
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive", "x", "y"],
             "additionalProperties": false
           },
           {
@@ -67674,6 +67718,28 @@
               },
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
               },
               "startX": {
                 "type": "number",
@@ -67706,6 +67772,7 @@
               "operation",
               "windowID",
               "observationID",
+              "sensitive",
               "startX",
               "startY",
               "endX",
@@ -67736,6 +67803,28 @@
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
               },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              },
               "action": {
                 "type": "string",
                 "enum": ["click", "double_click"]
@@ -67755,7 +67844,18 @@
                 "enum": ["left", "right"]
               }
             },
-            "required": ["id", "sessionID", "operation", "windowID", "observationID", "action", "x", "y", "button"],
+            "required": [
+              "id",
+              "sessionID",
+              "operation",
+              "windowID",
+              "observationID",
+              "sensitive",
+              "action",
+              "x",
+              "y",
+              "button"
+            ],
             "additionalProperties": false
           },
           {
@@ -67780,13 +67880,35 @@
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
               },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              },
               "text": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200000
               }
             },
-            "required": ["id", "sessionID", "operation", "windowID", "observationID", "text"],
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive", "text"],
             "additionalProperties": false
           },
           {
@@ -67810,6 +67932,28 @@
               },
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
               },
               "key": {
                 "anyOf": [
@@ -67859,7 +68003,7 @@
                 "maxItems": 4
               }
             },
-            "required": ["id", "sessionID", "operation", "windowID", "observationID", "key", "modifiers"],
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive", "key", "modifiers"],
             "additionalProperties": false
           },
           {
@@ -67884,6 +68028,28 @@
               "observationID": {
                 "$ref": "#/components/schemas/ComputerUseObservationID"
               },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              },
               "deltaX": {
                 "type": "number",
                 "minimum": -1200,
@@ -67895,7 +68061,7 @@
                 "maximum": 1200
               }
             },
-            "required": ["id", "sessionID", "operation", "windowID", "observationID", "deltaX", "deltaY"],
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive", "deltaX", "deltaY"],
             "additionalProperties": false
           }
         ]
@@ -82224,6 +82390,27 @@
                     "type": "string",
                     "enum": ["available", "unavailable"]
                   },
+                  "viewport": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "width": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "height": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["x", "y", "width", "height"],
+                    "additionalProperties": false
+                  },
                   "controls": {
                     "type": "array",
                     "items": {
@@ -82288,7 +82475,7 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["source", "status", "controls", "truncated"],
+                "required": ["source", "status", "viewport", "controls", "truncated"],
                 "additionalProperties": false
               },
               "observation": {
@@ -82436,6 +82623,27 @@
                           "type": "string",
                           "enum": ["available", "unavailable"]
                         },
+                        "viewport": {
+                          "type": "object",
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            },
+                            "width": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "height": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": ["x", "y", "width", "height"],
+                          "additionalProperties": false
+                        },
                         "controls": {
                           "type": "array",
                           "items": {
@@ -82510,7 +82718,7 @@
                           "type": "boolean"
                         }
                       },
-                      "required": ["source", "status", "controls", "truncated"],
+                      "required": ["source", "status", "viewport", "controls", "truncated"],
                       "additionalProperties": false
                     },
                     "observation": {

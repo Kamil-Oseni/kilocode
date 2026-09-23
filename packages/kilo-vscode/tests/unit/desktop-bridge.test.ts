@@ -41,6 +41,7 @@ function setup(
       semantics: {
         source: "windows_ui_automation",
         status: "available",
+        viewport: { x: 0, y: 0, width: 20, height: 10 },
         controls: [
           {
             controlID: "42.7",
@@ -216,6 +217,7 @@ describe("desktop observation bridge", () => {
       operation: "focus",
       windowID: "window_2",
       observationID: listed.result.observation.id,
+      sensitive: false,
     }
     for (const listener of test.events)
       listener({ type: "kilocode.desktop.requested", properties: focus } as SSEPayload, "C:\\workspace")
@@ -258,6 +260,7 @@ describe("desktop observation bridge", () => {
         semantics: {
           source: "windows_ui_automation",
           status: "available",
+          viewport: { x: 0, y: 0, width: 20, height: 10 },
           controls: [expect.objectContaining({ controlID: "42.7", role: "Button", name: "Save" })],
           truncated: false,
         },
@@ -297,6 +300,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       action: "click",
       button: "left",
       x: 0.5,
@@ -417,6 +421,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       action: "click",
       button: "left",
       x: 0.5,
@@ -454,6 +459,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       action: "click",
       button: "left",
       x: 0.5,
@@ -489,6 +495,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       action: "click",
       button: "left",
       x: 0.5,
@@ -543,6 +550,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       action: "click",
       button: "left",
       x: 0.5,
@@ -614,6 +622,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: "window_1",
       observationID: "observation_missing",
+      sensitive: false,
       action: "click",
       button: "left",
       x: 0.5,
@@ -672,6 +681,7 @@ describe("desktop observation bridge", () => {
       operation: "move",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       x: 0.75,
       y: 0.125,
     } as DesktopRequest
@@ -700,6 +710,7 @@ describe("desktop observation bridge", () => {
       operation: "drag",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       startX: 0.2,
       startY: 0.3,
       endX: 0.8,
@@ -740,6 +751,7 @@ describe("desktop observation bridge", () => {
       operation: "type",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       text: 'hello `$(Get-ChildItem) "world"',
     }
     for (const listener of test.events)
@@ -769,6 +781,7 @@ describe("desktop observation bridge", () => {
       operation: "key",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       key: "Enter",
       modifiers: ["control", "shift"],
     }
@@ -799,6 +812,7 @@ describe("desktop observation bridge", () => {
       operation: "scroll",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      sensitive: false,
       deltaX: 120,
       deltaY: -240,
     }

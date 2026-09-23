@@ -149,6 +149,7 @@ it.instance("lists visible windows and focuses one exact observed target", () =>
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: observation.id,
+        sensitive: false,
       },
     ])
     expect(listed.title).toBe("Found 1 visible desktop windows")
@@ -222,6 +223,7 @@ it.instance(
       expect(asks).toEqual([])
       expect(calls.map((input) => input.operation)).toEqual(["authorize", "click"])
       expect(calls[0]).toMatchObject({ operation: "authorize", sensitive: "communications" })
+      expect(calls[1]).toMatchObject({ operation: "click", sensitive: "communications" })
     }),
   { git: true },
 )
@@ -332,6 +334,7 @@ it.instance(
           sessionID: ctx.sessionID,
           windowID: "window_seen",
           observationID: ObservationID.make("observation_seen"),
+          sensitive: false,
           action: "double_click",
           button: "right",
           x: 0.25,
@@ -364,6 +367,7 @@ it.instance(
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_moved"),
+        sensitive: false,
         x: 0.5,
         y: 0.125,
       })
@@ -397,6 +401,7 @@ it.instance(
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_typed"),
+        sensitive: false,
         text: "Exact text",
       })
       expect(typed.title).toBe("Typed into desktop")
@@ -429,6 +434,7 @@ it.instance(
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_keyed"),
+        sensitive: false,
         key: "Enter",
         modifiers: ["control", "shift"],
       })
@@ -465,6 +471,7 @@ it.instance(
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_scrolled"),
+        sensitive: false,
         deltaX: 120,
         deltaY: -240,
       })
@@ -475,9 +482,12 @@ it.instance(
         operation: "scroll" as const,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_scroll_schema"),
+        sensitive: false,
       }
       expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 0 })).toBe(false)
       expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 1_201 })).toBe(false)
+      expect(Schema.is(ScrollRequest)({ ...base, sensitive: undefined, deltaX: 0, deltaY: 120 })).toBe(false)
+      expect(Schema.is(ScrollRequest)({ ...base, sensitive: true, deltaX: 0, deltaY: 120 })).toBe(false)
       expect(Schema.is(ScrollRequest)({ ...base, deltaX: 0, deltaY: 120 })).toBe(true)
 
       const watched = yield* DesktopWatchTool.pipe(
@@ -536,6 +546,7 @@ it.instance(
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_dragged"),
+        sensitive: false,
         startX: 0.125,
         startY: 0.25,
         endX: 0.875,
@@ -549,6 +560,7 @@ it.instance(
         operation: "drag" as const,
         windowID: "window_seen",
         observationID: ObservationID.make("observation_drag_schema"),
+        sensitive: false,
         startX: 0.5,
         startY: 0.5,
         endX: 0.5,
@@ -567,9 +579,9 @@ it.instance(
         "observe",
         "pointer",
       ])
-      expect(
-        calls.filter((input) => input.operation === "authorize").every((input) => input.sensitive === false),
-      ).toBe(true)
+      expect(calls.filter((input) => input.operation === "authorize").every((input) => input.sensitive === false)).toBe(
+        true,
+      )
     }),
   { git: true },
 )

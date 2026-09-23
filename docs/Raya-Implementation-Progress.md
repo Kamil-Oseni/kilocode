@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 03:07 America/Toronto - Accessibility traversal batches bounded child caches
+
+**Status: implemented and benchmarked in source; event-driven incremental semantics remain open.** The persistent Windows host no longer crosses the UI Automation provider boundary separately for `GetFirstChild` and every `GetNextSibling` edge. Each bounded breadth-first step now refreshes one element together with its immediate Control View children through the existing property-and-pattern `CacheRequest`, then enqueues only the remaining capacity. The traversal still visits at most 1,024 elements, returns at most 256 visible controls, marks partial trees as truncated, excludes text values and secrets, and rechecks the exact foreground identity after both visual and semantic collection.
+
+Focused native-driver evidence passes **18 tests / 132 assertions**. A read-only 12-frame real-host probe discarded two warm-up frames and returned the same 91 available, non-truncated controls in all ten measured observations. UI Automation measured p50 **85.0874 ms** / p95 **88.2134 ms**, compared with p50 **121.3719 ms** / p95 **137.5624 ms** immediately before this change. Total observation measured p50 **163.4186 ms** / p95 **192.3619 ms**, compared with p50 **188.8456 ms** / p95 **217.3478 ms**. The sample shows a real improvement, but semantic and total latency remain outside the desired action-to-frame experience and this is not an installed release-gate result.
+
+Next move continuous visual acquisition into a measured WGC/DXGI worker and use event-driven semantic invalidation plus action-critical live checks so stable accessibility data can be reused without trusting stale bounds or sensitive state. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-23 02:55 America/Toronto - Unchanged-frame capture snapshot installed
 
 **Status: pushed, packaged and installed without force-reloading the open host; installed-host behavior is not yet accepted.** Product source `7bb3c02759` is on `origin/main`. The protected push passed 29 JavaScript/TypeScript package typechecks and the JetBrains typecheck. The low-memory production workflow confirmed unchanged SDK output and reused the verified Windows CLI, then passed extension-host and webview typechecks, ESLint and the production bundle sequentially. It packaged 442 files and installed `eden.raya@7.4.23-snapshot+7bb3c02759.kamil-oseni.1790146328295`.

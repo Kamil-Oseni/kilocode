@@ -437,7 +437,7 @@ function Get-RayaControls($window) {
   $root = [Windows.Automation.AutomationElement]::FromHandle($window.Handle)
   if (-not $root) { throw "Windows UI Automation could not inspect the foreground window" }
   $cache = [Windows.Automation.CacheRequest]::new()
-  $cache.TreeScope = [Windows.Automation.TreeScope]::Element
+  $cache.TreeScope = [Windows.Automation.TreeScope]::Element -bor [Windows.Automation.TreeScope]::Children
   $cache.Add([Windows.Automation.AutomationElement]::NameProperty)
   $cache.Add([Windows.Automation.AutomationElement]::AutomationIdProperty)
   $cache.Add([Windows.Automation.AutomationElement]::ControlTypeProperty)
@@ -452,19 +452,21 @@ function Get-RayaControls($window) {
   $cache.Add([Windows.Automation.ValuePattern]::Pattern)
   $cache.Add([Windows.Automation.ScrollPattern]::Pattern)
   $cache.Add([Windows.Automation.ScrollItemPattern]::Pattern)
-  $root = $root.GetUpdatedCache($cache)
   $queue = [Collections.Generic.Queue[object]]::new()
   $queue.Enqueue($root)
-  $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
   $visited = 0
+  $truncated = $false
   while ($queue.Count -gt 0 -and $visited -lt 1024 -and $controls.Count -lt 256) {
     $item = $queue.Dequeue()
+    $item = $item.GetUpdatedCache($cache)
     $visited += 1
-    $child = $walker.GetFirstChild($item, $cache)
-    while ($child) {
-      $queue.Enqueue($child)
-      $child = $walker.GetNextSibling($child, $cache)
+    $children = $item.CachedChildren
+    $remaining = 1024 - $visited - $queue.Count
+    $count = [Math]::Min($children.Count, [Math]::Max(0, $remaining))
+    for ($index = 0; $index -lt $count; $index += 1) {
+      $queue.Enqueue($children[$index])
     }
+    if ($children.Count -gt $count) { $truncated = $true }
     try {
       $current = $item.Cached
       if ($current.IsOffscreen) { continue }
@@ -521,7 +523,7 @@ function Get-RayaControls($window) {
     status = 'available'
     viewport = [pscustomobject]@{ x = $window.Rect.Left; y = $window.Rect.Top; width = $window.Width; height = $window.Height }
     controls = @($controls)
-    truncated = $queue.Count -gt 0
+    truncated = $truncated -or $queue.Count -gt 0
   }
 }
 function Test-RayaImage($stream) {

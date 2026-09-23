@@ -5,7 +5,7 @@ import type { MessageV2 } from "@/session/message-v2"
 import { MessageID, SessionID } from "@/session/schema"
 import type { BackgroundJob } from "@/background/job"
 import { mutation } from "@/kilocode/goal/mutation"
-import { owner, stopped } from "@/kilocode/task/owner"
+import { durable, stopped } from "@/kilocode/task/owner"
 
 /** Durable admission and result ledger for one bounded Auto Chief fanout. */
 export namespace ChiefBranches {
@@ -27,7 +27,9 @@ export namespace ChiefBranches {
     callID: Schema.optional(Schema.String),
     sessionID: Schema.optional(SessionID),
     messageID: Schema.optional(MessageID),
-    owner: Schema.optional(Schema.Struct({ host: Schema.String, pid: Schema.Number })),
+    owner: Schema.optional(
+      Schema.Struct({ host: Schema.String, pid: Schema.Number, birth: Schema.optional(Schema.String) }),
+    ),
     result: Schema.optional(Schema.String),
     review: Schema.optional(
       Schema.Struct({
@@ -240,7 +242,7 @@ export namespace ChiefBranches {
             callID: input.callID,
             sessionID: input.sessionID,
             ...(input.messageID ? { messageID: input.messageID } : {}),
-            owner: owner(),
+            owner: durable(),
             updatedAt: Date.now(),
           }
           yield* storage.replace(key(input.goalID), {

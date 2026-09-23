@@ -166,7 +166,11 @@ describe("Auto Chief branch ledger", () => {
         access: "read" as const,
       }
       const admitted = yield* ledger.admit(input)
-      expect(admitted.owner).toEqual(owner())
+      expect(admitted.owner).toMatchObject(owner())
+      if (process.platform === "win32" || process.platform === "linux") {
+        expect(admitted.owner?.birth).toBeTruthy()
+        expect(stopped({ ...admitted.owner, birth: `${admitted.owner?.birth}-older` })).toBe(true)
+      }
       expect((yield* ChiefBranches.make(storage).reconcile(id, createdAt)).branches[0].state).toBe("admitted")
 
       const legacy = yield* ledger.read(id)

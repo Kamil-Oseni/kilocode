@@ -96,7 +96,8 @@ it.live(
       const child = `ses_child_${crypto.randomUUID()}`
       const time = Date.now()
       const first = yield* Effect.promise(() => admit(dir, root, id, time, child))
-      expect(first.admitted.owner).toEqual({ host: hostname(), pid: first.pid })
+      expect(first.admitted.owner).toMatchObject({ host: hostname(), pid: first.pid })
+      if (process.platform === "win32" || process.platform === "linux") expect(first.admitted.owner.birth).toBeTruthy()
       expect(first.saved.branches[0]).toMatchObject({
         state: "admitted",
         callID: "task-1",

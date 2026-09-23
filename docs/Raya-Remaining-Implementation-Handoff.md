@@ -6,9 +6,15 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 23:18 America/Toronto - preserve the Windows-wide pause listener
+
+`WindowsPauseHotkey` owns a native `RegisterHotKey` loop for Ctrl+Alt+Shift+Escape only while a Computer Use grant exists. Every complete `pause` event uses `DesktopAutomationService.pause`, so the lease event cancels capture/queued input and the session takes control back. Unexpected registration/process loss invokes that same fail-closed path once. Stop and disposal kill the host; disposal exits must not trigger a false loss pause.
+
+The reference Windows host successfully registered and released the shortcut in a bounded one-second probe. Focused evidence is 29 tests / 97 assertions, and the complete extension production compile passes both typechecks, lint and bundle. Still run the installed matrix during active capture and native input, disconnect, resume, Stop and restart before accepting emergency control.
+
 ## ChatGPT 2026-09-22 23:05 America/Toronto - preserve capture-stage timing
 
-Desktop observation results now include `timing.acquisitionMs`, `timing.preparationMs` and `timing.totalMs`. Acquisition covers the native GDI frame copy, preparation covers PNG/JPEG encoding plus base64 creation, and total includes current process startup and bridge overhead. Keep all three when replacing the driver so benchmarks separate local stages. Invalid or inconsistent values are refused before an observation is issued.
+Product commit `3c842e98b1` adds `timing.acquisitionMs`, `timing.preparationMs` and `timing.totalMs` to desktop observation results. Acquisition covers the native GDI frame copy, preparation covers PNG/JPEG encoding plus base64 creation, and total includes current process startup and bridge overhead. Keep all three when replacing the driver so benchmarks separate local stages. Invalid or inconsistent values are refused before an observation is issued.
 
 Do not interpret these fields as meeting the latency target. The direct reference-machine probe correctly refused capture because the sleeping/locked desktop had no foreground window, so real percentiles remain unmeasured. The current PowerShell/GDI/base64 path remains the baseline to replace with a persistent cancellable WGC/DXGI worker and binary changed-frame transport.
 

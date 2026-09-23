@@ -5,6 +5,7 @@ import { WindowsDesktopDriver } from "./desktop-windows"
 import { DesktopBridge } from "./desktop-bridge"
 import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
+import { WindowsPauseHotkey } from "./windows-pause-hotkey"
 
 export class DesktopAutomationService implements vscode.Disposable {
   private readonly session: DesktopSession | undefined
@@ -13,6 +14,7 @@ export class DesktopAutomationService implements vscode.Disposable {
   private readonly lease: ComputerUseLeaseStore | undefined
   private readonly indicator: vscode.StatusBarItem | undefined
   private readonly offLease: (() => void) | undefined
+  private hotkey: WindowsPauseHotkey | undefined
 
   constructor(connection: KiloConnectionService, context: vscode.ExtensionContext, lease?: ComputerUseLeaseStore) {
     if (process.platform !== "win32") return
@@ -24,10 +26,16 @@ export class DesktopAutomationService implements vscode.Disposable {
     this.indicator.command = "raya.openComputerUse"
     this.offLease = this.lease.onChange((lease) => {
       if (!lease) {
+        this.hotkey?.dispose()
+        this.hotkey = undefined
         this.bridge?.cancel("Raya desktop control stopped.")
         this.indicator!.hide()
         return
       }
+      this.hotkey ??= new WindowsPauseHotkey(
+        () => this.pause("Raya desktop control paused from the global shortcut."),
+        () => this.pause("Raya desktop control paused because the global Pause listener stopped."),
+      )
       if (lease.state === "paused") this.bridge?.cancel("Raya desktop control paused.")
       const label = lease.level === "observe" ? "Observe" : lease.level === "assisted" ? "Assisted" : "Autonomous"
       this.indicator!.text = lease.state === "paused" ? "$(debug-pause) Raya paused" : `$(remote) Raya ${label}`
@@ -88,13 +96,14 @@ export class DesktopAutomationService implements vscode.Disposable {
     return this.panel.authorize(request)
   }
 
-  async pause(): Promise<void> {
+  async pause(reason = "Raya desktop control paused from the keyboard."): Promise<void> {
     if (!this.lease || !this.session) return
     await this.lease.pause()
-    this.session.takeControl("Raya desktop control paused from the keyboard.")
+    this.session.takeControl(reason)
   }
 
   dispose(): void {
+    this.hotkey?.dispose()
     this.bridge?.dispose()
     this.panel?.dispose()
     this.session?.dispose()

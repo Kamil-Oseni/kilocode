@@ -62,9 +62,11 @@ describe("Auto Chief branch proposal", () => {
       specialist: "researcher",
       access: "read",
       brief: proposals[0]!.brief,
+      scope: ["docs claims"],
+      independence: proposals[0]!.independence,
+      authority: proposals[0]!.authority,
     })
     expect(result[1]?.brief.objective).toBe("Inspect the current chat activity display")
-    expect(result[0]).not.toHaveProperty("scope")
   })
 
   test("refuses one, four, duplicate, dependent, and overlapping branches", () => {

@@ -23,6 +23,9 @@ export namespace ChiefBranches {
     specialist: Schema.String,
     access: Schema.Literals(["read", "edit"]),
     brief: Brief,
+    scope: Schema.optional(Schema.Array(Schema.String)),
+    independence: Schema.optional(Schema.String),
+    authority: Schema.optional(Schema.String),
     state: Schema.Literals(["planned", "admitted", "completed", "failed", "cancelled", "unknown"]),
     callID: Schema.optional(Schema.String),
     sessionID: Schema.optional(SessionID),
@@ -103,7 +106,8 @@ export namespace ChiefBranches {
     )
   }
 
-  export type Input = Pick<Branch, "id" | "name" | "specialist" | "access" | "brief">
+  export type Input = Pick<Branch, "id" | "name" | "specialist" | "access" | "brief"> &
+    Partial<Pick<Branch, "scope" | "independence" | "authority">>
   type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
   const key = (id: SessionID) => ["raya", "chief", "branches", id]
   const goal = (id: SessionID) => ["raya", "goal", id]
@@ -177,12 +181,15 @@ export namespace ChiefBranches {
               old.revision === revision &&
               old.requestID === input.requestID &&
               JSON.stringify(
-                old.branches.map(({ id, name, specialist, access, brief }) => ({
+                old.branches.map(({ id, name, specialist, access, brief, scope, independence, authority }) => ({
                   id,
                   name,
                   specialist,
                   access,
                   brief,
+                  ...(scope === undefined ? {} : { scope }),
+                  ...(independence === undefined ? {} : { independence }),
+                  ...(authority === undefined ? {} : { authority }),
                 })),
               ) === JSON.stringify(input.branches)
             )

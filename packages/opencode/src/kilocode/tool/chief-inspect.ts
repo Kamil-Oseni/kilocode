@@ -33,7 +33,16 @@ export function chiefInspectTool(deps: {
           const branches = []
           for (const item of current.branches) {
             if (!item.sessionID) {
-              branches.push({ id: item.id, name: item.name, specialist: item.specialist, state: item.state })
+              branches.push({
+                id: item.id,
+                name: item.name,
+                specialist: item.specialist,
+                access: item.access,
+                scope: item.scope,
+                independence: item.independence,
+                authority: item.authority,
+                state: item.state,
+              })
               continue
             }
             const child = yield* deps.sessions.get(item.sessionID)
@@ -63,6 +72,9 @@ export function chiefInspectTool(deps: {
               name: item.name,
               specialist: item.specialist,
               access: item.access,
+              scope: item.scope,
+              independence: item.independence,
+              authority: item.authority,
               state: item.state,
               callID: item.callID,
               reviewed: !!item.review,

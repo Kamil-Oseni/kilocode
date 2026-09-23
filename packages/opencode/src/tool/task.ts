@@ -417,7 +417,20 @@ export const TaskTool = Tool.define(
             messageID: message,
             access: branch.access,
           })
-          .pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? lease.release : Effect.void)))
+          .pipe(
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit)
+                ? Effect.gen(function* () {
+                    const saved = yield* branches.read(ctx.sessionID)
+                    if (!saved?.branches.some((item) => item.sessionID === nextSession.id))
+                      yield* sessions.remove(nextSession.id)
+                  }).pipe(
+                    Effect.catchCause((cause) => Effect.logWarning("Could not remove unadmitted Chief child", cause)),
+                    Effect.ensuring(lease.release.pipe(Effect.orDie)),
+                  )
+                : Effect.void,
+            ),
+          )
       // kilocode_change end
       // raya_change end
       // kilocode_change end

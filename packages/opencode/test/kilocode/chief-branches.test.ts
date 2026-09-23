@@ -25,6 +25,9 @@ const plan = [
     specialist: "researcher",
     access: "read" as const,
     brief: { objective: "Audit safety", constraints: ["Do not edit"], expectedReturn: "Findings" },
+    scope: ["authorization"],
+    independence: "Can review saved policy without the UX audit.",
+    authority: "Read access covers this audit.",
   },
   {
     id: "design",
@@ -369,10 +372,27 @@ describe("Auto Chief branch ledger", () => {
       expect(saved.branches.map((item) => item.brief.objective)).toEqual(["Audit safety", "Audit UX"])
       const restarted = ChiefBranches.make(storage)
       expect((yield* restarted.read(id))?.requestID).toBe("route-1")
+      expect((yield* restarted.read(id))?.branches[0]).toMatchObject({
+        scope: ["authorization"],
+        independence: "Can review saved policy without the UX audit.",
+        authority: "Read access covers this audit.",
+      })
       expect(
         (yield* restarted.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan }))
           .createdAt,
       ).toBe(saved.createdAt)
+      expect(
+        Exit.isFailure(
+          yield* restarted
+            .start({
+              goalID: id,
+              goalCreatedAt: createdAt,
+              requestID: "route-1",
+              branches: [{ ...plan[0], authority: "Changed reason" }, plan[1]],
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
       expect(
         Exit.isFailure(
           yield* restarted

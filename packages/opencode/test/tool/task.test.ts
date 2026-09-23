@@ -547,7 +547,7 @@ describe("tool.task planned Auto Chief branch", () => {
   )
 
   planned.instance(
-    "releases the child lease if admission loses a race, without prompting the orphan",
+    "removes an unadmitted child when admission loses a race",
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
@@ -623,7 +623,8 @@ describe("tool.task planned Auto Chief branch", () => {
           .pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
         expect(prompts).toBe(0)
-        expect(yield* sessions.children(chat.id)).toHaveLength(1) // child allocation precedes durable admission
+        expect(yield* sessions.children(chat.id)).toHaveLength(0)
+        expect((yield* branches.read(chat.id))?.branches[0]?.callID).toBe("competing-call")
         const children = yield* GoalChildren.make({ storage, sessions })
         const lease = yield* children.claim(chat.id)
         yield* lease.release

@@ -91,6 +91,9 @@ export namespace ChiefPlan {
         constraints: item.brief.constraints.map(clean),
         expectedReturn: clean(item.brief.expectedReturn),
       },
+      scope: item.scope.map(clean),
+      independence: clean(item.independence),
+      authority: clean(item.authority),
     }))
   }
 }

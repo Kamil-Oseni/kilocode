@@ -87,6 +87,92 @@
   border-top: 1px solid var(--border-weak-base);
 }
 
+/* Chief branch activity stays in the conversation, with details available on demand. */
+.chief-activity {
+  max-width: 100%;
+  padding-block: 4px;
+  color: var(--text-base);
+  font-size: var(--kilo-font-size-12);
+}
+
+.chief-activity__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  list-style: none;
+  line-height: 1.5;
+}
+
+.chief-activity__summary::-webkit-details-marker {
+  display: none;
+}
+
+.chief-activity__summary:focus-visible {
+  outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
+  outline-offset: 2px;
+}
+
+.chief-activity__icons {
+  display: inline-flex;
+  gap: 3px;
+  color: var(--text-weak);
+}
+
+.chief-activity__summary [data-slot="chief-activity-chevron"] {
+  color: var(--text-weak);
+  transition: transform 150ms ease;
+}
+
+.chief-activity[open] .chief-activity__summary [data-slot="chief-activity-chevron"] {
+  transform: rotate(90deg);
+}
+
+.chief-activity__branches {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chief-activity__branches li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.chief-activity__branches li > [data-component="icon"] {
+  flex: none;
+  color: var(--text-weak);
+}
+
+.chief-activity__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chief-activity__status {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-weak);
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .chief-activity__branches li {
+    flex-wrap: wrap;
+  }
+
+  .chief-activity__status {
+    margin-left: 24px;
+  }
+}
+
 /* ============================================
    Background Process Tool
    ============================================ */

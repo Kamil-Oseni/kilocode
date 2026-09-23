@@ -1,14 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-## ChatGPT 2026-09-23 17:18 America/Toronto - Chief evidence journey and named activity next
-
-The Auto tool-registry integration case in `packages/opencode/test/tool/task.test.ts` now exercises plan → two background children → saved child tool evidence/final reply → inspect → exact review → synthesis → completion guard. It passes with a stub model and real backend sessions, jobs, storage, registry and tools. CLI typecheck and the shared-file annotation guard pass. This does not replace live host acceptance. A read-only chat audit identified the concrete presentation gap: `AssistantMessage.tsx` and `utils/transcript-parts.ts` reduce Chief operations to generic steps; `TaskToolExpanded.tsx` and `BackgroundAgents.tsx` already know specialist names/status, and `SubagentPanel.tsx` still uses one generic icon. Next implement a compact Chief activity view tied to saved branch identities and review state, using existing role icons and an expandable evidence/report view; avoid showing a branch as fully accepted merely because its `task` result completed. Then run the installed-host parallel/restart/unknown matrix before closing the agent rows.
-
 > **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `5ba192f61f` (`7.4.23-snapshot+5ba192f61f.kamil-oseni.1790197455179`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 17:34 America/Toronto - Chief chat activity source slice
+
+The parent chat now renders a compact Chief specialist summary at the saved `chief_plan` tool result. Expanding it shows exact branch names, existing role icons, and states derived from the plan, matching inspection, task and review receipts. It does not confuse a completed background launch with a finished child report, and it keeps stopped and unknown separate from failure. Three focused tests, webview typecheck and extension lint pass. This is not installed-host visual acceptance; build and install a snapshot, then observe narrow/wide chat, a real goal-bound parallel run, review/synthesis, backend restart and stale receipt behavior. `SubagentPanel.tsx` still has a generic tab icon and remains a later polish slice.
+
+## ChatGPT 2026-09-23 17:18 America/Toronto - Chief evidence journey and named activity next
+
+The Auto tool-registry integration case in `packages/opencode/test/tool/task.test.ts` now exercises plan, two background children, saved child tool evidence/final replies, inspect, exact review, synthesis, and the completion guard. The full `task` suite passes 47 tests / 268 assertions with a stub model and real backend sessions, jobs, storage, registry and tools. CLI typecheck and the shared-file annotation guard pass. This does not replace live host acceptance. A read-only chat audit identified the concrete presentation gap: `AssistantMessage.tsx` and `utils/transcript-parts.ts` reduce Chief operations to generic steps; `TaskToolExpanded.tsx` and `BackgroundAgents.tsx` already know specialist names/status, and `SubagentPanel.tsx` still uses one generic icon. Next implement a compact Chief activity view tied to saved branch identities and review state, using existing role icons and an expandable evidence/report view; avoid showing a branch as fully accepted merely because its `task` result completed. Then run the installed-host parallel/restart/unknown matrix before closing the agent rows.
 
 ## ChatGPT 2026-09-23 17:09 America/Toronto - repaired Chief snapshot installed
 

@@ -45,6 +45,8 @@ import { toolDefaultOpen } from "./tool-default-open"
 import { useVSCode } from "../../context/vscode"
 import { provenance } from "../../../../src/shared/memory-provenance"
 import { MemoryProvenance } from "./MemoryProvenance"
+import { ChiefActivity } from "./ChiefActivity"
+import { chiefActivity, type ChiefPart } from "./chief-activity"
 
 type PlanStep = { id: string; description: string; status?: string }
 
@@ -404,6 +406,13 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
             if (!planExitInfo(part)) return
             return part as unknown as ToolPart
           })
+          const chiefPlan = createMemo(() => {
+            if (part.type !== "tool" || part.tool !== "chief_plan") return
+            const id = session.currentSessionID()
+            const plan = part as unknown as ChiefPart
+            if (!id || !chiefActivity(plan, session.getSessionToolParts(id) as ChiefPart[])) return
+            return plan
+          })
           const forceOpen = createMemo(() => !!props.forceOpenPartID && part.id === props.forceOpenPartID)
 
           // Lights up when this part is behind the hovered/focused task-timeline
@@ -460,6 +469,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                                 <Show
                                   when={isUpstreamSuppressed}
                                   fallback={
+                                    chiefPlan() ? <ChiefActivity plan={chiefPlan()!} /> :
                                     <Part
                                       part={part}
                                       message={props.message as SDKMessage}

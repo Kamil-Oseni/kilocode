@@ -14,6 +14,7 @@ export const UPSTREAM_SUPPRESSED_TOOLS = new Set(["todowrite", "todoread"])
 // VscodeSessionTurn (across consecutive tool-only messages in one turn).
 export const PROMINENT_TOOLS = new Set([
   "task",
+  "chief_plan",
   "question",
   "ask_options",
   "suggest",

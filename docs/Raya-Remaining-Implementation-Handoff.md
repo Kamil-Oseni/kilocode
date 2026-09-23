@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `5ba192f61f` (`7.4.23-snapshot+5ba192f61f.kamil-oseni.1790197455179`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `c9be6c7397` (`7.4.23-snapshot+c9be6c7397.kamil-oseni.1790199404668`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 17:41 America/Toronto - named Chief activity installed
+
+`c9be6c7397` is pushed and installed as `7.4.23-snapshot+c9be6c7397.kamil-oseni.1790199404668`. The low-memory workflow regenerated the SDK, smoke-tested the Windows CLI and sandbox worker, passed extension/webview typechecks and lint, bundled production assets and installed the VSIX. Installed CLI SHA-256: `76015D84932494E37727C4F09567895D03ABDC55CD32EBE1F25F43DAF9BEE3F0`; retained rollback VSIX SHA-256: `53A853B6C829C130000EB153BAC7ACE376DF66873354B98B80745EAF430979C0`. VS Code reports the installed version, but no live parent-child conversation or narrow/wide layout was observed. Keep the agent rows In progress until real parallel execution, review/synthesis, cancellation/restart, and chat visual acceptance pass.
 
 ## ChatGPT 2026-09-23 17:34 America/Toronto - Chief chat activity source slice
 

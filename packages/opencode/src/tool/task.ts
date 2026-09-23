@@ -32,6 +32,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milesto
 import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_change: durable subagent display identity
 import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse failed equivalent children
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
+import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - bind planned Auto branches to child calls
+import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - saved branch preflight
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -82,6 +84,9 @@ const BaseParameterFields = {
   access: Schema.optional(Schema.Literals(["read", "edit"])).annotate({
     description:
       'Set "read" for research or audits that must not edit files or run shell commands. Set "edit" only when the parent policy allows changes. Omitted keeps legacy task behavior.',
+  }),
+  branch_id: Schema.optional(Schema.String).annotate({
+    description: "Exact branch ID from a saved Auto Chief plan. Required when the active goal has a branch plan.",
   }),
   // kilocode_change end
   // raya_change end
@@ -136,6 +141,7 @@ export const TaskTool = Tool.define(
     const database = yield* Database.Service
     const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change - raya_change: optional outside durable goal contexts
     const children = storage ? yield* GoalChildren.make({ storage, sessions }) : undefined // kilocode_change - raya_change
+    const branches = storage ? ChiefBranches.make(storage) : undefined // kilocode_change
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -148,11 +154,24 @@ export const TaskTool = Tool.define(
       }
 
       const parent = yield* sessions.get(ctx.sessionID)
+      // kilocode_change start - a saved fanout plan is authoritative for this active goal
+      const binding = yield* ChiefTaskBinding.load({
+        storage,
+        branches,
+        sessionID: ctx.sessionID,
+        agent: ctx.agent,
+        metadata: parent.metadata,
+        callID: ctx.callID,
+        params,
+      })
+      const plan = binding.plan
+      const branch = binding.branch
+      // kilocode_change end
       // kilocode_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
       const chief = ctx.agent === "auto" ? RayaChief.pending(parent.metadata) : undefined
       const follow = ctx.agent === "auto" ? RayaChief.follow(parent.metadata) : undefined
       const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
-      if (ctx.agent === "auto" && !follow && !continued) {
+      if (ctx.agent === "auto" && !branch && !follow && !continued) {
         return yield* Effect.fail(new Error("Auto must call chief_route on a new request before delegating with task"))
       }
       const resumed = params.task_id
@@ -171,7 +190,7 @@ export const TaskTool = Tool.define(
       const ruleset = Permission.merge(caller.permission, parent.permission ?? [])
       // kilocode_change start - resumed child authority cannot be widened
       const access = TaskAuthority.select({
-        requested: params.access,
+        requested: branch?.access ?? params.access,
         saved: TaskAuthority.read(resumed?.metadata),
         parent: ruleset,
       })
@@ -185,15 +204,24 @@ export const TaskTool = Tool.define(
       )
       const explicit = params.subagent_type && params.subagent_type !== "auto" ? params.subagent_type : undefined
       // kilocode_change start
-      const request = [
-        params.description,
-        params.prompt ?? "",
-        params.brief?.objective ?? "",
-        params.brief?.context ?? "",
-        ...(params.brief?.constraints ?? []),
-        params.brief?.expected_return ?? "",
-      ].join("\n")
+      const request = branch
+        ? [
+            branch.name,
+            branch.brief.objective,
+            branch.brief.context ?? "",
+            ...branch.brief.constraints,
+            branch.brief.expectedReturn,
+          ].join("\n")
+        : [
+            params.description,
+            params.prompt ?? "",
+            params.brief?.objective ?? "",
+            params.brief?.context ?? "",
+            ...(params.brief?.constraints ?? []),
+            params.brief?.expected_return ?? "",
+          ].join("\n")
       const routed =
+        branch?.specialist ??
         chief?.agent ??
         follow?.agent ??
         resumed?.agent ??
@@ -212,16 +240,19 @@ export const TaskTool = Tool.define(
         "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
       const extras = canvas ? [canvasRule] : []
       const handoff = KiloTask.brief({
-        prompt: chief?.request ?? continued ?? params.prompt,
+        prompt: branch?.brief.objective ?? chief?.request ?? continued ?? params.prompt,
         brief: {
-          objective: chief?.request ?? continued ?? params.brief?.objective ?? params.prompt ?? "",
-          context: chief
-            ? [params.brief?.context, chief.needs_plan ? "Plan the approach before execution." : undefined]
-                .filter(Boolean)
-                .join("\n")
-            : params.brief?.context,
-          expected_return: params.brief?.expected_return,
-          constraints: [...(params.brief?.constraints ?? []), ...extras],
+          objective:
+            branch?.brief.objective ?? chief?.request ?? continued ?? params.brief?.objective ?? params.prompt ?? "",
+          context: branch
+            ? branch.brief.context
+            : chief
+              ? [params.brief?.context, chief.needs_plan ? "Plan the approach before execution." : undefined]
+                  .filter(Boolean)
+                  .join("\n")
+              : params.brief?.context,
+          expected_return: branch?.brief.expectedReturn ?? params.brief?.expected_return,
+          constraints: [...(branch?.brief.constraints ?? params.brief?.constraints ?? []), ...extras],
         },
         cap: limit,
       })
@@ -338,7 +369,7 @@ export const TaskTool = Tool.define(
       // kilocode_change end // raya_change end
       // kilocode_change start - create a child session with inherited Kilo restrictions
       // raya_change start - allocate a durable, collision-safe identity only for a new child
-      const selection = explicit && !continued ? "explicit" : "auto"
+      const selection = branch ? "auto" : explicit && !continued ? "explicit" : "auto"
       const created = yield* TaskName.gate
         .withLock(ctx.sessionID)(
           Effect.gen(function* () {
@@ -348,9 +379,9 @@ export const TaskTool = Tool.define(
             }
             const siblings = yield* sessions.children(ctx.sessionID)
             const identity = TaskName.allocate({
-              description: params.description,
-              objective: params.brief?.objective,
-              prompt: params.prompt,
+              description: branch?.name ?? params.description,
+              objective: branch?.brief.objective ?? params.brief?.objective,
+              prompt: branch?.brief.objective ?? params.prompt,
               specialist: next.name,
               selection,
               parentSessionID: ctx.sessionID,
@@ -372,6 +403,19 @@ export const TaskTool = Tool.define(
         .pipe(Effect.tapError(() => lease.release))
       const nextSession = created.session
       const displayName = created.displayName
+      // kilocode_change start - admit the exact child under the goal lock before any child execution
+      if (branch && plan && branches && ctx.callID)
+        yield* branches
+          .admit({
+            goalID: ctx.sessionID,
+            goalCreatedAt: plan.goalCreatedAt,
+            branchID: branch.id,
+            callID: ctx.callID,
+            sessionID: nextSession.id,
+            access: branch.access,
+          })
+          .pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? lease.release : Effect.void)))
+      // kilocode_change end
       // raya_change end
       // kilocode_change end
       // kilocode_change start - persist a task-specific ceiling consumed by SessionPrompt.runLoop
@@ -401,7 +445,7 @@ export const TaskTool = Tool.define(
 
       // kilocode_change start
       // raya_change start - consume the already logged Chief decision exactly once
-      if (chief) {
+      if (chief && !branch) {
         const latest = yield* sessions.get(ctx.sessionID).pipe(Effect.tapError(() => lease.release))
         const clean = Object.fromEntries(
           Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey),

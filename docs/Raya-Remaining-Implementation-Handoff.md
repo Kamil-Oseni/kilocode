@@ -1,10 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** Current source `d39b01172a` is pushed and installed; the child-authority, named-activity, immediate unknown-receipt and SDK fixes are included. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `d39b01172a`; later Chief branch source checkpoints are pushed but not installed. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed snapshot. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 11:02 America/Toronto - plan-to-task admission handoff
+
+The unregistered `chief_plan` tool validates proposed branches against the original bound user message, active goal, current Auto request, eligible agents and parent policy, then stores planned rows without launching. `task.branch_id` is the sole planned-branch selector; `task` takes specialist, exact brief and access from the saved row, not caller substitutions. Duplicate or stale branches fail. Admission happens under the goal mutation lock before the child prompt. A losing admission releases its lease; session creation may leave one inert unadmitted child because it cannot reserve an ID ahead of time. Verify its cleanup before enabling fanout.
+
+Keep `chief_plan` unregistered and the existing one-child Auto prompt until terminal branch settlement and review, background completion/restart recovery, pause/stop propagation, bounded concurrency/cost and named grouped activity are implemented and tested. A structural scope claim from the model is not evidence of semantic independence. The snapshot still installed is `d39b01172a`; this backend slice is source-only.
 
 ## ChatGPT 2026-09-23 10:26 America/Toronto - planner contract and production job signal
 

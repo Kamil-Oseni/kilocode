@@ -9,6 +9,12 @@ import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { FSUtil } from "@opencode-ai/core/fs-util" // kilocode_change - durable Chief branch test
+import { Git } from "@/git" // kilocode_change - durable Chief branch test
+import { Storage } from "@/storage/storage" // kilocode_change - durable Chief branch test
+import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - durable Chief branch test
+import { RayaGoal } from "@/kilocode/goal" // kilocode_change - durable Chief branch test
+import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - rejected branch releases its child lease
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2" // kilocode_change
@@ -65,9 +71,10 @@ const provider = ProviderTest.fake({
 })
 // kilocode_change end
 
-const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+const layer = (flags: Partial<RuntimeFlags.Info> = {}, durable = false) => // kilocode_change - optional durable branch fixtures
   LayerNode.compile(
     LayerNode.group([
+      ...(durable ? [Storage.node, FSUtil.node, Git.node] : []), // kilocode_change - only branch tests need durable storage
       Agent.node,
       BackgroundJob.node,
       EventV2Bridge.node,
@@ -96,6 +103,199 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const it = testEffect(layer())
 const background = it // kilocode_change - background subagents are enabled by default
 const disabled = testEffect(layer({ experimentalBackgroundSubagents: false })) // kilocode_change
+
+const planned = testEffect(layer({}, true)) // kilocode_change - saved Auto Chief branch admission
+// kilocode_change start - remove only this test's durable records
+const clean = (storage: Storage.Interface, id: SessionID) =>
+  Effect.addFinalizer(() =>
+    Effect.all([storage.remove(["raya", "goal", id]), storage.remove(["raya", "chief", "branches", id])]).pipe(
+      Effect.ignore,
+    ),
+  )
+// kilocode_change end
+
+// kilocode_change start - a saved branch, rather than the caller's task fields, owns its child execution
+describe("tool.task planned Auto Chief branch", () => {
+  planned.instance(
+    "runs the exact saved brief once and refuses missing, changed, or duplicate branch calls",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const { chat, assistant } = yield* seed()
+        yield* clean(storage, chat.id)
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(chat.id, "Review the product", assistant.parentID)
+        if (!goal.intent) throw new Error("expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
+        const branches = ChiefBranches.make(storage)
+        yield* branches.start({
+          goalID: chat.id,
+          goalCreatedAt: goal.createdAt,
+          requestID: assistant.parentID,
+          branches: [
+            {
+              id: "safety",
+              name: "Safety audit",
+              specialist: "researcher",
+              access: "read",
+              brief: { objective: "Audit authorization", constraints: ["Do not edit"], expectedReturn: "Findings" },
+            },
+            {
+              id: "design",
+              name: "UX audit",
+              specialist: "designer",
+              access: "read",
+              brief: { objective: "Audit navigation", constraints: ["Do not edit"], expectedReturn: "Findings" },
+            },
+          ],
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: "Review the entire product", [RayaChief.phaseKey]: "task" },
+        })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const seen: SessionPrompt.PromptInput[] = []
+        const ctx = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          callID: "call-safety",
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => seen.push(input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const base = { description: "Ignored caller label", branch_id: "safety" }
+        const current = yield* goals.get(chat.id)
+        if (!current?.dispatch) throw new Error("expected bound user request")
+        yield* storage.replace(["raya", "goal", chat.id], {
+          ...current,
+          dispatch: { ...current.dispatch, messageID: MessageID.ascending() },
+        })
+        expect(Exit.isFailure(yield* def.execute(base, ctx).pipe(Effect.exit))).toBe(true)
+        yield* storage.replace(["raya", "goal", chat.id], current)
+        expect(Exit.isFailure(yield* def.execute({ description: "Missing" }, ctx).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* def.execute({ ...base, subagent_type: "designer" }, ctx).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect(Exit.isFailure(yield* def.execute({ ...base, access: "edit" }, ctx).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* def.execute({ ...base, prompt: "Different task" }, ctx).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect(seen).toHaveLength(0)
+        expect(yield* sessions.children(chat.id)).toHaveLength(0)
+
+        const result = yield* def.execute(base, ctx)
+        expect(result.metadata.selectedAgent).toBe("researcher")
+        expect(seen).toHaveLength(1)
+        expect(seen[0]?.agent).toBe("researcher")
+        expect(seen[0]?.parts[0]).toMatchObject({ type: "text", text: expect.stringContaining("Audit authorization") })
+        expect(seen[0]?.parts[0]).toMatchObject({
+          type: "text",
+          text: expect.not.stringContaining("Ignored caller label"),
+        })
+        const branch = (yield* branches.read(chat.id))?.branches.find((item) => item.id === "safety")
+        expect(branch).toMatchObject({ state: "admitted", callID: "call-safety", sessionID: result.metadata.sessionId })
+        const child = yield* sessions.get(result.metadata.sessionId)
+        expect(TaskAuthority.read(child.metadata)).toBe("read")
+        expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
+
+        expect(Exit.isFailure(yield* def.execute(base, ctx).pipe(Effect.exit))).toBe(true)
+        expect(seen).toHaveLength(1)
+        expect(yield* sessions.children(chat.id)).toHaveLength(1)
+      }),
+    20_000,
+  )
+
+  planned.instance(
+    "releases the child lease if admission loses a race, without prompting the orphan",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const { chat, assistant } = yield* seed()
+        yield* clean(storage, chat.id)
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(
+          chat.id,
+          "Review the product",
+          assistant.parentID,
+          undefined,
+          undefined,
+          undefined,
+          { concurrentChildren: 1 },
+        )
+        if (!goal.intent) throw new Error("expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
+        const branches = ChiefBranches.make(storage)
+        yield* branches.start({
+          goalID: chat.id,
+          goalCreatedAt: goal.createdAt,
+          requestID: assistant.parentID,
+          branches: [
+            {
+              id: "safety",
+              name: "Safety audit",
+              specialist: "researcher",
+              access: "read",
+              brief: { objective: "Audit authorization", constraints: [], expectedReturn: "Findings" },
+            },
+            {
+              id: "design",
+              name: "UX audit",
+              specialist: "designer",
+              access: "read",
+              brief: { objective: "Audit navigation", constraints: [], expectedReturn: "Findings" },
+            },
+          ],
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: "Review the entire product", [RayaChief.phaseKey]: "task" },
+        })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let prompts = 0
+        const exit = yield* def
+          .execute(
+            { description: "Safety audit", branch_id: "safety" },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              callID: "call-safety",
+              agent: "auto",
+              abort: new AbortController().signal,
+              extra: { promptOps: stubOps({ onPrompt: () => prompts++ }) },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () =>
+                branches
+                  .admit({
+                    goalID: chat.id,
+                    goalCreatedAt: goal.createdAt,
+                    branchID: "safety",
+                    callID: "competing-call",
+                    sessionID: SessionID.make(`ses_competing_${crypto.randomUUID()}`),
+                    access: "read",
+                  })
+                  .pipe(Effect.asVoid, Effect.orDie),
+            },
+          )
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(prompts).toBe(0)
+        expect(yield* sessions.children(chat.id)).toHaveLength(1) // child allocation precedes durable admission
+        const children = yield* GoalChildren.make({ storage, sessions })
+        const lease = yield* children.claim(chat.id)
+        yield* lease.release
+      }),
+    20_000,
+  )
+})
+// kilocode_change end
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void

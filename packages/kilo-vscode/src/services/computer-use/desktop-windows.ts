@@ -2,8 +2,10 @@ import { execFile, type ChildProcess } from "node:child_process"
 import {
   CAPTURE,
   type DesktopAction,
+  type DesktopControl,
   type DesktopDriver,
   type DesktopFrame,
+  type DesktopSemantics,
   type DesktopWindow,
 } from "./desktop-session"
 
@@ -426,6 +428,82 @@ function Get-RayaWindow {
 
 const observe = `${setup}
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+function Get-RayaControls($window) {
+  $controls = @()
+  $root = [Windows.Automation.AutomationElement]::FromHandle($window.Handle)
+  if (-not $root) { throw "Windows UI Automation could not inspect the foreground window" }
+  $queue = [Collections.Generic.Queue[object]]::new()
+  $queue.Enqueue($root)
+  $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
+  $visited = 0
+  while ($queue.Count -gt 0 -and $visited -lt 1024 -and $controls.Count -lt 256) {
+    $item = $queue.Dequeue()
+    $visited += 1
+    $child = $walker.GetFirstChild($item)
+    while ($child) {
+      $queue.Enqueue($child)
+      $child = $walker.GetNextSibling($child)
+    }
+    try {
+      $current = $item.Current
+      if ($current.IsOffscreen) { continue }
+      $bounds = $current.BoundingRectangle
+      if ([double]::IsNaN($bounds.X) -or [double]::IsNaN($bounds.Y) -or [double]::IsNaN($bounds.Width) -or [double]::IsNaN($bounds.Height)) { continue }
+      $x = [int][Math]::Round($bounds.X)
+      $y = [int][Math]::Round($bounds.Y)
+      $width = [int][Math]::Round($bounds.Width)
+      $height = [int][Math]::Round($bounds.Height)
+      if ($width -le 0 -or $height -le 0) { continue }
+      if ($x -ge $window.Rect.Right -or $y -ge $window.Rect.Bottom -or $x + $width -le $window.Rect.Left -or $y + $height -le $window.Rect.Top) { continue }
+      $name = ([string]$current.Name).Trim()
+      if ($name.Length -gt 512) { $name = $name.Substring(0, 512) }
+      $automationID = ([string]$current.AutomationId).Trim()
+      if ($automationID.Length -gt 200) { $automationID = $automationID.Substring(0, 200) }
+      $role = ([string]$current.ControlType.ProgrammaticName) -replace '^ControlType\\.', ''
+      if (-not $role -or $role.Length -gt 100) { continue }
+      $runtime = @($item.GetRuntimeId())
+      $controlID = if ($runtime.Count -gt 0) { $runtime -join '.' } else { "control:$visited" }
+      if ($controlID.Length -gt 200) { continue }
+      $patterns = @($item.GetSupportedPatterns() | ForEach-Object { [string]$_.ProgrammaticName })
+      $actions = @()
+      if ($patterns -like 'InvokePattern*') { $actions += 'invoke' }
+      if ($patterns -like 'SelectionItemPattern*') { $actions += 'select' }
+      if ($patterns -like 'TogglePattern*') { $actions += 'toggle' }
+      if ($patterns -like 'ExpandCollapsePattern*') { $actions += 'expand_collapse' }
+      if ($patterns -like 'ValuePattern*') { $actions += 'value' }
+      if ($patterns -like 'ScrollPattern*' -or $patterns -like 'ScrollItemPattern*') { $actions += 'scroll' }
+      $selected = $null
+      $selection = $null
+      if ($item.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
+        $selected = [bool]$selection.Current.IsSelected
+      }
+      $controls += [pscustomobject]@{
+        controlID = $controlID
+        role = $role
+        name = if ($name) { $name } else { $null }
+        automationID = if ($automationID) { $automationID } else { $null }
+        x = $x
+        y = $y
+        width = $width
+        height = $height
+        enabled = [bool]$current.IsEnabled
+        focused = [bool]$current.HasKeyboardFocus
+        selected = $selected
+        actions = @($actions)
+      }
+    } catch {
+      continue
+    }
+  }
+  [pscustomobject]@{
+    source = 'windows_ui_automation'
+    status = 'available'
+    controls = @($controls)
+    truncated = $queue.Count -gt 0
+  }
+}
 function Test-RayaImage($stream) {
   if ($stream.Length -le 0) { throw "Desktop capture encoder returned no image" }
   $stream.Position = 0
@@ -482,6 +560,26 @@ try {
   }
   $data = [Convert]::ToBase64String($stream.GetBuffer(), 0, [int]$stream.Length)
   $preparation.Stop()
+  $semanticsTimer = [Diagnostics.Stopwatch]::StartNew()
+  try {
+    $semanticOutput = @(Get-RayaControls $window)
+    $semantics = $semanticOutput[-1]
+    if (-not $semantics -or $semantics.source -ne 'windows_ui_automation') {
+      throw "Windows UI Automation returned no bounded observation"
+    }
+  } catch {
+    $semantics = [pscustomobject]@{
+      source = 'windows_ui_automation'
+      status = 'unavailable'
+      controls = @()
+      truncated = $false
+    }
+  }
+  $semanticsTimer.Stop()
+  $after = Get-RayaWindow
+  if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
+    throw "Foreground window changed while correlating visual and semantic observations"
+  }
   [pscustomobject]@{
     windowID = $window.WindowID
     location = $window.Location
@@ -489,9 +587,11 @@ try {
     height = $height
     mime = $mime
     data = $data
+    semantics = $semantics
     acquisitionMs = $acquisition.Elapsed.TotalMilliseconds
     preparationMs = $preparation.Elapsed.TotalMilliseconds
-  } | ConvertTo-Json -Compress
+    semanticsMs = $semanticsTimer.Elapsed.TotalMilliseconds
+  } | ConvertTo-Json -Depth 8 -Compress
 } finally {
   $stream.Dispose()
   $graphics.Dispose()
@@ -660,6 +760,162 @@ function object(value: string) {
   return parsed as Record<string, unknown>
 }
 
+const semanticActions = new Set<DesktopControl["actions"][number]>([
+  "invoke",
+  "select",
+  "toggle",
+  "expand_collapse",
+  "value",
+  "scroll",
+])
+
+function optional(value: unknown, limit: number): value is string | null | undefined {
+  if (value === null || value === undefined) return true
+  return typeof value === "string" && value.length <= limit
+}
+
+function required(value: unknown, limit: number, label: string): string {
+  if (typeof value !== "string" || !value || value.length > limit)
+    throw new Error(`Windows UI Automation control ${label} is incomplete`)
+  return value
+}
+
+function bounds(input: Record<string, unknown>) {
+  if (![input.x, input.y, input.width, input.height].every(Number.isInteger))
+    throw new Error("Windows UI Automation control bounds are invalid")
+  if ((input.width as number) <= 0 || (input.height as number) <= 0)
+    throw new Error("Windows UI Automation control bounds are empty")
+  return {
+    x: input.x as number,
+    y: input.y as number,
+    width: input.width as number,
+    height: input.height as number,
+  }
+}
+
+function state(input: Record<string, unknown>) {
+  if (typeof input.enabled !== "boolean" || typeof input.focused !== "boolean")
+    throw new Error("Windows UI Automation control state is incomplete")
+  if (input.selected !== null && input.selected !== undefined && typeof input.selected !== "boolean")
+    throw new Error("Windows UI Automation selection state is invalid")
+  return {
+    enabled: input.enabled,
+    focused: input.focused,
+    ...(typeof input.selected === "boolean" ? { selected: input.selected } : {}),
+  }
+}
+
+function actions(value: unknown): DesktopControl["actions"] {
+  if (!Array.isArray(value) || value.length > semanticActions.size)
+    throw new Error("Windows UI Automation control actions are incomplete")
+  if (
+    !value.every((item) => typeof item === "string" && semanticActions.has(item as DesktopControl["actions"][number]))
+  )
+    throw new Error("Windows UI Automation control actions are invalid")
+  return value as DesktopControl["actions"]
+}
+
+function control(value: unknown, index: number): DesktopControl {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error(
+      `Windows UI Automation control ${index} is invalid (${value === null ? "null" : Array.isArray(value) ? "array" : typeof value})`,
+    )
+  const input = value as Record<string, unknown>
+  const controlID = required(input.controlID, 200, "identity")
+  const role = required(input.role, 100, "role")
+  if (!optional(input.name, 512) || !optional(input.automationID, 200))
+    throw new Error("Windows UI Automation control name is invalid")
+  return {
+    controlID,
+    role,
+    ...(typeof input.name === "string" && input.name ? { name: input.name } : {}),
+    ...(typeof input.automationID === "string" && input.automationID ? { automationID: input.automationID } : {}),
+    ...bounds(input),
+    ...state(input),
+    actions: actions(input.actions),
+  }
+}
+
+function semantics(value: unknown): DesktopSemantics | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== "object") throw new Error("Windows UI Automation observation is invalid")
+  const input = value as Record<string, unknown>
+  if (
+    input.source !== "windows_ui_automation" ||
+    (input.status !== "available" && input.status !== "unavailable") ||
+    typeof input.truncated !== "boolean" ||
+    !Array.isArray(input.controls) ||
+    input.controls.length > 256
+  )
+    throw new Error("Windows UI Automation observation is incomplete")
+  const controls = input.controls.map(control)
+  if (input.status === "unavailable" && (controls.length > 0 || input.truncated))
+    throw new Error("Unavailable Windows UI Automation observation contains controls")
+  return { source: input.source, status: input.status, controls, truncated: input.truncated }
+}
+
+function image(
+  input: Record<string, unknown>,
+): Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> {
+  if (typeof input.windowID !== "string" || typeof input.location !== "string")
+    throw new Error("Windows desktop observation identity is incomplete")
+  if (typeof input.width !== "number" || typeof input.height !== "number")
+    throw new Error("Windows desktop observation dimensions are incomplete")
+  if (!Number.isInteger(input.width) || !Number.isInteger(input.height))
+    throw new Error("Windows desktop observation dimensions are invalid")
+  if (input.width <= 0 || input.height <= 0 || input.width > CAPTURE.edge || input.height > CAPTURE.edge)
+    throw new Error("Windows desktop observation dimensions exceed the safe capture bounds")
+  if (input.width * input.height > CAPTURE.pixels)
+    throw new Error("Windows desktop observation pixel count exceeds the safe capture bounds")
+  if (input.mime !== "image/png" && input.mime !== "image/jpeg")
+    throw new Error("Windows desktop observation image type is invalid")
+  if (typeof input.data !== "string" || Buffer.byteLength(input.data, "ascii") > CAPTURE.data)
+    throw new Error("Windows desktop observation image is incomplete")
+  return {
+    windowID: input.windowID,
+    location: input.location,
+    width: input.width,
+    height: input.height,
+    mime: input.mime,
+    data: input.data,
+  }
+}
+
+function timing(input: Record<string, unknown>, totalMs: number, semantic: DesktopSemantics | undefined) {
+  if (typeof input.acquisitionMs !== "number" || typeof input.preparationMs !== "number")
+    throw new Error("Windows desktop observation timing is incomplete")
+  if (semantic !== undefined && typeof input.semanticsMs !== "number")
+    throw new Error("Windows desktop semantic timing is incomplete")
+  if (semantic === undefined && input.semanticsMs !== undefined)
+    throw new Error("Windows desktop semantic timing has no observation")
+  const values = [
+    input.acquisitionMs,
+    input.preparationMs,
+    ...(typeof input.semanticsMs === "number" ? [input.semanticsMs] : []),
+    totalMs,
+  ]
+  if (!values.every((value) => Number.isFinite(value) && value >= 0 && value <= 120_000))
+    throw new Error("Windows desktop observation timing is invalid")
+  const measured =
+    input.acquisitionMs + input.preparationMs + (typeof input.semanticsMs === "number" ? input.semanticsMs : 0)
+  if (totalMs < measured) throw new Error("Windows desktop observation timing is inconsistent")
+  return {
+    acquisitionMs: input.acquisitionMs,
+    preparationMs: input.preparationMs,
+    ...(typeof input.semanticsMs === "number" ? { semanticsMs: input.semanticsMs } : {}),
+    totalMs,
+  }
+}
+
+function frame(input: Record<string, unknown>, totalMs: number): DesktopFrame {
+  const semantic = semantics(input.semantics)
+  return {
+    ...image(input),
+    ...(semantic ? { semantics: semantic } : {}),
+    timing: timing(input, totalMs, semantic),
+  }
+}
+
 export class WindowsDesktopDriver implements DesktopDriver {
   private readonly runner: Runner
 
@@ -671,39 +927,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   async observe(): Promise<DesktopFrame> {
     const started = performance.now()
     const result = object(await this.runner.run(observe))
-    const totalMs = performance.now() - started
-    if (
-      typeof result.windowID !== "string" ||
-      typeof result.location !== "string" ||
-      typeof result.width !== "number" ||
-      typeof result.height !== "number" ||
-      !Number.isInteger(result.width) ||
-      !Number.isInteger(result.height) ||
-      result.width <= 0 ||
-      result.height <= 0 ||
-      result.width > CAPTURE.edge ||
-      result.height > CAPTURE.edge ||
-      result.width * result.height > CAPTURE.pixels ||
-      (result.mime !== "image/png" && result.mime !== "image/jpeg") ||
-      typeof result.data !== "string" ||
-      Buffer.byteLength(result.data, "ascii") > CAPTURE.data ||
-      typeof result.acquisitionMs !== "number" ||
-      typeof result.preparationMs !== "number" ||
-      ![result.acquisitionMs, result.preparationMs, totalMs].every(
-        (value) => Number.isFinite(value) && value >= 0 && value <= 120_000,
-      ) ||
-      totalMs < result.acquisitionMs + result.preparationMs
-    )
-      throw new Error("Windows desktop observation is incomplete")
-    return {
-      windowID: result.windowID,
-      location: result.location,
-      width: result.width,
-      height: result.height,
-      mime: result.mime,
-      data: result.data,
-      timing: { acquisitionMs: result.acquisitionMs, preparationMs: result.preparationMs, totalMs },
-    }
+    return frame(result, performance.now() - started)
   }
 
   async windows(): Promise<DesktopWindow[]> {

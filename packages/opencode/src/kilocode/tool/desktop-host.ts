@@ -51,9 +51,7 @@ function approve(
       ctx.abort,
     )
     const auth =
-      result.operation === "authorize"
-        ? result
-        : yield* Effect.die(new Error("Desktop host returned the wrong result"))
+      result.operation === "authorize" ? result : yield* Effect.die(new Error("Desktop host returned the wrong result"))
     if (auth.decision === "deny") yield* Effect.die(new Error(`Desktop control denied: ${auth.reason}`))
     if (auth.decision === "ask")
       yield* ctx.ask({
@@ -92,6 +90,7 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
             observation: result.observation,
             receipt: result.receipt,
             timing: result.timing,
+            ...(result.semantics ? { semantics: result.semantics } : {}),
           }
           return {
             title: "Desktop observation",
@@ -236,6 +235,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
                   height: frame.height,
                   observation: frame.observation,
                   timing: frame.timing,
+                  ...(frame.semantics ? { semantics: frame.semantics } : {}),
                 })),
                 receipt: result.receipt,
               },

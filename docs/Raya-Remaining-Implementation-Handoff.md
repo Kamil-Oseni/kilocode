@@ -6,6 +6,12 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 23:49 America/Toronto - preserve correlated UI Automation observations
+
+Foreground frame results now optionally carry `semantics` from Windows UI Automation and `timing.semanticsMs`. Preserve the bounds: 256 returned controls after at most 1,024 visited Control View nodes. Controls include runtime identity, role/name/automation ID, physical bounds, enabled/focused/selected state and only the fixed supported-action vocabulary. Do not add text values, secrets or clipboard data to this path. An unavailable tree must be explicit and empty; malformed or over-capacity output fails before observation issuance.
+
+The driver rechecks exact foreground window identity after both visual and semantic collection. A real host probe found 91 non-truncated controls, but measured 804.6353 ms for UIA and 3,786.1049 ms total, confirming that per-frame PowerShell startup must be replaced. Focused extension/CLI suites, both typechecks, the production extension compile/bundle, ESLint, Knip and affected guards pass. Continue with a persistent cancellable native worker, WGC/DXGI comparison and changed-frame transport. Then retain each semantic snapshot behind its exact observation so local pre-dispatch policy can verify coordinate targets and their sensitive category. Do not install or close `FUT-CU-01` from this source checkpoint.
+
 ## ChatGPT 2026-09-22 23:18 America/Toronto - preserve the Windows-wide pause listener
 
 `WindowsPauseHotkey` owns a native `RegisterHotKey` loop for Ctrl+Alt+Shift+Escape only while a Computer Use grant exists. Every complete `pause` event uses `DesktopAutomationService.pause`, so the lease event cancels capture/queued input and the session takes control back. Unexpected registration/process loss invokes that same fail-closed path once. Stop and disposal kill the host; disposal exits must not trigger a false loss pause.

@@ -82201,12 +82201,94 @@
                     "type": "number",
                     "minimum": 0
                   },
+                  "semanticsMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
                   "totalMs": {
                     "type": "number",
                     "minimum": 0
                   }
                 },
                 "required": ["acquisitionMs", "preparationMs", "totalMs"],
+                "additionalProperties": false
+              },
+              "semantics": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": ["windows_ui_automation"]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["available", "unavailable"]
+                  },
+                  "controls": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "controlID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "role": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 512
+                        },
+                        "automationID": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "x": {
+                          "type": "integer"
+                        },
+                        "y": {
+                          "type": "integer"
+                        },
+                        "width": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "height": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "focused": {
+                          "type": "boolean"
+                        },
+                        "selected": {
+                          "type": "boolean"
+                        },
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": ["invoke", "select", "toggle", "expand_collapse", "value", "scroll"]
+                          },
+                          "maxItems": 6
+                        }
+                      },
+                      "required": ["controlID", "role", "x", "y", "width", "height", "enabled", "focused", "actions"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 256
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["source", "status", "controls", "truncated"],
                 "additionalProperties": false
               },
               "observation": {
@@ -82331,12 +82413,104 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "semanticsMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "totalMs": {
                           "type": "number",
                           "minimum": 0
                         }
                       },
                       "required": ["acquisitionMs", "preparationMs", "totalMs"],
+                      "additionalProperties": false
+                    },
+                    "semantics": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "string",
+                          "enum": ["windows_ui_automation"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["available", "unavailable"]
+                        },
+                        "controls": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "controlID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "role": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
+                              },
+                              "name": {
+                                "type": "string",
+                                "maxLength": 512
+                              },
+                              "automationID": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "width": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              },
+                              "height": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "focused": {
+                                "type": "boolean"
+                              },
+                              "selected": {
+                                "type": "boolean"
+                              },
+                              "actions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": ["invoke", "select", "toggle", "expand_collapse", "value", "scroll"]
+                                },
+                                "maxItems": 6
+                              }
+                            },
+                            "required": [
+                              "controlID",
+                              "role",
+                              "x",
+                              "y",
+                              "width",
+                              "height",
+                              "enabled",
+                              "focused",
+                              "actions"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 256
+                        },
+                        "truncated": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["source", "status", "controls", "truncated"],
                       "additionalProperties": false
                     },
                     "observation": {

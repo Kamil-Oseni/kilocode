@@ -31,6 +31,28 @@ describe("Windows native desktop driver", () => {
         data: "png",
         acquisitionMs: 0,
         preparationMs: 0,
+        semanticsMs: 0,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          truncated: false,
+          controls: [
+            {
+              controlID: "42.7",
+              role: "Button",
+              name: "Save",
+              automationID: "save",
+              x: 100,
+              y: 80,
+              width: 64,
+              height: 28,
+              enabled: true,
+              focused: false,
+              selected: null,
+              actions: ["invoke"],
+            },
+          ],
+        },
       }),
       JSON.stringify({ windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" }),
     ])
@@ -42,7 +64,13 @@ describe("Windows native desktop driver", () => {
       width: 1280,
       height: 720,
       data: "png",
-      timing: { acquisitionMs: 0, preparationMs: 0 },
+      timing: { acquisitionMs: 0, preparationMs: 0, semanticsMs: 0 },
+      semantics: {
+        source: "windows_ui_automation",
+        status: "available",
+        truncated: false,
+        controls: [expect.objectContaining({ controlID: "42.7", role: "Button", name: "Save", actions: ["invoke"] })],
+      },
     })
     expect(frame.timing.totalMs).toBeGreaterThanOrEqual(0)
     expect(await driver.current()).toEqual({
@@ -67,7 +95,16 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("$stream.GetBuffer(), 0, [int]$stream.Length")
     expect(test.scripts[0]).toContain("$acquisition = [Diagnostics.Stopwatch]::StartNew()")
     expect(test.scripts[0]).toContain("$preparation = [Diagnostics.Stopwatch]::StartNew()")
+    expect(test.scripts[0]).toContain("$semanticsTimer = [Diagnostics.Stopwatch]::StartNew()")
     expect(test.scripts[0]).toContain("acquisitionMs = $acquisition.Elapsed.TotalMilliseconds")
+    expect(test.scripts[0]).toContain("$semanticOutput = @(Get-RayaControls $window)")
+    expect(test.scripts[0]).toContain("$semantics = $semanticOutput[-1]")
+    expect(test.scripts[0]).toContain("ConvertTo-Json -Depth 8 -Compress")
+    expect(test.scripts[0]).toContain("[Windows.Automation.AutomationElement]::FromHandle($window.Handle)")
+    expect(test.scripts[0]).toContain("$visited -lt 1024 -and $controls.Count -lt 256")
+    expect(test.scripts[0]).toContain("controls = @($controls)")
+    expect(test.scripts[0]).toContain("actions = @($actions)")
+    expect(test.scripts[0]).toContain("Foreground window changed while correlating visual and semantic observations")
     expect(test.scripts[0]).not.toContain("$stream.ToArray()")
     expect(test.scripts[0]).toContain("width = $width")
     expect(test.scripts[0]).toContain("height = $height")
@@ -285,7 +322,85 @@ describe("Windows native desktop driver", () => {
   it("rejects malformed native output", async () => {
     const test = harness([JSON.stringify({ windowID: "0x123" })])
     const driver = new WindowsDesktopDriver(test.runner)
-    await expect(driver.observe()).rejects.toThrow(/observation is incomplete/i)
+    await expect(driver.observe()).rejects.toThrow(/identity is incomplete/i)
+  })
+
+  it("rejects malformed or over-capacity UI Automation output", async () => {
+    const base = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,1280,720",
+      width: 1280,
+      height: 720,
+      mime: "image/png",
+      data: "png",
+      acquisitionMs: 0,
+      preparationMs: 0,
+      semanticsMs: 0,
+    }
+    const test = harness([
+      JSON.stringify({
+        ...base,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          truncated: false,
+          controls: [{ controlID: "x", role: "Button", width: -1 }],
+        },
+      }),
+      JSON.stringify({
+        ...base,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          truncated: true,
+          controls: Array.from({ length: 257 }, (_, index) => ({
+            controlID: String(index),
+            role: "Button",
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            enabled: true,
+            focused: false,
+            actions: [],
+          })),
+        },
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    await expect(driver.observe()).rejects.toThrow(/UI Automation control bounds are invalid/i)
+    await expect(driver.observe()).rejects.toThrow(/UI Automation observation is incomplete/i)
+  })
+
+  it("accepts explicit unavailable UI Automation without inventing controls", async () => {
+    const test = harness([
+      JSON.stringify({
+        windowID: "0x123",
+        location: "pid:5;title:Editor;bounds:0,0,1280,720",
+        width: 1280,
+        height: 720,
+        mime: "image/png",
+        data: "png",
+        acquisitionMs: 0,
+        preparationMs: 0,
+        semanticsMs: 0,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "unavailable",
+          truncated: false,
+          controls: [],
+        },
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    expect((await driver.observe()).semantics).toEqual({
+      source: "windows_ui_automation",
+      status: "unavailable",
+      truncated: false,
+      controls: [],
+    })
   })
 
   it("rejects native observations outside the bounded capture envelope", async () => {
@@ -313,8 +428,8 @@ describe("Windows native desktop driver", () => {
     ])
     const driver = new WindowsDesktopDriver(test.runner)
 
-    await expect(driver.observe()).rejects.toThrow(/observation is incomplete/i)
-    await expect(driver.observe()).rejects.toThrow(/observation is incomplete/i)
+    await expect(driver.observe()).rejects.toThrow(/dimensions exceed the safe capture bounds/i)
+    await expect(driver.observe()).rejects.toThrow(/pixel count exceeds the safe capture bounds/i)
   })
 
   it("accepts the bounded JPEG fallback", async () => {

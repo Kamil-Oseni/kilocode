@@ -245,6 +245,7 @@ export class DesktopBridge {
       mime: frame.mime,
       data: frame.data,
       timing: frame.timing,
+      ...(frame.semantics ? { semantics: frame.semantics } : {}),
       observation: frame.observation,
       receipt: {
         version: 1,

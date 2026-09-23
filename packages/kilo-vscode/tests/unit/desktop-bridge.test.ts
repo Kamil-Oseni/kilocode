@@ -38,7 +38,26 @@ function setup(
       height: 10,
       mime: "image/png",
       data: "cG5n",
-      timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
+      semantics: {
+        source: "windows_ui_automation",
+        status: "available",
+        controls: [
+          {
+            controlID: "42.7",
+            role: "Button",
+            name: "Save",
+            x: 4,
+            y: 5,
+            width: 10,
+            height: 6,
+            enabled: true,
+            focused: false,
+            actions: ["invoke"],
+          },
+        ],
+        truncated: false,
+      },
+      timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 3, totalMs: 20 },
     }),
     windows: async () => [
       {
@@ -235,7 +254,13 @@ describe("desktop observation bridge", () => {
         height: 10,
         mime: "image/png",
         data: "cG5n",
-        timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
+        timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 3, totalMs: 20 },
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          controls: [expect.objectContaining({ controlID: "42.7", role: "Button", name: "Save" })],
+          truncated: false,
+        },
         observation: { target: { surface: "desktop", windowID: "window_1", location: "process|title|bounds" } },
         receipt: { requestID: request.id, effect: "observe", outcome: "confirmed" },
       },

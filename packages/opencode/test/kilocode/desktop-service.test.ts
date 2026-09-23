@@ -46,7 +46,26 @@ it.instance(
         height: 8,
         mime: "image/png" as const,
         data: "cG5n",
-        timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
+        timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 3, totalMs: 20 },
+        semantics: {
+          source: "windows_ui_automation" as const,
+          status: "available" as const,
+          controls: [
+            {
+              controlID: "42.7",
+              role: "Button",
+              name: "Save",
+              x: 100,
+              y: 80,
+              width: 64,
+              height: 28,
+              enabled: true,
+              focused: false,
+              actions: ["invoke" as const],
+            },
+          ],
+          truncated: false,
+        },
         observation,
         receipt,
       }

@@ -187,7 +187,32 @@ export const AuthorizeResult = Schema.Struct({
 export const Timing = Schema.Struct({
   acquisitionMs: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
   preparationMs: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  semanticsMs: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))),
   totalMs: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+})
+
+export const SemanticControl = Schema.Struct({
+  controlID: Identity,
+  role: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  name: Schema.optional(Schema.String.check(Schema.isMaxLength(512))),
+  automationID: Schema.optional(Schema.String.check(Schema.isMaxLength(200))),
+  x: Schema.Number.check(Schema.isInt()),
+  y: Schema.Number.check(Schema.isInt()),
+  width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  enabled: Schema.Boolean,
+  focused: Schema.Boolean,
+  selected: Schema.optional(Schema.Boolean),
+  actions: Schema.Array(Schema.Literals(["invoke", "select", "toggle", "expand_collapse", "value", "scroll"])).check(
+    Schema.isMaxLength(6),
+  ),
+})
+
+export const Semantics = Schema.Struct({
+  source: Schema.Literal("windows_ui_automation"),
+  status: Schema.Literals(["available", "unavailable"]),
+  controls: Schema.Array(SemanticControl).check(Schema.isMaxLength(256)),
+  truncated: Schema.Boolean,
 })
 
 export const ObserveResult = Schema.Struct({
@@ -197,6 +222,7 @@ export const ObserveResult = Schema.Struct({
   mime: Schema.Literals(["image/png", "image/jpeg"]),
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
   timing: Timing,
+  semantics: Schema.optional(Semantics),
   observation: Observation,
   receipt: Receipt,
 })
@@ -226,6 +252,7 @@ export const WatchFrame = Schema.Struct({
   mime: Schema.Literals(["image/png", "image/jpeg"]),
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
   timing: Timing,
+  semantics: Schema.optional(Semantics),
   observation: Observation,
 })
 

@@ -5818,7 +5818,27 @@ export type DesktopResult =
       timing: {
         acquisitionMs: number
         preparationMs: number
+        semanticsMs?: number
         totalMs: number
+      }
+      semantics?: {
+        source: "windows_ui_automation"
+        status: "available" | "unavailable"
+        controls: Array<{
+          controlID: string
+          role: string
+          name?: string
+          automationID?: string
+          x: number
+          y: number
+          width: number
+          height: number
+          enabled: boolean
+          focused: boolean
+          selected?: boolean
+          actions: Array<"invoke" | "select" | "toggle" | "expand_collapse" | "value" | "scroll">
+        }>
+        truncated: boolean
       }
       observation: ComputerUseObservation
       receipt: ComputerUseReceipt
@@ -5849,7 +5869,27 @@ export type DesktopResult =
         timing: {
           acquisitionMs: number
           preparationMs: number
+          semanticsMs?: number
           totalMs: number
+        }
+        semantics?: {
+          source: "windows_ui_automation"
+          status: "available" | "unavailable"
+          controls: Array<{
+            controlID: string
+            role: string
+            name?: string
+            automationID?: string
+            x: number
+            y: number
+            width: number
+            height: number
+            enabled: boolean
+            focused: boolean
+            selected?: boolean
+            actions: Array<"invoke" | "select" | "toggle" | "expand_collapse" | "value" | "scroll">
+          }>
+          truncated: boolean
         }
         observation: ComputerUseObservation
       }>

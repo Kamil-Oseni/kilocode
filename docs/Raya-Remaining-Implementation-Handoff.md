@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 14:17 America/Toronto - saved synthesis before Chief completion
+
+Chief branch ledger records one bounded conclusion per reviewed branch plus a combined summary. The same-lock completion gate now requires that durable synthesis with exact branch coverage; version-one records without synthesis remain decodable but unfinished. `chief_synthesize` is implemented and unregistered. Review and synthesis refuse a paused goal under the mutation lock; terminal child settlement remains possible. Ledger and model-facing synthesis tests pass, including a changed-request refusal. Next cover concurrent cancellation/unknown, parent stop and installed restart before registering the tools or enabling automatic fanout.
+
 ## ChatGPT 2026-09-23 14:12 America/Toronto - Chief review phase corrected
 
 Planned branch calls keep Chief in the task phase so later saved branches remain launchable. `chief_review` now accepts inspected, completed branch evidence in that active phase as well as the goal phase; route and done remain refused. Its active goal/request/child-lineage/evidence checks are unchanged. Review and inspection tests pass. The tools are still unregistered. Next build an all-branch synthesis receipt and completion gate, then settle concurrent cancellation/unknown and restart cases before product activation.

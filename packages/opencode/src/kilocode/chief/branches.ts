@@ -46,6 +46,13 @@ export namespace ChiefBranches {
     requestID: Schema.String,
     createdAt: Schema.Number,
     branches: Schema.Array(Branch).check(Schema.isMinLength(2), Schema.isMaxLength(3)),
+    synthesis: Schema.optional(
+      Schema.Struct({
+        summary: Schema.String,
+        findings: Schema.Array(Schema.Struct({ branchID: Schema.String, conclusion: Schema.String })),
+        at: Schema.Number,
+      }),
+    ),
   })
   export type Record = typeof Record.Type
 
@@ -264,6 +271,7 @@ export namespace ChiefBranches {
         storage,
         input.goalID,
         Effect.gen(function* () {
+          yield* active(input.goalID, input.goalCreatedAt)
           const old = yield* read(input.goalID)
           if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
           const item = old.branches.find((entry) => entry.id === input.branchID)
@@ -296,6 +304,50 @@ export namespace ChiefBranches {
       )
     })
 
+    const synthesize = Effect.fn("ChiefBranches.synthesize")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      summary: string
+      findings: readonly { branchID: string; conclusion: string }[]
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          yield* active(input.goalID, input.goalCreatedAt)
+          const old = yield* read(input.goalID)
+          if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
+          const summary = input.summary.trim()
+          if (!summary || summary.length > 4_000) throw new Error("Auto Chief synthesis needs a bounded summary")
+          if (
+            input.findings.length !== old.branches.length ||
+            new Set(input.findings.map((item) => item.branchID)).size !== old.branches.length ||
+            input.findings.some((item) => !old.branches.some((branch) => branch.id === item.branchID))
+          )
+            throw new Error("Auto Chief synthesis must cover every planned branch exactly once")
+          if (old.branches.some((item) => item.state !== "completed" || !item.review))
+            throw new Error("Auto Chief cannot synthesize unfinished or unreviewed branches")
+          const findings = old.branches.map((item) => {
+            const conclusion = input.findings.find((entry) => entry.branchID === item.id)?.conclusion.trim() ?? ""
+            if (!conclusion || conclusion.length > 2_000)
+              throw new Error(`Auto Chief synthesis needs a bounded conclusion for ${item.name}`)
+            return { branchID: item.id, conclusion }
+          })
+          if (old.synthesis) {
+            if (
+              old.synthesis.summary === summary &&
+              JSON.stringify(old.synthesis.findings) === JSON.stringify(findings)
+            )
+              return old.synthesis
+            throw new Error("Auto Chief synthesis was already saved with different conclusions")
+          }
+          const synthesis = { summary, findings, at: Date.now() }
+          yield* storage.replace(key(input.goalID), { ...old, synthesis } satisfies Record)
+          return synthesis
+        }),
+      )
+    })
+
     /** Must be called while the goal's mutation lock is held. */
     const completion = Effect.fn("ChiefBranches.completion")(function* (id: SessionID, createdAt: number) {
       const record = yield* read(id)
@@ -307,6 +359,14 @@ export namespace ChiefBranches {
             `Auto Chief branches are unfinished or unreviewed: ${pending.map((item) => `${item.name} (${item.state})`).join(", ")}`,
           ),
         )
+      if (
+        !record.synthesis ||
+        record.synthesis.findings.length !== record.branches.length ||
+        record.branches.some(
+          (item) => record.synthesis?.findings.filter((entry) => entry.branchID === item.id).length !== 1,
+        )
+      )
+        return yield* Effect.fail(new Error("Auto Chief has not synthesized every reviewed branch"))
       if (!background) return yield* Effect.fail(new Error("Auto Chief background status is unavailable"))
       const jobs = yield* background.list()
       if (!sessions) return yield* Effect.fail(new Error("Auto Chief parent task receipts are unavailable"))
@@ -338,6 +398,6 @@ export namespace ChiefBranches {
       }
     })
 
-    return { read, start, admit, settle, review, completion }
+    return { read, start, admit, settle, review, synthesize, completion }
   }
 }

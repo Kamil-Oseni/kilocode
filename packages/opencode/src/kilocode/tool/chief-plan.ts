@@ -12,7 +12,7 @@ import * as Tool from "@/tool/tool"
 const Parameters = Schema.Struct({ proposals: Schema.Array(ChiefPlan.Proposal) })
 type Metadata = { goalCreatedAt: number; requestID: string }
 
-/** Kept out of the tool registry until task admission enforces the saved branch plan. */
+/** Kept out of the tool registry until the full fanout and synthesis lifecycle is accepted. */
 export function chiefPlanTool(deps: {
   storage: Storage.Interface
   sessions: Pick<Session.Interface, "get" | "messages">

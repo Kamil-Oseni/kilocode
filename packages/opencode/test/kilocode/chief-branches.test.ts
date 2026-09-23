@@ -177,6 +177,22 @@ describe("Auto Chief branch ledger", () => {
       const unreviewed = yield* ledger.completion(id, createdAt).pipe(Effect.exit)
       expect(Exit.isFailure(unreviewed)).toBe(true)
       if (Exit.isFailure(unreviewed)) expect(Cause.pretty(unreviewed.cause)).toContain("unreviewed")
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "paused" })
+      expect(
+        Exit.isFailure(
+          yield* ledger
+            .review({
+              goalID: id,
+              goalCreatedAt: createdAt,
+              branchID: "audit",
+              callID: "task-0",
+              sessionID: children[0],
+              evidence: { callID: "read-0", messageID: "msg-0", partID: "part-0" },
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
       yield* ledger.review({
         goalID: id,
         goalCreatedAt: createdAt,
@@ -185,6 +201,28 @@ describe("Auto Chief branch ledger", () => {
         sessionID: children[0],
         evidence: { callID: "read-0", messageID: "msg-0", partID: "part-0" },
       })
+      expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
+      const summary = {
+        goalID: id,
+        goalCreatedAt: createdAt,
+        summary: "Safety and UX findings are both ready for the owner.",
+        findings: [
+          { branchID: "audit", conclusion: "Safety evidence was inspected." },
+          { branchID: "design", conclusion: "UX evidence was inspected." },
+        ],
+      }
+      expect(
+        Exit.isFailure(yield* ledger.synthesize({ ...summary, findings: [summary.findings[0]] }).pipe(Effect.exit)),
+      ).toBe(true)
+      const synthesis = yield* ledger.synthesize(summary)
+      expect(synthesis.findings.map((item) => item.branchID)).toEqual(["audit", "design"])
+      expect(yield* ledger.synthesize(summary)).toEqual(synthesis)
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "paused" })
+      expect(Exit.isFailure(yield* ledger.synthesize(summary).pipe(Effect.exit))).toBe(true)
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      expect(
+        Exit.isFailure(yield* ledger.synthesize({ ...summary, summary: "A changed summary" }).pipe(Effect.exit)),
+      ).toBe(true)
       jobs = [{ id: children[0], status: "running" }]
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
       jobs = [{ id: children[0], status: "error" }]

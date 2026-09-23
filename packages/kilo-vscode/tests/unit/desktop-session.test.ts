@@ -430,4 +430,38 @@ describe("native desktop session boundary", () => {
     ).rejects.toThrow(/sequence postcondition may have taken effect.*not retried/i)
     expect(driver.actions.map((action) => action.key)).toEqual(["Enter"])
   })
+
+  it("reports a partial sequence without replay when a later lease check denies", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    driver.frames.push({ ...driver.target, ...driver.frame, data: "first-effect" })
+    let checks = 0
+
+    await expect(
+      session.sequence(
+        {
+          observationID: initial.observation.id,
+          maxDurationMs: 5_000,
+          steps: [
+            {
+              action: { operation: "key", windowID: "window-1", sensitive: false, key: "Tab" },
+              postconditions: [{ kind: "pixels", change: "changed" }],
+              recovery: "stop",
+            },
+            {
+              action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+              postconditions: [{ kind: "pixels", change: "changed" }],
+              recovery: "stop",
+            },
+          ],
+        },
+        () => {
+          checks += 1
+          if (checks === 2) throw new Error("Grant stopped")
+        },
+      ),
+    ).rejects.toThrow(/partial sequence may have taken effect.*not retried/i)
+    expect(driver.actions.map((action) => action.key)).toEqual(["Tab"])
+  })
 })

@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { GrantID } from "@/kilocode/computer-use/lease"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { DragRequest, Key, ScrollRequest, WatchRequest } from "@/kilocode/desktop/protocol"
+import { DragRequest, Key, ScrollRequest, SequenceRequest, WatchRequest } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
 import {
   DesktopClickTool,
@@ -11,6 +11,7 @@ import {
   DesktopKeyTool,
   DesktopMoveTool,
   DesktopScrollTool,
+  DesktopSequenceTool,
   DesktopTypeTool,
   DesktopWatchTool,
   DesktopWindowsTool,
@@ -43,6 +44,7 @@ test("keeps legacy per-action approval as the fail-closed VS Code fallback", () 
       "desktop_type",
       "desktop_key",
       "desktop_scroll",
+      "desktop_sequence",
     ]) {
       expect(Permission.evaluate(permission, "*", rules).action).toBe("ask")
     }
@@ -226,6 +228,156 @@ it.instance(
       expect(calls[1]).toMatchObject({ operation: "click", sensitive: "communications" })
     }),
   { git: true },
+)
+
+it.instance("submits one bounded desktop plan after grouping lease decisions", () =>
+  Effect.gen(function* () {
+    const calls: Desktop.Input[] = []
+    const asks: Parameters<Tool.Context["ask"]>[0][] = []
+    const observation = {
+      version: 2 as const,
+      id: ObservationID.make("observation_sequence_final"),
+      sequence: 3,
+      sceneVersion: 3,
+      observedAt: 3,
+      validUntil: 10_000,
+      target: { surface: "desktop" as const, windowID: "window_seen", location: "same-window" },
+    }
+    const host: Desktop.Interface = {
+      request: (input) =>
+        Effect.sync(() => {
+          calls.push(input)
+          if (input.operation === "authorize")
+            return { operation: "authorize" as const, decision: "ask" as const, reason: "No active grant" }
+          return {
+            operation: "sequence" as const,
+            status: "completed" as const,
+            completed: 2,
+            width: 20,
+            height: 10,
+            mime: "image/png" as const,
+            data: "cG5n",
+            timing: { acquisitionMs: 1, preparationMs: 1, totalMs: 2 },
+            observation,
+            evidence: [
+              {
+                step: 1,
+                observationID: ObservationID.make("observation_sequence_2"),
+                sceneVersion: 2,
+                observedAt: 2,
+                postconditions: [{ kind: "pixels" as const, change: "changed" as const }],
+              },
+              {
+                step: 2,
+                observationID: observation.id,
+                sceneVersion: 3,
+                observedAt: 3,
+                postconditions: [{ kind: "control" as const, controlID: "editor", focused: true }],
+              },
+            ],
+            receipt: {
+              version: 1 as const,
+              requestID: "desktop_sequence_test",
+              startedAt: 1,
+              finishedAt: 3,
+              effect: "interact" as const,
+              outcome: "confirmed" as const,
+              target: observation.target,
+              observationID: observation.id,
+            },
+          }
+        }),
+      list: () => Effect.succeed([]),
+      cancelSession: () => Effect.void,
+      reply: () => Effect.void,
+      reject: () => Effect.void,
+    }
+    const ctx: Tool.Context = {
+      sessionID: SessionID.make("ses_desktop_sequence"),
+      messageID: MessageID.make("msg_desktop_sequence"),
+      agent: "build",
+      abort: new AbortController().signal,
+      messages: [],
+      metadata: () => Effect.void,
+      ask: (input) => Effect.sync(() => asks.push(input)),
+    }
+    const result = yield* DesktopSequenceTool.pipe(
+      Effect.provideService(Desktop.Service, host),
+      Effect.flatMap(Tool.init),
+      Effect.flatMap((tool) =>
+        tool.execute(
+          {
+            window_id: "window_seen",
+            observation_id: ObservationID.make("observation_sequence_1"),
+            max_duration_ms: 5_000,
+            steps: [
+              {
+                action: {
+                  operation: "pointer",
+                  action: "click",
+                  window_id: "window_seen",
+                  sensitive_category: "ordinary",
+                  x: 0.5,
+                  y: 0.5,
+                },
+                preconditions: [{ kind: "control", control_id: "editor", enabled: true }],
+                postconditions: [{ kind: "pixels", change: "changed" }],
+                recovery: "stop",
+              },
+              {
+                action: {
+                  operation: "type",
+                  window_id: "window_seen",
+                  sensitive_category: "communications",
+                  text: "hello",
+                },
+                postconditions: [{ kind: "control", control_id: "editor", focused: true }],
+                recovery: "stop",
+              },
+            ],
+          },
+          ctx,
+        ),
+      ),
+    )
+
+    expect(asks).toEqual([
+      expect.objectContaining({ permission: "desktop_sequence", patterns: ["window_seen:pointer:ordinary"] }),
+      expect.objectContaining({
+        permission: "desktop_sequence",
+        patterns: ["window_seen:keyboard:communications"],
+      }),
+    ])
+    expect(calls.map((input) => input.operation)).toEqual(["authorize", "authorize", "sequence"])
+    expect(calls[2]).toMatchObject({
+      operation: "sequence",
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: { operation: "pointer", sensitive: false },
+          preconditions: [{ kind: "control", controlID: "editor", enabled: true }],
+        },
+        { action: { operation: "type", sensitive: "communications" } },
+      ],
+    })
+    expect(result).toMatchObject({
+      title: "Desktop sequence completed after 2 actions",
+      metadata: { status: "completed", completed: 2 },
+      attachments: [{ filename: "desktop-sequence.png" }],
+    })
+    expect(JSON.parse(result.output)).toMatchObject({ status: "completed", evidence: [{ step: 1 }, { step: 2 }] })
+    expect(
+      Schema.is(SequenceRequest)({
+        id: "sequence_schema",
+        sessionID: ctx.sessionID,
+        operation: "sequence",
+        windowID: "window_seen",
+        observationID: ObservationID.make("observation_sequence_schema"),
+        maxDurationMs: 10_001,
+        steps: [],
+      }),
+    ).toBe(false)
+  }),
 )
 
 it.instance(
@@ -512,10 +664,7 @@ it.instance(
       expect(effects()[5]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
       expect(watched.title).toBe("Observed 3 desktop frames (2 images)")
       expect(watched.attachments).toHaveLength(2)
-      expect(watched.attachments?.map((item) => item.filename)).toEqual([
-        "desktop-frame-1.png",
-        "desktop-frame-3.png",
-      ])
+      expect(watched.attachments?.map((item) => item.filename)).toEqual(["desktop-frame-1.png", "desktop-frame-3.png"])
       expect(JSON.parse(watched.output).frames[1]).toMatchObject({
         change: "unchanged",
         baseObservationID: "observation_watch_0",

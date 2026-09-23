@@ -10,6 +10,7 @@ import type {
 import type { ConnectionState } from "../cli-backend/connection-service"
 import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
 import { DesktopOutcomeError, type DesktopSession } from "./desktop-session"
+import type { DesktopPlannedAction } from "./desktop-sequence"
 
 export interface DesktopConnection {
   onEvent(listener: (event: SSEPayload, directory?: string) => void): () => void
@@ -29,7 +30,7 @@ type ActionResult = Exclude<DesktopResult, { operation: "authorize" | "observe" 
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
 
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
-const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll"])
+const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll", "sequence"])
 const passive = new Set(["authorize", "observe", "watch", "windows"])
 
 function effect(request: DesktopRequest) {
@@ -232,6 +233,7 @@ export class DesktopBridge {
         this.authorize?.(request) ??
         Promise.resolve({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" })
       )
+    if (request.operation === "sequence") return this.interact(request, startedAt)
     const decision = this.validate?.(authorization(request))
     if (decision?.decision === "deny") throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
     if (request.operation === "windows") return this.windows(request, startedAt)
@@ -324,6 +326,41 @@ export class DesktopBridge {
       outcome: "confirmed" as const,
       target: { surface: "desktop" as const, windowID: request.windowID },
       observationID: request.observationID,
+    }
+    if (request.operation === "sequence") {
+      const result = await this.session.sequence(
+        {
+          observationID: request.observationID,
+          maxDurationMs: request.maxDurationMs,
+          steps: request.steps,
+        },
+        (action) => {
+          const decision = this.validate?.(sequenceAuthorization(request, action))
+          if (decision?.decision === "deny")
+            throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
+        },
+      )
+      const frame = result.scene
+      return {
+        operation: "sequence",
+        status: result.status,
+        completed: result.completed,
+        ...(result.reason ? { reason: result.reason } : {}),
+        width: frame.width,
+        height: frame.height,
+        mime: frame.mime,
+        data: frame.data,
+        timing: frame.timing,
+        ...(frame.semantics ? { semantics: frame.semantics } : {}),
+        observation: frame.observation,
+        evidence: result.evidence,
+        receipt: {
+          ...receipt,
+          finishedAt: Date.now(),
+          target: frame.observation.target,
+          observationID: frame.observation.id,
+        },
+      }
     }
     if (request.operation === "focus") {
       await this.session.focus(request.windowID, request.observationID)
@@ -476,7 +513,9 @@ export class DesktopBridge {
   }
 }
 
-function authorization(request: Exclude<DesktopRequest, AuthorizeRequest>): AuthorizeRequest {
+function authorization(
+  request: Exclude<DesktopRequest, AuthorizeRequest | { operation: "sequence" }>,
+): AuthorizeRequest {
   const action =
     request.operation === "observe" || request.operation === "watch" || request.operation === "windows"
       ? "observe"
@@ -495,6 +534,26 @@ function authorization(request: Exclude<DesktopRequest, AuthorizeRequest>): Auth
     action,
     ...("windowID" in request ? { windowID: request.windowID } : {}),
     sensitive: "sensitive" in request ? request.sensitive : false,
+  }
+}
+
+function sequenceAuthorization(
+  request: Extract<DesktopRequest, { operation: "sequence" }>,
+  action: DesktopPlannedAction,
+): AuthorizeRequest {
+  return {
+    id: request.id,
+    sessionID: request.sessionID,
+    operation: "authorize",
+    surface: "desktop",
+    action:
+      action.operation === "scroll"
+        ? "scroll"
+        : action.operation === "type" || action.operation === "key"
+          ? "keyboard"
+          : "pointer",
+    windowID: action.windowID,
+    sensitive: action.sensitive,
   }
 }
 

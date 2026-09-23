@@ -1302,6 +1302,154 @@ export type DesktopRequest =
       deltaX: number
       deltaY: number
     }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "sequence"
+      windowID: string
+      observationID: ComputerUseObservationId
+      maxDurationMs: number
+      steps: Array<{
+        action:
+          | {
+              operation: "pointer"
+              action: "move" | "click" | "double_click"
+              windowID: string
+              sensitive:
+                | false
+                | "communications"
+                | "financial"
+                | "credentials"
+                | "software"
+                | "system"
+                | "deletion"
+                | "disclosure"
+                | "legal"
+                | "publishing"
+              x: number
+              y: number
+              button?: "left" | "right"
+            }
+          | {
+              operation: "drag"
+              windowID: string
+              sensitive:
+                | false
+                | "communications"
+                | "financial"
+                | "credentials"
+                | "software"
+                | "system"
+                | "deletion"
+                | "disclosure"
+                | "legal"
+                | "publishing"
+              startX: number
+              startY: number
+              endX: number
+              endY: number
+              button: "left" | "right"
+            }
+          | {
+              operation: "type"
+              windowID: string
+              sensitive:
+                | false
+                | "communications"
+                | "financial"
+                | "credentials"
+                | "software"
+                | "system"
+                | "deletion"
+                | "disclosure"
+                | "legal"
+                | "publishing"
+              text: string
+            }
+          | {
+              operation: "key"
+              windowID: string
+              sensitive:
+                | false
+                | "communications"
+                | "financial"
+                | "credentials"
+                | "software"
+                | "system"
+                | "deletion"
+                | "disclosure"
+                | "legal"
+                | "publishing"
+              key:
+                | "Backspace"
+                | "Tab"
+                | "Enter"
+                | "Escape"
+                | "Space"
+                | "PageUp"
+                | "PageDown"
+                | "End"
+                | "Home"
+                | "ArrowLeft"
+                | "ArrowUp"
+                | "ArrowRight"
+                | "ArrowDown"
+                | "Delete"
+                | "F1"
+                | "F2"
+                | "F3"
+                | "F4"
+                | "F5"
+                | "F6"
+                | "F7"
+                | "F8"
+                | "F9"
+                | "F10"
+                | "F11"
+                | "F12"
+                | string
+              modifiers: Array<"alt" | "control" | "meta" | "shift">
+            }
+          | {
+              operation: "scroll"
+              windowID: string
+              sensitive:
+                | false
+                | "communications"
+                | "financial"
+                | "credentials"
+                | "software"
+                | "system"
+                | "deletion"
+                | "disclosure"
+                | "legal"
+                | "publishing"
+              deltaX: number
+              deltaY: number
+            }
+        preconditions: Array<{
+          kind: "control"
+          controlID: string
+          enabled?: boolean
+          focused?: boolean
+          selected?: boolean
+        }>
+        postconditions: Array<
+          | {
+              kind: "pixels"
+              change: "changed" | "unchanged"
+            }
+          | {
+              kind: "control"
+              controlID: string
+              enabled?: boolean
+              focused?: boolean
+              selected?: boolean
+            }
+        >
+        recovery: "stop"
+      }>
+    }
 
 export type CanvasRequestId = string
 
@@ -6061,6 +6209,68 @@ export type DesktopResult =
     }
   | {
       operation: "scroll"
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "sequence"
+      status: "completed" | "stopped"
+      completed: number
+      reason?: string
+      width: number
+      height: number
+      mime: "image/png" | "image/jpeg"
+      data: string
+      timing: {
+        acquisitionMs: number
+        preparationMs: number
+        semanticsMs?: number
+        totalMs: number
+      }
+      semantics?: {
+        source: "windows_ui_automation"
+        status: "available" | "unavailable"
+        viewport: {
+          x: number
+          y: number
+          width: number
+          height: number
+        }
+        controls: Array<{
+          controlID: string
+          role: string
+          name?: string
+          automationID?: string
+          x: number
+          y: number
+          width: number
+          height: number
+          enabled: boolean
+          focused: boolean
+          selected?: boolean
+          actions: Array<"invoke" | "select" | "toggle" | "expand_collapse" | "value" | "scroll">
+        }>
+        truncated: boolean
+      }
+      observation: ComputerUseObservation
+      evidence: Array<{
+        step: number
+        observationID: ComputerUseObservationId
+        sceneVersion: number
+        observedAt: number
+        postconditions: Array<
+          | {
+              kind: "pixels"
+              change: "changed" | "unchanged"
+            }
+          | {
+              kind: "control"
+              controlID: string
+              enabled?: boolean
+              focused?: boolean
+              selected?: boolean
+            }
+        >
+      }>
       receipt: ComputerUseReceipt
     }
 

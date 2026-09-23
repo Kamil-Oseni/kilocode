@@ -475,6 +475,7 @@ export function prepare(cfg: Config.Info): KiloData {
           desktop_type: "ask" as const,
           desktop_key: "ask" as const,
           desktop_scroll: "ask" as const,
+          desktop_sequence: "ask" as const,
           // raya_change end
           create_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
           update_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
@@ -926,6 +927,7 @@ export function patchAgents(
           desktop_type: "ask",
           desktop_key: "ask",
           desktop_scroll: "ask",
+          desktop_sequence: "ask",
           create_canvas: "allow",
           update_canvas: "allow",
         }),

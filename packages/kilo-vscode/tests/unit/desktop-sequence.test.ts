@@ -120,6 +120,31 @@ describe("bounded desktop sequence executor", () => {
     expect(calls).toEqual(["Tab"])
   })
 
+  it("checks semantic preconditions before dispatching a step", async () => {
+    const calls: string[] = []
+    const result = await executeSequence(
+      input([
+        {
+          action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+          preconditions: [{ kind: "control", controlID: "editor", focused: true }],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ]),
+      {
+        step: async (action) => {
+          calls.push(action.operation)
+          return scene(2, "next")
+        },
+        cancelled: () => false,
+        now: () => 100,
+      },
+    )
+
+    expect(result).toMatchObject({ status: "stopped", completed: 0, reason: expect.stringMatching(/precondition/i) })
+    expect(calls).toEqual([])
+  })
+
   it("stops on cancellation, duration, or an unexpected window without dispatch", async () => {
     const step = {
       action: { operation: "key" as const, windowID: "window-1", sensitive: false as const, key: "Enter" },

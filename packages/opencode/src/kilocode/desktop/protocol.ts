@@ -171,6 +171,101 @@ export const ScrollRequest = Schema.Struct({
   ),
 )
 
+const SequencePointer = Schema.Struct({
+  operation: Schema.Literal("pointer"),
+  action: Schema.Literals(["move", "click", "double_click"]),
+  windowID: Identity,
+  sensitive: ClassifiedSensitive,
+  x: Unit,
+  y: Unit,
+  button: Schema.optional(Schema.Literals(["left", "right"])),
+})
+
+const SequenceDrag = Schema.Struct({
+  operation: Schema.Literal("drag"),
+  windowID: Identity,
+  sensitive: ClassifiedSensitive,
+  startX: Unit,
+  startY: Unit,
+  endX: Unit,
+  endY: Unit,
+  button: Schema.Literals(["left", "right"]),
+}).check(
+  Schema.makeFilter((value) =>
+    value.startX !== value.endX || value.startY !== value.endY
+      ? undefined
+      : "Desktop drag requires different start and end points.",
+  ),
+)
+
+const SequenceType = Schema.Struct({
+  operation: Schema.Literal("type"),
+  windowID: Identity,
+  sensitive: ClassifiedSensitive,
+  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
+})
+
+const SequenceKey = Schema.Struct({
+  operation: Schema.Literal("key"),
+  windowID: Identity,
+  sensitive: ClassifiedSensitive,
+  key: Key,
+  modifiers: Schema.Array(Modifier).check(Schema.isMaxLength(4)),
+})
+
+const SequenceScroll = Schema.Struct({
+  operation: Schema.Literal("scroll"),
+  windowID: Identity,
+  sensitive: ClassifiedSensitive,
+  deltaX: ScrollDelta,
+  deltaY: ScrollDelta,
+}).check(
+  Schema.makeFilter((value) =>
+    value.deltaX !== 0 || value.deltaY !== 0 ? undefined : "Desktop scroll requires non-zero movement.",
+  ),
+)
+
+export const SequenceAction = Schema.Union([SequencePointer, SequenceDrag, SequenceType, SequenceKey, SequenceScroll])
+
+export const SequencePrecondition = Schema.Struct({
+  kind: Schema.Literal("control"),
+  controlID: Identity,
+  enabled: Schema.optional(Schema.Boolean),
+  focused: Schema.optional(Schema.Boolean),
+  selected: Schema.optional(Schema.Boolean),
+}).check(
+  Schema.makeFilter((value) =>
+    value.enabled !== undefined || value.focused !== undefined || value.selected !== undefined
+      ? undefined
+      : "Desktop control precondition requires an expected state.",
+  ),
+)
+
+export const SequencePostcondition = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("pixels"), change: Schema.Literals(["changed", "unchanged"]) }),
+  SequencePrecondition,
+])
+
+export const SequenceStep = Schema.Struct({
+  action: SequenceAction,
+  preconditions: Schema.Array(SequencePrecondition).check(Schema.isMaxLength(4)),
+  postconditions: Schema.Array(SequencePostcondition).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+  recovery: Schema.Literal("stop"),
+})
+
+export const SequenceRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("sequence"),
+  windowID: Identity,
+  observationID: ObservationID,
+  maxDurationMs: Schema.Number.check(
+    Schema.isInt(),
+    Schema.isGreaterThanOrEqualTo(100),
+    Schema.isLessThanOrEqualTo(10_000),
+  ),
+  steps: Schema.Array(SequenceStep).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
+})
+
 export const Request = Schema.Union([
   AuthorizeRequest,
   ObserveRequest,
@@ -183,6 +278,7 @@ export const Request = Schema.Union([
   TypeRequest,
   KeyRequest,
   ScrollRequest,
+  SequenceRequest,
 ]).annotate({ identifier: "DesktopRequest" })
 export type Request = Schema.Schema.Type<typeof Request>
 
@@ -324,6 +420,30 @@ export const ScrollResult = Schema.Struct({
   receipt: Receipt,
 })
 
+export const SequenceEvidence = Schema.Struct({
+  step: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(8)),
+  observationID: ObservationID,
+  sceneVersion: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  observedAt: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  postconditions: Schema.Array(SequencePostcondition).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+})
+
+export const SequenceResult = Schema.Struct({
+  operation: Schema.Literal("sequence"),
+  status: Schema.Literals(["completed", "stopped"]),
+  completed: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8)),
+  reason: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_000))),
+  width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  mime: Schema.Literals(["image/png", "image/jpeg"]),
+  data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
+  timing: Timing,
+  semantics: Schema.optional(Semantics),
+  observation: Observation,
+  evidence: Schema.Array(SequenceEvidence).check(Schema.isMaxLength(8)),
+  receipt: Receipt,
+})
+
 export const Result = Schema.Union([
   AuthorizeResult,
   ObserveResult,
@@ -336,6 +456,7 @@ export const Result = Schema.Union([
   TypeResult,
   KeyResult,
   ScrollResult,
+  SequenceResult,
 ]).annotate({ identifier: "DesktopResult" })
 export type Result = Schema.Schema.Type<typeof Result>
 

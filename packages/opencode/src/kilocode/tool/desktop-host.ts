@@ -638,6 +638,211 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
   }),
 )
 
+const SequenceControl = Schema.Struct({
+  kind: Schema.Literal("control"),
+  control_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  enabled: Schema.optional(Schema.Boolean),
+  focused: Schema.optional(Schema.Boolean),
+  selected: Schema.optional(Schema.Boolean),
+}).check(
+  Schema.makeFilter((value) =>
+    value.enabled !== undefined || value.focused !== undefined || value.selected !== undefined
+      ? undefined
+      : "A control condition requires an expected state.",
+  ),
+)
+const SequencePostcondition = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("pixels"), change: Schema.Literals(["changed", "unchanged"]) }),
+  SequenceControl,
+])
+const SequenceAction = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("pointer"),
+    action: Schema.Literals(["move", "click", "double_click"]),
+    window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+    sensitive_category: Sensitive,
+    x: Unit,
+    y: Unit,
+    button: Schema.optional(Schema.Literals(["left", "right"])),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("drag"),
+    window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+    sensitive_category: Sensitive,
+    start_x: Unit,
+    start_y: Unit,
+    end_x: Unit,
+    end_y: Unit,
+    button: Schema.optional(Schema.Literals(["left", "right"])),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("type"),
+    window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+    sensitive_category: Sensitive,
+    text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("key"),
+    window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+    sensitive_category: Sensitive,
+    key: Key,
+    modifiers: Schema.optional(Schema.Array(Modifier).check(Schema.isMaxLength(4))),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("scroll"),
+    window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+    sensitive_category: Sensitive,
+    delta_x: Schema.optional(ScrollDelta),
+    delta_y: ScrollDelta,
+  }),
+])
+const SequenceParams = Schema.Struct({
+  window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Exact foreground window identity from the starting desktop observation.",
+  }),
+  observation_id: ObservationID.annotate({
+    description: "Fresh version-2 desktop observation that grounds the first action.",
+  }),
+  max_duration_ms: Schema.Number.check(
+    Schema.isInt(),
+    Schema.isGreaterThanOrEqualTo(100),
+    Schema.isLessThanOrEqualTo(10_000),
+  ),
+  steps: Schema.Array(
+    Schema.Struct({
+      action: SequenceAction,
+      preconditions: Schema.optional(Schema.Array(SequenceControl).check(Schema.isMaxLength(4))),
+      postconditions: Schema.Array(SequencePostcondition).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+      recovery: Schema.Literal("stop"),
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
+})
+
+function condition(value: Schema.Schema.Type<typeof SequenceControl>) {
+  return {
+    kind: value.kind,
+    controlID: value.control_id,
+    ...(value.enabled === undefined ? {} : { enabled: value.enabled }),
+    ...(value.focused === undefined ? {} : { focused: value.focused }),
+    ...(value.selected === undefined ? {} : { selected: value.selected }),
+  }
+}
+
+function planned(value: Schema.Schema.Type<typeof SequenceAction>) {
+  const base = { windowID: value.window_id, sensitive: classified(value.sensitive_category) }
+  if (value.operation === "pointer")
+    return {
+      ...base,
+      operation: "pointer" as const,
+      action: value.action,
+      x: value.x,
+      y: value.y,
+      ...(value.button ? { button: value.button } : {}),
+    }
+  if (value.operation === "drag")
+    return {
+      ...base,
+      operation: "drag" as const,
+      startX: value.start_x,
+      startY: value.start_y,
+      endX: value.end_x,
+      endY: value.end_y,
+      button: value.button ?? "left",
+    }
+  if (value.operation === "type") return { ...base, operation: "type" as const, text: value.text }
+  if (value.operation === "key")
+    return { ...base, operation: "key" as const, key: value.key, modifiers: [...new Set(value.modifiers ?? [])] }
+  return { ...base, operation: "scroll" as const, deltaX: value.delta_x ?? 0, deltaY: value.delta_y }
+}
+
+export const DesktopSequenceTool = Tool.define<
+  typeof SequenceParams,
+  { completed: number; status: "completed" | "stopped" },
+  Desktop.Service,
+  "desktop_sequence"
+>(
+  "desktop_sequence",
+  Effect.gen(function* () {
+    const desktop = yield* Desktop.Service
+    return {
+      description:
+        "Execute 1â€“8 ordered actions in the same foreground Windows application without a model round trip between actions. Every action is checked against the active grant immediately before dispatch and must satisfy bounded local control or pixel postconditions before the next action can run. The host stops on mismatch, takeover, timeout, target change, denial, or unknown outcome and never retries automatically.",
+      parameters: SequenceParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const steps = params.steps.map((step) => ({
+            action: planned(step.action),
+            preconditions: (step.preconditions ?? []).map(condition),
+            postconditions: step.postconditions.map((item) => (item.kind === "control" ? condition(item) : item)),
+            recovery: step.recovery,
+          }))
+          const grants = new Set<string>()
+          for (const step of steps) {
+            const action = step.action
+            const kind =
+              action.operation === "scroll"
+                ? ("scroll" as const)
+                : action.operation === "type" || action.operation === "key"
+                  ? ("keyboard" as const)
+                  : ("pointer" as const)
+            const key = JSON.stringify([kind, action.windowID, action.sensitive])
+            if (grants.has(key)) continue
+            grants.add(key)
+            yield* approve(desktop, ctx, {
+              action: kind,
+              windowID: action.windowID,
+              sensitive: action.sensitive,
+              permission: "desktop_sequence",
+              patterns: [`${action.windowID}:${kind}:${action.sensitive || "ordinary"}`],
+              always: [],
+              metadata: { steps: steps.length },
+            })
+          }
+          const result = yield* run(
+            desktop,
+            {
+              operation: "sequence",
+              sessionID: ctx.sessionID,
+              windowID: params.window_id,
+              observationID: params.observation_id,
+              maxDurationMs: params.max_duration_ms,
+              steps,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "sequence")
+            return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          return {
+            title: `Desktop sequence ${result.status} after ${result.completed} action${result.completed === 1 ? "" : "s"}`,
+            output: JSON.stringify(
+              {
+                status: result.status,
+                completed: result.completed,
+                ...(result.reason ? { reason: result.reason } : {}),
+                observation: result.observation,
+                evidence: result.evidence,
+                timing: result.timing,
+                ...(result.semantics ? { semantics: result.semantics } : {}),
+                receipt: result.receipt,
+              },
+              undefined,
+              2,
+            ),
+            metadata: { completed: result.completed, status: result.status },
+            attachments: [
+              {
+                type: "file" as const,
+                mime: result.mime,
+                filename: result.mime === "image/png" ? "desktop-sequence.png" : "desktop-sequence.jpg",
+                url: `data:${result.mime};base64,${result.data}`,
+              },
+            ],
+          }
+        }),
+    }
+  }),
+)
+
 export const DesktopTools = [
   DesktopObserveTool,
   DesktopWindowsTool,
@@ -649,4 +854,5 @@ export const DesktopTools = [
   DesktopTypeTool,
   DesktopKeyTool,
   DesktopScrollTool,
+  DesktopSequenceTool,
 ]

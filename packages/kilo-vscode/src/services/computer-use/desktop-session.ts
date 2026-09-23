@@ -4,6 +4,7 @@ import type { SensitiveCategory } from "./lease-store"
 import { mismatch } from "./desktop-sensitive"
 import {
   executeSequence,
+  type DesktopPlannedAction,
   type DesktopScene,
   type DesktopSequenceInput,
   type DesktopSequenceResult,
@@ -262,13 +263,17 @@ export class DesktopSession {
     return result
   }
 
-  sequence(input: Omit<DesktopSequenceInput, "scene"> & { observationID: string }): Promise<DesktopSequenceResult> {
+  sequence(
+    input: Omit<DesktopSequenceInput, "scene"> & { observationID: string },
+    authorize?: (action: DesktopPlannedAction) => void | Promise<void>,
+  ): Promise<DesktopSequenceResult> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending an action sequence"))
     const run = async () => {
       const scene = this.frames.get(input.observationID)
       if (!scene) throw new Error("Desktop sequence requires a retained fresh observation")
       const revision = this.revision
+      let effects = 0
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
@@ -286,6 +291,7 @@ export class DesktopSession {
                 throw new Error("Desktop sequence scene changed before dispatch; no action was sent")
               const reason = mismatch(action, before.semantics)
               if (reason) throw new Error(reason)
+              await authorize?.(planned)
               const token = this.observations.begin(before.observation.id, before.observation.target, revision)
               this.frames.delete(before.observation.id)
               this.semantics.delete(before.observation.id)
@@ -299,6 +305,7 @@ export class DesktopSession {
                 const detail = error instanceof Error ? error.message : String(error)
                 throw new DesktopOutcomeError(action.operation, detail)
               })
+              effects += 1
               const frame = await this.capture().catch((error: unknown) => {
                 this.observations.cancel(token)
                 const detail = error instanceof Error ? error.message : String(error)
@@ -320,6 +327,10 @@ export class DesktopSession {
             now: () => performance.now(),
           },
         )
+      } catch (error) {
+        if (effects === 0 || error instanceof DesktopOutcomeError) throw error
+        const detail = error instanceof Error ? error.message : String(error)
+        throw new DesktopOutcomeError("partial sequence", detail)
       } finally {
         this.active = Math.max(0, this.active - 1)
         if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })

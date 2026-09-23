@@ -423,9 +423,7 @@ describe("desktop observation bridge", () => {
       },
     })
     const result = (test.replies[0] as { result: { frames: Array<Record<string, unknown>> } }).result
-    expect(result.frames[1].baseObservationID).toBe(
-      (result.frames[0].observation as { id: string }).id,
-    )
+    expect(result.frames[1].baseObservationID).toBe((result.frames[0].observation as { id: string }).id)
     expect(result.frames[1]).not.toHaveProperty("data")
     expect(result.frames[2].baseObservationID).toBe(result.frames[1].baseObservationID)
     test.bridge.dispose()
@@ -869,6 +867,121 @@ describe("desktop observation bridge", () => {
       requestID: input.id,
       result: { operation: "scroll", receipt: { effect: "interact", outcome: "confirmed" } },
     })
+    test.bridge.dispose()
+  })
+
+  it("executes a bounded sequence with final-frame and per-step evidence", async () => {
+    const test = setup({ dispatchDecision: "allow", pixels: ["start", "clicked", "typed"] })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as {
+      result: { observation: { id: string; target: { windowID: string } } }
+    }
+    const input: DesktopRequest = {
+      id: "desktop_sequence_1",
+      sessionID: "ses_desktop",
+      operation: "sequence",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: {
+            operation: "pointer",
+            action: "click",
+            windowID: "window_1",
+            sensitive: false,
+            x: 0.5,
+            y: 0.5,
+            button: "left",
+          },
+          preconditions: [{ kind: "control", controlID: "42.7", enabled: true }],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+        {
+          action: { operation: "type", windowID: "window_1", sensitive: false, text: "hello" },
+          preconditions: [],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: input } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.actions.map((action) => (action as { operation: string }).operation)).toEqual(["pointer", "type"])
+    expect(test.replies[1]).toMatchObject({
+      requestID: input.id,
+      result: {
+        operation: "sequence",
+        status: "completed",
+        completed: 2,
+        data: "typed",
+        observation: { version: 2, sceneVersion: 3 },
+        evidence: [
+          { step: 1, sceneVersion: 2, postconditions: [{ kind: "pixels", change: "changed" }] },
+          { step: 2, sceneVersion: 3, postconditions: [{ kind: "pixels", change: "changed" }] },
+        ],
+        receipt: { effect: "interact", outcome: "confirmed" },
+      },
+    })
+    test.bridge.dispose()
+  })
+
+  it("persists an unknown no-replay receipt when a later sequence lease check denies", async () => {
+    let checks = 0
+    const store = memory()
+    const test = setup({
+      store,
+      rejectFail: true,
+      pixels: ["start", "first-effect"],
+      dispatch: () => (++checks === 3 ? "deny" : "allow"),
+    })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string } } }
+    const input: DesktopRequest = {
+      id: "desktop_sequence_denied",
+      sessionID: "ses_desktop",
+      operation: "sequence",
+      windowID: "window_1",
+      observationID: observed.result.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: { operation: "key", windowID: "window_1", sensitive: false, key: "Tab", modifiers: [] },
+          preconditions: [],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+        {
+          action: { operation: "key", windowID: "window_1", sensitive: false, key: "Enter", modifiers: [] },
+          preconditions: [],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: input } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.actions).toHaveLength(1)
+    expect(test.rejects[0]).toMatchObject({
+      requestID: input.id,
+      error: { receipt: { effect: "interact", outcome: "unknown", observationID: input.observationID } },
+    })
+    expect(store.read()).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({ id: input.id, failure: expect.objectContaining({ receipt: expect.anything() }) }),
+        ],
+      }),
+    )
     test.bridge.dispose()
   })
 })

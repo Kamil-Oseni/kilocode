@@ -68063,6 +68063,438 @@
             },
             "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive", "deltaX", "deltaY"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["sequence"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observationID": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "maxDurationMs": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 10000
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "type": "string",
+                              "enum": ["pointer"]
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": ["move", "click", "double_click"]
+                            },
+                            "windowID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "sensitive": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean",
+                                  "enum": [false]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "communications",
+                                    "financial",
+                                    "credentials",
+                                    "software",
+                                    "system",
+                                    "deletion",
+                                    "disclosure",
+                                    "legal",
+                                    "publishing"
+                                  ]
+                                }
+                              ]
+                            },
+                            "x": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "button": {
+                              "type": "string",
+                              "enum": ["left", "right"]
+                            }
+                          },
+                          "required": ["operation", "action", "windowID", "sensitive", "x", "y"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "type": "string",
+                              "enum": ["drag"]
+                            },
+                            "windowID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "sensitive": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean",
+                                  "enum": [false]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "communications",
+                                    "financial",
+                                    "credentials",
+                                    "software",
+                                    "system",
+                                    "deletion",
+                                    "disclosure",
+                                    "legal",
+                                    "publishing"
+                                  ]
+                                }
+                              ]
+                            },
+                            "startX": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "startY": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "endX": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "endY": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "button": {
+                              "type": "string",
+                              "enum": ["left", "right"]
+                            }
+                          },
+                          "required": [
+                            "operation",
+                            "windowID",
+                            "sensitive",
+                            "startX",
+                            "startY",
+                            "endX",
+                            "endY",
+                            "button"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "type": "string",
+                              "enum": ["type"]
+                            },
+                            "windowID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "sensitive": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean",
+                                  "enum": [false]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "communications",
+                                    "financial",
+                                    "credentials",
+                                    "software",
+                                    "system",
+                                    "deletion",
+                                    "disclosure",
+                                    "legal",
+                                    "publishing"
+                                  ]
+                                }
+                              ]
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000
+                            }
+                          },
+                          "required": ["operation", "windowID", "sensitive", "text"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "type": "string",
+                              "enum": ["key"]
+                            },
+                            "windowID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "sensitive": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean",
+                                  "enum": [false]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "communications",
+                                    "financial",
+                                    "credentials",
+                                    "software",
+                                    "system",
+                                    "deletion",
+                                    "disclosure",
+                                    "legal",
+                                    "publishing"
+                                  ]
+                                }
+                              ]
+                            },
+                            "key": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "Backspace",
+                                    "Tab",
+                                    "Enter",
+                                    "Escape",
+                                    "Space",
+                                    "PageUp",
+                                    "PageDown",
+                                    "End",
+                                    "Home",
+                                    "ArrowLeft",
+                                    "ArrowUp",
+                                    "ArrowRight",
+                                    "ArrowDown",
+                                    "Delete",
+                                    "F1",
+                                    "F2",
+                                    "F3",
+                                    "F4",
+                                    "F5",
+                                    "F6",
+                                    "F7",
+                                    "F8",
+                                    "F9",
+                                    "F10",
+                                    "F11",
+                                    "F12"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9]$"
+                                }
+                              ]
+                            },
+                            "modifiers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["alt", "control", "meta", "shift"]
+                              },
+                              "maxItems": 4
+                            }
+                          },
+                          "required": ["operation", "windowID", "sensitive", "key", "modifiers"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "type": "string",
+                              "enum": ["scroll"]
+                            },
+                            "windowID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "sensitive": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean",
+                                  "enum": [false]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "communications",
+                                    "financial",
+                                    "credentials",
+                                    "software",
+                                    "system",
+                                    "deletion",
+                                    "disclosure",
+                                    "legal",
+                                    "publishing"
+                                  ]
+                                }
+                              ]
+                            },
+                            "deltaX": {
+                              "type": "number",
+                              "minimum": -1200,
+                              "maximum": 1200
+                            },
+                            "deltaY": {
+                              "type": "number",
+                              "minimum": -1200,
+                              "maximum": 1200
+                            }
+                          },
+                          "required": ["operation", "windowID", "sensitive", "deltaX", "deltaY"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "preconditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["control"]
+                          },
+                          "controlID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "focused": {
+                            "type": "boolean"
+                          },
+                          "selected": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["kind", "controlID"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 4
+                    },
+                    "postconditions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["pixels"]
+                              },
+                              "change": {
+                                "type": "string",
+                                "enum": ["changed", "unchanged"]
+                              }
+                            },
+                            "required": ["kind", "change"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["control"]
+                              },
+                              "controlID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "focused": {
+                                "type": "boolean"
+                              },
+                              "selected": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": ["kind", "controlID"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 4
+                    },
+                    "recovery": {
+                      "type": "string",
+                      "enum": ["stop"]
+                    }
+                  },
+                  "required": ["action", "preconditions", "postconditions", "recovery"],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 8
+              }
+            },
+            "required": ["id", "sessionID", "operation", "windowID", "observationID", "maxDurationMs", "steps"],
+            "additionalProperties": false
           }
         ]
       },
@@ -83036,6 +83468,264 @@
               }
             },
             "required": ["operation", "receipt"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["sequence"]
+              },
+              "status": {
+                "type": "string",
+                "enum": ["completed", "stopped"]
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "width": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "mime": {
+                "type": "string",
+                "enum": ["image/png", "image/jpeg"]
+              },
+              "data": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000000
+              },
+              "timing": {
+                "type": "object",
+                "properties": {
+                  "acquisitionMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "preparationMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "semanticsMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "totalMs": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": ["acquisitionMs", "preparationMs", "totalMs"],
+                "additionalProperties": false
+              },
+              "semantics": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": ["windows_ui_automation"]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["available", "unavailable"]
+                  },
+                  "viewport": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "width": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "height": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["x", "y", "width", "height"],
+                    "additionalProperties": false
+                  },
+                  "controls": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "controlID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "role": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 512
+                        },
+                        "automationID": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "x": {
+                          "type": "integer"
+                        },
+                        "y": {
+                          "type": "integer"
+                        },
+                        "width": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "height": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "focused": {
+                          "type": "boolean"
+                        },
+                        "selected": {
+                          "type": "boolean"
+                        },
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": ["invoke", "select", "toggle", "expand_collapse", "value", "scroll"]
+                          },
+                          "maxItems": 6
+                        }
+                      },
+                      "required": ["controlID", "role", "x", "y", "width", "height", "enabled", "focused", "actions"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 256
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["source", "status", "viewport", "controls", "truncated"],
+                "additionalProperties": false
+              },
+              "observation": {
+                "$ref": "#/components/schemas/ComputerUseObservation"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 8
+                    },
+                    "observationID": {
+                      "$ref": "#/components/schemas/ComputerUseObservationID"
+                    },
+                    "sceneVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "observedAt": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "postconditions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["pixels"]
+                              },
+                              "change": {
+                                "type": "string",
+                                "enum": ["changed", "unchanged"]
+                              }
+                            },
+                            "required": ["kind", "change"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["control"]
+                              },
+                              "controlID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "focused": {
+                                "type": "boolean"
+                              },
+                              "selected": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": ["kind", "controlID"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 4
+                    }
+                  },
+                  "required": ["step", "observationID", "sceneVersion", "observedAt", "postconditions"],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/ComputerUseReceipt"
+              }
+            },
+            "required": [
+              "operation",
+              "status",
+              "completed",
+              "width",
+              "height",
+              "mime",
+              "data",
+              "timing",
+              "observation",
+              "evidence",
+              "receipt"
+            ],
             "additionalProperties": false
           }
         ]

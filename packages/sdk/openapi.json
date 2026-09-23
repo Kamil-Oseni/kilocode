@@ -67435,6 +67435,40 @@
               },
               "operation": {
                 "type": "string",
+                "enum": ["authorize"]
+              },
+              "surface": {
+                "type": "string",
+                "enum": ["desktop"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["observe", "pointer", "keyboard", "scroll", "window", "launch", "browser", "files"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sensitive": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "surface", "action", "sensitive"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DesktopRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
                 "enum": ["observe"]
               }
             },
@@ -82004,8 +82038,36 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
+      "ComputerUseGrantID": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
       "DesktopResult": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["authorize"]
+              },
+              "decision": {
+                "type": "string",
+                "enum": ["allow", "ask", "deny"]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "grantID": {
+                "$ref": "#/components/schemas/ComputerUseGrantID"
+              }
+            },
+            "required": ["operation", "decision", "reason"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {

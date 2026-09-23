@@ -1,5 +1,6 @@
 // raya_change - model-facing native desktop tool tests
 import { expect, test } from "bun:test"
+import { GrantID } from "@/kilocode/computer-use/lease"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { DragRequest, Key, ScrollRequest, WatchRequest } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
@@ -66,6 +67,8 @@ it.instance("lists visible windows and focuses one exact observed target", () =>
       request: (input) =>
         Effect.sync(() => {
           calls.push(input)
+          if (input.operation === "authorize")
+            return { operation: "authorize" as const, decision: "ask" as const, reason: "No active grant" }
           if (input.operation === "windows")
             return {
               operation: "windows" as const,
@@ -137,7 +140,7 @@ it.instance("lists visible windows and focuses one exact observed target", () =>
       expect.objectContaining({ permission: "desktop_windows", patterns: ["visible-windows"], always: [] }),
       expect.objectContaining({ permission: "desktop_focus", patterns: ["window_seen"], always: [] }),
     ])
-    expect(calls).toEqual([
+    expect(calls.filter((input) => input.operation !== "authorize")).toEqual([
       { operation: "windows", sessionID: ctx.sessionID },
       {
         operation: "focus",
@@ -153,6 +156,73 @@ it.instance("lists visible windows and focuses one exact observed target", () =>
 )
 
 it.instance(
+  "skips the per-action prompt only when the host authorizes an active grant",
+  () =>
+    Effect.gen(function* () {
+      const calls: Desktop.Input[] = []
+      const asks: Parameters<Tool.Context["ask"]>[0][] = []
+      const host: Desktop.Interface = {
+        request: (input) =>
+          Effect.sync(() => {
+            calls.push(input)
+            if (input.operation === "authorize")
+              return {
+                operation: "authorize" as const,
+                decision: "allow" as const,
+                reason: "Authorized by active grant",
+                grantID: GrantID.make("grant_test"),
+              }
+            return {
+              operation: "click" as const,
+              receipt: {
+                version: 1 as const,
+                requestID: "desktop_click_granted",
+                startedAt: 1,
+                finishedAt: 2,
+                effect: "interact" as const,
+                outcome: "confirmed" as const,
+                target: { surface: "desktop" as const, windowID: "window_seen" },
+                observationID: ObservationID.make("observation_granted"),
+              },
+            }
+          }),
+        list: () => Effect.succeed([]),
+        cancelSession: () => Effect.void,
+        reply: () => Effect.void,
+        reject: () => Effect.void,
+      }
+      const ctx: Tool.Context = {
+        sessionID: SessionID.make("ses_desktop_granted"),
+        messageID: MessageID.make("msg_desktop_granted"),
+        agent: "build",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: (input) => Effect.sync(() => asks.push(input)),
+      }
+      yield* DesktopClickTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) =>
+          tool.execute(
+            {
+              window_id: "window_seen",
+              observation_id: ObservationID.make("observation_granted"),
+              x: 0.5,
+              y: 0.5,
+            },
+            ctx,
+          ),
+        ),
+      )
+
+      expect(asks).toEqual([])
+      expect(calls.map((input) => input.operation)).toEqual(["authorize", "click"])
+    }),
+  { git: true },
+)
+
+it.instance(
   "desktop click forwards exact grounding and asks for the exact point",
   () =>
     Effect.gen(function* () {
@@ -162,6 +232,8 @@ it.instance(
         request: (input) =>
           Effect.sync(() => {
             calls.push(input)
+            if (input.operation === "authorize")
+              return { operation: "authorize" as const, decision: "ask" as const, reason: "No active grant" }
             if (input.operation === "watch") {
               return {
                 operation: "watch" as const,
@@ -227,6 +299,7 @@ it.instance(
         metadata: () => Effect.void,
         ask: (input) => Effect.sync(() => asks.push(input)),
       }
+      const effects = () => calls.filter((input) => input.operation !== "authorize")
       const result = yield* DesktopClickTool.pipe(
         Effect.provideService(Desktop.Service, host),
         Effect.flatMap(Tool.init),
@@ -247,7 +320,7 @@ it.instance(
       expect(asks).toEqual([
         expect.objectContaining({ permission: "desktop_click", patterns: ["window_seen:0.2500,0.7500"], always: [] }),
       ])
-      expect(calls).toEqual([
+      expect(effects()).toEqual([
         {
           operation: "click",
           sessionID: ctx.sessionID,
@@ -279,7 +352,7 @@ it.instance(
       expect(asks[1]).toEqual(
         expect.objectContaining({ permission: "desktop_move", patterns: ["window_seen:0.5000,0.1250"], always: [] }),
       )
-      expect(calls[1]).toEqual({
+      expect(effects()[1]).toEqual({
         operation: "move",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -311,7 +384,7 @@ it.instance(
           metadata: { length: 10 },
         }),
       )
-      expect(calls[2]).toEqual({
+      expect(effects()[2]).toEqual({
         operation: "type",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -342,7 +415,7 @@ it.instance(
           always: [],
         }),
       )
-      expect(calls[3]).toEqual({
+      expect(effects()[3]).toEqual({
         operation: "key",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -377,7 +450,7 @@ it.instance(
           always: [],
         }),
       )
-      expect(calls[4]).toEqual({
+      expect(effects()[4]).toEqual({
         operation: "scroll",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -409,7 +482,7 @@ it.instance(
           always: [],
         }),
       )
-      expect(calls[5]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
+      expect(effects()[5]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
       expect(watched.title).toBe("Captured 3 desktop frames")
       expect(watched.attachments).toHaveLength(3)
       expect(watched.attachments?.map((item) => item.filename)).toEqual([
@@ -447,7 +520,7 @@ it.instance(
           always: [],
         }),
       )
-      expect(calls[6]).toEqual({
+      expect(effects()[6]).toEqual({
         operation: "drag",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
@@ -474,6 +547,15 @@ it.instance(
       expect(Schema.is(DragRequest)(drag)).toBe(false)
       expect(Schema.is(DragRequest)({ ...drag, endX: 1.1 })).toBe(false)
       expect(Schema.is(DragRequest)({ ...drag, endX: 0.75 })).toBe(true)
+      expect(calls.filter((input) => input.operation === "authorize").map((input) => input.action)).toEqual([
+        "pointer",
+        "pointer",
+        "keyboard",
+        "keyboard",
+        "scroll",
+        "observe",
+        "pointer",
+      ])
     }),
   { git: true },
 )

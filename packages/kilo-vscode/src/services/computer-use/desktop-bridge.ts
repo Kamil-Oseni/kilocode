@@ -21,14 +21,16 @@ export interface DesktopConnection {
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure; delivered?: boolean }
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
-type PassiveRequest = CaptureRequest | WindowsRequest
+type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
+type AuthorizeResult = Extract<DesktopResult, { operation: "authorize" }>
+type PassiveRequest = CaptureRequest | WindowsRequest | AuthorizeRequest
 type ActionRequest = Exclude<DesktopRequest, PassiveRequest>
-type ActionResult = Exclude<DesktopResult, { operation: "observe" | "watch" | "windows" }>
+type ActionResult = Exclude<DesktopResult, { operation: "authorize" | "observe" | "watch" | "windows" }>
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
 
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
 const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll"])
-const passive = new Set(["observe", "watch", "windows"])
+const passive = new Set(["authorize", "observe", "watch", "windows"])
 
 function effect(request: DesktopRequest) {
   if (passive.has(request.operation)) return "observe" as const
@@ -65,6 +67,7 @@ export class DesktopBridge {
     private readonly session: DesktopSession,
     private readonly capture: (request: CaptureRequest, signal: AbortSignal) => Promise<Frame[]>,
     private readonly store?: DesktopReceiptStore,
+    private readonly authorize?: (request: AuthorizeRequest) => Promise<AuthorizeResult>,
   ) {
     this.restore()
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
@@ -198,6 +201,11 @@ export class DesktopBridge {
   }
 
   private dispatch(request: DesktopRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
+    if (request.operation === "authorize")
+      return (
+        this.authorize?.(request) ??
+        Promise.resolve({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" })
+      )
     if (request.operation === "windows") return this.windows(request, startedAt)
     if (request.operation === "observe" || request.operation === "watch")
       return this.observe(request, startedAt, signal)

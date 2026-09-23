@@ -1,6 +1,7 @@
 // raya_change - native desktop observation host protocol
 import { BusEvent } from "@/bus/bus-event"
 import { Observation, ObservationID, Receipt } from "@/kilocode/computer-use/protocol"
+import { Action as LeaseAction, GrantID } from "@/kilocode/computer-use/lease"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 
@@ -75,6 +76,15 @@ export const WatchRequest = Schema.Struct({
   operation: Schema.Literal("watch"),
   frameCount: WatchCount,
   intervalMs: WatchInterval,
+})
+
+export const AuthorizeRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("authorize"),
+  surface: Schema.Literal("desktop"),
+  action: LeaseAction,
+  windowID: Schema.optional(Identity),
+  sensitive: Schema.Boolean,
 })
 
 export const ClickRequest = Schema.Struct({
@@ -153,6 +163,7 @@ export const ScrollRequest = Schema.Struct({
 )
 
 export const Request = Schema.Union([
+  AuthorizeRequest,
   ObserveRequest,
   WindowsRequest,
   WatchRequest,
@@ -165,6 +176,13 @@ export const Request = Schema.Union([
   ScrollRequest,
 ]).annotate({ identifier: "DesktopRequest" })
 export type Request = Schema.Schema.Type<typeof Request>
+
+export const AuthorizeResult = Schema.Struct({
+  operation: Schema.Literal("authorize"),
+  decision: Schema.Literals(["allow", "ask", "deny"]),
+  reason: Identity,
+  grantID: Schema.optional(GrantID),
+})
 
 export const ObserveResult = Schema.Struct({
   operation: Schema.Literal("observe"),
@@ -245,6 +263,7 @@ export const ScrollResult = Schema.Struct({
 })
 
 export const Result = Schema.Union([
+  AuthorizeResult,
   ObserveResult,
   WindowsResult,
   WatchResult,

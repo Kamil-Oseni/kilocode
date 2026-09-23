@@ -19,6 +19,39 @@ function run(desktop: Desktop.Interface, input: Input, signal: AbortSignal) {
   return desktop.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
 }
 
+function approve(
+  desktop: Desktop.Interface,
+  ctx: Tool.Context,
+  input: Parameters<Tool.Context["ask"]>[0] & {
+    action: "observe" | "pointer" | "keyboard" | "scroll" | "window"
+    windowID?: string
+  },
+) {
+  return Effect.gen(function* () {
+    const result = yield* run(
+      desktop,
+      {
+        operation: "authorize",
+        sessionID: ctx.sessionID,
+        surface: "desktop",
+        action: input.action,
+        sensitive: false,
+        ...(input.windowID ? { windowID: input.windowID } : {}),
+      },
+      ctx.abort,
+    )
+    if (result.operation !== "authorize") return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+    if (result.decision === "deny") return yield* Effect.die(new Error(`Desktop control denied: ${result.reason}`))
+    if (result.decision === "ask")
+      yield* ctx.ask({
+        permission: input.permission,
+        patterns: input.patterns,
+        always: input.always,
+        metadata: input.metadata,
+      })
+  })
+}
+
 const Params = Schema.Struct({})
 export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, Desktop.Service, "desktop_observe">(
   "desktop_observe",
@@ -30,7 +63,13 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
       parameters: Params,
       execute: (_params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({ permission: "desktop_observe", patterns: ["foreground-window"], always: [], metadata: {} })
+          yield* approve(desktop, ctx, {
+            action: "observe",
+            permission: "desktop_observe",
+            patterns: ["foreground-window"],
+            always: [],
+            metadata: {},
+          })
           const result = yield* run(desktop, { operation: "observe", sessionID: ctx.sessionID }, ctx.abort)
           if (result.operation !== "observe")
             return yield* Effect.die(new Error("Desktop host returned the wrong result"))
@@ -68,7 +107,13 @@ export const DesktopWindowsTool = Tool.define<typeof Params, { count: number }, 
       parameters: Params,
       execute: (_params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({ permission: "desktop_windows", patterns: ["visible-windows"], always: [], metadata: {} })
+          yield* approve(desktop, ctx, {
+            action: "observe",
+            permission: "desktop_windows",
+            patterns: ["visible-windows"],
+            always: [],
+            metadata: {},
+          })
           const result = yield* run(desktop, { operation: "windows", sessionID: ctx.sessionID }, ctx.abort)
           if (result.operation !== "windows")
             return yield* Effect.die(new Error("Desktop host returned the wrong result"))
@@ -101,7 +146,9 @@ export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Serv
       parameters: FocusParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(desktop, ctx, {
+            action: "window",
+            windowID: params.window_id,
             permission: "desktop_focus",
             patterns: [params.window_id],
             always: [],
@@ -145,7 +192,13 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const pattern = `foreground-window:${params.frames}x${params.interval_ms}ms`
-          yield* ctx.ask({ permission: "desktop_watch", patterns: [pattern], always: [], metadata: {} })
+          yield* approve(desktop, ctx, {
+            action: "observe",
+            permission: "desktop_watch",
+            patterns: [pattern],
+            always: [],
+            metadata: {},
+          })
           const result = yield* run(
             desktop,
             {
@@ -223,7 +276,14 @@ export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Servic
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const point = `${params.window_id}:${params.x.toFixed(4)},${params.y.toFixed(4)}`
-          yield* ctx.ask({ permission: "desktop_move", patterns: [point], always: [], metadata: {} })
+          yield* approve(desktop, ctx, {
+            action: "pointer",
+            windowID: params.window_id,
+            permission: "desktop_move",
+            patterns: [point],
+            always: [],
+            metadata: {},
+          })
           const result = yield* run(
             desktop,
             {
@@ -280,7 +340,9 @@ export const DesktopDragTool = Tool.define<typeof DragParams, {}, Desktop.Servic
           const start = `${params.start_x.toFixed(4)},${params.start_y.toFixed(4)}`
           const end = `${params.end_x.toFixed(4)},${params.end_y.toFixed(4)}`
           const button = params.button ?? "left"
-          yield* ctx.ask({
+          yield* approve(desktop, ctx, {
+            action: "pointer",
+            windowID: params.window_id,
             permission: "desktop_drag",
             patterns: [`${params.window_id}:${button}:${start}->${end}`],
             always: [],
@@ -323,7 +385,14 @@ export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Serv
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const point = `${params.window_id}:${params.x.toFixed(4)},${params.y.toFixed(4)}`
-          yield* ctx.ask({ permission: "desktop_click", patterns: [point], always: [], metadata: {} })
+          yield* approve(desktop, ctx, {
+            action: "pointer",
+            windowID: params.window_id,
+            permission: "desktop_click",
+            patterns: [point],
+            always: [],
+            metadata: {},
+          })
           const result = yield* run(
             desktop,
             {
@@ -372,7 +441,9 @@ export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Servic
       parameters: TypeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(desktop, ctx, {
+            action: "keyboard",
+            windowID: params.window_id,
             permission: "desktop_type",
             patterns: [params.window_id],
             always: [],
@@ -427,7 +498,9 @@ export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service,
         Effect.gen(function* () {
           const modifiers = [...new Set(params.modifiers ?? [])]
           const chord = [...modifiers, params.key].join("+")
-          yield* ctx.ask({
+          yield* approve(desktop, ctx, {
+            action: "keyboard",
+            windowID: params.window_id,
             permission: "desktop_key",
             patterns: [`${params.window_id}:${chord}`],
             always: [],
@@ -487,7 +560,14 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
         Effect.gen(function* () {
           const x = params.delta_x ?? 0
           const amount = `${params.window_id}:${x},${params.delta_y}`
-          yield* ctx.ask({ permission: "desktop_scroll", patterns: [amount], always: [], metadata: {} })
+          yield* approve(desktop, ctx, {
+            action: "scroll",
+            windowID: params.window_id,
+            permission: "desktop_scroll",
+            patterns: [amount],
+            always: [],
+            metadata: {},
+          })
           const result = yield* run(
             desktop,
             {

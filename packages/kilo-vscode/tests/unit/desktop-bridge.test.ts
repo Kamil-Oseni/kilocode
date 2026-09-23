@@ -19,6 +19,7 @@ function setup(
     rejectFail?: boolean
     actionError?: Error
     hold?: Promise<void>
+    decision?: "allow" | "ask" | "deny"
   } = {},
 ) {
   const replies: unknown[] = []
@@ -106,6 +107,12 @@ function setup(
       return frames
     },
     input.store,
+    async () => ({
+      operation: "authorize",
+      decision: input.decision ?? "ask",
+      reason: input.decision === "allow" ? "Authorized by active grant" : "No active grant",
+      ...(input.decision === "allow" ? { grantID: "grant_test" } : {}),
+    }),
   )
   return { bridge, events, states, replies, rejects, actions, focused, observed: () => observed }
 }
@@ -122,6 +129,36 @@ function memory(seed?: unknown) {
 }
 
 describe("desktop observation bridge", () => {
+  it("negotiates a grant decision without capturing or dispatching input", async () => {
+    const test = setup({ decision: "allow" })
+    const auth: DesktopRequest = {
+      id: "desktop_authorize_1",
+      sessionID: "ses_desktop",
+      operation: "authorize",
+      surface: "desktop",
+      action: "pointer",
+      windowID: "window_1",
+      sensitive: false,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: auth } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.observed()).toBe(0)
+    expect(test.actions).toEqual([])
+    expect(test.replies).toContainEqual({
+      requestID: auth.id,
+      directory: "C:\\workspace",
+      result: {
+        operation: "authorize",
+        decision: "allow",
+        reason: "Authorized by active grant",
+        grantID: "grant_test",
+      },
+    })
+    test.bridge.dispose()
+  })
+
   it("lists sanitized windows and focuses one exact catalog target once", async () => {
     const test = setup()
     const windows: DesktopRequest = { id: "desktop_windows_1", sessionID: "ses_desktop", operation: "windows" }

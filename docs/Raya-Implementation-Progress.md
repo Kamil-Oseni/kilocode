@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 20:45 America/Toronto - Desktop lease negotiation reaches the host boundary
+
+**Status: slice 1 remains in progress; its prompt-bypass seam is implemented and verified.** The versioned desktop protocol now includes a non-mutating `authorize` request carrying the exact session, desktop surface, ordinary action category, optional window and sensitive classification. Before any existing desktop tool asks for permission, it requests this local host decision. **Allow** proceeds without `ctx.ask`; **ask** preserves the legacy prompt exactly; **deny** stops before capture or native input. The extension bridge defaults to **ask** until a local lease store is connected, so this checkpoint cannot silently widen current authority.
+
+Authorization checks do not issue observations, consume grounding, capture pixels or dispatch input. The generated OpenAPI and v2 SDK carry the same union, and the bridge keeps authorization results outside the native-action receipt journal. Focused evidence passes **29 tests / 139 assertions**: 11 CLI contract/tool/service cases and 18 extension bridge cases, including an allowed action with zero prompt and an authorization round trip with zero capture/input. OpenCode and extension host/webview typechecks, root lint, generated SDK consistency and the annotation guard pass. A `tsgolint` orphan left by the check path grew to roughly 5.6 GB and was terminated; no build process remains.
+
+Next in slice 1: implement the bounded local lease store and single-review grant UI, bind the host callback to the canonical decision rules, then extend the same negotiation to browser actions. Do not enable an autonomous grant until expiry, revocation, restart and sensitive-action fallback are enforced.
+
 ## ChatGPT 2026-09-22 20:28 America/Toronto - Autonomous lease contract foundation
 
 **Status: slice 1 is started, not complete.** A new Kilo-owned `computer-use/lease.ts` defines the bounded version-1 grant used by the forthcoming UI and host enforcement. It represents Observe only, Assisted control and Autonomous control; active/paused/revoked state; current-session or all-session lifetime; expiry or until-stopped duration; all/selected application and monitor scopes; browser/desktop/mobile surfaces; ordinary action categories; and cooperative-input preference.

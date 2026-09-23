@@ -1081,6 +1081,15 @@ export type DesktopRequest =
   | {
       id: DesktopRequestId
       sessionID: string
+      operation: "authorize"
+      surface: "desktop"
+      action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
+      windowID?: string
+      sensitive: boolean
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
       operation: "observe"
     }
   | {
@@ -5755,7 +5764,15 @@ export type BrowserFailure = {
   receipt?: ComputerUseReceipt
 }
 
+export type ComputerUseGrantId = string
+
 export type DesktopResult =
+  | {
+      operation: "authorize"
+      decision: "allow" | "ask" | "deny"
+      reason: string
+      grantID?: ComputerUseGrantId
+    }
   | {
       operation: "observe"
       width: number

@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 20:45 America/Toronto - preserve desktop lease negotiation
+
+The desktop protocol, generated SDK, model tools and extension bridge now negotiate `authorize` before the legacy permission call. Preserve the three-way result: **allow** skips `ctx.ask`, **ask** uses the existing exact permission request and **deny** stops before the real operation. The extension currently returns **ask** by default; this is intentional until its local lease store and review UI exist. Never interpret bridge availability itself as authority.
+
+Authorization is non-mutating: it must not capture, issue/consume an observation, dispatch input or enter the persistent native-action receipt journal. Evidence passes 11 CLI cases and 18 extension cases, 139 assertions total, plus affected typechecks, lint, SDK generation and the annotation guard. One orphaned `tsgolint` process was terminated after it reached roughly 5.6 GB; continue capped sequential checks and inspect processes immediately afterward.
+
+Next: local lease storage and review UI, host binding to the canonical decision function, then the browser adapter. Keep the legacy ask path active until expiry, revocation, restart and sensitive fallback have direct tests.
+
 ## ChatGPT 2026-09-22 20:28 America/Toronto - preserve the lease decision foundation
 
 `packages/opencode/src/kilocode/computer-use/lease.ts` is the canonical start of slice 1. Preserve its bounded versioned grant, three control levels, active/paused/revoked states, session/all-session lifetime, expiry/until-stopped duration, all/selected app and monitor scopes, surfaces, action categories and cooperative-input choice. `decide` must allow only an exact active in-scope ordinary action. Missing or out-of-scope authority falls back to **ask**; paused, revoked, expired and Observe-only mutation deny; sensitive requests ask until slice 2 provides the category policy.

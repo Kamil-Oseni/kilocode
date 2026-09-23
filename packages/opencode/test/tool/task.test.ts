@@ -155,7 +155,39 @@ describe("tool.task planned Auto Chief branch", () => {
           prompt: (input) =>
             input.sessionID === chat.id
               ? Deferred.succeed(injected, input).pipe(Effect.as(reply(input, "injected")))
-              : Effect.succeed(reply(input, "done")),
+              : Effect.gen(function* () {
+                  if (!input.messageID) throw new Error("Missing admitted child message")
+                  yield* sessions.updateMessage({
+                    id: input.messageID,
+                    role: "user",
+                    sessionID: input.sessionID,
+                    agent: input.agent ?? "general",
+                    model: ref,
+                    time: { created: Date.now() },
+                  })
+                  const tool = reply(input, "tool evidence")
+                  yield* sessions.updateMessage({ ...tool.info, time: { ...tool.info.time, completed: Date.now() } })
+                  yield* sessions.updatePart({
+                    id: PartID.ascending(),
+                    sessionID: input.sessionID,
+                    messageID: tool.info.id,
+                    type: "tool",
+                    callID: "call-read",
+                    tool: "read",
+                    state: {
+                      status: "completed",
+                      input: {},
+                      output: "Read saved state",
+                      title: "Read evidence",
+                      metadata: {},
+                      time: { start: Date.now(), end: Date.now() },
+                    },
+                  })
+                  const result = reply(input, "Saved state inspected and findings confirmed.")
+                  yield* sessions.updateMessage({ ...result.info, time: { ...result.info.time, completed: Date.now() } })
+                  yield* Effect.forEach(result.parts, (part) => sessions.updatePart(part))
+                  return result
+                }),
         }
         const get = (id: string) => {
           const tool = tools.find((item) => item.id === id)
@@ -212,18 +244,69 @@ describe("tool.task planned Auto Chief branch", () => {
           { description: "Navigation audit", branch_id: "design", background: true },
           context("call-design"),
         )
-        for (const item of [first, second]) {
+        for (const [index, item] of [first, second].entries()) {
           const id = item.metadata.sessionId
           if (typeof id !== "string") throw new Error("Missing child session identity")
           expect((yield* jobs.wait({ id: SessionID.make(id) })).info?.status).toBe("completed")
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: chat.id,
+            messageID: assistant.id,
+            type: "tool",
+            callID: index === 0 ? "call-safety" : "call-design",
+            tool: "task",
+            state: {
+              status: "completed",
+              input: {},
+              output: item.output,
+              title: item.title,
+              metadata: item.metadata,
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
         }
         expect((yield* Deferred.await(injected).pipe(Effect.timeout("3 seconds"))).goalObjective).toBe(request)
         const inspect = yield* get("chief_inspect").execute({}, context("call-inspect"))
-        const report = JSON.parse(inspect.output) as { branches: { name: string; state: string }[] }
+        const report = JSON.parse(inspect.output) as {
+          branches: { id: string; name: string; state: string; report: string; evidence: { callID: string; messageID: string; partID: string }[] }[]
+        }
         expect(report.branches.map((item) => [item.name, item.state])).toEqual([
           ["Safety audit", "completed"],
           ["Navigation audit", "completed"],
         ])
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: chat.id,
+          messageID: assistant.id,
+          type: "tool",
+          callID: "call-inspect",
+          tool: "chief_inspect",
+          state: {
+            status: "completed",
+            input: {},
+            output: inspect.output,
+            title: inspect.title,
+            metadata: inspect.metadata,
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        for (const item of report.branches) {
+          expect(item.report).toContain("findings confirmed")
+          expect(item.evidence).toHaveLength(1)
+          yield* get("chief_review").execute(
+            { branch_id: item.id, assessment: `${item.name} checked its saved state.`, evidence: item.evidence[0] },
+            context(`call-review-${item.id}`),
+          )
+        }
+        yield* get("chief_synthesize").execute(
+          {
+            summary: "Both saved audits were reviewed.",
+            findings: report.branches.map((item) => ({ branch_id: item.id, conclusion: item.report })),
+          },
+          context("call-synthesize"),
+        )
+        const ledger = ChiefBranches.make(storage, sessions, jobs)
+        expect(yield* ledger.completion(chat.id, goal.createdAt)).toBeUndefined()
       }),
     30_000,
   )

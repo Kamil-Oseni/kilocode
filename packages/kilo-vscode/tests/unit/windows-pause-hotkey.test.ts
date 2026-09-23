@@ -34,10 +34,13 @@ function harness() {
 describe("Windows global Pause Raya shortcut", () => {
   it("registers Ctrl+Alt+Shift+Escape and emits every complete pause line", () => {
     const test = harness()
-    const state = { pauses: 0, losses: 0 }
+    const state = { pauses: 0, manuals: 0, losses: 0 }
     const hotkey = new WindowsPauseHotkey(
       () => {
         state.pauses += 1
+      },
+      () => {
+        state.manuals += 1
       },
       () => {
         state.losses += 1
@@ -47,10 +50,16 @@ describe("Windows global Pause Raya shortcut", () => {
 
     expect(test.state.script).toContain("RegisterHotKey")
     expect(test.state.script).toContain("0x4007, 0x1B")
+    expect(test.state.script).toContain("SetWindowsHookEx(13")
+    expect(test.state.script).toContain("SetWindowsHookEx(14")
+    expect(test.state.script).toContain("(input.Flags & 0x12) == 0")
+    expect(test.state.script).toContain("(input.Flags & 0x3) == 0")
+    expect(test.state.script).toContain("Environment.TickCount64 + 750")
+    expect(test.state.script).toContain("UnhookWindowsHookEx")
     expect(test.state.script).toContain("UnregisterHotKey")
     test.listeners.data?.("pau")
-    test.listeners.data?.("se\r\npause\nnoise\n")
-    expect(state).toEqual({ pauses: 2, losses: 0 })
+    test.listeners.data?.("se\r\nmanual\npause\nnoise\n")
+    expect(state).toEqual({ pauses: 2, manuals: 1, losses: 0 })
     hotkey.dispose()
     expect(test.state.killed).toBe(1)
   })
@@ -59,6 +68,7 @@ describe("Windows global Pause Raya shortcut", () => {
     const test = harness()
     const state = { losses: 0 }
     const hotkey = new WindowsPauseHotkey(
+      () => {},
       () => {},
       () => {
         state.losses += 1

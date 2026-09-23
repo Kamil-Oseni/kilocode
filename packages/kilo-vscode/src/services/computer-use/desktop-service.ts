@@ -25,18 +25,25 @@ export class DesktopAutomationService implements vscode.Disposable {
     this.indicator.name = "Raya desktop control"
     this.indicator.command = "raya.openComputerUse"
     this.offLease = this.lease.onChange((lease) => {
+      this.hotkey?.dispose()
+      this.hotkey = undefined
       if (!lease) {
-        this.hotkey?.dispose()
-        this.hotkey = undefined
         this.bridge?.cancel("Raya desktop control stopped.")
         this.indicator!.hide()
         return
       }
-      this.hotkey ??= new WindowsPauseHotkey(
-        () => this.pause("Raya desktop control paused from the global shortcut."),
-        () => this.pause("Raya desktop control paused because the global Pause listener stopped."),
-      )
-      if (lease.state === "paused") this.bridge?.cancel("Raya desktop control paused.")
+      if (lease.state === "paused") {
+        this.bridge?.cancel("Raya desktop control paused.")
+      } else {
+        this.hotkey = new WindowsPauseHotkey(
+          () => this.pause("Raya desktop control paused from the global shortcut."),
+          () => {
+            if (!lease.cooperativeInput)
+              return this.pause("Raya desktop control paused because you began using the computer.")
+          },
+          () => this.pause("Raya desktop control paused because the global input listener stopped."),
+        )
+      }
       const label = lease.level === "observe" ? "Observe" : lease.level === "assisted" ? "Assisted" : "Autonomous"
       this.indicator!.text = lease.state === "paused" ? "$(debug-pause) Raya paused" : `$(remote) Raya ${label}`
       this.indicator!.tooltip = "Open Raya desktop controls"

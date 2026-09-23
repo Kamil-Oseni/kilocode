@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 03:22 America/Toronto - Physical input triggers automatic desktop takeover
+
+**Status: implemented and verified in source; installed physical-input acceptance remains open.** While an active Computer Use lease exists, the same hidden native host that owns `Ctrl+Alt+Shift+Escape` now installs low-level Windows keyboard and pointer hooks. A non-injected physical event emits one bounded manual-takeover signal. The lease changes to paused immediately, queued work and capture are cancelled through the existing bridge, observations and scene continuity are invalidated, the native capture worker is stopped, and the listener is disposed. Resume creates a fresh listener and requires fresh grounding. Paused or stopped grants retain no input hook.
+
+The listener ignores `LLKHF_INJECTED`, `LLKHF_LOWER_IL_INJECTED`, `LLMHF_INJECTED` and `LLMHF_LOWER_IL_INJECTED`, so Raya's own `SendInput` dispatch does not pause its lease. It arms 750 ms after registration to avoid interpreting the user's grant interaction as immediate takeover, emits at most one manual signal per active lease interval, and preserves the global Pause shortcut. When cooperative-input mode is enabled, physical input remains visible to the listener but deliberately does not pause Raya. Loss of either hook host remains fail-closed and pauses control.
+
+Focused lease, session and listener evidence passes **22 tests / 78 assertions**, covering session and persistent grants, pause/expiry/observe-only refusal, all nine sensitive policies, scene invalidation, sequence uncertainty, injected-flag filtering in the native source, bounded output parsing, disposal and fail-closed host loss. A 1.5-second real-host smoke compiled the C# listener, registered both hooks and the global hotkey, remained alive with zero loss events, then disposed cleanly. Real physical takeover during active work and cooperative-input coexistence still require installed-host observation. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-23 03:14 America/Toronto - Batched accessibility snapshot installed
 
 **Status: pushed, packaged and installed without force-reloading the open host; installed-host behavior is not yet accepted.** Product source `5aaa2043d6` is on `origin/main`. The protected push passed 29 JavaScript/TypeScript package typechecks and the JetBrains typecheck. The low-memory production workflow confirmed unchanged SDK output and reused the verified Windows CLI, then passed extension-host and webview typechecks, ESLint and the production bundle sequentially. It packaged 442 files and installed `eden.raya@7.4.23-snapshot+5aaa2043d6.kamil-oseni.1790147490193`.

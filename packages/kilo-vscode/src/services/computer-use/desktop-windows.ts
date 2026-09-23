@@ -560,25 +560,53 @@ try {
   }
   $acquisition.Stop()
   $preparation = [Diagnostics.Stopwatch]::StartNew()
+  $region = New-Object Drawing.Rectangle 0, 0, $width, $height
+  $bits = $image.LockBits($region, [Drawing.Imaging.ImageLockMode]::ReadOnly, [Drawing.Imaging.PixelFormat]::Format32bppArgb)
   try {
-    $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
-    Test-RayaImage $stream
-  } catch {
-    $stream.Dispose()
-    $stream = New-Object RayaBoundedStream ${CAPTURE.bytes}
-    $codec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq "image/jpeg" | Select-Object -First 1
-    if (-not $codec) { throw "Windows JPEG encoder is unavailable" }
-    $parameters = New-Object Drawing.Imaging.EncoderParameters 1
-    $parameters.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), ([long]88)
-    try {
-      $image.Save($stream, $codec, $parameters)
-      Test-RayaImage $stream
-    } finally {
-      $parameters.Dispose()
-    }
-    $mime = "image/jpeg"
+    $size = [Math]::Abs($bits.Stride) * $height
+    if ($size -le 0 -or $size -gt ${CAPTURE.pixels * 4}) { throw "Desktop raw frame exceeds the bounded pixel buffer" }
+    $pixels = New-Object byte[] $size
+    [Runtime.InteropServices.Marshal]::Copy($bits.Scan0, $pixels, 0, $size)
+  } finally {
+    $image.UnlockBits($bits)
   }
-  $data = [Convert]::ToBase64String($stream.GetBuffer(), 0, [int]$stream.Length)
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try {
+    $digest = ([BitConverter]::ToString($sha.ComputeHash($pixels))).Replace('-', '')
+  } finally {
+    $sha.Dispose()
+  }
+  $cache = $global:RayaCaptureCache
+  $unchanged = $cache -and $cache.WindowID -eq $window.WindowID -and $cache.Location -eq $window.Location -and $cache.Width -eq $width -and $cache.Height -eq $height -and $cache.Digest -eq $digest
+  $data = $null
+  if (-not $unchanged) {
+    try {
+      $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+      Test-RayaImage $stream
+    } catch {
+      $stream.Dispose()
+      $stream = New-Object RayaBoundedStream ${CAPTURE.bytes}
+      $codec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq "image/jpeg" | Select-Object -First 1
+      if (-not $codec) { throw "Windows JPEG encoder is unavailable" }
+      $parameters = New-Object Drawing.Imaging.EncoderParameters 1
+      $parameters.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), ([long]88)
+      try {
+        $image.Save($stream, $codec, $parameters)
+        Test-RayaImage $stream
+      } finally {
+        $parameters.Dispose()
+      }
+      $mime = "image/jpeg"
+    }
+    $data = [Convert]::ToBase64String($stream.GetBuffer(), 0, [int]$stream.Length)
+    $global:RayaCaptureCache = [pscustomobject]@{
+      WindowID = $window.WindowID
+      Location = $window.Location
+      Width = $width
+      Height = $height
+      Digest = $digest
+    }
+  }
   $preparation.Stop()
   $semanticsTimer = [Diagnostics.Stopwatch]::StartNew()
   try {
@@ -601,18 +629,22 @@ try {
   if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
     throw "Foreground window changed while correlating visual and semantic observations"
   }
-  [pscustomobject]@{
+  $result = [ordered]@{
     windowID = $window.WindowID
     location = $window.Location
     width = $width
     height = $height
-    mime = $mime
-    data = $data
+    change = if ($unchanged) { 'unchanged' } else { 'keyframe' }
     semantics = $semantics
     acquisitionMs = $acquisition.Elapsed.TotalMilliseconds
     preparationMs = $preparation.Elapsed.TotalMilliseconds
     semanticsMs = $semanticsTimer.Elapsed.TotalMilliseconds
-  } | ConvertTo-Json -Depth 8 -Compress
+  }
+  if (-not $unchanged) {
+    $result['mime'] = $mime
+    $result['data'] = $data
+  }
+  [pscustomobject]$result | ConvertTo-Json -Depth 8 -Compress
 } finally {
   $stream.Dispose()
   $graphics.Dispose()
@@ -1000,6 +1032,25 @@ function image(
   }
 }
 
+function visual(
+  input: Record<string, unknown>,
+  prior: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined,
+) {
+  if (input.change === undefined || input.change === "keyframe") return image(input)
+  if (input.change !== "unchanged") throw new Error("Windows desktop observation change state is invalid")
+  if (input.mime !== undefined || input.data !== undefined)
+    throw new Error("Unchanged Windows desktop observation unexpectedly contains encoded pixels")
+  if (
+    !prior ||
+    input.windowID !== prior.windowID ||
+    input.location !== prior.location ||
+    input.width !== prior.width ||
+    input.height !== prior.height
+  )
+    throw new Error("Unchanged Windows desktop observation has no matching local keyframe")
+  return prior
+}
+
 function timing(input: Record<string, unknown>, totalMs: number, semantic: DesktopSemantics | undefined) {
   if (typeof input.acquisitionMs !== "number" || typeof input.preparationMs !== "number")
     throw new Error("Windows desktop observation timing is incomplete")
@@ -1026,10 +1077,14 @@ function timing(input: Record<string, unknown>, totalMs: number, semantic: Deskt
   }
 }
 
-function frame(input: Record<string, unknown>, totalMs: number): DesktopFrame {
+function frame(
+  input: Record<string, unknown>,
+  totalMs: number,
+  prior?: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data">,
+): DesktopFrame {
   const semantic = semantics(input.semantics)
   return {
-    ...image(input),
+    ...visual(input, prior),
     ...(semantic ? { semantics: semantic } : {}),
     timing: timing(input, totalMs, semantic),
   }
@@ -1037,6 +1092,7 @@ function frame(input: Record<string, unknown>, totalMs: number): DesktopFrame {
 
 export class WindowsDesktopDriver implements DesktopDriver {
   private readonly runner: Runner
+  private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
 
   constructor(input?: Runner) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
@@ -1046,7 +1102,16 @@ export class WindowsDesktopDriver implements DesktopDriver {
   async observe(): Promise<DesktopFrame> {
     const started = performance.now()
     const result = object(await this.runner.run(observe))
-    return frame(result, performance.now() - started)
+    const next = frame(result, performance.now() - started, this.last)
+    this.last = {
+      windowID: next.windowID,
+      location: next.location,
+      width: next.width,
+      height: next.height,
+      mime: next.mime,
+      data: next.data,
+    }
+    return next
   }
 
   async windows(): Promise<DesktopWindow[]> {
@@ -1089,6 +1154,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   cancel(): void {
+    this.last = undefined
     this.runner.cancel()
   }
 }

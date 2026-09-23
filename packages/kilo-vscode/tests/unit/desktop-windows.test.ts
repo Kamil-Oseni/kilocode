@@ -95,6 +95,12 @@ describe("Windows native desktop driver", () => {
       'throw new InvalidOperationException("Desktop capture exceeds the encoded image limit")',
     )
     expect(test.scripts[0]).toContain("$stream.GetBuffer(), 0, [int]$stream.Length")
+    expect(test.scripts[0]).toContain("$image.LockBits")
+    expect(test.scripts[0]).toContain("$size -gt 33177600")
+    expect(test.scripts[0]).toContain("[Security.Cryptography.SHA256]::Create()")
+    expect(test.scripts[0]).toContain("$global:RayaCaptureCache")
+    expect(test.scripts[0]).toContain("change = if ($unchanged) { 'unchanged' } else { 'keyframe' }")
+    expect(test.scripts[0]).toContain("if (-not $unchanged) {")
     expect(test.scripts[0]).toContain("$acquisition = [Diagnostics.Stopwatch]::StartNew()")
     expect(test.scripts[0]).toContain("$preparation = [Diagnostics.Stopwatch]::StartNew()")
     expect(test.scripts[0]).toContain("$semanticsTimer = [Diagnostics.Stopwatch]::StartNew()")
@@ -121,6 +127,137 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("desktop coordinates are unsafe")
     expect(test.scripts[1]).not.toContain("CopyFromScreen")
     expect(test.scripts[1]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
+  })
+
+  it("reuses one bounded local keyframe when native pixels are exactly unchanged", async () => {
+    const base = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      acquisitionMs: 0,
+      preparationMs: 0,
+      semanticsMs: 0,
+    }
+    const semantics = (focused: boolean) => ({
+      source: "windows_ui_automation",
+      status: "available",
+      viewport: { x: 0, y: 0, width: 20, height: 10 },
+      controls: [
+        {
+          controlID: "editor",
+          role: "Edit",
+          x: 0,
+          y: 0,
+          width: 20,
+          height: 10,
+          enabled: true,
+          focused,
+          actions: ["value"],
+        },
+      ],
+      truncated: false,
+    })
+    const test = harness([
+      JSON.stringify({ ...base, change: "keyframe", mime: "image/png", data: "encoded", semantics: semantics(false) }),
+      JSON.stringify({ ...base, change: "unchanged", semantics: semantics(true) }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    const first = await driver.observe()
+    const second = await driver.observe()
+
+    expect(first).toMatchObject({ data: "encoded", mime: "image/png", semantics: { controls: [{ focused: false }] } })
+    expect(second).toMatchObject({
+      data: "encoded",
+      mime: "image/png",
+      timing: { preparationMs: 0 },
+      semantics: { controls: [{ focused: true }] },
+    })
+  })
+
+  it("refuses an unchanged native frame without an exact local keyframe", async () => {
+    const output = JSON.stringify({
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      change: "unchanged",
+      acquisitionMs: 0,
+      preparationMs: 0,
+      semanticsMs: 0,
+      semantics: {
+        source: "windows_ui_automation",
+        status: "unavailable",
+        viewport: { x: 0, y: 0, width: 20, height: 10 },
+        controls: [],
+        truncated: false,
+      },
+    })
+    const driver = new WindowsDesktopDriver(harness([output]).runner)
+    await expect(driver.observe()).rejects.toThrow(/no matching local keyframe/i)
+  })
+
+  it("refuses malformed unchanged-frame claims", async () => {
+    const base = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      acquisitionMs: 0,
+      preparationMs: 0,
+      semanticsMs: 0,
+    }
+    const semantic = {
+      source: "windows_ui_automation",
+      status: "unavailable",
+      viewport: { x: 0, y: 0, width: 20, height: 10 },
+      controls: [],
+      truncated: false,
+    }
+    const pixels = new WindowsDesktopDriver(
+      harness([
+        JSON.stringify({ ...base, change: "keyframe", mime: "image/png", data: "encoded", semantics: semantic }),
+        JSON.stringify({ ...base, change: "unchanged", mime: "image/png", data: "replayed", semantics: semantic }),
+      ]).runner,
+    )
+    await pixels.observe()
+    await expect(pixels.observe()).rejects.toThrow(/unexpectedly contains encoded pixels/i)
+
+    const state = new WindowsDesktopDriver(
+      harness([JSON.stringify({ ...base, change: "delta", semantics: semantic })]).runner,
+    )
+    await expect(state.observe()).rejects.toThrow(/change state is invalid/i)
+  })
+
+  it("invalidates the local keyframe when capture is cancelled", async () => {
+    const base = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      acquisitionMs: 0,
+      preparationMs: 0,
+      semanticsMs: 0,
+      semantics: {
+        source: "windows_ui_automation",
+        status: "unavailable",
+        viewport: { x: 0, y: 0, width: 20, height: 10 },
+        controls: [],
+        truncated: false,
+      },
+    }
+    const test = harness([
+      JSON.stringify({ ...base, change: "keyframe", mime: "image/png", data: "encoded" }),
+      JSON.stringify({ ...base, change: "unchanged" }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    await driver.observe()
+    driver.cancel()
+
+    expect(test.cancelled()).toBe(1)
+    await expect(driver.observe()).rejects.toThrow(/no matching local keyframe/i)
   })
 
   it("lists visible windows and focuses an exact encoded identity", async () => {

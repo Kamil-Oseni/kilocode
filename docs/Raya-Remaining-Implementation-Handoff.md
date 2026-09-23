@@ -12,7 +12,7 @@ Chief reconciliation now uses exact saved parent task and child-input identities
 
 ## ChatGPT 2026-09-23 15:14 America/Toronto - installed named activity snapshot
 
-`cff303e7f5` is pushed and installed as `7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403`. SDK/CLI build, binary smoke tests, extension typechecks and lint, and packaging passed. This snapshot includes the named specialist rows plus the source-verified Chief stop-owner reconciliation and safe pre-admission replanning. Observe a real parallel-agent conversation and a persisted completed child report in the installed host before marking those UI behaviors accepted. Chief automatic fanout remains disabled pending terminal-receipt reconstruction and stop/restart tests.
+`cff303e7f5` is pushed and installed as `7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403`. SDK/CLI build, binary smoke tests, extension typechecks and lint, and packaging passed. This snapshot includes the named specialist rows plus the source-verified Chief stop-owner reconciliation and safe pre-admission replanning. Observe a real parallel-agent conversation and a persisted completed child report in the installed host before marking those UI behaviors accepted. Windows Computer Use could not initialize here: the node_repl helper exited twice with `CreateProcessWithLogonW failed: 2`, so no native UI state was observed. Chief automatic fanout remains disabled pending terminal-receipt reconstruction and stop/restart tests.
 
 ## ChatGPT 2026-09-23 15:09 America/Toronto - named background specialist activity
 

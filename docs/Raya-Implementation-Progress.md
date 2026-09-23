@@ -12,7 +12,7 @@
 
 ## ChatGPT 2026-09-23 15:14 America/Toronto - installed named specialist activity snapshot
 
-**Status: installed; real conversation visual review pending.** Commit `cff303e7f5` was pushed and snapshot `7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403` passed SDK generation, Windows CLI build and smoke tests, extension typechecks/lint, packaging and VS Code installation. It includes stopped-owner Chief reconciliation, safe replacement of an unstarted revised plan, and the named specialist activity rows. The Chief tools remain unregistered. Searchable child reports and the new activity hierarchy still need installed-host observation with real persisted and parallel child conversations.
+**Status: installed; real conversation visual review pending.** Commit `cff303e7f5` was pushed and snapshot `7.4.23-snapshot+cff303e7f5.kamil-oseni.1790190657403` passed SDK generation, Windows CLI build and smoke tests, extension typechecks/lint, packaging and VS Code installation. It includes stopped-owner Chief reconciliation, safe replacement of an unstarted revised plan, and the named specialist activity rows. The Chief tools remain unregistered. Searchable child reports and the new activity hierarchy still need installed-host observation with real persisted and parallel child conversations. Windows Computer Use could not initialize here: the node_repl helper exited twice with `CreateProcessWithLogonW failed: 2`, so no native UI state was observed.
 
 ## ChatGPT 2026-09-23 15:09 America/Toronto - named specialist activity rows
 

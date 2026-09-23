@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 18:34 America/Toronto - make specialist activity explain itself
+
+The existing parent-chat Chief activity list now shows each saved specialist's job and read-only/editing access under its name, followed by a short child report preview only when the matching inspected branch is ready or reviewed. Failed, cancelled and unknown outcomes suppress the report preview, and those adverse states take precedence over an older reviewed marker. This uses existing role icons and one expandable list without adding another panel or activity rail. Focused projection tests pass 4 cases / 13 assertions; extension/webview typechecks, lint and formatting pass. This is source evidence only until a real installed-host parallel run, narrow layout and restart are observed; `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-23 18:28 America/Toronto - desktop takeover snapshot installed
 
 Commit `4af3a34550` is pushed to `origin/main` and installed as `7.4.23-snapshot+4af3a34550.kamil-oseni.1790202286314`; VS Code lists the exact version. The retained rollback VSIX SHA-256 is `EBF7D2128CD5CFB079BFBEFE9B070790F05CDE60A6E9F7F0204205C50C75DA9E`. The low-memory workflow passed SDK preparation, extension/webview typechecks, lint, production bundling, packaging and installation; the push hook passed 29 JS/TS package typechecks plus the cached JetBrains check. A live editor reload, takeover during in-flight native capture, and WGC/DXGI frame benchmark remain unverified.

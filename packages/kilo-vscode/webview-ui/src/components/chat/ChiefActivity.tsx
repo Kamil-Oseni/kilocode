@@ -54,7 +54,19 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
               {(branch) => (
                 <li>
                   <Icon name={agentIcon(branch.specialist)} size="small" aria-hidden="true" />
-                  <span class="chief-activity__name">{branch.name}</span>
+                  <span class="chief-activity__content">
+                    <span class="chief-activity__name">{branch.name}</span>
+                    <Show when={branch.objective || branch.access}>
+                      <span class="chief-activity__brief">
+                        {branch.objective}
+                        <Show when={branch.objective && branch.access}> · </Show>
+                        <Show when={branch.access}>{branch.access === "read" ? "Read only" : "Can edit"}</Show>
+                      </span>
+                    </Show>
+                    <Show when={branch.report && (branch.state === "ready" || branch.state === "reviewed")}>
+                      <span class="chief-activity__report">{branch.report}</span>
+                    </Show>
+                  </span>
                   <span class="chief-activity__status">{label[branch.state]}</span>
                 </li>
               )}

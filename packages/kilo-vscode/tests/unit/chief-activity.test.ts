@@ -84,8 +84,64 @@ describe("chiefActivity", () => {
       ["ux", "cancelled", false],
     ])
     expect(chiefActivity(plan, [plan, current])?.branches.map((item) => item.state)).toEqual(["unknown", "cancelled"])
+    const contradictory = inspect([
+      ["docs", "unknown", true],
+      ["ux", "failed", true],
+    ])
+    expect(chiefActivity(plan, [plan, contradictory])?.branches.map((item) => item.state)).toEqual([
+      "unknown",
+      "failed",
+    ])
     expect(chiefActivity(plan, [plan, task("ux", "error")])?.branches[1]?.state).toBe("failed")
     expect(chiefActivity(plan, [current])).toBeUndefined()
     expect(chiefActivity({ ...plan, state: { ...plan.state, status: "error" } }, [plan])).toBeUndefined()
+  })
+
+  it("shows saved purpose and access, then only a completed matching report", () => {
+    const saved: ChiefPart = {
+      ...plan,
+      state: {
+        ...plan.state,
+        input: {
+          proposals: [
+            {
+              id: "docs",
+              name: "Docs audit",
+              specialist: "researcher",
+              access: "read",
+              brief: { objective: "Check the handoff" },
+            },
+            {
+              id: "ux",
+              name: "UX audit",
+              specialist: "designer",
+              access: "edit",
+              brief: { objective: "Improve the chat" },
+            },
+          ],
+        },
+      },
+    }
+    const report: ChiefPart = {
+      ...inspect([
+        ["docs", "completed", false],
+        ["ux", "admitted", false],
+      ]),
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          branches: [
+            { id: "docs", state: "completed", report: "The handoff matches the current source." },
+            { id: "ux", state: "admitted", report: "Premature result" },
+          ],
+        }),
+        metadata: { requestID: "request", goalCreatedAt: 1 },
+      },
+    }
+    const branches = chiefActivity(saved, [saved, report])?.branches
+    expect(branches?.map((branch) => [branch.objective, branch.access, branch.report])).toEqual([
+      ["Check the handoff", "read", "The handoff matches the current source."],
+      ["Improve the chat", "edit", undefined],
+    ])
   })
 })

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 18:34 America/Toronto - specialist activity hierarchy
+
+The existing expandable Chief parent-chat activity now derives each branch's job and read/edit access from its saved plan and a bounded report preview from the matching `chief_inspect` receipt. Unknown, cancelled and failed states override reviewed markers and hide previews. Projection tests pass 4 cases / 13 assertions; extension/webview typechecks, lint and formatting pass. Next build/install a snapshot, then inspect an actual two-specialist conversation on narrow and wide layouts, reopen it after restart, and verify exact names, roles, access labels, statuses and reports against the saved child turns. Do not mark the agent rows Verified from this source-only test.
+
 ## ChatGPT 2026-09-23 18:28 America/Toronto - installed takeover fix
 
 `4af3a34550` is pushed and installed as `7.4.23-snapshot+4af3a34550.kamil-oseni.1790202286314`. VS Code lists that version; retained rollback VSIX SHA-256 is `EBF7D2128CD5CFB079BFBEFE9B070790F05CDE60A6E9F7F0204205C50C75DA9E`. The low-memory build passed SDK preparation, extension/webview typechecks, lint, production bundle, VSIX packaging and installation. No live UI surface was available to prove the open host loaded it. Verify an in-flight capture interrupted by Pause/Stop on the installed host and run the native capture benchmark in an interactive desktop session; do not infer WGC/DXGI latency from this host's API errors.

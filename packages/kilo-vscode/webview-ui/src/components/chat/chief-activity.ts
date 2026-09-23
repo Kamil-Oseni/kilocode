@@ -6,6 +6,9 @@ export type ChiefBranch = {
   id: string
   name: string
   specialist: string
+  access?: "read" | "edit"
+  objective?: string
+  report?: string
   state: "planned" | "working" | "ready" | "reviewed" | "failed" | "cancelled" | "unknown"
 }
 
@@ -28,20 +31,23 @@ function inspect(part: ChiefPart) {
   try {
     const data = object(JSON.parse(part.state.output))
     if (!Array.isArray(data?.branches)) return []
-    return data.branches.flatMap((value): { id: string; state: ChiefBranch["state"]; reviewed: boolean }[] => {
-      const item = object(value)
-      const id = text(item?.id)
-      const state = item?.state
-      if (!id || !["planned", "admitted", "completed", "failed", "cancelled", "unknown"].includes(String(state)))
-        return []
-      return [
-        {
-          id,
-          state: state === "admitted" ? "working" : state === "completed" ? "ready" : (state as ChiefBranch["state"]),
-          reviewed: item?.reviewed === true,
-        },
-      ]
-    })
+    return data.branches.flatMap(
+      (value): { id: string; state: ChiefBranch["state"]; reviewed: boolean; report?: string }[] => {
+        const item = object(value)
+        const id = text(item?.id)
+        const state = item?.state
+        if (!id || !["planned", "admitted", "completed", "failed", "cancelled", "unknown"].includes(String(state)))
+          return []
+        return [
+          {
+            id,
+            state: state === "admitted" ? "working" : state === "completed" ? "ready" : (state as ChiefBranch["state"]),
+            reviewed: item?.reviewed === true,
+            ...(text(item?.report) ? { report: text(item?.report)?.slice(0, 240) } : {}),
+          },
+        ]
+      },
+    )
   } catch {
     return []
   }
@@ -54,7 +60,20 @@ function planned(value: unknown): ChiefBranch[] | undefined {
     const id = text(item?.id)
     const name = text(item?.name)
     const specialist = text(item?.specialist)
-    return id && name && specialist ? [{ id, name, specialist, state: "planned" }] : []
+    const brief = object(item?.brief)
+    const access = item?.access === "read" || item?.access === "edit" ? item.access : undefined
+    return id && name && specialist
+      ? [
+          {
+            id,
+            name,
+            specialist,
+            ...(access ? { access } : {}),
+            ...(text(brief?.objective) ? { objective: text(brief?.objective) } : {}),
+            state: "planned",
+          },
+        ]
+      : []
   })
   if (branches.length !== value.length || new Set(branches.map((item) => item.id)).size !== branches.length) return
   return branches
@@ -67,9 +86,9 @@ function status(
 ) {
   const state = report?.state
   const outcome = task?.state.output?.match(/<task\s+[^>]*state="(completed|error)"/)?.[1]
-  if (reviewed || report?.reviewed) return "reviewed" as const
   if (state === "unknown" || state === "cancelled" || state === "failed") return state
   if (task?.state.status === "error" || outcome === "error") return "failed" as const
+  if (reviewed || report?.reviewed) return "reviewed" as const
   if (state === "ready" || outcome === "completed") return "ready" as const
   if (state === "working" || task) return "working" as const
   return "planned" as const
@@ -126,7 +145,12 @@ export function chiefActivity(plan: ChiefPart, parts: readonly ChiefPart[]): Chi
     const report = reports.get(branch.id)
     const tasks = later.filter((part) => part.tool === "task" && part.state.input?.branch_id === branch.id)
     const task = tasks.at(-1)
-    return { ...branch, state: status(report, task, reviews.has(branch.id)) }
+    const current = status(report, task, reviews.has(branch.id))
+    return {
+      ...branch,
+      state: current,
+      ...((current === "ready" || current === "reviewed") && report?.report ? { report: report.report } : {}),
+    }
   })
   const synthesized = later.some(
     (part) => part.tool === "chief_synthesize" && part.state.status === "completed" && related(plan, part),

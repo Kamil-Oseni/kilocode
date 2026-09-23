@@ -140,7 +140,7 @@
 
 .chief-activity__branches li {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
   line-height: 1.45;
@@ -151,9 +151,25 @@
   color: var(--text-weak);
 }
 
-.chief-activity__name {
+.chief-activity__content {
+  display: grid;
+  gap: 2px;
   min-width: 0;
+  flex: 1;
+}
+
+.chief-activity__name,
+.chief-activity__brief,
+.chief-activity__report {
   overflow-wrap: anywhere;
+}
+
+.chief-activity__brief {
+  color: var(--text-weak);
+}
+
+.chief-activity__report {
+  margin-top: 2px;
 }
 
 .chief-activity__status {
@@ -169,7 +185,7 @@
   }
 
   .chief-activity__status {
-    margin-left: 24px;
+    margin-left: 20px;
   }
 }
 

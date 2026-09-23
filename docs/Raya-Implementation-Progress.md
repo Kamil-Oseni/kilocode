@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 17:48 America/Toronto - persist specialist role icons in child tabs
+
+Agent Manager child tabs now save the selected specialist role alongside the existing child title and parent ID. Task cards and the background-agent strip pass that role through the same open event; restored tabs retain it, and the tab and panel heading use Raya's existing role icon mapping. Older saved tabs without a role still load with the generic child icon. The focused tab suite passes 10 tests / 34 assertions, extension/webview typechecks and lint pass, and the diff is clean. This user-visible source change requires a fresh snapshot and installed-host observation before the child-tab visual gate can close.
+
 ## ChatGPT 2026-09-23 17:41 America/Toronto - install named Chief activity snapshot
 
 Commit `c9be6c7397` is pushed to `origin/main` and installed in VS Code as `7.4.23-snapshot+c9be6c7397.kamil-oseni.1790199404668`. SDK regeneration, Windows CLI and sandbox-worker smoke tests, sequential extension and webview typechecks, lint, production bundle and VSIX packaging passed. The installed CLI SHA-256 is `76015D84932494E37727C4F09567895D03ABDC55CD32EBE1F25F43DAF9BEE3F0`; retained rollback VSIX SHA-256 is `53A853B6C829C130000EB153BAC7ACE376DF66873354B98B80745EAF430979C0`. VS Code lists the installed version, but the open host conversation has not been observed. Live parallel-run, restart and responsive chat acceptance remain open.

@@ -138,6 +138,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
       sessionID: id,
       title: title(),
       parentSessionID: session.currentSessionID(),
+      agent: selectedAgent(),
       worktree: !!worktree,
       post: vscode.postMessage,
     })

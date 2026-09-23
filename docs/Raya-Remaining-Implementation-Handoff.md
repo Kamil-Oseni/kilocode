@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 17:48 America/Toronto - child-tab specialist identity
+
+`SubagentTab` now stores an optional validated specialist role without changing the version-one saved-tab format. The Agent Manager toolbar obtains the role from task receipts, and task-card/background-strip open events carry the selected role. Child tabs and the panel heading render the existing role icon mapping; restart restoration preserves it. The 10 focused subagent-tab tests, extension/webview typechecks, lint, and diff check pass. This is source-only after installed `c9be6c7397`; build/install the next snapshot and verify role icons in live tabs across restart before accepting the UI.
+
 ## ChatGPT 2026-09-23 17:41 America/Toronto - named Chief activity installed
 
 `c9be6c7397` is pushed and installed as `7.4.23-snapshot+c9be6c7397.kamil-oseni.1790199404668`. The low-memory workflow regenerated the SDK, smoke-tested the Windows CLI and sandbox worker, passed extension/webview typechecks and lint, bundled production assets and installed the VSIX. Installed CLI SHA-256: `76015D84932494E37727C4F09567895D03ABDC55CD32EBE1F25F43DAF9BEE3F0`; retained rollback VSIX SHA-256: `53A853B6C829C130000EB153BAC7ACE376DF66873354B98B80745EAF430979C0`. VS Code reports the installed version, but no live parent-child conversation or narrow/wide layout was observed. Keep the agent rows In progress until real parallel execution, review/synthesis, cancellation/restart, and chat visual acceptance pass.

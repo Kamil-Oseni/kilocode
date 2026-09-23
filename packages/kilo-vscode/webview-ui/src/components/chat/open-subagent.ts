@@ -12,6 +12,7 @@ interface OpenSubagent {
   sessionID: string
   title?: string
   parentSessionID?: string
+  agent?: string
   /** True inside Agent Manager, where the inspector replaces the editor tab. */
   worktree: boolean
   post: (message: WebviewMessage) => void
@@ -22,7 +23,12 @@ export function openSubagent(input: OpenSubagent) {
   if (input.worktree) {
     window.dispatchEvent(
       new CustomEvent("agentManager.openSubagent", {
-        detail: { sessionID: input.sessionID, title: input.title, parentSessionID: input.parentSessionID },
+        detail: {
+          sessionID: input.sessionID,
+          title: input.title,
+          parentSessionID: input.parentSessionID,
+          agent: input.agent,
+        },
       }),
     )
     return

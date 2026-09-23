@@ -217,6 +217,25 @@ describe("Agent Manager subagent tabs", () => {
     ).toEqual({ version: 1, tabs: { default: [{ id: "same", title: "First" }] }, active: {} })
   })
 
+  it("keeps the selected specialist role on a child tab after restoration", () => {
+    const saved: SubagentState[] = []
+    createRoot((dispose) => {
+      const item = createSubagentTabs({
+        current: () => "parent",
+        persist: (state) => saved.push(structuredClone(state)),
+        sync: () => undefined,
+        unsync: () => undefined,
+        show: () => undefined,
+        hide: () => undefined,
+      })
+      item.open("child", "Safety audit", "parent", "researcher")
+      item.open("child", "Safety audit", "parent")
+      expect(item.tabs()).toEqual([{ id: "child", title: "Safety audit", parentID: "parent", agent: "researcher" }])
+      dispose()
+    })
+    expect(restoreSubagents(saved.at(-1))).toEqual(saved.at(-1))
+  })
+
   it("finds direct subagent sessions in task tool parts", () => {
     const tabs = availableSubagents([
       {
@@ -241,8 +260,8 @@ describe("Agent Manager subagent tabs", () => {
     ])
 
     expect(tabs).toEqual([
-      { id: "child-1", title: "Map API routes · Explore" },
-      { id: "child-2", title: "general" },
+      { id: "child-1", title: "Map API routes · Explore", agent: "explore" },
+      { id: "child-2", title: "general", agent: "general" },
     ])
   })
 })

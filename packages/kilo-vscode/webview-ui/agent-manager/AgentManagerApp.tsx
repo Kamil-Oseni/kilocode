@@ -1226,11 +1226,18 @@ const AgentManagerContent: Component = () => {
       }
     }
     const subagent = (event: Event) => {
-      const detail = (event as CustomEvent<{ sessionID?: unknown; title?: unknown; parentSessionID?: unknown }>).detail
+      const detail = (
+        event as CustomEvent<{ sessionID?: unknown; title?: unknown; parentSessionID?: unknown; agent?: unknown }>
+      ).detail
       if (typeof detail?.sessionID !== "string") return
       const parent = typeof detail.parentSessionID === "string" ? detail.parentSessionID : session.currentSessionID()
       if (parent && !ownsParentSession(projectStates(), parent, currentProjectId())) return
-      subagents.open(detail.sessionID, typeof detail.title === "string" ? detail.title : undefined, parent)
+      subagents.open(
+        detail.sessionID,
+        typeof detail.title === "string" ? detail.title : undefined,
+        parent,
+        typeof detail.agent === "string" ? detail.agent : undefined,
+      )
     }
     window.addEventListener("agentManager.openSubagent", subagent)
     window.addEventListener("message", handler)

@@ -14,6 +14,7 @@ import { SessionProvider, useSession } from "../src/context/session"
 import { SortableClosableTab } from "./ClosableTab"
 import { InspectorTabStrip } from "./InspectorTabStrip"
 import type { SubagentTab } from "./subagent-tabs"
+import { agentIcon } from "../src/components/chat/task-tool-state"
 
 interface Props {
   tabs: Accessor<SubagentTab[]>
@@ -72,7 +73,7 @@ const SubagentContent: Component<Props> = (props) => {
     >
       <header class="am-subagent-header">
         <div class="am-subagent-heading">
-          <Icon name="task" size="small" />
+          <Icon name={agentIcon(active()?.agent)} size="small" />
           <Show when={active()?.parentID} fallback={<span>Subagents</span>}>
             {(id) => (
               <>
@@ -108,7 +109,7 @@ const SubagentContent: Component<Props> = (props) => {
               id={id}
               label={label}
               tooltip={label}
-              icon="task"
+              icon={agentIcon(props.tabs().find((tab) => tab.id === id)?.agent)}
               showKeybind={false}
               keybind={props.active() === id ? "" : props.nextKeybind}
               closeKeybind={props.closeKeybind}

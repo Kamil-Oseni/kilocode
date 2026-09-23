@@ -7,6 +7,7 @@ export interface SubagentTab {
   id: string
   title: string
   parentID?: string
+  agent?: string
 }
 
 export interface SubagentState {
@@ -45,13 +46,14 @@ export function restoreSubagents(value: unknown): SubagentState {
     const seen = new Set<string>()
     const list = raw.slice(0, children).flatMap((item): SubagentTab[] => {
       if (!item || typeof item !== "object") return []
-      const input = item as { id?: unknown; title?: unknown; parentID?: unknown }
+      const input = item as { id?: unknown; title?: unknown; parentID?: unknown; agent?: unknown }
       const id = text(input.id)
       const title = text(input.title, 200)
       const parentID = input.parentID === undefined ? undefined : text(input.parentID)
+      const agent = input.agent === undefined ? undefined : text(input.agent, 100)
       if (!id || !title || seen.has(id) || (input.parentID !== undefined && !parentID)) return []
       seen.add(id)
-      return [{ id, title, ...(parentID ? { parentID } : {}) }]
+      return [{ id, title, ...(parentID ? { parentID } : {}), ...(agent ? { agent } : {}) }]
     })
     if (list.length > 0) tabs[scope] = list
   }
@@ -106,9 +108,10 @@ export function createSubagentTabs(opts: Options) {
   resume()
   createEffect(resume)
 
-  const open = (id: string, title?: string, parentID?: string) => {
+  const open = (id: string, title?: string, parentID?: string, agent?: string) => {
     if (!id) return
     const label = title?.trim().slice(0, 200) || "Sub-agent"
+    const role = agent?.trim().slice(0, 100) || undefined
     const scope = key(parentID)
     const existing = (tabs()[scope] ?? []).some((tab) => tab.id === id)
     if (!existing) synced.add(receipt(scope, id))
@@ -116,12 +119,19 @@ export function createSubagentTabs(opts: Options) {
       setTabs((prev) => {
         const current = prev[scope] ?? []
         const existing = current.find((tab) => tab.id === id)
-        if (!existing) return { ...prev, [scope]: [...current, { id, title: label, parentID }] }
-        if ((title?.trim() && existing.title !== label) || (!existing.parentID && parentID)) {
+        if (!existing)
+          return { ...prev, [scope]: [...current, { id, title: label, parentID, ...(role ? { agent: role } : {}) }] }
+        if (
+          (title?.trim() && existing.title !== label) ||
+          (!existing.parentID && parentID) ||
+          (!existing.agent && role)
+        ) {
           return {
             ...prev,
             [scope]: current.map((tab) =>
-              tab.id === id ? { ...tab, title: label, parentID: tab.parentID ?? parentID } : tab,
+              tab.id === id
+                ? { ...tab, title: label, parentID: tab.parentID ?? parentID, agent: tab.agent ?? role }
+                : tab,
             ),
           }
         }
@@ -227,6 +237,7 @@ export function availableSubagents(parts: ToolPart[]): SubagentTab[] {
     const type = input.subagent_type
     const metadata = part.metadata ?? (part.state as { metadata?: Record<string, unknown> }).metadata
     const display = metadata?.displayName
+    const role = metadata?.selectedAgent ?? type
     const title =
       typeof display === "string" && display.trim()
         ? display
@@ -235,7 +246,7 @@ export function availableSubagents(parts: ToolPart[]): SubagentTab[] {
           : typeof type === "string"
             ? type
             : "Sub-agent"
-    return [{ id: child, title }]
+    return [{ id: child, title, ...(typeof role === "string" && role.trim() ? { agent: role } : {}) }]
   })
 }
 
@@ -244,7 +255,7 @@ export function createSubagentToolbar(opts: {
   current: Accessor<string | undefined>
   parts: (id: string) => ToolPart[]
   tabs: Accessor<SubagentTab[]>
-  open: (id: string, title: string, parentID: string) => void
+  open: (id: string, title: string, parentID: string, agent?: string) => void
   visible: Accessor<boolean>
   show: () => void
   hide: () => void
@@ -264,7 +275,7 @@ export function createSubagentToolbar(opts: {
     }
     const id = opts.current()
     if (!id) return
-    for (const tab of available()) opts.open(tab.id, tab.title, id)
+    for (const tab of available()) opts.open(tab.id, tab.title, id, tab.agent)
   }
   createEffect(
     on(
@@ -315,14 +326,19 @@ export function createSubagentController(opts: {
   return { tabs, toolbar }
 }
 
-export function attachSubagentEvent(open: (id: string, title?: string, parentID?: string) => void): () => void {
+export function attachSubagentEvent(
+  open: (id: string, title?: string, parentID?: string, agent?: string) => void,
+): () => void {
   const handler = (event: Event) => {
-    const detail = (event as CustomEvent<{ sessionID?: unknown; title?: unknown; parentSessionID?: unknown }>).detail
+    const detail = (
+      event as CustomEvent<{ sessionID?: unknown; title?: unknown; parentSessionID?: unknown; agent?: unknown }>
+    ).detail
     if (typeof detail?.sessionID !== "string") return
     open(
       detail.sessionID,
       typeof detail.title === "string" ? detail.title : undefined,
       typeof detail.parentSessionID === "string" ? detail.parentSessionID : undefined,
+      typeof detail.agent === "string" ? detail.agent : undefined,
     )
   }
   window.addEventListener("agentManager.openSubagent", handler)

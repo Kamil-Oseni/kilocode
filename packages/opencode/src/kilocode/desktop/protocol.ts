@@ -261,15 +261,27 @@ export const WindowsResult = Schema.Struct({
   receipt: Receipt,
 })
 
-export const WatchFrame = Schema.Struct({
+const WatchFrameBase = {
   width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
-  mime: Schema.Literals(["image/png", "image/jpeg"]),
-  data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
   timing: Timing,
   semantics: Schema.optional(Semantics),
   observation: Observation,
-})
+}
+
+export const WatchFrame = Schema.Union([
+  Schema.Struct({
+    ...WatchFrameBase,
+    change: Schema.Literal("keyframe"),
+    mime: Schema.Literals(["image/png", "image/jpeg"]),
+    data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
+  }),
+  Schema.Struct({
+    ...WatchFrameBase,
+    change: Schema.Literal("unchanged"),
+    baseObservationID: ObservationID,
+  }),
+])
 
 export const WatchResult = Schema.Struct({
   operation: Schema.Literal("watch"),

@@ -227,13 +227,16 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
           )
           if (result.operation !== "watch")
             return yield* Effect.die(new Error("Desktop host returned the wrong result"))
+          const images = result.frames.filter((frame) => frame.change === "keyframe").length
           return {
-            title: `Captured ${result.frames.length} desktop frames`,
+            title: `Observed ${result.frames.length} desktop frames (${images} image${images === 1 ? "" : "s"})`,
             output: JSON.stringify(
               {
                 frames: result.frames.map((frame) => ({
+                  change: frame.change,
                   width: frame.width,
                   height: frame.height,
+                  ...(frame.change === "unchanged" ? { baseObservationID: frame.baseObservationID } : {}),
                   observation: frame.observation,
                   timing: frame.timing,
                   ...(frame.semantics ? { semantics: frame.semantics } : {}),
@@ -243,13 +246,19 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
               undefined,
               2,
             ),
-            metadata: { frames: result.frames.length },
-            attachments: result.frames.map((frame, index) => ({
-              type: "file" as const,
-              mime: frame.mime,
-              filename: `desktop-frame-${index + 1}.${frame.mime === "image/png" ? "png" : "jpg"}`,
-              url: `data:${frame.mime};base64,${frame.data}`,
-            })),
+            metadata: { frames: result.frames.length, images },
+            attachments: result.frames.flatMap((frame, index) =>
+              frame.change === "keyframe"
+                ? [
+                    {
+                      type: "file" as const,
+                      mime: frame.mime,
+                      filename: `desktop-frame-${index + 1}.${frame.mime === "image/png" ? "png" : "jpg"}`,
+                      url: `data:${frame.mime};base64,${frame.data}`,
+                    },
+                  ]
+                : [],
+            ),
           }
         }),
     }

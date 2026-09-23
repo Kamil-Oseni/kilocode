@@ -243,20 +243,27 @@ it.instance(
             if (input.operation === "watch") {
               return {
                 operation: "watch" as const,
-                frames: Array.from({ length: input.frameCount }, (_, index) => ({
-                  width: 20,
-                  height: 10,
-                  mime: "image/png" as const,
-                  data: "cG5n",
-                  timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
-                  observation: {
-                    version: 1 as const,
-                    id: ObservationID.make(`observation_watch_${index}`),
-                    observedAt: index + 1,
-                    validUntil: index + 10_000,
-                    target: { surface: "desktop" as const, windowID: "window_seen" },
-                  },
-                })),
+                frames: Array.from({ length: input.frameCount }, (_, index) => {
+                  const frame = {
+                    width: 20,
+                    height: 10,
+                    timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
+                    observation: {
+                      version: 1 as const,
+                      id: ObservationID.make(`observation_watch_${index}`),
+                      observedAt: index + 1,
+                      validUntil: index + 10_000,
+                      target: { surface: "desktop" as const, windowID: "window_seen" },
+                    },
+                  }
+                  if (index === 1)
+                    return {
+                      ...frame,
+                      change: "unchanged" as const,
+                      baseObservationID: ObservationID.make("observation_watch_0"),
+                    }
+                  return { ...frame, change: "keyframe" as const, mime: "image/png" as const, data: "cG5n" }
+                }),
                 receipt: {
                   version: 1 as const,
                   requestID: "desktop_watch_test",
@@ -503,13 +510,16 @@ it.instance(
         }),
       )
       expect(effects()[5]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
-      expect(watched.title).toBe("Captured 3 desktop frames")
-      expect(watched.attachments).toHaveLength(3)
+      expect(watched.title).toBe("Observed 3 desktop frames (2 images)")
+      expect(watched.attachments).toHaveLength(2)
       expect(watched.attachments?.map((item) => item.filename)).toEqual([
         "desktop-frame-1.png",
-        "desktop-frame-2.png",
         "desktop-frame-3.png",
       ])
+      expect(JSON.parse(watched.output).frames[1]).toMatchObject({
+        change: "unchanged",
+        baseObservationID: "observation_watch_0",
+      })
       const watch = { id: "watch_schema", sessionID: ctx.sessionID, operation: "watch" as const }
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 1, intervalMs: 500 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 3, intervalMs: 249 })).toBe(false)

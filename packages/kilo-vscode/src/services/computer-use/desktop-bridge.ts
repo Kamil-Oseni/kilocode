@@ -47,6 +47,31 @@ function ground(request: DesktopRequest) {
   }
 }
 
+function changes(frames: Frame[]) {
+  let base: Frame | undefined
+  return frames.map((frame) => {
+    if (
+      base &&
+      frame.width === base.width &&
+      frame.height === base.height &&
+      frame.mime === base.mime &&
+      frame.data === base.data
+    ) {
+      return {
+        change: "unchanged" as const,
+        width: frame.width,
+        height: frame.height,
+        timing: frame.timing,
+        ...(frame.semantics ? { semantics: frame.semantics } : {}),
+        observation: frame.observation,
+        baseObservationID: base.observation.id,
+      }
+    }
+    base = frame
+    return { ...frame, change: "keyframe" as const }
+  })
+}
+
 export interface DesktopReceiptStore {
   get<T>(key: string): T | undefined
   update(key: string, value: unknown): Thenable<void>
@@ -223,7 +248,7 @@ export class DesktopBridge {
         throw new Error("Desktop watch returned an incomplete frame sequence")
       return {
         operation: "watch",
-        frames,
+        frames: changes(frames),
         receipt: {
           version: 1,
           requestID: request.id,

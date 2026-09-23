@@ -22,6 +22,7 @@ function setup(
     decision?: "allow" | "ask" | "deny"
     dispatchDecision?: "allow" | "ask" | "deny"
     dispatch?: () => "allow" | "ask" | "deny"
+    pixels?: string[]
   } = {},
 ) {
   const replies: unknown[] = []
@@ -30,6 +31,7 @@ function setup(
   const focused: string[] = []
   const events = new Set<(event: SSEPayload, directory?: string) => void>()
   const states = new Set<(state: ConnectionState, error?: Error) => void>()
+  let captured = 0
   const driver: DesktopDriver = {
     observe: async () => ({
       windowID: "window_1",
@@ -37,7 +39,7 @@ function setup(
       width: 20,
       height: 10,
       mime: "image/png",
-      data: "cG5n",
+      data: input.pixels?.[captured++] ?? "cG5n",
       semantics: {
         source: "windows_ui_automation",
         status: "available",
@@ -397,13 +399,56 @@ describe("desktop observation bridge", () => {
       result: {
         operation: "watch",
         frames: [
-          { width: 20, height: 10, observation: { target: { surface: "desktop", windowID: "window_1" } } },
-          { width: 20, height: 10, observation: { target: { surface: "desktop", windowID: "window_1" } } },
-          { width: 20, height: 10, observation: { target: { surface: "desktop", windowID: "window_1" } } },
+          {
+            change: "keyframe",
+            width: 20,
+            height: 10,
+            data: "cG5n",
+            observation: { target: { surface: "desktop", windowID: "window_1" } },
+          },
+          {
+            change: "unchanged",
+            width: 20,
+            height: 10,
+            observation: { target: { surface: "desktop", windowID: "window_1" } },
+          },
+          {
+            change: "unchanged",
+            width: 20,
+            height: 10,
+            observation: { target: { surface: "desktop", windowID: "window_1" } },
+          },
         ],
         receipt: { requestID: watch.id, effect: "observe", outcome: "confirmed" },
       },
     })
+    const result = (test.replies[0] as { result: { frames: Array<Record<string, unknown>> } }).result
+    expect(result.frames[1].baseObservationID).toBe(
+      (result.frames[0].observation as { id: string }).id,
+    )
+    expect(result.frames[1]).not.toHaveProperty("data")
+    expect(result.frames[2].baseObservationID).toBe(result.frames[1].baseObservationID)
+    test.bridge.dispose()
+  })
+
+  it("emits a new keyframe only after the watched pixels change", async () => {
+    const test = setup({ pixels: ["same", "same", "changed"] })
+    const watch: DesktopRequest = {
+      id: "desktop_watch_changed",
+      sessionID: "ses_desktop",
+      operation: "watch",
+      frameCount: 3,
+      intervalMs: 500,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: watch } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    const frames = (test.replies[0] as { result: { frames: Array<Record<string, unknown>> } }).result.frames
+    expect(frames.map((frame) => frame.change)).toEqual(["keyframe", "unchanged", "keyframe"])
+    expect(frames[1].baseObservationID).toBe((frames[0].observation as { id: string }).id)
+    expect(frames[2]).toMatchObject({ data: "changed" })
+    expect(frames[2]).not.toHaveProperty("baseObservationID")
     test.bridge.dispose()
   })
 

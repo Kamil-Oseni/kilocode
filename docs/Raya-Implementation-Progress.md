@@ -6,6 +6,16 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:21 America/Toronto - Bounded desktop watch omits identical image payloads
+
+**Status: implemented and verified in source; region-level deltas and continuous capture remain open.** Each bounded desktop watch now compares the exact encoded dimensions, format and pixels of successive observations locally. The first image and every changed image cross the shared protocol as a keyframe. An identical image crosses as an `unchanged` frame containing its fresh observation, separate stage timing, current bounded accessibility snapshot and the exact base keyframe observation ID, but no repeated MIME or base64 pixel payload. The model tool attaches only keyframes while still reporting every sampled frame and its continuity metadata.
+
+This is exact full-frame deduplication, not speculative scene equivalence. A one-byte image change creates a new keyframe. Accessibility data remains fresh even when pixels are identical because focus, enabled state or semantic structure can change without a visible pixel difference. The final watch receipt still names the newest observation, and cancellation, target checks, bounded 2–4 frame count and receipt replay rules are unchanged.
+
+Focused evidence passes **21 extension bridge tests / 72 assertions** and **6 CLI tests / 71 assertions**. It proves one keyframe followed by unchanged references for a stable scene, a new keyframe immediately after changed pixels, no image field on unchanged frames, correct base-observation linkage, CLI decoding, model-visible continuity metadata and attachment omission. Both package typechecks and SDK generation pass.
+
+Next move deduplication ahead of encoding inside the native capture worker, add bounded dirty-region payloads and an ephemeral ring, and replace 2–4 frame polling with adaptive continuous acquisition under the lease. `FUT-CU-01` remains **In progress** and no snapshot is installed from this source checkpoint.
+
 ## ChatGPT 2026-09-23 01:06 America/Toronto - UI Automation uses bounded cached traversal
 
 **Status: implemented and benchmarked in source; capture preparation, semantic latency and end-to-end observation remain above target.** The foreground UI Automation walk now creates one explicit `CacheRequest` for the exact properties and action patterns Raya is permitted to observe. The root and every Control View child carry that cache, so the bounded 1,024-node traversal reads accessible name, automation ID, role, physical bounds, enabled/focused/off-screen/selected state and supported actions from one correlated cache instead of issuing repeated cross-process calls for every property and pattern. It still returns at most 256 controls, excludes text values and secrets, and rechecks the exact foreground identity after visual and semantic collection.

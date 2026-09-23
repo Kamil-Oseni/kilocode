@@ -5944,44 +5944,85 @@ export type DesktopResult =
     }
   | {
       operation: "watch"
-      frames: Array<{
-        width: number
-        height: number
-        mime: "image/png" | "image/jpeg"
-        data: string
-        timing: {
-          acquisitionMs: number
-          preparationMs: number
-          semanticsMs?: number
-          totalMs: number
-        }
-        semantics?: {
-          source: "windows_ui_automation"
-          status: "available" | "unavailable"
-          viewport: {
-            x: number
-            y: number
+      frames: Array<
+        | {
             width: number
             height: number
+            timing: {
+              acquisitionMs: number
+              preparationMs: number
+              semanticsMs?: number
+              totalMs: number
+            }
+            semantics?: {
+              source: "windows_ui_automation"
+              status: "available" | "unavailable"
+              viewport: {
+                x: number
+                y: number
+                width: number
+                height: number
+              }
+              controls: Array<{
+                controlID: string
+                role: string
+                name?: string
+                automationID?: string
+                x: number
+                y: number
+                width: number
+                height: number
+                enabled: boolean
+                focused: boolean
+                selected?: boolean
+                actions: Array<"invoke" | "select" | "toggle" | "expand_collapse" | "value" | "scroll">
+              }>
+              truncated: boolean
+            }
+            observation: ComputerUseObservation
+            change: "keyframe"
+            mime: "image/png" | "image/jpeg"
+            data: string
           }
-          controls: Array<{
-            controlID: string
-            role: string
-            name?: string
-            automationID?: string
-            x: number
-            y: number
+        | {
             width: number
             height: number
-            enabled: boolean
-            focused: boolean
-            selected?: boolean
-            actions: Array<"invoke" | "select" | "toggle" | "expand_collapse" | "value" | "scroll">
-          }>
-          truncated: boolean
-        }
-        observation: ComputerUseObservation
-      }>
+            timing: {
+              acquisitionMs: number
+              preparationMs: number
+              semanticsMs?: number
+              totalMs: number
+            }
+            semantics?: {
+              source: "windows_ui_automation"
+              status: "available" | "unavailable"
+              viewport: {
+                x: number
+                y: number
+                width: number
+                height: number
+              }
+              controls: Array<{
+                controlID: string
+                role: string
+                name?: string
+                automationID?: string
+                x: number
+                y: number
+                width: number
+                height: number
+                enabled: boolean
+                focused: boolean
+                selected?: boolean
+                actions: Array<"invoke" | "select" | "toggle" | "expand_collapse" | "value" | "scroll">
+              }>
+              truncated: boolean
+            }
+            observation: ComputerUseObservation
+            change: "unchanged"
+            baseObservationID: ComputerUseObservationId
+          }
+      >
       receipt: ComputerUseReceipt
     }
   | {

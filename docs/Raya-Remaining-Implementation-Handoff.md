@@ -6,6 +6,12 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:21 America/Toronto - preserve exact watch-frame deduplication
+
+The shared desktop watch result is now a union of `keyframe` and `unchanged` frames. A keyframe carries MIME and base64 image data. An unchanged frame carries no pixels; it retains dimensions, fresh timing, current semantics, its own observation and `baseObservationID` pointing to the exact retained keyframe. The CLI emits attachments only for keyframes and includes change/base metadata for every sample.
+
+Keep the comparison exact across width, height, MIME and encoded data. Do not infer unchanged state from timing, target identity or a perceptual threshold. Semantic snapshots must remain fresh because accessibility can change without pixels. Focused evidence is 21 extension tests / 72 assertions and 6 CLI tests / 71 assertions with both typechecks and SDK generation passing. Continue by moving change detection before encoding, sending bounded dirty regions and replacing short polling with an adaptive continuous native ring. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-23 01:06 America/Toronto - preserve cached UI Automation traversal
 
 `Get-RayaControls` now supplies an explicit `CacheRequest` to the Control View walker and reads only cached properties/patterns for every returned element. Preserve the exact property allowlist, 1,024 visited-node bound, 256 returned-control bound, physical viewport and final foreground identity recheck. Do not replace cached traversal with unbounded `FindAll`, reintroduce repeated `Current` property calls, add control text values or expose credentials/clipboard content.

@@ -82570,163 +82570,328 @@
               "frames": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "width": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0
-                    },
-                    "height": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0
-                    },
-                    "mime": {
-                      "type": "string",
-                      "enum": ["image/png", "image/jpeg"]
-                    },
-                    "data": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 20000000
-                    },
-                    "timing": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "acquisitionMs": {
-                          "type": "number",
-                          "minimum": 0
+                        "width": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
                         },
-                        "preparationMs": {
-                          "type": "number",
-                          "minimum": 0
+                        "height": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
                         },
-                        "semanticsMs": {
-                          "type": "number",
-                          "minimum": 0
-                        },
-                        "totalMs": {
-                          "type": "number",
-                          "minimum": 0
-                        }
-                      },
-                      "required": ["acquisitionMs", "preparationMs", "totalMs"],
-                      "additionalProperties": false
-                    },
-                    "semantics": {
-                      "type": "object",
-                      "properties": {
-                        "source": {
-                          "type": "string",
-                          "enum": ["windows_ui_automation"]
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": ["available", "unavailable"]
-                        },
-                        "viewport": {
+                        "timing": {
                           "type": "object",
                           "properties": {
-                            "x": {
-                              "type": "integer"
+                            "acquisitionMs": {
+                              "type": "number",
+                              "minimum": 0
                             },
-                            "y": {
-                              "type": "integer"
+                            "preparationMs": {
+                              "type": "number",
+                              "minimum": 0
                             },
-                            "width": {
-                              "type": "integer",
-                              "exclusiveMinimum": 0
+                            "semanticsMs": {
+                              "type": "number",
+                              "minimum": 0
                             },
-                            "height": {
-                              "type": "integer",
-                              "exclusiveMinimum": 0
+                            "totalMs": {
+                              "type": "number",
+                              "minimum": 0
                             }
                           },
-                          "required": ["x", "y", "width", "height"],
+                          "required": ["acquisitionMs", "preparationMs", "totalMs"],
                           "additionalProperties": false
                         },
-                        "controls": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "controlID": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
-                              },
-                              "role": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 100
-                              },
-                              "name": {
-                                "type": "string",
-                                "maxLength": 512
-                              },
-                              "automationID": {
-                                "type": "string",
-                                "maxLength": 200
-                              },
-                              "x": {
-                                "type": "integer"
-                              },
-                              "y": {
-                                "type": "integer"
-                              },
-                              "width": {
-                                "type": "integer",
-                                "exclusiveMinimum": 0
-                              },
-                              "height": {
-                                "type": "integer",
-                                "exclusiveMinimum": 0
-                              },
-                              "enabled": {
-                                "type": "boolean"
-                              },
-                              "focused": {
-                                "type": "boolean"
-                              },
-                              "selected": {
-                                "type": "boolean"
-                              },
-                              "actions": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string",
-                                  "enum": ["invoke", "select", "toggle", "expand_collapse", "value", "scroll"]
-                                },
-                                "maxItems": 6
-                              }
+                        "semantics": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": ["windows_ui_automation"]
                             },
-                            "required": [
-                              "controlID",
-                              "role",
-                              "x",
-                              "y",
-                              "width",
-                              "height",
-                              "enabled",
-                              "focused",
-                              "actions"
-                            ],
-                            "additionalProperties": false
+                            "status": {
+                              "type": "string",
+                              "enum": ["available", "unavailable"]
+                            },
+                            "viewport": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "integer"
+                                },
+                                "y": {
+                                  "type": "integer"
+                                },
+                                "width": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "height": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["x", "y", "width", "height"],
+                              "additionalProperties": false
+                            },
+                            "controls": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "controlID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "role": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "maxLength": 512
+                                  },
+                                  "automationID": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "x": {
+                                    "type": "integer"
+                                  },
+                                  "y": {
+                                    "type": "integer"
+                                  },
+                                  "width": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0
+                                  },
+                                  "height": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0
+                                  },
+                                  "enabled": {
+                                    "type": "boolean"
+                                  },
+                                  "focused": {
+                                    "type": "boolean"
+                                  },
+                                  "selected": {
+                                    "type": "boolean"
+                                  },
+                                  "actions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": ["invoke", "select", "toggle", "expand_collapse", "value", "scroll"]
+                                    },
+                                    "maxItems": 6
+                                  }
+                                },
+                                "required": [
+                                  "controlID",
+                                  "role",
+                                  "x",
+                                  "y",
+                                  "width",
+                                  "height",
+                                  "enabled",
+                                  "focused",
+                                  "actions"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 256
+                            },
+                            "truncated": {
+                              "type": "boolean"
+                            }
                           },
-                          "maxItems": 256
+                          "required": ["source", "status", "viewport", "controls", "truncated"],
+                          "additionalProperties": false
                         },
-                        "truncated": {
-                          "type": "boolean"
+                        "observation": {
+                          "$ref": "#/components/schemas/ComputerUseObservation"
+                        },
+                        "change": {
+                          "type": "string",
+                          "enum": ["keyframe"]
+                        },
+                        "mime": {
+                          "type": "string",
+                          "enum": ["image/png", "image/jpeg"]
+                        },
+                        "data": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000000
                         }
                       },
-                      "required": ["source", "status", "viewport", "controls", "truncated"],
+                      "required": ["width", "height", "timing", "observation", "change", "mime", "data"],
                       "additionalProperties": false
                     },
-                    "observation": {
-                      "$ref": "#/components/schemas/ComputerUseObservation"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "width": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "height": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "timing": {
+                          "type": "object",
+                          "properties": {
+                            "acquisitionMs": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "preparationMs": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "semanticsMs": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "totalMs": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["acquisitionMs", "preparationMs", "totalMs"],
+                          "additionalProperties": false
+                        },
+                        "semantics": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": ["windows_ui_automation"]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["available", "unavailable"]
+                            },
+                            "viewport": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "integer"
+                                },
+                                "y": {
+                                  "type": "integer"
+                                },
+                                "width": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "height": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["x", "y", "width", "height"],
+                              "additionalProperties": false
+                            },
+                            "controls": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "controlID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "role": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "maxLength": 512
+                                  },
+                                  "automationID": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "x": {
+                                    "type": "integer"
+                                  },
+                                  "y": {
+                                    "type": "integer"
+                                  },
+                                  "width": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0
+                                  },
+                                  "height": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0
+                                  },
+                                  "enabled": {
+                                    "type": "boolean"
+                                  },
+                                  "focused": {
+                                    "type": "boolean"
+                                  },
+                                  "selected": {
+                                    "type": "boolean"
+                                  },
+                                  "actions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": ["invoke", "select", "toggle", "expand_collapse", "value", "scroll"]
+                                    },
+                                    "maxItems": 6
+                                  }
+                                },
+                                "required": [
+                                  "controlID",
+                                  "role",
+                                  "x",
+                                  "y",
+                                  "width",
+                                  "height",
+                                  "enabled",
+                                  "focused",
+                                  "actions"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 256
+                            },
+                            "truncated": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["source", "status", "viewport", "controls", "truncated"],
+                          "additionalProperties": false
+                        },
+                        "observation": {
+                          "$ref": "#/components/schemas/ComputerUseObservation"
+                        },
+                        "change": {
+                          "type": "string",
+                          "enum": ["unchanged"]
+                        },
+                        "baseObservationID": {
+                          "$ref": "#/components/schemas/ComputerUseObservationID"
+                        }
+                      },
+                      "required": ["width", "height", "timing", "observation", "change", "baseObservationID"],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": ["width", "height", "mime", "data", "timing", "observation"],
-                  "additionalProperties": false
+                  ]
                 },
                 "minItems": 2,
                 "maxItems": 4

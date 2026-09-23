@@ -1,4 +1,4 @@
-import { execFile, type ChildProcess } from "node:child_process"
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import {
   CAPTURE,
   type DesktopAction,
@@ -388,9 +388,11 @@ public static class RayaDesktopNative {
 const setup = String.raw`
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+if (-not ("RayaDesktopNative" -as [type])) {
 Add-Type -TypeDefinition @'
 ${native}
 '@
+}
 [RayaDesktopNative]::EnableDpiAwareness()
 
 function Get-RayaWindow {
@@ -721,36 +723,112 @@ switch ($action.operation) {
 `
 }
 
-type Runner = { run(script: string): Promise<string>; cancel(): void }
+export type Runner = { run(script: string): Promise<string>; cancel(): void }
+const HOST_OUTPUT = 30 * 1024 * 1024
 
-function runner(): Runner {
-  let child: ChildProcess | undefined
+const host = String.raw`
+$ErrorActionPreference = "Stop"
+while (($line = [Console]::In.ReadLine()) -ne $null) {
+  try {
+    $script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($line))
+    $result = & ([ScriptBlock]::Create($script)) | Out-String
+    $body = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($result.Trim()))
+    [Console]::Out.WriteLine("ok $body")
+  } catch {
+    $message = [string]$_.Exception.Message
+    $body = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($message.Substring(0, [Math]::Min(2000, $message.Length))))
+    [Console]::Out.WriteLine("error $body")
+  }
+}
+`
+
+export function runner(): Runner {
+  let child: ChildProcessWithoutNullStreams | undefined
+  let active: { resolve(value: string): void; reject(error: Error): void } | undefined
+  let stdout = ""
+  let stderr = ""
+
+  const stop = (error: Error) => {
+    const pending = active
+    active = undefined
+    if (pending) pending.reject(error)
+  }
+
+  const start = () => {
+    if (child) return child
+    const process = spawn(
+      "powershell.exe",
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(host, "utf16le").toString("base64")],
+      { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
+    )
+    stdout = ""
+    stderr = ""
+    process.stdout.setEncoding("utf8")
+    process.stderr.setEncoding("utf8")
+    process.stdout.on("data", (chunk: string) => {
+      if (child !== process) return
+      stdout += chunk
+      if (Buffer.byteLength(stdout, "utf8") > HOST_OUTPUT) {
+        if (child !== process) return
+        child = undefined
+        stop(new Error("Windows desktop host response exceeds the bounded output limit"))
+        process.kill()
+        return
+      }
+      const lines = stdout.split(/\r?\n/)
+      stdout = lines.pop() ?? ""
+      for (const line of lines) {
+        if (!line) continue
+        const pending = active
+        active = undefined
+        if (!pending) continue
+        const split = line.indexOf(" ")
+        const status = split < 0 ? line : line.slice(0, split)
+        const value = split < 0 ? "" : line.slice(split + 1)
+        const decoded = Buffer.from(value, "base64").toString("utf8")
+        if (status === "ok") pending.resolve(decoded)
+        else pending.reject(new Error(decoded || "Windows desktop host command failed"))
+      }
+    })
+    process.stderr.on("data", (chunk: string) => {
+      if (child !== process) return
+      stderr = (stderr + chunk).slice(-2000)
+    })
+    process.once("error", (error) => {
+      if (child !== process) return
+      child = undefined
+      stop(new Error((stderr.trim() || error.message).slice(0, 2000), { cause: error }))
+    })
+    process.once("exit", (code) => {
+      if (child !== process) return
+      child = undefined
+      stop(new Error((stderr.trim() || `Windows desktop host exited with code ${code ?? "unknown"}`).slice(0, 2000)))
+    })
+    child = process
+    return process
+  }
+
   return {
     run: (script) =>
       new Promise((resolve, reject) => {
-        if (child) {
+        if (active) {
           reject(new Error("A Windows desktop driver command is already active"))
           return
         }
-        const process = execFile(
-          "powershell.exe",
-          ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "[Console]::In.ReadToEnd() | Invoke-Expression"],
-          { windowsHide: true, maxBuffer: 21 * 1024 * 1024 },
-          (error, stdout, stderr) => {
-            if (child === process) child = undefined
-            if (error) {
-              reject(new Error((stderr.trim() || error.message).slice(0, 2000), { cause: error }))
-              return
-            }
-            resolve(stdout.trim())
-          },
-        )
-        child = process
-        process.stdin?.end(script, "utf8")
+        const process = start()
+        const pending = { resolve, reject }
+        active = pending
+        stderr = ""
+        process.stdin.write(`${Buffer.from(script, "utf8").toString("base64")}\n`, "utf8", (error) => {
+          if (!error || active !== pending) return
+          stop(new Error(error.message, { cause: error }))
+        })
       }),
     cancel: () => {
-      child?.kill()
+      const process = child
       child = undefined
+      stop(new Error("Windows desktop driver command was cancelled"))
+      process?.kill()
     },
   }
 }

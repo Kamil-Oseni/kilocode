@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 00:53 America/Toronto - preserve the warm Windows host boundary
+
+`runner()` now owns one hidden non-interactive PowerShell process and frames every command/result as one base64 line. Keep commands serialized. Native helper compilation occurs once per active host. Pause, Stop, manual takeover and disposal must reject the active request, kill that process and require a clean replacement. Late data, stderr, error and exit events from an obsolete process must never settle the replacement host's active request.
+
+Preserve the 30 MiB stdout and 2,000-character stderr bounds. Oversized output terminates the host and the next command starts cleanly. Adverse tests cover reuse, cancellation/recovery, command errors, oversized output and stale-process races. A real cold/warm pair reduced total time from 4,045.1358 ms to 703.7425 ms; the warm stages were 40.3646 ms acquisition, 77.3769 ms preparation and 509.0076 ms UI Automation for the same 1928 x 1040 viewport and 91 controls. This proves startup reuse, not the product latency target.
+
+Continue with a native persistent WGC-versus-DXGI benchmark and incremental/asynchronous UI Automation. Do not allow the interim PowerShell/GDI host to become the final architecture, install this checkpoint by itself or close `FUT-CU-01`.
+
 ## ChatGPT 2026-09-23 00:34 America/Toronto - preserve desktop semantic enforcement
 
 Actual desktop effect requests now require `sensitive: false | SensitiveCategory`; do not let the execution request silently discard the category negotiated during authorization. `DesktopSession` retains the exact bounded UI Automation snapshot by observation ID and checks it after exact foreground identity validation and one-use observation consumption but before native dispatch. Coordinate mapping uses the snapshot's explicit physical viewport. Known click, drag and focused keyboard targets must match the declared policy category; a mismatch consumes the observation and requires a fresh one. Multiple known categories across a drag fail closed.

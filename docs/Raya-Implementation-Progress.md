@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:39 America/Toronto - bounded read-only Chief result inspection
+
+**Status: source verified; tool unregistered.** A new Chief inspection tool reads the exact active goal and saved request, verifies each admitted child still belongs to the parent, and returns branch state, a bounded final child reply and up to 20 exact completed child tool references. It does not start work, change authority or mark a branch reviewed. Stale request and changed child lineage fail closed. Its focused live-storage test passes **1 test / 4 assertions** and CLI typecheck passes. Next add an explicit review decision tied to these inspected references and the original brief, then test all-branch synthesis and production restart behavior before exposing fanout.
+
 ## ChatGPT 2026-09-23 12:33 America/Toronto - reconstruct completed Chief branches after restart
 
 **Status: source verified; automatic fanout remains disabled.** For a completed background branch, a new backend process can now reconstruct the completion barrier from the durable terminal ledger, the exact completed parent `task` receipt, the later child reply and reviewed child tool evidence. An empty in-memory job registry does not cause a replay or an indefinite block when those persisted facts agree. A present running or failed job still blocks, as do failed, cancelled, unknown, unreviewed or ambiguous branches. Focused ledger/outcome tests pass **6 tests / 38 assertions** and CLI typecheck passes. This is source evidence for restart reconstruction, not an installed multi-agent restart acceptance run. Chief still needs result inspection, explicit review and bounded fanout activation.

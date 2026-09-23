@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:39 America/Toronto - result inspection before review
+
+`chief_inspect` is implemented but unregistered. It binds the active goal and original request, verifies the saved child-parent relationship, and gives Auto Chief a bounded final reply plus exact child tool references for each branch without accepting results. The next tool must record an explicit branch assessment using a reference from this view, and goal completion must still require every distinct branch's reviewed evidence. Keep both tools hidden until synthesis, restart, pause/stop, cost and concurrent-admission tests are complete.
+
 ## ChatGPT 2026-09-23 12:33 America/Toronto - durable completed-branch restart reconstruction
 
 The completion gate now treats the terminal branch ledger plus exact parent `task` receipt, final child reply and reviewed child tool evidence as durable proof when a completed background job has disappeared from the process-local registry after restart. It never replays the child. Any still-present running or failed job blocks, and every failed/cancelled/unknown or unreviewed branch remains blocked. This behavior is source-tested only; the real installed restart matrix and Chief inspection/review workflow remain before enabling automatic fanout. The installed snapshot is still `f462c88182`.

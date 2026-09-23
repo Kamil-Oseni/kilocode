@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 14:12 America/Toronto - Chief review phase corrected
+
+Planned branch calls keep Chief in the task phase so later saved branches remain launchable. `chief_review` now accepts inspected, completed branch evidence in that active phase as well as the goal phase; route and done remain refused. Its active goal/request/child-lineage/evidence checks are unchanged. Review and inspection tests pass. The tools are still unregistered. Next build an all-branch synthesis receipt and completion gate, then settle concurrent cancellation/unknown and restart cases before product activation.
+
 ## ChatGPT 2026-09-23 13:01 America/Toronto - failed sibling isolation
 
 A focused task integration case runs two saved branches concurrently and fails only the UX child's actual background prompt. The Safety job and ledger branch complete; the UX job errors and its branch is saved as failed with no review. The test passes. Next cover cancellation and uncertain outcome under concurrent jobs, then require a final Chief response to cite each inspected and reviewed branch before exposing automatic fanout. The installed snapshot remains `f462c88182`.

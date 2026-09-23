@@ -27,8 +27,8 @@ export function chiefReviewTool(deps: {
         Effect.gen(function* () {
           if (ctx.agent !== "auto") throw new Error("Only Auto Chief can review its branches")
           const parent = yield* deps.sessions.get(ctx.sessionID)
-          if (RayaChief.phase(parent.metadata) !== "goal")
-            throw new Error("Auto Chief can review branches only during the goal phase")
+          if (RayaChief.phase(parent.metadata) !== "task" && RayaChief.phase(parent.metadata) !== "goal")
+            throw new Error("Auto Chief can review branches only during its active task or goal phase")
           const goal = yield* deps.goals.get(ctx.sessionID)
           const branches = ChiefBranches.make(deps.storage, deps.sessions)
           const plan = yield* branches.read(ctx.sessionID)

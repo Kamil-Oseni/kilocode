@@ -73,7 +73,7 @@ describe("Auto Chief branch review", () => {
         state: "completed",
         result: "Child task completed",
       })
-      const parent = { metadata: { [RayaChief.phaseKey]: "goal" } } as unknown as Session.Info
+      const parent = { metadata: { [RayaChief.phaseKey]: "task" } } as unknown as Session.Info
       const branch = { parentID: id } as Session.Info
       const childRows = [
         {
@@ -159,6 +159,9 @@ describe("Auto Chief branch review", () => {
         assessment: input.assessment,
       })
       expect(yield* def.execute(input, ctx)).toEqual(result)
+      parent.metadata![RayaChief.phaseKey] = "route"
+      expect(Exit.isFailure(yield* def.execute(input, ctx).pipe(Effect.exit))).toBe(true)
+      parent.metadata![RayaChief.phaseKey] = "task"
       raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
       expect(Exit.isFailure(yield* def.execute(input, ctx).pipe(Effect.exit))).toBe(true)
     }),

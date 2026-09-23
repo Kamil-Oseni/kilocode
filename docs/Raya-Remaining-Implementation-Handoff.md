@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `064db8435c` (`7.4.23-snapshot+064db8435c.kamil-oseni.1790196351816`); bounded Auto Chief fanout is source-enabled and installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `5ba192f61f` (`7.4.23-snapshot+5ba192f61f.kamil-oseni.1790197455179`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 17:09 America/Toronto - repaired Chief snapshot installed
+
+`5ba192f61f` is installed as `7.4.23-snapshot+5ba192f61f.kamil-oseni.1790197455179`. Its Windows CLI and sandbox-worker smoke tests, extension/webview typechecks, lint and VSIX packaging passed. Installed CLI SHA-256: `37C0D226AA4CA56917A6450DF25ED246FF9BD1BAD58423D5B1E25BC00D13221A`; rollback VSIX SHA-256: `924DABC33AE4484E0BBE8EC8F4F9EF64BE9B12823EADDD402ECEAB59C73D16F9`. The current computer-use surface inventory returned no apps or browsers, so actual VS Code activation remains unobserved. Next exercise a full goal-bound two-branch request in the loaded host: exact model routing, named background activity, child evidence review, synthesis, cancellation and restart/unknown recovery. Source tests alone do not close that acceptance gate.
 
 ## ChatGPT 2026-09-23 17:03 America/Toronto - Chief continuation repair
 

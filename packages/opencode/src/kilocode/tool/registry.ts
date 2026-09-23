@@ -26,6 +26,7 @@ import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import type { Storage } from "@/storage/storage" // raya_change - Milestone A goal tool dependencies
 import type { Session } from "@/session/session" // raya_change - Milestone A goal audit evidence
 import type { SessionRunState } from "@/session/run-state"
+import type { BackgroundJob } from "@/background/job"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal state
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - hybrid self-heal classification refinement
 import { goalTools } from "./goal" // raya_change - Milestone A model-facing tools
@@ -97,6 +98,7 @@ export namespace KiloToolRegistry {
       storage: Storage.Interface
       sessions: Session.Interface
       runs?: Pick<SessionRunState.Interface, "inspect">
+      background?: Pick<BackgroundJob.Interface, "list">
     }, // raya_change - Milestone A
     browser?: Browser.Interface, // raya_change - Milestone F browser bridge
     desktop?: Desktop.Interface,

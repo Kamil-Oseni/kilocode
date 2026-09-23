@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 10:26 America/Toronto - planner contract and production job signal
+
+`ChiefPlan.validate` is a non-executing proposal boundary for two or three distinct named branches. It checks structural scope separation, no declared dependencies, eligible specialists and parent task/edit policy, then emits ledger inputs. It cannot prove semantic independence from model-authored labels; a reviewed caller must compare the proposals with the actual user request before ledger start. The model-tool and HTTP goal bindings now provide the live background-job registry to the completion gate. Nine combined planner/ledger tests and CLI typecheck pass. Do not change the one-child Chief prompt yet; first wire branch-specific task admission and safe finalization, then add restart/stop and concurrent race tests before enabling automatic fanout.
+
 ## ChatGPT 2026-09-23 10:15 America/Toronto - disabled fanout foundation
 
 The version-1 Chief branch ledger and same-lock goal completion check are implemented in source but not connected to Auto Chief task calls or installed. A ledger record is bounded to 2-3 named branches with exact specialist, brief, read/edit scope, call and child session identity, terminal state and reviewed child tool evidence. Goal completion refuses an unreviewed, failed, cancelled or unknown branch and associated non-completed background work. No background service signal also blocks a present plan. Focused tests and CLI typecheck pass. Next pass the background registry to the production goal tool binding, then wire each planned branch to its own Chief route and `task` call. Keep the one-child prompt until restart, duplicate admission, paused/stop, failed/unknown, distinct brief and cost aggregation tests pass. Do not claim automatic fanout or a grouped chat timeline from this ledger alone.

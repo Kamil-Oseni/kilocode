@@ -154,6 +154,7 @@ const layer = Layer.effect(
     const agent = yield* Agent.Service
     // kilocode_change start
     const suggesttool = yield* SuggestTool
+    const background = Option.getOrUndefined(yield* Effect.serviceOption(BackgroundJob.Service)) // kilocode_change - Chief completion checks live child work
     const manager = Option.getOrUndefined(yield* Effect.serviceOption(AgentManager.Service))
     const notebook = Option.getOrUndefined(yield* Effect.serviceOption(Notebook.Service))
     const browser = Option.getOrUndefined(yield* Effect.serviceOption(Browser.Service)) // kilocode_change // raya_change - Milestone F
@@ -162,7 +163,7 @@ const layer = Layer.effect(
     const kiloToolInfos = yield* KiloToolRegistry.infos(
       manager,
       notebook,
-      storage ? { storage, sessions, runs } : undefined,
+      storage ? { storage, sessions, runs, background } : undefined,
       browser, // kilocode_change // raya_change - Milestone F browser tools
       desktop, // kilocode_change // raya_change - native desktop tools
       canvas, // kilocode_change // raya_change - Milestone E canvas tools

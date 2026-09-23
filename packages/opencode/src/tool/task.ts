@@ -35,6 +35,10 @@ import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_chang
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - bind planned Auto branches to child calls
 import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - saved branch preflight
 import { ChiefBranchOutcome } from "@/kilocode/chief/outcome" // kilocode_change - exact child terminal receipt
+import { Git } from "@/git" // kilocode_change - pin editing branches to the parent HEAD
+import { Worktree } from "@/worktree" // kilocode_change - isolated Chief edit workspaces
+import { InstanceStore } from "@/project/instance-store" // kilocode_change - run edit children in their worktree
+import { InstanceState } from "@/effect/instance-state" // kilocode_change - record the parent directory
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -143,6 +147,11 @@ export const TaskTool = Tool.define(
     const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change - raya_change: optional outside durable goal contexts
     const children = storage ? yield* GoalChildren.make({ storage, sessions }) : undefined // kilocode_change - raya_change
     const branches = storage ? ChiefBranches.make(storage) : undefined // kilocode_change
+    // kilocode_change start - optional until Chief edit plans request an isolated workspace
+    const git = Option.getOrUndefined(yield* Effect.serviceOption(Git.Service))
+    const worktree = Option.getOrUndefined(yield* Effect.serviceOption(Worktree.Service))
+    const store = Option.getOrUndefined(yield* Effect.serviceOption(InstanceStore.Service))
+    // kilocode_change end
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -337,6 +346,61 @@ export const TaskTool = Tool.define(
       const canTask = depth + 1 < (cfg.subagent_depth ?? 2) // kilocode_change - honor upstream's opt-in depth limit
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
+      // kilocode_change start - reserve an exact edit workspace before Git mutation or child creation
+      const parentDirectory = yield* InstanceState.directory
+      const callID = ctx.callID
+      const edit =
+        branch?.access === "edit" && plan && branches && callID
+          ? yield* Effect.gen(function* () {
+              if (!git || !worktree || !store)
+                return yield* Effect.fail(new Error("Auto Chief editing services are unavailable"))
+              const changes = yield* git.status(parentDirectory)
+              if (changes.length)
+                return yield* Effect.fail(
+                  new Error(
+                    "Auto Chief editing needs a clean parent worktree; commit or stash local changes before launching this branch",
+                  ),
+                )
+              const head = yield* git.run(["rev-parse", "HEAD"], { cwd: parentDirectory })
+              const baseCommit = head.text().trim()
+              if (head.exitCode !== 0 || !/^[0-9a-f]{40}$|^[0-9a-f]{64}$/i.test(baseCommit))
+                return yield* Effect.fail(new Error("Auto Chief could not pin the parent Git commit"))
+              const info = yield* worktree.plan({ name: `chief-${branch.id}-${ctx.sessionID.slice(-6)}` })
+              if (!info.branch) return yield* Effect.fail(new Error("Auto Chief editing requires a named Git branch"))
+              const record = {
+                goalID: ctx.sessionID,
+                goalCreatedAt: plan.goalCreatedAt,
+                branchID: branch.id,
+                callID,
+                directory: info.directory,
+                baseCommit,
+              }
+              const reserved = yield* branches.reserveWorktree({ ...record, name: info.name, branch: info.branch })
+              if (reserved.phase !== "reserved")
+                return yield* Effect.fail(
+                  new Error("Auto Chief worktree creation has an uncertain or completed outcome"),
+                )
+              yield* worktree
+                .createReadyFromInfo(info, undefined, baseCommit)
+                .pipe(
+                  Effect.onExit((exit) =>
+                    Exit.isFailure(exit)
+                      ? branches
+                          .uncertainWorktree(record)
+                          .pipe(
+                            Effect.catchCause((cause) =>
+                              Effect.logWarning("Could not mark Chief worktree uncertain", cause),
+                            ),
+                          )
+                      : Effect.void,
+                  ),
+                )
+              yield* branches.readyWorktree(record)
+              return info
+            })
+          : undefined
+      // kilocode_change end
+
       const session = resumed // raya_change - reuse the child validated before auto-routing
       // kilocode_change start — inherit edit/bash/MCP restrictions from calling agent
       const rules = KiloTask.inherited({ caller, session: parent, mcp: cfg.mcp })
@@ -390,7 +454,7 @@ export const TaskTool = Tool.define(
               callID: ctx.callID,
               siblings,
             })
-            const child = yield* sessions.create({
+            const create = sessions.create({
               parentID: ctx.sessionID,
               title: identity.displayName,
               agent: next.name,
@@ -398,6 +462,7 @@ export const TaskTool = Tool.define(
               platform,
               permission: childPermission,
             })
+            const child = yield* edit && store ? store.provide({ directory: edit.directory }, create) : create // kilocode_change
             return { session: child, displayName: identity.displayName }
           }),
         )
@@ -453,10 +518,17 @@ export const TaskTool = Tool.define(
       // kilocode_change end
       // kilocode_change start - rebuild in-memory ancestry and inherit confinement after creation/resume
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
-      yield* SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback).pipe(
+      yield* (
+        edit && store
+          ? store.provide(
+              { directory: edit.directory },
+              SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback, parentDirectory),
+            )
+          : SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback)
+      ).pipe(
         Effect.provideService(Config.Service, config),
         Effect.tapError(() => lease.release),
-      )
+      ) // kilocode_change
       // kilocode_change end
 
       // kilocode_change start
@@ -607,7 +679,7 @@ export const TaskTool = Tool.define(
 
       // kilocode_change start - settle the exact planned child on every terminal path
       const work = () =>
-        runTask().pipe(
+        (edit && store ? store.provide({ directory: edit.directory }, runTask()) : runTask()).pipe(
           Effect.onExit((exit) =>
             branch && plan && branches && ctx.callID
               ? ChiefBranchOutcome.record({

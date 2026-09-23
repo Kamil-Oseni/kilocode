@@ -268,7 +268,7 @@ export namespace ChiefBranches {
               item.worktree.baseCommit === identity.baseCommit &&
               item.worktree.callID === identity.callID
             )
-              return item.worktree
+              throw new Error("Auto Chief editing worktree is already reserved; inspect it before retrying")
             throw new Error("Auto Chief editing branch already reserved a different worktree")
           }
           if (
@@ -377,6 +377,8 @@ export namespace ChiefBranches {
           const item = old.branches.find((entry) => entry.id === input.branchID)
           if (!item) throw new Error("Unknown Auto Chief branch")
           if (item.access !== input.access) throw new Error("Auto Chief branch authority changed")
+          if (item.access === "edit" && (item.worktree?.phase !== "ready" || item.worktree.callID !== input.callID))
+            throw new Error("Auto Chief editing branch has no ready worktree for this call")
           if (
             item.state === "admitted" &&
             item.callID === input.callID &&
@@ -655,6 +657,13 @@ export namespace ChiefBranches {
         return yield* Effect.fail(
           new Error(
             `Auto Chief branches are unfinished or unreviewed: ${pending.map((item) => `${item.name} (${item.state})`).join(", ")}`,
+          ),
+        )
+      const edits = record.branches.filter((item) => item.access === "edit")
+      if (edits.length)
+        return yield* Effect.fail(
+          new Error(
+            `Auto Chief edits are still isolated in worktrees and need reviewed integration: ${edits.map((item) => item.name).join(", ")}`,
           ),
         )
       if (

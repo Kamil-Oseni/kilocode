@@ -123,7 +123,7 @@ export interface Interface {
   readonly plan: (options?: { name?: string; detached?: boolean }) => Effect.Effect<Info, Error> // kilocode_change
   readonly createFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void, Error>
   readonly create: (input?: CreateInput) => Effect.Effect<Info, Error>
-  readonly createReadyFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void, Error> // kilocode_change
+  readonly createReadyFromInfo: (info: Info, startCommand?: string, baseCommit?: string) => Effect.Effect<void, Error> // kilocode_change
   readonly createReady: (input?: CreateInput) => Effect.Effect<Info, Error> // kilocode_change
   readonly list: () => Effect.Effect<(Omit<Info, "branch"> & { branch?: string })[], Error>
   readonly remove: (input: RemoveInput) => Effect.Effect<boolean, Error>
@@ -216,12 +216,12 @@ const layer: Layer.Layer<
       return yield* candidate({ root, name: input?.name ? slugify(input.name) : "", detached: input?.detached })
     })
 
-    const setup = Effect.fnUntraced(function* (info: Info) {
+    const setup = Effect.fnUntraced(function* (info: Info, baseCommit?: string) {
       const ctx = yield* InstanceState.context
       const created = yield* git(
         info.branch
-          ? ["worktree", "add", "--no-checkout", "-b", info.branch, info.directory]
-          : ["worktree", "add", "--no-checkout", "--detach", info.directory, "HEAD"],
+          ? ["worktree", "add", "--no-checkout", "-b", info.branch, info.directory, baseCommit ?? "HEAD"] // kilocode_change
+          : ["worktree", "add", "--no-checkout", "--detach", info.directory, baseCommit ?? "HEAD"], // kilocode_change
         { cwd: ctx.worktree },
       )
       if (created.code !== 0) {
@@ -312,8 +312,9 @@ const layer: Layer.Layer<
     const createReadyFromInfo = Effect.fn("Worktree.createReadyFromInfo")(function* (
       info: Info,
       startCommand?: string,
+      baseCommit?: string,
     ) {
-      yield* setup(info)
+      yield* setup(info, baseCommit)
       yield* boot(info, startCommand)
     })
     const createReady = Effect.fn("Worktree.createReady")(function* (input?: CreateInput) {

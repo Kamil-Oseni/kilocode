@@ -11,6 +11,12 @@ import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util" // kilocode_change - durable Chief branch test
 import { Git } from "@/git" // kilocode_change - durable Chief branch test
+import { Worktree } from "@/worktree" // kilocode_change - real Chief edit worktree test
+import { InstanceState } from "@/effect/instance-state" // kilocode_change - verify child prompt directory
+import { InstanceStore } from "@/project/instance-store" // kilocode_change - worktree bootstrap layer
+import { InstanceBootstrap } from "@/project/bootstrap" // kilocode_change - real worktree setup
+import path from "node:path" // kilocode_change - verify real child edit destination
+import { unlink } from "node:fs/promises" // kilocode_change - restore dirty-parent test fixture
 import { Storage } from "@/storage/storage" // kilocode_change - durable Chief branch test
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - durable Chief branch test
 import { RayaGoal } from "@/kilocode/goal" // kilocode_change - durable Chief branch test
@@ -77,7 +83,7 @@ const layer = (
 ) =>
   LayerNode.compile(
     LayerNode.group([
-      ...(durable ? [Storage.node, FSUtil.node, Git.node] : []), // kilocode_change - only branch tests need durable storage
+      ...(durable ? [Storage.node, FSUtil.node, Git.node, Worktree.node] : []), // kilocode_change - real branch worktrees
       Agent.node,
       BackgroundJob.node,
       EventV2Bridge.node,
@@ -99,6 +105,7 @@ const layer = (
     [
       [Provider.node, provider.layer],
       [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+      ...(durable ? [[InstanceStore.bootstrapNode, InstanceBootstrap.node] as const] : []), // kilocode_change
     ],
     // kilocode_change end
   )
@@ -119,6 +126,95 @@ const clean = (storage: Storage.Interface, id: SessionID) =>
 
 // kilocode_change start - a saved branch, rather than the caller's task fields, owns its child execution
 describe("tool.task planned Auto Chief branch", () => {
+  // kilocode_change start - edit authority must move both the saved session and actual prompt into Git isolation
+  planned.instance(
+    "runs an editing specialist in its reserved worktree without changing the parent",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const git = yield* Git.Service
+        const worktrees = yield* Worktree.Service
+        const parent = yield* InstanceState.directory
+        const { chat, assistant } = yield* seed()
+        yield* clean(storage, chat.id)
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(chat.id, "Edit a child-only file", assistant.parentID)
+        if (!goal.intent) throw new Error("expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
+        const ledger = ChiefBranches.make(storage)
+        yield* ledger.start({
+          goalID: chat.id,
+          goalCreatedAt: goal.createdAt,
+          requestID: assistant.parentID,
+          branches: [
+            {
+              id: "edit",
+              name: "File editor",
+              specialist: "designer",
+              access: "edit",
+              brief: { objective: "Write a child-only file", constraints: [], expectedReturn: "Edited file" },
+            },
+            {
+              id: "audit",
+              name: "Read-only audit",
+              specialist: "researcher",
+              access: "read",
+              brief: { objective: "Review independent context", constraints: [], expectedReturn: "Audit" },
+            },
+          ],
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: "Edit a child-only file", [RayaChief.phaseKey]: "task" },
+        })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const ctx = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          callID: "call-edit",
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: (input: SessionPrompt.PromptInput) =>
+                Effect.gen(function* () {
+                  const dir = yield* InstanceState.directory
+                  yield* Effect.promise(() => Bun.write(path.join(dir, "chief-owned.txt"), "written by child"))
+                  return reply(input, "Edited child-only file")
+                }),
+            },
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const dirty = path.join(parent, "uncommitted.txt")
+        yield* Effect.promise(() => Bun.write(dirty, "parent draft"))
+        expect(
+          Exit.isFailure(yield* def.execute({ description: "File editor", branch_id: "edit" }, ctx).pipe(Effect.exit)),
+        ).toBe(true)
+        expect((yield* ledger.read(chat.id))?.branches[0].worktree).toBeUndefined()
+        yield* Effect.promise(() => unlink(dirty))
+        const result = yield* def.execute({ description: "File editor", branch_id: "edit" }, ctx)
+        const saved = (yield* ledger.read(chat.id))?.branches[0]
+        expect(saved?.worktree?.phase).toBe("ready")
+        expect(saved?.worktree?.baseCommit).toMatch(/^[0-9a-f]{40}$/)
+        const dir = saved?.worktree?.directory
+        if (!dir) throw new Error("missing child worktree")
+        expect((yield* sessions.get(result.metadata.sessionId)).directory).toBe(dir)
+        expect((yield* git.run(["rev-parse", "HEAD"], { cwd: dir })).text().trim()).toBe(saved?.worktree?.baseCommit)
+        expect(yield* Effect.promise(() => Bun.file(path.join(dir, "chief-owned.txt")).text())).toBe("written by child")
+        expect(yield* Effect.promise(() => Bun.file(path.join(parent, "chief-owned.txt")).exists())).toBe(false)
+        expect(yield* worktrees.remove({ directory: dir })).toBe(true)
+      }),
+    { git: true },
+    30_000,
+  )
+  // kilocode_change end
+
   planned.instance(
     "runs a goal-bound two-branch plan through Auto's registered tools",
     () =>
@@ -184,7 +280,10 @@ describe("tool.task planned Auto Chief branch", () => {
                     },
                   })
                   const result = reply(input, "Saved state inspected and findings confirmed.")
-                  yield* sessions.updateMessage({ ...result.info, time: { ...result.info.time, completed: Date.now() } })
+                  yield* sessions.updateMessage({
+                    ...result.info,
+                    time: { ...result.info.time, completed: Date.now() },
+                  })
                   yield* Effect.forEach(result.parts, (part) => sessions.updatePart(part))
                   return result
                 }),
@@ -268,7 +367,13 @@ describe("tool.task planned Auto Chief branch", () => {
         expect((yield* Deferred.await(injected).pipe(Effect.timeout("3 seconds"))).goalObjective).toBe(request)
         const inspect = yield* get("chief_inspect").execute({}, context("call-inspect"))
         const report = JSON.parse(inspect.output) as {
-          branches: { id: string; name: string; state: string; report: string; evidence: { callID: string; messageID: string; partID: string }[] }[]
+          branches: {
+            id: string
+            name: string
+            state: string
+            report: string
+            evidence: { callID: string; messageID: string; partID: string }[]
+          }[]
         }
         expect(report.branches.map((item) => [item.name, item.state])).toEqual([
           ["Safety audit", "completed"],
@@ -718,16 +823,10 @@ describe("tool.task planned Auto Chief branch", () => {
         if (!selected?.revision) throw new Error("expected a running design job revision")
         expect(selected.status).toBe("running")
         expect((yield* jobs.cancel(design.metadata.sessionId, selected.revision))?.status).toBe("cancelled")
-        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual([
-          "admitted",
-          "cancelled",
-        ])
+        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual(["admitted", "cancelled"])
         yield* Deferred.succeed(done, undefined)
         expect((yield* jobs.wait({ id: safety.metadata.sessionId })).info?.status).toBe("completed")
-        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual([
-          "completed",
-          "cancelled",
-        ])
+        expect((yield* branches.read(chat.id))?.branches.map((item) => item.state)).toEqual(["completed", "cancelled"])
         expect(
           Exit.isFailure(
             yield* def.execute({ description: "UX audit", branch_id: "design" }, ctx("retry")).pipe(Effect.exit),

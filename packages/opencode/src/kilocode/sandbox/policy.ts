@@ -207,6 +207,10 @@ function ancestor(value: string, target: string) {
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
 }
 
+function related(value: string, target: string) {
+  return canonical(value) === canonical(target) || ancestor(value, target) || ancestor(target, value)
+}
+
 function accessible(dir: string) {
   try {
     accessSync(dir, constants.R_OK)
@@ -219,10 +223,12 @@ function accessible(dir: string) {
 function filterWritable(ctx: InstanceContext, values: readonly string[]) {
   const list = values.filter(accessible)
   if (!isolated(ctx)) return list
-  // A nested macOS sandbox cannot reliably canonicalize an inherited writable
-  // ancestor of the linked worktree. The active worktree is already writable;
-  // keep unrelated explicit paths, but do not widen it back to the repository.
-  return list.filter((value) => !ancestor(value, ctx.directory))
+  // The active linked worktree is already writable. Do not carry an explicit
+  // grant for the main checkout (or one of its parents/children) into it,
+  // including when the linked worktree is a sibling of the main checkout.
+  return list.filter(
+    (value) => !ancestor(value, ctx.directory) && (ctx.worktree === "/" || !related(value, ctx.worktree)),
+  )
 }
 
 export function profile(
@@ -536,7 +542,11 @@ export const inherit = Effect.fn("SandboxPolicy.inherit")(function* (
     parentID,
     Effect.gen(function* () {
       const stored = yield* read(source, parentID)
-      const parent: Snapshot | undefined = stored ?? (fallback && { ...fallback, version: 0 })
+      const original: Snapshot | undefined = stored ?? (fallback && { ...fallback, version: 0 })
+      const parent =
+        original && source !== directory
+          ? { ...original, writablePaths: original.writablePaths.filter((value) => !related(value, source)) }
+          : original
       if (!parent) return
       // Only persist the parent snapshot when it actually belongs to this directory. A fallback
       // carries confinement from another directory (e.g. forking into a worktree) and must not be

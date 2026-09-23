@@ -46,6 +46,33 @@ const cleanup = (storage: Storage.Interface, id: SessionID) =>
   )
 
 describe("Auto Chief branch ledger", () => {
+  it.live("refuses to finish a reviewed edit before its worktree is integrated", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      const saved = yield* ledger.start({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        requestID: "review-edit",
+        branches: [{ ...plan[0], access: "edit" }, plan[1]],
+      })
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) => ({
+          ...item,
+          state: "completed",
+          review: { callID: "review", messageID: "message", partID: "part", at: Date.now() },
+        })),
+      })
+      const err = yield* ledger.completion(id, createdAt).pipe(Effect.flip)
+      expect(err.message).toContain("isolated in worktrees")
+    }),
+  )
+
   it.live("reserves one durable edit worktree and refuses changed or uncertain identities", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -75,7 +102,16 @@ describe("Auto Chief branch ledger", () => {
       }
       const reserved = yield* ledger.reserveWorktree(input)
       expect(reserved.phase).toBe("reserved")
-      expect(yield* ChiefBranches.make(storage).reserveWorktree(input)).toEqual(reserved)
+      const admission = {
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: input.callID,
+        sessionID: SessionID.make(`ses_chief_child_${crypto.randomUUID()}`),
+        access: "edit" as const,
+      }
+      expect(Exit.isFailure(yield* ledger.admit(admission).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* ChiefBranches.make(storage).reserveWorktree(input).pipe(Effect.exit))).toBe(true)
       expect(
         Exit.isFailure(
           yield* ledger.reserveWorktree({ ...input, directory: "C:\\worktrees\\other" }).pipe(Effect.exit),
@@ -88,6 +124,7 @@ describe("Auto Chief branch ledger", () => {
       ).toBe(true)
       const ready = yield* ledger.readyWorktree(input)
       expect(ready.phase).toBe("ready")
+      expect((yield* ledger.admit(admission)).worktree?.directory).toBe(input.directory)
       expect((yield* ledger.read(id))?.branches[0].worktree?.baseCommit).toBe(input.baseCommit)
       expect(Exit.isFailure(yield* ledger.uncertainWorktree(input).pipe(Effect.exit))).toBe(true)
       expect(

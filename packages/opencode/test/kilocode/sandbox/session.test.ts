@@ -7,11 +7,13 @@ import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
+import { assertNetwork, assertWrite, run as runSandbox } from "@kilocode/sandbox"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { BackgroundJob } from "@/background/job"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { BackgroundProcess } from "@/kilocode/background-process"
@@ -154,6 +156,51 @@ describe("sandbox session cleanup", () => {
       yield* provideInstance(dir)(SandboxPolicy.toggle(source.id))
       expect((yield* provideInstance(dir)(SandboxPolicy.status(source.id))).enabled).toBe(false)
       expect((yield* provideInstance(worktree)(SandboxPolicy.status(child.id))).enabled).toBe(true)
+    }),
+  )
+
+  it.live("keeps a Chief edit child confined in its linked worktree", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const dir = yield* tmpdirScoped({ git: true })
+      const worktree = yield* linked(dir)
+      const parent = yield* provideInstance(dir)(sessions.create({ title: "chief-edit-parent" }))
+      yield* Effect.promise(() =>
+        SandboxStore.write(dir, parent.id, {
+          enabled: true,
+          mode: "deny",
+          allowedHosts: [],
+          writablePaths: [dir],
+          version: 0,
+        }),
+      )
+      const token = SandboxInheritance.issue({ sessionID: parent.id, directory: dir, count: 1 })
+      const child = yield* provideInstance(worktree)(
+        sessions.create({ parentID: parent.id, title: "chief-edit-child", sandboxInheritanceToken: token }),
+      )
+      const state = yield* SandboxPolicy.peek(worktree, child.id)
+      expect(state).toMatchObject({ enabled: true, mode: "deny", allowedHosts: [], writablePaths: [] })
+      expect(yield* SandboxPolicy.peek(worktree, parent.id)).toBeUndefined()
+
+      const profile = yield* provideInstance(worktree)(
+        Effect.gen(function* () {
+          const ctx = yield* InstanceState.context
+          return SandboxPolicy.profile(ctx, state?.mode, state?.writablePaths, state?.allowedHosts)
+        }),
+      )
+      expect(profile.network.mode).toBe("deny")
+      expect(profile.network.allowedHosts).toEqual([])
+      expect(profile.filesystem.allowWrite.some((item) => item.path === dir)).toBe(false)
+      expect(profile.filesystem.allowWrite.some((item) => item.path === worktree)).toBe(true)
+      expect(
+        Exit.isFailure(yield* runSandbox(profile, assertWrite(path.join(dir, "parent.txt")).pipe(Effect.exit))),
+      ).toBe(true)
+      expect(
+        Exit.isSuccess(yield* runSandbox(profile, assertWrite(path.join(worktree, "child.txt")).pipe(Effect.exit))),
+      ).toBe(true)
+      expect(Exit.isFailure(yield* runSandbox(profile, assertNetwork("https://example.com").pipe(Effect.exit)))).toBe(
+        true,
+      )
     }),
   )
 

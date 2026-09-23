@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 19:36 America/Toronto - execute Chief edit children in isolated worktrees
+
+Planned editing specialists now reserve an exact Git worktree before mutation, pin its base to the parent commit, await checkout and startup, then create the child session and run its prompt under the child worktree's instance context. A real task test writes from the child prompt and confirms the parent checkout stays untouched; it also confirms a dirty parent is rejected before reservation and the saved base matches the child HEAD. A repeat reservation is refused so an interrupted native creation cannot be replayed automatically. Chief admission requires a ready worktree for the exact call. Goal completion now refuses unintegrated editing branches instead of treating an isolated report as merged work.
+
+A separate sandbox audit found that cross-directory inheritance could retain explicit write access to the parent checkout. The policy now removes parent-related writable paths; a real linked-worktree test confirms child writes succeed while parent writes and network access remain denied. Full sandbox coverage passes 47 tests with 3 skips; the full task suite passes 48 tests / 277 assertions; the Chief ledger suite passes 12 tests / 85 assertions. The fixed-base worktree test passes. CLI typecheck, targeted Oxlint, formatting, shared-file annotations, Promise-facade and whitespace guards pass. This is source-only: no new snapshot has been installed, and the edit integration/review workflow, conflicts, untracked files, restart/unknown matrix and live provider run remain open. Keep `FUT-AGENT-01/02` In progress.
+
 ## ChatGPT 2026-09-23 19:09 America/Toronto - intelligent specialists and edit-worktree foundation
 
 The owner reaffirmed the target for Raya's Chief: select only independently useful specialists, choose read-only or editing access from each assignment, name them clearly, and show a compact parent-chat timeline of starts, tool activity, messages, completions and reports with meaningful role icons. Existing Chief plans, task receipts and child tabs provide part of this experience; a real installed-host run and responsive visual review are still required. `FUT-AGENT-01/02` remain In progress.

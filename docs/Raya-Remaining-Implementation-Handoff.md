@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 19:36 America/Toronto - isolated Chief edit execution, integration still open
+
+The `task` tool now uses the saved edit-worktree reservation: a clean parent checkout and exact HEAD are required, `Worktree.plan` chooses the identity, `reserveWorktree` saves it before Git effects, `createReadyFromInfo` checks out that fixed base and awaits setup, and `readyWorktree` fences admission. The child session and prompt execute under `InstanceStore.provide` for the new directory; Chief receipts and background parent messages remain in the parent context. A failed or interrupted creation becomes unknown and is never automatically repeated. Worktrees are retained after child execution for review. A linked-worktree sandbox regression also removes the parent checkout from the child's inherited write grants.
+
+The current implementation intentionally blocks goal completion for an editing branch because its isolated changes have no reviewed integration path yet. Implement that next: expose a fixed-base diff including untracked files and metadata, detect changed parent files and conflicts, present a concise human review of what will be applied, persist exact acceptance/rejection and integration receipts, apply once with uncertain-outcome reconciliation, then permit completion only for verified integrated branches. Handle dirty parent changes without silently omitting them, and keep unknown or unmerged worktrees recoverable. Add real restart, stop, concurrent-edit, path-isolation, cost lineage and installed-host tests before shipping the new behavior. This source slice has not been packaged or installed; do not claim the live extension uses it.
+
 ## ChatGPT 2026-09-23 19:09 America/Toronto - worktree reservation foundation
 
 The owner wants deliberate specialist selection and Codex-like parent-chat clarity: short useful subagent names, recognizable role icons, visible read/edit access, concise chronological progress and messages, and full reports on demand. Existing Chief activity and tabs approximate this but are not accepted from a live installed parallel run. Do not spawn specialists merely to decorate an answer.

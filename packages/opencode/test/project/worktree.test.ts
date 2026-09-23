@@ -192,10 +192,13 @@ describe("Worktree", () => {
           const before = yield* git(test.directory, ["worktree", "list", "--porcelain"])
           expect(normalize(before)).not.toContain(normalize(info.directory))
 
-          yield* svc.createReadyFromInfo(info)
+          const base = (yield* git(test.directory, ["rev-parse", "HEAD"])).trim()
+          yield* git(test.directory, ["commit", "--allow-empty", "-m", "advance after planning"])
+          expect((yield* git(test.directory, ["rev-parse", "HEAD"])).trim()).not.toBe(base)
+          yield* svc.createReadyFromInfo(info, undefined, base)
           expect((yield* svc.list()).some((item) => normalize(item.directory) === normalize(info.directory))).toBe(true)
           const head = yield* git(info.directory, ["rev-parse", "HEAD"])
-          expect(head.trim()).toMatch(/^[a-f0-9]{40}$/)
+          expect(head.trim()).toBe(base)
           yield* removeCreatedWorktree(info.directory)
         }),
       { git: true },

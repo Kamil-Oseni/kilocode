@@ -52,6 +52,7 @@ describe("Auto Chief plan tool admission", () => {
       const userID = MessageID.make(`msg_${crypto.randomUUID()}`)
       const createdAt = Date.now()
       const state = { createdAt, status: "active", dispatch: { messageID: userID } } as RayaGoal.State
+      let current = state
       yield* storage.replace(["raya", "goal", id], state)
       yield* Effect.addFinalizer(() =>
         Effect.all([storage.remove(["raya", "goal", id]), storage.remove(["raya", "chief", "branches", id])]).pipe(
@@ -80,7 +81,7 @@ describe("Auto Chief plan tool admission", () => {
         messages: () => Effect.succeed(rows),
       } as Pick<Session.Interface, "get" | "messages">
       const goals = {
-        get: () => Effect.succeed(state),
+        get: () => Effect.succeed(current),
       } as Pick<ReturnType<typeof RayaGoal.make>, "get">
       const output = {
         output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
@@ -106,6 +107,16 @@ describe("Auto Chief plan tool admission", () => {
         "planned",
       ])
       expect(yield* def.execute({ proposals }, ctx)).toEqual(saved)
+      rows.push({
+        info: { id: MessageID.make(`msg_${crypto.randomUUID()}`), role: "user" },
+        parts: [{ type: "text", text: "Continue the saved goal", synthetic: true }],
+      } as unknown as SessionV1.WithParts)
+      expect(yield* def.execute({ proposals }, ctx)).toEqual(saved)
+      current = { ...state, objective: "Continue the saved goal objective" }
+      metadata[RayaChief.requestKey] = current.objective
+      expect(yield* def.execute({ proposals }, ctx)).toEqual(saved)
+      current = state
+      metadata[RayaChief.requestKey] = request
 
       const edited = [{ ...proposals[0]!, access: "edit" as const }, proposals[1]!]
       expect(Exit.isFailure(yield* def.execute({ proposals: edited }, ctx).pipe(Effect.exit))).toBe(true)
@@ -119,7 +130,7 @@ describe("Auto Chief plan tool admission", () => {
       metadata[RayaChief.requestKey] = request
       rows.push({
         info: { id: MessageID.make(`msg_${crypto.randomUUID()}`), role: "user" },
-        parts: [],
+        parts: [{ type: "text", text: "Change the request" }],
       } as unknown as SessionV1.WithParts)
       expect(Exit.isFailure(yield* def.execute({ proposals }, ctx).pipe(Effect.exit))).toBe(true)
     }),

@@ -37,8 +37,13 @@ export function chiefPlanTool(deps: {
           if (goal?.status !== "active" || !goal.dispatch?.messageID)
             throw new Error("Auto Chief needs an active goal bound to a user request")
           const rows = yield* deps.sessions.messages({ sessionID: ctx.sessionID })
-          const user = rows.filter((row) => row.info.role === "user").at(-1)
-          if (user?.info.id !== goal.dispatch.messageID || RayaChief.requestText(user.parts) !== request)
+          const user = rows.find((row) => row.info.role === "user" && row.info.id === goal.dispatch?.messageID)
+          const latest = rows.filter((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts)).at(-1)
+          if (
+            !user ||
+            user.info.id !== latest?.info.id ||
+            (RayaChief.requestText(user.parts) !== request && goal.objective !== request)
+          )
             throw new Error("Saved Auto Chief request does not match the bound user message")
           const parent = yield* deps.agents.get(ctx.agent)
           const rules = Permission.merge(parent.permission, session.permission ?? [])

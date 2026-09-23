@@ -120,6 +120,115 @@ const clean = (storage: Storage.Interface, id: SessionID) =>
 // kilocode_change start - a saved branch, rather than the caller's task fields, owns its child execution
 describe("tool.task planned Auto Chief branch", () => {
   planned.instance(
+    "runs a goal-bound two-branch plan through Auto's registered tools",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const agents = yield* Agent.Service
+        const registry = yield* ToolRegistry.Service
+        const jobs = yield* BackgroundJob.Service
+        const { chat, assistant } = yield* seed()
+        yield* clean(storage, chat.id)
+        const request = "Audit authorization and navigation"
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+        })
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(chat.id, request, assistant.parentID)
+        if (!goal.intent) throw new Error("expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
+        })
+        const auto = yield* agents.get("auto")
+        if (!auto) throw new Error("Auto agent unavailable")
+        const tools = yield* registry.tools({ ...ref, agent: auto })
+        const injected = yield* Deferred.make<SessionPrompt.PromptInput>()
+        const ops: TaskPromptOps = {
+          ...stubOps(),
+          prompt: (input) =>
+            input.sessionID === chat.id
+              ? Deferred.succeed(injected, input).pipe(Effect.as(reply(input, "injected")))
+              : Effect.succeed(reply(input, "done")),
+        }
+        const get = (id: string) => {
+          const tool = tools.find((item) => item.id === id)
+          if (!tool) throw new Error(`Missing ${id} from Auto registry`)
+          return tool
+        }
+        const context = (callID: string) => ({
+          sessionID: chat.id,
+          messageID: assistant.id,
+          callID,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: ops },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        const plan = yield* get("chief_plan").execute(
+          {
+            proposals: [
+              {
+                id: "safety",
+                name: "Safety audit",
+                specialist: "researcher",
+                access: "read",
+                brief: { objective: "Audit authorization", constraints: [], expectedReturn: "Safety findings" },
+                scope: ["authorization"],
+                dependsOn: [],
+                independence: "Uses saved authorization state.",
+                authority: "Read access is sufficient.",
+              },
+              {
+                id: "design",
+                name: "Navigation audit",
+                specialist: "designer",
+                access: "read",
+                brief: { objective: "Audit navigation", constraints: [], expectedReturn: "Navigation findings" },
+                scope: ["navigation"],
+                dependsOn: [],
+                independence: "Uses saved navigation state.",
+                authority: "Read access is sufficient.",
+              },
+            ],
+          },
+          context("call-plan"),
+        )
+        expect(plan.title).toBe("Auto Chief branches planned")
+        const task = get("task")
+        const first = yield* task.execute(
+          { description: "Safety audit", branch_id: "safety", background: true },
+          context("call-safety"),
+        )
+        const second = yield* task.execute(
+          { description: "Navigation audit", branch_id: "design", background: true },
+          context("call-design"),
+        )
+        for (const item of [first, second]) {
+          const id = item.metadata.sessionId
+          if (typeof id !== "string") throw new Error("Missing child session identity")
+          expect((yield* jobs.wait({ id: SessionID.make(id) })).info?.status).toBe("completed")
+        }
+        expect((yield* Deferred.await(injected).pipe(Effect.timeout("3 seconds"))).goalObjective).toBe(request)
+        const inspect = yield* get("chief_inspect").execute({}, context("call-inspect"))
+        const report = JSON.parse(inspect.output) as { branches: { name: string; state: string }[] }
+        expect(report.branches.map((item) => [item.name, item.state])).toEqual([
+          ["Safety audit", "completed"],
+          ["Navigation audit", "completed"],
+        ])
+      }),
+    30_000,
+  )
+
+  planned.instance(
     "runs the exact saved brief once and refuses missing, changed, or duplicate branch calls",
     () =>
       Effect.gen(function* () {

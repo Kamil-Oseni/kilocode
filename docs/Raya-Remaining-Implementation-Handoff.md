@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 17:03 America/Toronto - Chief continuation repair
+
+An integrated backend test now uses Auto's actual registry to plan two goal-bound branches, launch both background tasks and inspect the saved result. A separate audit found two faults: background completion notification reset Auto to `route`, and `chief_plan` rejected a saved goal after a synthetic continuation user message. The notification now carries the exact saved objective; plan admission anchors to the bound latest genuine human message and allows the durable goal objective for a continuation. New genuine steering still rejects the old plan. Focused tests pass 3/28, CLI typecheck and guards pass. Source is newer than installed `064db8435c`; rebuild/install before live host tests. The integrated test stubs model replies, so real child evidence review, synthesis, cancellation/restart and named chat UI are still open.
+
 ## ChatGPT 2026-09-23 16:50 America/Toronto - Chief-enabled installed snapshot
 
 `064db8435c` is installed as `7.4.23-snapshot+064db8435c.kamil-oseni.1790196351816`. SDK regeneration, Windows CLI and sandbox-worker smoke tests, extension and webview typechecks, lint, packaging and VS Code installation passed. Installed CLI SHA-256: `C8DA115D78820C6A751F3C3D320F274FC659679D7D2D2817C2F5A984B9B2F693`; retained VSIX SHA-256: `64F82DC00F8C33515A670E7835A7A7B9B3AC1E356E53EFA99B61406E14628A0E`. Computer Use could not observe an app window (`@oai/sky` sandbox startup failed; alternate UI inventory was empty), so the open VS Code host and a genuine goal-bound parallel Chief run remain unverified. Next observe the loaded extension, run two independent read-only branches, inspect/review/synthesize exact evidence, then test cancellation, backend restart, unknown outcomes and named chat activity. Keep agent rows In progress until that matrix passes.

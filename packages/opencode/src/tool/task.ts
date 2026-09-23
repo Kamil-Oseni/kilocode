@@ -557,6 +557,9 @@ export const TaskTool = Tool.define(
             sessionID: ctx.sessionID,
             agent: currentParent.agent ?? ctx.agent,
             variant,
+            ...(branch && ctx.agent === "auto" && RayaChief.request(currentParent.metadata)
+              ? { goalObjective: RayaChief.request(currentParent.metadata) }
+              : {}), // kilocode_change - Chief background notices continue the saved task phase
             parts: [
               {
                 type: "text",

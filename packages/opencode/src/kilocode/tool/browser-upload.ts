@@ -9,7 +9,7 @@ import { KiloReadObject } from "./read-object"
 import { KiloReference } from "@/kilocode/reference/contains"
 import { Browser } from "@/kilocode/browser/service"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
-import { FrameID, Selector, TabID } from "@/kilocode/browser/protocol"
+import { FrameID, Selector, TabID, type AuthorizationEvidence } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { ActionClassification } from "@/kilocode/computer-use/lease"
 import type { UploadFile } from "@/kilocode/browser/upload-schema"
@@ -47,26 +47,47 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
             yield* Effect.die(new Error("Browser file selection requires sensitive_category=disclosure"))
           const pattern =
             params.action === "start" ? params.destination : params.action === "list" ? "list" : params.upload_id
+          const sensitive =
+            params.action === "start" && params.sensitive_category !== "ordinary" ? params.sensitive_category : false
           const authorization = yield* browser.request({
             operation: "authorize",
             sessionID: ctx.sessionID,
             surface: "browser",
             action: "files",
-            sensitive:
-              params.action === "start" && params.sensitive_category !== "ordinary" ? params.sensitive_category : false,
+            sensitive,
             ...(params.action === "start" ? { windowID: params.tab_id } : {}),
           })
           if (authorization.operation !== "authorize")
             return yield* Effect.die(new Error("Browser host returned the wrong result"))
           if (authorization.decision === "deny")
             return yield* Effect.die(new Error(`Browser control denied: ${authorization.reason}`))
-          if (authorization.decision === "ask")
+          const base = {
+            version: 1 as const,
+            sessionID: ctx.sessionID,
+            action: "files" as const,
+            ...(params.action === "start" ? { windowID: params.tab_id } : {}),
+            sensitive,
+          }
+          const proof: AuthorizationEvidence =
+            authorization.decision === "allow"
+              ? authorization.grantID
+                ? { ...base, source: "lease", grantID: authorization.grantID }
+                : yield* Effect.die(new Error("Browser authorization omitted its grant identity"))
+              : { ...base, source: "legacy_prompt" }
+          if (authorization.decision === "ask") {
             yield* ctx.ask({ permission: "browser_upload", patterns: [pattern], always: [pattern], metadata: {} })
+          }
           if (params.action !== "start") {
             const result = yield* browser.request(
               params.action === "list"
-                ? { operation: "upload", action: "list", sessionID: ctx.sessionID }
-                : { operation: "upload", action: params.action, uploadID: params.upload_id, sessionID: ctx.sessionID },
+                ? { operation: "upload", action: "list", sessionID: ctx.sessionID, authorization: proof }
+                : {
+                    operation: "upload",
+                    action: params.action,
+                    uploadID: params.upload_id,
+                    sessionID: ctx.sessionID,
+                    authorization: proof,
+                  },
             )
             return { title: "Browser uploads", output: JSON.stringify(result, null, 2), metadata: {} }
           }
@@ -121,6 +142,7 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
             operation: "upload",
             action: "start",
             sessionID: ctx.sessionID,
+            authorization: proof,
             uploadID: owner.uploadID,
             tabID: params.tab_id,
             frameID: params.frame_id,

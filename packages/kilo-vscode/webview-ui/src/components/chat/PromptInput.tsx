@@ -1763,7 +1763,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </div>
       <Show when={isBusy() && hasInput()}>
         <div class="prompt-queue-note" role="status">
-          Send queues this instruction for Raya's next safe step. Stop interrupts the current step.
+          Send queues for the next safe step. Stop interrupts current work.
         </div>
       </Show>
       <VoiceTranscript />

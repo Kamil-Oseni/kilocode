@@ -9,7 +9,12 @@ import { DesktopSession, type DesktopDriver } from "../../src/services/computer-
 import type { ConnectionState } from "../../src/services/cli-backend/connection-service"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 
-const request: DesktopRequest = { id: "desktop_1", sessionID: "ses_desktop", operation: "observe" }
+const request: DesktopRequest = {
+  id: "desktop_1",
+  sessionID: "ses_desktop",
+  operation: "observe",
+  authorization: { kind: "prompt" },
+}
 
 function setup(
   input: {
@@ -18,6 +23,7 @@ function setup(
     fail?: boolean
     rejectFail?: boolean
     actionError?: Error
+    actionHold?: Promise<void>
     hold?: Promise<void>
     decision?: "allow" | "ask" | "deny"
     dispatchDecision?: "allow" | "ask" | "deny"
@@ -28,6 +34,7 @@ function setup(
   const replies: unknown[] = []
   const rejects: unknown[] = []
   const actions: unknown[] = []
+  const checks: unknown[] = []
   const focused: string[] = []
   const events = new Set<(event: SSEPayload, directory?: string) => void>()
   const states = new Set<(state: ConnectionState, error?: Error) => void>()
@@ -82,6 +89,7 @@ function setup(
     },
     perform: async (action) => {
       actions.push(action)
+      if (input.actionHold) await input.actionHold
       if (input.actionError) throw input.actionError
     },
   }
@@ -139,7 +147,8 @@ function setup(
       ...(input.decision === "allow" ? { grantID: "grant_test" } : {}),
     }),
     input.dispatchDecision || input.dispatch
-      ? () => {
+      ? (request) => {
+          checks.push(request)
           const decision = input.dispatch?.() ?? input.dispatchDecision!
           return {
             operation: "authorize",
@@ -150,7 +159,7 @@ function setup(
         }
       : undefined,
   )
-  return { bridge, events, states, replies, rejects, actions, focused, observed: () => observed }
+  return { bridge, events, states, replies, rejects, actions, checks, focused, observed: () => observed }
 }
 
 function memory(seed?: unknown) {
@@ -303,6 +312,7 @@ describe("desktop observation bridge", () => {
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
       sensitive: false,
+      authorization: { kind: "grant", grantID: "grant_test" },
       action: "click",
       button: "left",
       x: 0.5,
@@ -465,6 +475,7 @@ describe("desktop observation bridge", () => {
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
       sensitive: false,
+      authorization: { kind: "grant", grantID: "grant_test" },
       action: "click",
       button: "left",
       x: 0.5,
@@ -503,6 +514,7 @@ describe("desktop observation bridge", () => {
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
       sensitive: false,
+      authorization: { kind: "grant", grantID: "grant_test" },
       action: "click",
       button: "left",
       x: 0.5,
@@ -518,6 +530,40 @@ describe("desktop observation bridge", () => {
       expect.objectContaining({
         requestID: click.id,
         error: expect.objectContaining({ message: expect.stringContaining("Grant stopped") }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
+  it("refuses grant-backed input when revalidation falls back to ask", async () => {
+    const test = setup({ dispatchDecision: "ask" })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const click: DesktopRequest = {
+      id: "desktop_grant_expired_1",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      sensitive: "communications",
+      authorization: { kind: "grant", grantID: "grant_test" },
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.actions).toEqual([])
+    expect(test.checks.at(-1)).toMatchObject({ sensitive: "communications" })
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({ message: expect.stringContaining("grant is no longer authorized") }),
       }),
     )
     test.bridge.dispose()
@@ -572,6 +618,49 @@ describe("desktop observation bridge", () => {
     ])
     expect(store.read()).toEqual({ version: 1, items: [] })
     second.bridge.dispose()
+  })
+
+  it("records unknown after Stop interrupts a dispatched native action", async () => {
+    const gate = Promise.withResolvers<void>()
+    const store = memory()
+    const test = setup({ store, actionHold: gate.promise, rejectFail: true })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const click: DesktopRequest = {
+      id: "desktop_stopped_during_dispatch",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      sensitive: false,
+      authorization: { kind: "prompt" },
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toHaveLength(1)
+    test.bridge.cancel("User stopped desktop control")
+    gate.resolve()
+    await Bun.sleep(20)
+    expect(test.replies).toHaveLength(1)
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({
+          receipt: expect.objectContaining({ outcome: "unknown", requestID: click.id }),
+        }),
+      }),
+    )
+    expect(store.read()).toMatchObject({
+      items: [{ id: click.id, failure: { receipt: { outcome: "unknown", requestID: click.id } } }],
+    })
+    test.bridge.dispose()
   })
 
   it("persists an uncertain action failure, pauses fresh input, and redelivers it without replay", async () => {
@@ -892,6 +981,7 @@ describe("desktop observation bridge", () => {
             action: "click",
             windowID: "window_1",
             sensitive: false,
+            authorization: { kind: "grant", grantID: "grant_test" },
             x: 0.5,
             y: 0.5,
             button: "left",
@@ -901,7 +991,13 @@ describe("desktop observation bridge", () => {
           recovery: "stop",
         },
         {
-          action: { operation: "type", windowID: "window_1", sensitive: false, text: "hello" },
+          action: {
+            operation: "type",
+            windowID: "window_1",
+            sensitive: false,
+            authorization: { kind: "grant", grantID: "grant_test" },
+            text: "hello",
+          },
           preconditions: [],
           postconditions: [{ kind: "pixels", change: "changed" }],
           recovery: "stop",
@@ -953,13 +1049,27 @@ describe("desktop observation bridge", () => {
       maxDurationMs: 5_000,
       steps: [
         {
-          action: { operation: "key", windowID: "window_1", sensitive: false, key: "Tab", modifiers: [] },
+          action: {
+            operation: "key",
+            windowID: "window_1",
+            sensitive: false,
+            authorization: { kind: "grant", grantID: "grant_test" },
+            key: "Tab",
+            modifiers: [],
+          },
           preconditions: [],
           postconditions: [{ kind: "pixels", change: "changed" }],
           recovery: "stop",
         },
         {
-          action: { operation: "key", windowID: "window_1", sensitive: false, key: "Enter", modifiers: [] },
+          action: {
+            operation: "key",
+            windowID: "window_1",
+            sensitive: false,
+            authorization: { kind: "grant", grantID: "grant_test" },
+            key: "Enter",
+            modifiers: [],
+          },
           preconditions: [],
           postconditions: [{ kind: "pixels", change: "changed" }],
           recovery: "stop",

@@ -3,6 +3,7 @@ import { createSignal, onCleanup, type Accessor, type ParentComponent } from "so
 import { useSession } from "../../context/session"
 import { useProvider } from "../../context/provider"
 import { useLanguage } from "../../context/language"
+import { sanitizeName, stripSubProviderPrefix } from "../shared/model-selector-utils"
 
 /** Keeps the existing selectors mounted so scoped picker shortcuts still work. */
 export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string | undefined>; scope: string }> = (
@@ -21,7 +22,8 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
   const identity = () => {
     const selected = selection()
     if (!selected) return language.t("composer.configuration.unset")
-    return `${model()?.name ?? selected.modelID} · ${model()?.providerName ?? selected.providerID}`
+    const name = model()?.name
+    return name ? stripSubProviderPrefix(sanitizeName(name)) : selected.modelID
   }
   const events = ["openModePicker", "openModelPicker", "openVariantPicker"]
   const reveal = (event: Event) => {
@@ -46,15 +48,9 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
       <Collapsible class="composer-configuration" variant="ghost" open={open()} onOpenChange={setOpen} forceMount>
         <Collapsible.Trigger ref={summary}>
           <span class="composer-configuration-value">
-            <span>{mode()}</span>
             <span>
-              {language.t("composer.configuration.preferred")}: {identity()}
+              {mode()} · {identity()}
             </span>
-            {session.currentVariant(props.sessionID()) && (
-              <span>
-                {language.t("composer.configuration.reasoning")}: {session.currentVariant(props.sessionID())}
-              </span>
-            )}
             {!provider.isModelValid(selection()) && (
               <span class="composer-configuration-warning">
                 {language.t(selection() ? "composer.configuration.unavailable" : "composer.configuration.choose")}

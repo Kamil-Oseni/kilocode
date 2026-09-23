@@ -30,6 +30,10 @@ export const ScrollDelta = Schema.Number.check(
 const Base = { id: RequestID, sessionID: SessionID }
 const Sensitive = Schema.Union([Schema.Boolean, SensitiveCategory])
 const ClassifiedSensitive = Schema.Union([Schema.Literal(false), SensitiveCategory])
+export const Authorization = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("grant"), grantID: GrantID }),
+  Schema.Struct({ kind: Schema.Literal("prompt") }),
+])
 export const Key = Schema.Union([
   Schema.Literals([
     "Backspace",
@@ -66,16 +70,19 @@ export const Modifier = Schema.Literals(["alt", "control", "meta", "shift"])
 export const ObserveRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("observe"),
+  authorization: Schema.optional(Authorization),
 })
 
 export const WindowsRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("windows"),
+  authorization: Schema.optional(Authorization),
 })
 
 export const WatchRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("watch"),
+  authorization: Schema.optional(Authorization),
   frameCount: WatchCount,
   intervalMs: WatchInterval,
 }).check(
@@ -101,6 +108,7 @@ export const ClickRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   action: Schema.Literals(["click", "double_click"]),
   x: Unit,
   y: Unit,
@@ -113,6 +121,7 @@ export const FocusRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
 })
 
 export const MoveRequest = Schema.Struct({
@@ -121,6 +130,7 @@ export const MoveRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   x: Unit,
   y: Unit,
 })
@@ -131,6 +141,7 @@ export const DragRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   startX: Unit,
   startY: Unit,
   endX: Unit,
@@ -150,6 +161,7 @@ export const TypeRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
 })
 
@@ -159,6 +171,7 @@ export const KeyRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   key: Key,
   modifiers: Schema.Array(Modifier).check(Schema.isMaxLength(4)),
 })
@@ -169,6 +182,7 @@ export const ScrollRequest = Schema.Struct({
   windowID: Identity,
   observationID: ObservationID,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   deltaX: ScrollDelta,
   deltaY: ScrollDelta,
 }).check(
@@ -182,6 +196,7 @@ const SequencePointer = Schema.Struct({
   action: Schema.Literals(["move", "click", "double_click"]),
   windowID: Identity,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   x: Unit,
   y: Unit,
   button: Schema.optional(Schema.Literals(["left", "right"])),
@@ -191,6 +206,7 @@ const SequenceDrag = Schema.Struct({
   operation: Schema.Literal("drag"),
   windowID: Identity,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   startX: Unit,
   startY: Unit,
   endX: Unit,
@@ -208,6 +224,7 @@ const SequenceType = Schema.Struct({
   operation: Schema.Literal("type"),
   windowID: Identity,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)),
 })
 
@@ -215,6 +232,7 @@ const SequenceKey = Schema.Struct({
   operation: Schema.Literal("key"),
   windowID: Identity,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   key: Key,
   modifiers: Schema.Array(Modifier).check(Schema.isMaxLength(4)),
 })
@@ -223,6 +241,7 @@ const SequenceScroll = Schema.Struct({
   operation: Schema.Literal("scroll"),
   windowID: Identity,
   sensitive: ClassifiedSensitive,
+  authorization: Schema.optional(Authorization),
   deltaX: ScrollDelta,
   deltaY: ScrollDelta,
 }).check(

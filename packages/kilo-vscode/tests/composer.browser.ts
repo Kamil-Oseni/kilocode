@@ -18,6 +18,20 @@ test("OpenAI voice admission preserves the task agent and displays missing-key r
   )
 })
 
+test("busy composer keeps queue and stop actions clear", async ({ page }) => {
+  await page.goto("/?theme=dark")
+  const prompt = page.locator("textarea.prompt-input")
+
+  await page.getByRole("button", { name: "Toggle busy", exact: true }).click()
+  await prompt.fill("Continue with the next section")
+
+  await expect(page.getByRole("status")).toHaveText("Send queues for the next safe step. Stop interrupts current work.")
+  await expect(page.getByRole("button", { name: "Queue for the next safe step", exact: true })).toBeVisible()
+
+  await prompt.fill("")
+  await expect(page.getByRole("button", { name: "Stop work", exact: true })).toBeVisible()
+})
+
 for (const [theme, width] of [
   ["light", 320],
   ["dark", 760],
@@ -117,9 +131,9 @@ for (const theme of ["light", "dark", "contrast"])
         expect(controls.length).toBeGreaterThanOrEqual(3)
         expect(controls.every((item) => item.border === item.text && item.style === "solid")).toBe(true)
       }
-      await expect(summary).toContainText("Preferred model")
-      await expect(summary).toContainText("Claude Sonnet 4.6")
-      await expect(summary).toContainText("Raya Gateway")
+      await expect(summary).toContainText("Auto · Claude Sonnet 4.6")
+      await expect(summary).not.toContainText("Raya Gateway")
+      await expect(summary).not.toContainText("Reasoning")
       await page.locator(".prompt-input-container").screenshot({ path: info.outputPath("collapsed.png") })
       await expect(summary).toHaveAttribute("aria-expanded", "false")
       await prompt.fill("Review this material and return a concise summary with caveats.")
@@ -160,7 +174,7 @@ for (const theme of ["light", "dark", "contrast"])
       )
       await expect(page.getByRole("option", { name: "Default", exact: true })).toBeFocused()
       await page.getByRole("option", { name: "High", exact: true }).click()
-      await expect(summary).toContainText("Reasoning: high")
+      await expect(summary).not.toContainText("Reasoning")
       await expect(prompt).toBeFocused()
       await page.getByRole("button", { name: "Toggle connection", exact: true }).click()
       await prompt.press("Enter")
@@ -213,9 +227,9 @@ for (const theme of ["light", "dark", "contrast"])
       await expect(prompt).toHaveValue("")
       expect(await page.locator("[data-sent]").evaluate((node) => JSON.parse(node.textContent!).length)).toBe(3)
       await page.getByRole("button", { name: "Unavailable model", exact: true }).click()
-      await expect(summary).toContainText("missing-provider")
+      await expect(summary).not.toContainText("missing-provider")
       await expect(summary).toContainText("missing-model")
-      await expect(summary).toContainText("unavailable")
+      await expect(summary).toContainText("Model unavailable")
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       // Axe reads authored foreground values rather than forced system colors.
       // Audit the configured high-contrast palette, then capture system rendering.

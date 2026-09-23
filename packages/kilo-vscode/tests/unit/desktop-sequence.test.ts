@@ -5,10 +5,16 @@ import {
   type DesktopSequenceInput,
 } from "../../src/services/computer-use/desktop-sequence"
 
-function scene(version: number, data: string, focused = false, windowID = "window-1"): DesktopScene {
+function scene(
+  version: number,
+  data: string,
+  focused = false,
+  windowID = "window-1",
+  location = "process|title|bounds",
+): DesktopScene {
   return {
     windowID,
-    location: `scene-${version}`,
+    location,
     width: 20,
     height: 10,
     mime: "image/png",
@@ -40,7 +46,7 @@ function scene(version: number, data: string, focused = false, windowID = "windo
       sceneVersion: version,
       observedAt: version,
       validUntil: 10_000,
-      target: { surface: "desktop", windowID, location: `scene-${version}` },
+      target: { surface: "desktop", windowID, location },
     },
   }
 }
@@ -117,6 +123,30 @@ describe("bounded desktop sequence executor", () => {
 
     expect(result).toMatchObject({ status: "stopped", completed: 1 })
     expect(result.reason).toMatch(/focused=true/i)
+    expect(calls).toEqual(["Tab"])
+  })
+
+  it("stops before a later effect when the same window has a different target fingerprint", async () => {
+    const calls: string[] = []
+    const step = {
+      action: { operation: "key" as const, windowID: "window-1", sensitive: false as const, key: "Tab" },
+      postconditions: [{ kind: "pixels" as const, change: "changed" as const }],
+      recovery: "stop" as const,
+    }
+    const result = await executeSequence(input([step, step]), {
+      step: async (action) => {
+        calls.push(action.key ?? action.operation)
+        return scene(2, "changed", false, "window-1", "different-process|title|bounds")
+      },
+      cancelled: () => false,
+      now: () => 100,
+    })
+
+    expect(result).toMatchObject({
+      status: "stopped",
+      completed: 1,
+      reason: expect.stringMatching(/target fingerprint changed/i),
+    })
     expect(calls).toEqual(["Tab"])
   })
 

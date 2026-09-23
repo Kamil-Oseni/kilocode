@@ -181,7 +181,7 @@ export class DesktopSession {
     return { windows, observation }
   }
 
-  focus(windowID: string, observationID: string): Promise<void> {
+  focus(windowID: string, observationID: string, onDispatch?: () => void): Promise<void> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before switching windows"))
     const run = async () => {
@@ -199,6 +199,7 @@ export class DesktopSession {
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
+        onDispatch?.()
         await this.driver.focus(target).catch((error: unknown) => {
           const detail = error instanceof Error ? error.message : String(error)
           throw new DesktopOutcomeError("window switch", detail)
@@ -216,7 +217,7 @@ export class DesktopSession {
     return result
   }
 
-  execute(action: DesktopAction): Promise<void> {
+  execute(action: DesktopAction, onDispatch?: () => void): Promise<void> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending another action"))
     const run = async () => {
@@ -247,6 +248,7 @@ export class DesktopSession {
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
+        onDispatch?.()
         await this.driver.perform(action, current).catch((error: unknown) => {
           const detail = error instanceof Error ? error.message : String(error)
           throw new DesktopOutcomeError(action.operation, detail)
@@ -267,6 +269,7 @@ export class DesktopSession {
   sequence(
     input: Omit<DesktopSequenceInput, "scene"> & { observationID: string },
     authorize?: (action: DesktopPlannedAction) => void | Promise<void>,
+    onDispatch?: () => void,
   ): Promise<DesktopSequenceResult> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending an action sequence"))
@@ -301,6 +304,7 @@ export class DesktopSession {
                 this.observations.cancel(token)
                 throw new Error("Desktop sequence cancelled for manual takeover; no action was dispatched")
               }
+              onDispatch?.()
               await this.driver.perform(action, current).catch((error: unknown) => {
                 this.observations.cancel(token)
                 const detail = error instanceof Error ? error.message : String(error)

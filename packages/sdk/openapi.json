@@ -65386,6 +65386,118 @@
       "BrowserRequestID": {
         "type": "string"
       },
+      "ComputerUseGrantID": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "BrowserAuthorizationEvidence": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "action": {
+                "type": "string",
+                "enum": ["observe", "pointer", "keyboard", "scroll", "window", "launch", "browser", "files"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": ["lease"]
+              },
+              "grantID": {
+                "$ref": "#/components/schemas/ComputerUseGrantID"
+              }
+            },
+            "required": ["version", "sessionID", "action", "sensitive", "source", "grantID"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "action": {
+                "type": "string",
+                "enum": ["observe", "pointer", "keyboard", "scroll", "window", "launch", "browser", "files"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": ["legacy_prompt"]
+              }
+            },
+            "required": ["version", "sessionID", "action", "sensitive", "source"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "ComputerUseObservationID": {
         "type": "string",
         "minLength": 1,
@@ -65610,6 +65722,9 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -65733,6 +65848,7 @@
             "required": [
               "id",
               "sessionID",
+              "authorization",
               "tabID",
               "operation",
               "action",
@@ -65753,6 +65869,9 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["upload"]
@@ -65762,7 +65881,7 @@
                 "enum": ["list"]
               }
             },
-            "required": ["id", "sessionID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -65774,6 +65893,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -65789,7 +65911,7 @@
                 "format": "uuid"
               }
             },
-            "required": ["id", "sessionID", "operation", "action", "uploadID"],
+            "required": ["id", "sessionID", "authorization", "operation", "action", "uploadID"],
             "additionalProperties": false
           },
           {
@@ -65801,6 +65923,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "tabID": {
                 "type": "string",
@@ -65904,7 +66029,7 @@
                 "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "selector"],
+            "required": ["id", "sessionID", "authorization", "tabID", "operation", "action", "selector"],
             "additionalProperties": false
           },
           {
@@ -65916,6 +66041,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -65930,7 +66058,7 @@
                 "minimum": 0
               }
             },
-            "required": ["id", "sessionID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -65942,6 +66070,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -65957,7 +66088,7 @@
                 "maxLength": 100
               }
             },
-            "required": ["id", "sessionID", "operation", "action", "transferID"],
+            "required": ["id", "sessionID", "authorization", "operation", "action", "transferID"],
             "additionalProperties": false
           },
           {
@@ -65975,6 +66106,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -65990,7 +66124,7 @@
                 "maxLength": 100
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -66008,6 +66142,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66027,7 +66164,7 @@
                 "maxLength": 10000
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "dialogID"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action", "dialogID"],
             "additionalProperties": false
           },
           {
@@ -66045,6 +66182,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66060,7 +66200,7 @@
                 "maxLength": 100
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "dialogID"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action", "dialogID"],
             "additionalProperties": false
           },
           {
@@ -66078,6 +66218,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66088,7 +66231,7 @@
                 "enum": ["list"]
               }
             },
-            "required": ["id", "sessionID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -66106,6 +66249,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66121,7 +66267,7 @@
                 "maxLength": 20000
               }
             },
-            "required": ["id", "sessionID", "operation", "action", "url"],
+            "required": ["id", "sessionID", "authorization", "operation", "action", "url"],
             "additionalProperties": false
           },
           {
@@ -66139,6 +66285,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66149,7 +66298,7 @@
                 "enum": ["select"]
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -66168,6 +66317,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["tabs"]
@@ -66177,7 +66329,7 @@
                 "enum": ["close"]
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -66189,6 +66341,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "tabID": {
                 "type": "string",
@@ -66205,7 +66360,7 @@
                 "enum": ["list"]
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "tabID", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -66217,6 +66372,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "tabID": {
                 "type": "string",
@@ -66244,7 +66402,7 @@
                 "maxLength": 10000
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "parentID", "selector"],
+            "required": ["id", "sessionID", "authorization", "tabID", "operation", "action", "parentID", "selector"],
             "additionalProperties": false
           },
           {
@@ -66263,6 +66421,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["navigate"]
@@ -66273,7 +66434,7 @@
                 "maxLength": 20000
               }
             },
-            "required": ["id", "sessionID", "operation", "url"],
+            "required": ["id", "sessionID", "authorization", "operation", "url"],
             "additionalProperties": false
           },
           {
@@ -66298,12 +66459,15 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["snapshot"]
               }
             },
-            "required": ["id", "sessionID", "operation"],
+            "required": ["id", "sessionID", "authorization", "operation"],
             "additionalProperties": false
           },
           {
@@ -66330,6 +66494,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66414,7 +66581,7 @@
                 "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
               }
             },
-            "required": ["id", "sessionID", "operation", "selector"],
+            "required": ["id", "sessionID", "authorization", "operation", "selector"],
             "additionalProperties": false
           },
           {
@@ -66441,6 +66608,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66532,7 +66702,7 @@
                 "type": "boolean"
               }
             },
-            "required": ["id", "sessionID", "operation", "selector", "text", "submit"],
+            "required": ["id", "sessionID", "authorization", "operation", "selector", "text", "submit"],
             "additionalProperties": false
           },
           {
@@ -66559,6 +66729,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66652,7 +66825,7 @@
                 "maxItems": 100
               }
             },
-            "required": ["id", "sessionID", "operation", "selector", "values"],
+            "required": ["id", "sessionID", "authorization", "operation", "selector", "values"],
             "additionalProperties": false
           },
           {
@@ -66679,6 +66852,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -66808,7 +66984,7 @@
                 ]
               }
             },
-            "required": ["id", "sessionID", "operation", "deltaX", "deltaY"],
+            "required": ["id", "sessionID", "authorization", "operation", "deltaX", "deltaY"],
             "additionalProperties": false
           },
           {
@@ -66827,6 +67003,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["screenshot"]
@@ -66835,7 +67014,7 @@
                 "type": "boolean"
               }
             },
-            "required": ["id", "sessionID", "operation", "fullPage"],
+            "required": ["id", "sessionID", "authorization", "operation", "fullPage"],
             "additionalProperties": false
           },
           {
@@ -66863,6 +67042,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["evaluate"]
@@ -66872,7 +67054,7 @@
                 "maxLength": 200000
               }
             },
-            "required": ["id", "sessionID", "operation", "expression"],
+            "required": ["id", "sessionID", "authorization", "operation", "expression"],
             "additionalProperties": false
           },
           {
@@ -66919,6 +67101,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -67465,7 +67650,7 @@
                 "maxItems": 100
               }
             },
-            "required": ["id", "sessionID", "operation", "name", "mode", "steps"],
+            "required": ["id", "sessionID", "authorization", "operation", "name", "mode", "steps"],
             "additionalProperties": false
           }
         ]
@@ -67540,6 +67725,35 @@
               "operation": {
                 "type": "string",
                 "enum": ["observe"]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": ["id", "sessionID", "operation"],
@@ -67558,6 +67772,35 @@
               "operation": {
                 "type": "string",
                 "enum": ["windows"]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": ["id", "sessionID", "operation"],
@@ -67576,6 +67819,35 @@
               "operation": {
                 "type": "string",
                 "enum": ["watch"]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
               },
               "frameCount": {
                 "type": "integer",
@@ -67634,6 +67906,35 @@
                     ]
                   }
                 ]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": ["id", "sessionID", "operation", "windowID", "observationID", "sensitive"],
@@ -67680,6 +67981,35 @@
                       "legal",
                       "publishing"
                     ]
+                  }
+                ]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -67738,6 +68068,35 @@
                       "legal",
                       "publishing"
                     ]
+                  }
+                ]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -67825,6 +68184,35 @@
                   }
                 ]
               },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "action": {
                 "type": "string",
                 "enum": ["click", "double_click"]
@@ -67902,6 +68290,35 @@
                   }
                 ]
               },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "text": {
                 "type": "string",
                 "minLength": 1,
@@ -67952,6 +68369,35 @@
                       "legal",
                       "publishing"
                     ]
+                  }
+                ]
+              },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -68050,6 +68496,35 @@
                   }
                 ]
               },
+              "authorization": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["grant"]
+                      },
+                      "grantID": {
+                        "$ref": "#/components/schemas/ComputerUseGrantID"
+                      }
+                    },
+                    "required": ["kind", "grantID"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["prompt"]
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "deltaX": {
                 "type": "number",
                 "minimum": -1200,
@@ -68136,6 +68611,35 @@
                                 }
                               ]
                             },
+                            "authorization": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["grant"]
+                                    },
+                                    "grantID": {
+                                      "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    }
+                                  },
+                                  "required": ["kind", "grantID"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["prompt"]
+                                    }
+                                  },
+                                  "required": ["kind"],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
                             "x": {
                               "type": "number",
                               "minimum": 0,
@@ -68185,6 +68689,35 @@
                                     "legal",
                                     "publishing"
                                   ]
+                                }
+                              ]
+                            },
+                            "authorization": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["grant"]
+                                    },
+                                    "grantID": {
+                                      "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    }
+                                  },
+                                  "required": ["kind", "grantID"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["prompt"]
+                                    }
+                                  },
+                                  "required": ["kind"],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -68259,6 +68792,35 @@
                                 }
                               ]
                             },
+                            "authorization": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["grant"]
+                                    },
+                                    "grantID": {
+                                      "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    }
+                                  },
+                                  "required": ["kind", "grantID"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["prompt"]
+                                    }
+                                  },
+                                  "required": ["kind"],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
                             "text": {
                               "type": "string",
                               "minLength": 1,
@@ -68299,6 +68861,35 @@
                                     "legal",
                                     "publishing"
                                   ]
+                                }
+                              ]
+                            },
+                            "authorization": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["grant"]
+                                    },
+                                    "grantID": {
+                                      "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    }
+                                  },
+                                  "required": ["kind", "grantID"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["prompt"]
+                                    }
+                                  },
+                                  "required": ["kind"],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -81018,11 +81609,6 @@
         "required": ["data", "offset", "next"],
         "additionalProperties": false
       },
-      "ComputerUseGrantID": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 200
-      },
       "ComputerUseTarget": {
         "type": "object",
         "properties": {
@@ -87028,6 +87614,9 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -87151,6 +87740,7 @@
             "required": [
               "id",
               "sessionID",
+              "authorization",
               "tabID",
               "operation",
               "action",
@@ -87171,6 +87761,9 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["upload"]
@@ -87180,7 +87773,7 @@
                 "enum": ["list"]
               }
             },
-            "required": ["id", "sessionID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87192,6 +87785,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87207,7 +87803,7 @@
                 "format": "uuid"
               }
             },
-            "required": ["id", "sessionID", "operation", "action", "uploadID"],
+            "required": ["id", "sessionID", "authorization", "operation", "action", "uploadID"],
             "additionalProperties": false
           },
           {
@@ -87219,6 +87815,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "tabID": {
                 "type": "string",
@@ -87322,7 +87921,7 @@
                 "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "selector"],
+            "required": ["id", "sessionID", "authorization", "tabID", "operation", "action", "selector"],
             "additionalProperties": false
           },
           {
@@ -87334,6 +87933,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87348,7 +87950,7 @@
                 "minimum": 0
               }
             },
-            "required": ["id", "sessionID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87360,6 +87962,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87375,7 +87980,7 @@
                 "maxLength": 100
               }
             },
-            "required": ["id", "sessionID", "operation", "action", "transferID"],
+            "required": ["id", "sessionID", "authorization", "operation", "action", "transferID"],
             "additionalProperties": false
           },
           {
@@ -87393,6 +87998,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87408,7 +88016,7 @@
                 "maxLength": 100
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87426,6 +88034,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87445,7 +88056,7 @@
                 "maxLength": 10000
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "dialogID"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action", "dialogID"],
             "additionalProperties": false
           },
           {
@@ -87463,6 +88074,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87478,7 +88092,7 @@
                 "maxLength": 100
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "dialogID"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action", "dialogID"],
             "additionalProperties": false
           },
           {
@@ -87496,6 +88110,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87506,7 +88123,7 @@
                 "enum": ["list"]
               }
             },
-            "required": ["id", "sessionID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87524,6 +88141,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87539,7 +88159,7 @@
                 "maxLength": 20000
               }
             },
-            "required": ["id", "sessionID", "operation", "action", "url"],
+            "required": ["id", "sessionID", "authorization", "operation", "action", "url"],
             "additionalProperties": false
           },
           {
@@ -87557,6 +88177,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87567,7 +88190,7 @@
                 "enum": ["select"]
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87586,6 +88209,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["tabs"]
@@ -87595,7 +88221,7 @@
                 "enum": ["close"]
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "tabID", "authorization", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87607,6 +88233,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "tabID": {
                 "type": "string",
@@ -87623,7 +88252,7 @@
                 "enum": ["list"]
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "required": ["id", "sessionID", "authorization", "tabID", "operation", "action"],
             "additionalProperties": false
           },
           {
@@ -87635,6 +88264,9 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "tabID": {
                 "type": "string",
@@ -87662,7 +88294,7 @@
                 "maxLength": 10000
               }
             },
-            "required": ["id", "sessionID", "tabID", "operation", "action", "parentID", "selector"],
+            "required": ["id", "sessionID", "authorization", "tabID", "operation", "action", "parentID", "selector"],
             "additionalProperties": false
           },
           {
@@ -87681,6 +88313,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["navigate"]
@@ -87691,7 +88326,7 @@
                 "maxLength": 20000
               }
             },
-            "required": ["id", "sessionID", "operation", "url"],
+            "required": ["id", "sessionID", "authorization", "operation", "url"],
             "additionalProperties": false
           },
           {
@@ -87716,12 +88351,15 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["snapshot"]
               }
             },
-            "required": ["id", "sessionID", "operation"],
+            "required": ["id", "sessionID", "authorization", "operation"],
             "additionalProperties": false
           },
           {
@@ -87748,6 +88386,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87832,7 +88473,7 @@
                 "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
               }
             },
-            "required": ["id", "sessionID", "operation", "selector"],
+            "required": ["id", "sessionID", "authorization", "operation", "selector"],
             "additionalProperties": false
           },
           {
@@ -87859,6 +88500,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -87950,7 +88594,7 @@
                 "type": "boolean"
               }
             },
-            "required": ["id", "sessionID", "operation", "selector", "text", "submit"],
+            "required": ["id", "sessionID", "authorization", "operation", "selector", "text", "submit"],
             "additionalProperties": false
           },
           {
@@ -87977,6 +88621,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -88070,7 +88717,7 @@
                 "maxItems": 100
               }
             },
-            "required": ["id", "sessionID", "operation", "selector", "values"],
+            "required": ["id", "sessionID", "authorization", "operation", "selector", "values"],
             "additionalProperties": false
           },
           {
@@ -88097,6 +88744,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -88218,7 +88868,7 @@
                 ]
               }
             },
-            "required": ["id", "sessionID", "operation", "deltaX", "deltaY"],
+            "required": ["id", "sessionID", "authorization", "operation", "deltaX", "deltaY"],
             "additionalProperties": false
           },
           {
@@ -88237,6 +88887,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["screenshot"]
@@ -88245,7 +88898,7 @@
                 "type": "boolean"
               }
             },
-            "required": ["id", "sessionID", "operation", "fullPage"],
+            "required": ["id", "sessionID", "authorization", "operation", "fullPage"],
             "additionalProperties": false
           },
           {
@@ -88273,6 +88926,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["evaluate"]
@@ -88282,7 +88938,7 @@
                 "maxLength": 200000
               }
             },
-            "required": ["id", "sessionID", "operation", "expression"],
+            "required": ["id", "sessionID", "authorization", "operation", "expression"],
             "additionalProperties": false
           },
           {
@@ -88329,6 +88985,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
               "operation": {
                 "type": "string",
@@ -88867,7 +89526,7 @@
                 "maxItems": 100
               }
             },
-            "required": ["id", "sessionID", "operation", "name", "mode", "steps"],
+            "required": ["id", "sessionID", "authorization", "operation", "name", "mode", "steps"],
             "additionalProperties": false
           }
         ]

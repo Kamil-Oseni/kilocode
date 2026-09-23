@@ -469,6 +469,47 @@ export type NotebookRequest = NotebookReadRequest | NotebookEditRequest | Notebo
 
 export type BrowserRequestId = string
 
+export type ComputerUseGrantId = string
+
+export type BrowserAuthorizationEvidence =
+  | {
+      version: 1
+      sessionID: string
+      action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
+      windowID?: string
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
+      source: "lease"
+      grantID: ComputerUseGrantId
+    }
+  | {
+      version: 1
+      sessionID: string
+      action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
+      windowID?: string
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
+      source: "legacy_prompt"
+    }
+
 export type ComputerUseObservationId = string
 
 export type BrowserUploadFile = {
@@ -545,6 +586,7 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -584,12 +626,14 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "upload"
       action: "list"
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "upload"
       action: "inspect" | "cancel"
       uploadID: string
@@ -597,6 +641,7 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -633,6 +678,7 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "download"
       action: "list"
       offset?: number
@@ -640,6 +686,7 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "download"
       action: "inspect" | "cancel"
       transferID: string
@@ -651,6 +698,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "list"
       operationID?: string
@@ -662,6 +710,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "accept"
       dialogID: string
@@ -674,6 +723,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "dismiss"
       dialogID: string
@@ -685,6 +735,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "list"
     }
@@ -695,6 +746,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "open"
       url: string
@@ -706,6 +758,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "select"
     }
@@ -716,12 +769,14 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "close"
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -732,6 +787,7 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -751,6 +807,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "navigate"
       url: string
     }
@@ -765,6 +822,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "snapshot"
     }
   | {
@@ -779,6 +837,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "click"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -814,6 +873,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "type"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -851,6 +911,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "select"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -887,6 +948,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       deltaY: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -916,6 +978,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "screenshot"
       fullPage: boolean
     }
@@ -931,6 +994,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "evaluate"
       expression: string
     }
@@ -951,6 +1015,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "smoke"
       name: string
       mode: "scripted" | "exploratory"
@@ -1120,16 +1185,40 @@ export type DesktopRequest =
       id: DesktopRequestId
       sessionID: string
       operation: "observe"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
     }
   | {
       id: DesktopRequestId
       sessionID: string
       operation: "windows"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
     }
   | {
       id: DesktopRequestId
       sessionID: string
       operation: "watch"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       frameCount: number
       intervalMs: number
     }
@@ -1150,6 +1239,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
     }
   | {
       id: DesktopRequestId
@@ -1168,6 +1265,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       x: number
       y: number
     }
@@ -1188,6 +1293,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       startX: number
       startY: number
       endX: number
@@ -1211,6 +1324,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       action: "click" | "double_click"
       x: number
       y: number
@@ -1233,6 +1354,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       text: string
     }
   | {
@@ -1252,6 +1381,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       key:
         | "Backspace"
         | "Tab"
@@ -1299,6 +1436,14 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      authorization:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+          }
+        | {
+            kind: "prompt"
+          }
       deltaX: number
       deltaY: number
     }
@@ -1326,6 +1471,14 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
+              authorization:
+                | {
+                    kind: "grant"
+                    grantID: ComputerUseGrantId
+                  }
+                | {
+                    kind: "prompt"
+                  }
               x: number
               y: number
               button?: "left" | "right"
@@ -1344,6 +1497,14 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
+              authorization:
+                | {
+                    kind: "grant"
+                    grantID: ComputerUseGrantId
+                  }
+                | {
+                    kind: "prompt"
+                  }
               startX: number
               startY: number
               endX: number
@@ -1364,6 +1525,14 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
+              authorization:
+                | {
+                    kind: "grant"
+                    grantID: ComputerUseGrantId
+                  }
+                | {
+                    kind: "prompt"
+                  }
               text: string
             }
           | {
@@ -1380,6 +1549,14 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
+              authorization:
+                | {
+                    kind: "grant"
+                    grantID: ComputerUseGrantId
+                  }
+                | {
+                    kind: "prompt"
+                  }
               key:
                 | "Backspace"
                 | "Tab"
@@ -5514,8 +5691,6 @@ export type BrowserUploadChunk = {
   next: number
 }
 
-export type ComputerUseGrantId = string
-
 export type ComputerUseTarget = {
   surface: "browser" | "desktop" | "mobile"
   windowID: string
@@ -7154,6 +7329,7 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7193,12 +7369,14 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "upload"
       action: "list"
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "upload"
       action: "inspect" | "cancel"
       uploadID: string
@@ -7206,6 +7384,7 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7242,6 +7421,7 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "download"
       action: "list"
       offset?: number
@@ -7249,6 +7429,7 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "download"
       action: "inspect" | "cancel"
       transferID: string
@@ -7260,6 +7441,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "list"
       operationID?: string
@@ -7271,6 +7453,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "accept"
       dialogID: string
@@ -7283,6 +7466,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "dismiss"
       dialogID: string
@@ -7294,6 +7478,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "list"
     }
@@ -7304,6 +7489,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "open"
       url: string
@@ -7315,6 +7501,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "select"
     }
@@ -7325,12 +7512,14 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "close"
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7341,6 +7530,7 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      authorization: BrowserAuthorizationEvidence
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7360,6 +7550,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "navigate"
       url: string
     }
@@ -7374,6 +7565,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "snapshot"
     }
   | {
@@ -7388,6 +7580,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "click"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -7423,6 +7616,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "type"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -7460,6 +7654,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "select"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -7496,6 +7691,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity"
       deltaY: number | "NaN" | "Infinity" | "-Infinity"
@@ -7525,6 +7721,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "screenshot"
       fullPage: boolean
     }
@@ -7540,6 +7737,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "evaluate"
       expression: string
     }
@@ -7560,6 +7758,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      authorization: BrowserAuthorizationEvidence
       operation: "smoke"
       name: string
       mode: "scripted" | "exploratory"

@@ -122,6 +122,8 @@ export async function executeSequence(
     if (runner.now() - started >= input.maxDurationMs) return stopped("Desktop sequence reached its maximum duration")
     if (scene.observation.target.windowID !== step.action.windowID)
       return stopped("Desktop sequence changed to an unexpected window")
+    if (scene.observation.target.location !== before.observation.target.location)
+      return stopped("Desktop sequence target fingerprint changed")
     for (const expected of step.postconditions) {
       const reason = postcondition(before, scene, expected)
       if (reason) return stopped(reason)

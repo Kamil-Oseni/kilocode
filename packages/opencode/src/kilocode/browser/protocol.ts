@@ -22,6 +22,21 @@ export const AuthorizeRequest = Schema.Struct({
   sensitive: Schema.Union([Schema.Boolean, SensitiveCategory]),
 })
 
+const ClassifiedSensitive = Schema.Union([Schema.Literal(false), SensitiveCategory])
+const AuthorizationBase = {
+  version: Schema.Literal(1),
+  sessionID: SessionID,
+  action: LeaseAction,
+  windowID: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))),
+  sensitive: ClassifiedSensitive,
+}
+export const AuthorizationEvidence = Schema.Union([
+  Schema.Struct({ ...AuthorizationBase, source: Schema.Literal("lease"), grantID: GrantID }),
+  Schema.Struct({ ...AuthorizationBase, source: Schema.Literal("legacy_prompt") }),
+]).annotate({ identifier: "BrowserAuthorizationEvidence" })
+export type AuthorizationEvidence = Schema.Schema.Type<typeof AuthorizationEvidence>
+const Authorized = { authorization: AuthorizationEvidence }
+
 const Match = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
 const Scope = { scope: Schema.optional(Match) }
 export const Selector = Schema.Union([
@@ -48,6 +63,7 @@ export const UploadRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     tabID: TabID,
     ...Framed,
     ...Grounded,
@@ -61,12 +77,14 @@ export const UploadRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     operation: Schema.Literal("upload"),
     action: Schema.Literal("list"),
   }),
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     operation: Schema.Literal("upload"),
     action: Schema.Literals(["inspect", "cancel"]),
     uploadID: Schema.String.check(Schema.isUUID()),
@@ -101,6 +119,7 @@ export const DownloadRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     tabID: TabID,
     ...Framed,
     ...Grounded,
@@ -111,6 +130,7 @@ export const DownloadRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     operation: Schema.Literal("download"),
     action: Schema.Literal("list"),
     offset: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -118,6 +138,7 @@ export const DownloadRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     operation: Schema.Literal("download"),
     action: Schema.Literals(["inspect", "cancel"]),
     transferID: TransferID,
@@ -144,6 +165,7 @@ export const FramesRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     tabID: TabID,
     operation: Schema.Literal("frames"),
     action: Schema.Literal("list"),
@@ -151,6 +173,7 @@ export const FramesRequest = Schema.Union([
   Schema.Struct({
     id: RequestID,
     sessionID: SessionID,
+    ...Authorized,
     tabID: TabID,
     operation: Schema.Literal("frames"),
     action: Schema.Literal("resolve"),
@@ -187,10 +210,28 @@ export const AuthRequest = Schema.Union([
   }),
 ])
 export const TabsRequest = Schema.Union([
-  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("list") }),
-  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("open"), url: Url }),
-  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("select"), tabID: TabID }),
-  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("close"), tabID: TabID }),
+  Schema.Struct({ ...Base, ...Authorized, operation: Schema.Literal("tabs"), action: Schema.Literal("list") }),
+  Schema.Struct({
+    ...Base,
+    ...Authorized,
+    operation: Schema.Literal("tabs"),
+    action: Schema.Literal("open"),
+    url: Url,
+  }),
+  Schema.Struct({
+    ...Base,
+    ...Authorized,
+    operation: Schema.Literal("tabs"),
+    action: Schema.Literal("select"),
+    tabID: TabID,
+  }),
+  Schema.Struct({
+    ...Base,
+    ...Authorized,
+    operation: Schema.Literal("tabs"),
+    action: Schema.Literal("close"),
+    tabID: TabID,
+  }),
 ])
 export const Tab = Schema.Struct({
   id: TabID,
@@ -233,6 +274,7 @@ export const DialogOperation = Schema.Struct({
 export const DialogRequest = Schema.Union([
   Schema.Struct({
     ...Base,
+    ...Authorized,
     tabID: TabID,
     operation: Schema.Literal("dialog"),
     action: Schema.Literal("list"),
@@ -240,6 +282,7 @@ export const DialogRequest = Schema.Union([
   }),
   Schema.Struct({
     ...Base,
+    ...Authorized,
     tabID: TabID,
     operation: Schema.Literal("dialog"),
     action: Schema.Literal("accept"),
@@ -248,6 +291,7 @@ export const DialogRequest = Schema.Union([
   }),
   Schema.Struct({
     ...Base,
+    ...Authorized,
     tabID: TabID,
     operation: Schema.Literal("dialog"),
     action: Schema.Literal("dismiss"),
@@ -266,18 +310,21 @@ export const DialogResult = Schema.Struct({
 
 export const NavigateRequest = Schema.Struct({
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("navigate"),
   url: Url,
 })
 export const SnapshotRequest = Schema.Struct({
   ...Framed,
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("snapshot"),
 })
 export const ClickRequest = Schema.Struct({
   ...Framed,
   ...Grounded,
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("click"),
   selector: Selector,
 })
@@ -285,6 +332,7 @@ export const TypeRequest = Schema.Struct({
   ...Framed,
   ...Grounded,
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("type"),
   selector: Selector,
   text: Text,
@@ -294,6 +342,7 @@ export const SelectRequest = Schema.Struct({
   ...Framed,
   ...Grounded,
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("select"),
   selector: Selector,
   values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
@@ -302,6 +351,7 @@ export const ScrollRequest = Schema.Struct({
   ...Framed,
   ...Grounded,
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("scroll"),
   deltaX: Schema.Number,
   deltaY: Schema.Number,
@@ -309,6 +359,7 @@ export const ScrollRequest = Schema.Struct({
 })
 export const ScreenshotRequest = Schema.Struct({
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("screenshot"),
   fullPage: Schema.Boolean,
 })
@@ -316,6 +367,7 @@ export const EvaluateRequest = Schema.Struct({
   ...Framed,
   ...Grounded,
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("evaluate"),
   expression: Text,
 })
@@ -369,6 +421,7 @@ export const AuthCaptureRequest = Schema.Struct({
 })
 export const SmokeRequest = Schema.Struct({
   ...Base,
+  ...Authorized,
   operation: Schema.Literal("smoke"),
   name: Name,
   mode: Schema.Literals(["scripted", "exploratory"]),

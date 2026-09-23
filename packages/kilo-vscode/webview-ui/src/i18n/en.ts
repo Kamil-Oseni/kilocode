@@ -678,11 +678,9 @@ export const dict = {
   "session.messages.welcome":
     "Describe the result you need below. Attach relevant material or mention a file, and include what a useful result should cover.",
   "composer.configuration.action": "Configure",
-  "composer.configuration.preferred": "Preferred model",
-  "composer.configuration.reasoning": "Reasoning",
   "composer.configuration.unset": "Model not selected",
-  "composer.configuration.choose": "Open Configure to choose a model.",
-  "composer.configuration.unavailable": "Selected model unavailable. Open Configure to check the model and provider.",
+  "composer.configuration.choose": "Choose a model",
+  "composer.configuration.unavailable": "Model unavailable",
   "session.messages.scrollToBottom": "Scroll to bottom",
   "session.messages.initializing": "Initializing...",
   "session.messages.taskStarting": "Starting...",
@@ -753,7 +751,7 @@ export const dict = {
   "dialog.model.noProviders": "No providers",
 
   "prompt.placeholder.connecting": "Connecting to server...",
-  "prompt.placeholder.default": "Describe the result you need. @ mentions files. Enter sends; Shift+Enter adds a line.",
+  "prompt.placeholder.default": "Message Raya",
   "prompt.placeholder.error": "Connection failed. Check the output panel or restart the extension.",
 
   "context.usage.sessionCost": "Session cost",

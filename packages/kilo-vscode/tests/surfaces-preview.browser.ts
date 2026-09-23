@@ -115,7 +115,7 @@ for (const theme of ["light", "dark"]) {
       await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
       const prompt = page.locator("textarea.prompt-input")
       await expect(prompt).toBeVisible()
-      await expect(prompt).toHaveAttribute("placeholder", /Describe the result you need/)
+      await expect(prompt).toHaveAttribute("placeholder", "Message Raya")
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
       const result = await new AxeBuilder({ page }).include(".prompt-input-container").analyze()
       expect(result.violations).toEqual([])

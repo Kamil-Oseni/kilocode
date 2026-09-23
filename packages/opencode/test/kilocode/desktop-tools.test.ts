@@ -2,7 +2,14 @@
 import { expect, test } from "bun:test"
 import { GrantID } from "@/kilocode/computer-use/lease"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { DragRequest, Key, ScrollRequest, SequenceRequest, WatchRequest, WatchResult } from "@/kilocode/desktop/protocol"
+import {
+  DragRequest,
+  Key,
+  ScrollRequest,
+  SequenceRequest,
+  WatchRequest,
+  WatchResult,
+} from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
 import {
   DesktopClickTool,
@@ -145,13 +152,14 @@ it.instance("lists visible windows and focuses one exact observed target", () =>
       expect.objectContaining({ permission: "desktop_focus", patterns: ["window_seen"], always: [] }),
     ])
     expect(calls.filter((input) => input.operation !== "authorize")).toEqual([
-      { operation: "windows", sessionID: ctx.sessionID },
+      { operation: "windows", sessionID: ctx.sessionID, authorization: { kind: "prompt" } },
       {
         operation: "focus",
         sessionID: ctx.sessionID,
         windowID: "window_seen",
         observationID: observation.id,
         sensitive: false,
+        authorization: { kind: "prompt" },
       },
     ])
     expect(listed.title).toBe("Found 1 visible desktop windows")
@@ -225,7 +233,11 @@ it.instance(
       expect(asks).toEqual([])
       expect(calls.map((input) => input.operation)).toEqual(["authorize", "click"])
       expect(calls[0]).toMatchObject({ operation: "authorize", sensitive: "communications" })
-      expect(calls[1]).toMatchObject({ operation: "click", sensitive: "communications" })
+      expect(calls[1]).toMatchObject({
+        operation: "click",
+        sensitive: "communications",
+        authorization: { kind: "grant", grantID: "grant_test" },
+      })
     }),
   { git: true },
 )
@@ -354,10 +366,10 @@ it.instance("submits one bounded desktop plan after grouping lease decisions", (
       maxDurationMs: 5_000,
       steps: [
         {
-          action: { operation: "pointer", sensitive: false },
+          action: { operation: "pointer", sensitive: false, authorization: { kind: "prompt" } },
           preconditions: [{ kind: "control", controlID: "editor", enabled: true }],
         },
-        { action: { operation: "type", sensitive: "communications" } },
+        { action: { operation: "type", sensitive: "communications", authorization: { kind: "prompt" } } },
       ],
     })
     expect(result).toMatchObject({
@@ -494,6 +506,7 @@ it.instance(
           windowID: "window_seen",
           observationID: ObservationID.make("observation_seen"),
           sensitive: false,
+          authorization: { kind: "prompt" },
           action: "double_click",
           button: "right",
           x: 0.25,
@@ -527,6 +540,7 @@ it.instance(
         windowID: "window_seen",
         observationID: ObservationID.make("observation_moved"),
         sensitive: false,
+        authorization: { kind: "prompt" },
         x: 0.5,
         y: 0.125,
       })
@@ -561,6 +575,7 @@ it.instance(
         windowID: "window_seen",
         observationID: ObservationID.make("observation_typed"),
         sensitive: false,
+        authorization: { kind: "prompt" },
         text: "Exact text",
       })
       expect(typed.title).toBe("Typed into desktop")
@@ -594,6 +609,7 @@ it.instance(
         windowID: "window_seen",
         observationID: ObservationID.make("observation_keyed"),
         sensitive: false,
+        authorization: { kind: "prompt" },
         key: "Enter",
         modifiers: ["control", "shift"],
       })
@@ -631,6 +647,7 @@ it.instance(
         windowID: "window_seen",
         observationID: ObservationID.make("observation_scrolled"),
         sensitive: false,
+        authorization: { kind: "prompt" },
         deltaX: 120,
         deltaY: -240,
       })
@@ -661,7 +678,13 @@ it.instance(
           always: [],
         }),
       )
-      expect(effects()[5]).toEqual({ operation: "watch", sessionID: ctx.sessionID, frameCount: 3, intervalMs: 500 })
+      expect(effects()[5]).toEqual({
+        operation: "watch",
+        sessionID: ctx.sessionID,
+        frameCount: 3,
+        intervalMs: 500,
+        authorization: { kind: "prompt" },
+      })
       expect(watched.title).toBe("Observed 3 desktop frames (2 images)")
       expect(watched.attachments).toHaveLength(2)
       expect(watched.attachments?.map((item) => item.filename)).toEqual(["desktop-frame-1.png", "desktop-frame-3.png"])
@@ -738,6 +761,7 @@ it.instance(
         windowID: "window_seen",
         observationID: ObservationID.make("observation_dragged"),
         sensitive: false,
+        authorization: { kind: "prompt" },
         startX: 0.125,
         startY: 0.25,
         endX: 0.875,

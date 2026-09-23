@@ -218,6 +218,12 @@ describe("browser host tools", () => {
         if (request.operation !== "upload" || request.action !== "start") throw new Error("Missing upload request")
         expect(request.files[0]).toMatchObject({ name: "upload.txt", bytes: 17 })
         expect(request.observationID).toBe(ObservationID.make("obs_upload"))
+        expect(request.authorization).toMatchObject({
+          source: "legacy_prompt",
+          action: "files",
+          windowID: "tab_seen",
+          sensitive: "disclosure",
+        })
         expect(JSON.stringify(request)).not.toContain(source)
         const stage = new UploadStage()
         const owner = { directory: instance.directory, sessionID: ctx.sessionID, uploadID: request.uploadID }
@@ -554,6 +560,7 @@ describe("browser host tools", () => {
                 return {
                   operation: "authorize" as const,
                   decision: "allow" as const,
+                  grantID: "grant_test",
                   reason: "Authorized by shared grant",
                 }
               return result(input)
@@ -580,7 +587,18 @@ describe("browser host tools", () => {
           windowID: "tab_test",
           sensitive: "communications",
         })
-        expect(inputs[1]).toMatchObject({ operation: "click", selector: "#send" })
+        expect(inputs[1]).toMatchObject({
+          operation: "click",
+          selector: "#send",
+          authorization: {
+            source: "lease",
+            grantID: "grant_test",
+            sessionID: "ses_browser_tools",
+            action: "browser",
+            windowID: "tab_test",
+            sensitive: "communications",
+          },
+        })
       }),
     60_000,
   )

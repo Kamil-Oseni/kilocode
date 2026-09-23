@@ -6,7 +6,7 @@ import {
   type ActionClassification as Classification,
   type SensitiveCategory as SensitiveKind,
 } from "@/kilocode/computer-use/lease"
-import { Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
+import { Authorization, Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -53,13 +53,20 @@ function approve(
     const auth =
       result.operation === "authorize" ? result : yield* Effect.die(new Error("Desktop host returned the wrong result"))
     if (auth.decision === "deny") yield* Effect.die(new Error(`Desktop control denied: ${auth.reason}`))
-    if (auth.decision === "ask")
+    if (auth.decision === "allow") {
+      if (!auth.grantID) return yield* Effect.die(new Error("Desktop grant authorization omitted its grant identity"))
+      return { kind: "grant" as const, grantID: auth.grantID }
+    }
+    if (auth.decision === "ask") {
       yield* ctx.ask({
         permission: input.permission,
         patterns: input.patterns,
         always: input.always,
         metadata: input.metadata,
       })
+      return { kind: "prompt" as const }
+    }
+    return yield* Effect.die(new Error("Desktop host returned an invalid authorization decision"))
   })
 }
 
@@ -74,14 +81,18 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
       parameters: Params,
       execute: (_params, ctx) =>
         Effect.gen(function* () {
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "observe",
             permission: "desktop_observe",
             patterns: ["foreground-window"],
             always: [],
             metadata: {},
           })
-          const result = yield* run(desktop, { operation: "observe", sessionID: ctx.sessionID }, ctx.abort)
+          const result = yield* run(
+            desktop,
+            { operation: "observe", sessionID: ctx.sessionID, authorization },
+            ctx.abort,
+          )
           if (result.operation !== "observe")
             return yield* Effect.die(new Error("Desktop host returned the wrong result"))
           const summary = {
@@ -120,14 +131,18 @@ export const DesktopWindowsTool = Tool.define<typeof Params, { count: number }, 
       parameters: Params,
       execute: (_params, ctx) =>
         Effect.gen(function* () {
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "observe",
             permission: "desktop_windows",
             patterns: ["visible-windows"],
             always: [],
             metadata: {},
           })
-          const result = yield* run(desktop, { operation: "windows", sessionID: ctx.sessionID }, ctx.abort)
+          const result = yield* run(
+            desktop,
+            { operation: "windows", sessionID: ctx.sessionID, authorization },
+            ctx.abort,
+          )
           if (result.operation !== "windows")
             return yield* Effect.die(new Error("Desktop host returned the wrong result"))
           return {
@@ -160,7 +175,7 @@ export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Serv
       parameters: FocusParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "window",
             windowID: params.window_id,
             sensitive: classified(params.sensitive_category),
@@ -177,6 +192,7 @@ export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Serv
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
             },
             ctx.abort,
           )
@@ -216,7 +232,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const pattern = `foreground-window:${params.frames}x${params.interval_ms}ms`
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "observe",
             permission: "desktop_watch",
             patterns: [pattern],
@@ -230,6 +246,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
               sessionID: ctx.sessionID,
               frameCount: params.frames,
               intervalMs: params.interval_ms,
+              authorization,
             },
             ctx.abort,
           )
@@ -314,7 +331,7 @@ export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Servic
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const point = `${params.window_id}:${params.x.toFixed(4)},${params.y.toFixed(4)}`
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "pointer",
             windowID: params.window_id,
             sensitive: classified(params.sensitive_category),
@@ -331,6 +348,7 @@ export const DesktopMoveTool = Tool.define<typeof MoveParams, {}, Desktop.Servic
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
               x: params.x,
               y: params.y,
             },
@@ -381,7 +399,7 @@ export const DesktopDragTool = Tool.define<typeof DragParams, {}, Desktop.Servic
           const start = `${params.start_x.toFixed(4)},${params.start_y.toFixed(4)}`
           const end = `${params.end_x.toFixed(4)},${params.end_y.toFixed(4)}`
           const button = params.button ?? "left"
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "pointer",
             windowID: params.window_id,
             permission: "desktop_drag",
@@ -398,6 +416,7 @@ export const DesktopDragTool = Tool.define<typeof DragParams, {}, Desktop.Servic
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
               startX: params.start_x,
               startY: params.start_y,
               endX: params.end_x,
@@ -428,7 +447,7 @@ export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Serv
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const point = `${params.window_id}:${params.x.toFixed(4)},${params.y.toFixed(4)}`
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "pointer",
             windowID: params.window_id,
             permission: "desktop_click",
@@ -445,6 +464,7 @@ export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Serv
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
               action: params.action ?? "click",
               button: params.button ?? "left",
               x: params.x,
@@ -487,7 +507,7 @@ export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Servic
       parameters: TypeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "keyboard",
             windowID: params.window_id,
             permission: "desktop_type",
@@ -504,6 +524,7 @@ export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Servic
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
               text: params.text,
             },
             ctx.abort,
@@ -547,7 +568,7 @@ export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service,
         Effect.gen(function* () {
           const modifiers = [...new Set(params.modifiers ?? [])]
           const chord = [...modifiers, params.key].join("+")
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "keyboard",
             windowID: params.window_id,
             permission: "desktop_key",
@@ -564,6 +585,7 @@ export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service,
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
               key: params.key,
               modifiers,
             },
@@ -612,7 +634,7 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
         Effect.gen(function* () {
           const x = params.delta_x ?? 0
           const amount = `${params.window_id}:${x},${params.delta_y}`
-          yield* approve(desktop, ctx, {
+          const authorization = yield* approve(desktop, ctx, {
             action: "scroll",
             windowID: params.window_id,
             sensitive: classified(params.sensitive_category),
@@ -629,6 +651,7 @@ export const DesktopScrollTool = Tool.define<typeof ScrollParams, {}, Desktop.Se
               windowID: params.window_id,
               observationID: params.observation_id,
               sensitive: classified(params.sensitive_category),
+              authorization,
               deltaX: x,
               deltaY: params.delta_y,
             },
@@ -784,7 +807,7 @@ export const DesktopSequenceTool = Tool.define<
             postconditions: step.postconditions.map((item) => (item.kind === "control" ? condition(item) : item)),
             recovery: step.recovery,
           }))
-          const grants = new Set<string>()
+          const proofs = new Map<string, Schema.Schema.Type<typeof Authorization>>()
           for (const step of steps) {
             const action = step.action
             const kind =
@@ -794,9 +817,8 @@ export const DesktopSequenceTool = Tool.define<
                   ? ("keyboard" as const)
                   : ("pointer" as const)
             const key = JSON.stringify([kind, action.windowID, action.sensitive])
-            if (grants.has(key)) continue
-            grants.add(key)
-            yield* approve(desktop, ctx, {
+            if (proofs.has(key)) continue
+            const authorization = yield* approve(desktop, ctx, {
               action: kind,
               windowID: action.windowID,
               sensitive: action.sensitive,
@@ -805,7 +827,21 @@ export const DesktopSequenceTool = Tool.define<
               always: [],
               metadata: { steps: steps.length },
             })
+            proofs.set(key, authorization)
           }
+          const plans = steps.map((step) => {
+            const action = step.action
+            const kind =
+              action.operation === "scroll"
+                ? ("scroll" as const)
+                : action.operation === "type" || action.operation === "key"
+                  ? ("keyboard" as const)
+                  : ("pointer" as const)
+            const key = JSON.stringify([kind, action.windowID, action.sensitive])
+            const authorization = proofs.get(key)
+            if (!authorization) throw new Error("Desktop sequence authorization evidence is incomplete")
+            return { ...step, action: { ...action, authorization } }
+          })
           const result = yield* run(
             desktop,
             {
@@ -814,7 +850,7 @@ export const DesktopSequenceTool = Tool.define<
               windowID: params.window_id,
               observationID: params.observation_id,
               maxDurationMs: params.max_duration_ms,
-              steps,
+              steps: plans,
             },
             ctx.abort,
           )

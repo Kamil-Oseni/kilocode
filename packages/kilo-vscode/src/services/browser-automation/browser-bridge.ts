@@ -68,6 +68,10 @@ function action(request: ActionRequest): BrowserAction {
       })),
     }
   // raya_change end
+  if ("authorization" in request) {
+    const { authorization: _, ...input } = request
+    return input
+  }
   return request
 }
 
@@ -101,6 +105,22 @@ const codes = new Set([
   "unsupported",
 ])
 const effects = new Set(["observe", "navigate", "interact", "manage", "transfer", "authenticate", "test"])
+const authorized = new Set([
+  "upload",
+  "download",
+  "dialog",
+  "tabs",
+  "frames",
+  "navigate",
+  "snapshot",
+  "click",
+  "type",
+  "select",
+  "scroll",
+  "screenshot",
+  "evaluate",
+  "smoke",
+])
 
 function scope(directory: string) {
   return createHash("sha256").update(directory).digest("hex")
@@ -375,8 +395,22 @@ export class BrowserBridge {
     this.active.set(request.id, { controller, request, directory, startedAt, receipt })
     const state = { completed: false }
     try {
-      const decision = this.validate?.(authorization(request))
-      if (decision?.decision === "deny") throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
+      const auth = authorization(request)
+      const decision = this.validate?.(auth)
+      if ("authorization" in request) {
+        if (request.authorization.source === "lease") {
+          if (!decision || decision.decision !== "allow")
+            throw new Error(
+              `Browser lease authorization is no longer valid: ${decision?.reason ?? "local revalidation is unavailable"}`,
+            )
+          if (decision.grantID !== request.authorization.grantID)
+            throw new Error("Browser lease authorization changed grants before dispatch")
+        } else if (decision?.decision === "deny") {
+          throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
+        }
+      } else if (decision?.decision === "deny") {
+        throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
+      }
       await this.show(request, directory)
       if (controller.signal.aborted) return
       const value = await this.host.execute({
@@ -527,21 +561,43 @@ export class BrowserBridge {
 
 function authorization(request: ActionRequest): AuthorizeRequest {
   const action =
-    request.operation === "snapshot" || request.operation === "screenshot" || request.operation === "frames"
+    request.operation === "snapshot" ||
+    request.operation === "screenshot" ||
+    request.operation === "frames" ||
+    (request.operation === "tabs" && request.action === "list") ||
+    (request.operation === "dialog" && request.action === "list")
       ? "observe"
       : request.operation === "scroll"
         ? "scroll"
         : request.operation === "upload" || request.operation === "download"
           ? "files"
           : "browser"
+  const windowID = "tabID" in request && request.tabID ? request.tabID : undefined
+  if (!("authorization" in request)) {
+    // Profile and authentication requests originate inside the extension. Model-originated actions require evidence;
+    // queued requests from older backends fail closed after an upgrade instead of inheriting a new grant implicitly.
+    if (authorized.has(request.operation)) throw new Error("Browser action is missing immutable authorization evidence")
+    return {
+      id: request.id,
+      sessionID: request.sessionID,
+      operation: "authorize",
+      surface: "browser",
+      action,
+      ...(windowID ? { windowID } : {}),
+      sensitive: false,
+    }
+  }
+  const proof = request.authorization
+  if (proof.sessionID !== request.sessionID || proof.action !== action || proof.windowID !== windowID)
+    throw new Error("Browser action does not match its immutable authorization evidence")
   return {
     id: request.id,
     sessionID: request.sessionID,
     operation: "authorize",
     surface: "browser",
     action,
-    ...("tabID" in request && request.tabID ? { windowID: request.tabID } : {}),
-    sensitive: false,
+    ...(windowID ? { windowID } : {}),
+    sensitive: proof.sensitive,
   }
 }
 

@@ -49,6 +49,11 @@ describe("Windows global Pause Raya shortcut", () => {
     )
 
     expect(test.state.script).toContain("RegisterHotKey")
+    const id = Number(test.state.script.match(/\$id = (0x[\da-f]+)/i)?.[1])
+    expect(id).toBe(0x5241)
+    expect(id).toBeGreaterThanOrEqual(0)
+    expect(id).toBeLessThanOrEqual(0xbfff)
+    expect(test.state.script).not.toContain("$id = 0x52415941")
     expect(test.state.script).toContain("0x4007, 0x1B")
     expect(test.state.script).toContain("SetWindowsHookEx(13")
     expect(test.state.script).toContain("SetWindowsHookEx(14")

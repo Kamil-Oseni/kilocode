@@ -69,7 +69,7 @@ public static class RayaPauseHotkey {
   }
 }
 '@
-$id = 0x52415941
+$id = 0x5241
 if (-not [RayaPauseHotkey]::RegisterHotKey([IntPtr]::Zero, $id, 0x4007, 0x1B)) {
   throw "Windows refused the global Pause Raya shortcut"
 }

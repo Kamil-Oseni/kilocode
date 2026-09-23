@@ -28,6 +28,7 @@ type PassiveRequest = CaptureRequest | WindowsRequest | AuthorizeRequest
 type ActionRequest = Exclude<DesktopRequest, PassiveRequest>
 type ActionResult = Exclude<DesktopResult, { operation: "authorize" | "observe" | "watch" | "windows" }>
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
+type Authorization = Exclude<DesktopRequest, { operation: "authorize" }>["authorization"]
 
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
 const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll", "sequence"])
@@ -184,10 +185,15 @@ export class DesktopBridge {
     }
     const controller = new AbortController()
     const startedAt = Date.now()
+    let dispatched = false
     this.active.set(request.id, controller)
     try {
-      const result = await this.dispatch(request, startedAt, controller.signal)
-      if (controller.signal.aborted) return
+      const result = await this.dispatch(request, startedAt, controller.signal, () => {
+        dispatched = true
+      })
+      if (controller.signal.aborted && !dispatched) return
+      if (controller.signal.aborted)
+        throw new DesktopOutcomeError("cancelled action", "Control was stopped after native dispatch began")
       receipt.result = result
       receipt.failure = undefined
       await this.retain(receipt).catch((error) =>
@@ -195,7 +201,7 @@ export class DesktopBridge {
       )
       await this.deliver(request.id, directory, receipt)
     } catch (error) {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted && !dispatched) return
       const uncertain = error instanceof DesktopOutcomeError
       receipt.failure = {
         code: "invalid_request",
@@ -227,19 +233,23 @@ export class DesktopBridge {
     }
   }
 
-  private dispatch(request: DesktopRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
+  private dispatch(
+    request: DesktopRequest,
+    startedAt: number,
+    signal: AbortSignal,
+    onDispatch: () => void,
+  ): Promise<DesktopResult> {
     if (request.operation === "authorize")
       return (
         this.authorize?.(request) ??
         Promise.resolve({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" })
       )
-    if (request.operation === "sequence") return this.interact(request, startedAt)
-    const decision = this.validate?.(authorization(request))
-    if (decision?.decision === "deny") throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
+    if (request.operation === "sequence") return this.interact(request, startedAt, onDispatch)
+    enforce(this.validate?.(authorization(request)), request.authorization)
     if (request.operation === "windows") return this.windows(request, startedAt)
     if (request.operation === "observe" || request.operation === "watch")
       return this.observe(request, startedAt, signal)
-    return this.interact(request, startedAt)
+    return this.interact(request, startedAt, onDispatch)
   }
 
   private async observe(request: CaptureRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
@@ -316,7 +326,7 @@ export class DesktopBridge {
     }
   }
 
-  private async interact(request: ActionRequest, startedAt: number): Promise<DesktopResult> {
+  private async interact(request: ActionRequest, startedAt: number, onDispatch: () => void): Promise<DesktopResult> {
     const receipt = {
       version: 1 as const,
       requestID: request.id,
@@ -328,6 +338,9 @@ export class DesktopBridge {
       observationID: request.observationID,
     }
     if (request.operation === "sequence") {
+      const proofs = new Map<object, Authorization>(
+        request.steps.map((step) => [step.action, step.action.authorization]),
+      )
       const result = await this.session.sequence(
         {
           observationID: request.observationID,
@@ -336,9 +349,11 @@ export class DesktopBridge {
         },
         (action) => {
           const decision = this.validate?.(sequenceAuthorization(request, action))
-          if (decision?.decision === "deny")
-            throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
+          const proof = proofs.get(action)
+          if (!proof) throw new Error("Desktop sequence authorization evidence is incomplete")
+          enforce(decision, proof)
         },
+        onDispatch,
       )
       const frame = result.scene
       return {
@@ -363,77 +378,95 @@ export class DesktopBridge {
       }
     }
     if (request.operation === "focus") {
-      await this.session.focus(request.windowID, request.observationID)
+      await this.session.focus(request.windowID, request.observationID, onDispatch)
       return { operation: "focus", receipt: { ...receipt, effect: "manage", finishedAt: Date.now() } }
     }
     if (request.operation === "move") {
-      await this.session.execute({
-        operation: "pointer",
-        action: "move",
-        windowID: request.windowID,
-        observationID: request.observationID,
-        sensitive: request.sensitive,
-        x: request.x,
-        y: request.y,
-      })
+      await this.session.execute(
+        {
+          operation: "pointer",
+          action: "move",
+          windowID: request.windowID,
+          observationID: request.observationID,
+          sensitive: request.sensitive,
+          x: request.x,
+          y: request.y,
+        },
+        onDispatch,
+      )
       return { operation: "move", receipt: { ...receipt, finishedAt: Date.now() } }
     }
     if (request.operation === "drag") {
-      await this.session.execute({
-        operation: "drag",
-        windowID: request.windowID,
-        observationID: request.observationID,
-        sensitive: request.sensitive,
-        startX: request.startX,
-        startY: request.startY,
-        endX: request.endX,
-        endY: request.endY,
-        button: request.button,
-      })
+      await this.session.execute(
+        {
+          operation: "drag",
+          windowID: request.windowID,
+          observationID: request.observationID,
+          sensitive: request.sensitive,
+          startX: request.startX,
+          startY: request.startY,
+          endX: request.endX,
+          endY: request.endY,
+          button: request.button,
+        },
+        onDispatch,
+      )
       return { operation: "drag", receipt: { ...receipt, finishedAt: Date.now() } }
     }
     if (request.operation === "click") {
-      await this.session.execute({
-        operation: "pointer",
-        action: request.action,
-        windowID: request.windowID,
-        observationID: request.observationID,
-        sensitive: request.sensitive,
-        x: request.x,
-        y: request.y,
-        button: request.button,
-      })
+      await this.session.execute(
+        {
+          operation: "pointer",
+          action: request.action,
+          windowID: request.windowID,
+          observationID: request.observationID,
+          sensitive: request.sensitive,
+          x: request.x,
+          y: request.y,
+          button: request.button,
+        },
+        onDispatch,
+      )
       return { operation: "click", receipt: { ...receipt, finishedAt: Date.now() } }
     }
     if (request.operation === "type") {
-      await this.session.execute({
-        operation: "type",
-        windowID: request.windowID,
-        observationID: request.observationID,
-        sensitive: request.sensitive,
-        text: request.text,
-      })
+      await this.session.execute(
+        {
+          operation: "type",
+          windowID: request.windowID,
+          observationID: request.observationID,
+          sensitive: request.sensitive,
+          text: request.text,
+        },
+        onDispatch,
+      )
       return { operation: "type", receipt: { ...receipt, finishedAt: Date.now() } }
     }
     if (request.operation === "key") {
-      await this.session.execute({
-        operation: "key",
+      await this.session.execute(
+        {
+          operation: "key",
+          windowID: request.windowID,
+          observationID: request.observationID,
+          sensitive: request.sensitive,
+          key: request.key,
+          modifiers: request.modifiers,
+        },
+        onDispatch,
+      )
+      return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
+    }
+    await this.session.execute(
+      {
+        operation: "scroll",
         windowID: request.windowID,
         observationID: request.observationID,
         sensitive: request.sensitive,
-        key: request.key,
-        modifiers: request.modifiers,
-      })
-      return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
-    }
-    await this.session.execute({
-      operation: "scroll",
-      windowID: request.windowID,
-      observationID: request.observationID,
-      sensitive: request.sensitive,
-      deltaX: request.deltaX,
-      deltaY: request.deltaY,
-    })
+        deltaX: request.deltaX,
+        deltaY: request.deltaY,
+      },
+      onDispatch,
+    )
     return { operation: "scroll", receipt: { ...receipt, finishedAt: Date.now() } }
   }
 
@@ -503,7 +536,7 @@ export class DesktopBridge {
     this.offState()
     for (const controller of this.active.values()) controller.abort()
     this.active.clear()
-    this.receipts.clear()
+    // In-flight native effects must still settle into the durable receipt journal.
   }
 
   cancel(reason: string): void {
@@ -555,6 +588,17 @@ function sequenceAuthorization(
     windowID: action.windowID,
     sensitive: action.sensitive,
   }
+}
+
+function enforce(decision: AuthorizeResult | undefined, proof: Authorization): void {
+  if (!decision) return
+  if (!proof) throw new Error("Desktop request has no authorization evidence")
+  if (proof.kind === "prompt") {
+    if (decision.decision === "deny") throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
+    return
+  }
+  if (decision.decision !== "allow" || decision.grantID !== proof.grantID)
+    throw new Error(`Desktop grant is no longer authorized: ${decision.reason}`)
 }
 
 function persistable(value: unknown): value is ActionResult {

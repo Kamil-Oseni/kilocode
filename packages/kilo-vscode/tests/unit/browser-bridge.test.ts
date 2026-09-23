@@ -72,9 +72,72 @@ describe("Raya browser bridge", () => {
     }
   })
 
-  it("revalidates a stopped shared grant before showing or executing the browser", async () => {
+  it.each(["ask", "deny"] as const)(
+    "refuses a shared grant when dispatch revalidation changes to %s",
+    async (decision) => {
+      const failures: unknown[] = []
+      let shown = 0
+      let executed = 0
+      const client = {
+        kilocode: {
+          browser: {
+            list: async () => ({ data: [] }),
+            reply: async () => ({ data: true }),
+            reject: async (value: unknown) => {
+              failures.push(value)
+              return { data: true }
+            },
+          },
+        },
+      } as unknown as KiloClient
+      const connection = harness(client)
+      const bridge = new BrowserBridge(
+        connection.value,
+        {
+          show: async () => {
+            shown++
+          },
+          execute: async () => {
+            executed++
+            return { operation: "snapshot", snapshot: "" }
+          },
+        },
+        undefined,
+        undefined,
+        (request) => {
+          expect(request.sensitive).toBe("communications")
+          return { operation: "authorize", decision, reason: `Computer Use changed to ${decision}` }
+        },
+      )
+      try {
+        connection.event({
+          type: "kilocode.browser.requested",
+          properties: {
+            id: "brr_stopped",
+            sessionID: "ses_test",
+            operation: "click",
+            tabID: "tab_seen",
+            selector: "#send",
+            authorization: grant("browser", "grant_test", "tab_seen", "communications"),
+          },
+        })
+        await Bun.sleep(20)
+        expect(shown).toBe(0)
+        expect(executed).toBe(0)
+        expect(failures).toContainEqual(
+          expect.objectContaining({
+            requestID: "brr_stopped",
+            error: expect.objectContaining({ message: expect.stringContaining(`changed to ${decision}`) }),
+          }),
+        )
+      } finally {
+        bridge.dispose()
+      }
+    },
+  )
+
+  it("refuses a lease when local revalidation resolves a different grant", async () => {
     const failures: unknown[] = []
-    let shown = 0
     let executed = 0
     const client = {
       kilocode: {
@@ -92,9 +155,7 @@ describe("Raya browser bridge", () => {
     const bridge = new BrowserBridge(
       connection.value,
       {
-        show: async () => {
-          shown++
-        },
+        show: async () => undefined,
         execute: async () => {
           executed++
           return { operation: "snapshot", snapshot: "" }
@@ -102,20 +163,30 @@ describe("Raya browser bridge", () => {
       },
       undefined,
       undefined,
-      () => ({ operation: "authorize", decision: "deny", reason: "Computer Use was stopped" }),
+      () => ({
+        operation: "authorize",
+        decision: "allow",
+        reason: "A replacement grant is active",
+        grantID: "grant_replacement",
+      }),
     )
     try {
       connection.event({
         type: "kilocode.browser.requested",
-        properties: { id: "brr_stopped", sessionID: "ses_test", operation: "snapshot" },
+        properties: {
+          id: "brr_changed_grant",
+          sessionID: "ses_test",
+          operation: "click",
+          selector: "#save",
+          authorization: grant("browser", "grant_original"),
+        },
       })
       await Bun.sleep(20)
-      expect(shown).toBe(0)
       expect(executed).toBe(0)
       expect(failures).toContainEqual(
         expect.objectContaining({
-          requestID: "brr_stopped",
-          error: expect.objectContaining({ message: expect.stringContaining("Computer Use was stopped") }),
+          requestID: "brr_changed_grant",
+          error: expect.objectContaining({ message: expect.stringContaining("changed grants") }),
         }),
       )
     } finally {
@@ -174,6 +245,7 @@ describe("Raya browser bridge", () => {
         sessionID: "ses_test",
         tabID: "tab_seen",
         operation: "upload",
+        authorization: prompt("files", "tab_seen", "disclosure"),
         action: "start",
         uploadID,
         selector: "#files",
@@ -251,6 +323,7 @@ describe("Raya browser bridge", () => {
         sessionID: "ses_test",
         tabID: "tab_seen",
         operation: "download",
+        authorization: prompt("files", "tab_seen"),
         action: "start",
         selector: "#export",
       },
@@ -304,7 +377,14 @@ describe("Raya browser bridge", () => {
     })
     const event = {
       type: "kilocode.browser.requested",
-      properties: { id: "brr_dialog", sessionID: "ses_test", tabID: "tab_seen", operation: "click", selector: "#save" },
+      properties: {
+        id: "brr_dialog",
+        sessionID: "ses_test",
+        tabID: "tab_seen",
+        operation: "click",
+        selector: "#save",
+        authorization: prompt("browser", "tab_seen"),
+      },
     }
     try {
       connection.event(event)
@@ -390,7 +470,13 @@ describe("Raya browser bridge", () => {
     try {
       connection.event({
         type: "kilocode.browser.requested",
-        properties: { id: "brr_serialize", sessionID: "ses_test", operation: "evaluate", expression: "save()" },
+        properties: {
+          id: "brr_serialize",
+          sessionID: "ses_test",
+          operation: "evaluate",
+          expression: "save()",
+          authorization: prompt("browser"),
+        },
       })
       await done.promise
       expect(failures[0]).toMatchObject({
@@ -408,7 +494,13 @@ describe("Raya browser bridge", () => {
     const recovered = Promise.withResolvers<void>()
     const collision = Promise.withResolvers<void>()
     let reads = 0
-    const request = { id: "brr_once", sessionID: "ses_test", operation: "click", selector: "#save" } as const
+    const request = {
+      id: "brr_once",
+      sessionID: "ses_test",
+      operation: "click",
+      selector: "#save",
+      authorization: prompt("browser"),
+    } as const
     let calls = 0
     const replies: unknown[] = []
     const failures: unknown[] = []
@@ -451,7 +543,13 @@ describe("Raya browser bridge", () => {
       send(request)
       await started.promise
       send(request)
-      send({ selector: request.selector, operation: request.operation, sessionID: request.sessionID, id: request.id })
+      send({
+        selector: request.selector,
+        authorization: request.authorization,
+        operation: request.operation,
+        sessionID: request.sessionID,
+        id: request.id,
+      })
       send({ ...request, selector: "#different" })
       await collision.promise
       expect(calls).toBe(1)
@@ -485,6 +583,7 @@ describe("Raya browser bridge", () => {
       sessionID: "ses_test",
       operation: "evaluate",
       expression: "mutateThenThrow()",
+      authorization: prompt("browser"),
     } as const
     let calls = 0
     const failures: unknown[] = []
@@ -557,7 +656,13 @@ describe("Raya browser bridge", () => {
     const send = (id: number) =>
       connection.event({
         type: "kilocode.browser.requested",
-        properties: { id: `brr_capacity_${id}`, sessionID: "ses_test", operation: "click", selector: "#save" },
+        properties: {
+          id: `brr_capacity_${id}`,
+          sessionID: "ses_test",
+          operation: "click",
+          selector: "#save",
+          authorization: prompt("browser"),
+        },
       })
     try {
       for (let id = 0; id <= 1024; id++) send(id)
@@ -604,7 +709,12 @@ describe("Raya browser bridge", () => {
     const send = (id: number) =>
       connection.event({
         type: "kilocode.browser.requested",
-        properties: { id: `brr_long_${id}`, sessionID: "ses_test", operation: "snapshot" },
+        properties: {
+          id: `brr_long_${id}`,
+          sessionID: "ses_test",
+          operation: "snapshot",
+          authorization: prompt("observe"),
+        },
       })
     try {
       for (const start of [0, 256, 512, 768]) {
@@ -668,6 +778,7 @@ describe("Raya browser bridge", () => {
         id: "brr_test",
         sessionID: "ses_test",
         ...input,
+        authorization: prompt("browser"),
         origin: { requestID: "forged", sessionID: "forged", directory: "forged" },
       },
     })
@@ -714,6 +825,7 @@ describe("Raya browser bridge", () => {
         id: "brr_cancel",
         sessionID: "ses_test",
         operation: "snapshot",
+        authorization: prompt("observe"),
       },
     })
     connection.event({
@@ -793,7 +905,12 @@ describe("Raya browser bridge", () => {
     connection.state("connected")
     connection.event({
       type: "kilocode.browser.requested",
-      properties: { id: "brr_disconnect", sessionID: "ses_test", operation: "snapshot" },
+      properties: {
+        id: "brr_disconnect",
+        sessionID: "ses_test",
+        operation: "snapshot",
+        authorization: prompt("observe"),
+      },
     })
     await entered.promise
     connection.state("disconnected")
@@ -844,6 +961,7 @@ describe("Raya browser bridge", () => {
         tabID: "tab_seen",
         observationID: "obs_seen",
         selector: "#save",
+        authorization: prompt("browser", "tab_seen"),
       },
     })
     await entered.promise
@@ -897,6 +1015,7 @@ describe("Raya browser bridge", () => {
         tabID: "tab_seen",
         observationID: "obs_after",
         selector: "#save",
+        authorization: prompt("browser", "tab_seen"),
       },
     })
     await Bun.sleep(20)
@@ -964,6 +1083,7 @@ describe("Raya browser bridge", () => {
         id: "brr_smoke",
         sessionID: "ses_test",
         operation: "smoke",
+        authorization: prompt("browser"),
         name: "sample-app",
         mode: "scripted",
         steps: [
@@ -1024,6 +1144,7 @@ describe("Raya browser bridge", () => {
         tabID: "tab_seen",
         observationID: "obs_seen",
         selector: "#save",
+        authorization: prompt("browser", "tab_seen"),
       },
     })
     await done.promise
@@ -1058,6 +1179,7 @@ describe("Raya browser bridge", () => {
       tabID: "tab_seen",
       observationID: "obs_seen",
       selector: "#save",
+      authorization: prompt("browser", "tab_seen"),
     }
     const firstFailures: unknown[] = []
     const firstClient = {
@@ -1169,6 +1291,40 @@ describe("Raya browser bridge", () => {
     second.dispose()
   })
 })
+
+function prompt(
+  action: "observe" | "browser" | "scroll" | "files",
+  windowID?: string,
+  sensitive:
+    | false
+    | "communications"
+    | "financial"
+    | "credentials"
+    | "software"
+    | "system"
+    | "deletion"
+    | "disclosure"
+    | "legal"
+    | "publishing" = false,
+) {
+  return {
+    version: 1 as const,
+    source: "legacy_prompt" as const,
+    sessionID: "ses_test",
+    action,
+    ...(windowID ? { windowID } : {}),
+    sensitive,
+  }
+}
+
+function grant(
+  action: "observe" | "browser" | "scroll" | "files",
+  grantID: string,
+  windowID?: string,
+  sensitive: Parameters<typeof prompt>[2] = false,
+) {
+  return { ...prompt(action, windowID, sensitive), source: "lease" as const, grantID }
+}
 
 function memory(seed?: unknown) {
   let value: unknown = seed

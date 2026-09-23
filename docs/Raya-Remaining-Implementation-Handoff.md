@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:23 America/Toronto - ordered child activity in chat
+
+The expanded task renderer now puts actual child tool rows before the final report, with one quiet divider only when there are tool rows. Webview typecheck and targeted lint pass. Storybook could not produce a preview because its manager cache was inaccessible and the preview-only build failed dependency resolution; check the installed snapshot visually at narrow and desktop widths. This is a single-child hierarchy fix, not the full named multi-agent event view.
+
 ## ChatGPT 2026-09-23 12:10 America/Toronto - parent task provenance and restart gate
 
 Completion now requires an unambiguous persisted parent `task` part with the exact admitted call, parent and child identities, alongside each child reply and reviewed tool evidence. A background branch needs its matching completed in-memory job; if the registry is empty after restart, completion remains blocked. Foreground task completion can be reconstructed from its parent receipt. Add explicit background recovery that proves the child outcome without replaying it, then implement Chief inspection/review and all-branch synthesis. `chief_plan` remains unregistered, and no installed-host claim follows from these source tests.

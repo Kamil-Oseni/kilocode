@@ -198,7 +198,6 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
                 <span data-slot="task-tool-title">{language.t("session.messages.taskStarting")}</span>
               </div>
             </Show>
-            <Show when={result()}>{(text) => <Markdown text={text()} />}</Show>
             <Index each={childToolParts()}>
               {(item) => {
                 const info = createMemo(() => getToolInfo(item().tool, item().state?.input))
@@ -221,6 +220,13 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
                 )
               }}
             </Index>
+            <Show when={result()}>
+              {(text) => (
+                <div data-slot="task-result" data-after-activity={childToolCount() > 0 ? "" : undefined}>
+                  <Markdown text={text()} />
+                </div>
+              )}
+            </Show>
           </div>
         </div>
       </BasicTool>

@@ -76,6 +76,17 @@
   }
 }
 
+[data-component="task-tools"] [data-slot="task-result"] {
+  min-width: 0;
+  padding: 8px 12px 10px;
+  overflow-wrap: anywhere;
+}
+
+[data-component="task-tools"] [data-slot="task-result"][data-after-activity] {
+  margin-top: 6px;
+  border-top: 1px solid var(--border-weak-base);
+}
+
 /* ============================================
    Background Process Tool
    ============================================ */

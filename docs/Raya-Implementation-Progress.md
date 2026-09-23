@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 12:23 America/Toronto - child activity precedes the final chat report
+
+**Status: source verified; installed visual acceptance pending.** The expanded child task now presents its real tool activity before the final report and uses a neutral divider only when activity exists. This follows the actual work order and reduces the previous report-then-tools inversion in Raya chat. Webview typecheck, targeted ESLint and Prettier pass. The existing Storybook preview did not build on this checkout: its manager cache was inaccessible and preview-only mode failed resolving installed packages, so no story screenshot is claimed. Build and install a production snapshot, then inspect the real chat at narrow and desktop widths. The grouped multi-child event timeline remains a separate unfinished goal.
+
 ## ChatGPT 2026-09-23 12:10 America/Toronto - require exact parent task receipts at goal completion
 
 **Status: source verified; fanout remains disabled.** The all-branch completion barrier now requires exactly one completed parent `task` part with the saved call ID, parent session ID and child session ID for each branch. A live failed or unfinished job still blocks completion. A background branch whose job disappears after restart also blocks until an explicit recovery path proves its outcome; a completed foreground task can rely on its persisted parent receipt. This closes the case where an empty in-memory job registry could make reviewed child evidence appear sufficient. The ledger suite passes **5 tests / 27 assertions**, including missing parent and missing background-job cases, and CLI typecheck passes. Build restart reconciliation and Chief result inspection before allowing automatic fanout.

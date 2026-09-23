@@ -116,7 +116,7 @@ describe("Auto Chief branch ledger", () => {
         const ref = { callID: `read-${index}`, messageID: `msg-${index}`, partID: `part-${index}` }
         rows.set(child, [
           {
-            info: { id: ref.messageID },
+            info: { id: ref.messageID, role: "assistant", time: { created: 1, completed: 2 } },
             parts: [{ type: "tool", id: ref.partID, callID: ref.callID, tool: "read", state: { status: "completed" } }],
           },
         ] as unknown as MessageV2.WithParts[])
@@ -129,6 +129,25 @@ describe("Auto Chief branch ledger", () => {
           state: "completed",
           result: "Findings returned",
         })
+        if (index === 1)
+          expect(
+            Exit.isFailure(
+              yield* ledger
+                .review({
+                  goalID: id,
+                  goalCreatedAt: createdAt,
+                  branchID: item.id,
+                  callID: `task-${index}`,
+                  sessionID: child,
+                  evidence: ref,
+                })
+                .pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        rows.get(child)?.push({
+          info: { id: `final-${index}`, role: "assistant", time: { created: 3, completed: 4 } },
+          parts: [{ type: "text", text: "Findings returned" }],
+        } as unknown as MessageV2.WithParts)
         if (index === 0) continue
         yield* ledger.review({
           goalID: id,

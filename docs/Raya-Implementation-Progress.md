@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 11:49 America/Toronto - require a completed child reply before branch review
+
+**Status: source verified; fanout remains disabled.** A completed tool part in a child session is no longer sufficient review evidence by itself. The exact referenced tool call must precede a completed assistant reply with nonempty text in that same child conversation. The review and goal-completion paths recheck this persisted transcript, so a missing or changed final reply blocks acceptance after restart. The focused adverse case proves the tool call alone is refused; the ledger suite passes **5 tests / 25 assertions** and CLI typecheck passes. This is structural evidence, not semantic proof that the child satisfied its brief. A Chief result-inspection and review workflow is still required before registering the plan tool or enabling multi-child Auto execution.
+
 ## ChatGPT 2026-09-23 11:39 America/Toronto - exact Chief child terminal receipts
 
 **Status: source verified; automatic fanout remains disabled.** The admitted branch now settles from the actual child run's terminal `Exit`, bound to the branch, task call and child session IDs. Completed, failed, cancelled and uncertain/defect outcomes remain distinct. The ledger saves a generic result description rather than copying child report text or error details; the actual child conversation remains the source for evidence review. A failed, cancelled or unknown branch still blocks goal completion, and no terminal result is automatically reviewed. Focused outcome and task tests pass **3 tests / 33 assertions**, and CLI typecheck passes. Restart reconciliation for an admitted child whose process disappears, background stop/pause behavior, exact result review and grouped chat presentation still need implementation and installed acceptance.

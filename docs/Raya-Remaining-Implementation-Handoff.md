@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 11:49 America/Toronto - child reply evidence handoff
+
+Branch review now refuses a child tool receipt without a later completed, nonempty assistant reply in that child conversation. Completion rechecks both against the saved child transcript, including after restart. Do not treat this as semantic review: build a Chief result-inspection step, exact parent task/result lineage, explicit acceptance of each brief and cautious recovery when the background job registry is unavailable. The plan tool remains unregistered.
+
 ## ChatGPT 2026-09-23 11:39 America/Toronto - terminal branch receipt handoff
 
 The exact admitted child run now settles its branch on terminal exit. Completion, ordinary failure, interruption and defect/uncertain outcome remain separate. The ledger stores no raw child output or error text, and a terminal state does not count as reviewed evidence. An admitted child stranded by process loss or restart remains blocked until a cautious reconciliation path proves its real outcome. Next implement that path and a child-result review tool, then test background stop/pause and all-branch synthesis before registering `chief_plan` or changing Auto's one-child prompt.

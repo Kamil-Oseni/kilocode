@@ -225,19 +225,28 @@ export namespace ChiefBranches {
       if (!sessions || !item.sessionID)
         return yield* Effect.fail(new Error("Auto Chief branch evidence is unavailable"))
       const rows = yield* sessions.messages({ sessionID: item.sessionID })
-      return rows.some(
+      const final = rows.findLastIndex(
         (row) =>
-          row.info.id === ref.messageID &&
-          row.parts.some(
-            (part) =>
-              part.type === "tool" &&
-              part.id === ref.partID &&
-              part.callID === ref.callID &&
-              part.state.status === "completed" &&
-              part.tool !== "task" &&
-              part.tool !== "chief_route",
-          ),
+          row.info.role === "assistant" &&
+          typeof row.info.time.completed === "number" &&
+          row.parts.some((part) => part.type === "text" && part.text.trim().length > 0),
       )
+      if (final < 0) return false
+      return rows
+        .slice(0, final + 1)
+        .some(
+          (row) =>
+            row.info.id === ref.messageID &&
+            row.parts.some(
+              (part) =>
+                part.type === "tool" &&
+                part.id === ref.partID &&
+                part.callID === ref.callID &&
+                part.state.status === "completed" &&
+                part.tool !== "task" &&
+                part.tool !== "chief_route",
+            ),
+        )
     })
 
     const review = Effect.fn("ChiefBranches.review")(function* (input: {

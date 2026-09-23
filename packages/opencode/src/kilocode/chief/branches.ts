@@ -163,7 +163,8 @@ export namespace ChiefBranches {
               ) === JSON.stringify(input.branches)
             )
               return old
-            throw new Error("An Auto Chief branch plan already exists for this goal")
+            if (old.branches.some((item) => item.state !== "planned") || old.revision === revision)
+              throw new Error("An Auto Chief branch plan already exists for this goal")
           }
           const now = Date.now()
           const next: Record = {

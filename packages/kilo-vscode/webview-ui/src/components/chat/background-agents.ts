@@ -84,6 +84,15 @@ export function showBackgroundAgent(agent: BackgroundAgent, hidden: ReadonlySet<
   return agent.status === "running" || !hidden.has(agent.jobID)
 }
 
+/** Keep the specialist visible even when a long task title fills the row. */
+export function backgroundAgentIdentity(agent: BackgroundAgent, fallback: string) {
+  const name = agent.agent?.trim()
+  const task = agent.description?.trim()
+  if (!name) return { name: task || fallback, task: undefined }
+  if (!task || task.toLocaleLowerCase() === name.toLocaleLowerCase()) return { name, task: undefined }
+  return { name, task }
+}
+
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined
 }

@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:09 America/Toronto - named background specialist activity
+
+The chat activity panel now places the specialist name above its task, keeps live tool detail on running rows, and marks completed rows with “View report” on the existing child-conversation button. A focused 23-test suite and webview typecheck pass. This user-visible source change needs a built/installed snapshot and visual review in a real parallel-agent conversation. It is a presentation improvement, not evidence that Chief automatic fanout is ready.
+
+## ChatGPT 2026-09-23 15:06 America/Toronto - safe plan replacement after steering
+
+An unstarted Chief plan can be replaced when the active goal gains a new revision. Any admitted or terminal branch still blocks replacement, and changing a plan under the same revision remains refused. A focused ledger case passes. The inspection test now verifies that stopped-owner recovery is visible as `unknown` in the result view. These changes are source-only after installed snapshot `51f71798c5`; automatic fanout remains unregistered. Continue with exact terminal-receipt reconstruction and interruption/restart acceptance before activation.
+
 ## ChatGPT 2026-09-23 14:58 America/Toronto - admitted-child recovery checkpoint
 
 New Chief admissions retain the admitting backend owner. `chief_inspect` can idempotently reconcile a branch to `unknown` after proving that owner process stopped; it does not infer failure from an empty in-memory job list or replay the child. Missing owner evidence remains unresolved. Focused ledger tests include a real terminated process, live-owner refusal, legacy-owner refusal, exact identity retention and repeat recovery. This source change is unregistered and not in the installed `51f71798c5` snapshot. Next reconstruct a proven terminal outcome from exact durable parent/child receipts where possible, cover same-process scope loss and multi-process races, then perform installed-host restart/stop acceptance before registering Chief fanout.

@@ -3,6 +3,7 @@ import {
   backgroundAgentActivity,
   backgroundAgentDuration,
   backgroundAgentElapsed,
+  backgroundAgentIdentity,
   backgroundAgentUsage,
   backgroundAgents,
   backgroundJobAgents,
@@ -57,6 +58,30 @@ const busy: SessionStatusInfo = { type: "busy" }
 const idle: SessionStatusInfo = { type: "idle" }
 
 describe("backgroundAgents", () => {
+  it("keeps the specialist name separate from the task in the activity row", () => {
+    const agent = {
+      id: "child",
+      jobID: "job",
+      status: "completed" as const,
+      startedAt: 1_000,
+      agent: "Researcher",
+      description: "Investigate the failing build",
+    }
+
+    expect(backgroundAgentIdentity(agent, "Background agent")).toEqual({
+      name: "Researcher",
+      task: "Investigate the failing build",
+    })
+    expect(backgroundAgentIdentity({ ...agent, description: "researcher" }, "Background agent")).toEqual({
+      name: "Researcher",
+      task: undefined,
+    })
+    expect(backgroundAgentIdentity({ ...agent, agent: undefined }, "Background agent")).toEqual({
+      name: "Investigate the failing build",
+      task: undefined,
+    })
+  })
+
   it("projects only a child's current pending or running tool", () => {
     const done = {
       id: "done",

@@ -7,6 +7,7 @@ import { Git } from "@/git"
 import { Agent } from "@/agent/agent"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { owner } from "@/kilocode/task/owner"
 import { RayaChief } from "@/kilocode/chief"
 import type { RayaGoal } from "@/kilocode/goal"
 import { chiefInspectTool } from "@/kilocode/tool/chief-inspect"
@@ -119,6 +120,26 @@ describe("Auto Chief branch inspection", () => {
       })
       expect(view.branches[1]).toMatchObject({ id: "design", state: "planned" })
       expect((yield* branches.read(id))?.branches[0]?.review).toBeUndefined()
+      const second = SessionID.make(`ses_child_${crypto.randomUUID()}`)
+      yield* branches.admit({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "design",
+        callID: "call-design",
+        sessionID: second,
+        access: "read",
+      })
+      const saved = yield* branches.read(id)
+      if (!saved) throw new Error("Expected saved Chief branches")
+      yield* storage.replace(["raya", "chief", "branches", id], {
+        ...saved,
+        branches: saved.branches.map((item) =>
+          item.id === "design" ? { ...item, owner: { ...owner(), pid: 2_147_483_647 } } : item,
+        ),
+      })
+      const recovered = JSON.parse((yield* def.execute({}, ctx)).output)
+      expect(recovered.branches[1]).toMatchObject({ id: "design", state: "unknown", callID: "call-design" })
+      expect((yield* branches.read(id))?.branches[1].state).toBe("unknown")
       raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
       expect(Exit.isFailure(yield* def.execute({}, ctx).pipe(Effect.exit))).toBe(false)
       raw.revisions.push({ id: crypto.randomUUID() })

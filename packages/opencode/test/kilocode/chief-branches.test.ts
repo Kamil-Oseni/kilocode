@@ -41,6 +41,47 @@ const cleanup = (storage: Storage.Interface, id: SessionID) =>
   )
 
 describe("Auto Chief branch ledger", () => {
+  it.live("replans a revised goal only before any Chief branch is admitted", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      const first = yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
+      const revised = [{ ...plan[0], brief: { ...plan[0].brief, objective: "Audit revised safety" } }, plan[1]]
+      yield* storage.replace(["raya", "goal", id], {
+        createdAt,
+        status: "active",
+        revisions: [{ id: "revision-2" }],
+      })
+      const second = yield* ChiefBranches.make(storage).start({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        requestID: "route-2",
+        branches: revised,
+      })
+      expect(second.version).toBe(2)
+      expect(second.revision).toBe("revision-2")
+      expect(second.requestID).toBe("route-2")
+      expect(second.branches[0].brief.objective).toBe("Audit revised safety")
+      expect(second.branches.every((item) => item.state === "planned")).toBe(true)
+      expect(second.createdAt).toBeGreaterThanOrEqual(first.createdAt)
+      expect(
+        (yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-2", branches: revised }))
+          .createdAt,
+      ).toBe(second.createdAt)
+      expect(
+        Exit.isFailure(
+          yield* ledger
+            .start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-3", branches: revised })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }),
+  )
+
   it.live("reconciles only a proven stopped owner's admitted child as unknown without replay", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

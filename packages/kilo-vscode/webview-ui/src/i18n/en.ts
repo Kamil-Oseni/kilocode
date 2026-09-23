@@ -1263,6 +1263,7 @@ export const dict = {
   "task.backgroundAgents.status.completed": "Done",
   "task.backgroundAgents.status.cancelled": "Cancelled",
   "task.backgroundAgents.status.error": "Error",
+  "task.backgroundAgents.viewReport": "View report",
   "task.backgroundAgents.untitled": "Background agent",
   "task.subagent.modelDetails": "Model details",
   "task.subagent.steps.one": "{{count}} step",

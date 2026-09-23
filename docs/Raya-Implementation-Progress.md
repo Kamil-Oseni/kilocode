@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:09 America/Toronto - named specialist activity rows
+
+**Status: source verified; installed visual acceptance pending.** Background-agent rows now lead with the durable routed specialist name, place the task beneath it, limit transient tool detail to running work, and give completed work a clear “View report” cue on the existing child-conversation action. The change uses the existing icon and status system without adding another control. The focused activity suite passes **23 tests / 36 assertions** and webview typecheck passes. This addresses a portion of the requested Codex-like named subagent presentation; multi-agent summaries, report quality and installed visual acceptance remain open.
+
+## ChatGPT 2026-09-23 15:06 America/Toronto - revised Chief plans can start before admission
+
+**Status: source verified; automatic fanout remains disabled.** A newly revised active goal can replace an obsolete Chief plan only when every prior branch is still planned. The same revision cannot silently change its request or branch definitions, and any admitted or terminal child prevents replacement. This removes the otherwise permanent dead end after the user steers an unstarted plan without replaying work. The ledger suite passes **7 tests / 54 assertions**; inspection also verifies that a stopped-owner branch appears as `unknown` in the Chief result view. CLI typecheck passes. Installed-host restart and multi-branch interruption acceptance remain open.
+
 ## ChatGPT 2026-09-23 14:58 America/Toronto - conservative recovery for admitted Chief children
 
 **Status: source verified; automatic fanout remains disabled.** Each newly admitted Chief branch now saves the backend process owner with its exact child and task-call identity. Chief inspection reconciles an admitted branch to `unknown` only after the owner is proven stopped on the same host; a live owner or older admission without owner evidence remains admitted. Reconciliation is idempotent under the goal mutation lock, cannot reset a branch to planned or replay a child, and refuses a late conflicting success. The focused ledger and inspection suite passes **7 tests / 51 assertions**, including a real terminated-process probe; CLI typecheck and the OpenCode annotation guard pass. This is conservative recovery for process death, not a reconstructed successful outcome or an installed restart acceptance run. Complete parent/child receipt reconstruction, backend stop without process death, and installed-host interruption tests remain open before enabling fanout.

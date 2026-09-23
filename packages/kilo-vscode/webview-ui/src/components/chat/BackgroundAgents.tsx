@@ -26,6 +26,7 @@ import {
   backgroundAgentActivity,
   backgroundAgentDuration,
   backgroundAgentElapsed,
+  backgroundAgentIdentity,
   backgroundAgentUsage,
   backgroundJobAgents,
   foregroundAgent,
@@ -115,8 +116,10 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     return id ? foregroundAgent(session.getSessionToolParts(id), session.allStatusMap()) : undefined
   })
 
-  const label = (agent: BackgroundAgent) =>
-    agent.description ?? agent.agent ?? language.t("task.backgroundAgents.untitled")
+  const identity = (agent: BackgroundAgent) =>
+    backgroundAgentIdentity(agent, language.t("task.backgroundAgents.untitled"))
+
+  const label = (agent: BackgroundAgent) => identity(agent).name
 
   const status = (agent: BackgroundAgent) => language.t(`task.backgroundAgents.status.${agent.status}`)
 
@@ -291,16 +294,28 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         <span data-slot="task-header-agent-status-label">{status(agent)}</span>
                       </span>
                       <span data-slot="task-header-agent-secondary">
-                        <Show
-                          when={
-                            agent.agent && !label(agent).toLocaleLowerCase().includes(agent.agent.toLocaleLowerCase())
-                          }
-                        >
-                          {(name) => <span data-slot="task-header-agent-role">{name()}</span>}
-                        </Show>
-                        <Show when={detail()}>
-                          {(value) => (
+                        <Show when={identity(agent).task}>
+                          {(task) => (
                             <span data-slot="task-header-agent-activity" dir="auto">
+                              {task()}
+                            </span>
+                          )}
+                        </Show>
+                        <Show when={agent.status === "running" && detail()}>
+                          {(value) => (
+                            <span data-slot="task-header-agent-detail" dir="auto">
+                              {value()}
+                            </span>
+                          )}
+                        </Show>
+                        <Show when={agent.status === "completed"}>
+                          <span data-slot="task-header-agent-report">
+                            {language.t("task.backgroundAgents.viewReport")}
+                          </span>
+                        </Show>
+                        <Show when={agent.status === "error" && detail()}>
+                          {(value) => (
+                            <span data-slot="task-header-agent-detail" dir="auto">
                               {value()}
                             </span>
                           )}

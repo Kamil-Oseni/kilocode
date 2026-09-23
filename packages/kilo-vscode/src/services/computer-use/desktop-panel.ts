@@ -283,7 +283,13 @@ export class DesktopPanel implements vscode.Disposable {
     const send = (type) => vscode.postMessage({ type });
     const drawActions = () => { const level = selected("level") || "assisted"; byId("checks").innerHTML = Object.entries(actionLabels).map(([value, label]) => '<label class="check"><input type="checkbox" value="' + value + '" ' + (defaults[level].includes(value) ? 'checked' : '') + '>' + label + '</label>').join(''); };
     const drawPolicy = () => { byId("policy").innerHTML = Object.entries(categoryLabels).map(([category, label]) => '<label class="policy-row"><span>' + label + '</span><select data-category="' + category + '">' + Object.entries(ruleLabels).map(([value, name]) => '<option value="' + value + '">' + name + '</option>').join('') + '</select></label>').join(''); };
-    const summarize = () => { const level = selected("level") || "assisted"; const apps = selected("apps") === "current" ? "the current application" : "all visible applications"; const duration = selected("duration") === "session" ? "this task" : selected("duration") === "hour" ? "one hour" : "all sessions until you stop"; review.textContent = labels[level] + " in " + apps + " for " + duration + ". Sensitive actions follow the policy below."; };
+    const summarize = () => {
+      const level = selected("level") || "assisted";
+      const apps = selected("apps") === "current" ? "the current application" : "all visible applications";
+      const duration = selected("duration") === "session" ? "this task" : selected("duration") === "hour" ? "one hour" : "all sessions until you stop";
+      const sensitive = level === "assisted" ? "Sensitive actions always ask first; Deny still applies." : level === "observe" ? "Raya cannot click or type." : "Sensitive actions follow the policy below.";
+      review.textContent = labels[level] + " in " + apps + " for " + duration + ". " + sensitive;
+    };
     document.querySelectorAll('input[name="level"]').forEach((input) => input.addEventListener("change", () => { drawActions(); summarize(); }));
     document.querySelectorAll('input[name="apps"]').forEach((input) => input.addEventListener("change", () => { if (selected("apps") === "current") document.querySelector('input[name="duration"][value="session"]').checked = true; summarize(); }));
     document.querySelectorAll('input[name="duration"]').forEach((input) => input.addEventListener("change", () => { if (selected("duration") !== "session") document.querySelector('input[name="apps"][value="all"]').checked = true; summarize(); }));

@@ -41,8 +41,7 @@ export const SensitiveCategory = Schema.Literals([
 export type SensitiveCategory = Schema.Schema.Type<typeof SensitiveCategory>
 
 export const ActionClassification = Schema.Union([Schema.Literal("ordinary"), SensitiveCategory]).annotate({
-  description:
-    "Classify the intended effect as ordinary or as one sensitive policy category before local dispatch.",
+  description: "Classify the intended effect as ordinary or as one sensitive policy category before local dispatch.",
 })
 export type ActionClassification = Schema.Schema.Type<typeof ActionClassification>
 export const ClassifiedAction = Schema.Struct({ sensitive_category: ActionClassification })
@@ -131,7 +130,7 @@ export function decide(lease: Lease | undefined, request: Request, now = Date.no
   if (request.sensitive) {
     const rule = lease.sensitive[request.sensitive]
     if (rule === "deny") return { decision: "deny", reason: "sensitive_denied" }
-    if (rule === "ask") return { decision: "ask", reason: "sensitive_ask" }
+    if (lease.level === "assisted" || rule === "ask") return { decision: "ask", reason: "sensitive_ask" }
     if (rule === "allow_session" && request.sessionID !== lease.sensitiveSessionID)
       return { decision: "ask", reason: "sensitive_session" }
   }

@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 18:04 America/Toronto - enforce Assisted control's sensitive-action pause
+
+The shared Computer Use lease decision and VS Code's local lease store now make Assisted control ask before every classified sensitive action, even if that category has a saved Allow rule. A Deny rule still refuses the action, ordinary authorized work continues, and Autonomous control still follows the chosen sensitive policy. The grant review copy now states the Assisted behavior explicitly. Focused CLI tests pass 8 / 29 and extension lease/panel tests pass 11 / 49; CLI and extension/webview typechecks, extension lint, Prettier and diff/annotation checks pass. This is source-only after installed `a14ce51ee4`; build/install before installed-host policy acceptance. A parallel read-only capture audit confirms that request-scoped GDI watches remain the current implementation, not continuous WGC/DXGI capture or changed-region transport. `FUT-CU-01` stays In progress.
+
 ## ChatGPT 2026-09-23 17:55 America/Toronto - install specialist child-tab snapshot
 
 Commit `a14ce51ee4` is pushed and installed as `7.4.23-snapshot+a14ce51ee4.kamil-oseni.1790200394593`. The first packaging attempt found that the Agent Manager entry file exceeded its 2,800-line lint limit by one line; a narrow type alias repaired it without changing the behavior. The final low-memory snapshot passed SDK preparation, extension/webview typechecks, lint, production bundle, VSIX packaging and VS Code installation. VS Code lists the new version. Installed CLI SHA-256: `76015D84932494E37727C4F09567895D03ABDC55CD32EBE1F25F43DAF9BEE3F0`; retained rollback VSIX SHA-256: `814AB78EF0EF1D7F23D8FB95EEF2C9A826D4169A3901FCB374E51F30F96A7F7C`. Real child tabs and parent-chat activity remain unobserved in the host, so the agent acceptance rows stay In progress.

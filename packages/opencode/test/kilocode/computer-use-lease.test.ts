@@ -136,6 +136,27 @@ describe("Computer Use capability lease", () => {
     })
   })
 
+  test("assisted control pauses for sensitive effects even when a category is saved as allowed", () => {
+    const lease: Lease = {
+      ...base,
+      level: "assisted",
+      sensitive: { ...base.sensitive, communications: "allow_always" },
+    }
+    expect(decide(lease, request, 500)).toEqual({ decision: "allow", reason: "authorized" })
+    expect(decide(lease, { ...request, sensitive: "communications" }, 500)).toEqual({
+      decision: "ask",
+      reason: "sensitive_ask",
+    })
+    expect(decide(lease, { ...request, sensitive: "publishing" }, 500)).toEqual({
+      decision: "ask",
+      reason: "sensitive_ask",
+    })
+    expect(decide(lease, { ...request, sensitive: "financial" }, 500)).toEqual({
+      decision: "deny",
+      reason: "sensitive_denied",
+    })
+  })
+
   test("rejects empty selected scopes and unbounded scope arrays", () => {
     expect(() => Schema.decodeUnknownSync(Lease)({ ...base, applications: { kind: "selected", values: [] } })).toThrow()
     expect(() =>

@@ -231,6 +231,27 @@ describe("Computer Use lease store", () => {
     expect(store.authorize(auth({ sensitive: "credentials" }))).toMatchObject({ decision: "ask" })
   })
 
+  it("asks before sensitive assisted actions despite an allow rule", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const sensitive = policy("allow_always")
+    sensitive.financial = "deny"
+    await store.grant({
+      sessionID: "session_test",
+      level: "assisted",
+      duration: "session",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive,
+      cooperativeInput: false,
+    })
+    expect(store.authorize(auth())).toMatchObject({ decision: "allow" })
+    expect(store.authorize(auth({ sensitive: "communications" }))).toMatchObject({
+      decision: "ask",
+      reason: "Assisted control asks before sensitive actions",
+    })
+    expect(store.authorize(auth({ sensitive: "financial" }))).toMatchObject({ decision: "deny" })
+  })
+
   it("retains a session revocation until a fresh user review begins", async () => {
     const store = new ComputerUseLeaseStore(memory(), () => 100)
     await store.grant({

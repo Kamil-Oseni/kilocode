@@ -217,6 +217,7 @@ function sensitive(lease: ComputerUseLease, request: AuthorizationRequest): Auth
   if (!request.sensitive) return
   const rule = lease.sensitive[request.sensitive]
   if (rule === "deny") return answer("deny", "This sensitive action is denied by your policy")
+  if (lease.level === "assisted") return answer("ask", "Assisted control asks before sensitive actions")
   if (rule === "ask") return answer("ask", "Your policy requires approval for this sensitive action")
   if (rule === "allow_session" && request.sessionID !== lease.sensitiveSessionID)
     return answer("ask", "This sensitive action was allowed only for the original session")

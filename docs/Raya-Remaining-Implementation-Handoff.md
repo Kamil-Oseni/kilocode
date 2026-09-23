@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `f462c88182`; Chief branch safety source is included, but automatic fanout remains disabled. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed snapshot. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `51f71798c5` (`7.4.23-snapshot+51f71798c5.kamil-oseni.1790189260260`); Chief branch safety source is included, but automatic fanout remains disabled. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed snapshot. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 14:51 America/Toronto - installed snapshot and next acceptance
+
+`51f71798c5` is pushed and installed as `7.4.23-snapshot+51f71798c5.kamil-oseni.1790189260260`. SDK and CLI build, Windows binary smoke tests, extension typechecks/lint, packaging and the normal push hook passed. Check completed specialist-name and report search in a real persisted conversation after VS Code loads the new extension. Chief fanout is still unregistered. Next source slice: reconcile an admitted child after backend process loss without replay or treating a missing in-memory job as proof of failure; then test stop, restart, changed target and inspected synthesis on the installed host before enabling fanout.
 
 ## ChatGPT 2026-09-23 14:38 America/Toronto - Chief plan revision identity and child-report search
 

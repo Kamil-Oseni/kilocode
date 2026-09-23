@@ -244,6 +244,7 @@ export class DesktopBridge {
       height: frame.height,
       mime: frame.mime,
       data: frame.data,
+      timing: frame.timing,
       observation: frame.observation,
       receipt: {
         version: 1,

@@ -184,12 +184,19 @@ export const AuthorizeResult = Schema.Struct({
   grantID: Schema.optional(GrantID),
 })
 
+export const Timing = Schema.Struct({
+  acquisitionMs: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  preparationMs: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  totalMs: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+})
+
 export const ObserveResult = Schema.Struct({
   operation: Schema.Literal("observe"),
   width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   mime: Schema.Literals(["image/png", "image/jpeg"]),
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
+  timing: Timing,
   observation: Observation,
   receipt: Receipt,
 })
@@ -218,6 +225,7 @@ export const WatchFrame = Schema.Struct({
   height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   mime: Schema.Literals(["image/png", "image/jpeg"]),
   data: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000_000)),
+  timing: Timing,
   observation: Observation,
 })
 

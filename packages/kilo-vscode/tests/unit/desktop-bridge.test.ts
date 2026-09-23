@@ -38,6 +38,7 @@ function setup(
       height: 10,
       mime: "image/png",
       data: "cG5n",
+      timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
     }),
     windows: async () => [
       {
@@ -234,6 +235,7 @@ describe("desktop observation bridge", () => {
         height: 10,
         mime: "image/png",
         data: "cG5n",
+        timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
         observation: { target: { surface: "desktop", windowID: "window_1", location: "process|title|bounds" } },
         receipt: { requestID: request.id, effect: "observe", outcome: "confirmed" },
       },

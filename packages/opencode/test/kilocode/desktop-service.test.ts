@@ -46,6 +46,7 @@ it.instance(
         height: 8,
         mime: "image/png" as const,
         data: "cG5n",
+        timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
         observation,
         receipt,
       }

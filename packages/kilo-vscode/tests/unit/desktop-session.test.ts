@@ -9,7 +9,13 @@ import {
 
 class Driver implements DesktopDriver {
   target = { windowID: "window-1", location: "Editor" }
-  frame = { width: 1280, height: 720, mime: "image/png" as const, data: "png" }
+  frame = {
+    width: 1280,
+    height: 720,
+    mime: "image/png" as const,
+    data: "png",
+    timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
+  }
   readonly actions: DesktopAction[] = []
   readonly focused: string[] = []
   list: DesktopWindow[] = [
@@ -117,8 +123,20 @@ describe("native desktop session boundary", () => {
     await expect(session.observe()).rejects.toThrow(/safe capture bounds/i)
     driver.frame = { ...driver.frame, width: 1280, height: 720, data: "x".repeat(CAPTURE.data + 1) }
     await expect(session.observe()).rejects.toThrow(/encoded image limit/i)
+    driver.frame = {
+      ...driver.frame,
+      data: "png",
+      timing: { acquisitionMs: 10, preparationMs: 20, totalMs: 15 },
+    }
+    await expect(session.observe()).rejects.toThrow(/timing is invalid/i)
 
-    driver.frame = { width: 1280, height: 720, mime: "image/png", data: "png" }
+    driver.frame = {
+      width: 1280,
+      height: 720,
+      mime: "image/png",
+      data: "png",
+      timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
+    }
     const frame = await session.observe()
     await session.execute({
       operation: "key",

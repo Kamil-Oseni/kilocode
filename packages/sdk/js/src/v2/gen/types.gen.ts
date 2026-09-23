@@ -5815,6 +5815,11 @@ export type DesktopResult =
       height: number
       mime: "image/png" | "image/jpeg"
       data: string
+      timing: {
+        acquisitionMs: number
+        preparationMs: number
+        totalMs: number
+      }
       observation: ComputerUseObservation
       receipt: ComputerUseReceipt
     }
@@ -5841,6 +5846,11 @@ export type DesktopResult =
         height: number
         mime: "image/png" | "image/jpeg"
         data: string
+        timing: {
+          acquisitionMs: number
+          preparationMs: number
+          totalMs: number
+        }
         observation: ComputerUseObservation
       }>
       receipt: ComputerUseReceipt

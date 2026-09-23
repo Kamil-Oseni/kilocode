@@ -448,6 +448,7 @@ $image = New-Object Drawing.Bitmap $width, $height
 $graphics = [Drawing.Graphics]::FromImage($image)
 $stream = New-Object RayaBoundedStream ${CAPTURE.bytes}
 $mime = "image/png"
+$acquisition = [Diagnostics.Stopwatch]::StartNew()
 try {
   if ($width -eq $window.Width -and $height -eq $window.Height) {
     $graphics.CopyFromScreen($window.Rect.Left, $window.Rect.Top, 0, 0, $image.Size, [Drawing.CopyPixelOperation]::SourceCopy)
@@ -459,6 +460,8 @@ try {
       $graphics.ReleaseHdc($context)
     }
   }
+  $acquisition.Stop()
+  $preparation = [Diagnostics.Stopwatch]::StartNew()
   try {
     $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
     Test-RayaImage $stream
@@ -477,13 +480,17 @@ try {
     }
     $mime = "image/jpeg"
   }
+  $data = [Convert]::ToBase64String($stream.GetBuffer(), 0, [int]$stream.Length)
+  $preparation.Stop()
   [pscustomobject]@{
     windowID = $window.WindowID
     location = $window.Location
     width = $width
     height = $height
     mime = $mime
-    data = [Convert]::ToBase64String($stream.GetBuffer(), 0, [int]$stream.Length)
+    data = $data
+    acquisitionMs = $acquisition.Elapsed.TotalMilliseconds
+    preparationMs = $preparation.Elapsed.TotalMilliseconds
   } | ConvertTo-Json -Compress
 } finally {
   $stream.Dispose()
@@ -662,7 +669,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   async observe(): Promise<DesktopFrame> {
+    const started = performance.now()
     const result = object(await this.runner.run(observe))
+    const totalMs = performance.now() - started
     if (
       typeof result.windowID !== "string" ||
       typeof result.location !== "string" ||
@@ -677,7 +686,13 @@ export class WindowsDesktopDriver implements DesktopDriver {
       result.width * result.height > CAPTURE.pixels ||
       (result.mime !== "image/png" && result.mime !== "image/jpeg") ||
       typeof result.data !== "string" ||
-      Buffer.byteLength(result.data, "ascii") > CAPTURE.data
+      Buffer.byteLength(result.data, "ascii") > CAPTURE.data ||
+      typeof result.acquisitionMs !== "number" ||
+      typeof result.preparationMs !== "number" ||
+      ![result.acquisitionMs, result.preparationMs, totalMs].every(
+        (value) => Number.isFinite(value) && value >= 0 && value <= 120_000,
+      ) ||
+      totalMs < result.acquisitionMs + result.preparationMs
     )
       throw new Error("Windows desktop observation is incomplete")
     return {
@@ -687,6 +702,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       height: result.height,
       mime: result.mime,
       data: result.data,
+      timing: { acquisitionMs: result.acquisitionMs, preparationMs: result.preparationMs, totalMs },
     }
   }
 

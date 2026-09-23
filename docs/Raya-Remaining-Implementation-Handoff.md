@@ -6,9 +6,15 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 23:05 America/Toronto - preserve capture-stage timing
+
+Desktop observation results now include `timing.acquisitionMs`, `timing.preparationMs` and `timing.totalMs`. Acquisition covers the native GDI frame copy, preparation covers PNG/JPEG encoding plus base64 creation, and total includes current process startup and bridge overhead. Keep all three when replacing the driver so benchmarks separate local stages. Invalid or inconsistent values are refused before an observation is issued.
+
+Do not interpret these fields as meeting the latency target. The direct reference-machine probe correctly refused capture because the sleeping/locked desktop had no foreground window, so real percentiles remain unmeasured. The current PowerShell/GDI/base64 path remains the baseline to replace with a persistent cancellable WGC/DXGI worker and binary changed-frame transport.
+
 ## ChatGPT 2026-09-22 22:49 America/Toronto - preserve local browser sensitivity checks
 
-Structured browser role/name and label targets now receive a conservative local keyword check before authorization. Ordinary or mismatched declarations are refused for known communications, financial, credential, software, system, deletion, disclosure, legal and publishing semantics. Do not infer from opaque selector strings or test IDs. File selection always requires disclosure. Preserve the pure classifier and the integration rule that a mismatch produces no browser-host request.
+Product commit `3e962405b6` gives structured browser role/name and label targets a conservative local keyword check before authorization. Ordinary or mismatched declarations are refused for known communications, financial, credential, software, system, deletion, disclosure, legal and publishing semantics. Do not infer from opaque selector strings or test IDs. File selection always requires disclosure. Preserve the pure classifier and the integration rule that a mismatch produces no browser-host request.
 
 This only verifies English positive matches on trustworthy browser semantics. Continue with correlated Windows UI Automation observation for desktop controls and do not represent coordinate-only actions as semantically verified.
 

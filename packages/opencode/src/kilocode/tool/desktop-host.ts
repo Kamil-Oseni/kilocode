@@ -91,6 +91,7 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
             height: result.height,
             observation: result.observation,
             receipt: result.receipt,
+            timing: result.timing,
           }
           return {
             title: "Desktop observation",
@@ -234,6 +235,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
                   width: frame.width,
                   height: frame.height,
                   observation: frame.observation,
+                  timing: frame.timing,
                 })),
                 receipt: result.receipt,
               },

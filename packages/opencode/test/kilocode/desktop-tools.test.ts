@@ -246,6 +246,7 @@ it.instance(
                   height: 10,
                   mime: "image/png" as const,
                   data: "cG5n",
+                  timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
                   observation: {
                     version: 1 as const,
                     id: ObservationID.make(`observation_watch_${index}`),

@@ -29,12 +29,22 @@ describe("Windows native desktop driver", () => {
         height: 720,
         mime: "image/png",
         data: "png",
+        acquisitionMs: 0,
+        preparationMs: 0,
       }),
       JSON.stringify({ windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,1280,720" }),
     ])
     const driver = new WindowsDesktopDriver(test.runner)
 
-    expect(await driver.observe()).toMatchObject({ windowID: "0x123", width: 1280, height: 720, data: "png" })
+    const frame = await driver.observe()
+    expect(frame).toMatchObject({
+      windowID: "0x123",
+      width: 1280,
+      height: 720,
+      data: "png",
+      timing: { acquisitionMs: 0, preparationMs: 0 },
+    })
+    expect(frame.timing.totalMs).toBeGreaterThanOrEqual(0)
     expect(await driver.current()).toEqual({
       windowID: "0x123",
       location: "pid:5;title:Editor;bounds:0,0,1280,720",
@@ -55,6 +65,9 @@ describe("Windows native desktop driver", () => {
       'throw new InvalidOperationException("Desktop capture exceeds the encoded image limit")',
     )
     expect(test.scripts[0]).toContain("$stream.GetBuffer(), 0, [int]$stream.Length")
+    expect(test.scripts[0]).toContain("$acquisition = [Diagnostics.Stopwatch]::StartNew()")
+    expect(test.scripts[0]).toContain("$preparation = [Diagnostics.Stopwatch]::StartNew()")
+    expect(test.scripts[0]).toContain("acquisitionMs = $acquisition.Elapsed.TotalMilliseconds")
     expect(test.scripts[0]).not.toContain("$stream.ToArray()")
     expect(test.scripts[0]).toContain("width = $width")
     expect(test.scripts[0]).toContain("height = $height")
@@ -284,6 +297,8 @@ describe("Windows native desktop driver", () => {
         height: 2023,
         mime: "image/png",
         data: "png",
+        acquisitionMs: 0,
+        preparationMs: 0,
       }),
       JSON.stringify({
         windowID: "0x123",
@@ -292,6 +307,8 @@ describe("Windows native desktop driver", () => {
         height: 4096,
         mime: "image/png",
         data: "png",
+        acquisitionMs: 0,
+        preparationMs: 0,
       }),
     ])
     const driver = new WindowsDesktopDriver(test.runner)
@@ -309,6 +326,8 @@ describe("Windows native desktop driver", () => {
         height: 2160,
         mime: "image/jpeg",
         data: "jpeg",
+        acquisitionMs: 0,
+        preparationMs: 0,
       }),
     ])
     const driver = new WindowsDesktopDriver(test.runner)

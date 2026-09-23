@@ -82190,6 +82190,25 @@
                 "minLength": 1,
                 "maxLength": 20000000
               },
+              "timing": {
+                "type": "object",
+                "properties": {
+                  "acquisitionMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "preparationMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "totalMs": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": ["acquisitionMs", "preparationMs", "totalMs"],
+                "additionalProperties": false
+              },
               "observation": {
                 "$ref": "#/components/schemas/ComputerUseObservation"
               },
@@ -82197,7 +82216,7 @@
                 "$ref": "#/components/schemas/ComputerUseReceipt"
               }
             },
-            "required": ["operation", "width", "height", "mime", "data", "observation", "receipt"],
+            "required": ["operation", "width", "height", "mime", "data", "timing", "observation", "receipt"],
             "additionalProperties": false
           },
           {
@@ -82301,11 +82320,30 @@
                       "minLength": 1,
                       "maxLength": 20000000
                     },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "acquisitionMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "preparationMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "totalMs": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["acquisitionMs", "preparationMs", "totalMs"],
+                      "additionalProperties": false
+                    },
                     "observation": {
                       "$ref": "#/components/schemas/ComputerUseObservation"
                     }
                   },
-                  "required": ["width", "height", "mime", "data", "observation"],
+                  "required": ["width", "height", "mime", "data", "timing", "observation"],
                   "additionalProperties": false
                 },
                 "minItems": 2,

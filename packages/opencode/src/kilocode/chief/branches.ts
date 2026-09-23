@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import type { Session } from "@/session/session"
 import type { MessageV2 } from "@/session/message-v2"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import type { BackgroundJob } from "@/background/job"
 import { mutation } from "@/kilocode/goal/mutation"
 import { owner, stopped } from "@/kilocode/task/owner"
@@ -26,6 +26,7 @@ export namespace ChiefBranches {
     state: Schema.Literals(["planned", "admitted", "completed", "failed", "cancelled", "unknown"]),
     callID: Schema.optional(Schema.String),
     sessionID: Schema.optional(SessionID),
+    messageID: Schema.optional(MessageID),
     owner: Schema.optional(Schema.Struct({ host: Schema.String, pid: Schema.Number })),
     result: Schema.optional(Schema.String),
     review: Schema.optional(
@@ -40,6 +41,27 @@ export namespace ChiefBranches {
     updatedAt: Schema.Number,
   })
   export type Branch = typeof Branch.Type
+
+  /** Reports and evidence belong to the admitted input turn, never a later child conversation. */
+  export function turn(rows: readonly MessageV2.WithParts[], id: MessageID | undefined) {
+    if (!id) return
+    const matches = rows.flatMap((row, index) => (row.info.role === "user" && row.info.id === id ? [index] : []))
+    if (matches.length !== 1) return
+    const start = matches[0]
+    const end = rows.findIndex((row, index) => index > start && row.info.role === "user")
+    const entries = rows.slice(start + 1, end < 0 ? undefined : end)
+    const final = entries.findLastIndex((row) => row.info.role === "assistant")
+    if (final < 0) return
+    const reply = entries[final]
+    if (
+      reply.info.role !== "assistant" ||
+      reply.info.error ||
+      typeof reply.info.time.completed !== "number" ||
+      !reply.parts.some((part) => part.type === "text" && part.text.trim())
+    )
+      return
+    return { rows: entries.slice(0, final + 1), reply }
+  }
 
   const fields = {
     goalID: Schema.String,
@@ -188,6 +210,7 @@ export namespace ChiefBranches {
       branchID: string
       callID: string
       sessionID: SessionID
+      messageID?: MessageID
       access: Branch["access"]
     }) {
       return yield* mutation(
@@ -201,7 +224,12 @@ export namespace ChiefBranches {
           const item = old.branches.find((entry) => entry.id === input.branchID)
           if (!item) throw new Error("Unknown Auto Chief branch")
           if (item.access !== input.access) throw new Error("Auto Chief branch authority changed")
-          if (item.state === "admitted" && item.callID === input.callID && item.sessionID === input.sessionID)
+          if (
+            item.state === "admitted" &&
+            item.callID === input.callID &&
+            item.sessionID === input.sessionID &&
+            item.messageID === input.messageID
+          )
             return item
           if (item.state !== "planned") throw new Error("Auto Chief branch has already been admitted")
           if (old.branches.some((entry) => entry.callID === input.callID || entry.sessionID === input.sessionID))
@@ -211,6 +239,7 @@ export namespace ChiefBranches {
             state: "admitted",
             callID: input.callID,
             sessionID: input.sessionID,
+            ...(input.messageID ? { messageID: input.messageID } : {}),
             owner: owner(),
             updatedAt: Date.now(),
           }
@@ -344,28 +373,21 @@ export namespace ChiefBranches {
       if (!sessions || !item.sessionID)
         return yield* Effect.fail(new Error("Auto Chief branch evidence is unavailable"))
       const rows = yield* sessions.messages({ sessionID: item.sessionID })
-      const final = rows.findLastIndex(
+      const result = turn(rows, item.messageID)
+      if (!result) return false
+      return result.rows.some(
         (row) =>
-          row.info.role === "assistant" &&
-          typeof row.info.time.completed === "number" &&
-          row.parts.some((part) => part.type === "text" && part.text.trim().length > 0),
+          row.info.id === ref.messageID &&
+          row.parts.some(
+            (part) =>
+              part.type === "tool" &&
+              part.id === ref.partID &&
+              part.callID === ref.callID &&
+              part.state.status === "completed" &&
+              part.tool !== "task" &&
+              part.tool !== "chief_route",
+          ),
       )
-      if (final < 0) return false
-      return rows
-        .slice(0, final + 1)
-        .some(
-          (row) =>
-            row.info.id === ref.messageID &&
-            row.parts.some(
-              (part) =>
-                part.type === "tool" &&
-                part.id === ref.partID &&
-                part.callID === ref.callID &&
-                part.state.status === "completed" &&
-                part.tool !== "task" &&
-                part.tool !== "chief_route",
-            ),
-        )
     })
 
     const review = Effect.fn("ChiefBranches.review")(function* (input: {

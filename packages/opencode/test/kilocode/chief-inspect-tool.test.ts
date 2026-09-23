@@ -26,6 +26,7 @@ describe("Auto Chief branch inspection", () => {
       const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
       const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
       const user = MessageID.make(`msg_${crypto.randomUUID()}`)
+      const input = MessageID.make(`msg_${crypto.randomUUID()}`)
       const createdAt = Date.now()
       const raw = { createdAt, status: "active", dispatch: { messageID: user }, revisions: [] as { id: string }[] }
       const state = raw as unknown as RayaGoal.State
@@ -63,6 +64,7 @@ describe("Auto Chief branch inspection", () => {
         branchID: "audit",
         callID: "call-audit",
         sessionID: child,
+        messageID: input,
         access: "read",
       })
       yield* branches.settle({
@@ -78,12 +80,30 @@ describe("Auto Chief branch inspection", () => {
       const branch = { parentID: id } as Session.Info
       const rows = [
         {
+          info: { id: input, role: "user", time: { created: 0 } },
+          parts: [{ type: "text", text: "Audit the saved policy" }],
+        },
+        {
           info: { id: "msg-tool", role: "assistant", time: { created: 1, completed: 2 } },
           parts: [{ id: "part-read", type: "tool", callID: "call-read", tool: "read", state: { status: "completed" } }],
         },
         {
           info: { id: "msg-final", role: "assistant", time: { created: 3, completed: 4 } },
           parts: [{ type: "text", text: "Confirmed the saved policy." }],
+        },
+        {
+          info: { id: "msg-later", role: "user", time: { created: 5 } },
+          parts: [{ type: "text", text: "Unrelated follow-up" }],
+        },
+        {
+          info: { id: "msg-later-tool", role: "assistant", time: { created: 6, completed: 7 } },
+          parts: [
+            { id: "part-later", type: "tool", callID: "call-later", tool: "read", state: { status: "completed" } },
+          ],
+        },
+        {
+          info: { id: "msg-later-final", role: "assistant", time: { created: 8, completed: 9 } },
+          parts: [{ type: "text", text: "An unrelated newer answer." }],
         },
       ] as unknown as SessionV1.WithParts[]
       const sessions = {

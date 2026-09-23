@@ -6,7 +6,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@/git"
 import { Storage } from "@/storage/storage"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import type { BackgroundJob } from "@/background/job"
 import type { MessageV2 } from "@/session/message-v2"
@@ -361,16 +361,19 @@ describe("Auto Chief branch ledger", () => {
       yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
       for (const [index, item] of plan.entries()) {
         const child = children[index]
+        const input = MessageID.make(`msg-input-${index}`)
         yield* ledger.admit({
           goalID: id,
           goalCreatedAt: createdAt,
           branchID: item.id,
           callID: `task-${index}`,
           sessionID: child,
+          messageID: input,
           access: "read",
         })
         const ref = { callID: `read-${index}`, messageID: `msg-${index}`, partID: `part-${index}` }
         rows.set(child, [
+          { info: { id: input, role: "user" }, parts: [{ type: "text", text: "Audit" }] },
           {
             info: { id: ref.messageID, role: "assistant", time: { created: 1, completed: 2 } },
             parts: [{ type: "tool", id: ref.partID, callID: ref.callID, tool: "read", state: { status: "completed" } }],
@@ -421,6 +424,36 @@ describe("Auto Chief branch ledger", () => {
           parts: [{ type: "text", text: "Findings returned" }],
         } as unknown as MessageV2.WithParts)
         if (index === 0) continue
+        rows.get(child)?.push(
+          {
+            info: { id: "later-input", role: "user" },
+            parts: [{ type: "text", text: "Unrelated task" }],
+          } as MessageV2.WithParts,
+          {
+            info: { id: "later-tool", role: "assistant", time: { created: 5, completed: 6 } },
+            parts: [
+              { type: "tool", id: "later-part", callID: "later-call", tool: "read", state: { status: "completed" } },
+            ],
+          } as MessageV2.WithParts,
+          {
+            info: { id: "later-final", role: "assistant", time: { created: 7, completed: 8 } },
+            parts: [{ type: "text", text: "Unrelated newer result" }],
+          } as MessageV2.WithParts,
+        )
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .review({
+                goalID: id,
+                goalCreatedAt: createdAt,
+                branchID: item.id,
+                callID: `task-${index}`,
+                sessionID: child,
+                evidence: { callID: "later-call", messageID: "later-tool", partID: "later-part" },
+              })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
         yield* ledger.review({
           goalID: id,
           goalCreatedAt: createdAt,

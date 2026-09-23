@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:46 America/Toronto - exact Chief child-turn report and evidence
+
+Chief admissions now save the reserved child input ID. `chief_inspect` confines the displayed report and tool list to that input's turn, and review accepts tool evidence only from the same turn before its successful terminal reply. Later unrelated child chat cannot masquerade as the branch report; an older record without a bound input fails closed for review. Focused ledger, inspection, task and process-restart tests, CLI typecheck, Prettier and the OpenCode annotation guard pass. This is source-only after installed `cff303e7f5`; Chief tools remain unregistered. The next correctness gap is a stopped background-job scope within a still-live backend: PID liveness does not prove the branch is still running, and an absent in-memory job is not proof of failure. Add an exact durable scope-closure marker and reconcile to `unknown` unless the bound terminal turn is independently proven; then run installed stop/restart acceptance.
+
 ## ChatGPT 2026-09-23 15:35 America/Toronto - sibling cancellation and fresh-process Chief recovery
 
 The task integration suite proves that a cancelled running Chief child does not stop its sibling and cannot be replayed. A separate-process fixture now persists an actual admitting owner, kills that process, and verifies that a fresh process reads the same branch IDs, reconciles the stopped-owner admission to `unknown`, leaves the sibling planned, and refuses replay. The full task suite passes 46 tests / 257 assertions, the new restart test passes, and CLI typecheck passes. This is source-only after installed `cff303e7f5`; no production behavior changed in this checkpoint. Next test a stopped task scope with a still-live backend, PID reuse or owner-epoch ambiguity, and the installed-host stop/restart matrix before registering Chief tools. The Codex-like named activity is only partly delivered: real parallel-conversation visual acceptance and useful multi-agent summaries remain open.

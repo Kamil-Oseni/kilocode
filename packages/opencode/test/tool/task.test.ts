@@ -206,6 +206,7 @@ describe("tool.task planned Auto Chief branch", () => {
           state: "completed",
           callID: "call-safety",
           sessionID: result.metadata.sessionId,
+          messageID: seen[0]?.messageID,
         })
         const child = yield* sessions.get(result.metadata.sessionId)
         expect(TaskAuthority.read(child.metadata)).toBe("read")

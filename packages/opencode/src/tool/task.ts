@@ -404,6 +404,7 @@ export const TaskTool = Tool.define(
         .pipe(Effect.tapError(() => lease.release))
       const nextSession = created.session
       const displayName = created.displayName
+      const message = MessageID.ascending() // kilocode_change - bind Chief admission to this exact child input
       // kilocode_change start - admit the exact child under the goal lock before any child execution
       if (branch && plan && branches && ctx.callID)
         yield* branches
@@ -413,6 +414,7 @@ export const TaskTool = Tool.define(
             branchID: branch.id,
             callID: ctx.callID,
             sessionID: nextSession.id,
+            messageID: message,
             access: branch.access,
           })
           .pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? lease.release : Effect.void)))
@@ -465,7 +467,6 @@ export const TaskTool = Tool.define(
       }
       // raya_change end
       // kilocode_change end
-      const message = MessageID.ascending() // kilocode_change - reserve durable child evidence identity before publishing metadata
       const metadata: {
         parentSessionId: SessionID
         sessionId: SessionID

@@ -39,23 +39,14 @@ export function chiefInspectTool(deps: {
             const child = yield* deps.sessions.get(item.sessionID)
             if (child.parentID !== ctx.sessionID) throw new Error("Auto Chief branch child lineage changed")
             const rows = yield* deps.sessions.messages({ sessionID: item.sessionID })
-            const final = rows.findLastIndex(
-              (row) =>
-                row.info.role === "assistant" &&
-                typeof row.info.time.completed === "number" &&
-                row.parts.some((part) => part.type === "text" && part.text.trim().length > 0),
-            )
-            const report =
-              final < 0
-                ? undefined
-                : rows[final]?.parts
-                    .filter((part) => part.type === "text")
-                    .map((part) => part.text)
-                    .join("\n")
-                    .trim()
-                    .slice(0, 4_000)
-            const evidence = rows
-              .slice(0, final < 0 ? 0 : final + 1)
+            const turn = ChiefBranches.turn(rows, item.messageID)
+            const report = turn?.reply.parts
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n")
+              .trim()
+              .slice(0, 4_000)
+            const evidence = (turn?.rows ?? [])
               .flatMap((row) =>
                 row.parts.flatMap((part) =>
                   part.type === "tool" &&

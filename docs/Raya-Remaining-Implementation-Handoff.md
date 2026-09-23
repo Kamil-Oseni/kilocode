@@ -6,6 +6,12 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 14:38 America/Toronto - Chief plan revision identity and child-report search
+
+New Chief branch ledgers are version two and bind the goal revision plus original user request ID. Continuation message IDs may change without stranding the plan; steering/control revisions invalidate admission, inspection, review, synthesis and completion. Older version-one ledgers decode but cannot continue or complete. Focused tests and CLI typecheck pass. The remaining activation blocker is a stranded admitted child after backend restart: reconcile only with exact durable terminal evidence or a proven new runtime epoch, never by replaying or treating a missing job in the current process as proof of failure.
+
+Completed child report text and saved specialist names are now included in conversation search in both chat surfaces; a focused webview test and typecheck pass. Build/install a snapshot and test search against a real persisted child report before calling the UI behavior accepted.
+
 ## ChatGPT 2026-09-23 14:17 America/Toronto - saved synthesis before Chief completion
 
 Chief branch ledger records one bounded conclusion per reviewed branch plus a combined summary. The same-lock completion gate now requires that durable synthesis with exact branch coverage; version-one records without synthesis remain decodable but unfinished. `chief_synthesize` is implemented and unregistered. Review and synthesis refuse a paused goal under the mutation lock; terminal child settlement remains possible. Ledger and model-facing synthesis tests pass, including a changed-request refusal. Next cover concurrent cancellation/unknown, parent stop and installed restart before registering the tools or enabling automatic fanout.

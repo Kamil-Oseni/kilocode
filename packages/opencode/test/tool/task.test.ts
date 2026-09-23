@@ -71,7 +71,10 @@ const provider = ProviderTest.fake({
 })
 // kilocode_change end
 
-const layer = (flags: Partial<RuntimeFlags.Info> = {}, durable = false) => // kilocode_change - optional durable branch fixtures
+const layer = (
+  flags: Partial<RuntimeFlags.Info> = {},
+  durable = false, // kilocode_change - optional durable branch fixtures
+) =>
   LayerNode.compile(
     LayerNode.group([
       ...(durable ? [Storage.node, FSUtil.node, Git.node] : []), // kilocode_change - only branch tests need durable storage
@@ -171,10 +174,7 @@ describe("tool.task planned Auto Chief branch", () => {
         const base = { description: "Ignored caller label", branch_id: "safety" }
         const current = yield* goals.get(chat.id)
         if (!current?.dispatch) throw new Error("expected bound user request")
-        yield* storage.replace(["raya", "goal", chat.id], {
-          ...current,
-          dispatch: { ...current.dispatch, messageID: MessageID.ascending() },
-        })
+        yield* goals.revise(chat.id, "A changed objective")
         expect(Exit.isFailure(yield* def.execute(base, ctx).pipe(Effect.exit))).toBe(true)
         yield* storage.replace(["raya", "goal", chat.id], current)
         expect(Exit.isFailure(yield* def.execute({ description: "Missing" }, ctx).pipe(Effect.exit))).toBe(true)
@@ -188,6 +188,10 @@ describe("tool.task planned Auto Chief branch", () => {
         expect(seen).toHaveLength(0)
         expect(yield* sessions.children(chat.id)).toHaveLength(0)
 
+        yield* storage.replace(["raya", "goal", chat.id], {
+          ...current,
+          dispatch: { ...current.dispatch, messageID: MessageID.ascending() },
+        })
         const result = yield* def.execute(base, ctx)
         expect(result.metadata.selectedAgent).toBe("researcher")
         expect(seen).toHaveLength(1)
@@ -198,7 +202,11 @@ describe("tool.task planned Auto Chief branch", () => {
           text: expect.not.stringContaining("Ignored caller label"),
         })
         const branch = (yield* branches.read(chat.id))?.branches.find((item) => item.id === "safety")
-        expect(branch).toMatchObject({ state: "completed", callID: "call-safety", sessionID: result.metadata.sessionId })
+        expect(branch).toMatchObject({
+          state: "completed",
+          callID: "call-safety",
+          sessionID: result.metadata.sessionId,
+        })
         const child = yield* sessions.get(result.metadata.sessionId)
         expect(TaskAuthority.read(child.metadata)).toBe("read")
         expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
@@ -409,8 +417,14 @@ describe("tool.task planned Auto Chief branch", () => {
           metadata: () => Effect.void,
           ask: () => Effect.void,
         })
-        const safety = yield* def.execute({ description: "Safety audit", branch_id: "safety", background: true }, ctx("call-safety"))
-        const design = yield* def.execute({ description: "UX audit", branch_id: "design", background: true }, ctx("call-design"))
+        const safety = yield* def.execute(
+          { description: "Safety audit", branch_id: "safety", background: true },
+          ctx("call-safety"),
+        )
+        const design = yield* def.execute(
+          { description: "UX audit", branch_id: "design", background: true },
+          ctx("call-design"),
+        )
         yield* Deferred.await(ready)
         expect((yield* jobs.get(safety.metadata.sessionId))?.status).toBe("running")
         expect((yield* jobs.get(design.metadata.sessionId))?.status).toBe("running")
@@ -679,7 +693,12 @@ describe("tool.task", () => {
           permission: [{ permission: "read", pattern: "*", action: "deny" }],
         })
         const restricted = yield* def.execute(
-          { description: "Audit restricted", prompt: "Inspect permitted files", subagent_type: "explore", access: "read" },
+          {
+            description: "Audit restricted",
+            prompt: "Inspect permitted files",
+            subagent_type: "explore",
+            access: "read",
+          },
           ctx,
         )
         const limited = yield* sessions.get(restricted.metadata.sessionId)
@@ -811,20 +830,22 @@ describe("tool.task", () => {
   )
 
   // kilocode_change start // raya_change start - Milestone D intelligent delegation
-  it.instance("registers Auto as a cheap-model primary agent with specialist capability cards", () =>
-    Effect.gen(function* () {
-      const agents = yield* Agent.Service
-      const auto = yield* agents.get("auto")
+  it.instance(
+    "registers Auto as a cheap-model primary agent with specialist capability cards",
+    () =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        const auto = yield* agents.get("auto")
 
-      expect(auto.mode).toBe("primary")
-      expect(`${auto.model?.providerID}/${auto.model?.modelID}`).toBe("kilo/kilo-auto/small")
-      for (const name of ["coder", "engineer", "designer", "researcher", "accountant", "reasoner"]) {
-        expect(auto.prompt).toContain(`- ${name}:`)
-      }
-      expect((yield* agents.get("coder")).mode).toBe("subagent")
-      expect((yield* agents.get("engineer")).mode).toBe("all")
-      expect((yield* agents.get("designer")).mode).toBe("all")
-    }),
+        expect(auto.mode).toBe("primary")
+        expect(`${auto.model?.providerID}/${auto.model?.modelID}`).toBe("kilo/kilo-auto/small")
+        for (const name of ["coder", "engineer", "designer", "researcher", "accountant", "reasoner"]) {
+          expect(auto.prompt).toContain(`- ${name}:`)
+        }
+        expect((yield* agents.get("coder")).mode).toBe("subagent")
+        expect((yield* agents.get("engineer")).mode).toBe("all")
+        expect((yield* agents.get("designer")).mode).toBe("all")
+      }),
     { config: { small_model: "kilo/kilo-auto/small" } }, // kilocode_change - make the asserted Auto model explicit
   )
 
@@ -1418,7 +1439,10 @@ describe("tool.task", () => {
       const cancelled = defer<{ sessionID: SessionID; messageID?: MessageID }>() // kilocode_change
       const abort = new AbortController()
       const promptOps: TaskPromptOps = {
-        cancel: (sessionID, messageID) => // kilocode_change
+        cancel: (
+          sessionID,
+          messageID, // kilocode_change
+        ) =>
           Effect.sync(() => {
             cancelled.resolve({ sessionID, messageID }) // kilocode_change
           }),
@@ -1453,7 +1477,10 @@ describe("tool.task", () => {
       const input = yield* Effect.promise(() => ready.promise)
       abort.abort()
       // kilocode_change start - cleanup names the same child input that was executed
-      expect(yield* Effect.promise(() => cancelled.promise)).toEqual({ sessionID: input.sessionID, messageID: input.messageID })
+      expect(yield* Effect.promise(() => cancelled.promise)).toEqual({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+      })
       // kilocode_change end
 
       const exit = yield* Fiber.await(fiber)
@@ -1498,45 +1525,47 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("prevents subagents from launching subagents by default", () =>
-    Effect.gen(function* () {
-      const sessions = yield* Session.Service
-      const { chat, assistant } = yield* seed()
-      const child = yield* sessions.create({ parentID: chat.id, title: "child" })
-      const nestedAssistant = yield* sessions.updateMessage({
-        ...assistant,
-        id: MessageID.ascending(),
-        parentID: MessageID.ascending(),
-        sessionID: child.id,
-      })
-      const tool = yield* TaskTool
-      const def = yield* tool.init()
-      let asked = false
+  it.instance(
+    "prevents subagents from launching subagents by default",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const child = yield* sessions.create({ parentID: chat.id, title: "child" })
+        const nestedAssistant = yield* sessions.updateMessage({
+          ...assistant,
+          id: MessageID.ascending(),
+          parentID: MessageID.ascending(),
+          sessionID: child.id,
+        })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let asked = false
 
-      const exit = yield* def
-        .execute(
-          {
-            description: "inspect bug",
-            prompt: "look into the cache key path",
-            subagent_type: "general",
-          },
-          {
-            sessionID: child.id,
-            messageID: nestedAssistant.id,
-            agent: "general",
-            abort: new AbortController().signal,
-            extra: { promptOps: stubOps() },
-            messages: [],
-            metadata: () => Effect.void,
-            ask: () => Effect.sync(() => (asked = true)),
-          },
-        )
-        .pipe(Effect.exit)
+        const exit = yield* def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: child.id,
+              messageID: nestedAssistant.id,
+              agent: "general",
+              abort: new AbortController().signal,
+              extra: { promptOps: stubOps() },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.sync(() => (asked = true)),
+            },
+          )
+          .pipe(Effect.exit)
 
-      expect(Exit.isFailure(exit)).toBe(true)
-      expect(asked).toBe(false)
-      expect(yield* sessions.children(child.id)).toHaveLength(0)
-    }),
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(asked).toBe(false)
+        expect(yield* sessions.children(child.id)).toHaveLength(0)
+      }),
     { config: { subagent_depth: 1 } }, // kilocode_change - explicit ceiling; default depth is 2
   )
 
@@ -1918,112 +1947,118 @@ describe("tool.task", () => {
   )
 
   for (const mode of ["completed", "cancelled"]) // kilocode_change - exercise normal and individually cancelled initial invocations
-  background.instance(`background task ${mode} initial invocation preserves running updates`, () => // kilocode_change
-    Effect.gen(function* () {
-      const jobs = yield* BackgroundJob.Service
-      const { chat, assistant } = yield* seed()
-      const tool = yield* TaskTool
-      const def = yield* tool.init()
-      const first = defer<void>()
-      const second = defer<void>()
-      const updated = defer<SessionPrompt.PromptInput>()
-      const injected = defer<SessionPrompt.PromptInput>()
-      const received: SessionPrompt.PromptInput[] = [] // kilocode_change - verify recorded child identities against executed inputs
-      const cancelled: { sessionID: SessionID; messageID?: MessageID }[] = [] // kilocode_change
-      let prompts = 0
-      const promptOps: TaskPromptOps = {
-        ...stubOps(),
-        cancel: (sessionID, messageID) => Effect.sync(() => { cancelled.push({ sessionID, messageID }) }), // kilocode_change
-        prompt: (input) => {
-          if (input.sessionID === chat.id) {
-            injected.resolve(input)
-            return Effect.succeed(reply(input, "done"))
-          }
-          prompts++
-          received.push(input) // kilocode_change
-          if (prompts === 1) return Effect.promise(() => first.promise).pipe(Effect.as(reply(input, "first done")))
-          updated.resolve(input)
-          return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
-        },
-      }
-      const context = {
-        sessionID: chat.id,
-        messageID: assistant.id,
-        agent: "build",
-        abort: new AbortController().signal,
-        extra: { promptOps },
-        callID: "first", // kilocode_change - identify each task admission independently
-        messages: [],
-        metadata: () => Effect.void,
-        ask: () => Effect.void,
-      }
+    background.instance(`background task ${mode} initial invocation preserves running updates`, () =>
+      // kilocode_change
+      Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const first = defer<void>()
+        const second = defer<void>()
+        const updated = defer<SessionPrompt.PromptInput>()
+        const injected = defer<SessionPrompt.PromptInput>()
+        const received: SessionPrompt.PromptInput[] = [] // kilocode_change - verify recorded child identities against executed inputs
+        const cancelled: { sessionID: SessionID; messageID?: MessageID }[] = [] // kilocode_change
+        let prompts = 0
+        const promptOps: TaskPromptOps = {
+          ...stubOps(),
+          cancel: (sessionID, messageID) =>
+            Effect.sync(() => {
+              cancelled.push({ sessionID, messageID })
+            }), // kilocode_change
+          prompt: (input) => {
+            if (input.sessionID === chat.id) {
+              injected.resolve(input)
+              return Effect.succeed(reply(input, "done"))
+            }
+            prompts++
+            received.push(input) // kilocode_change
+            if (prompts === 1) return Effect.promise(() => first.promise).pipe(Effect.as(reply(input, "first done")))
+            updated.resolve(input)
+            return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
+          },
+        }
+        const context = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          callID: "first", // kilocode_change - identify each task admission independently
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
 
-      const started = yield* def.execute(
-        {
-          description: "inspect bug",
-          prompt: "look into the cache key path",
-          subagent_type: "general",
-          background: true,
-        },
-        context,
-      )
-      const observed = yield* jobs.get(started.metadata.sessionId) // kilocode_change - capture before extension admission
-      const result = yield* def.execute(
-        {
-          description: "add investigation scope",
-          prompt: "also inspect cancellation",
-          subagent_type: "general",
-          task_id: started.metadata.sessionId,
-        },
-        { ...context, callID: "second" }, // kilocode_change
-      )
+        const started = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            background: true,
+          },
+          context,
+        )
+        const observed = yield* jobs.get(started.metadata.sessionId) // kilocode_change - capture before extension admission
+        const result = yield* def.execute(
+          {
+            description: "add investigation scope",
+            prompt: "also inspect cancellation",
+            subagent_type: "general",
+            task_id: started.metadata.sessionId,
+          },
+          { ...context, callID: "second" }, // kilocode_change
+        )
 
-      // kilocode_change start - real task starts and extensions preserve their source invocation
-      const origins = (yield* jobs.get(started.metadata.sessionId))?.origins
-      expect(origins).toMatchObject([
-        { sessionID: chat.id, messageID: assistant.id, callID: "first" },
-        { sessionID: chat.id, messageID: assistant.id, callID: "second" },
-      ])
-      expect(origins?.[0]?.childSessionID).toBe(started.metadata.sessionId)
-      expect(origins?.[0]?.childMessageID).toBe(received[0].messageID)
-      expect(started.metadata).toMatchObject({ childMessageID: origins?.[0]?.childMessageID })
-      expect(result.metadata).toMatchObject({ childMessageID: origins?.[1]?.childMessageID })
-      expect(origins?.[1]?.childSessionID).toBe(started.metadata.sessionId)
-      expect(typeof origins?.[1]?.childMessageID).toBe("string")
-      expect(origins?.[1]?.childMessageID).not.toBe(origins?.[0]?.childMessageID)
-      expect(yield* jobs.cancel(started.metadata.sessionId, observed!.revision)).toBeUndefined()
-      // kilocode_change end
+        // kilocode_change start - real task starts and extensions preserve their source invocation
+        const origins = (yield* jobs.get(started.metadata.sessionId))?.origins
+        expect(origins).toMatchObject([
+          { sessionID: chat.id, messageID: assistant.id, callID: "first" },
+          { sessionID: chat.id, messageID: assistant.id, callID: "second" },
+        ])
+        expect(origins?.[0]?.childSessionID).toBe(started.metadata.sessionId)
+        expect(origins?.[0]?.childMessageID).toBe(received[0].messageID)
+        expect(started.metadata).toMatchObject({ childMessageID: origins?.[0]?.childMessageID })
+        expect(result.metadata).toMatchObject({ childMessageID: origins?.[1]?.childMessageID })
+        expect(origins?.[1]?.childSessionID).toBe(started.metadata.sessionId)
+        expect(typeof origins?.[1]?.childMessageID).toBe("string")
+        expect(origins?.[1]?.childMessageID).not.toBe(origins?.[0]?.childMessageID)
+        expect(yield* jobs.cancel(started.metadata.sessionId, observed!.revision)).toBeUndefined()
+        // kilocode_change end
 
-      expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
-      expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain("Background task updated")
-      // kilocode_change start - route exact invocation cleanup through the actual task wrapper
-      if (mode === "cancelled") {
-        const current = (yield* jobs.get(started.metadata.sessionId))!
-        expect(yield* jobs.cancelInput(started.metadata.sessionId, current.revision!, origins![0]!.childMessageID!)).toBe(true)
-        expect(cancelled).toEqual([{ sessionID: started.metadata.sessionId, messageID: received[0].messageID }])
-      }
-      if (mode === "completed") first.resolve()
-      // kilocode_change end
-      expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
-      // kilocode_change start // raya_change start - task updates now carry structured briefs
-      const update = yield* Effect.promise(() => updated.promise)
-      expect(origins?.[1]?.childMessageID).toBe(update.messageID) // kilocode_change - queued work uses its reserved identity
-      expect(update.parts[0]?.type).toBe("text")
-      if (update.parts[0]?.type !== "text") throw new Error("expected structured task update")
-      expect(update.parts[0].text).toContain("Objective: also inspect cancellation")
-      // kilocode_change end // raya_change end
+        expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
+        expect(result.metadata.background).toBe(true)
+        expect(result.output).toContain("Background task updated")
+        // kilocode_change start - route exact invocation cleanup through the actual task wrapper
+        if (mode === "cancelled") {
+          const current = (yield* jobs.get(started.metadata.sessionId))!
+          expect(
+            yield* jobs.cancelInput(started.metadata.sessionId, current.revision!, origins![0]!.childMessageID!),
+          ).toBe(true)
+          expect(cancelled).toEqual([{ sessionID: started.metadata.sessionId, messageID: received[0].messageID }])
+        }
+        if (mode === "completed") first.resolve()
+        // kilocode_change end
+        expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
+        // kilocode_change start // raya_change start - task updates now carry structured briefs
+        const update = yield* Effect.promise(() => updated.promise)
+        expect(origins?.[1]?.childMessageID).toBe(update.messageID) // kilocode_change - queued work uses its reserved identity
+        expect(update.parts[0]?.type).toBe("text")
+        if (update.parts[0]?.type !== "text") throw new Error("expected structured task update")
+        expect(update.parts[0].text).toContain("Objective: also inspect cancellation")
+        // kilocode_change end // raya_change end
 
-      second.resolve()
-      const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
-      expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toBe("second done")
-      const notification = yield* Effect.promise(() => injected.promise)
-      expect(notification.variant).toBe("xhigh")
-      expect(notification.parts[0]?.type).toBe("text")
-      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
-    }),
-  )
+        second.resolve()
+        const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
+        expect(waited.info?.status).toBe("completed")
+        expect(waited.info?.output).toBe("second done")
+        const notification = yield* Effect.promise(() => injected.promise)
+        expect(notification.variant).toBe("xhigh")
+        expect(notification.parts[0]?.type).toBe("text")
+        if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
+      }),
+    )
 
   // kilocode_change start - completed background tasks propagate their invocation cost delta
   background.instance("background tasks propagate child cost to the parent", () =>

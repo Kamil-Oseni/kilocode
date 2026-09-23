@@ -26,12 +26,7 @@ export function chiefInspectTool(deps: {
             throw new Error("Auto Chief branch inspection is unavailable in this phase")
           const goal = yield* deps.goals.get(ctx.sessionID)
           const plan = yield* ChiefBranches.make(deps.storage).read(ctx.sessionID)
-          if (
-            goal?.status !== "active" ||
-            !plan ||
-            goal.createdAt !== plan.goalCreatedAt ||
-            goal.dispatch?.messageID !== plan.requestID
-          )
+          if (!plan || !ChiefBranches.matches(plan, goal))
             throw new Error("Auto Chief branch plan no longer matches the active request")
           const branches = []
           for (const item of plan.branches) {

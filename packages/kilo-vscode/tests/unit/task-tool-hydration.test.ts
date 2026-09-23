@@ -11,6 +11,7 @@ import {
   taskModel,
   taskResult,
   taskRunning,
+  taskSearchText,
   taskVisible,
 } from "../../webview-ui/src/components/chat/task-tool-state" // raya_change
 
@@ -44,6 +45,25 @@ describe("completed task hydration", () => {
     expect(taskResult(output, undefined)).toBe("child outcome")
     expect(taskResult(output, "ses_child")).toBeUndefined()
     expect(taskResult("plain output", undefined)).toBe("plain output")
+  })
+
+  it("indexes the durable child name and completed report that the task card renders", () => {
+    const input = { subagent_type: "explore", description: "Audit search behavior" }
+    const part = { selectedAgent: "researcher", displayName: "Search audit" }
+    const output = "task_id: private-debug-id\n\n<task_result>\nFound the missing report\n</task_result>"
+    const title = (agent: string) => `${agent} Agent`
+    const completed = taskSearchText({ status: "completed", input, part, output, child: "ses_child", title })
+    expect(completed).toEqual({
+      title: "Search audit",
+      description: "Audit search behavior",
+      result: "Found the missing report",
+    })
+    expect(JSON.stringify(completed)).not.toContain("private-debug-id")
+
+    expect(taskSearchText({ status: "running", input, part, output, child: "ses_child", title }).result).toBeUndefined()
+    expect(taskSearchText({ status: "completed", input, output, child: "ses_child", title }).title).toBe(
+      "explore Agent",
+    )
   })
 
   // raya_change - Milestone D nested threads expose automatic routing and final summaries

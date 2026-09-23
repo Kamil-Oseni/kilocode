@@ -35,7 +35,7 @@ export namespace ChiefTaskBinding {
               .read<{
                 createdAt?: number
                 status?: string
-                dispatch?: { messageID?: string }
+                revisions?: { id?: string }[]
               }>(["raya", "goal", input.sessionID])
               .pipe(
                 Effect.catchIf(
@@ -44,9 +44,7 @@ export namespace ChiefTaskBinding {
                 ),
               )
           : undefined
-      const plan = goal?.status === "active" && goal.createdAt === record?.goalCreatedAt ? record : undefined
-      if (plan && goal?.dispatch?.messageID !== plan.requestID)
-        throw new Error("Auto Chief branch plan does not match the current user request")
+      const plan = record && ChiefBranches.matches(record, goal) ? record : undefined
       if (input.params.branch_id && !plan) throw new Error("No active Auto Chief branch plan matches this task")
       if (plan && input.agent !== "auto") throw new Error("Only Auto Chief can run its planned branches")
       if (plan && RayaChief.phase(input.metadata) !== "task")
@@ -55,8 +53,7 @@ export namespace ChiefTaskBinding {
         throw new Error("A planned Auto Chief task needs its exact branch ID and call ID")
       const branch = plan?.branches.find((item) => item.id === input.params.branch_id)
       if (plan && !branch) throw new Error("Unknown Auto Chief branch")
-      if (branch && branch.state !== "planned")
-        throw new Error("Auto Chief branch has already been admitted")
+      if (branch && branch.state !== "planned") throw new Error("Auto Chief branch has already been admitted")
       if (branch && (input.params.task_id || (input.params.access && input.params.access !== branch.access)))
         throw new Error("Auto Chief branch identity or authority cannot be changed")
       if (

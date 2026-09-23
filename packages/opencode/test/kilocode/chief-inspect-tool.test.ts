@@ -26,8 +26,8 @@ describe("Auto Chief branch inspection", () => {
       const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
       const user = MessageID.make(`msg_${crypto.randomUUID()}`)
       const createdAt = Date.now()
-      const raw = { createdAt, status: "active", dispatch: { messageID: user } }
-      const state = raw as RayaGoal.State
+      const raw = { createdAt, status: "active", dispatch: { messageID: user }, revisions: [] as { id: string }[] }
+      const state = raw as unknown as RayaGoal.State
       yield* storage.replace(["raya", "goal", id], state)
       yield* Effect.addFinalizer(() =>
         Effect.all([storage.remove(["raya", "goal", id]), storage.remove(["raya", "chief", "branches", id])]).pipe(
@@ -120,6 +120,8 @@ describe("Auto Chief branch inspection", () => {
       expect(view.branches[1]).toMatchObject({ id: "design", state: "planned" })
       expect((yield* branches.read(id))?.branches[0]?.review).toBeUndefined()
       raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
+      expect(Exit.isFailure(yield* def.execute({}, ctx).pipe(Effect.exit))).toBe(false)
+      raw.revisions.push({ id: crypto.randomUUID() })
       expect(Exit.isFailure(yield* def.execute({}, ctx).pipe(Effect.exit))).toBe(true)
     }),
   )

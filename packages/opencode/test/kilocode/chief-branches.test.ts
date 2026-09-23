@@ -48,7 +48,7 @@ describe("Auto Chief branch ledger", () => {
       yield* cleanup(storage, id)
       const first = ChiefBranches.make(storage)
       const saved = yield* first.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
-      expect(saved.version).toBe(1)
+      expect(saved.version).toBe(2)
       expect(saved.branches.map((item) => item.brief.objective)).toEqual(["Audit safety", "Audit UX"])
       const restarted = ChiefBranches.make(storage)
       expect((yield* restarted.read(id))?.requestID).toBe("route-1")
@@ -80,6 +80,14 @@ describe("Auto Chief branch ledger", () => {
       const duplicate = yield* restarted.admit({ ...input, branchID: "design" }).pipe(Effect.exit)
       expect(Exit.isFailure(duplicate)).toBe(true)
 
+      yield* storage.replace(["raya", "goal", id], {
+        createdAt,
+        status: "active",
+        revisions: [{ id: crypto.randomUUID() }],
+      })
+      expect(
+        Exit.isFailure(yield* restarted.admit({ ...input, branchID: "design", callID: "task-2" }).pipe(Effect.exit)),
+      ).toBe(true)
       yield* storage.replace(["raya", "goal", id], { createdAt, status: "paused" })
       expect(
         Exit.isFailure(yield* restarted.admit({ ...input, branchID: "design", callID: "task-2" }).pipe(Effect.exit)),
@@ -228,7 +236,19 @@ describe("Auto Chief branch ledger", () => {
       jobs = [{ id: children[0], status: "error" }]
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
       jobs = []
+      yield* storage.replace(["raya", "goal", id], {
+        createdAt,
+        status: "active",
+        dispatch: { messageID: "later-continuation" },
+      })
       yield* ChiefBranches.make(storage, sessions, background).completion(id, createdAt)
+      yield* storage.replace(["raya", "goal", id], {
+        createdAt,
+        status: "active",
+        revisions: [{ id: crypto.randomUUID() }],
+      })
+      expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
       const parent = rows.get(id)!
       rows.delete(id)
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)

@@ -24,8 +24,8 @@ describe("Auto Chief branch synthesis", () => {
       const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
       const request = MessageID.make(`msg_${crypto.randomUUID()}`)
       const createdAt = Date.now()
-      const raw = { createdAt, status: "active", dispatch: { messageID: request } }
-      const state = raw as RayaGoal.State
+      const raw = { createdAt, status: "active", dispatch: { messageID: request }, revisions: [] as { id: string }[] }
+      const state = raw as unknown as RayaGoal.State
       yield* storage.replace(["raya", "goal", id], state)
       yield* Effect.addFinalizer(() =>
         Effect.all([storage.remove(["raya", "goal", id]), storage.remove(["raya", "chief", "branches", id])]).pipe(
@@ -97,10 +97,12 @@ describe("Auto Chief branch synthesis", () => {
       const result = yield* def.execute(input, ctx)
       expect(result.output).toContain("Safety and UX findings are ready.")
       expect((yield* ledger.read(id))?.synthesis?.findings.map((item) => item.branchID)).toEqual(["safety", "design"])
+      raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
+      expect(yield* def.execute(input, ctx)).toEqual(result)
       parent.metadata![RayaChief.phaseKey] = "route"
       expect(Exit.isFailure(yield* def.execute(input, ctx).pipe(Effect.exit))).toBe(true)
       parent.metadata![RayaChief.phaseKey] = "task"
-      raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
+      raw.revisions.push({ id: crypto.randomUUID() })
       expect(Exit.isFailure(yield* def.execute(input, ctx).pipe(Effect.exit))).toBe(true)
     }),
   )

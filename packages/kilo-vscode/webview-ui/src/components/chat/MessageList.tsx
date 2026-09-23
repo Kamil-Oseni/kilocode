@@ -29,7 +29,6 @@ import { useServer } from "../../context/server"
 import { useLanguage } from "../../context/language"
 import { useI18n } from "@kilocode/kilo-ui/context/i18n"
 import { useProvider } from "../../context/provider"
-import { useWorktreeMode } from "../../context/worktree-mode"
 import { WelcomeEmptyState } from "./WelcomeEmptyState"
 import { TranscriptRowView } from "./TranscriptRow"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
@@ -57,7 +56,7 @@ import {
   type MessageTurn,
 } from "../../context/session-queue"
 import { childID } from "../../context/session-utils"
-import { taskResult } from "./task-tool-state"
+import { taskSearchText } from "./task-tool-state"
 import { activeQuestionTab, tr } from "./question-dock-utils"
 import { useData } from "@kilocode/kilo-ui/context/data"
 import { getDirectory as getRawDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -108,12 +107,6 @@ export const MessageList: Component<MessageListProps> = (props) => {
   const provider = useProvider()
   const i18n = useI18n()
   const data = useData()
-  // Only present inside Agent Manager (see worktree-mode.tsx). Agent Manager
-  // never calls registerExpandedTaskTool(), so its "task" cards always fall
-  // back to kilo-ui's default hideDetails renderer, which never shows a
-  // task's result text — indexing it there would produce a phantom match.
-  const inAgentManager = !!useWorktreeMode()
-
   // Mirrors message-part.tsx's own (unexported) relativizeProjectPath/
   // getDirectory exactly, so the directory text indexed here matches what
   // ToolMetaLine/ToolFileAccordion actually put on screen.
@@ -468,37 +461,30 @@ export const MessageList: Component<MessageListProps> = (props) => {
     return !!value && typeof value === "object" && Array.isArray((value as { todos?: unknown }).todos)
   }
 
-  // Matches TaskToolExpanded.tsx (the renderer this webview actually
-  // registers for "task", overriding kilo-ui's default) exactly: title is
-  // always `i18n.t("ui.tool.agent", { type })` regardless of status — the
-  // "capitalize" CSS class only changes how it *looks*, the DOM text node
-  // itself is the raw, lowercase subagent_type. The "(N)" child-tool-count
-  // suffix shown there is a live value from session.getSessionToolCount(),
-  // not stored on the part at all, so it can't be indexed from a snapshot —
-  // searching for that count isn't meaningful content anyway.
+  // Both the sidebar and Agent Manager use TaskToolExpanded. Index the
+  // selected name and the result it actually renders when the child finishes.
+  // The live tool count and collapsed model details aren't indexed here.
   function taskText(part: Part & { type: "tool" }, state: ToolState): string[] {
-    const input = state.input as { subagent_type?: string; description?: string } | undefined
-    const type = input?.subagent_type || part.tool
-    const chunks = [i18n.t("ui.tool.agent", { type })]
-    if (input?.description) chunks.push(input.description)
-    // TaskToolExpanded.tsx only shows the raw <task_result> body when there's
-    // no live child session to display instead (result() there resolves to
-    // undefined once a child session exists) — mirror that exactly so a
-    // completed task with no child session stays searchable, without
-    // indexing text that's actually replaced by the child tool list. Agent
-    // Manager never registers TaskToolExpanded at all (it always uses
-    // kilo-ui's default hideDetails task card, which never shows result
-    // text there), so skip this entirely in that surface.
-    if (state.status === "completed" && !inAgentManager) {
-      const child = childID({
-        type: "tool",
-        tool: part.tool,
-        metadata: part.metadata as { sessionId?: string } | undefined,
-        state: { metadata: state.metadata },
-      })
-      const result = taskResult(state.output, child)
-      if (result) chunks.push(stripMarkdownLinkUrls(result))
-    }
+    const metadata = "metadata" in state ? state.metadata : undefined
+    const child = childID({
+      type: "tool",
+      tool: part.tool,
+      metadata: part.metadata as { sessionId?: string } | undefined,
+      state: { metadata },
+    })
+    const visible = taskSearchText({
+      status: state.status,
+      input: state.input,
+      part: part.metadata,
+      metadata,
+      output: state.status === "completed" ? state.output : undefined,
+      child,
+      title: (agent) => i18n.t("ui.tool.agent", { type: agent }),
+    })
+    const chunks = [visible.title]
+    if (visible.description) chunks.push(visible.description)
+    // Markdown links contribute their visible labels, never hidden URLs.
+    if (visible.result) chunks.push(stripMarkdownLinkUrls(visible.result))
     return chunks
   }
 

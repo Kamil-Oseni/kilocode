@@ -35,14 +35,14 @@ export function agentIcon(role: string | undefined) {
 
 // raya_change start - Milestone D nested thread identity for automatic Chief routing
 export function taskAgent(
-  input: { subagent_type?: unknown; description?: unknown },
+  input: { subagent_type?: unknown; description?: unknown } | undefined,
   part?: { selectedAgent?: string; selection?: string; displayName?: string },
   state?: { selectedAgent?: string; selection?: string; displayName?: string },
 ) {
   const selected = part?.selectedAgent ?? state?.selectedAgent
-  const requested = typeof input.subagent_type === "string" ? input.subagent_type : undefined
+  const requested = typeof input?.subagent_type === "string" ? input.subagent_type : undefined
   const agent = selected ?? requested ?? "auto"
-  const description = typeof input.description === "string" ? input.description : undefined
+  const description = typeof input?.description === "string" ? input.description : undefined
   const displayName = part?.displayName ?? state?.displayName
   return {
     agent,
@@ -51,6 +51,24 @@ export function taskAgent(
   }
 }
 // raya_change end
+
+/** Match the visible task trigger and result when indexing conversation search. */
+export function taskSearchText(opts: {
+  status: string
+  input?: { subagent_type?: unknown; description?: unknown }
+  part?: { selectedAgent?: string; selection?: string; displayName?: string }
+  metadata?: { selectedAgent?: string; selection?: string; displayName?: string }
+  output?: string
+  child?: string
+  title: (agent: string) => string
+}) {
+  const agent = taskAgent(opts.input, opts.part, opts.metadata)
+  return {
+    title: agent.displayName ?? opts.title(agent.agent),
+    description: agent.description,
+    result: taskResult(opts.output, taskRunning(opts.status) ? opts.child : undefined),
+  }
+}
 
 const sources = {
   workflow: "workflow",

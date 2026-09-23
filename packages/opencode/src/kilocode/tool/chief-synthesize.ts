@@ -31,12 +31,7 @@ export function chiefSynthesizeTool(deps: {
           const goal = yield* deps.goals.get(ctx.sessionID)
           const branches = ChiefBranches.make(deps.storage)
           const plan = yield* branches.read(ctx.sessionID)
-          if (
-            goal?.status !== "active" ||
-            !plan ||
-            goal.createdAt !== plan.goalCreatedAt ||
-            goal.dispatch?.messageID !== plan.requestID
-          )
+          if (!plan || !ChiefBranches.matches(plan, goal))
             throw new Error("Auto Chief branch plan no longer matches the active request")
           const saved = yield* branches.synthesize({
             goalID: ctx.sessionID,

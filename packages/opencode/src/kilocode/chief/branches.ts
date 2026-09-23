@@ -39,8 +39,7 @@ export namespace ChiefBranches {
   })
   export type Branch = typeof Branch.Type
 
-  export const Record = Schema.Struct({
-    version: Schema.Literal(1),
+  const fields = {
     goalID: Schema.String,
     goalCreatedAt: Schema.Number,
     requestID: Schema.String,
@@ -53,8 +52,30 @@ export namespace ChiefBranches {
         at: Schema.Number,
       }),
     ),
-  })
+  }
+  export const Record = Schema.Union([
+    Schema.Struct({ version: Schema.Literal(1), revision: Schema.optional(Schema.String), ...fields }),
+    Schema.Struct({ version: Schema.Literal(2), revision: Schema.String, ...fields }),
+  ])
   export type Record = typeof Record.Type
+
+  export function matches(
+    record: Record,
+    goal:
+      | {
+          createdAt?: number
+          status?: string
+          revisions?: readonly { id?: string }[]
+        }
+      | undefined,
+  ) {
+    return (
+      record.version === 2 &&
+      goal?.status === "active" &&
+      goal.createdAt === record.goalCreatedAt &&
+      (goal.revisions?.at(-1)?.id ?? "") === record.revision
+    )
+  }
 
   export type Input = Pick<Branch, "id" | "name" | "specialist" | "access" | "brief">
   type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
@@ -96,15 +117,19 @@ export namespace ChiefBranches {
       )
     })
 
-    const active = Effect.fn("ChiefBranches.active")(function* (id: SessionID, createdAt: number) {
+    const active = Effect.fn("ChiefBranches.active")(function* (id: SessionID, createdAt: number, revision?: string) {
       const raw = yield* storage
         .read<unknown>(goal(id))
         .pipe(Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)))
       if (!raw || typeof raw !== "object" || Array.isArray(raw))
         throw new Error("Auto Chief fanout requires an active goal")
-      const state = raw as { createdAt?: unknown; status?: unknown }
+      const state = raw as { createdAt?: unknown; status?: unknown; revisions?: { id?: unknown }[] }
       if (state.createdAt !== createdAt || state.status !== "active")
         throw new Error("The goal changed before Auto Chief could admit a branch")
+      const current = state.revisions?.at(-1)?.id ?? ""
+      if (typeof current !== "string" || (revision !== undefined && current !== revision))
+        throw new Error("The goal was revised after Auto Chief planned its branches")
+      return current
     })
 
     const start = Effect.fn("ChiefBranches.start")(function* (input: {
@@ -118,10 +143,12 @@ export namespace ChiefBranches {
         storage,
         input.goalID,
         Effect.gen(function* () {
-          yield* active(input.goalID, input.goalCreatedAt)
+          const revision = yield* active(input.goalID, input.goalCreatedAt)
           const old = yield* read(input.goalID)
           if (old?.goalCreatedAt === input.goalCreatedAt) {
             if (
+              old.version === 2 &&
+              old.revision === revision &&
               old.requestID === input.requestID &&
               JSON.stringify(
                 old.branches.map(({ id, name, specialist, access, brief }) => ({
@@ -138,7 +165,8 @@ export namespace ChiefBranches {
           }
           const now = Date.now()
           const next: Record = {
-            version: 1,
+            version: 2,
+            revision,
             goalID: input.goalID,
             goalCreatedAt: input.goalCreatedAt,
             requestID: input.requestID,
@@ -163,9 +191,10 @@ export namespace ChiefBranches {
         storage,
         input.goalID,
         Effect.gen(function* () {
-          yield* active(input.goalID, input.goalCreatedAt)
           const old = yield* read(input.goalID)
           if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
+          if (old.version !== 2) throw new Error("Legacy Auto Chief branch plan cannot admit new work")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
           const item = old.branches.find((entry) => entry.id === input.branchID)
           if (!item) throw new Error("Unknown Auto Chief branch")
           if (item.access !== input.access) throw new Error("Auto Chief branch authority changed")
@@ -271,9 +300,10 @@ export namespace ChiefBranches {
         storage,
         input.goalID,
         Effect.gen(function* () {
-          yield* active(input.goalID, input.goalCreatedAt)
           const old = yield* read(input.goalID)
           if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
+          if (old.version !== 2) throw new Error("Legacy Auto Chief branch plan cannot be reviewed")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
           const item = old.branches.find((entry) => entry.id === input.branchID)
           if (!item || item.callID !== input.callID || item.sessionID !== input.sessionID || item.state !== "completed")
             throw new Error("Only the completed, admitted branch can be reviewed")
@@ -314,9 +344,10 @@ export namespace ChiefBranches {
         storage,
         input.goalID,
         Effect.gen(function* () {
-          yield* active(input.goalID, input.goalCreatedAt)
           const old = yield* read(input.goalID)
           if (!old || old.goalCreatedAt !== input.goalCreatedAt) throw new Error("Auto Chief branch plan changed")
+          if (old.version !== 2) throw new Error("Legacy Auto Chief branch plan cannot be synthesized")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
           const summary = input.summary.trim()
           if (!summary || summary.length > 4_000) throw new Error("Auto Chief synthesis needs a bounded summary")
           if (
@@ -352,6 +383,8 @@ export namespace ChiefBranches {
     const completion = Effect.fn("ChiefBranches.completion")(function* (id: SessionID, createdAt: number) {
       const record = yield* read(id)
       if (!record || record.goalCreatedAt !== createdAt) return
+      if (record.version !== 2) return yield* Effect.fail(new Error("Legacy Auto Chief branch plan is incomplete"))
+      yield* active(id, createdAt, record.revision)
       const pending = record.branches.filter((item) => item.state !== "completed" || !item.review)
       if (pending.length)
         return yield* Effect.fail(

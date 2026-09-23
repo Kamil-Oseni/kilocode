@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `c9be6c7397` (`7.4.23-snapshot+c9be6c7397.kamil-oseni.1790199404668`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `a14ce51ee4` (`7.4.23-snapshot+a14ce51ee4.kamil-oseni.1790200394593`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 17:55 America/Toronto - child-tab snapshot installed
+
+`a14ce51ee4` is pushed and installed as `7.4.23-snapshot+a14ce51ee4.kamil-oseni.1790200394593`. The first install attempt failed because `AgentManagerApp.tsx` crossed its 2,800-line lint ceiling; the committed type-alias repair restored lint compliance. The final build passed SDK preparation, extension and webview typechecks, lint, production bundling, VSIX packaging and installation. VS Code lists this version; installed CLI SHA-256 is `76015D84932494E37727C4F09567895D03ABDC55CD32EBE1F25F43DAF9BEE3F0` and retained rollback VSIX SHA-256 is `814AB78EF0EF1D7F23D8FB95EEF2C9A826D4169A3901FCB374E51F30F96A7F7C`. Live parent/child chat, narrow layout, restart and tab-icon behavior still need host acceptance.
 
 ## ChatGPT 2026-09-23 17:48 America/Toronto - child-tab specialist identity
 

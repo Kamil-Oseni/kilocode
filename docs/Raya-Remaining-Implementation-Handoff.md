@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** Pushed Computer Use checkpoint `3a57a1c8cc` is on `origin/main`; the child-authority, named-activity, immediate unknown-receipt and SDK fixes are the next source checkpoint. The installed snapshot and host behavior must be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** Current source `d39b01172a` is pushed and installed; the child-authority, named-activity, immediate unknown-receipt and SDK fixes are included. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 10:15 America/Toronto - disabled fanout foundation
+
+The version-1 Chief branch ledger and same-lock goal completion check are implemented in source but not connected to Auto Chief task calls or installed. A ledger record is bounded to 2-3 named branches with exact specialist, brief, read/edit scope, call and child session identity, terminal state and reviewed child tool evidence. Goal completion refuses an unreviewed, failed, cancelled or unknown branch and associated non-completed background work. No background service signal also blocks a present plan. Focused tests and CLI typecheck pass. Next pass the background registry to the production goal tool binding, then wire each planned branch to its own Chief route and `task` call. Keep the one-child prompt until restart, duplicate admission, paused/stop, failed/unknown, distinct brief and cost aggregation tests pass. Do not claim automatic fanout or a grouped chat timeline from this ledger alone.
+
+## ChatGPT 2026-09-23 09:24 America/Toronto - installed checkpoint and next fanout slice
+
+`d39b01172a` is pushed and installed as `eden.raya@7.4.23-snapshot+d39b01172a.kamil-oseni.1790169020083`. Source checks, low-memory packaging and extension installation pass. Read-only child access is now enforced and saved; named child activity is clearer in chat. Auto Chief still delegates one child, and no grouped branch view or completion barrier is yet accepted. The next backend slice is a saved 2-3-branch ledger with admission and completion under the goal mutation lock, branch-specific routing and restart/failure evidence. Do not enable prompt-only parallel task calls or claim installed-host acceptance from the packaging result.
 
 ## ChatGPT 2026-09-23 06:29 America/Toronto - resumed audit and immediate handoff
 

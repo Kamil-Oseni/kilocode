@@ -33,6 +33,7 @@ import * as Artifact from "@/kilocode/goal/artifact"
 import * as GoalChildren from "@/kilocode/goal/children"
 import * as GoalCharges from "@/kilocode/goal/charges"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
+import { ChiefBranches } from "@/kilocode/chief/branches"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
 
@@ -132,6 +133,66 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  it.live("rejects a valid completion audit while a Chief branch remains unreviewed", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_chief_goal_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = RayaGoal.make({
+        storage,
+        sessions: {
+          messages: () => Effect.succeed(rows),
+          children: () => Effect.succeed([]),
+        },
+        background: { list: () => Effect.succeed([]) } as Pick<BackgroundJob.Interface, "list">,
+      })
+      const goal = yield* goals.create(sessionID, "Complete the delegated audits")
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const result = transcript({ sessionID, tool: "bash", exit: 0 })
+      rows.push(...result.rows)
+      const branches = ChiefBranches.make(storage)
+      yield* Effect.addFinalizer(() => storage.remove(["raya", "chief", "branches", sessionID]).pipe(Effect.ignore))
+      yield* branches.start({
+        goalID: sessionID,
+        goalCreatedAt: goal.createdAt,
+        requestID: "route-1",
+        branches: [
+          {
+            id: "a",
+            name: "Safety audit",
+            specialist: "researcher",
+            access: "read",
+            brief: { objective: "Audit safety", constraints: [], expectedReturn: "Findings" },
+          },
+          {
+            id: "b",
+            name: "UX audit",
+            specialist: "designer",
+            access: "read",
+            brief: { objective: "Audit UX", constraints: [], expectedReturn: "Findings" },
+          },
+        ],
+      })
+      const failed = yield* goals
+        .update(sessionID, {
+          status: "complete",
+          audit: {
+            summary: "A command passed",
+            requirements: [
+              {
+                requirement: "The check passed",
+                passed: true,
+                evidence: [{ callID: result.part!.callID, summary: "The command exited with code 0" }],
+              },
+            ],
+          },
+        })
+        .pipe(Effect.flip)
+      expect(failed.message).toContain("Auto Chief branches are unfinished or unreviewed")
+      expect((yield* goals.get(sessionID))?.status).toBe("active")
+    }),
+  )
+
   it.live("durably shares the concurrent-child limit and recovers an expired backend lease", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

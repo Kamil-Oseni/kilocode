@@ -27,6 +27,7 @@ import { collect } from "./evidence-scope"
 import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/verification"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as DelegationAccounting from "./delegation-accounting"
+import { ChiefBranches } from "@/kilocode/chief/branches"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -409,6 +410,7 @@ export namespace RayaGoal {
     storage: Store
     sessions: Sessions
     database?: Database.Interface
+    background?: Pick<BackgroundJob.Interface, "list">
   }
 
   const controls = new Set(["create_goal", "get_goal", "update_goal", "update_goal_plan"])
@@ -689,6 +691,13 @@ export namespace RayaGoal {
               message:
                 "This goal changed while the operation was running. Read get_goal and review the current objective before retrying.",
             })
+          // The fanout ledger uses this same mutation lock. Recheck here so a
+          // branch admitted after the audit cannot race a completion write.
+          if (state.status === "complete" || state.review?.status === "pending") {
+            yield* ChiefBranches.make(deps.storage, deps.sessions, deps.background)
+              .completion(sessionID, state.createdAt)
+              .pipe(Effect.mapError((err) => new AuditError({ message: err.message })))
+          }
           const candidate = { ...state, revision: crypto.randomUUID() }
           const next = { ...candidate, revision: before ? yield* before(candidate) : candidate.revision }
           yield* deps.storage.replace(key(sessionID), next).pipe(Effect.orDie)

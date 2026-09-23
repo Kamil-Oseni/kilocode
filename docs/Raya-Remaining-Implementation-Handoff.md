@@ -6,6 +6,12 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:06 America/Toronto - preserve cached UI Automation traversal
+
+`Get-RayaControls` now supplies an explicit `CacheRequest` to the Control View walker and reads only cached properties/patterns for every returned element. Preserve the exact property allowlist, 1,024 visited-node bound, 256 returned-control bound, physical viewport and final foreground identity recheck. Do not replace cached traversal with unbounded `FindAll`, reintroduce repeated `Current` property calls, add control text values or expose credentials/clipboard content.
+
+The real host returned the same 91 controls before and after this change. Warm semantic time fell from 509.0076 ms to 125.2891 ms and warm total from 703.7425 ms to 321.8374 ms. Across 10 warm samples: acquisition p50/p95 31.4748/45.3366 ms; preparation 75.4818/85.6832 ms; semantics 122.1642/136.4627 ms; total 311.741/325.9025 ms. These are source-host measurements, not installed acceptance. Continue with native WGC/DXGI capture, changed regions and binary transport; keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-23 00:53 America/Toronto - preserve the warm Windows host boundary
 
 `runner()` now owns one hidden non-interactive PowerShell process and frames every command/result as one base64 line. Keep commands serialized. Native helper compilation occurs once per active host. Pause, Stop, manual takeover and disposal must reject the active request, kill that process and require a clean replacement. Late data, stderr, error and exit events from an obsolete process must never settle the replacement host's active request.

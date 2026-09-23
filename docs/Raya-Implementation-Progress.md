@@ -6,6 +6,16 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:06 America/Toronto - UI Automation uses bounded cached traversal
+
+**Status: implemented and benchmarked in source; capture preparation, semantic latency and end-to-end observation remain above target.** The foreground UI Automation walk now creates one explicit `CacheRequest` for the exact properties and action patterns Raya is permitted to observe. The root and every Control View child carry that cache, so the bounded 1,024-node traversal reads accessible name, automation ID, role, physical bounds, enabled/focused/off-screen/selected state and supported actions from one correlated cache instead of issuing repeated cross-process calls for every property and pattern. It still returns at most 256 controls, excludes text values and secrets, and rechecks the exact foreground identity after visual and semantic collection.
+
+A real cold/warm comparison returned the same available, non-truncated 91 controls and exact 1928 x 1040 physical viewport on both observations. The cold semantic stage measured 414.728 ms and total 3,982.2188 ms. The warm semantic stage measured 125.2891 ms and total 321.8374 ms, compared with 509.0076 ms semantics and 703.7425 ms total before cached traversal.
+
+A separate 10-frame warm-host benchmark measured acquisition p50 **31.4748 ms** / p95 **45.3366 ms**, preparation p50 **75.4818 ms** / p95 **85.6832 ms**, semantics p50 **122.1642 ms** / p95 **136.4627 ms**, and total p50 **311.741 ms** / p95 **325.9025 ms**. Acquisition now meets its stated target in this small sample. Preparation and total observation do not, and the sample is not an installed benchmark or release claim.
+
+Next move capture and encoding to a persistent native WGC/DXGI worker with binary changed-region transport, then decouple or incrementally refresh accessibility state without weakening exact scene correlation. `FUT-CU-01` remains **In progress** and the autonomous snapshot remains uninstalled.
+
 ## ChatGPT 2026-09-23 00:53 America/Toronto - Desktop capture reuses a cancellable warm host
 
 **Status: implemented and verified in source; the GDI/PowerShell transport is still an interim baseline.** Windows desktop commands now reuse one hidden non-interactive PowerShell host while control remains active. The native input helper is compiled once inside that process instead of once per observation or action. Commands use a line-delimited base64 request/response protocol so arbitrary scripts, Unicode results and JSON cannot break framing. Only one command may be active. Pause, Stop, manual takeover and disposal reject the active request, kill the host and force the next command to start a clean process.

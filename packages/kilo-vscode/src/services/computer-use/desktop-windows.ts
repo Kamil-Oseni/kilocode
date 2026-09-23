@@ -436,6 +436,23 @@ function Get-RayaControls($window) {
   $controls = @()
   $root = [Windows.Automation.AutomationElement]::FromHandle($window.Handle)
   if (-not $root) { throw "Windows UI Automation could not inspect the foreground window" }
+  $cache = [Windows.Automation.CacheRequest]::new()
+  $cache.TreeScope = [Windows.Automation.TreeScope]::Element
+  $cache.Add([Windows.Automation.AutomationElement]::NameProperty)
+  $cache.Add([Windows.Automation.AutomationElement]::AutomationIdProperty)
+  $cache.Add([Windows.Automation.AutomationElement]::ControlTypeProperty)
+  $cache.Add([Windows.Automation.AutomationElement]::BoundingRectangleProperty)
+  $cache.Add([Windows.Automation.AutomationElement]::IsEnabledProperty)
+  $cache.Add([Windows.Automation.AutomationElement]::HasKeyboardFocusProperty)
+  $cache.Add([Windows.Automation.AutomationElement]::IsOffscreenProperty)
+  $cache.Add([Windows.Automation.InvokePattern]::Pattern)
+  $cache.Add([Windows.Automation.SelectionItemPattern]::Pattern)
+  $cache.Add([Windows.Automation.TogglePattern]::Pattern)
+  $cache.Add([Windows.Automation.ExpandCollapsePattern]::Pattern)
+  $cache.Add([Windows.Automation.ValuePattern]::Pattern)
+  $cache.Add([Windows.Automation.ScrollPattern]::Pattern)
+  $cache.Add([Windows.Automation.ScrollItemPattern]::Pattern)
+  $root = $root.GetUpdatedCache($cache)
   $queue = [Collections.Generic.Queue[object]]::new()
   $queue.Enqueue($root)
   $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
@@ -443,13 +460,13 @@ function Get-RayaControls($window) {
   while ($queue.Count -gt 0 -and $visited -lt 1024 -and $controls.Count -lt 256) {
     $item = $queue.Dequeue()
     $visited += 1
-    $child = $walker.GetFirstChild($item)
+    $child = $walker.GetFirstChild($item, $cache)
     while ($child) {
       $queue.Enqueue($child)
-      $child = $walker.GetNextSibling($child)
+      $child = $walker.GetNextSibling($child, $cache)
     }
     try {
-      $current = $item.Current
+      $current = $item.Cached
       if ($current.IsOffscreen) { continue }
       $bounds = $current.BoundingRectangle
       if ([double]::IsNaN($bounds.X) -or [double]::IsNaN($bounds.Y) -or [double]::IsNaN($bounds.Width) -or [double]::IsNaN($bounds.Height)) { continue }
@@ -468,18 +485,18 @@ function Get-RayaControls($window) {
       $runtime = @($item.GetRuntimeId())
       $controlID = if ($runtime.Count -gt 0) { $runtime -join '.' } else { "control:$visited" }
       if ($controlID.Length -gt 200) { continue }
-      $patterns = @($item.GetSupportedPatterns() | ForEach-Object { [string]$_.ProgrammaticName })
       $actions = @()
-      if ($patterns -like 'InvokePattern*') { $actions += 'invoke' }
-      if ($patterns -like 'SelectionItemPattern*') { $actions += 'select' }
-      if ($patterns -like 'TogglePattern*') { $actions += 'toggle' }
-      if ($patterns -like 'ExpandCollapsePattern*') { $actions += 'expand_collapse' }
-      if ($patterns -like 'ValuePattern*') { $actions += 'value' }
-      if ($patterns -like 'ScrollPattern*' -or $patterns -like 'ScrollItemPattern*') { $actions += 'scroll' }
+      $pattern = $null
+      if ($item.TryGetCachedPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $actions += 'invoke' }
+      if ($item.TryGetCachedPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) { $actions += 'select' }
+      if ($item.TryGetCachedPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$pattern)) { $actions += 'toggle' }
+      if ($item.TryGetCachedPattern([Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$pattern)) { $actions += 'expand_collapse' }
+      if ($item.TryGetCachedPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$pattern)) { $actions += 'value' }
+      if ($item.TryGetCachedPattern([Windows.Automation.ScrollPattern]::Pattern, [ref]$pattern) -or $item.TryGetCachedPattern([Windows.Automation.ScrollItemPattern]::Pattern, [ref]$pattern)) { $actions += 'scroll' }
       $selected = $null
       $selection = $null
-      if ($item.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
-        $selected = [bool]$selection.Current.IsSelected
+      if ($item.TryGetCachedPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
+        $selected = [bool]$selection.Cached.IsSelected
       }
       $controls += [pscustomobject]@{
         controlID = $controlID

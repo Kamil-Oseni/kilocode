@@ -387,7 +387,7 @@ export const WatchFrame = Schema.Union([
 
 export const WatchResult = Schema.Struct({
   operation: Schema.Literal("watch"),
-  frames: Schema.Array(WatchFrame).check(Schema.isMinLength(2), Schema.isMaxLength(4)),
+  frames: Schema.Array(WatchFrame).check(Schema.isMinLength(2), Schema.isMaxLength(16)),
   receipt: Receipt,
 })
 

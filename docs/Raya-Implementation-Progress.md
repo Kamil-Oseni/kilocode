@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 04:15 America/Toronto - Adaptive-watch result bound corrected
+
+**Status: implemented and verified in source.** Post-install capture-pipeline audit found that the adaptive-watch request accepted two through sixteen frames while the shared result schema still accepted only two through four. Valid five-through-sixteen-frame watches would therefore complete locally and then fail result decoding. The result contract now uses the same sixteen-frame ceiling as the request, with adverse schema evidence accepting sixteen and refusing seventeen. The focused CLI suite passes **5 tests / 72 assertions**; CLI and generated SDK typechecks pass. A replacement snapshot is required before this correction is installed. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-23 04:08 America/Toronto - Adaptive desktop-watch snapshot installed
 
 **Status: pushed, packaged and installed without force-reloading the open host; native event-driven acquisition remains open.** Product source `27326ad30b` is on `origin/main`. The protected push passed 29 JavaScript/TypeScript package typechecks and the JetBrains typecheck. The low-memory production workflow regenerated the SDK, rebuilt and smoke-tested CLI `0.0.0-main-202609230804`, passed extension-host and webview typechecks, ESLint and the production bundle sequentially, packaged 442 files, and installed `eden.raya@7.4.23-snapshot+27326ad30b.kamil-oseni.1790150581213`.

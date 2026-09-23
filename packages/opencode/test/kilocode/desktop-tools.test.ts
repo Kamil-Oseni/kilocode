@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { GrantID } from "@/kilocode/computer-use/lease"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
-import { DragRequest, Key, ScrollRequest, SequenceRequest, WatchRequest } from "@/kilocode/desktop/protocol"
+import { DragRequest, Key, ScrollRequest, SequenceRequest, WatchRequest, WatchResult } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
 import {
   DesktopClickTool,
@@ -677,6 +677,34 @@ it.instance(
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 8, intervalMs: 1_000 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 17, intervalMs: 50 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 4, intervalMs: 1_001 })).toBe(false)
+      const sample = (length: number) => ({
+        operation: "watch" as const,
+        frames: Array.from({ length }, (_, index) => ({
+          change: "keyframe" as const,
+          width: 1,
+          height: 1,
+          mime: "image/png" as const,
+          data: "x",
+          timing: { acquisitionMs: 0, preparationMs: 0, totalMs: 0 },
+          observation: {
+            version: 1 as const,
+            id: ObservationID.make(`watch_result_${index}`),
+            observedAt: 1,
+            validUntil: 2,
+            target: { surface: "desktop" as const, windowID: "window_seen" },
+          },
+        })),
+        receipt: {
+          version: 1 as const,
+          requestID: "watch_result",
+          startedAt: 1,
+          finishedAt: 2,
+          effect: "observe" as const,
+          outcome: "confirmed" as const,
+        },
+      })
+      expect(Schema.is(WatchResult)(sample(16))).toBe(true)
+      expect(Schema.is(WatchResult)(sample(17))).toBe(false)
 
       const dragged = yield* DesktopDragTool.pipe(
         Effect.provideService(Desktop.Service, host),

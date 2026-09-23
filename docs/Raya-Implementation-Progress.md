@@ -6,7 +6,15 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
-## ChatGPT 2026-09-22 22:35 America/Toronto - Autonomous Desktop Mode intent correction and implementation audit
+## ChatGPT 2026-09-22 20:28 America/Toronto - Autonomous lease contract foundation
+
+**Status: slice 1 is started, not complete.** A new Kilo-owned `computer-use/lease.ts` defines the bounded version-1 grant used by the forthcoming UI and host enforcement. It represents Observe only, Assisted control and Autonomous control; active/paused/revoked state; current-session or all-session lifetime; expiry or until-stopped duration; all/selected application and monitor scopes; browser/desktop/mobile surfaces; ordinary action categories; and cooperative-input preference.
+
+The pure decision boundary allows an ordinary action only when every lease dimension matches. A missing or out-of-scope grant returns **ask** for compatibility; paused, revoked, expired and Observe-only mutation return **deny**; sensitive actions continue to return **ask** until slice 2 supplies their saved category policy. Focused adverse coverage passes 5 tests / 14 assertions for decoding, authorization, missing/session/application/action fallback, pause, revocation, expiry, Observe-only denial, sensitive fallback, all-session lifetime and bounded scope arrays. OpenCode typecheck and the annotation guard pass under the memory cap with no remaining Bun/tsgo process.
+
+This commit does not yet bypass any existing tool prompt. Slice 1 remains open for durable local storage, CLI/extension capability negotiation, one-review grant UI, settings for session versus all-session use, browser and desktop enforcement, expiry/revocation and installed acceptance proving that authorized ordinary work receives no per-action prompts.
+
+## ChatGPT 2026-09-22 20:20 America/Toronto - Autonomous Desktop Mode intent correction and implementation audit
 
 **Status: the product target is corrected; implementation remains active.** The installed Computer Use work is a safety foundation, not the finished interaction model. `FUT-CU-01` now means an explicitly enabled Autonomous Desktop Mode in which one understandable capability lease authorizes bounded continuous work. A valid lease removes repeated prompts for ordinary observation, pointer, keyboard, scrolling, window, application and browser actions. Single-use observations and exact per-action permission remain only as the compatibility path when no applicable lease exists or when the saved sensitive-action policy says **Ask immediately before execution**.
 

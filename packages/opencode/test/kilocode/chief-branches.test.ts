@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { spawnSync } from "node:child_process"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Deferred, Effect, Exit, Scope } from "effect"
+import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -11,6 +12,7 @@ import type { Session } from "@/session/session"
 import type { BackgroundJob } from "@/background/job"
 import type { MessageV2 } from "@/session/message-v2"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { ChiefBranchOutcome } from "@/kilocode/chief/outcome"
 import { owner, stopped } from "@/kilocode/task/owner"
 import { testEffect } from "../lib/effect"
 
@@ -41,6 +43,69 @@ const cleanup = (storage: Storage.Interface, id: SessionID) =>
   )
 
 describe("Auto Chief branch ledger", () => {
+  it.live("settles an admitted branch when its job scope closes in a live backend", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
+      const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
+      const createdAt = Date.now()
+      yield* storage.replace(["raya", "goal", id], { createdAt, status: "active" })
+      yield* cleanup(storage, id)
+      const ledger = ChiefBranches.make(storage)
+      yield* ledger.start({ goalID: id, goalCreatedAt: createdAt, requestID: "route-1", branches: plan })
+      yield* ledger.admit({
+        goalID: id,
+        goalCreatedAt: createdAt,
+        branchID: "audit",
+        callID: "task-1",
+        sessionID: child,
+        messageID: MessageID.make("msg-child"),
+        access: "read",
+      })
+      const scope = yield* Scope.make()
+      const jobs = yield* CoreBackgroundJob.make.pipe(Scope.provide(scope))
+      const started = yield* Deferred.make<void>()
+      yield* jobs.start({
+        id: child,
+        type: "task",
+        run: Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.onExit((exit) =>
+            ChiefBranchOutcome.record({
+              branches: ledger,
+              goalID: id,
+              goalCreatedAt: createdAt,
+              branchID: "audit",
+              callID: "task-1",
+              sessionID: child,
+              exit,
+            }),
+          ),
+        ),
+      })
+      yield* Deferred.await(started)
+      yield* Scope.close(scope, Exit.void)
+      expect((yield* jobs.get(child))?.status).toBe("running")
+      expect((yield* ledger.read(id))?.branches[0].state).toBe("cancelled")
+      expect((yield* ledger.reconcile(id, createdAt)).branches[0].state).toBe("cancelled")
+      expect(
+        Exit.isFailure(
+          yield* ledger
+            .admit({
+              goalID: id,
+              goalCreatedAt: createdAt,
+              branchID: "audit",
+              callID: "task-retry",
+              sessionID: child,
+              messageID: MessageID.make("msg-retry"),
+              access: "read",
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }),
+  )
+
   it.live("replans a revised goal only before any Chief branch is admitted", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

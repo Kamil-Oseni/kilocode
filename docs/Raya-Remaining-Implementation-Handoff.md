@@ -6,9 +6,13 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 15:51 America/Toronto - normal live-backend scope closure
+
+A real background-job scope-closure test shows that the abandoned in-memory registry may retain `running`, while Chief's task terminal callback persists `cancelled` before scope closure completes. Reconciliation preserves that result and a new admission cannot replay the child. The ledger and fresh-process restart suites pass 11 tests / 74 assertions; CLI typecheck and Prettier pass. The prior 15:46 scope warning was a hypothesis, not a proven defect in this normal path. Still test simultaneous storage shutdown, hard termination and the installed VS Code backend restart matrix; do not infer completion from the stale in-memory job or enable Chief fanout yet. Installed snapshot remains `cff303e7f5`.
+
 ## ChatGPT 2026-09-23 15:46 America/Toronto - exact Chief child-turn report and evidence
 
-Chief admissions now save the reserved child input ID. `chief_inspect` confines the displayed report and tool list to that input's turn, and review accepts tool evidence only from the same turn before its successful terminal reply. Later unrelated child chat cannot masquerade as the branch report; an older record without a bound input fails closed for review. Focused ledger, inspection, task and process-restart tests, CLI typecheck, Prettier and the OpenCode annotation guard pass. This is source-only after installed `cff303e7f5`; Chief tools remain unregistered. The next correctness gap is a stopped background-job scope within a still-live backend: PID liveness does not prove the branch is still running, and an absent in-memory job is not proof of failure. Add an exact durable scope-closure marker and reconcile to `unknown` unless the bound terminal turn is independently proven; then run installed stop/restart acceptance.
+Chief admissions now save the reserved child input ID. `chief_inspect` confines the displayed report and tool list to that input's turn, and review accepts tool evidence only from the same turn before its successful terminal reply. Later unrelated child chat cannot masquerade as the branch report; an older record without a bound input fails closed for review. Focused ledger, inspection, task and process-restart tests, CLI typecheck, Prettier and the OpenCode annotation guard pass. This is source-only after installed `cff303e7f5`; Chief tools remain unregistered. The next concern at this checkpoint was whether a stopped background-job scope within a still-live backend could strand an admission. The 15:51 test above resolves the normal scope-closure path; installed stop/restart acceptance remains open.
 
 ## ChatGPT 2026-09-23 15:35 America/Toronto - sibling cancellation and fresh-process Chief recovery
 

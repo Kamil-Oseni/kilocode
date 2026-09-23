@@ -2,6 +2,12 @@ import { createHash } from "node:crypto"
 import { ObservationLedger, type ComputerObservation, type ComputerTarget } from "./observation-ledger"
 import type { SensitiveCategory } from "./lease-store"
 import { mismatch } from "./desktop-sensitive"
+import {
+  executeSequence,
+  type DesktopScene,
+  type DesktopSequenceInput,
+  type DesktopSequenceResult,
+} from "./desktop-sequence"
 
 export const CAPTURE = { edge: 4_096, pixels: 8_294_400, bytes: 15_000_000, data: 20_000_000 } as const
 
@@ -106,6 +112,7 @@ type DesktopObservation = ComputerObservation & { target: ComputerTarget & { sur
 export class DesktopSession {
   private readonly observations = new ObservationLedger("Desktop")
   private readonly semantics = new Map<string, DesktopSemantics>()
+  private readonly frames = new Map<string, DesktopScene>()
   private readonly listeners = new Set<(state: DesktopState) => void>()
   private state: DesktopState = { control: "agent", busy: false }
   private revision = 0
@@ -125,6 +132,14 @@ export class DesktopSession {
   }
 
   async observe(): Promise<DesktopFrame & { observation: DesktopObservation }> {
+    const frame = await this.capture()
+    const observation = this.observations.issue(this.target(frame), this.revision)
+    const scene = { ...frame, observation }
+    this.retain(scene)
+    return scene
+  }
+
+  private async capture(): Promise<DesktopFrame> {
     const frame = await this.driver.observe()
     if (
       !Number.isInteger(frame.width) ||
@@ -154,16 +169,7 @@ export class DesktopSession {
       frame.timing.totalMs < frame.timing.acquisitionMs + frame.timing.preparationMs + (frame.timing.semanticsMs ?? 0)
     )
       throw new Error("Desktop observation timing is invalid")
-    const observation = this.observations.issue(
-      {
-        surface: "desktop",
-        windowID: frame.windowID,
-        ...(frame.location ? { location: frame.location } : {}),
-      },
-      this.revision,
-    )
-    this.retain(observation.id, frame.semantics)
-    return { ...frame, observation }
+    return frame
   }
 
   async windows(): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
@@ -187,6 +193,7 @@ export class DesktopSession {
         throw new Error("Desktop window switch cancelled for manual takeover; no action was dispatched")
       this.observations.invalidate("desktop")
       this.semantics.clear()
+      this.frames.clear()
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
@@ -217,6 +224,7 @@ export class DesktopSession {
         throw new Error("Desktop action targets a different window; no action was dispatched")
       const semantic = this.semantics.get(action.observationID)
       this.semantics.delete(action.observationID)
+      this.frames.delete(action.observationID)
       this.observations.consume(
         action.observationID,
         {
@@ -233,6 +241,7 @@ export class DesktopSession {
         throw new Error("Desktop action cancelled for manual takeover; no action was dispatched")
       this.observations.invalidate("desktop", current.windowID)
       this.semantics.clear()
+      this.frames.clear()
       this.active += 1
       this.update({ control: "agent", busy: true })
       try {
@@ -253,10 +262,82 @@ export class DesktopSession {
     return result
   }
 
+  sequence(input: Omit<DesktopSequenceInput, "scene"> & { observationID: string }): Promise<DesktopSequenceResult> {
+    if (this.state.control === "manual")
+      return Promise.reject(new Error("Resume agent desktop control before sending an action sequence"))
+    const run = async () => {
+      const scene = this.frames.get(input.observationID)
+      if (!scene) throw new Error("Desktop sequence requires a retained fresh observation")
+      const revision = this.revision
+      this.active += 1
+      this.update({ control: "agent", busy: true })
+      try {
+        return await executeSequence(
+          { scene, steps: input.steps, maxDurationMs: input.maxDurationMs },
+          {
+            step: async (planned, before) => {
+              const current = await this.driver.current()
+              const action = { ...planned, observationID: before.observation.id } as DesktopAction
+              this.validate(action)
+              if (
+                current.windowID !== before.observation.target.windowID ||
+                current.location !== before.observation.target.location
+              )
+                throw new Error("Desktop sequence scene changed before dispatch; no action was sent")
+              const reason = mismatch(action, before.semantics)
+              if (reason) throw new Error(reason)
+              const token = this.observations.begin(before.observation.id, before.observation.target, revision)
+              this.frames.delete(before.observation.id)
+              this.semantics.delete(before.observation.id)
+              this.observations.invalidate("desktop", current.windowID, token.id)
+              if (this.state.control === "manual" || revision !== this.revision) {
+                this.observations.cancel(token)
+                throw new Error("Desktop sequence cancelled for manual takeover; no action was dispatched")
+              }
+              await this.driver.perform(action, current).catch((error: unknown) => {
+                this.observations.cancel(token)
+                const detail = error instanceof Error ? error.message : String(error)
+                throw new DesktopOutcomeError(action.operation, detail)
+              })
+              const frame = await this.capture().catch((error: unknown) => {
+                this.observations.cancel(token)
+                const detail = error instanceof Error ? error.message : String(error)
+                throw new DesktopOutcomeError("sequence postcondition", detail)
+              })
+              const observation = (() => {
+                try {
+                  return this.observations.advance(token, this.target(frame), revision)
+                } catch (error) {
+                  const detail = error instanceof Error ? error.message : String(error)
+                  throw new DesktopOutcomeError("sequence continuity", detail)
+                }
+              })()
+              const next = { ...frame, observation }
+              this.retain(next)
+              return next
+            },
+            cancelled: () => this.state.control === "manual" || revision !== this.revision,
+            now: () => performance.now(),
+          },
+        )
+      } finally {
+        this.active = Math.max(0, this.active - 1)
+        if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })
+      }
+    }
+    const result = this.queue.then(run)
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
   takeControl(reason = "You took manual control of the desktop."): void {
     this.revision += 1
     this.observations.invalidate("desktop")
     this.semantics.clear()
+    this.frames.clear()
     this.driver.cancel?.()
     this.update({ control: "manual", busy: this.active > 0, reason })
   }
@@ -265,6 +346,7 @@ export class DesktopSession {
     this.revision += 1
     this.observations.invalidate("desktop")
     this.semantics.clear()
+    this.frames.clear()
     this.update({ control: "agent", busy: this.active > 0 })
   }
 
@@ -321,10 +403,20 @@ export class DesktopSession {
     }
   }
 
-  private retain(id: string, semantics: DesktopSemantics | undefined): void {
-    if (!semantics) return
-    this.semantics.set(id, semantics)
+  private retain(scene: DesktopScene): void {
+    this.frames.set(scene.observation.id, scene)
+    while (this.frames.size > 4) this.frames.delete(this.frames.keys().next().value!)
+    if (!scene.semantics) return
+    this.semantics.set(scene.observation.id, scene.semantics)
     while (this.semantics.size > 256) this.semantics.delete(this.semantics.keys().next().value!)
+  }
+
+  private target(frame: DesktopFrame): ComputerTarget & { surface: "desktop" } {
+    return {
+      surface: "desktop",
+      windowID: frame.windowID,
+      ...(frame.location ? { location: frame.location } : {}),
+    }
   }
 
   private catalog(windows: DesktopWindow[]): ComputerTarget & { surface: "desktop" } {

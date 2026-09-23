@@ -111,13 +111,14 @@ export class ObservationLedger {
     return record
   }
 
-  invalidate(surface?: ComputerSurface, windowID?: string): void {
+  invalidate(surface?: ComputerSurface, windowID?: string, preserveStep?: string): void {
     for (const [id, record] of this.records) {
       if (surface && record.value.target.surface !== surface) continue
       if (windowID && record.value.target.windowID !== windowID) continue
       this.records.delete(id)
     }
     for (const [id, record] of this.steps) {
+      if (id === preserveStep) continue
       if (surface && record.value.target.surface !== surface) continue
       if (windowID && record.value.target.windowID !== windowID) continue
       this.steps.delete(id)

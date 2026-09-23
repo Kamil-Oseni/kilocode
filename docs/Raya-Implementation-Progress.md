@@ -6,6 +6,16 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:55 America/Toronto - Bounded desktop plans execute against local postconditions
+
+**Status: the local executor and desktop-session boundary are implemented and verified; model/tool exposure and per-step lease evaluation are next.** A retained version-2 desktop observation can now ground a bounded plan of one through eight ordered native actions for at most ten seconds. Every step names the exact window, declares its sensitive category, performs one native effect, captures the next local scene and requires one through four pixel or UI Automation postconditions. The next effect cannot run until those checks pass. The executor stops on cancellation, duration expiry, target change, missing controls, unexpected control state or pixel mismatch and never retries an effect automatically.
+
+Scene continuity remains fail-closed underneath the executor. Each action consumes the current observation into an opaque ledger step, invalidates competing observations for that window, rechecks the live window identity and locally correlated sensitive target, dispatches once, then advances to a fresh observation ID and incremented scene version only after post-effect capture. Pause, manual takeover and revision changes cancel continuity and clear the bounded four-frame ephemeral ring. A capture or continuity failure after dispatch is reported as an unknown outcome with explicit no-retry wording.
+
+Focused evidence passes **17 extension tests / 51 assertions** across the pure executor and real `DesktopSession` boundary. Tests cover two-step scene advancement, pixel and semantic postconditions, stop-before-next-effect behavior, cancellation during dispatch, duration expiry during dispatch, changed-window refusal before dispatch and failed post-effect capture without replay. Extension typecheck, ESLint and Knip all pass.
+
+This checkpoint does not expose sequences to the model or shared protocol yet, and it does not bypass lease enforcement. Next add the versioned sequence request/result and receipt contract, validate the active capability lease immediately before every local step, preserve partial/unknown results across restart and expose the bounded plan through the Computer Use tool. `FUT-CU-01` remains **In progress** and no snapshot is installed from this source-only checkpoint.
+
 ## ChatGPT 2026-09-23 01:34 America/Toronto - Computer observations carry bounded scene continuity
 
 **Status: the versioned continuity foundation is implemented and verified; bounded multi-action execution is next.** New browser and desktop observations now use shared observation contract version 2 with a monotonically increasing ledger sequence and a scene version beginning at 1. The shared decoder continues accepting version-1 observations for compatibility. Existing ordinary actions retain their single-use behavior while the local ledger gains a separate fail-closed scene-step transaction for future bounded sequences.

@@ -18,6 +18,7 @@ class Driver implements DesktopDriver {
     timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
   }
   readonly actions: DesktopAction[] = []
+  readonly frames: DesktopFrame[] = []
   readonly focused: string[] = []
   list: DesktopWindow[] = [
     {
@@ -36,6 +37,8 @@ class Driver implements DesktopDriver {
   cancelled = 0
 
   async observe() {
+    const next = this.frames.shift()
+    if (next) return next
     return { ...this.target, ...this.frame }
   }
 
@@ -289,5 +292,142 @@ describe("native desktop session boundary", () => {
 
     expect(driver.cancelled).toBe(1)
     expect(states).toEqual(["agent:false:", "manual:false:You took manual control of the desktop.", "agent:false:"])
+  })
+
+  it("runs a bounded local sequence across advancing scene versions", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    driver.frames.push(
+      {
+        ...driver.target,
+        ...driver.frame,
+        data: "focused",
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          viewport: { x: 0, y: 0, width: 1280, height: 720 },
+          controls: [
+            {
+              controlID: "editor",
+              role: "Edit",
+              x: 0,
+              y: 0,
+              width: 1280,
+              height: 720,
+              enabled: true,
+              focused: true,
+              actions: ["value"],
+            },
+          ],
+          truncated: false,
+        },
+      },
+      { ...driver.target, ...driver.frame, data: "typed" },
+    )
+
+    const result = await session.sequence({
+      observationID: initial.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: {
+            operation: "pointer",
+            action: "click",
+            windowID: "window-1",
+            sensitive: false,
+            x: 0.5,
+            y: 0.5,
+          },
+          postconditions: [{ kind: "control", controlID: "editor", focused: true }],
+          recovery: "stop",
+        },
+        {
+          action: { operation: "type", windowID: "window-1", sensitive: false, text: "hello" },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({
+      status: "completed",
+      completed: 2,
+      scene: { data: "typed", observation: { version: 2, sequence: 3, sceneVersion: 3 } },
+    })
+    expect(driver.actions.map((action) => action.operation)).toEqual(["pointer", "type"])
+    expect(driver.actions[0]?.observationID).toBe(initial.observation.id)
+    expect(driver.actions[1]?.observationID).not.toBe(initial.observation.id)
+  })
+
+  it("stops a sequence before its next effect when a local postcondition fails", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    driver.frames.push({ ...driver.target, ...driver.frame, data: initial.data })
+
+    const result = await session.sequence({
+      observationID: initial.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: { operation: "key", windowID: "window-1", sensitive: false, key: "Tab" },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+        {
+          action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({ status: "stopped", completed: 1, reason: expect.stringMatching(/changed/i) })
+    expect(driver.actions.map((action) => action.key)).toEqual(["Tab"])
+  })
+
+  it("refuses a sequence when the exact target changed before its first effect", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    driver.target.location = "Different"
+
+    await expect(
+      session.sequence({
+        observationID: initial.observation.id,
+        maxDurationMs: 5_000,
+        steps: [
+          {
+            action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+            postconditions: [{ kind: "pixels", change: "changed" }],
+            recovery: "stop",
+          },
+        ],
+      }),
+    ).rejects.toThrow(/scene changed before dispatch/i)
+    expect(driver.actions).toEqual([])
+  })
+
+  it("reports an uncertain sequence outcome without retry when post-effect capture fails", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    driver.frames.push({ ...driver.target, ...driver.frame, data: "" })
+
+    await expect(
+      session.sequence({
+        observationID: initial.observation.id,
+        maxDurationMs: 5_000,
+        steps: [
+          {
+            action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+            postconditions: [{ kind: "pixels", change: "changed" }],
+            recovery: "stop",
+          },
+        ],
+      }),
+    ).rejects.toThrow(/sequence postcondition may have taken effect.*not retried/i)
+    expect(driver.actions.map((action) => action.key)).toEqual(["Enter"])
   })
 })

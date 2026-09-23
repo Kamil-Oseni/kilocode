@@ -6,9 +6,15 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 22:49 America/Toronto - preserve local browser sensitivity checks
+
+Structured browser role/name and label targets now receive a conservative local keyword check before authorization. Ordinary or mismatched declarations are refused for known communications, financial, credential, software, system, deletion, disclosure, legal and publishing semantics. Do not infer from opaque selector strings or test IDs. File selection always requires disclosure. Preserve the pure classifier and the integration rule that a mismatch produces no browser-host request.
+
+This only verifies English positive matches on trustworthy browser semantics. Continue with correlated Windows UI Automation observation for desktop controls and do not represent coordinate-only actions as semantically verified.
+
 ## ChatGPT 2026-09-22 22:33 America/Toronto - preserve mandatory effect classification
 
-Effectful model tools now require an explicit `ordinary` or one-of-nine sensitive classification. Preserve this as a required schema field for desktop focus/move/click/drag/type/key/scroll and browser navigate/click/type/select/scroll/evaluate/smoke, tab mutations, dialog responses, download starts and upload selections. Read-only operations and cancellation intentionally remain classification-free. `ordinary` becomes protocol `false`; sensitive values remain opaque categories only.
+Product commit `26d2ddf249` makes effectful model tools require an explicit `ordinary` or one-of-nine sensitive classification. Preserve this as a required schema field for desktop focus/move/click/drag/type/key/scroll and browser navigate/click/type/select/scroll/evaluate/smoke, tab mutations, dialog responses, download starts and upload selections. Read-only operations and cancellation intentionally remain classification-free. `ordinary` becomes protocol `false`; sensitive values remain opaque categories only.
 
 This prevents omission, not dishonest or mistaken classification. Do not install Autonomous Desktop Mode yet. Add local deterministic browser checks where URL and accessible target semantics are trustworthy, then use correlated UI Automation state to verify desktop intent. Until those layers and the Windows-wide Pause shortcut exist, keep `FUT-CU-01` In progress and retain the legacy prompt fallback.
 

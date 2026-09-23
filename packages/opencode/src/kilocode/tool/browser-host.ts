@@ -3,6 +3,7 @@ import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
 import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { infer, mismatch } from "@/kilocode/computer-use/sensitivity"
 import {
   ActionClassification,
   type ActionClassification as Classification,
@@ -63,6 +64,11 @@ function run(browser: Browser.Interface, input: Input, signal: AbortSignal) {
 
 function classified(value: Classification): SensitiveKind | false {
   return value === "ordinary" ? false : value
+}
+
+function verify(value: Classification, target: typeof Selector.Type) {
+  const detail = mismatch(value, infer(target))
+  return detail ? Effect.die(new Error(detail)) : Effect.void
 }
 
 function approve(
@@ -196,6 +202,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
       parameters: ClickParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
+          yield* verify(params.sensitive_category, params.selector)
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
@@ -241,6 +248,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
       parameters: TypeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
+          yield* verify(params.sensitive_category, params.selector)
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
@@ -290,6 +298,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
       parameters: SelectParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
+          yield* verify(params.sensitive_category, params.selector)
           yield* approve(browser, ctx, {
             action: "browser",
             tabID: params.tab_id,
@@ -740,6 +749,7 @@ export const BrowserDownloadTool = Tool.define<
               : "transfer_id" in params
                 ? params.transfer_id
                 : "list"
+          if (params.action === "start") yield* verify(params.sensitive_category, params.selector)
           yield* approve(browser, ctx, {
             action: "files",
             tabID: "tab_id" in params ? params.tab_id : undefined,

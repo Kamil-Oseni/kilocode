@@ -208,7 +208,7 @@ describe("browser host tools", () => {
             selector: "input[type=file]",
             destination: "https://example.test/form",
             paths: [source],
-            sensitive_category: "ordinary",
+            sensitive_category: "disclosure",
           },
           ctx,
         )
@@ -497,6 +497,31 @@ describe("browser host tools", () => {
         expect(asks[0].patterns).toEqual([JSON.stringify(selector)])
         expect(asks[0].always).toEqual([JSON.stringify(selector)])
         const count = calls.length
+        const payment = { kind: "role" as const, role: "button", name: "Pay invoice" }
+        const refused = yield* tool
+          .execute(
+            {
+              tab_id: "tab_test",
+              observation_id: ObservationID.make("obs_payment_refused"),
+              selector: payment,
+              sensitive_category: "ordinary",
+            },
+            context(asks),
+          )
+          .pipe(Effect.exit)
+        expect(refused._tag).toBe("Failure")
+        expect(calls).toHaveLength(count)
+        yield* tool.execute(
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_payment_allowed"),
+            selector: payment,
+            sensitive_category: "financial",
+          },
+          context(asks),
+        )
+        expect(calls.findLast((call) => call.operation === "authorize")).toMatchObject({ sensitive: "financial" })
+        const invalidCount = calls.length
         const failed = yield* tool
           .execute(
             {
@@ -509,7 +534,7 @@ describe("browser host tools", () => {
           )
           .pipe(Effect.exit)
         expect(failed._tag).toBe("Failure")
-        expect(calls).toHaveLength(count)
+        expect(calls).toHaveLength(invalidCount)
       }),
     60_000,
   )

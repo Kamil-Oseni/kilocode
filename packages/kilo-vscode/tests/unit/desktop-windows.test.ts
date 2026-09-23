@@ -182,6 +182,27 @@ describe("Windows native desktop driver", () => {
     })
   })
 
+  it("can measure visual capture without placing UI Automation on its critical path", async () => {
+    const test = harness([
+      JSON.stringify({
+        windowID: "0x123",
+        location: "pid:5;title:Editor;bounds:0,0,20,10",
+        width: 20,
+        height: 10,
+        mime: "image/png",
+        data: "encoded",
+        acquisitionMs: 0,
+        preparationMs: 0,
+      }),
+    ])
+    const frame = await new WindowsDesktopDriver(test.runner).observe({ semantics: false })
+    expect(frame.semantics).toBeUndefined()
+    expect(frame.timing).toEqual(expect.objectContaining({ acquisitionMs: 0, preparationMs: 0 }))
+    expect(frame.timing.semanticsMs).toBeUndefined()
+    expect(test.scripts[0]).toContain("$collectSemantics = $false")
+    expect(test.scripts[0]).toContain("if ($collectSemantics) {")
+  })
+
   it("refuses an unchanged native frame without an exact local keyframe", async () => {
     const output = JSON.stringify({
       windowID: "0x123",

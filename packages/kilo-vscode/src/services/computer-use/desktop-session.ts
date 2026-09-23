@@ -101,7 +101,7 @@ export class DesktopOutcomeError extends Error {
 }
 
 export interface DesktopDriver {
-  observe(): Promise<DesktopFrame>
+  observe(options?: { semantics?: boolean }): Promise<DesktopFrame>
   windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
   focus(target: DesktopWindow): Promise<void>

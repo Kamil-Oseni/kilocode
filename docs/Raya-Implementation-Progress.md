@@ -6,6 +6,14 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 05:05 America/Toronto - Visual capture separates from semantic collection
+
+**Status: implemented and verified in source.** The Windows driver now has an explicit visual-only observation option while keeping correlated visual-plus-UIA capture as the default product behavior. Visual-only results omit the semantic tree and semantic timing instead of reporting a fabricated zero. This creates a clean measurement and worker boundary for WGC/DXGI acquisition and encoding without treating the current 0.85–1.09 second synchronous UIA cost as capture latency.
+
+Focused driver and session evidence passes **32 tests / 176 assertions** and extension-host/webview typechecks pass. A separate real-host probe warmed the persistent host and collected twenty visual-only observations. GDI acquisition measured **38.5519 ms p50 / 55.0742 ms p95** with a 58.4187 ms maximum. Preparation measured **32.7524 / 75.2595 ms** with a 76.3768 ms maximum. Total local visual observation measured **81.4209 / 150.1878 ms** with a 156.0515 ms maximum. In this sample, acquisition and preparation meet their stage targets while total visual observation is about 0.2 ms above its 150 ms p95 target. These are exact measurements for the interim GDI path, not WGC/DXGI results or release acceptance.
+
+No model-facing observation uses visual-only mode in this slice, so action grounding and sensitive-target checks retain their current behavior. Before visual-only frames become actionable, the local executor must correlate a trustworthy current semantic snapshot or deliberately use the documented vision fallback under the active lease. WGC and DXGI still require independent benchmarks. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-23 04:56 America/Toronto - Current Windows capture baseline remeasured
 
 **Status: measured on the real active Windows host; targets are not met.** A bounded read-only probe warmed one persistent desktop host, collected twenty foreground observations, retained pixels only in process memory, printed timing statistics only and cancelled the host afterward. GDI acquisition measured **63.9542 ms p50 / 94.1047 ms p95** with a 98.2131 ms maximum. Image hashing, PNG/JPEG preparation and base64 measured **120.8799 / 136.1893 ms** with a 143.788 ms maximum. Synchronous UI Automation measured **851.8811 / 1,087.3765 ms** with a 1,402.6752 ms maximum. Total local observation measured **1,069.9564 / 1,396.4728 ms** with a 1,637.4515 ms maximum.

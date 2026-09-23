@@ -432,6 +432,7 @@ const observe = `${setup}
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+$collectSemantics = $true
 function Get-RayaControls($window) {
   $controls = @()
   $root = [Windows.Automation.AutomationElement]::FromHandle($window.Handle)
@@ -610,23 +611,29 @@ try {
     }
   }
   $preparation.Stop()
-  $semanticsTimer = [Diagnostics.Stopwatch]::StartNew()
-  try {
-    $semanticOutput = @(Get-RayaControls $window)
-    $semantics = $semanticOutput[-1]
-    if (-not $semantics -or $semantics.source -ne 'windows_ui_automation') {
-      throw "Windows UI Automation returned no bounded observation"
-    }
-  } catch {
-    $semantics = [pscustomobject]@{
-      source = 'windows_ui_automation'
-      status = 'unavailable'
-      viewport = [pscustomobject]@{ x = $window.Rect.Left; y = $window.Rect.Top; width = $window.Width; height = $window.Height }
-      controls = @()
-      truncated = $false
+  $semantics = $null
+  $semanticsMs = $null
+  if ($collectSemantics) {
+    $semanticsTimer = [Diagnostics.Stopwatch]::StartNew()
+    try {
+      $semanticOutput = @(Get-RayaControls $window)
+      $semantics = $semanticOutput[-1]
+      if (-not $semantics -or $semantics.source -ne 'windows_ui_automation') {
+        throw "Windows UI Automation returned no bounded observation"
+      }
+    } catch {
+      $semantics = [pscustomobject]@{
+        source = 'windows_ui_automation'
+        status = 'unavailable'
+        viewport = [pscustomobject]@{ x = $window.Rect.Left; y = $window.Rect.Top; width = $window.Width; height = $window.Height }
+        controls = @()
+        truncated = $false
+      }
+    } finally {
+      $semanticsTimer.Stop()
+      $semanticsMs = $semanticsTimer.Elapsed.TotalMilliseconds
     }
   }
-  $semanticsTimer.Stop()
   $after = Get-RayaWindow
   if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
     throw "Foreground window changed while correlating visual and semantic observations"
@@ -637,11 +644,11 @@ try {
     width = $width
     height = $height
     change = if ($unchanged) { 'unchanged' } else { 'keyframe' }
-    semantics = $semantics
     acquisitionMs = $acquisition.Elapsed.TotalMilliseconds
     preparationMs = $preparation.Elapsed.TotalMilliseconds
-    semanticsMs = $semanticsTimer.Elapsed.TotalMilliseconds
   }
+  if ($semantics) { $result['semantics'] = $semantics }
+  if ($null -ne $semanticsMs) { $result['semanticsMs'] = $semanticsMs }
   if (-not $unchanged) {
     $result['mime'] = $mime
     $result['data'] = $data
@@ -653,6 +660,8 @@ try {
   $image.Dispose()
 }
 `
+
+const pixels = observe.replace("$collectSemantics = $true", "$collectSemantics = $false")
 
 const current = `${setup}
 $window = Get-RayaWindow
@@ -1101,9 +1110,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
     this.runner = input ?? runner()
   }
 
-  async observe(): Promise<DesktopFrame> {
+  async observe(options?: { semantics?: boolean }): Promise<DesktopFrame> {
     const started = performance.now()
-    const result = object(await this.runner.run(observe))
+    const result = object(await this.runner.run(options?.semantics === false ? pixels : observe))
     const next = frame(result, performance.now() - started, this.last)
     this.last = {
       windowID: next.windowID,

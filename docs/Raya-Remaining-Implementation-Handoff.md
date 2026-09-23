@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `a14ce51ee4` (`7.4.23-snapshot+a14ce51ee4.kamil-oseni.1790200394593`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `a02b94cd0c` (`7.4.23-snapshot+a02b94cd0c.kamil-oseni.1790201177010`); bounded Auto Chief fanout and continuation repairs are installed, while live parallel-run, restart and named-chat acceptance remain open. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed files. The open host has not been proven to load the new snapshot; installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 18:10 America/Toronto - policy snapshot installed
+
+`a02b94cd0c` is pushed and installed as `7.4.23-snapshot+a02b94cd0c.kamil-oseni.1790201177010`. SDK generation, Windows CLI and sandbox-worker smoke tests, extension/webview typechecks, lint, bundle and VSIX packaging passed. VS Code reports that version; installed CLI SHA-256 is `4884A9F9EB12104A2680A84D0FD3CC106F559D7A124D1853C1533124604A136B` and retained rollback VSIX SHA-256 is `C535E77B528CED2A9D94427D55389E8B3E16A199A3B88603F365DA00C56B3CEE`. No UI surface was available to observe a real sensitive target, so source proof and installed artifact identity do not close the Assisted/Autonomous policy acceptance or `FUT-CU-01`.
 
 ## ChatGPT 2026-09-23 18:04 America/Toronto - Assisted control policy correction and capture audit
 

@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 13:01 America/Toronto - failed sibling isolation
+
+A focused task integration case runs two saved branches concurrently and fails only the UX child's actual background prompt. The Safety job and ledger branch complete; the UX job errors and its branch is saved as failed with no review. The test passes. Next cover cancellation and uncertain outcome under concurrent jobs, then require a final Chief response to cite each inspected and reviewed branch before exposing automatic fanout. The installed snapshot remains `f462c88182`.
+
 ## ChatGPT 2026-09-23 12:55 America/Toronto - planned read-only branch concurrency
 
 Two saved Chief branches can run as separate background jobs at the same time under a two-child goal limit, with different saved briefs, specialists and read-only child authority. The focused integration case passes. The full task suite had one 5-second timeout under concurrent typecheck load; that case passed in isolation. Automatic fanout remains disabled. Next prove failure, cancellation and uncertain terminal behavior for multiple active branches, then exact all-branch synthesis and stop/restart behavior before registering Chief planning and review tools.

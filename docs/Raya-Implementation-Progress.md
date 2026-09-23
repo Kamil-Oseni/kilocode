@@ -6,6 +6,10 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 13:01 America/Toronto - failed Chief sibling stays failed
+
+**Status: focused source verification; automatic fanout remains disabled.** A second task integration case starts two planned background branches together, releases both after observing them running, and makes only the UX child fail. The background service reports a completed Safety job and an errored UX job; the durable branch ledger separately records `completed` and `failed`, without a review receipt for the failed branch. The case passes **1 test / 6 assertions**. This proves the actual task/background outcome boundary in the source fixture; it does not prove Chief synthesis, stop/restart, installed-host behavior or semantic result quality.
+
 ## ChatGPT 2026-09-23 12:55 America/Toronto - distinct planned Chief branches run together
 
 **Status: focused source verification; automatic fanout remains disabled.** A new task integration case starts two branches from the same durable plan under a two-child goal limit. Both background jobs remain running together, use distinct child sessions and the exact saved Safety and UX briefs, retain read-only authority, and settle their own completed branch receipts after release. The new case passes **1 test / 12 assertions**. The full task suite had **43 passes and one unrelated 5-second description-order timeout** while CLI typecheck ran concurrently; that case passed by itself in 3.8 seconds. CLI typecheck and the OpenCode annotation guard pass. This proves concurrent task admission in the source fixture, not semantic independence, all-branch synthesis, installed-host restart or safe production fanout.

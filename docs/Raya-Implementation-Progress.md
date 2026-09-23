@@ -6,6 +6,12 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 04:56 America/Toronto - Current Windows capture baseline remeasured
+
+**Status: measured on the real active Windows host; targets are not met.** A bounded read-only probe warmed one persistent desktop host, collected twenty foreground observations, retained pixels only in process memory, printed timing statistics only and cancelled the host afterward. GDI acquisition measured **63.9542 ms p50 / 94.1047 ms p95** with a 98.2131 ms maximum. Image hashing, PNG/JPEG preparation and base64 measured **120.8799 / 136.1893 ms** with a 143.788 ms maximum. Synchronous UI Automation measured **851.8811 / 1,087.3765 ms** with a 1,402.6752 ms maximum. Total local observation measured **1,069.9564 / 1,396.4728 ms** with a 1,637.4515 ms maximum.
+
+This is a current GDI plus synchronous-UIA baseline, not WGC or DXGI data and not an installed product acceptance result. It demonstrates that capture API replacement alone will not meet the product target: visual acquisition/encoding and semantic refresh must run as separate cancellable paths, with trustworthy semantic state correlated to the current scene before action. The next capture worker must benchmark WGC and DXGI independently on this same machine and preserve acquisition, preparation, semantic and total measurements. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-23 04:42 America/Toronto - Desktop pixel retention gains a byte-bounded ephemeral ring
 
 **Status: implemented and verified in source.** Desktop scenes were already evicted after four entries, but that count-only limit could retain as many as 80 million encoded characters when every frame approached the protocol maximum. The cache is now an explicit local ring capped at four frames and 25 million encoded bytes. It keeps the newest complete frame, evicts oldest pixels until both bounds hold, replaces repeated observation identities without double-counting, and clears synchronously through the existing pause, Stop, manual-takeover and disposal paths. This does not persist pixels and does not send them to telemetry.

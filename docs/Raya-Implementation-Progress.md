@@ -6,6 +6,16 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:34 America/Toronto - Computer observations carry bounded scene continuity
+
+**Status: the versioned continuity foundation is implemented and verified; bounded multi-action execution is next.** New browser and desktop observations now use shared observation contract version 2 with a monotonically increasing ledger sequence and a scene version beginning at 1. The shared decoder continues accepting version-1 observations for compatibility. Existing ordinary actions retain their single-use behavior while the local ledger gains a separate fail-closed scene-step transaction for future bounded sequences.
+
+A sequence executor must explicitly begin a step from the exact current observation, which consumes that observation. Only the resulting opaque in-memory step token can advance continuity. Advancing creates a new observation ID and sequence, increments the scene version, binds the newly observed exact target and keeps the original expiry instead of extending authority. A token is single-use. Replay, expiry, manual takeover, target-scoped invalidation and capacity eviction remove the step before another native effect can depend on it.
+
+Focused evidence passes **37 extension tests / 132 assertions** across the shared ledger, desktop session and live browser session plus **7 CLI tests / 76 assertions** across legacy/v2 decoding and the desktop transport/tools. Tests prove v1 compatibility, required positive v2 sequence/scene fields, monotonic issuance, one-step advancement, unchanged expiry, token replay refusal and in-flight invalidation on takeover. Both package typechecks and SDK generation pass.
+
+This does not yet permit multiple effects from one model plan. Next add the bounded desktop sequence request/executor so each action consumes the current scene step, dispatches once, observes a local postcondition, advances to the next scene only on success and stops immediately on target, semantic, pixel, lease or duration mismatch. `FUT-CU-01` remains **In progress** and no snapshot is installed from this contract-only checkpoint.
+
 ## ChatGPT 2026-09-23 01:21 America/Toronto - Bounded desktop watch omits identical image payloads
 
 **Status: implemented and verified in source; region-level deltas and continuous capture remain open.** Each bounded desktop watch now compares the exact encoded dimensions, format and pixels of successive observations locally. The first image and every changed image cross the shared protocol as a keyframe. An identical image crosses as an `unchanged` frame containing its fresh observation, separate stage timing, current bounded accessibility snapshot and the exact base keyframe observation ID, but no repeated MIME or base64 pixel payload. The model tool attaches only keyframes while still reporting every sampled frame and its continuity metadata.

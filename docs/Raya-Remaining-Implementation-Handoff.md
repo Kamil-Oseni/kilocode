@@ -6,6 +6,12 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 01:34 America/Toronto - preserve versioned scene-step transactions
+
+New observations emitted by `ObservationLedger` are contract version 2 and carry positive monotonic `sequence` plus `sceneVersion`. The protocol must continue decoding legacy v1 observations. Ordinary actions still call `consume` once. Bounded executors must use the separate `begin`/`advance` transaction: begin consumes the exact current observation and returns an opaque local token; advance accepts that token once, issues a new ID/sequence with scene version +1, binds the new exact target and retains the original expiry.
+
+Do not make step tokens serializable or model-authored, extend validity during advance, allow advance replay, or leave steps alive after manual takeover/scoped invalidation. Focused evidence is 37 extension tests / 132 assertions and 7 CLI tests / 76 assertions with both typechecks and SDK generation passing. Next connect this foundation to a bounded local desktop action-sequence protocol with per-step postconditions, duration/stop limits, sensitive-policy checks and unknown-outcome no-replay. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-23 01:21 America/Toronto - preserve exact watch-frame deduplication
 
 The shared desktop watch result is now a union of `keyframe` and `unchanged` frames. A keyframe carries MIME and base64 image data. An unchanged frame carries no pixels; it retains dimensions, fresh timing, current semantics, its own observation and `baseObservationID` pointing to the exact retained keyframe. The CLI emits attachments only for keyframes and includes change/base metadata for every sample.

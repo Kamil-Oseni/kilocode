@@ -80655,29 +80655,66 @@
         "additionalProperties": false
       },
       "ComputerUseObservation": {
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "number",
-            "enum": [1]
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "id": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "observedAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "validUntil": {
+                "type": "number",
+                "minimum": 0
+              },
+              "target": {
+                "$ref": "#/components/schemas/ComputerUseTarget"
+              }
+            },
+            "required": ["version", "id", "observedAt", "validUntil", "target"],
+            "additionalProperties": false
           },
-          "id": {
-            "$ref": "#/components/schemas/ComputerUseObservationID"
-          },
-          "observedAt": {
-            "type": "number",
-            "minimum": 0
-          },
-          "validUntil": {
-            "type": "number",
-            "minimum": 0
-          },
-          "target": {
-            "$ref": "#/components/schemas/ComputerUseTarget"
+          {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [2]
+              },
+              "id": {
+                "$ref": "#/components/schemas/ComputerUseObservationID"
+              },
+              "sequence": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "sceneVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "observedAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "validUntil": {
+                "type": "number",
+                "minimum": 0
+              },
+              "target": {
+                "$ref": "#/components/schemas/ComputerUseTarget"
+              }
+            },
+            "required": ["version", "id", "sequence", "sceneVersion", "observedAt", "validUntil", "target"],
+            "additionalProperties": false
           }
-        },
-        "required": ["version", "id", "observedAt", "validUntil", "target"],
-        "additionalProperties": false
+        ]
       },
       "BrowserAuthSource": {
         "type": "object",

@@ -5386,13 +5386,23 @@ export type ComputerUseReceipt = {
   observationID?: ComputerUseObservationId
 }
 
-export type ComputerUseObservation = {
-  version: 1
-  id: ComputerUseObservationId
-  observedAt: number
-  validUntil: number
-  target: ComputerUseTarget
-}
+export type ComputerUseObservation =
+  | {
+      version: 1
+      id: ComputerUseObservationId
+      observedAt: number
+      validUntil: number
+      target: ComputerUseTarget
+    }
+  | {
+      version: 2
+      id: ComputerUseObservationId
+      sequence: number
+      sceneVersion: number
+      observedAt: number
+      validUntil: number
+      target: ComputerUseTarget
+    }
 
 export type BrowserAuthSource = {
   source: "live" | "capture"

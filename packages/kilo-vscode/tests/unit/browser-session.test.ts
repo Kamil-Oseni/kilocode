@@ -240,7 +240,9 @@ describe("Raya browser session", () => {
     await session.execute({ operation: "navigate", url: "https://example.test/form" })
     const snapshot = await session.execute({ operation: "snapshot" })
     expect(snapshot.observation).toMatchObject({
-      version: 1,
+      version: 2,
+      sequence: 1,
+      sceneVersion: 1,
       target: { surface: "browser", location: "https://example.test/form" },
     })
     expect(snapshot.observation!.validUntil).toBeGreaterThan(snapshot.observation!.observedAt)

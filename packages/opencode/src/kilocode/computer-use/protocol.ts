@@ -5,6 +5,7 @@ const Time = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualT
 const Identity = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
 
 export const ProtocolVersion = Schema.Literal(1)
+export const ObservationVersion = Schema.Literal(2)
 export const ObservationID = Identity.pipe(Schema.brand("ComputerUseObservationID")).annotate({
   identifier: "ComputerUseObservationID",
 })
@@ -17,13 +18,27 @@ export const Target = Schema.Struct({
   location: Schema.optional(Schema.String.check(Schema.isMaxLength(20_000))),
 }).annotate({ identifier: "ComputerUseTarget" })
 
-export const Observation = Schema.Struct({
+const ObservationV1 = Schema.Struct({
   version: ProtocolVersion,
   id: ObservationID,
   observedAt: Time,
   validUntil: Time,
   target: Target,
-}).annotate({ identifier: "ComputerUseObservation" })
+})
+
+const ObservationV2 = Schema.Struct({
+  version: ObservationVersion,
+  id: ObservationID,
+  sequence: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  sceneVersion: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  observedAt: Time,
+  validUntil: Time,
+  target: Target,
+})
+
+export const Observation = Schema.Union([ObservationV1, ObservationV2]).annotate({
+  identifier: "ComputerUseObservation",
+})
 export type Observation = Schema.Schema.Type<typeof Observation>
 
 export const Receipt = Schema.Struct({

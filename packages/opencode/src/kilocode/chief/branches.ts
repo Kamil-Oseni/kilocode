@@ -322,8 +322,8 @@ export namespace ChiefBranches {
         const job = jobs.find((entry) => entry.id === item.sessionID)
         if (job?.status !== undefined && job.status !== "completed")
           return yield* Effect.fail(new Error(`Auto Chief background work is unfinished or failed: ${item.name}`))
-        if (receipt.state.metadata?.background === true && job?.status !== "completed")
-          return yield* Effect.fail(new Error(`Auto Chief background outcome is unavailable: ${item.name}`))
+        // The completed branch ledger, parent receipt and child transcript survive a backend restart.
+        // A missing in-memory job is not evidence of failure and must never trigger a replay.
         if (!item.review || !(yield* evidence(item, item.review)))
           return yield* Effect.fail(new Error(`Auto Chief branch evidence changed: ${item.name}`))
       }

@@ -190,9 +190,7 @@ describe("Auto Chief branch ledger", () => {
       jobs = [{ id: children[0], status: "error" }]
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
       jobs = []
-      expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)
-      jobs = [{ id: children[0], status: "completed" }]
-      yield* ledger.completion(id, createdAt)
+      yield* ChiefBranches.make(storage, sessions, background).completion(id, createdAt)
       const parent = rows.get(id)!
       rows.delete(id)
       expect(Exit.isFailure(yield* ledger.completion(id, createdAt).pipe(Effect.exit))).toBe(true)

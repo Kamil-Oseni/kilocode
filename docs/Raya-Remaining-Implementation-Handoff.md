@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `d39b01172a`; later Chief branch source checkpoints are pushed but not installed. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed snapshot. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
+> **Goal status: ACTIVE after the owner's 2026-09-23 resume.** The latest installed snapshot is `f462c88182`; Chief branch safety source is included, but automatic fanout remains disabled. The child-authority, named-activity, immediate unknown-receipt and SDK fixes are included in the installed snapshot. Installed host behavior must still be checked independently before claiming acceptance. `FUT-CU-01`, `FUT-CHAT-01`, `FUT-ORG-01` and the agent UX rows remain in progress.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 17 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-23 12:33 America/Toronto - durable completed-branch restart reconstruction
+
+The completion gate now treats the terminal branch ledger plus exact parent `task` receipt, final child reply and reviewed child tool evidence as durable proof when a completed background job has disappeared from the process-local registry after restart. It never replays the child. Any still-present running or failed job blocks, and every failed/cancelled/unknown or unreviewed branch remains blocked. This behavior is source-tested only; the real installed restart matrix and Chief inspection/review workflow remain before enabling automatic fanout. The installed snapshot is still `f462c88182`.
+
+## ChatGPT 2026-09-23 12:30 America/Toronto - installed snapshot and next acceptance
+
+`f462c88182` is pushed and installed as `eden.raya@7.4.23-snapshot+f462c88182.kamil-oseni.1790180781452`. The low-memory build passed CLI smoke, both extension typechecks, ESLint, production bundle and VSIX packaging. The current VS Code host was not reloaded or visually inspected; verify the subagent tool/report order at narrow and desktop widths when possible. The installed Chief ledger, task admission and completion gates remain dormant because the plan tool is unregistered. Next implement explicit background restart recovery and semantic child-result review before bounded Auto fanout.
 
 ## ChatGPT 2026-09-23 12:23 America/Toronto - ordered child activity in chat
 

@@ -19,6 +19,8 @@ import { SessionStatus } from "@/session/status"
 import { Provider } from "../../src/provider/provider" // kilocode_change
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
 import { KiloTask } from "../../src/kilocode/tool/task" // kilocode_change // raya_change
+import { TaskAuthority } from "../../src/kilocode/tool/task-authority" // kilocode_change - raya_change
+import { Permission } from "../../src/permission" // kilocode_change - raya_change
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -187,6 +189,137 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
 }
 
 describe("tool.task", () => {
+  // kilocode_change start - raya_change: delegated audits retain a durable authority ceiling
+  it.instance(
+    "keeps a read-only child below a fully capable specialist after resume",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const ctx = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const created = yield* def.execute(
+          {
+            description: "Audit permissions",
+            prompt: "Inspect authority rules",
+            subagent_type: "explore",
+            access: "read",
+          },
+          ctx,
+        )
+        const child = yield* sessions.get(created.metadata.sessionId)
+        expect(TaskAuthority.read(child.metadata)).toBe("read")
+        expect(TaskAuthority.read(JSON.parse(JSON.stringify(child.metadata)))).toBe("read")
+        expect(() => TaskAuthority.read({ [TaskAuthority.key]: { access: "edit" } })).toThrow(
+          "Invalid child authority record",
+        )
+        const specialist = yield* (yield* Agent.Service).get("explore")
+        const effective = Permission.merge(specialist.permission, child.permission ?? [])
+        for (const permission of ["edit", "write", "apply_patch", "bash", "notebook_execute", "agent_manager"]) {
+          expect(Permission.evaluate(permission, "*", effective).action).toBe("deny")
+          expect(TaskAuthority.permits("read", permission, "*")).toBe(false)
+        }
+        expect(Permission.evaluate("read", "*", effective).action).toBe("allow")
+
+        yield* def.execute(
+          {
+            description: "Continue audit",
+            prompt: "Inspect the remaining policy",
+            subagent_type: "explore",
+            task_id: child.id,
+          },
+          ctx,
+        )
+        const resumed = yield* sessions.get(child.id)
+        expect(TaskAuthority.read(resumed.metadata)).toBe("read")
+        expect(
+          Permission.evaluate("bash", "*", Permission.merge(specialist.permission, resumed.permission ?? [])).action,
+        ).toBe("deny")
+
+        const widened = yield* Effect.exit(
+          def.execute(
+            {
+              description: "Widen audit",
+              prompt: "Try editing",
+              subagent_type: "explore",
+              task_id: child.id,
+              access: "edit",
+            },
+            ctx,
+          ),
+        )
+        expect(Exit.isFailure(widened)).toBe(true)
+        expect(TaskAuthority.read((yield* sessions.get(child.id)).metadata)).toBe("read")
+
+        yield* sessions.setPermission({
+          sessionID: chat.id,
+          permission: [{ permission: "read", pattern: "*", action: "deny" }],
+        })
+        const restricted = yield* def.execute(
+          { description: "Audit restricted", prompt: "Inspect permitted files", subagent_type: "explore", access: "read" },
+          ctx,
+        )
+        const limited = yield* sessions.get(restricted.metadata.sessionId)
+        const inherited = Permission.merge(specialist.permission, limited.permission ?? [])
+        expect(Permission.evaluate("read", "*", inherited).action).toBe("deny")
+        expect(Permission.evaluate("grep", "*", inherited).action).toBe("allow")
+      }),
+    { config: { permission: { "*": "allow" } } },
+  )
+
+  it.instance("allows explicit edit access only under a parent edit allow", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps() },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      yield* sessions.setPermission({
+        sessionID: chat.id,
+        permission: [{ permission: "edit", pattern: "*", action: "deny" }],
+      })
+      const refused = yield* Effect.exit(
+        def.execute(
+          { description: "Edit findings", prompt: "Update the report", subagent_type: "general", access: "edit" },
+          ctx,
+        ),
+      )
+      expect(Exit.isFailure(refused)).toBe(true)
+      expect(yield* sessions.children(chat.id)).toHaveLength(0)
+
+      yield* sessions.setPermission({
+        sessionID: chat.id,
+        permission: [{ permission: "edit", pattern: "*", action: "allow" }],
+      })
+      const created = yield* def.execute(
+        { description: "Edit findings", prompt: "Update the report", subagent_type: "general", access: "edit" },
+        ctx,
+      )
+      const child = yield* sessions.get(created.metadata.sessionId)
+      expect(TaskAuthority.read(child.metadata)).toBe("edit")
+    }),
+  )
+  // kilocode_change end
+
   it.instance(
     "description sorts subagents by name and is stable across calls",
     () =>

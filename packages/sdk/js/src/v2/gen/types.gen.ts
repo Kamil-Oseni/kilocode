@@ -1185,7 +1185,7 @@ export type DesktopRequest =
       id: DesktopRequestId
       sessionID: string
       operation: "observe"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1198,7 +1198,7 @@ export type DesktopRequest =
       id: DesktopRequestId
       sessionID: string
       operation: "windows"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1211,7 +1211,7 @@ export type DesktopRequest =
       id: DesktopRequestId
       sessionID: string
       operation: "watch"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1239,7 +1239,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1265,7 +1265,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1293,7 +1293,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1324,7 +1324,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1354,7 +1354,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1381,7 +1381,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1436,7 +1436,7 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
-      authorization:
+      authorization?:
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
@@ -1471,7 +1471,7 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
-              authorization:
+              authorization?:
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
@@ -1497,7 +1497,7 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
-              authorization:
+              authorization?:
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
@@ -1525,7 +1525,7 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
-              authorization:
+              authorization?:
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
@@ -1549,7 +1549,7 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
-              authorization:
+              authorization?:
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
@@ -1601,6 +1601,14 @@ export type DesktopRequest =
                 | "disclosure"
                 | "legal"
                 | "publishing"
+              authorization?:
+                | {
+                    kind: "grant"
+                    grantID: ComputerUseGrantId
+                  }
+                | {
+                    kind: "prompt"
+                  }
               deltaX: number
               deltaY: number
             }

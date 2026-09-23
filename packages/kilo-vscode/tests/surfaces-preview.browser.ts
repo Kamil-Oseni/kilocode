@@ -231,8 +231,17 @@ for (const width of [320, 760]) {
     await page.keyboard.press("Enter")
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
     await expect(agents.locator('[data-slot="task-header-agent"]')).toHaveCount(12)
+    await expect(agents.locator('[data-slot="task-header-agent-label"]').first()).toHaveText(
+      "Review authentication boundaries",
+    )
+    await expect(agents.locator('[data-slot="task-header-agent-status-label"]').first()).toHaveText("Running")
+    await expect(agents.locator('[data-slot="task-header-agent-role-icon"]').first()).toBeVisible()
+    await expect(agents.locator('[data-slot="task-header-agent-role-icon"] use').nth(1)).toHaveAttribute(
+      "href",
+      "#opencode-icon-magnifying-glass",
+    )
     await expect(page.getByText("The delegated check failed. Review its saved output before retrying.")).toBeVisible()
-    await page.getByRole("button", { name: "Open background agent: Review authentication boundaries" }).focus()
+    await page.getByRole("button", { name: "Open background agent: Review authentication boundaries, Running" }).focus()
     await page.keyboard.press("Enter")
     await expect(page.locator("html")).toHaveAttribute("data-preview-message", /openSubAgentViewer.*child-1/)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)

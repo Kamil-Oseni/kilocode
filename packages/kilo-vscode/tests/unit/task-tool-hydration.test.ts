@@ -6,6 +6,7 @@ import {
   writeToolOpen,
 } from "../../../kilo-ui/src/components/tool-open-state"
 import {
+  agentIcon,
   taskAgent,
   taskModel,
   taskResult,
@@ -57,7 +58,7 @@ describe("completed task hydration", () => {
         { description: "Inspect API routes" },
         { selectedAgent: "explore", selection: "auto", displayName: "Map API routes · Explore" },
       ),
-    ).toEqual({ agent: "explore", displayName: "Map API routes · Explore", description: "Auto chose explore" })
+    ).toEqual({ agent: "explore", displayName: "Map API routes · Explore", description: "Inspect API routes" })
     expect(taskResult("<task_result>\nSynthesized route map\n</task_result>", undefined)).toBe("Synthesized route map")
     expect(
       taskResult(
@@ -65,6 +66,16 @@ describe("completed task hydration", () => {
         taskRunning("completed") ? "ses_child" : undefined,
       ),
     ).toBe("Synthesized route map")
+  })
+
+  it("uses specialist icons only for known routed roles", () => {
+    expect(agentIcon("researcher")).toBe("magnifying-glass")
+    expect(agentIcon("designer")).toBe("pencil-line")
+    expect(agentIcon("engineer")).toBe("code")
+    expect(agentIcon("accountant")).toBe("checklist")
+    expect(agentIcon("reasoner")).toBe("brain")
+    expect(agentIcon("generalist")).toBe("subagent")
+    expect(agentIcon("made-up-role")).toBe("subagent")
   })
 })
 

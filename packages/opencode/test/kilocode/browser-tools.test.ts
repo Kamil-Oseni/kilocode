@@ -5,6 +5,7 @@ import { Agent } from "@/agent/agent"
 import * as KiloAgent from "@/kilocode/agent"
 import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { GrantID } from "@/kilocode/computer-use/lease"
 import { Browser, HostError } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
@@ -560,7 +561,7 @@ describe("browser host tools", () => {
                 return {
                   operation: "authorize" as const,
                   decision: "allow" as const,
-                  grantID: "grant_test",
+                  grantID: GrantID.make("grant_test"),
                   reason: "Authorized by shared grant",
                 }
               return result(input)

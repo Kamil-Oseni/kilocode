@@ -7,12 +7,13 @@ export const UPSTREAM_SUPPRESSED_TOOLS = new Set(["todowrite", "todoread"])
 
 // raya_change start - progressive disclosure. Tools that must always stay inline
 // and un-bundled: they carry their own prominent UI (assistant text/reasoning,
-// file edits with inline review chrome, terminal output, plan hand-offs, and any
-// active question/suggestion). Everything else (get_goal, update_goal, subagent
-// tasks, read/grep/glob/list, etc.) is "meta/read" chatter that collapses into an
+// file edits with inline review chrome, terminal output, child-agent activity,
+// plan hand-offs, and any active question/suggestion). Everything else
+// (get_goal, update_goal, read/grep/glob/list, etc.) is "meta/read" chatter that collapses into an
 // inline "N steps" group. Shared by AssistantMessage (within a message) and
 // VscodeSessionTurn (across consecutive tool-only messages in one turn).
 export const PROMINENT_TOOLS = new Set([
+  "task",
   "question",
   "ask_options",
   "suggest",

@@ -28,7 +28,7 @@ type PassiveRequest = CaptureRequest | WindowsRequest | AuthorizeRequest
 type ActionRequest = Exclude<DesktopRequest, PassiveRequest>
 type ActionResult = Exclude<DesktopResult, { operation: "authorize" | "observe" | "watch" | "windows" }>
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
-type Authorization = Exclude<DesktopRequest, { operation: "authorize" }>["authorization"]
+type Authorization = Exclude<DesktopRequest, { operation: "authorize" | "sequence" }>["authorization"]
 
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
 const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll", "sequence"])
@@ -186,14 +186,41 @@ export class DesktopBridge {
     const controller = new AbortController()
     const startedAt = Date.now()
     let dispatched = false
+    let settled = false
+    let interrupted: Promise<void> | undefined
+    const onAbort = () => {
+      if (!dispatched || settled) return
+      settled = true
+      receipt.failure = {
+        code: "cancelled",
+        message:
+          "Desktop control stopped after native dispatch began. The outcome is unknown and will not be replayed.",
+        receipt: {
+          version: 1,
+          requestID: request.id,
+          startedAt,
+          finishedAt: Date.now(),
+          effect: effect(request),
+          outcome: "unknown",
+          ...ground(request),
+        },
+      }
+      interrupted = this.retain(receipt)
+        .catch((error) => console.error("[Raya] Interrupted desktop receipt persistence failed", error))
+        .then(() => this.deliver(request.id, directory, receipt))
+    }
+    controller.signal.addEventListener("abort", onAbort, { once: true })
     this.active.set(request.id, controller)
     try {
       const result = await this.dispatch(request, startedAt, controller.signal, () => {
+        if (controller.signal.aborted) throw new Error("Desktop action cancelled before native dispatch")
         dispatched = true
       })
-      if (controller.signal.aborted && !dispatched) return
-      if (controller.signal.aborted)
-        throw new DesktopOutcomeError("cancelled action", "Control was stopped after native dispatch began")
+      if (controller.signal.aborted) {
+        await interrupted
+        return
+      }
+      settled = true
       receipt.result = result
       receipt.failure = undefined
       await this.retain(receipt).catch((error) =>
@@ -201,7 +228,11 @@ export class DesktopBridge {
       )
       await this.deliver(request.id, directory, receipt)
     } catch (error) {
-      if (controller.signal.aborted && !dispatched) return
+      if (controller.signal.aborted) {
+        await interrupted
+        return
+      }
+      settled = true
       const uncertain = error instanceof DesktopOutcomeError
       receipt.failure = {
         code: "invalid_request",
@@ -229,6 +260,7 @@ export class DesktopBridge {
       )
       await this.deliver(request.id, directory, receipt)
     } finally {
+      controller.signal.removeEventListener("abort", onAbort)
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
     }
   }

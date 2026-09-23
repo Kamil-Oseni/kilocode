@@ -79,9 +79,8 @@ const COALESCE_SCRIPT = `
   const tool = (id, name) => ({ id, type: "tool", tool: name, state: { status: "completed", input: {}, output: "ok", title: name } })
   const text = (id, value) => ({ id, type: "text", text: value })
 
-  // One Auto turn spread across separate assistant messages: routing + delegation
-  // + goal bookkeeping are tool-only (bundlable) and must collapse together; the
-  // final message carries assistant text and must break the run and stand alone.
+  // A delegated child stays visible between routing and goal bookkeeping;
+  // the final message carries assistant text and stands alone.
   const store = {
     "m1": [tool("t1", "chief_route")],
     "m2": [tool("t2", "task")],
@@ -93,12 +92,9 @@ const COALESCE_SCRIPT = `
 
   const fail = (reason) => { console.log("${COALESCE_FAIL}" + reason); process.exit(2) }
 
-  // Expect two rows: [collapsed m1+m2+m3 tool run] then [m4 text, standalone].
-  if (rows.length !== 2) fail("expected 2 rows, got " + rows.length)
-  if (rows[0].message.id !== "m1") fail("run should key off first message")
-  if (!rows[0].parts || rows[0].parts.length !== 4) fail("collapsed run should carry all 4 tool parts, got " + (rows[0].parts?.length ?? 0))
-  if (rows[1].message.id !== "m4") fail("text message should be its own row")
-  if (rows[1].parts !== undefined) fail("standalone message must not override parts")
+  if (rows.length !== 4) fail("expected 4 rows, got " + rows.length)
+  if (rows[1].message.id !== "m2" || rows[1].parts !== undefined) fail("child task must stay visible")
+  if (rows[3].message.id !== "m4" || rows[3].parts !== undefined) fail("text message should stand alone")
 
   // A lone tool-only message stays a solo row (no parts override) so within-message
   // rendering is unchanged; nothing to collapse across a single message.

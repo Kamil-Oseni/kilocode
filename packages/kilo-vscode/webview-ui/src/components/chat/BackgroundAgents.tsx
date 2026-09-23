@@ -34,6 +34,7 @@ import {
 } from "./background-agents"
 import { openSubagent } from "./open-subagent"
 import { loadAgentView, saveAgentView } from "./background-agent-state"
+import { agentIcon } from "./task-tool-state"
 
 export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const session = useSession()
@@ -114,21 +115,21 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     return id ? foregroundAgent(session.getSessionToolParts(id), session.allStatusMap()) : undefined
   })
 
+  const label = (agent: BackgroundAgent) =>
+    agent.description ?? agent.agent ?? language.t("task.backgroundAgents.untitled")
+
+  const status = (agent: BackgroundAgent) => language.t(`task.backgroundAgents.status.${agent.status}`)
+
   const summary = createMemo(() => {
     const running = visible().filter((agent) => agent.status === "running").length
     const total = visible().length
     if (total === 0 && foreground()) return language.t("task.backgroundAgents.foreground")
-    if (total === 1 && running === 1) return language.t("task.backgroundAgents.running.one")
+    if (total === 1) return `${label(visible()[0]!)} · ${status(visible()[0]!)}`
     if (running === total) return language.t("task.backgroundAgents.running.many", { count: String(total) })
     return language.t("task.backgroundAgents.summary", { running: String(running), total: String(total) })
   })
 
   const waiting = createMemo(() => visible().filter((agent) => agent.permission || agent.question).length)
-
-  const label = (agent: BackgroundAgent) =>
-    agent.description ?? agent.agent ?? language.t("task.backgroundAgents.untitled")
-
-  const status = (agent: BackgroundAgent) => language.t(`task.backgroundAgents.status.${agent.status}`)
 
   const save = (id: string, next: { open: boolean; hidden: Set<string> }) =>
     vscode.setState(saveAgentView(vscode.getState(), id, { open: next.open, hidden: [...next.hidden] }))
@@ -197,12 +198,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
               <Show
                 when={waiting() > 0}
                 fallback={
-                  <Show
-                    when={visible().some((agent) => agent.status === "running")}
-                    fallback={<Icon name="task" size="small" />}
-                  >
-                    <Spinner />
-                  </Show>
+                  <Icon name={visible().length === 1 ? agentIcon(visible()[0]?.agent) : "subagent"} size="small" />
                 }
               >
                 <Icon name="warning" size="small" />
@@ -284,19 +280,24 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                     <button
                       data-slot="task-header-agent-main"
                       title={`${language.t("task.backgroundAgents.open")}: ${label(agent)}`}
-                      aria-label={`${language.t("task.backgroundAgents.open")}: ${label(agent)}`}
+                      aria-label={`${language.t("task.backgroundAgents.open")}: ${label(agent)}, ${status(agent)}`}
                       onClick={() => openAgent(agent)}
                     >
                       <span data-slot="task-header-agent-primary">
+                        <Icon name={agentIcon(agent.agent)} size="small" data-slot="task-header-agent-role-icon" />
                         <span data-slot="task-header-agent-label" dir="auto">
                           {label(agent)}
                         </span>
-                        <Show when={agent.agent}>
-                          {(name) => <span data-slot="task-header-agent-role">{name()}</span>}
-                        </Show>
+                        <span data-slot="task-header-agent-status-label">{status(agent)}</span>
                       </span>
                       <span data-slot="task-header-agent-secondary">
-                        <span data-slot="task-header-agent-status-label">{status(agent)}</span>
+                        <Show
+                          when={
+                            agent.agent && !label(agent).toLocaleLowerCase().includes(agent.agent.toLocaleLowerCase())
+                          }
+                        >
+                          {(name) => <span data-slot="task-header-agent-role">{name()}</span>}
+                        </Show>
                         <Show when={detail()}>
                           {(value) => (
                             <span data-slot="task-header-agent-activity" dir="auto">

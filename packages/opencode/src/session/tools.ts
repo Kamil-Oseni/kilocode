@@ -32,6 +32,7 @@ import { McpApps } from "@/kilocode/mcp/apps"
 // kilocode_change end
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - hide tools outside durable child authority
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -79,7 +80,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change start - Routine catalogs expose only exact durable tool grants
   const routine = input.session.metadata?.rayaRoutine !== undefined
   const authority = routine ? Permission.merge(input.agent.permission, input.session.permission ?? []) : undefined
-  const visible = (id: string) => !authority || Permission.evaluate(id, "*", authority).action !== "deny"
+  const visible = (id: string) =>
+    TaskAuthority.permits(TaskAuthority.read(input.session.metadata), id, "*") &&
+    (!authority || Permission.evaluate(id, "*", authority).action !== "deny") // kilocode_change
   const grant = (id: string) => (routine ? id : "read")
   // kilocode_change end
   const catalog = CapabilityCatalog.bind(tools, restricted) // kilocode_change

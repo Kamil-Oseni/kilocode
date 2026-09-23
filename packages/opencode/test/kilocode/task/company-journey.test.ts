@@ -60,7 +60,18 @@ it.instance(
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       const navigate = yield* browser
-        .request({ operation: "navigate", sessionID: SessionID.make("ses_company_browser_source"), url: prospect })
+        .request({
+          operation: "navigate",
+          sessionID: SessionID.make("ses_company_browser_source"),
+          url: prospect,
+          authorization: {
+            version: 1,
+            sessionID: SessionID.make("ses_company_browser_source"),
+            action: "browser",
+            sensitive: false,
+            source: "legacy_prompt",
+          },
+        })
         .pipe(Effect.forkChild)
       const opening = yield* Queue.take(requests)
       const page = yield* Effect.promise(() => fetch(opening.operation === "navigate" ? opening.url : prospect))
@@ -78,6 +89,14 @@ it.instance(
           operation: "snapshot",
           sessionID: SessionID.make("ses_company_browser_source"),
           tabID: "tab_company_source",
+          authorization: {
+            version: 1,
+            sessionID: SessionID.make("ses_company_browser_source"),
+            action: "observe",
+            windowID: "tab_company_source",
+            sensitive: false,
+            source: "legacy_prompt",
+          },
         })
         .pipe(Effect.forkChild)
       const capture = yield* Queue.take(requests)

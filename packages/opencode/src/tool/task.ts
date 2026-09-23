@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B p
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
 import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_change: durable subagent display identity
 import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse failed equivalent children
+import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -77,6 +78,12 @@ const BaseParameterFields = {
   step_cap: Schema.optional(Schema.Number).annotate({
     description: "Maximum agentic steps for this child (clamped to 1-50; defaults to 12)",
   }),
+  // kilocode_change start - raya_change: explicit child authority ceiling
+  access: Schema.optional(Schema.Literals(["read", "edit"])).annotate({
+    description:
+      'Set "read" for research or audits that must not edit files or run shell commands. Set "edit" only when the parent policy allows changes. Omitted keeps legacy task behavior.',
+  }),
+  // kilocode_change end
   // raya_change end
   task_id: Schema.optional(Schema.String).annotate({
     description:
@@ -162,6 +169,13 @@ export const TaskTool = Tool.define(
       }
       const caller = yield* agent.get(ctx.agent)
       const ruleset = Permission.merge(caller.permission, parent.permission ?? [])
+      // kilocode_change start - resumed child authority cannot be widened
+      const access = TaskAuthority.select({
+        requested: params.access,
+        saved: TaskAuthority.read(resumed?.metadata),
+        parent: ruleset,
+      })
+      // kilocode_change end
       const candidates = (yield* agent.list()).filter(
         (item) =>
           item.mode !== "primary" &&
@@ -295,6 +309,7 @@ export const TaskTool = Tool.define(
       // kilocode_change start — inherit edit/bash/MCP restrictions from calling agent
       const rules = KiloTask.inherited({ caller, session: parent, mcp: cfg.mcp })
       const childPermission = KiloTask.merge(
+        TaskAuthority.rules(access), // kilocode_change - start with a strict read-only tool allowlist
         deriveSubagentSessionPermission({
           parentSessionPermission: parent.permission ?? [],
           subagent: next,
@@ -305,6 +320,7 @@ export const TaskTool = Tool.define(
           action: "deny" as const,
         })) ?? [],
         KiloTask.permissions(rules, canTask),
+        TaskAuthority.denies(access, ruleset), // kilocode_change - parent read denials stay above child allows
       )
       // kilocode_change end
       // kilocode_change start - refresh current parent restrictions when resuming an existing task session
@@ -346,7 +362,7 @@ export const TaskTool = Tool.define(
               parentID: ctx.sessionID,
               title: identity.displayName,
               agent: next.name,
-              metadata: { [TaskName.key]: identity },
+              metadata: TaskAuthority.save({ [TaskName.key]: identity }, access), // kilocode_change
               platform,
               permission: childPermission,
             })
@@ -363,10 +379,13 @@ export const TaskTool = Tool.define(
         .setMetadata({
           sessionID: nextSession.id,
           metadata: KiloTask.metadata(
-            {
-              ...nextSession.metadata,
-              ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
-            },
+            TaskAuthority.save(
+              {
+                ...nextSession.metadata,
+                ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
+              },
+              access,
+            ), // kilocode_change - retain authority across restarts and resumes
             params.step_cap,
           ),
         })

@@ -4,6 +4,7 @@ Launch a new isolated agent to handle complex, multistep tasks autonomously.
 Subagent selection is automatic by default. Omit subagent_type (or use "auto") so the Chief router selects the best-fit specialist from the structured brief. Set an explicit subagent_type only when the user requests that specialist or automatic routing cannot express a hard requirement.
 
 Provide brief.objective and include relevant context, constraints, and the expected synthesized return. The child must return conclusions, evidence, and artifact paths rather than its raw transcript.
+Always choose access for a new task: use access="read" for investigation, review, or audit work. That child can use reading tools but cannot run shell commands or make changes, even if its specialist normally can. Use access="edit" only for implementation work authorized by the parent policy. Reusing task_id retains the saved ceiling; never request a wider scope on resume.
 
 When NOT to use the Task tool:
 - If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly

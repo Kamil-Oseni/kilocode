@@ -6,6 +6,7 @@ import { Permission } from "../../../src/permission"
 import { PermissionProvenance } from "../../../src/kilocode/permission/provenance"
 import { KiloSessionPrompt } from "../../../src/kilocode/session/prompt"
 import { SessionID } from "../../../src/session/schema"
+import { TaskAuthority } from "../../../src/kilocode/tool/task-authority"
 
 describe("PermissionProvenance", () => {
   test("configSource maps the scope of a permission + pattern", () => {
@@ -206,6 +207,44 @@ describe("askPermission returns provenance", () => {
     options: {},
   }
   const session = { id: sessionID, permission: [] } as unknown as Session.Info
+
+  test("passes the persisted audit ceiling as a hard veto even if session rules are widened", async () => {
+    const child = {
+      id: sessionID,
+      permission: Permission.fromConfig({ "*": "allow" }),
+      metadata: TaskAuthority.save({}, "read"),
+    } as Session.Info
+    let checked = false
+    await Effect.gen(function* () {
+      yield* KiloSessionPrompt.askPermission({
+        permission: yield* Permission.Service,
+        agents: yield* Agent.Service,
+        sessions: yield* Session.Service,
+        agent,
+        session: child,
+        request: { sessionID, permission: "bash", patterns: ["git status"], always: [], metadata: {} },
+      })
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.mock(Permission.Service)({
+            ask: (req) =>
+              Effect.sync(() => {
+                checked = true
+                expect(Permission.evaluate("bash", "git status", req.ruleset).action).toBe("allow")
+                expect(Permission.evaluate("bash", "git status", req.hardRuleset ?? []).action).toBe("deny")
+                expect(Permission.evaluate("read", "src/index.ts", req.hardRuleset ?? []).action).toBe("allow")
+                return { manual: false } as const
+              }),
+          }),
+          Layer.mock(Agent.Service)({ get: () => Effect.succeed(agent) }),
+          Layer.mock(Session.Service)({ get: () => Effect.succeed(child) }),
+        ),
+      ),
+      Effect.runPromise,
+    )
+    expect(checked).toBe(true)
+  })
 
   const run = (outcome: Permission.AskOutcome, origins?: PermissionProvenance.Origins) =>
     Effect.gen(function* () {

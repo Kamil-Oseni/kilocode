@@ -336,11 +336,11 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
     ),
   )
   // raya_change start - progressive disclosure. Consecutive "meta/read" tool
-  // calls (get_goal, update_goal, subagent tasks, read/grep/glob/list, etc.)
+  // calls (get_goal, update_goal, read/grep/glob/list, etc.)
   // stacked as one-liners bloat the transcript, so a run of 2+ collapses into a
   // single inline "N steps" group. Prominent parts stay inline and un-bundled:
   // assistant text/reasoning, file edits (their inline review chrome must show),
-  // terminal (bash), plan hand-offs, and any active question/suggestion.
+  // terminal (bash), child agents, plan hand-offs, and any active question/suggestion.
   // PROMINENT_TOOLS lives in transcript-parts so VscodeSessionTurn shares it.
   const bundles = (part: SDKPart) => {
     if (part.type !== "tool") return false

@@ -21,7 +21,7 @@ import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { childID } from "../../context/session-utils"
 import { openSubagent } from "./open-subagent"
-import { taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
+import { agentIcon, taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
   const i18n = useI18n()
@@ -136,7 +136,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     if (!id) return
     openSubagent({
       sessionID: id,
-      title: description(),
+      title: title(),
       parentSessionID: session.currentSessionID(),
       worktree: !!worktree,
       post: vscode.postMessage,
@@ -145,6 +145,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
 
   const trigger = () => (
     <div data-slot="basic-tool-tool-info-structured">
+      <Icon name={agentIcon(selectedAgent())} size="small" data-slot="task-agent-role-icon" />
       <div data-slot="basic-tool-tool-info-main">
         <span data-slot="basic-tool-tool-title" class="capitalize">
           {title()}
@@ -153,7 +154,10 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
           <span data-slot="basic-tool-tool-subtitle">
             {description()}
             <Show when={childToolCount() > 0}>
-              {description() ? " " : ""}({childToolCount()})
+              {description() ? " · " : ""}
+              {language.t(childToolCount() === 1 ? "task.subagent.steps.one" : "task.subagent.steps.many", {
+                count: String(childToolCount()),
+              })}
             </Show>
           </span>
         </Show>
@@ -185,7 +189,10 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
       >
         <div ref={viewport} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
           <div ref={content} data-component="task-tools">
-            <div data-slot="task-model-selection">{taskModel(props.partMetadata, props.metadata)}</div>
+            <details data-slot="task-model-details">
+              <summary>{language.t("task.subagent.modelDetails")}</summary>
+              <div data-slot="task-model-selection">{taskModel(props.partMetadata, props.metadata)}</div>
+            </details>
             <Show when={running() && childToolCount() === 0}>
               <div data-slot="task-tool-item" data-state="starting">
                 <span data-slot="task-tool-title">{language.t("session.messages.taskStarting")}</span>
@@ -202,12 +209,14 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
                   return undefined
                 })
                 return (
-                  <div data-slot="task-tool-item">
+                  <div data-slot="task-tool-item" data-status={item().state.status}>
                     <Icon name={info().icon} size="small" />
-                    <span data-slot="task-tool-title">{info().title}</span>
-                    <Show when={subtitle()}>
-                      <span data-slot="task-tool-subtitle">{subtitle()}</span>
-                    </Show>
+                    <span data-slot="task-tool-text">
+                      <span data-slot="task-tool-title">{info().title}</span>
+                      <Show when={subtitle()}>
+                        <span data-slot="task-tool-subtitle">{subtitle()}</span>
+                      </Show>
+                    </span>
                   </div>
                 )
               }}

@@ -12,6 +12,27 @@ export function taskResult(output: string | undefined, id: string | undefined) {
   return match?.[1] ?? output
 }
 
+/** Use the routed specialist, never the task title, to choose chat chrome. */
+export function agentIcon(role: string | undefined) {
+  switch (role?.toLocaleLowerCase()) {
+    case "researcher":
+    case "explore":
+      return "magnifying-glass" as const
+    case "designer":
+      return "pencil-line" as const
+    case "engineer":
+    case "coder":
+    case "code":
+      return "code" as const
+    case "accountant":
+      return "checklist" as const
+    case "reasoner":
+      return "brain" as const
+    default:
+      return "subagent" as const
+  }
+}
+
 // raya_change start - Milestone D nested thread identity for automatic Chief routing
 export function taskAgent(
   input: { subagent_type?: unknown; description?: unknown },
@@ -21,13 +42,12 @@ export function taskAgent(
   const selected = part?.selectedAgent ?? state?.selectedAgent
   const requested = typeof input.subagent_type === "string" ? input.subagent_type : undefined
   const agent = selected ?? requested ?? "auto"
-  const selection = part?.selection ?? state?.selection
   const description = typeof input.description === "string" ? input.description : undefined
   const displayName = part?.displayName ?? state?.displayName
   return {
     agent,
     displayName,
-    description: displayName ? (selection === "auto" ? `Auto chose ${agent}` : `Agent ${agent}`) : description,
+    description,
   }
 }
 // raya_change end

@@ -5,7 +5,7 @@
 
 [data-component="tool-output"][data-scrollable]:has([data-component="task-tools"]) {
   margin-inline: -6px;
-  max-height: 200px;
+  max-height: min(320px, 45vh);
   background: var(--surface-tool-output-base);
 
   > [data-component="task-tools"] {
@@ -13,14 +13,67 @@
   }
 }
 
-[data-component="task-tools"] > [data-slot="task-model-selection"] {
+[data-slot="task-agent-role-icon"] {
+  flex: none;
+  color: var(--text-weak);
+}
+
+[data-component="task-tools"] > [data-slot="task-model-details"] {
   min-width: 0;
   max-width: 100%;
-  padding: 8px 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-weak-base);
+  color: var(--text-weaker);
+  font-size: var(--kilo-font-size-12);
+}
+
+[data-slot="task-model-details"] summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+[data-slot="task-model-details"] summary:focus-visible {
+  outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
+  outline-offset: 2px;
+}
+
+[data-slot="task-model-selection"] {
+  padding-top: 6px;
   white-space: normal;
   overflow-wrap: anywhere;
   font-size: var(--kilo-font-size-12);
   line-height: 1.5;
+}
+
+[data-component="task-tools"] [data-slot="task-tool-item"] {
+  align-items: flex-start;
+  min-width: 0;
+  padding: 2px 12px;
+}
+
+[data-component="task-tools"] [data-slot="task-tool-text"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+[data-component="task-tools"] [data-slot="task-tool-title"] {
+  flex-shrink: 0;
+}
+
+[data-component="task-tools"] [data-slot="task-tool-subtitle"] {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-component="task-tools"] [data-slot="task-tool-item"][data-status="error"] {
+  [data-slot="task-tool-title"],
+  [data-slot="task-tool-subtitle"] {
+    color: var(--text-danger, var(--vscode-errorForeground));
+  }
 }
 
 /* ============================================

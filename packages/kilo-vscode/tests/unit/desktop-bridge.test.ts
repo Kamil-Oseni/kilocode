@@ -620,7 +620,7 @@ describe("desktop observation bridge", () => {
     second.bridge.dispose()
   })
 
-  it("records unknown after Stop interrupts a dispatched native action", async () => {
+  it("records unknown immediately when Stop interrupts a stalled native action", async () => {
     const gate = Promise.withResolvers<void>()
     const store = memory()
     const test = setup({ store, actionHold: gate.promise, rejectFail: true })
@@ -646,7 +646,6 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(test.actions).toHaveLength(1)
     test.bridge.cancel("User stopped desktop control")
-    gate.resolve()
     await Bun.sleep(20)
     expect(test.replies).toHaveLength(1)
     expect(test.rejects).toContainEqual(
@@ -660,6 +659,9 @@ describe("desktop observation bridge", () => {
     expect(store.read()).toMatchObject({
       items: [{ id: click.id, failure: { receipt: { outcome: "unknown", requestID: click.id } } }],
     })
+    gate.resolve()
+    await Bun.sleep(20)
+    expect(test.actions).toHaveLength(1)
     test.bridge.dispose()
   })
 

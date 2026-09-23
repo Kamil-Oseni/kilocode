@@ -22,7 +22,12 @@ it.instance(
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       const fiber = yield* browser
-        .request({ operation: "navigate", sessionID, url: "https://example.com" })
+        .request({
+          operation: "navigate",
+          sessionID,
+          url: "https://example.com",
+          authorization: { version: 1, sessionID, action: "browser", sensitive: false, source: "legacy_prompt" },
+        })
         .pipe(Effect.forkChild)
       const request = yield* Queue.take(events).pipe(Effect.timeout("2 seconds"))
       expect(request).toMatchObject({ operation: "navigate", sessionID, url: "https://example.com" })
@@ -57,7 +62,21 @@ it.instance(
       const browser = yield* Browser.Service
       const observationID = ObservationID.make("obs_browser_uncertain")
       const fiber = yield* browser
-        .request({ operation: "click", sessionID, tabID: "tab_seen", observationID, selector: "#save" })
+        .request({
+          operation: "click",
+          sessionID,
+          tabID: "tab_seen",
+          observationID,
+          selector: "#save",
+          authorization: {
+            version: 1,
+            sessionID,
+            action: "browser",
+            windowID: "tab_seen",
+            sensitive: false,
+            source: "legacy_prompt",
+          },
+        })
         .pipe(Effect.forkChild)
       const pending = yield* browser.list().pipe(Effect.repeat({ until: (items) => items.length === 1 }))
       const receipt = {
@@ -79,7 +98,13 @@ it.instance(
       expect(err.receipt).toEqual(receipt)
       expect(err.message).toContain("Do not automatically retry")
 
-      const timeout = yield* browser.request({ operation: "snapshot", sessionID }).pipe(Effect.flip)
+      const timeout = yield* browser
+        .request({
+          operation: "snapshot",
+          sessionID,
+          authorization: { version: 1, sessionID, action: "observe", sensitive: false, source: "legacy_prompt" },
+        })
+        .pipe(Effect.flip)
       expect(timeout.code).toBe("timeout")
       expect(yield* browser.list()).toEqual([])
     }),

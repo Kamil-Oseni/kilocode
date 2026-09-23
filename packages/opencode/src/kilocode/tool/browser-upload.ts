@@ -47,8 +47,7 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
             yield* Effect.die(new Error("Browser file selection requires sensitive_category=disclosure"))
           const pattern =
             params.action === "start" ? params.destination : params.action === "list" ? "list" : params.upload_id
-          const sensitive =
-            params.action === "start" && params.sensitive_category !== "ordinary" ? params.sensitive_category : false
+          const sensitive: false | "disclosure" = params.action === "start" ? "disclosure" : false
           const authorization = yield* browser.request({
             operation: "authorize",
             sessionID: ctx.sessionID,

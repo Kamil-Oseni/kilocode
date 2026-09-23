@@ -26,6 +26,7 @@ import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import { MemoryMarker } from "@/kilocode/memory/marker"
 import { KilocodeSystemPrompt } from "@/kilocode/system-prompt"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
+import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import ASK_CODE_SWITCH from "./ask-code-switch.txt"
 import { consumeAutoTitle, markAutoTitle } from "@/kilo-sessions/rename-adoptions"
 import { gate } from "./input-gate"
@@ -266,6 +267,7 @@ export namespace KiloSessionPrompt {
     const session = yield* input.sessions
       .get(input.session.id)
       .pipe(Effect.catchCause(() => Effect.succeed(input.session)))
+    const ceiling = TaskAuthority.rules(TaskAuthority.read(session.metadata))
 
     // kilocode_change start - tag every rule with its true origin before merging, so the winning
     // rule (chosen by findLast) reports the correct source instead of classify() having to guess.
@@ -277,7 +279,11 @@ export namespace KiloSessionPrompt {
       taggedAgent,
       guardPermissions({ agent: { name: agent.name, permission: taggedAgent }, session: { permission: taggedSession } }),
     )
-    const outcome = yield* input.permission.ask({ ...input.request, ruleset, hardRuleset: hardPermissions({ agent }) })
+    const outcome = yield* input.permission.ask({
+      ...input.request,
+      ruleset,
+      hardRuleset: Permission.merge(hardPermissions({ agent }) ?? [], ceiling),
+    })
     if (outcome.manual) return { source: "manual" } satisfies PermissionProvenance.Approval
     return PermissionProvenance.classify({ rule: outcome.rule, agent: agent.name, origins: input.origins })
     // kilocode_change end

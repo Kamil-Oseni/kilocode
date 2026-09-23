@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 22:09 America/Toronto - preserve the cross-surface lease and revocation tombstone
+
+The uncommitted next checkpoint makes `ComputerUseLeaseStore` the single extension-host authority for browser and desktop tools. Browser `authorize` is non-mutating and outside the receipt journal. Every browser tool negotiates before its legacy permission call, then the browser bridge revalidates locally immediately before showing the panel or dispatching Playwright. Preserve **allow skips prompt / ask preserves prompt / deny stops**.
+
+Do not simplify away `sessions`, `revoked` or `review`. An active grant records every allowed session. Stop moves those session IDs to revocation tombstones before awaiting persistence. Native browser and desktop dispatch therefore deny work that was authorized just before Stop. A genuinely new panel review clears only its own tombstone, allowing the user to grant control again. A never-authorized task still receives **ask**, so the compatibility permission path works.
+
+Focused evidence is extension 52 / 185 and CLI 18 / 103 with both typechecks, extension lint, the full production extension compile/bundle and scoped Oxlint passing. Commit/push this cross-surface behavior. Keep it uninstalled until native Windows global Pause and mandatory sensitive-intent classification are present. Then continue stable application identity and continuous capture. Do not mark slice 1, slice 2 or `FUT-CU-01` complete from these focused checks.
+
 ## ChatGPT 2026-09-22 21:34 America/Toronto - preserve local grants, policy and dispatch revocation
 
 Product commit `d72cd77b69` is pushed and uninstalled. It contains the desktop half of slices 1 and 2. `ComputerUseLeaseStore` keeps current-task grants in memory, persists only cross-session grants in VS Code local storage, strictly decodes version 2 and rejects persisted selected-application grants until stable executable identity exists. `DesktopPanel` is one progressive review for Observe, Assisted or Autonomous level, application/duration scope, ordinary categories and cooperative input. It defaults every sensitive category to **Ask before** and exposes all four owner-required rules.

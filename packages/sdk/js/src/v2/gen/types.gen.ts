@@ -483,6 +483,25 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      operation: "authorize"
+      surface: "browser"
+      action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
+      windowID?: string
+      sensitive:
+        | boolean
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -5270,6 +5289,8 @@ export type BrowserUploadChunk = {
   next: number
 }
 
+export type ComputerUseGrantId = string
+
 export type ComputerUseTarget = {
   surface: "browser" | "desktop" | "mobile"
   windowID: string
@@ -5368,6 +5389,13 @@ export type BrowserUploadInfo = {
 }
 
 export type BrowserResult =
+  | {
+      operation: "authorize"
+      decision: "allow" | "ask" | "deny"
+      reason: string
+      grantID?: ComputerUseGrantId
+      url?: string
+    }
   | {
       receipt?: ComputerUseReceipt
       observation?: ComputerUseObservation
@@ -5773,8 +5801,6 @@ export type BrowserFailure = {
   message: string
   receipt?: ComputerUseReceipt
 }
-
-export type ComputerUseGrantId = string
 
 export type DesktopResult =
   | {
@@ -6663,6 +6689,25 @@ export type InteractiveTerminalInfo1 = {
 }
 
 export type BrowserRequest1 =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "authorize"
+      surface: "browser"
+      action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
+      windowID?: string
+      sensitive:
+        | boolean
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
+    }
   | {
       id: BrowserRequestId
       sessionID: string

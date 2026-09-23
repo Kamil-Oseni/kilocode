@@ -11,6 +11,7 @@ import { Browser } from "@/kilocode/browser/service"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { FrameID, Selector, TabID } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { SensitiveCategory } from "@/kilocode/computer-use/lease"
 import type { UploadFile } from "@/kilocode/browser/upload-schema"
 
 const Params = Schema.Union([
@@ -25,6 +26,9 @@ const Params = Schema.Union([
       Schema.isMinLength(1),
       Schema.isMaxLength(100),
     ),
+    sensitive_category: Schema.optional(SensitiveCategory).annotate({
+      description: "Use disclosure when the selected files contain private information sent outside the computer.",
+    }),
   }),
   Schema.Struct({ action: Schema.Literal("list") }),
   Schema.Struct({ action: Schema.Literals(["inspect", "cancel"]), upload_id: Schema.String.check(Schema.isUUID()) }),
@@ -43,7 +47,20 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
         Effect.gen(function* () {
           const pattern =
             params.action === "start" ? params.destination : params.action === "list" ? "list" : params.upload_id
-          yield* ctx.ask({ permission: "browser_upload", patterns: [pattern], always: [pattern], metadata: {} })
+          const authorization = yield* browser.request({
+            operation: "authorize",
+            sessionID: ctx.sessionID,
+            surface: "browser",
+            action: "files",
+            sensitive: params.action === "start" ? (params.sensitive_category ?? false) : false,
+            ...(params.action === "start" ? { windowID: params.tab_id } : {}),
+          })
+          if (authorization.operation !== "authorize")
+            return yield* Effect.die(new Error("Browser host returned the wrong result"))
+          if (authorization.decision === "deny")
+            return yield* Effect.die(new Error(`Browser control denied: ${authorization.reason}`))
+          if (authorization.decision === "ask")
+            yield* ctx.ask({ permission: "browser_upload", patterns: [pattern], always: [pattern], metadata: {} })
           if (params.action !== "start") {
             const result = yield* browser.request(
               params.action === "list"

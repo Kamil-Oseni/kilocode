@@ -3,7 +3,7 @@ import { DesktopPanel } from "./desktop-panel"
 import { DesktopSession } from "./desktop-session"
 import { WindowsDesktopDriver } from "./desktop-windows"
 import { DesktopBridge } from "./desktop-bridge"
-import { ComputerUseLeaseStore } from "./lease-store"
+import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 
 export class DesktopAutomationService implements vscode.Disposable {
@@ -14,9 +14,9 @@ export class DesktopAutomationService implements vscode.Disposable {
   private readonly indicator: vscode.StatusBarItem | undefined
   private readonly offLease: (() => void) | undefined
 
-  constructor(connection: KiloConnectionService, context: vscode.ExtensionContext) {
+  constructor(connection: KiloConnectionService, context: vscode.ExtensionContext, lease?: ComputerUseLeaseStore) {
     if (process.platform !== "win32") return
-    this.lease = new ComputerUseLeaseStore(context.globalState)
+    this.lease = lease ?? new ComputerUseLeaseStore(context.globalState)
     this.session = new DesktopSession(new WindowsDesktopDriver())
     this.panel = new DesktopPanel(this.session, this.lease)
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
@@ -81,6 +81,11 @@ export class DesktopAutomationService implements vscode.Disposable {
   async show(): Promise<void> {
     if (!this.panel) throw new Error("Raya Computer Use preview currently requires Windows")
     await this.panel.show()
+  }
+
+  async authorize(request: AuthorizationRequest): Promise<Authorization> {
+    if (!this.panel) return { operation: "authorize", decision: "deny", reason: "Desktop control requires Windows" }
+    return this.panel.authorize(request)
   }
 
   async pause(): Promise<void> {

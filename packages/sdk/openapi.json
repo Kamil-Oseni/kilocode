@@ -65433,6 +65433,58 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "operation": {
+                "type": "string",
+                "enum": ["authorize"]
+              },
+              "surface": {
+                "type": "string",
+                "enum": ["browser"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["observe", "pointer", "keyboard", "scroll", "window", "launch", "browser", "files"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "surface", "action", "sensitive"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -80368,6 +80420,11 @@
         "required": ["data", "offset", "next"],
         "additionalProperties": false
       },
+      "ComputerUseGrantID": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
       "ComputerUseTarget": {
         "type": "object",
         "properties": {
@@ -80715,6 +80772,34 @@
       },
       "BrowserResult": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["authorize"]
+              },
+              "decision": {
+                "type": "string",
+                "enum": ["allow", "ask", "deny"]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "grantID": {
+                "$ref": "#/components/schemas/ComputerUseGrantID"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["operation", "decision", "reason"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -82055,11 +82140,6 @@
         },
         "required": ["code", "message"],
         "additionalProperties": false
-      },
-      "ComputerUseGrantID": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 200
       },
       "DesktopResult": {
         "anyOf": [
@@ -85449,6 +85529,58 @@
       },
       "BrowserRequest1": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["authorize"]
+              },
+              "surface": {
+                "type": "string",
+                "enum": ["browser"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["observe", "pointer", "keyboard", "scroll", "window", "launch", "browser", "files"]
+              },
+              "windowID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sensitive": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "surface", "action", "sensitive"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {

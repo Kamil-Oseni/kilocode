@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { Observation, ObservationID, Receipt } from "@/kilocode/computer-use/protocol"
+import { Action as LeaseAction, GrantID, SensitiveCategory } from "@/kilocode/computer-use/lease"
 import { UploadFile, UploadInfo } from "./upload-schema"
 import { AuthSource, CaptureID, CaptureInfo, ProfileID, ProfileInfo } from "./profile-schema"
 
@@ -10,6 +11,16 @@ export const RequestID = Schema.String.pipe(Schema.brand("BrowserRequestID")).an
   identifier: "BrowserRequestID",
 })
 export type RequestID = Schema.Schema.Type<typeof RequestID>
+
+export const AuthorizeRequest = Schema.Struct({
+  id: RequestID,
+  sessionID: SessionID,
+  operation: Schema.Literal("authorize"),
+  surface: Schema.Literal("browser"),
+  action: LeaseAction,
+  windowID: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))),
+  sensitive: Schema.Union([Schema.Boolean, SensitiveCategory]),
+})
 
 const Match = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
 const Scope = { scope: Schema.optional(Match) }
@@ -366,6 +377,7 @@ export const SmokeRequest = Schema.Struct({
 // raya_change end
 
 export const Request = Schema.Union([
+  AuthorizeRequest,
   ProfileRequest,
   AuthRequest,
   UploadRequest,
@@ -397,6 +409,13 @@ const ResultBase = {
   url: Schema.optional(Url),
   title: Schema.optional(Schema.String.check(Schema.isMaxLength(10_000))),
 }
+export const AuthorizeResult = Schema.Struct({
+  operation: Schema.Literal("authorize"),
+  decision: Schema.Literals(["allow", "ask", "deny"]),
+  reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000)),
+  grantID: Schema.optional(GrantID),
+  url: Schema.optional(Url),
+})
 const ActionResult = <Operation extends "navigate" | "click" | "type" | "select" | "scroll">(operation: Operation) =>
   Schema.Struct({
     ...ResultBase,
@@ -477,6 +496,7 @@ export const SmokeResult = Schema.Struct({
 // raya_change end
 
 export const Result = Schema.Union([
+  AuthorizeResult,
   Schema.Struct({ ...ResultBase, operation: Schema.Literal("profile"), profile: ProfileInfo }),
   Schema.Struct({
     ...ResultBase,

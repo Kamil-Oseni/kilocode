@@ -21,6 +21,7 @@ import { AutocompleteServiceManager } from "./services/autocomplete/Autocomplete
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
 import { DesktopAutomationService } from "./services/computer-use"
+import { ComputerUseLeaseStore } from "./services/computer-use/lease-store"
 import { registerGrantAllPermissions } from "./kilo-provider/grant-all-permissions" // raya_change - global all-tools toggle
 import { mentions } from "./kilo-provider/file-picker"
 import { registerDesignSystemLock } from "./kilo-provider/design-system-lock" // raya_change - owner design-system lock
@@ -89,7 +90,14 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // raya_change start - Milestone F shared persistent browser and in-editor panel
-  const browserAutomationService = new BrowserAutomationService(connectionService, context)
+  const lease = new ComputerUseLeaseStore(context.globalState)
+  const desktop = new DesktopAutomationService(connectionService, context, lease)
+  const browserAutomationService = new BrowserAutomationService(
+    connectionService,
+    context,
+    (request) => desktop.authorize(request),
+    (request) => lease.authorize(request),
+  )
   context.subscriptions.push(
     vscode.commands.registerCommand("raya.openBrowser", () => browserAutomationService.show(false)),
     // Preserve integrations that invoked the pre-Raya command directly without declaring it in the Raya manifest.
@@ -103,7 +111,6 @@ export function activate(context: vscode.ExtensionContext) {
   )
   // raya_change end
 
-  const desktop = new DesktopAutomationService(connectionService, context)
   context.subscriptions.push(
     desktop,
     vscode.commands.registerCommand("raya.openComputerUse", () =>

@@ -7,6 +7,7 @@ import { BrowserPanel } from "./browser-panel"
 import { BrowserBridge } from "./browser-bridge"
 import { profile } from "./browser-profile"
 import type { AdminBrowserSignal } from "../../shared/admin"
+import type { Authorization, AuthorizationRequest } from "../computer-use/lease-store"
 
 type Entry = { session: BrowserSession; panel: BrowserPanel; close: () => void }
 
@@ -19,6 +20,8 @@ export class BrowserAutomationService implements vscode.Disposable {
   constructor(
     private readonly connection: KiloConnectionService,
     context: vscode.ExtensionContext,
+    authorize?: (request: AuthorizationRequest) => Promise<Authorization>,
+    validate?: (request: AuthorizationRequest) => Authorization,
   ) {
     this.root = join(context.globalStorageUri.fsPath, "browser-workspaces")
     this.bridge = new BrowserBridge(
@@ -40,6 +43,8 @@ export class BrowserAutomationService implements vscode.Disposable {
         uncertain: async (directory, reason) => (await this.entry(directory)).session.interlock(reason),
       },
       context.globalState,
+      authorize,
+      validate,
     )
   }
 

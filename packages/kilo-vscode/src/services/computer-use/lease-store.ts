@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto"
-import type { DesktopRequest, DesktopResult } from "@kilocode/sdk/v2/client"
+import type { BrowserRequest, BrowserResult, DesktopRequest, DesktopResult } from "@kilocode/sdk/v2/client"
 
-export type AuthorizationRequest = Extract<DesktopRequest, { operation: "authorize" }>
-export type Authorization = Extract<DesktopResult, { operation: "authorize" }>
+export type AuthorizationRequest =
+  | Extract<DesktopRequest, { operation: "authorize" }>
+  | Extract<BrowserRequest, { operation: "authorize" }>
+export type Authorization =
+  | Extract<DesktopResult, { operation: "authorize" }>
+  | Extract<BrowserResult, { operation: "authorize" }>
 export type ControlLevel = "observe" | "assisted" | "autonomous"
 export type LeaseAction = AuthorizationRequest["action"]
 export type SensitiveCategory = Exclude<AuthorizationRequest["sensitive"], boolean>
@@ -74,6 +78,8 @@ const rules = new Set<SensitiveRule>(["allow_session", "allow_always", "ask", "d
 export class ComputerUseLeaseStore {
   private lease: ComputerUseLease | undefined
   private readonly listeners = new Set<(lease: ComputerUseLease | undefined) => void>()
+  private readonly sessions = new Set<string>()
+  private readonly revoked = new Set<string>()
   private writes = Promise.resolve()
 
   constructor(
@@ -122,13 +128,14 @@ export class ComputerUseLeaseStore {
         input.duration === "hour" ? { kind: "expires_at", expiresAt: now + 60 * 60 * 1000 } : { kind: "until_stopped" },
       applications: input.applications === "all" ? { kind: "all" } : { kind: "selected", values: [input.windowID!] },
       monitors: { kind: "all" },
-      surfaces: ["desktop"],
+      surfaces: ["browser", "desktop"],
       actions: unique,
       sensitive: policy,
       sensitiveSessionID: input.sessionID,
       cooperativeInput: input.cooperativeInput,
     }
     this.lease = lease
+    this.revoked.delete(input.sessionID)
     await this.persist()
     this.emit()
     return this.current()!
@@ -154,6 +161,8 @@ export class ComputerUseLeaseStore {
 
   async stop(): Promise<void> {
     if (!this.lease) return
+    for (const session of this.sessions) this.revoked.add(session)
+    this.sessions.clear()
     this.lease = undefined
     this.emit()
     await this.persist()
@@ -161,7 +170,10 @@ export class ComputerUseLeaseStore {
 
   authorize(request: AuthorizationRequest): Authorization {
     const lease = this.lease
-    if (!lease) return answer("ask", "No active Computer Use grant")
+    if (!lease)
+      return this.revoked.has(request.sessionID)
+        ? answer("deny", "Computer Use was stopped for this task")
+        : answer("ask", "No active Computer Use grant")
     if (lease.state === "paused") return answer("deny", "Computer Use is paused")
     if (lease.state === "revoked") return answer("deny", "The Computer Use grant was revoked")
     if (expired(lease, this.now())) {
@@ -170,7 +182,7 @@ export class ComputerUseLeaseStore {
     }
     if (lease.lifetime.kind === "session" && lease.lifetime.sessionID !== request.sessionID)
       return answer("ask", "The grant belongs to another task")
-    if (!lease.surfaces.includes(request.surface)) return answer("ask", "The desktop is outside this grant")
+    if (!lease.surfaces.includes(request.surface)) return answer("ask", "This surface is outside the grant")
     if (lease.applications.kind === "selected") {
       if (!request.windowID || !lease.applications.values.includes(request.windowID))
         return answer("ask", "This application is outside the grant")
@@ -178,15 +190,15 @@ export class ComputerUseLeaseStore {
     if (lease.level === "observe" && request.action !== "observe")
       return answer("deny", "Observe only cannot control the desktop")
     if (!lease.actions.includes(request.action)) return answer("ask", "This action is outside the grant")
-    if (request.sensitive === true) return answer("ask", "This sensitive action requires a separate decision")
-    if (request.sensitive) {
-      const rule = lease.sensitive[request.sensitive]
-      if (rule === "deny") return answer("deny", "This sensitive action is denied by your policy")
-      if (rule === "ask") return answer("ask", "Your policy requires approval for this sensitive action")
-      if (rule === "allow_session" && request.sessionID !== lease.sensitiveSessionID)
-        return answer("ask", "This sensitive action was allowed only for the original session")
-    }
+    const policy = sensitive(lease, request)
+    if (policy) return policy
+    this.sessions.add(request.sessionID)
     return answer("allow", "Authorized by active Computer Use grant", lease.id)
+  }
+
+  review(request: AuthorizationRequest): Authorization {
+    if (!this.lease) this.revoked.delete(request.sessionID)
+    return this.authorize(request)
   }
 
   private persist(): Promise<void> {
@@ -198,6 +210,16 @@ export class ComputerUseLeaseStore {
   private emit(): void {
     for (const listener of this.listeners) listener(this.current())
   }
+}
+
+function sensitive(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
+  if (request.sensitive === true) return answer("ask", "This sensitive action requires a separate decision")
+  if (!request.sensitive) return
+  const rule = lease.sensitive[request.sensitive]
+  if (rule === "deny") return answer("deny", "This sensitive action is denied by your policy")
+  if (rule === "ask") return answer("ask", "Your policy requires approval for this sensitive action")
+  if (rule === "allow_session" && request.sessionID !== lease.sensitiveSessionID)
+    return answer("ask", "This sensitive action was allowed only for the original session")
 }
 
 function answer(decision: Authorization["decision"], reason: string, grantID?: string): Authorization {

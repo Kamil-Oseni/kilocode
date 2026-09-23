@@ -3,6 +3,7 @@ import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
 import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { SensitiveCategory, type SensitiveCategory as SensitiveKind } from "@/kilocode/computer-use/lease"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 import { BrowserUploadTool } from "./browser-upload"
@@ -56,6 +57,45 @@ function run(browser: Browser.Interface, input: Input, signal: AbortSignal) {
   return browser.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
 }
 
+function approve(
+  browser: Browser.Interface,
+  ctx: Tool.Context,
+  input: Parameters<Tool.Context["ask"]>[0] & {
+    action: "observe" | "browser" | "scroll" | "files"
+    tabID?: string
+    sensitive?: SensitiveKind
+  },
+) {
+  return Effect.gen(function* () {
+    const result = yield* run(
+      browser,
+      {
+        operation: "authorize",
+        sessionID: ctx.sessionID,
+        surface: "browser",
+        action: input.action,
+        sensitive: input.sensitive ?? false,
+        ...(input.tabID ? { windowID: input.tabID } : {}),
+      },
+      ctx.abort,
+    )
+    if (result.operation !== "authorize") return yield* Effect.die(new Error("Browser host returned the wrong result"))
+    if (result.decision === "deny") return yield* Effect.die(new Error(`Browser control denied: ${result.reason}`))
+    if (result.decision === "ask")
+      yield* ctx.ask({
+        permission: input.permission,
+        patterns: input.patterns,
+        always: input.always,
+        metadata: input.metadata,
+      })
+  })
+}
+
+const Sensitive = Schema.optional(SensitiveCategory).annotate({
+  description:
+    "Required when this action sends or publishes content, spends money, handles credentials, installs software, changes system security, permanently deletes, discloses private data, accepts legal terms, or commits/deploys/publishes work.",
+})
+
 const NavigateParams = Schema.Struct({
   ...Bootstrap,
   url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)).annotate({
@@ -77,7 +117,14 @@ export const BrowserNavigateTool = Tool.define<
       parameters: NavigateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({ permission: "browser_navigate", patterns: [params.url], always: [params.url], metadata: {} })
+          yield* approve(browser, ctx, {
+            action: "browser",
+            tabID: params.tab_id,
+            permission: "browser_navigate",
+            patterns: [params.url],
+            always: [params.url],
+            metadata: {},
+          })
           const result = yield* run(
             browser,
             { operation: "navigate", tabID: params.tab_id, sessionID: ctx.sessionID, url: params.url },
@@ -109,7 +156,14 @@ export const BrowserSnapshotTool = Tool.define<
       parameters: SnapshotParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({ permission: "browser_snapshot", patterns: ["*"], always: ["*"], metadata: {} })
+          yield* approve(browser, ctx, {
+            action: "observe",
+            tabID: params.tab_id,
+            permission: "browser_snapshot",
+            patterns: ["*"],
+            always: ["*"],
+            metadata: {},
+          })
           const result = yield* run(
             browser,
             { operation: "snapshot", frameID: params.frame_id, tabID: params.tab_id, sessionID: ctx.sessionID },
@@ -121,7 +175,7 @@ export const BrowserSnapshotTool = Tool.define<
   }),
 )
 
-const ClickParams = Schema.Struct({ ...Grounded, ...Identity, selector: Selector })
+const ClickParams = Schema.Struct({ ...Grounded, ...Identity, selector: Selector, sensitive_category: Sensitive })
 export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }, Browser.Service, "browser_click">(
   "browser_click",
   Effect.gen(function* () {
@@ -132,7 +186,10 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
       parameters: ClickParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: "browser",
+            tabID: params.tab_id,
+            sensitive: params.sensitive_category,
             permission: "browser_click",
             patterns: [target(params.selector)],
             always: [target(params.selector)],
@@ -162,6 +219,7 @@ const TypeParams = Schema.Struct({
   selector: Selector,
   text: Text,
   submit: Schema.optional(Schema.Boolean).annotate({ description: "Press Enter after typing. Defaults to false." }),
+  sensitive_category: Sensitive,
 })
 export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, Browser.Service, "browser_type">(
   "browser_type",
@@ -173,7 +231,10 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
       parameters: TypeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: "browser",
+            tabID: params.tab_id,
+            sensitive: params.sensitive_category,
             permission: "browser_type",
             patterns: [target(params.selector)],
             always: [target(params.selector)],
@@ -208,6 +269,7 @@ const SelectParams = Schema.Struct({
   ...Identity,
   selector: Selector,
   values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  sensitive_category: Sensitive,
 })
 export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string }, Browser.Service, "browser_select">(
   "browser_select",
@@ -218,7 +280,10 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
       parameters: SelectParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: "browser",
+            tabID: params.tab_id,
+            sensitive: params.sensitive_category,
             permission: "browser_select",
             patterns: [target(params.selector)],
             always: [target(params.selector)],
@@ -260,7 +325,14 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const pattern = params.selector === undefined ? "*" : target(params.selector)
-          yield* ctx.ask({ permission: "browser_scroll", patterns: [pattern], always: [pattern], metadata: {} })
+          yield* approve(browser, ctx, {
+            action: "scroll",
+            tabID: params.tab_id,
+            permission: "browser_scroll",
+            patterns: [pattern],
+            always: [pattern],
+            metadata: {},
+          })
           const result = yield* run(
             browser,
             {
@@ -299,7 +371,14 @@ export const BrowserScreenshotTool = Tool.define<
       parameters: ScreenshotParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({ permission: "browser_screenshot", patterns: ["*"], always: ["*"], metadata: {} })
+          yield* approve(browser, ctx, {
+            action: "observe",
+            tabID: params.tab_id,
+            permission: "browser_screenshot",
+            patterns: ["*"],
+            always: ["*"],
+            metadata: {},
+          })
           const result = yield* run(
             browser,
             {
@@ -334,6 +413,7 @@ const EvaluateParams = Schema.Struct({
   ...Grounded,
   ...Identity,
   expression: Text.annotate({ description: "JavaScript expression or function body to evaluate in the current page." }),
+  sensitive_category: Sensitive,
 })
 export const BrowserEvaluateTool = Tool.define<
   typeof EvaluateParams,
@@ -350,7 +430,15 @@ export const BrowserEvaluateTool = Tool.define<
       parameters: EvaluateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({ permission: "browser_evaluate", patterns: ["*"], always: ["*"], metadata: {} })
+          yield* approve(browser, ctx, {
+            action: "browser",
+            tabID: params.tab_id,
+            sensitive: params.sensitive_category,
+            permission: "browser_evaluate",
+            patterns: ["*"],
+            always: ["*"],
+            metadata: {},
+          })
           const result = yield* run(
             browser,
             {
@@ -393,7 +481,9 @@ export const BrowserSmokeTestTool = Tool.define<
       parameters: SmokeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: "browser",
+            tabID: params.tab_id,
             permission: "browser_smoke_test",
             patterns: [params.name],
             always: [params.name],
@@ -451,7 +541,9 @@ export const BrowserTabsTool = Tool.define<typeof TabsParams, { url?: string }, 
       parameters: TabsParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: params.action === "list" ? "observe" : "browser",
+            tabID: "tab_id" in params ? params.tab_id : undefined,
             permission: "browser_tabs",
             patterns: [params.action],
             always: [params.action],
@@ -489,7 +581,9 @@ export const BrowserFramesTool = Tool.define<typeof FramesParams, { url?: string
       parameters: FramesParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: "observe",
+            tabID: params.tab_id,
             permission: "browser_frames",
             patterns: [params.tab_id],
             always: [params.tab_id],
@@ -541,7 +635,9 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
       parameters: DialogParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          yield* ctx.ask({
+          yield* approve(browser, ctx, {
+            action: params.action === "list" ? "observe" : "browser",
+            tabID: params.tab_id,
             permission: "browser_dialog",
             patterns: [params.tab_id],
             always: [params.tab_id],
@@ -619,7 +715,14 @@ export const BrowserDownloadTool = Tool.define<
               : "transfer_id" in params
                 ? params.transfer_id
                 : "list"
-          yield* ctx.ask({ permission: "browser_download", patterns: [pattern], always: [pattern], metadata: {} })
+          yield* approve(browser, ctx, {
+            action: "files",
+            tabID: "tab_id" in params ? params.tab_id : undefined,
+            permission: "browser_download",
+            patterns: [pattern],
+            always: [pattern],
+            metadata: {},
+          })
           const input =
             params.action === "start"
               ? {

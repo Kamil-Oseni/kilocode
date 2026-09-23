@@ -35,6 +35,8 @@ import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  if (input.operation === "authorize")
+    return { operation: "authorize", decision: "ask", reason: "No active Computer Use grant" }
   const profile = {
     profileID: "a".repeat(64),
     directory: "workspace",
@@ -210,7 +212,7 @@ describe("browser host tools", () => {
           ctx,
         )
         expect(asks.map((ask) => ask.permission)).toEqual(["browser_upload", "read"])
-        const request = calls[0]
+        const request = calls.find((call) => call.operation === "upload")!
         expect(request.operation).toBe("upload")
         if (request.operation !== "upload" || request.action !== "start") throw new Error("Missing upload request")
         expect(request.files[0]).toMatchObject({ name: "upload.txt", bytes: 17 })
@@ -222,7 +224,7 @@ describe("browser host tools", () => {
         expect(Buffer.from(chunk.data, "base64").toString()).toBe("authorized upload")
         yield* Effect.promise(() => stage.release(owner, request.files[0].id))
         yield* tool.execute({ action: "inspect", upload_id: request.uploadID }, ctx)
-        expect(calls[1]).toMatchObject({
+        expect(calls.find((call) => call.operation === "upload" && call.action === "inspect")).toMatchObject({
           operation: "upload",
           action: "inspect",
           uploadID: request.uploadID,
@@ -254,21 +256,22 @@ describe("browser host tools", () => {
         )
         const inspected = yield* tool.execute({ action: "inspect", transfer_id: "transfer_seen" }, ctx)
         yield* tool.execute({ action: "cancel", transfer_id: "transfer_seen" }, ctx)
-        expect(calls).toHaveLength(3)
-        expect(calls[0]).toMatchObject({
+        const effects = calls.filter((call) => call.operation !== "authorize")
+        expect(effects).toHaveLength(3)
+        expect(effects[0]).toMatchObject({
           operation: "download",
           action: "start",
           sessionID: ctx.sessionID,
           tabID: "tab_seen",
           observationID: "obs_download",
         })
-        expect(calls[1]).toMatchObject({
+        expect(effects[1]).toMatchObject({
           operation: "download",
           action: "inspect",
           sessionID: ctx.sessionID,
           transferID: "transfer_seen",
         })
-        expect(calls[2]).toMatchObject({
+        expect(effects[2]).toMatchObject({
           operation: "download",
           action: "cancel",
           sessionID: ctx.sessionID,
@@ -353,14 +356,15 @@ describe("browser host tools", () => {
           context([]),
         )
         yield* dialog.execute({ action: "list", tab_id: "tab_seen", operation_id: "op_seen" }, context([]))
-        expect(calls[0]).toMatchObject({
+        const effects = calls.filter((call) => call.operation !== "authorize")
+        expect(effects[0]).toMatchObject({
           operation: "dialog",
           action: "accept",
           tabID: "tab_seen",
           dialogID: "dialog_seen",
           text: "Ada",
         })
-        expect(calls[1]).toMatchObject({ operation: "dialog", action: "list", operationID: "op_seen" })
+        expect(effects[1]).toMatchObject({ operation: "dialog", action: "list", operationID: "op_seen" })
       }),
     60_000,
   )
@@ -393,8 +397,9 @@ describe("browser host tools", () => {
           },
           ctx,
         )
-        expect(calls[1]).toMatchObject({ operation: "frames", parentID: "frame_parent", selector: "#form" })
-        expect(calls[2]).toMatchObject({ operation: "click", tabID: "tab_seen", frameID: "frame_child" })
+        const effects = calls.filter((call) => call.operation !== "authorize")
+        expect(effects[1]).toMatchObject({ operation: "frames", parentID: "frame_parent", selector: "#form" })
+        expect(effects[2]).toMatchObject({ operation: "click", tabID: "tab_seen", frameID: "frame_child" })
       }),
     60_000,
   )
@@ -413,13 +418,14 @@ describe("browser host tools", () => {
         yield* tabs.execute({ action: "open", url: "https://example.com" }, ctx)
         yield* tabs.execute({ action: "select", tab_id: "tab_seen" }, ctx)
         yield* tabs.execute({ action: "close", tab_id: "tab_seen" }, ctx)
-        expect(calls.map((call) => (call.operation === "tabs" ? call.action : call.operation))).toEqual([
+        const effects = calls.filter((call) => call.operation !== "authorize")
+        expect(effects.map((call) => (call.operation === "tabs" ? call.action : call.operation))).toEqual([
           "list",
           "open",
           "select",
           "close",
         ])
-        expect(calls[2]).toMatchObject({ tabID: "tab_seen" })
+        expect(effects[2]).toMatchObject({ tabID: "tab_seen" })
         const click = yield* BrowserClickTool.pipe(
           Effect.provideService(Browser.Service, host),
           Effect.flatMap(Tool.init),
@@ -446,7 +452,7 @@ describe("browser host tools", () => {
           )
           .pipe(Effect.exit)
         expect(ungrounded._tag).toBe("Failure")
-        expect(calls).toHaveLength(4)
+        expect(calls.filter((call) => call.operation !== "authorize")).toHaveLength(4)
       }),
     60_000,
   )
@@ -466,7 +472,7 @@ describe("browser host tools", () => {
           { tab_id: "tab_test", observation_id: ObservationID.make("obs_semantic"), selector },
           context(asks),
         )
-        expect(calls[0]).toMatchObject({ operation: "click", selector })
+        expect(calls.find((call) => call.operation === "click")).toMatchObject({ operation: "click", selector })
         expect(asks[0].patterns).toEqual([JSON.stringify(selector)])
         expect(asks[0].always).toEqual([JSON.stringify(selector)])
         const count = calls.length
@@ -482,6 +488,52 @@ describe("browser host tools", () => {
           .pipe(Effect.exit)
         expect(failed._tag).toBe("Failure")
         expect(calls).toHaveLength(count)
+      }),
+    60_000,
+  )
+
+  it.instance(
+    "skips the legacy prompt when the shared host grant authorizes browser control",
+    () =>
+      Effect.gen(function* () {
+        const inputs: Browser.Input[] = []
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const granted: Browser.Interface = {
+          ...host,
+          request: (input) =>
+            Effect.sync(() => {
+              inputs.push(input)
+              if (input.operation === "authorize")
+                return {
+                  operation: "authorize" as const,
+                  decision: "allow" as const,
+                  reason: "Authorized by shared grant",
+                }
+              return result(input)
+            }),
+        }
+        const tool = yield* BrowserClickTool.pipe(
+          Effect.provideService(Browser.Service, granted),
+          Effect.flatMap(Tool.init),
+        )
+        yield* tool.execute(
+          {
+            tab_id: "tab_test",
+            observation_id: ObservationID.make("obs_granted"),
+            selector: "#send",
+            sensitive_category: "communications",
+          },
+          context(asks),
+        )
+        expect(asks).toEqual([])
+        expect(inputs[0]).toMatchObject({
+          operation: "authorize",
+          surface: "browser",
+          action: "browser",
+          windowID: "tab_test",
+          sensitive: "communications",
+        })
+        expect(inputs[1]).toMatchObject({ operation: "click", selector: "#send" })
       }),
     60_000,
   )
@@ -594,7 +646,8 @@ describe("browser host tools", () => {
           ctx,
         )
 
-        expect(calls.map((item) => item.operation)).toEqual([
+        const effects = calls.filter((item) => item.operation !== "authorize")
+        expect(effects.map((item) => item.operation)).toEqual([
           "navigate",
           "snapshot",
           "click",
@@ -605,9 +658,9 @@ describe("browser host tools", () => {
           "evaluate",
           "smoke",
         ])
-        expect(calls[3]).toMatchObject({ text: "Raya", submit: true })
-        expect(calls[2]).toMatchObject({ observationID: "obs_seen" })
-        expect(calls[5]).toMatchObject({ deltaX: 4, deltaY: 500 })
+        expect(effects[3]).toMatchObject({ text: "Raya", submit: true })
+        expect(effects[2]).toMatchObject({ observationID: "obs_seen" })
+        expect(effects[5]).toMatchObject({ deltaX: 4, deltaY: 500 })
         expect(asks.map((item) => item.permission)).toEqual([
           "browser_navigate",
           "browser_snapshot",

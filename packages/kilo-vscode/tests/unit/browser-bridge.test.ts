@@ -12,6 +12,117 @@ import { BrowserBridge } from "../../src/services/browser-automation/browser-bri
 import { BrowserOutcomeError } from "../../src/services/browser-automation/browser-session"
 
 describe("Raya browser bridge", () => {
+  it("negotiates a shared Computer Use grant without showing or executing the browser", async () => {
+    const replies: unknown[] = []
+    let shown = 0
+    let executed = 0
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async (value: unknown) => {
+            replies.push(value)
+            return { data: true }
+          },
+          reject: async () => ({ data: true }),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => {
+          shown++
+        },
+        execute: async () => {
+          executed++
+          return { operation: "snapshot", snapshot: "" }
+        },
+      },
+      undefined,
+      async () => ({
+        operation: "authorize",
+        decision: "allow",
+        reason: "Authorized by shared grant",
+        grantID: "grant_test",
+      }),
+    )
+    const request: BrowserRequest = {
+      id: "brr_authorize",
+      sessionID: "ses_test",
+      operation: "authorize",
+      surface: "browser",
+      action: "browser",
+      windowID: "tab_seen",
+      sensitive: false,
+    }
+    try {
+      connection.event({ type: "kilocode.browser.requested", properties: request })
+      await Bun.sleep(20)
+      expect(shown).toBe(0)
+      expect(executed).toBe(0)
+      expect(replies).toContainEqual({
+        requestID: request.id,
+        directory: "C:\\workspace",
+        result: expect.objectContaining({ operation: "authorize", decision: "allow", grantID: "grant_test" }),
+      })
+    } finally {
+      bridge.dispose()
+    }
+  })
+
+  it("revalidates a stopped shared grant before showing or executing the browser", async () => {
+    const failures: unknown[] = []
+    let shown = 0
+    let executed = 0
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({ data: true }),
+          reject: async (value: unknown) => {
+            failures.push(value)
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => {
+          shown++
+        },
+        execute: async () => {
+          executed++
+          return { operation: "snapshot", snapshot: "" }
+        },
+      },
+      undefined,
+      undefined,
+      () => ({ operation: "authorize", decision: "deny", reason: "Computer Use was stopped" }),
+    )
+    try {
+      connection.event({
+        type: "kilocode.browser.requested",
+        properties: { id: "brr_stopped", sessionID: "ses_test", operation: "snapshot" },
+      })
+      await Bun.sleep(20)
+      expect(shown).toBe(0)
+      expect(executed).toBe(0)
+      expect(failures).toContainEqual(
+        expect.objectContaining({
+          requestID: "brr_stopped",
+          error: expect.objectContaining({ message: expect.stringContaining("Computer Use was stopped") }),
+        }),
+      )
+    } finally {
+      bridge.dispose()
+    }
+  })
+
   it("binds staged upload API calls to the authoritative task and preserves lost acknowledgements", async () => {
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()

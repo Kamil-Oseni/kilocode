@@ -28,7 +28,9 @@ export interface BrowserHost {
   uncertain?(directory: string, reason: string): Promise<void> | void
 }
 
-function action(request: BrowserRequest): BrowserAction {
+type ActionRequest = Exclude<BrowserRequest, { operation: "authorize" }>
+
+function action(request: ActionRequest): BrowserAction {
   if (request.operation === "scroll") {
     const x = Number(request.deltaX)
     const y = Number(request.deltaY)
@@ -70,6 +72,8 @@ function action(request: BrowserRequest): BrowserAction {
 }
 
 type Receipt = { fingerprint: string; result?: HostBrowserResult; failure?: BrowserFailure; delivered?: boolean }
+type AuthorizeRequest = Extract<BrowserRequest, { operation: "authorize" }>
+type AuthorizeResult = Extract<HostBrowserResult, { operation: "authorize" }>
 type Active = {
   controller: AbortController
   request: BrowserRequest
@@ -176,6 +180,8 @@ export class BrowserBridge {
     private readonly connection: BrowserConnection,
     private readonly host: BrowserHost,
     private readonly store?: BrowserReceiptStore,
+    private readonly authorize?: (request: AuthorizeRequest) => Promise<AuthorizeResult>,
+    private readonly validate?: (request: AuthorizeRequest) => AuthorizeResult,
   ) {
     this.restore()
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
@@ -352,6 +358,10 @@ export class BrowserBridge {
 
   private async run(request: BrowserRequest, directory: string, recovered = false): Promise<void> {
     if (this.disposed) return
+    if (request.operation === "authorize") {
+      await this.authorization(request, directory)
+      return
+    }
     const hash = fingerprint(request, directory)
     const admission = this.admit(request, directory, hash, recovered)
     if (!admission) return
@@ -365,6 +375,8 @@ export class BrowserBridge {
     this.active.set(request.id, { controller, request, directory, startedAt, receipt })
     const state = { completed: false }
     try {
+      const decision = this.validate?.(authorization(request))
+      if (decision?.decision === "deny") throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
       await this.show(request, directory)
       if (controller.signal.aborted) return
       const value = await this.host.execute({
@@ -396,6 +408,16 @@ export class BrowserBridge {
     } finally {
       if (this.active.get(request.id)?.controller === controller) this.active.delete(request.id)
     }
+  }
+
+  private async authorization(request: AuthorizeRequest, directory: string): Promise<void> {
+    const result =
+      (await this.authorize?.(request)) ??
+      ({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" } as const)
+    const response = await this.connection
+      .getClient()
+      .kilocode.browser.reply({ requestID: request.id, directory, result })
+    if (response.error) console.error("[Raya] Browser authorization delivery failed:", response.error)
   }
 
   private async deliver(requestID: string, directory: string, receipt: Receipt, owner = receipt): Promise<void> {
@@ -500,6 +522,26 @@ export class BrowserBridge {
     for (const active of this.active.values()) this.interrupt(active, "Raya stopped during a browser request.")
     this.active.clear()
     this.receipts.clear()
+  }
+}
+
+function authorization(request: ActionRequest): AuthorizeRequest {
+  const action =
+    request.operation === "snapshot" || request.operation === "screenshot" || request.operation === "frames"
+      ? "observe"
+      : request.operation === "scroll"
+        ? "scroll"
+        : request.operation === "upload" || request.operation === "download"
+          ? "files"
+          : "browser"
+  return {
+    id: request.id,
+    sessionID: request.sessionID,
+    operation: "authorize",
+    surface: "browser",
+    action,
+    ...("tabID" in request && request.tabID ? { windowID: request.tabID } : {}),
+    sensitive: false,
   }
 }
 

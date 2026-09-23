@@ -65,6 +65,16 @@ describe("Computer Use lease store", () => {
     })
     expect(store.authorize(auth({ sessionID: "session_other" }))).toMatchObject({ decision: "ask" })
     expect(store.authorize(auth({ windowID: "window_other" }))).toMatchObject({ decision: "ask" })
+    expect(
+      store.authorize({
+        id: "browser_authorize_test",
+        sessionID: "session_test",
+        operation: "authorize",
+        surface: "browser",
+        action: "browser",
+        sensitive: false,
+      }),
+    ).toMatchObject({ decision: "ask" })
   })
 
   it("persists all-session authority and restores it without widening scope", async () => {
@@ -87,6 +97,16 @@ describe("Computer Use lease store", () => {
       decision: "ask",
       reason: "This action is outside the grant",
     })
+    expect(
+      second.authorize({
+        id: "browser_authorize_test",
+        sessionID: "session_other",
+        operation: "authorize",
+        surface: "browser",
+        action: "keyboard",
+        sensitive: false,
+      }),
+    ).toMatchObject({ decision: "allow" })
   })
 
   it("denies pause, expiry, and observe-only mutation before dispatch", async () => {
@@ -209,5 +229,22 @@ describe("Computer Use lease store", () => {
       decision: "allow",
     })
     expect(store.authorize(auth({ sensitive: "credentials" }))).toMatchObject({ decision: "ask" })
+  })
+
+  it("retains a session revocation until a fresh user review begins", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    expect(store.authorize(auth())).toMatchObject({ decision: "allow" })
+    await store.stop()
+    expect(store.authorize(auth())).toMatchObject({ decision: "deny" })
+    expect(store.review(auth())).toMatchObject({ decision: "ask" })
   })
 })

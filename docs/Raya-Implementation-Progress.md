@@ -6,6 +6,12 @@
 >
 > Kilo-to-Raya migration is low-priority compatibility maintenance: fix visible leakage when encountered, but preserve package IDs, commands, storage, provider keys and protocols while higher-value product work continues. The Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 04:42 America/Toronto - Desktop pixel retention gains a byte-bounded ephemeral ring
+
+**Status: implemented and verified in source.** Desktop scenes were already evicted after four entries, but that count-only limit could retain as many as 80 million encoded characters when every frame approached the protocol maximum. The cache is now an explicit local ring capped at four frames and 25 million encoded bytes. It keeps the newest complete frame, evicts oldest pixels until both bounds hold, replaces repeated observation identities without double-counting, and clears synchronously through the existing pause, Stop, manual-takeover and disposal paths. This does not persist pixels and does not send them to telemetry.
+
+Focused ring, session and bridge evidence passes **39 tests / 135 assertions** after one resource-contention timeout passed alone and on a clean full rerun. Extension-host and webview typechecks pass. This is the bounded-memory prerequisite for continuous native acquisition. It does not turn the current request-scoped GDI path into WGC/DXGI streaming by itself. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-23 04:34 America/Toronto - Corrected adaptive-watch snapshot installed
 
 **Status: pushed, packaged and installed without force-reloading the open host.** Product source `da42542ba4` is on `origin/main`. The protected push passed 29 JavaScript/TypeScript package typechecks and the JetBrains typecheck. The low-memory production workflow regenerated the SDK, rebuilt and smoke-tested CLI `0.0.0-main-202609230830`, passed extension-host and webview typechecks, ESLint and the production bundle sequentially, packaged 442 files, and installed `eden.raya@7.4.23-snapshot+da42542ba4.kamil-oseni.1790152131172`.

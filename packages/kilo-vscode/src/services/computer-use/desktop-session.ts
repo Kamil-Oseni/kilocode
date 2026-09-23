@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { ObservationLedger, type ComputerObservation, type ComputerTarget } from "./observation-ledger"
 import type { SensitiveCategory } from "./lease-store"
 import { mismatch } from "./desktop-sensitive"
+import { DesktopFrameRing } from "./desktop-frame-ring"
 import {
   executeSequence,
   type DesktopPlannedAction,
@@ -113,7 +114,7 @@ type DesktopObservation = ComputerObservation & { target: ComputerTarget & { sur
 export class DesktopSession {
   private readonly observations = new ObservationLedger("Desktop")
   private readonly semantics = new Map<string, DesktopSemantics>()
-  private readonly frames = new Map<string, DesktopScene>()
+  private readonly frames = new DesktopFrameRing<DesktopScene>()
   private readonly listeners = new Set<(state: DesktopState) => void>()
   private state: DesktopState = { control: "agent", busy: false }
   private revision = 0
@@ -415,8 +416,7 @@ export class DesktopSession {
   }
 
   private retain(scene: DesktopScene): void {
-    this.frames.set(scene.observation.id, scene)
-    while (this.frames.size > 4) this.frames.delete(this.frames.keys().next().value!)
+    this.frames.set(scene)
     if (!scene.semantics) return
     this.semantics.set(scene.observation.id, scene.semantics)
     while (this.semantics.size > 256) this.semantics.delete(this.semantics.keys().next().value!)

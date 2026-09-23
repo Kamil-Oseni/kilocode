@@ -6,6 +6,16 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-22 21:34 America/Toronto - preserve local grants, policy and dispatch revocation
+
+The uninstalled source now has the desktop half of slices 1 and 2. `ComputerUseLeaseStore` keeps current-task grants in memory, persists only cross-session grants in VS Code local storage, strictly decodes version 2 and rejects persisted selected-application grants until stable executable identity exists. `DesktopPanel` is one progressive review for Observe, Assisted or Autonomous level, application/duration scope, ordinary categories and cooperative input. It defaults every sensitive category to **Ask before** and exposes all four owner-required rules.
+
+Preserve the two local enforcement points. Tool authorization consults the lease before legacy `ctx.ask`, and `DesktopBridge.dispatch` revalidates the same request immediately before capture or native input. Pause/Stop emit revocation before awaiting persistence, cancel active capture and queued input, and take control back. The status-bar indicator remains visible while a lease exists. The contributed shortcut is VS Code-scoped only; implement a Windows-wide `RegisterHotKey` before closing the emergency-control requirement.
+
+The version-2 canonical policy categories are communications, financial transactions, credentials, software installation/removal, security/system settings, permanent deletion, private-data disclosure/upload, legal terms and commit/push/deploy/publish. Click, drag, type and key tools can transport a declared category without exposing typed content to policy storage. This declaration is not a sufficient sensitive-intent classifier. Keep `FUT-CU-01` In progress and do not install/claim autonomous safety until the bounded planner/executor is required to classify sensitive outcomes, **Ask before** has a concrete one-action review, and adverse tests prove omissions fail closed.
+
+Current evidence: extension 29 / 106; CLI 12 / 87; extension and OpenCode typechecks, ESLint, Knip, SDK generation, the production extension compile/bundle and local guards pass. Next connect the same lease to browser control, add stable selected-application identity, mandatory sensitive classification and the native global pause host. Then start the persistent capture benchmark. No snapshot includes this work yet.
+
 ## ChatGPT 2026-09-22 20:45 America/Toronto - preserve desktop lease negotiation
 
 The desktop protocol, generated SDK, model tools and extension bridge now negotiate `authorize` before the legacy permission call. Preserve the three-way result: **allow** skips `ctx.ask`, **ask** uses the existing exact permission request and **deny** stops before the real operation. The extension currently returns **ask** by default; this is intentional until its local lease store and review UI exist. Never interpret bridge availability itself as authority.

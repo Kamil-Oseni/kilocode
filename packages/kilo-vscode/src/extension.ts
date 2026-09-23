@@ -112,6 +112,7 @@ export function activate(context: vscode.ExtensionContext) {
         return vscode.window.showErrorMessage(`Raya Computer Use: ${message}`)
       }),
     ),
+    vscode.commands.registerCommand("raya.pauseComputerUse", () => desktop.pause()),
   )
 
   // raya_change start - Milestone E live React canvas panel and host bridge

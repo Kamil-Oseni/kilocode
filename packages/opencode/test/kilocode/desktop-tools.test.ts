@@ -27,7 +27,7 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(AppNodeBuilder.build(Agent.node), AppNodeBuilder.build(Truncate.node)))
 
-test("requires one-time approval for every native desktop capability in VS Code", () => {
+test("keeps legacy per-action approval as the fail-closed VS Code fallback", () => {
   const client = process.env.KILO_CLIENT
   process.env.KILO_CLIENT = "vscode"
   try {
@@ -210,6 +210,7 @@ it.instance(
               observation_id: ObservationID.make("observation_granted"),
               x: 0.5,
               y: 0.5,
+              sensitive_category: "communications",
             },
             ctx,
           ),
@@ -218,6 +219,7 @@ it.instance(
 
       expect(asks).toEqual([])
       expect(calls.map((input) => input.operation)).toEqual(["authorize", "click"])
+      expect(calls[0]).toMatchObject({ operation: "authorize", sensitive: "communications" })
     }),
   { git: true },
 )

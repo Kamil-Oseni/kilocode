@@ -3,17 +3,39 @@ import { DesktopPanel } from "./desktop-panel"
 import { DesktopSession } from "./desktop-session"
 import { WindowsDesktopDriver } from "./desktop-windows"
 import { DesktopBridge } from "./desktop-bridge"
+import { ComputerUseLeaseStore } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 
 export class DesktopAutomationService implements vscode.Disposable {
   private readonly session: DesktopSession | undefined
   private readonly panel: DesktopPanel | undefined
   private readonly bridge: DesktopBridge | undefined
+  private readonly lease: ComputerUseLeaseStore | undefined
+  private readonly indicator: vscode.StatusBarItem | undefined
+  private readonly offLease: (() => void) | undefined
 
   constructor(connection: KiloConnectionService, context: vscode.ExtensionContext) {
     if (process.platform !== "win32") return
+    this.lease = new ComputerUseLeaseStore(context.globalState)
     this.session = new DesktopSession(new WindowsDesktopDriver())
-    this.panel = new DesktopPanel(this.session)
+    this.panel = new DesktopPanel(this.session, this.lease)
+    this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+    this.indicator.name = "Raya desktop control"
+    this.indicator.command = "raya.openComputerUse"
+    this.offLease = this.lease.onChange((lease) => {
+      if (!lease) {
+        this.bridge?.cancel("Raya desktop control stopped.")
+        this.indicator!.hide()
+        return
+      }
+      if (lease.state === "paused") this.bridge?.cancel("Raya desktop control paused.")
+      const label = lease.level === "observe" ? "Observe" : lease.level === "assisted" ? "Assisted" : "Autonomous"
+      this.indicator!.text = lease.state === "paused" ? "$(debug-pause) Raya paused" : `$(remote) Raya ${label}`
+      this.indicator!.tooltip = "Open Raya desktop controls"
+      this.indicator!.backgroundColor =
+        lease.state === "paused" ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined
+      this.indicator!.show()
+    })
     this.bridge = new DesktopBridge(
       connection,
       this.session,
@@ -51,6 +73,8 @@ export class DesktopAutomationService implements vscode.Disposable {
         )
       },
       context.globalState,
+      async (request) => this.panel!.authorize(request),
+      (request) => this.lease!.authorize(request),
     )
   }
 
@@ -59,10 +83,18 @@ export class DesktopAutomationService implements vscode.Disposable {
     await this.panel.show()
   }
 
+  async pause(): Promise<void> {
+    if (!this.lease || !this.session) return
+    await this.lease.pause()
+    this.session.takeControl("Raya desktop control paused from the keyboard.")
+  }
+
   dispose(): void {
     this.bridge?.dispose()
     this.panel?.dispose()
     this.session?.dispose()
+    this.offLease?.()
+    this.indicator?.dispose()
   }
 }
 

@@ -67451,7 +67451,25 @@
                 "maxLength": 200
               },
               "sensitive": {
-                "type": "boolean"
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "communications",
+                      "financial",
+                      "credentials",
+                      "software",
+                      "system",
+                      "deletion",
+                      "disclosure",
+                      "legal",
+                      "publishing"
+                    ]
+                  }
+                ]
               }
             },
             "required": ["id", "sessionID", "operation", "surface", "action", "sensitive"],

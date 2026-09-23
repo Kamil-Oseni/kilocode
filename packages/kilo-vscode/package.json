@@ -166,9 +166,15 @@
       },
       {
         "command": "raya.openComputerUse",
-        "title": "Open Computer Use Preview",
+        "title": "Desktop Control",
         "category": "Raya",
         "icon": "$(device-desktop)"
+      },
+      {
+        "command": "raya.pauseComputerUse",
+        "title": "Pause Desktop Control",
+        "category": "Raya",
+        "icon": "$(debug-pause)"
       },
       {
         "command": "raya.openCanvas",
@@ -813,6 +819,11 @@
         "command": "raya.toggleAutoApprove",
         "key": "ctrl+alt+a",
         "mac": "cmd+alt+a"
+      },
+      {
+        "command": "raya.pauseComputerUse",
+        "key": "ctrl+alt+shift+escape",
+        "mac": "cmd+alt+shift+escape"
       },
       {
         "command": "raya.generateTerminalCommand",

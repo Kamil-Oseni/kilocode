@@ -10,11 +10,26 @@ describe("Computer Use preview shell", () => {
     expect(source).toContain("Latest foreground window observation")
   })
 
-  it("exposes explicit takeover and responsive controls", () => {
-    expect(source).toContain("Pause agent control")
-    expect(source).toContain("Resume agent control")
+  it("exposes one grant review with three levels and responsive controls", () => {
+    expect(source).toContain("Observe only")
+    expect(source).toContain("Assisted control")
+    expect(source).toContain("Autonomous control")
+    expect(source).toContain("All sessions until I stop")
+    expect(source).toContain("Choose action categories")
+    expect(source).toContain("Sensitive-action policy")
+    expect(source).toContain("Allow this session")
+    expect(source).toContain("Allow every time")
+    expect(source).toContain('if (selected("apps") === "current")')
+    expect(source).toContain('if (selected("duration") !== "session")')
+    expect(source).toContain("Allow and continue")
     expect(source).toContain('"takeover" | "resume"')
     expect(source).toContain('send(manual ? "resume" : "takeover")')
     expect(source).toContain("@media (max-width: 520px)")
+  })
+
+  it("does not capture merely because a grant review opened", () => {
+    expect(source).toContain('if (message.type === "ready")')
+    expect(source).toContain("await this.sync()")
+    expect(source).not.toContain('["ready", "refresh", "resume"]')
   })
 })

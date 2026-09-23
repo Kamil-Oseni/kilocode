@@ -1085,7 +1085,17 @@ export type DesktopRequest =
       surface: "desktop"
       action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
       windowID?: string
-      sensitive: boolean
+      sensitive:
+        | boolean
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
     }
   | {
       id: DesktopRequestId

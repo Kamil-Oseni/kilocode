@@ -20,6 +20,8 @@ function setup(
     actionError?: Error
     hold?: Promise<void>
     decision?: "allow" | "ask" | "deny"
+    dispatchDecision?: "allow" | "ask" | "deny"
+    dispatch?: () => "allow" | "ask" | "deny"
   } = {},
 ) {
   const replies: unknown[] = []
@@ -113,6 +115,17 @@ function setup(
       reason: input.decision === "allow" ? "Authorized by active grant" : "No active grant",
       ...(input.decision === "allow" ? { grantID: "grant_test" } : {}),
     }),
+    input.dispatchDecision || input.dispatch
+      ? () => {
+          const decision = input.dispatch?.() ?? input.dispatchDecision!
+          return {
+            operation: "authorize",
+            decision,
+            reason: decision === "allow" ? "Authorized by active grant" : "Grant stopped",
+            ...(decision === "allow" ? { grantID: "grant_test" } : {}),
+          }
+        }
+      : undefined,
   )
   return { bridge, events, states, replies, rejects, actions, focused, observed: () => observed }
 }
@@ -291,6 +304,22 @@ describe("desktop observation bridge", () => {
     test.bridge.dispose()
   })
 
+  it("cancels capture and queued input immediately when the user stops control", async () => {
+    const gate = Promise.withResolvers<void>()
+    const test = setup({ hold: gate.promise })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(0)
+    test.bridge.cancel("User stopped desktop control")
+    gate.resolve()
+    await Bun.sleep(20)
+
+    expect(test.observed()).toBe(0)
+    expect(test.actions).toEqual([])
+    expect(test.replies).toEqual([])
+    test.bridge.dispose()
+  })
+
   it("redelivers its receipt without capturing the same request twice", async () => {
     const test = setup()
     for (const listener of test.events)
@@ -382,6 +411,39 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(test.actions).toHaveLength(1)
     expect(test.rejects).toHaveLength(1)
+    test.bridge.dispose()
+  })
+
+  it("revalidates a stopped grant locally before native dispatch", async () => {
+    let decision: "allow" | "deny" = "allow"
+    const test = setup({ dispatch: () => decision })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const click: DesktopRequest = {
+      id: "desktop_stopped_1",
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    decision = "deny"
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({ message: expect.stringContaining("Grant stopped") }),
+      }),
+    )
     test.bridge.dispose()
   })
 

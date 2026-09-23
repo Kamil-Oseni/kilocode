@@ -1,6 +1,7 @@
 // raya_change - model-facing native desktop observation tool
 import { Desktop, HostError, type Input } from "@/kilocode/desktop/service"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { SensitiveCategory, type SensitiveCategory as SensitiveKind } from "@/kilocode/computer-use/lease"
 import { Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
@@ -25,6 +26,7 @@ function approve(
   input: Parameters<Tool.Context["ask"]>[0] & {
     action: "observe" | "pointer" | "keyboard" | "scroll" | "window"
     windowID?: string
+    sensitive?: SensitiveKind
   },
 ) {
   return Effect.gen(function* () {
@@ -35,7 +37,7 @@ function approve(
         sessionID: ctx.sessionID,
         surface: "desktop",
         action: input.action,
-        sensitive: false,
+        sensitive: input.sensitive ?? false,
         ...(input.windowID ? { windowID: input.windowID } : {}),
       },
       ctx.abort,
@@ -239,6 +241,10 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
 )
 
 const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
+const Sensitive = Schema.optional(SensitiveCategory).annotate({
+  description:
+    "Required when this action sends or publishes content, spends money, handles credentials, installs software, changes system security, permanently deletes, discloses private data, accepts legal terms, or commits/deploys/publishes work.",
+})
 const ClickParams = Schema.Struct({
   window_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
     description: "Exact opaque window identity returned by desktop_observe.",
@@ -252,6 +258,7 @@ const ClickParams = Schema.Struct({
     description: "Defaults to a single click.",
   }),
   button: Schema.optional(Schema.Literals(["left", "right"])).annotate({ description: "Defaults to left." }),
+  sensitive_category: Sensitive,
 })
 
 const MoveParams = Schema.Struct({
@@ -319,6 +326,7 @@ const DragParams = Schema.Struct({
   end_x: Unit.annotate({ description: "Normalized horizontal drag end." }),
   end_y: Unit.annotate({ description: "Normalized vertical drag end." }),
   button: Schema.optional(Schema.Literals(["left", "right"])).annotate({ description: "Defaults to left." }),
+  sensitive_category: Sensitive,
 }).check(
   Schema.makeFilter((value) =>
     value.start_x !== value.end_x || value.start_y !== value.end_y
@@ -347,6 +355,7 @@ export const DesktopDragTool = Tool.define<typeof DragParams, {}, Desktop.Servic
             patterns: [`${params.window_id}:${button}:${start}->${end}`],
             always: [],
             metadata: {},
+            sensitive: params.sensitive_category,
           })
           const result = yield* run(
             desktop,
@@ -392,6 +401,7 @@ export const DesktopClickTool = Tool.define<typeof ClickParams, {}, Desktop.Serv
             patterns: [point],
             always: [],
             metadata: {},
+            sensitive: params.sensitive_category,
           })
           const result = yield* run(
             desktop,
@@ -429,6 +439,7 @@ const TypeParams = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200_000)).annotate({
     description: "Text to insert at the current focus. The host does not put this text on the clipboard.",
   }),
+  sensitive_category: Sensitive,
 })
 
 export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Service, "desktop_type">(
@@ -448,6 +459,7 @@ export const DesktopTypeTool = Tool.define<typeof TypeParams, {}, Desktop.Servic
             patterns: [params.window_id],
             always: [],
             metadata: { length: params.text.length },
+            sensitive: params.sensitive_category,
           })
           const result = yield* run(
             desktop,
@@ -484,6 +496,7 @@ const KeyParams = Schema.Struct({
   modifiers: Schema.optional(Schema.Array(Modifier).check(Schema.isMaxLength(4))).annotate({
     description: "Optional Alt, Control, Meta, or Shift modifiers.",
   }),
+  sensitive_category: Sensitive,
 })
 
 export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service, "desktop_key">(
@@ -505,6 +518,7 @@ export const DesktopKeyTool = Tool.define<typeof KeyParams, {}, Desktop.Service,
             patterns: [`${params.window_id}:${chord}`],
             always: [],
             metadata: {},
+            sensitive: params.sensitive_category,
           })
           const result = yield* run(
             desktop,

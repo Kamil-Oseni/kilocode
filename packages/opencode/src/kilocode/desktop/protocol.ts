@@ -1,7 +1,7 @@
 // raya_change - native desktop observation host protocol
 import { BusEvent } from "@/bus/bus-event"
 import { Observation, ObservationID, Receipt } from "@/kilocode/computer-use/protocol"
-import { Action as LeaseAction, GrantID } from "@/kilocode/computer-use/lease"
+import { Action as LeaseAction, GrantID, SensitiveCategory } from "@/kilocode/computer-use/lease"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 
@@ -84,7 +84,7 @@ export const AuthorizeRequest = Schema.Struct({
   surface: Schema.Literal("desktop"),
   action: LeaseAction,
   windowID: Schema.optional(Identity),
-  sensitive: Schema.Boolean,
+  sensitive: Schema.Union([Schema.Boolean, SensitiveCategory]),
 })
 
 export const ClickRequest = Schema.Struct({

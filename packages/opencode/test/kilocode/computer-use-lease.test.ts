@@ -4,7 +4,7 @@ import { GrantID, Lease, decide, type Request } from "@/kilocode/computer-use/le
 import { Schema } from "effect"
 
 const base: Lease = {
-  version: 1,
+  version: 2,
   id: GrantID.make("grant_test"),
   level: "autonomous",
   state: "active",
@@ -15,6 +15,18 @@ const base: Lease = {
   monitors: { kind: "selected", values: ["monitor_primary"] },
   surfaces: ["desktop"],
   actions: ["observe", "pointer", "keyboard"],
+  sensitive: {
+    communications: "ask",
+    financial: "deny",
+    credentials: "deny",
+    software: "ask",
+    system: "ask",
+    deletion: "ask",
+    disclosure: "ask",
+    legal: "deny",
+    publishing: "allow_session",
+  },
+  sensitiveSessionID: "session_test",
   cooperativeInput: false,
 }
 
@@ -58,7 +70,15 @@ describe("Computer Use capability lease", () => {
     })
     expect(decide(base, { ...request, sensitive: true }, 500)).toEqual({
       decision: "ask",
-      reason: "sensitive",
+      reason: "sensitive_ask",
+    })
+    expect(decide(base, { ...request, sensitive: "financial" }, 500)).toEqual({
+      decision: "deny",
+      reason: "sensitive_denied",
+    })
+    expect(decide(base, { ...request, sensitive: "publishing", sessionID: "session_other" }, 500)).toEqual({
+      decision: "ask",
+      reason: "session",
     })
   })
 
@@ -76,6 +96,36 @@ describe("Computer Use capability lease", () => {
     expect(decide(lease, { ...request, monitor: undefined }, 50_000)).toEqual({
       decision: "ask",
       reason: "monitor",
+    })
+  })
+
+  test("applies deny, ask, session-only, and persistent sensitive policy choices", () => {
+    const lease: Lease = {
+      ...base,
+      lifetime: { kind: "all_sessions" },
+      applications: { kind: "all" },
+      monitors: { kind: "all" },
+    }
+    expect(decide(lease, { ...request, sensitive: "financial" }, 500)).toEqual({
+      decision: "deny",
+      reason: "sensitive_denied",
+    })
+    expect(decide(lease, { ...request, sensitive: "communications" }, 500)).toEqual({
+      decision: "ask",
+      reason: "sensitive_ask",
+    })
+    expect(decide(lease, { ...request, sensitive: "publishing" }, 500)).toEqual({
+      decision: "allow",
+      reason: "authorized",
+    })
+    expect(decide(lease, { ...request, sensitive: "publishing", sessionID: "session_other" }, 500)).toEqual({
+      decision: "ask",
+      reason: "sensitive_session",
+    })
+    const always: Lease = { ...lease, sensitive: { ...lease.sensitive, publishing: "allow_always" } }
+    expect(decide(always, { ...request, sensitive: "publishing", sessionID: "session_other" }, 500)).toEqual({
+      decision: "allow",
+      reason: "authorized",
     })
   })
 

@@ -27,6 +27,24 @@ export const Action = Schema.Literals([
 ])
 export type Action = Schema.Schema.Type<typeof Action>
 
+export const SensitiveCategory = Schema.Literals([
+  "communications",
+  "financial",
+  "credentials",
+  "software",
+  "system",
+  "deletion",
+  "disclosure",
+  "legal",
+  "publishing",
+])
+export type SensitiveCategory = Schema.Schema.Type<typeof SensitiveCategory>
+
+export const SensitiveRule = Schema.Literals(["allow_session", "allow_always", "ask", "deny"])
+export type SensitiveRule = Schema.Schema.Type<typeof SensitiveRule>
+
+const SensitivePolicy = Schema.Record(SensitiveCategory, SensitiveRule)
+
 const Selected = Schema.Struct({
   kind: Schema.Literal("selected"),
   values: Schema.Array(Identity).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
@@ -44,7 +62,7 @@ export const Expiry = Schema.Union([
 ])
 
 export const Lease = Schema.Struct({
-  version: Schema.Literal(1),
+  version: Schema.Literal(2),
   id: GrantID,
   level: Level,
   state: Schema.Literals(["active", "paused", "revoked"]),
@@ -55,6 +73,8 @@ export const Lease = Schema.Struct({
   monitors: Scope,
   surfaces: Schema.Array(Surface).check(Schema.isMinLength(1), Schema.isMaxLength(3)),
   actions: Schema.Array(Action).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
+  sensitive: SensitivePolicy,
+  sensitiveSessionID: Identity,
   cooperativeInput: Schema.Boolean,
 }).annotate({ identifier: "ComputerUseLease" })
 export type Lease = Schema.Schema.Type<typeof Lease>
@@ -65,7 +85,7 @@ export type Request = {
   action: Action
   application?: string
   monitor?: string
-  sensitive?: boolean
+  sensitive?: SensitiveCategory | boolean
 }
 
 export type Decision = {
@@ -82,7 +102,9 @@ export type Decision = {
     | "monitor"
     | "action"
     | "observe_only"
-    | "sensitive"
+    | "sensitive_ask"
+    | "sensitive_denied"
+    | "sensitive_session"
 }
 
 export function decide(lease: Lease | undefined, request: Request, now = Date.now()): Decision {
@@ -96,9 +118,16 @@ export function decide(lease: Lease | undefined, request: Request, now = Date.no
   if (!lease.surfaces.includes(request.surface)) return { decision: "ask", reason: "surface" }
   if (!within(lease.applications, request.application)) return { decision: "ask", reason: "application" }
   if (!within(lease.monitors, request.monitor)) return { decision: "ask", reason: "monitor" }
-  if (!lease.actions.includes(request.action)) return { decision: "ask", reason: "action" }
   if (lease.level === "observe" && request.action !== "observe") return { decision: "deny", reason: "observe_only" }
-  if (request.sensitive) return { decision: "ask", reason: "sensitive" }
+  if (!lease.actions.includes(request.action)) return { decision: "ask", reason: "action" }
+  if (request.sensitive === true) return { decision: "ask", reason: "sensitive_ask" }
+  if (request.sensitive) {
+    const rule = lease.sensitive[request.sensitive]
+    if (rule === "deny") return { decision: "deny", reason: "sensitive_denied" }
+    if (rule === "ask") return { decision: "ask", reason: "sensitive_ask" }
+    if (rule === "allow_session" && request.sessionID !== lease.sensitiveSessionID)
+      return { decision: "ask", reason: "sensitive_session" }
+  }
   return { decision: "allow", reason: "authorized" }
 }
 

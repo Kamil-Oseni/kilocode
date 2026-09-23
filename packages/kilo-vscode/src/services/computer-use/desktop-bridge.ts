@@ -68,6 +68,7 @@ export class DesktopBridge {
     private readonly capture: (request: CaptureRequest, signal: AbortSignal) => Promise<Frame[]>,
     private readonly store?: DesktopReceiptStore,
     private readonly authorize?: (request: AuthorizeRequest) => Promise<AuthorizeResult>,
+    private readonly validate?: (request: AuthorizeRequest) => AuthorizeResult,
   ) {
     this.restore()
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
@@ -206,6 +207,9 @@ export class DesktopBridge {
         this.authorize?.(request) ??
         Promise.resolve({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" })
       )
+    const decision = this.validate?.(authorization(request))
+    if (decision && decision.decision !== "allow")
+      throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
     if (request.operation === "windows") return this.windows(request, startedAt)
     if (request.operation === "observe" || request.operation === "watch")
       return this.observe(request, startedAt, signal)
@@ -431,6 +435,34 @@ export class DesktopBridge {
     for (const controller of this.active.values()) controller.abort()
     this.active.clear()
     this.receipts.clear()
+  }
+
+  cancel(reason: string): void {
+    for (const controller of this.active.values()) controller.abort()
+    this.active.clear()
+    this.session.takeControl(reason)
+  }
+}
+
+function authorization(request: Exclude<DesktopRequest, AuthorizeRequest>): AuthorizeRequest {
+  const action =
+    request.operation === "observe" || request.operation === "watch" || request.operation === "windows"
+      ? "observe"
+      : request.operation === "focus"
+        ? "window"
+        : request.operation === "scroll"
+          ? "scroll"
+          : request.operation === "type" || request.operation === "key"
+            ? "keyboard"
+            : "pointer"
+  return {
+    id: request.id,
+    sessionID: request.sessionID,
+    operation: "authorize",
+    surface: "desktop",
+    action,
+    ...("windowID" in request ? { windowID: request.windowID } : {}),
+    sensitive: false,
   }
 }
 

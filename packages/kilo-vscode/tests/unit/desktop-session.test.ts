@@ -294,6 +294,37 @@ describe("native desktop session boundary", () => {
     expect(states).toEqual(["agent:false:", "manual:false:You took manual control of the desktop.", "agent:false:"])
   })
 
+  it("discards capture and window results that finish after manual takeover", async () => {
+    const capture = Promise.withResolvers<void>()
+    const listing = Promise.withResolvers<void>()
+    class Delayed extends Driver {
+      override async observe() {
+        await capture.promise
+        return super.observe()
+      }
+
+      override async windows() {
+        await listing.promise
+        return super.windows()
+      }
+    }
+    const driver = new Delayed()
+    const session = new DesktopSession(driver)
+    const results = Promise.allSettled([session.observe(), session.windows()])
+
+    session.takeControl()
+    capture.resolve()
+    listing.resolve()
+
+    const settled = await results
+    expect(settled.map((result) => result.status)).toEqual(["rejected", "rejected"])
+    expect(settled.map((result) => (result.status === "rejected" ? result.reason.message : ""))).toEqual([
+      "Desktop observation cancelled after control changed",
+      "Desktop window list cancelled after control changed",
+    ])
+    expect(driver.cancelled).toBe(1)
+  })
+
   it("runs a bounded local sequence across advancing scene versions", async () => {
     const driver = new Driver()
     const session = new DesktopSession(driver)

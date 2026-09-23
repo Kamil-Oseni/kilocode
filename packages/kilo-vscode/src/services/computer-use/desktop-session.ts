@@ -134,7 +134,9 @@ export class DesktopSession {
   }
 
   async observe(): Promise<DesktopFrame & { observation: DesktopObservation }> {
+    const revision = this.revision
     const frame = await this.capture()
+    if (revision !== this.revision) throw new Error("Desktop observation cancelled after control changed")
     const observation = this.observations.issue(this.target(frame), this.revision)
     const scene = { ...frame, observation }
     this.retain(scene)
@@ -175,7 +177,9 @@ export class DesktopSession {
   }
 
   async windows(): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
+    const revision = this.revision
     const windows = await this.driver.windows()
+    if (revision !== this.revision) throw new Error("Desktop window list cancelled after control changed")
     this.validateWindows(windows)
     const observation = this.observations.issue(this.catalog(windows), this.revision)
     return { windows, observation }

@@ -112,6 +112,7 @@ export function goalTools(
             active: "Goal resumed",
           }
           const output = yield* goals.update(ctx.sessionID, input).pipe(
+            Effect.tap(() => phase(ctx.sessionID, "done")),
             Effect.match({
               onFailure: (err) => result(rejected[input.status], `${failure(err)} The goal remains active.`, "active"),
               onSuccess: (goal) =>
@@ -130,7 +131,6 @@ export function goalTools(
                 ),
             }),
           )
-          yield* phase(ctx.sessionID, "done")
           return output
         }),
     }),

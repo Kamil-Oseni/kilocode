@@ -6,6 +6,10 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-23 16:43 America/Toronto - Auto Chief source activation
+
+The Kilo tool registry now builds and exposes the four bounded Chief plan/inspect/review/synthesis tools only for Auto. The Auto whitelist and prompt include a conditional two-to-three independent branch path while retaining single-task fallback when no matching active goal exists. Each planned branch must use its saved ID, read/edit authority, and background launch; inspection, exact child evidence, review and synthesis precede goal completion. Rejected goal updates no longer prematurely move Auto to `done`. The source passes CLI typecheck, targeted registry/Chief tests and guards. Do not mark `FUT-AGENT-01/02` Verified: the real installed host has not yet demonstrated registry-to-parallel-run-to-reviewed-synthesis, restart recovery, cancellation, and named chat activity. Build/install a current snapshot, run that matrix, then correct any host findings. Installed `ba1ef8f8ba` is older.
+
 ## ChatGPT 2026-09-23 16:28 America/Toronto - Chief delegation record and losing-admission cleanup
 
 Chief proposals now persist scope, independence, and authority rationale; `chief_inspect` returns these for planned and admitted branches. Optional ledger fields preserve older stored plans, and same-revision idempotence refuses changed rationale. A race-losing `task` admission now reads the ledger, removes only its newly allocated unadmitted child, and releases its child lease; the winner's receipt stays intact. Focused Chief tests pass 19/138 and CLI typecheck passes. Automatic Chief tools remain unregistered. Next verify the interruption/restart and real parallel-agent UI matrix on the installed host, then wire the tool registry, Auto whitelist, and Chief prompt. Installed snapshot `ba1ef8f8ba` does not include this source.

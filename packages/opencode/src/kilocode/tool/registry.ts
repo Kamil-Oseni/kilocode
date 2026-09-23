@@ -36,6 +36,10 @@ import { Database } from "@opencode-ai/core/database/database"
 import { selfHealTools } from "./self-heal" // raya_change - repair agent reconciles its own classification
 import { selfHealVerify } from "./self-heal-verify"
 import { ChiefRouteTool } from "./chief-route" // raya_change - Milestone B intelligent auto-routing
+import { chiefPlanTool } from "./chief-plan"
+import { chiefInspectTool } from "./chief-inspect"
+import { chiefReviewTool } from "./chief-review"
+import { chiefSynthesizeTool } from "./chief-synthesize"
 import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C selectable options
 import { BrowserTools } from "./browser-host" // raya_change - Milestone F browser tools
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
@@ -147,11 +151,37 @@ export namespace KiloToolRegistry {
       const goalGet = goals ? yield* goals.get : undefined
       const goalUpdate = goals ? yield* goals.update : undefined
       const goalPlan = goals ? yield* goals.plan : undefined
+      const branches =
+        goalState && goalDeps
+          ? yield* Effect.all({
+              chiefPlan: chiefPlanTool({
+                storage: goalDeps.storage,
+                sessions: goalDeps.sessions,
+                agents: yield* Agent.Service,
+                goals: goalState,
+              }),
+              chiefInspect: chiefInspectTool({
+                storage: goalDeps.storage,
+                sessions: goalDeps.sessions,
+                goals: goalState,
+              }),
+              chiefReview: chiefReviewTool({
+                storage: goalDeps.storage,
+                sessions: goalDeps.sessions,
+                goals: goalState,
+              }),
+              chiefSynthesize: chiefSynthesizeTool({
+                storage: goalDeps.storage,
+                sessions: goalDeps.sessions,
+                goals: goalState,
+              }),
+            })
+          : undefined
       // raya_change - hybrid self-heal: the repair agent reconciles its own item's classification
       const heal = goalState && goalDeps ? selfHealTools(goalState, RayaSelfHeal.make(goalDeps.storage)) : undefined
       const healRefine = heal ? yield* heal.refine : undefined
       const healVerify = goalState && goalDeps ? yield* selfHealVerify(goalState, goalDeps.storage) : undefined
-      const goal = { goalCreate, goalGet, goalUpdate, goalPlan, healRefine, healVerify }
+      const goal = { goalCreate, goalGet, goalUpdate, goalPlan, healRefine, healVerify, ...branches }
       const routines = goalDeps
         ? yield* Effect.gen(function* () {
             const database = yield* Database.Service
@@ -266,6 +296,10 @@ export namespace KiloToolRegistry {
       healRefine?: Tool.Info // raya_change - hybrid self-heal classification
       healVerify?: Tool.Info
       chief?: Tool.Info // raya_change - Milestone B
+      chiefPlan?: Tool.Info
+      chiefInspect?: Tool.Info
+      chiefReview?: Tool.Info
+      chiefSynthesize?: Tool.Info
       ask?: Tool.Info // raya_change - Milestone C
       browser?: Tool.Info[] // raya_change - Milestone F
       desktop?: Tool.Info[]
@@ -303,6 +337,15 @@ export namespace KiloToolRegistry {
         send: Tool.init(tools.send),
       })
       const chief = tools.chief ? yield* Tool.init(tools.chief) : undefined // raya_change - Milestone B
+      const branches =
+        tools.chiefPlan && tools.chiefInspect && tools.chiefReview && tools.chiefSynthesize
+          ? yield* Effect.all({
+              chiefPlan: Tool.init(tools.chiefPlan),
+              chiefInspect: Tool.init(tools.chiefInspect),
+              chiefReview: Tool.init(tools.chiefReview),
+              chiefSynthesize: Tool.init(tools.chiefSynthesize),
+            })
+          : {}
       const ask = tools.ask ? yield* Tool.init(tools.ask) : undefined // raya_change - Milestone C
       const discover = tools.discover ? yield* Tool.init(tools.discover) : undefined
       const spreadsheet = tools.spreadsheet ? yield* Tool.init(tools.spreadsheet) : undefined
@@ -356,6 +399,7 @@ export namespace KiloToolRegistry {
         notify: base.notify,
         send: base.send,
         chief,
+        ...branches,
         ask,
         discover,
         spreadsheet,
@@ -418,7 +462,8 @@ export namespace KiloToolRegistry {
 
   /** Hide human-driven tools from agents that cannot interact with the user directly. */
   export function available(tool: Tool.Def, agent: Agent.Info) {
-    if (tool.id === "chief_route") return agent.name === "auto" // raya_change - Milestone B
+    if (["chief_route", "chief_plan", "chief_inspect", "chief_review", "chief_synthesize"].includes(tool.id))
+      return agent.name === "auto"
     if (
       [
         "schedule_task",
@@ -464,6 +509,10 @@ export namespace KiloToolRegistry {
       healRefine?: Tool.Def // raya_change - hybrid self-heal classification
       healVerify?: Tool.Def
       chief?: Tool.Def // raya_change - Milestone B
+      chiefPlan?: Tool.Def
+      chiefInspect?: Tool.Def
+      chiefReview?: Tool.Def
+      chiefSynthesize?: Tool.Def
       ask?: Tool.Def // raya_change - Milestone C
       browser?: Tool.Def[] // raya_change - Milestone F
       desktop?: Tool.Def[]
@@ -511,6 +560,9 @@ export namespace KiloToolRegistry {
       ...(tools.healVerify ? [tools.healVerify] : []),
       ...(tools.goalPlan ? [tools.goalPlan] : []),
       ...(tools.chief ? [tools.chief] : []), // raya_change - Milestone B
+      ...(tools.chiefPlan && tools.chiefInspect && tools.chiefReview && tools.chiefSynthesize
+        ? [tools.chiefPlan, tools.chiefInspect, tools.chiefReview, tools.chiefSynthesize]
+        : []),
       ...(tools.ask ? [tools.ask] : []), // raya_change - Milestone C
       ...(tools.discover ? [tools.discover] : []),
       ...(tools.spreadsheet ? [tools.spreadsheet] : []),

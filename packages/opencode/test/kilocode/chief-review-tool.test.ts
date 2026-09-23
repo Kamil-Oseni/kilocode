@@ -25,6 +25,7 @@ describe("Auto Chief branch review", () => {
       const id = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
       const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
       const user = MessageID.make(`msg_${crypto.randomUUID()}`)
+      const inputID = MessageID.make(`msg_${crypto.randomUUID()}`)
       const createdAt = Date.now()
       const raw = { createdAt, status: "active", dispatch: { messageID: user }, revisions: [] as { id: string }[] }
       const state = raw as unknown as RayaGoal.State
@@ -62,6 +63,7 @@ describe("Auto Chief branch review", () => {
         branchID: "audit",
         callID: "call-audit",
         sessionID: child,
+        messageID: inputID,
         access: "read",
       })
       const saved = yield* branches.settle({
@@ -76,6 +78,10 @@ describe("Auto Chief branch review", () => {
       const parent = { metadata: { [RayaChief.phaseKey]: "task" } } as unknown as Session.Info
       const branch = { parentID: id } as Session.Info
       const childRows = [
+        {
+          info: { id: inputID, role: "user", time: { created: 0 } },
+          parts: [{ type: "text", text: "Audit safety" }],
+        },
         {
           info: { id: "msg-tool", role: "assistant", time: { created: 1, completed: 2 } },
           parts: [{ id: "part-read", type: "tool", callID: "call-read", tool: "read", state: { status: "completed" } }],

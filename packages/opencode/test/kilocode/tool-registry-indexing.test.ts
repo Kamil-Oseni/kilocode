@@ -40,6 +40,30 @@ afterEach(async () => {
 describe("kilocode tool registry indexing", () => {
   const logger = Log.create({ service: "kilocode-tool-registry" })
 
+  it.live(
+    "exposes the Chief lifecycle only to Auto",
+    () =>
+      provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            const registry = yield* ToolRegistry.Service
+            const auto = yield* agents.get("auto")
+            const build = yield* agents.get("build")
+            if (!auto || !build) throw new Error("expected Auto and build agents")
+            const ids = ["chief_plan", "chief_inspect", "chief_review", "chief_synthesize"]
+            const own = (yield* registry.tools({ ...ref, agent: auto })).map((tool) => tool.id)
+            const other = (yield* registry.tools({ ...ref, agent: build })).map((tool) => tool.id)
+            for (const id of ids) {
+              expect(own).toContain(id)
+              expect(other).not.toContain(id)
+            }
+          }),
+        { git: true },
+      ),
+    20_000,
+  )
+
   it.live("omits semantic_search without waiting for slow indexing startup", () =>
     provideTmpdirInstance(
       () =>
@@ -354,6 +378,20 @@ describe("kilocode tool registry indexing", () => {
 
     try {
       process.env["KILO_CLIENT"] = "cli"
+      const chief = KiloToolRegistry.extra(
+        {
+          ...tools,
+          chiefPlan: def("chief_plan"),
+          chiefInspect: def("chief_inspect"),
+          chiefReview: def("chief_review"),
+          chiefSynthesize: def("chief_synthesize"),
+        },
+        {},
+      ).map((tool) => tool.id)
+      expect(chief).toContain("chief_plan")
+      expect(chief).toContain("chief_inspect")
+      expect(chief).toContain("chief_review")
+      expect(chief).toContain("chief_synthesize")
       expect(KiloToolRegistry.extra(tools, {}).map((tool) => tool.id)).toEqual([
         "semantic_search",
         "kilo_memory_recall",

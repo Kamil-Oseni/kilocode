@@ -167,6 +167,10 @@ describe("Raya Chief routing", () => {
   it("keeps the bounded Auto workflow dispatchable across same-response tool calls", () => {
     const tools = {
       chief_route: { id: "chief" },
+      chief_plan: { id: "plan-branches" },
+      chief_inspect: { id: "inspect-branches" },
+      chief_review: { id: "review-branch" },
+      chief_synthesize: { id: "synthesize-branches" },
       task: { id: "task" },
       get_goal: { id: "get" },
       update_goal: { id: "update" },
@@ -174,7 +178,17 @@ describe("Raya Chief routing", () => {
       read: { id: "read" },
     }
 
-    const workflow = ["chief_route", "task", "get_goal", "update_goal", "update_goal_plan"]
+    const workflow = [
+      "chief_route",
+      "chief_plan",
+      "chief_inspect",
+      "chief_review",
+      "chief_synthesize",
+      "task",
+      "get_goal",
+      "update_goal",
+      "update_goal_plan",
+    ]
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "goal" }))).toEqual(workflow)
@@ -216,7 +230,9 @@ describe("Raya Chief routing", () => {
       "update_organization",
       "assign_organization_work",
     ])
-    expect(RayaChief.prompt(agents)).toContain("do not call chief_route or task for them")
+    expect(RayaChief.prompt(agents)).toContain("use the available Routines tools yourself")
+    expect(RayaChief.prompt(agents)).toContain("chief_plan")
+    expect(RayaChief.prompt(agents)).toContain("background:true")
     expect(RayaChief.routine("Have an accounting agent send me a report every Friday")).toBe(true)
     expect(RayaChief.routine("Fix this authentication bug")).toBe(false)
     // raya_change end

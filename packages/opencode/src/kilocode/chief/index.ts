@@ -53,7 +53,10 @@ export namespace RayaChief {
     if (!request) return false
     if (/\b(routine|organization|organisation)\b/i.test(request)) return true
     if (/\b(recurring|standing)\s+(agent|worker|task|job)s?\b/i.test(request)) return true
-    if (/\b(agent|worker|task|job|report|remind)\w*\b/i.test(request) && /\b(daily|weekly|monthly|hourly|every)\b/i.test(request))
+    if (
+      /\b(agent|worker|task|job|report|remind)\w*\b/i.test(request) &&
+      /\b(daily|weekly|monthly|hourly|every)\b/i.test(request)
+    )
       return true
     return /\bteam\b.*\bagents?\b|\bagents?\b.*\bteam\b/i.test(request)
   }
@@ -64,7 +67,19 @@ export namespace RayaChief {
     // whitelist or the model hits "Unknown tool: ask_options". When the user invoked
     // /canvas, Auto may also create and refine the live canvas directly (and follow the
     // host's update_canvas retry hint) instead of only through a delegated subagent.
-    const names = ["chief_route", "task", "get_goal", "update_goal", "update_goal_plan", "ask_options", "question"]
+    const names = [
+      "chief_route",
+      "chief_plan",
+      "chief_inspect",
+      "chief_review",
+      "chief_synthesize",
+      "task",
+      "get_goal",
+      "update_goal",
+      "update_goal_plan",
+      "ask_options",
+      "question",
+    ]
     if (routine(request(metadata)))
       names.push(
         "schedule_task",
@@ -441,7 +456,11 @@ export namespace RayaChief {
           `- ${item.name}: ${item.description ?? "No capability card"}${item.model ? ` [${item.model.providerID}/${item.model.modelID}]` : ""}`,
       )
       .join("\n")
-    return `You are Raya's Chief router. Requests to create or manage a routine, recurring worker, team of agents, or organization are a direct primary-chat workflow: do not call chief_route or task for them; use the available Routines tools yourself. For every other request, do not inspect the repository, answer the request, narrate an approach, or name a tool that is not currently available. Make exactly one tool call per response and wait for its result before choosing the next call. On a new non-Routines request, first call chief_route exactly once; its runtime uses the user's original request, regardless of how you phrase the objective argument. After it returns, call task exactly once. On a continuation, skip chief_route and call task if concrete work remains. When a genuine choice only the user can make is blocking the request, call ask_options with concrete labeled choices and wait for the answer before routing or delegating. When the delegated work is done, call get_goal. If a goal exists, formally complete or honestly block it with update_goal; if no goal exists, give the concise synthesis directly. After goal handling, give the user a concise synthesis without another tool call. Never write tool-call markup as prose. Never invent a tool name.
+    return `You are Raya's Chief coordinator. Requests to create or manage a routine, recurring worker, team of agents, or organization are a direct primary-chat workflow: use the available Routines tools yourself. For other new requests, first call chief_route exactly once; it uses the saved original request. Make one tool call per response and inspect its result before the next call. Ask the user with ask_options only when a decision genuinely requires them.
+
+Choose delegation by the work itself. Use one task for a simple or dependent request. For a goal-bound request with two or three truly independent, bounded pieces, call chief_plan first. Give each branch a distinct short name, specialist, scope, objective, expected result, independence reason and access reason. Choose read access for inspection and edit only where changes are required and already authorized. If chief_plan says there is no matching active goal, use the single-task path; do not invent a goal or retry a rejected plan unchanged. A saved plan requires one task call per exact branch_id. Start independent branches with background:true so they can run together. Never replace a branch or replay a child whose outcome is unknown. If background execution is unavailable, report that limitation rather than launch a misleading parallel plan.
+
+After starting all planned branches, call chief_inspect. If work is running, give a short progress update and wait for background completion to resume the conversation; do not repeatedly poll. When a branch completes, inspect its actual child reply and completed tool evidence. Call chief_review only for a completed branch whose result satisfies its saved brief, citing an exact child tool reference from chief_inspect. A conversational assertion with no tool evidence is not verified. If a branch fails, is cancelled, or has unknown outcome, report it honestly and do not synthesize it as success. Once all branches are reviewed, call chief_synthesize with one conclusion per branch. Then call get_goal and handle an existing goal with update_goal based on its actual evidence; a rejected completion leaves work to resolve. If no goal exists, give a concise synthesis. On a continuation, do not call chief_route again. Never invent tools, evidence or completion.
 
 Registry:
 ${registry}`

@@ -67580,12 +67580,12 @@
               "frameCount": {
                 "type": "integer",
                 "minimum": 2,
-                "maximum": 4
+                "maximum": 16
               },
               "intervalMs": {
                 "type": "integer",
-                "minimum": 250,
-                "maximum": 2000
+                "minimum": 50,
+                "maximum": 1000
               }
             },
             "required": ["id", "sessionID", "operation", "frameCount", "intervalMs"],

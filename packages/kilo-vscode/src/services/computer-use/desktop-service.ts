@@ -6,6 +6,7 @@ import { DesktopBridge } from "./desktop-bridge"
 import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 import { WindowsPauseHotkey } from "./windows-pause-hotkey"
+import { bounded, changed, DesktopCadence, limit, WATCH } from "./desktop-cadence"
 
 export class DesktopAutomationService implements vscode.Disposable {
   private readonly session: DesktopSession | undefined
@@ -57,6 +58,8 @@ export class DesktopAutomationService implements vscode.Disposable {
       async (request, signal) => {
         const count = request.operation === "watch" ? request.frameCount : 1
         const interval = request.operation === "watch" ? request.intervalMs : 0
+        if (request.operation === "watch" && !bounded(count, interval))
+          throw new Error("Desktop watch exceeds the ten-second local capture budget")
         return await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
@@ -74,11 +77,27 @@ export class DesktopAutomationService implements vscode.Disposable {
             })
             try {
               const frames = []
+              const cadence = request.operation === "watch" ? new DesktopCadence(interval) : undefined
+              const deadline = performance.now() + WATCH.budget
+              let previous: Awaited<ReturnType<DesktopSession["observe"]>> | undefined
               for (const index of Array.from({ length: count }, (_, value) => value)) {
                 if (state.cancelled || signal.aborted) throw new Error("Desktop viewing was stopped")
-                frames.push(await this.session!.observe())
+                const capture = this.session!.observe()
+                const frame =
+                  request.operation === "watch"
+                    ? await limit(capture, deadline - performance.now(), () =>
+                        this.pause("Raya desktop control paused because a bounded watch exceeded ten seconds."),
+                      )
+                    : await capture
+                frames.push(frame)
                 progress.report({ increment: 100 / count, message: `Frame ${index + 1} of ${count}` })
-                if (index + 1 < count) await wait(interval, signal, state)
+                if (index + 1 < count)
+                  await wait(
+                    Math.min(cadence!.next(changed(previous, frame)), Math.max(0, deadline - performance.now())),
+                    signal,
+                    state,
+                  )
+                previous = frame
               }
               return frames
             } finally {
@@ -105,8 +124,8 @@ export class DesktopAutomationService implements vscode.Disposable {
 
   async pause(reason = "Raya desktop control paused from the keyboard."): Promise<void> {
     if (!this.lease || !this.session) return
-    await this.lease.pause()
     this.session.takeControl(reason)
+    await this.lease.pause()
   }
 
   dispose(): void {

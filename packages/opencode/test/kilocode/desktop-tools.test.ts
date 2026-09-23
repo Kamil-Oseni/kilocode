@@ -671,8 +671,12 @@ it.instance(
       })
       const watch = { id: "watch_schema", sessionID: ctx.sessionID, operation: "watch" as const }
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 1, intervalMs: 500 })).toBe(false)
-      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 3, intervalMs: 249 })).toBe(false)
-      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 4, intervalMs: 2_000 })).toBe(true)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 3, intervalMs: 49 })).toBe(false)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 16, intervalMs: 50 })).toBe(true)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 16, intervalMs: 1_000 })).toBe(false)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 8, intervalMs: 1_000 })).toBe(false)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 17, intervalMs: 50 })).toBe(false)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 4, intervalMs: 1_001 })).toBe(false)
 
       const dragged = yield* DesktopDragTool.pipe(
         Effect.provideService(Desktop.Service, host),

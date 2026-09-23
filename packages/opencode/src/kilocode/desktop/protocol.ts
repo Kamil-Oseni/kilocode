@@ -15,12 +15,12 @@ const Unit = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualT
 export const WatchCount = Schema.Number.check(
   Schema.isInt(),
   Schema.isGreaterThanOrEqualTo(2),
-  Schema.isLessThanOrEqualTo(4),
+  Schema.isLessThanOrEqualTo(16),
 )
 export const WatchInterval = Schema.Number.check(
   Schema.isInt(),
-  Schema.isGreaterThanOrEqualTo(250),
-  Schema.isLessThanOrEqualTo(2_000),
+  Schema.isGreaterThanOrEqualTo(50),
+  Schema.isLessThanOrEqualTo(1_000),
 )
 export const ScrollDelta = Schema.Number.check(
   Schema.isFinite(),
@@ -78,7 +78,13 @@ export const WatchRequest = Schema.Struct({
   operation: Schema.Literal("watch"),
   frameCount: WatchCount,
   intervalMs: WatchInterval,
-})
+}).check(
+  Schema.makeFilter((input) =>
+    input.frameCount * 500 + (input.frameCount - 1) * input.intervalMs <= 10_000
+      ? undefined
+      : "Desktop watch exceeds the ten-second local capture budget",
+  ),
+)
 
 export const AuthorizeRequest = Schema.Struct({
   ...Base,

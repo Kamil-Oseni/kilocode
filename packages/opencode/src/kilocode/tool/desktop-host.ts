@@ -193,9 +193,17 @@ export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Serv
 )
 
 const WatchParams = Schema.Struct({
-  frames: WatchCount.annotate({ description: "Number of sampled frames, from 2 through 4." }),
-  interval_ms: WatchInterval.annotate({ description: "Delay between samples, from 250 through 2000 milliseconds." }),
-})
+  frames: WatchCount.annotate({ description: "Maximum sampled frames, from 2 through 16." }),
+  interval_ms: WatchInterval.annotate({
+    description: "Maximum idle delay from 50 through 1000 milliseconds; changed scenes sample every 50 milliseconds.",
+  }),
+}).check(
+  Schema.makeFilter((input) =>
+    input.frames * 500 + (input.frames - 1) * input.interval_ms <= 10_000
+      ? undefined
+      : "Desktop watch exceeds the ten-second local capture budget",
+  ),
+)
 
 export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number }, Desktop.Service, "desktop_watch">(
   "desktop_watch",
@@ -203,7 +211,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
     const desktop = yield* Desktop.Service
     return {
       description:
-        "Sample a short, bounded sequence of 2–4 foreground Windows application frames for live visual processing. Raya shows one visible cancellable capture indicator, stores each frame in this tool result, and sends no desktop input.",
+        "Adaptively sample a bounded sequence of 2–16 foreground Windows application frames for live visual processing. Changed scenes sample every 50 milliseconds while stable scenes back off to the requested idle interval. The estimated local watch must fit ten seconds. Raya shows one visible cancellable capture indicator, stores each frame in this tool result, and sends no desktop input.",
       parameters: WatchParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {

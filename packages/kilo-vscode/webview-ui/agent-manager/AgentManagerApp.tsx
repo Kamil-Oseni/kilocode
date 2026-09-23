@@ -226,6 +226,7 @@ interface SetupState {
 }
 /** Sidebar selection: LOCAL for local repo, worktree ID for a worktree, or null for an unassigned session. */
 type SidebarSelection = typeof LOCAL | string | null
+type SubagentEvent = CustomEvent<{ sessionID?: unknown; title?: unknown; parentSessionID?: unknown; agent?: unknown }>
 export type SidePanelState = SidePanel | null
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent)
 import { parseBindingTokens } from "./keybind-tokens"
@@ -1226,9 +1227,7 @@ const AgentManagerContent: Component = () => {
       }
     }
     const subagent = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ sessionID?: unknown; title?: unknown; parentSessionID?: unknown; agent?: unknown }>
-      ).detail
+      const detail = (event as SubagentEvent).detail
       if (typeof detail?.sessionID !== "string") return
       const parent = typeof detail.parentSessionID === "string" ? detail.parentSessionID : session.currentSessionID()
       if (parent && !ownsParentSession(projectStates(), parent, currentProjectId())) return

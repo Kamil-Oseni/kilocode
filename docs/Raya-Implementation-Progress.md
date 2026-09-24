@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 02:50 America/Toronto - installed Chief attention and access snapshot
+
+Source `8ec31fe9ed` is installed as `eden.raya@7.4.23-snapshot+8ec31fe9ed.kamil-oseni.1790232333738`; VS Code lists the version. The low-memory build regenerated the SDK with no tracked changes, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed sequential extension/webview typechecks and lint, bundled the production extension, packaged and installed the VSIX. Retained rollback VSIX SHA-256: `E92F26B1138559D40A62ADB6F5739C288075742A722A45A624387D983DB3D860`. This includes durable prepared note batches, a reminder only in an existing Chief continuation, visible-note dedupe and the collapsed-row access label. It does not prove immediate child-to-parent model wake or live two-specialist/restart UI behavior. Next bind a prepared batch to a single durable parent dispatch at a verified idle/queue boundary and run real host acceptance; keep `FUT-AGENT-01/02` In progress.
+
 ## ChatGPT 2026-09-24 02:37 America/Toronto - specialist access visible in chat
 
 The compact Chief activity row now shows each specialist's saved **Read only** or **Can edit** scope beside its name and live status, without opening the details. The expanded row keeps the objective and report without repeating the access label. This follows `docs/designer.md` by using existing typography and muted text rather than badges or decorative color. This is visibility into the saved scope, not a new permission grant. The owner's broader target remains task-aware specialist selection, enforced per-child access, intelligible status and messages, and safe parent attention; `FUT-AGENT-01/02` remain In progress. Thirteen focused chat tests / 69 assertions, extension and webview typechecks, lint and diff check pass. Installed snapshot and host acceptance remain pending.

@@ -62,7 +62,15 @@ export class DesktopPanel implements vscode.Disposable {
     )
     this.panel = panel
     panel.webview.html = this.html()
-    panel.webview.onDidReceiveMessage((message: Message) => void this.receive(message))
+    panel.webview.onDidReceiveMessage((message: Message) => {
+      void this.receive(message).catch(() => {
+        void vscode.window.showErrorMessage(
+          message.type === "stop"
+            ? "Raya stopped desktop control locally, but could not confirm saved revocation. Check Computer Use before restarting VS Code."
+            : "Raya could not complete that Computer Use action. Desktop control may be paused; check its current state.",
+        )
+      })
+    })
     panel.onDidDispose(() => {
       this.off?.()
       this.off = undefined
@@ -100,14 +108,16 @@ export class DesktopPanel implements vscode.Disposable {
       return
     }
     if (message.type === "stop") {
-      await this.lease.stop()
+      const stopped = this.lease.stop()
       this.session.takeControl("Desktop control stopped.")
       this.decline("Desktop control stopped")
+      await stopped
       return
     }
     if (message.type === "takeover") {
-      await this.lease.pause()
+      const paused = this.lease.pause()
       this.session.takeControl()
+      await paused
       return
     }
     if (message.type === "resume") {

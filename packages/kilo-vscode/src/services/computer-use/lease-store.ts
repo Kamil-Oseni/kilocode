@@ -50,6 +50,11 @@ export interface LeaseStorage {
   update(key: string, value: unknown): Thenable<void>
 }
 
+export interface LeaseRevocations {
+  has(id: string): boolean
+  add(id: string): Promise<void>
+}
+
 const key = "raya.computerUse.lease.v1"
 const actions = new Set<LeaseAction>([
   "observe",
@@ -82,14 +87,20 @@ export class ComputerUseLeaseStore {
   private readonly revoked = new Set<string>()
   private writes = Promise.resolve()
   private revision = 0
-  private pending: { revision: number; sessionID: string } | undefined
+  private pending: { id: string; revision: number; sessionID: string; durable: boolean } | undefined
 
   constructor(
     private readonly storage: LeaseStorage,
     private readonly now = () => Date.now(),
+    private readonly revocations?: LeaseRevocations,
   ) {
     this.lease = decode(storage.get<unknown>(key))
-    if (this.lease && (this.lease.lifetime.kind === "session" || expired(this.lease, this.now())))
+    if (
+      this.lease &&
+      (this.lease.lifetime.kind === "session" ||
+        expired(this.lease, this.now()) ||
+        this.revocations?.has(this.lease.id))
+    )
       this.lease = undefined
   }
 
@@ -141,7 +152,7 @@ export class ComputerUseLeaseStore {
       cooperativeInput: input.cooperativeInput,
     }
     const revision = ++this.revision
-    this.pending = { revision, sessionID: input.sessionID }
+    this.pending = { id: lease.id, revision, sessionID: input.sessionID, durable: lease.lifetime.kind === "all_sessions" }
     try {
       await this.persist(lease)
       if (this.revision !== revision) throw new Error("Computer Use grant changed before persistence completed")
@@ -177,14 +188,30 @@ export class ComputerUseLeaseStore {
 
   async stop(): Promise<void> {
     if (!this.lease && !this.pending) return
+    const ids = [
+      this.lease?.lifetime.kind === "all_sessions" ? this.lease.id : undefined,
+      this.pending?.durable ? this.pending.id : undefined,
+    ].filter((id): id is string => !!id)
     ++this.revision
+    if (this.lease) this.revoked.add(this.lease.sensitiveSessionID)
     if (this.pending) this.revoked.add(this.pending.sessionID)
     this.pending = undefined
     for (const session of this.sessions) this.revoked.add(session)
     this.sessions.clear()
     this.lease = undefined
     this.emit()
-    await this.persist()
+    const saved = this.persist()
+    const revocations = this.revocations
+    if (!revocations || ids.length === 0) {
+      await saved
+      return
+    }
+    const marked = (async () => {
+      for (const id of ids) await revocations.add(id)
+    })()
+    const results = await Promise.allSettled([saved, marked])
+    if (results.some((result) => result.status === "fulfilled")) return
+    throw new Error("Desktop control stopped locally, but neither revocation store confirmed the Stop")
   }
 
   authorize(request: AuthorizationRequest): Authorization {

@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { DesktopRequest } from "@kilocode/sdk/v2/client"
 import {
   ComputerUseLeaseStore,
@@ -6,6 +9,7 @@ import {
   type LeaseStorage,
   type SensitivePolicy,
 } from "../../src/services/computer-use/lease-store"
+import { ComputerUseRevocationStore } from "../../src/services/computer-use/revocation-store"
 
 const policy = (rule: SensitivePolicy[keyof SensitivePolicy] = "ask"): SensitivePolicy => ({
   communications: rule,
@@ -43,6 +47,68 @@ function memory(seed?: unknown) {
 }
 
 describe("Computer Use lease store", () => {
+  it("keeps Stop revoked after restart when the main storage write fails", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "raya-stop-"))
+    try {
+      let value: unknown
+      let fail = false
+      const storage: LeaseStorage = {
+        get: <T>() => value as T | undefined,
+        update: async (_key, next) => {
+          if (fail) throw new Error("Main storage unavailable")
+          value = structuredClone(next)
+        },
+      }
+      const record = new ComputerUseRevocationStore(dir)
+      const store = new ComputerUseLeaseStore(storage, () => 100, record)
+      const grant = await store.grant({
+        sessionID: "session_test",
+        level: "autonomous",
+        duration: "until_stopped",
+        applications: "all",
+        actions: ["pointer"],
+        sensitive: policy(),
+        cooperativeInput: false,
+      })
+      expect(store.authorize(auth()).decision).toBe("allow")
+      fail = true
+      await store.stop()
+      expect(store.authorize(auth()).decision).toBe("deny")
+      expect(value).toMatchObject({ id: grant.id, state: "active" })
+      const restored = new ComputerUseLeaseStore(storage, () => 100, new ComputerUseRevocationStore(dir))
+      expect(restored.current()).toBeUndefined()
+      expect(restored.authorize(auth()).decision).not.toBe("allow")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("refuses to confirm Stop when both durable stores fail while still revoking local authority", async () => {
+    const storage = memory()
+    const record = {
+      has: () => false,
+      add: async () => {
+        throw new Error("Revocation record unavailable")
+      },
+    }
+    const store = new ComputerUseLeaseStore(storage, () => 100, record)
+    await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "until_stopped",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    storage.update = async () => {
+      throw new Error("Main storage unavailable")
+    }
+    await expect(store.stop()).rejects.toThrow(/neither revocation store confirmed/i)
+    expect(store.current()).toBeUndefined()
+    expect(store.authorize(auth()).decision).toBe("deny")
+  })
+
   it("Stop cancels a pending durable grant before it can authorize or survive restart", async () => {
     let release!: () => void
     let signal!: () => void

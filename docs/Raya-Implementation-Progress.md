@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 11:21 America/Toronto - durable-grant snapshot installed
+
+**Status: `39c86676a2` pushed and production snapshot installed; autonomous acceptance remains open.** The low-memory workflow reused unchanged CLI/SDK inputs, passed extension/webview typechecks and lint, packaged 443 files and installed `eden.raya@7.4.23-snapshot+39c86676a2.kamil-oseni.1790263153804`. VS Code lists that version. The retained rollback VSIX SHA-256 is `55cbb4a82d97cc95c4d6d4b41e4e99edc6013e9fd5a28641735fed90a6d984c4`.
+
+The installed grant store now waits for persistence before granting input and prevents an in-flight lease from activating after Stop. A failed Stop storage write remains a restart-safety gap; continuous capture, UIA correlation, sensitive-intent enforcement and real Windows benchmarks also remain. Keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 11:16 America/Toronto - grant persistence precedes authority
 
 **Status: source tested; not yet committed, pushed or installed.** An all-session Computer Use grant was previously set active in memory before its persistent write completed. If that write rejected, the panel reported an error but the lease store could still authorize input. The store now waits for the write before activating the new grant, and a failed write leaves no new authority. Its write queue can recover for a later deliberate grant. Pause or Stop invalidates an in-flight grant; a successful Stop write follows it in storage order, preventing the pending all-session lease from returning after restart. The focused lease suite passes 11 tests / 61 assertions; extension/webview typechecks and lint pass. A storage failure during Stop still cannot prove durable revocation and requires a separate recovery design. Keep `FUT-CU-01` **In progress**.

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 11:21 America/Toronto - durable-grant snapshot installed
+
+`39c86676a2` is pushed and installed as `eden.raya@7.4.23-snapshot+39c86676a2.kamil-oseni.1790263153804`; VS Code lists that version. The retained rollback VSIX SHA-256 is `55cbb4a82d97cc95c4d6d4b41e4e99edc6013e9fd5a28641735fed90a6d984c4`. Extension/webview typechecks, lint, production packaging and install passed; CLI/SDK inputs were unchanged. Next: make Stop revocation recoverable when its persistent write fails, then continue the cancellable native capture worker and installed Windows benchmark. No live Computer Use acceptance has been run; `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 11:16 America/Toronto - durable grant activation boundary
 
 The Computer Use lease store now activates a grant only after its storage write succeeds. A rejected write leaves no new active authority and no permanently poisoned write queue; Stop invalidates a pending grant and queues a removal behind its write. Focused tests pass 11 cases / 61 assertions, including rejected storage and Stop-before-write-completion; both extension typechecks and lint pass. This source fix is not installed yet. Do not claim durable Stop if the removal write itself fails: the prior stored all-session lease can return after restart. Continue with explicit failed-removal recovery and the continuous capture worker/real Windows benchmark. `FUT-CU-01` remains In progress.

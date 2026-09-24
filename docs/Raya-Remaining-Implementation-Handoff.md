@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 16:37 America/Toronto - installed crop/review snapshot
+
+Source commit `982b99a616` is pushed and installed as `eden.raya@7.4.23-snapshot+982b99a616.kamil-oseni.1790282099135`. The retained 445-file VSIX SHA-256 is `41C4EC926D93C5D6098A89E4E42663B57E6FC59008500E02FCD3CFDDA2EF1C32`; native executable and matching PDB are present. Low-memory extension validation, production packaging and install passed after rerunning outside the sandbox for esbuild directory access. Next obtain an interactive native frame/fault receipt and benchmark metadata-based crop reuse; test restored session/workspace review navigation in VS Code. The user's native access violation, all-monitor rotation, changed-region transport, autonomous closed-loop release benchmark and restart/recovery matrix remain open. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-24 16:33 America/Toronto - workspace review source correction
 
 The Git-only review fallback now carries explicit workspace scope, actual file totals, and a workspace diff destination; it no longer offers Retry or session Keep/Undo without revisions. Focused units (24), extension/webview typechecks, lint, formatting and 320px/760px browser previews pass. A real restored-session click-through and installed snapshot are still pending. Do not treat Git-only counts as session revisions.

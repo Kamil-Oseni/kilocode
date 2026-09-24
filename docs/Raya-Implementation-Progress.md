@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 16:37 America/Toronto - installed crop/review checkpoint
+
+**Status: `982b99a616` pushed and installed.** The low-memory snapshot build passed SDK preparation, extension/webview typechecks, lint, production bundling, native MSVC `/W4` compile/self-test and VSIX packaging. VS Code lists `eden.raya@7.4.23-snapshot+982b99a616.kamil-oseni.1790282099135`; the installed native helper has a matching PDB, and the retained 445-file VSIX SHA-256 is `41C4EC926D93C5D6098A89E4E42663B57E6FC59008500E02FCD3CFDDA2EF1C32`. The first sandboxed build attempt failed at esbuild directory traversal and the same low-memory command succeeded with the required filesystem access. The source tests and browser fixtures from the two preceding entries pass. The Computer Use native pipe still has no live frame in this environment; the user's access violation has no captured symbolized receipt. No installed-host latency, cross-monitor, restart/takeover or restored-review-click acceptance is claimed. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-24 16:33 America/Toronto - distinguish workspace review from chat revisions
 
 **Status: source and preview verified; commit/install pending.** When a session has no authoritative file revisions but Git reports workspace changes, the chat review row now identifies those counts as workspace scope and reports the actual Git file count. It shows no futile Retry, Keep all or Undo all actions. Review changes selects the workspace diff source in the current session's directory. Session-sourced review retains its existing count aggregation and revision-gated actions. The focused provider, routing and review tests pass (24 tests), extension/webview typechecks, lint and formatting pass, and 320px/760px browser fixtures show no horizontal overflow. Installed-host restored-session clicking remains unverified.

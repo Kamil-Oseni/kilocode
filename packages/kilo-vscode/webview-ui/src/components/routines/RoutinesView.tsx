@@ -609,7 +609,7 @@ function recent(time?: number) {
 }
 
 function occupancy(item: Agent, box?: Box) {
-  return status(box?.state ?? (item.enabled ? "scheduled" : "paused"))
+  return status(box?.state ?? "scheduled", item.schedule.kind === "manual", item.enabled)
 }
 
 function unzoned(item: Agent) {
@@ -2011,6 +2011,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     role={item().role}
                     objective={item().objective}
                     schedule={whenLabel(item().schedule)}
+                    manual={item().schedule.kind === "manual"}
                     access={
                       item().access === "full"
                         ? item().tools === undefined || item().tools?.includes("*")

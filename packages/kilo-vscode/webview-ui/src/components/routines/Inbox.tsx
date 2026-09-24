@@ -479,13 +479,14 @@ export const Attachments: Component<{ agentID: string; items?: DraftFile[] }> = 
   )
 }
 
-export function status(state: Box["state"]) {
+export function status(state: Box["state"], manual = false, enabled = true) {
   if (state === "needs_input") return "Waiting for your answer"
   if (state === "waiting") return "Waiting"
   if (state === "paused") return "Paused"
   if (state === "failed") return "Failed"
   if (state === "running") return "Running"
-  return "Scheduled"
+  if (!enabled) return "Paused"
+  return manual ? "Ready" : "Scheduled"
 }
 
 function saved(value: unknown) {
@@ -646,6 +647,7 @@ export const Inbox: Component<{
   runID?: string
   objective: string
   schedule: string
+  manual: boolean
   access: string
   output: string
   enabled: boolean
@@ -1332,7 +1334,7 @@ export const Inbox: Component<{
           <strong tabIndex={-1}>{props.name}</strong>
           <span class="routines-meta">
             {props.role}
-            {` · ${status(props.box?.state ?? "scheduled")}`}
+            {` · ${status(props.box?.state ?? "scheduled", props.manual, props.enabled)}`}
             <Show when={props.box?.nextRun}>
               {(at) => (
                 <>
@@ -1574,7 +1576,7 @@ export const Inbox: Component<{
             schedule={props.schedule}
             access={props.access}
             output={props.output}
-            state={status(props.box?.state ?? "scheduled")}
+            state={status(props.box?.state ?? "scheduled", props.manual, props.enabled)}
             workspace={props.workspace}
             enabled={props.enabled}
             canInspect={props.canInspect}

@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 11:04 America/Toronto - validated-grant snapshot installed
+
+**Status: `8a3d058d84` pushed and production snapshot installed; full autonomous acceptance remains open.** The low-memory workflow reused the unchanged CLI/SDK, passed extension/webview typechecks and lint, packaged 443 files and installed `eden.raya@7.4.23-snapshot+8a3d058d84.kamil-oseni.1790262143674`. VS Code lists the exact version. The retained rollback VSIX SHA-256 is `3c13509ef483e7fff668ff1ca1a739ebe204a8bf6aaa018a05a2d8ac1246839d`.
+
+Runtime validation now refuses malformed Computer Use grant levels, durations, scopes and action lists before any lease is created. The installed host has not completed sensitive-action, Pause/Stop, restart or latency acceptance. The next architectural slice is a cancellable continuous Windows capture worker with measured WGC/DXGI behavior and the current GDI path as fallback. Keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 10:51 America/Toronto - reject malformed Computer Use grants
 
 **Status: source tested; not yet committed, pushed or installed.** The Computer Use panel sends grant choices across a webview message boundary, where TypeScript types do not validate runtime values. `ComputerUseLeaseStore.grant` previously interpreted an unknown duration as an all-session, until-stopped lifetime and an unknown control level as neither Observe nor Assisted, potentially granting ordinary input with a wider policy than the user chose. The store now checks task identity, control level, duration, application scope, selected window identity, action-list shape and cooperative-input flag before creating or persisting a lease. A malformed message leaves no grant. The focused real lease-store suite passes 9 tests / 49 assertions; extension and webview typechecks, lint and formatting pass. A read-only capture audit confirmed the active path remains request-driven GDI in a persistent PowerShell host; WGC/DXGI are benchmark-only and have not acquired frames here. This hardens the lease boundary but does not prove sensitive-intent classification or autonomous desktop acceptance. Keep `FUT-CU-01` **In progress**.

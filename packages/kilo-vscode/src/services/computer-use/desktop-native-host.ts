@@ -26,7 +26,8 @@ export class NativeCaptureHost {
       if (generation !== this.generation) return
       try {
         for (const result of parser.push(chunk)) {
-          if (result.type === "error") throw new Error(`Native desktop capture stopped: ${result.code}`)
+          if (result.type === "error")
+            throw new Error(`Native desktop capture stopped: ${result.code}${result.fault ? ` (${result.fault})` : ""}`)
           if (result.type === "unchanged") {
             if (!this.frame || result.frame.base !== this.frame.sequence)
               throw new Error("Native desktop continuity has no matching image")

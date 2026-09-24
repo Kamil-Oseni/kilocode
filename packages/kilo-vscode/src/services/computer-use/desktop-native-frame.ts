@@ -24,7 +24,7 @@ export type NativeUnchanged = Pick<NativeFrame, "sequence" | "windowID" | "locat
 type NativePacket =
   | { type: "frame"; frame: NativeFrame }
   | { type: "unchanged"; frame: NativeUnchanged }
-  | { type: "error"; code: string }
+  | { type: "error"; code: string; fault?: string }
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Native desktop header is invalid")
@@ -85,6 +85,12 @@ function packet(header: unknown, data: Buffer): NativePacket {
   if (value.type === "error") {
     if (data.length || typeof value.code !== "string" || !/^[a-z_]{1,64}$/.test(value.code))
       throw new Error("Native desktop error packet is invalid")
+    if (value.code === "native_fault") {
+      if (typeof value.fault !== "string" || !/^[0-9A-F]{8}:[A-Za-z0-9_.-]{1,48}\+0x[0-9A-F]{1,16}$/.test(value.fault))
+        throw new Error("Native desktop fault receipt is invalid")
+      return { type: "error", code: value.code, fault: value.fault }
+    }
+    if (value.fault !== undefined) throw new Error("Native desktop fault receipt is unexpected")
     return { type: "error", code: value.code }
   }
   if (value.type === "unchanged") {

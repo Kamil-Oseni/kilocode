@@ -129,6 +129,28 @@ describe("bounded native desktop frame protocol", () => {
     ).toThrow(/unexpected data/i)
   })
 
+  it("accepts bounded fault receipts and refuses malformed or unrelated fault data", () => {
+    const fault = { v: 1, type: "error", code: "native_fault", fault: "C0000005:main+0x12AB" }
+    expect(new NativeFrameParser().push(encode(fault, Buffer.alloc(0)))).toEqual([
+      { type: "error", code: "native_fault", fault: "C0000005:main+0x12AB" },
+    ])
+    expect(
+      new NativeFrameParser().push(encode({ ...fault, fault: "C0000005:KERNELBASE.dll+0x123" }, Buffer.alloc(0))),
+    ).toEqual([{ type: "error", code: "native_fault", fault: "C0000005:KERNELBASE.dll+0x123" }])
+    expect(() =>
+      new NativeFrameParser().push(encode({ ...fault, fault: "C0000005:main+0x12AB;secret" }, Buffer.alloc(0))),
+    ).toThrow(/fault receipt is invalid/i)
+    expect(() => new NativeFrameParser().push(encode({ ...fault, fault: undefined }, Buffer.alloc(0)))).toThrow(
+      /fault receipt is invalid/i,
+    )
+    expect(() =>
+      new NativeFrameParser().push(encode({ ...fault, fault: "C0000005:C:\\secret+0x12AB" }, Buffer.alloc(0))),
+    ).toThrow(/fault receipt is invalid/i)
+    expect(() => new NativeFrameParser().push(encode({ ...fault, code: "device_lost" }, Buffer.alloc(0)))).toThrow(
+      /fault receipt is unexpected/i,
+    )
+  })
+
   it("refuses oversized headers and encoded frames before buffering payloads", () => {
     const parser = new NativeFrameParser()
     const header = Buffer.alloc(4)

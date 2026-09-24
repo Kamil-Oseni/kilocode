@@ -27,6 +27,51 @@ static constexpr UINT kPointerEdge = 1'024;
 static constexpr UINT kPointerBytes = 4 * 1'024 * 1'024;
 static constexpr UINT kOutputs = 8;
 static volatile LONG stopped = 0;
+static volatile LONG faulting = 0;
+
+static LONG WINAPI fault(EXCEPTION_POINTERS* info) {
+  if (InterlockedCompareExchange(&faulting, 1, 0) || !info || !info->ExceptionRecord)
+    return EXCEPTION_EXECUTE_HANDLER;
+  const auto address = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
+  MEMORY_BASIC_INFORMATION memory{};
+  const auto found = VirtualQuery(info->ExceptionRecord->ExceptionAddress, &memory, sizeof(memory));
+  const auto base = found ? reinterpret_cast<uintptr_t>(memory.AllocationBase) : 0;
+  const auto main = base && memory.AllocationBase == GetModuleHandleW(nullptr);
+  char module[49] = "unknown";
+  if (main) {
+    std::memcpy(module, "main", 5);
+  } else if (base) {
+    wchar_t path[MAX_PATH]{};
+    const DWORD count = GetModuleFileNameW(reinterpret_cast<HMODULE>(base), path, MAX_PATH);
+    if (count && count < MAX_PATH) {
+      DWORD start = 0;
+      for (DWORD index = 0; index < count; ++index)
+        if (path[index] == L'\\' || path[index] == L'/') start = index + 1;
+      const DWORD length = std::min<DWORD>(count - start, sizeof(module) - 1);
+      for (DWORD index = 0; index < length; ++index) {
+        const wchar_t c = path[start + index];
+        module[index] = (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') ||
+                        (c >= L'0' && c <= L'9') || c == L'.' || c == L'_' || c == L'-' ? char(c) : '_';
+      }
+      module[length] = 0;
+    }
+  }
+  char header[256]{};
+  const int count = std::snprintf(header, sizeof(header),
+    "{\"v\":1,\"type\":\"error\",\"code\":\"native_fault\",\"fault\":\"%08lX:%s+0x%llX\"}",
+    info->ExceptionRecord->ExceptionCode, module,
+    static_cast<unsigned long long>(base && address >= base ? address - base : 0));
+  if (count <= 0 || count >= int(sizeof(header))) return EXCEPTION_EXECUTE_HANDLER;
+  const HANDLE pipe = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (!pipe || pipe == INVALID_HANDLE_VALUE) return EXCEPTION_EXECUTE_HANDLER;
+  const uint32_t length = uint32_t(count);
+  const uint32_t empty = 0;
+  DWORD written = 0;
+  WriteFile(pipe, &length, sizeof(length), &written, nullptr);
+  WriteFile(pipe, header, length, &written, nullptr);
+  WriteFile(pipe, &empty, sizeof(empty), &written, nullptr);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
 
 struct Failure : std::runtime_error {
   std::string code;
@@ -637,6 +682,7 @@ static void run(HANDLE pipe) {
 
 int wmain(int argc, wchar_t** argv) {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+  SetUnhandledExceptionFilter(fault);
   SetConsoleCtrlHandler(control, TRUE);
   HANDLE pipe = GetStdHandle(STD_OUTPUT_HANDLE);
   if (!pipe || pipe == INVALID_HANDLE_VALUE) return 2;
@@ -650,6 +696,10 @@ int wmain(int argc, wchar_t** argv) {
     return 1;
   }
   try {
+    if (argc == 2 && std::wstring(argv[1]) == L"--fault-test") {
+      RaiseException(EXCEPTION_ACCESS_VIOLATION, 0, 0, nullptr);
+      return 3;
+    }
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
       {
         pointertest();

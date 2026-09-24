@@ -112,6 +112,18 @@ describe("native desktop capture host", () => {
     expect(errors).toHaveLength(1)
   })
 
+  it("reports a native fault offset without retaining pixels or restarting", async () => {
+    const errors: Error[] = []
+    const packet = encode({ v: 1, type: "error", code: "native_fault", fault: "C0000005:main+0x12AB" }, Buffer.alloc(0))
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(packet, false)])
+    host.start()
+    await until(() => errors.length === 1)
+    expect(errors[0]?.message).toContain("native_fault (C0000005:main+0x12AB)")
+    expect(host.latest()).toBeUndefined()
+    await Bun.sleep(20)
+    expect(errors).toHaveLength(1)
+  })
+
   it("delivers only newer frames to one waiter and cancels a pending wait on Stop", async () => {
     const errors: Error[] = []
     const header = {

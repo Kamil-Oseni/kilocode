@@ -45,7 +45,12 @@ export namespace ChiefNotes {
         plan.goalCreatedAt !== input.goalCreatedAt ||
         plan.requestID !== input.requestID ||
         plan.revision !== input.revision ||
-        !ChiefBranches.matches(plan, goal)
+        !(
+          ChiefBranches.matches(plan, goal) ||
+          (goal?.status === "complete" &&
+            goal.createdAt === plan.goalCreatedAt &&
+            (goal.revisions?.at(-1)?.id ?? "") === plan.revision)
+        )
       )
         throw new Stale()
       const notes = plan.notes ?? []

@@ -119,6 +119,7 @@ export type Event =
   | EventKilocodeNotebookRequested
   | EventKilocodeNotebookCancelled
   | EventKiloSessionsRemoteStatusChanged
+  | EventRayaChiefNoteAvailable1
   | EventKilocodeBrowserRequested
   | EventKilocodeBrowserCancelled
   | EventKilocodeDesktopRequested
@@ -2378,6 +2379,7 @@ export type GlobalEvent = {
     | EventKilocodeNotebookRequested
     | EventKilocodeNotebookCancelled
     | EventKiloSessionsRemoteStatusChanged
+    | EventRayaChiefNoteAvailable
     | EventKilocodeBrowserRequested
     | EventKilocodeBrowserCancelled
     | EventKilocodeDesktopRequested
@@ -8168,6 +8170,19 @@ export type EventKiloSessionsRemoteStatusChanged = {
   }
 }
 
+export type EventRayaChiefNoteAvailable = {
+  id: string
+  type: "raya.chief.note.available"
+  properties: {
+    version: 1
+    sessionID: string
+    goalCreatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    requestID: string
+    revision: string
+    noteID: string
+  }
+}
+
 export type EventKilocodeBrowserRequested = {
   id: string
   type: "kilocode.browser.requested"
@@ -13565,6 +13580,19 @@ export type EventGlobalConfigUpdated1 = {
   type: "global.config.updated"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventRayaChiefNoteAvailable1 = {
+  id: string
+  type: "raya.chief.note.available"
+  properties: {
+    version: 1
+    sessionID: string
+    goalCreatedAt: number | "NaN" | "Infinity" | "-Infinity"
+    requestID: string
+    revision: string
+    noteID: string
   }
 }
 

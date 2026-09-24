@@ -69,6 +69,7 @@ import {
   type TranscriptRow,
 } from "../../context/transcript-rows"
 import { PromptRail } from "./PromptRail"
+import { ChiefNotesInbox } from "./ChiefNotesInbox"
 import { capacity, historyAction, promptItems, railEntries, type PromptRailItem } from "./prompt-rail"
 import { onTimelineHighlight, type TimelineHighlight } from "../../utils/timeline/highlight"
 import { useTranscriptSearch, type SearchMatch } from "../../context/transcript-search"
@@ -1373,6 +1374,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
               )}
             </For>
             <TurnOutcome />
+            <ChiefNotesInbox />
             <For each={props.questions?.()}>{(req) => <QuestionDock request={req} />}</For>
             <For each={props.suggestions?.()}>{(req) => <SuggestBar request={req} />}</For>
           </Show>

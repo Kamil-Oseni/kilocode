@@ -1980,6 +1980,8 @@ export interface FocusTimerResultMessage {
 }
 
 export type ExtensionMessage =
+  | import("../../../../src/shared/chief-notes-messages").ChiefNotesResult
+  | import("../../../../src/shared/chief-notes-messages").ChiefNotesAvailable
   | { type: "speechLiveStarted"; requestId: string }
   | AdminResultMessage
   | PersonalTodoResultMessage

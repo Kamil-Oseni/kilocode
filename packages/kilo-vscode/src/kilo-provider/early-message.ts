@@ -10,6 +10,7 @@ import { buildAutoApprovalReasonSettingMessage } from "./auto-approval-reason-se
 import type { ModelUsageMessage } from "./model-usage"
 import type { SpeechService } from "../speech/service" // raya_change - Milestone H
 import type { ChildSteerMessage } from "./child-steer"
+import type { ChiefNotesRequest } from "../shared/chief-notes-messages"
 
 type Ctx = {
   question: SuggestionContext
@@ -26,6 +27,7 @@ type Ctx = {
   backgroundJobs: (sessionID: string, requestID: string) => Promise<void>
   cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
+  chiefNotes: (input: ChiefNotesRequest) => Promise<void>
   childSteer: (message: ChildSteerMessage) => Promise<void>
   speech?: SpeechService // raya_change - Milestone H configured speech bridge
   voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
@@ -35,6 +37,18 @@ async function routeBackgroundMessage(
   message: { type: string; sessionID?: unknown; jobID?: unknown; requestID?: unknown },
   ctx: Ctx,
 ): Promise<boolean | undefined> {
+  if (message.type === "chiefNotesRead") {
+    const input = message as ChiefNotesRequest
+    if (
+      typeof input.id === "string" &&
+      typeof input.sessionID === "string" &&
+      typeof input.goalCreatedAt === "number" &&
+      typeof input.requestID === "string" &&
+      typeof input.revision === "string"
+    )
+      await ctx.chiefNotes(input)
+    return true
+  }
   if (message.type === "requestBackgroundJobs") {
     if (typeof message.sessionID === "string" && typeof message.requestID === "string") {
       await ctx.backgroundJobs(message.sessionID, message.requestID)

@@ -9,6 +9,8 @@ import { InstanceRef } from "@/effect/instance-ref"
 import type { InstanceContext } from "@/project/instance-context"
 import { Agent } from "@/agent/agent"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { ChiefNoteEvent } from "@/kilocode/chief/event"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { RayaChief } from "@/kilocode/chief"
 import type { RayaGoal } from "@/kilocode/goal"
 import { chiefMessageTool } from "@/kilocode/tool/chief-message"
@@ -82,7 +84,12 @@ describe("Chief child notes", () => {
           callID: "call-task",
           siblings: [],
         })
-        const parent = { id: parentID, metadata: { [RayaChief.phaseKey]: "task" } } as unknown as Session.Info
+        const parent = {
+          id: parentID,
+          directory: "C:\\parent-worktree",
+          projectID: "project_chief",
+          metadata: { [RayaChief.phaseKey]: "task" },
+        } as unknown as Session.Info
         const child = { id: childID, parentID, metadata: { [TaskName.key]: identity } } as unknown as Session.Info
         const rows = [
           { info: { id: inputID, role: "user", time: { created: 0 } }, parts: [] },
@@ -120,12 +127,36 @@ describe("Chief child notes", () => {
         }
         const workerContext = { directory: "C:\\isolated-chief-child" } as unknown as InstanceContext
         const parentContext = { directory: "C:\\parent-worktree" } as unknown as InstanceContext
+        const events: GlobalEvent[] = []
+        const listener = (event: GlobalEvent) => {
+          if (event.payload?.type === ChiefNoteEvent.type) events.push(event)
+        }
+        GlobalBus.on("event", listener)
+        yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
         const first = yield* def
           .execute({ text: "Read-only audit is underway." }, ctx)
           .pipe(Effect.provideService(InstanceRef, workerContext))
         expect(first.metadata.state).toBe("delivered")
+        expect(events).toHaveLength(1)
+        expect(events[0]).toMatchObject({
+          directory: parent.directory,
+          project: parent.projectID,
+          payload: {
+            type: ChiefNoteEvent.type,
+            properties: {
+              version: 1,
+              sessionID: parentID,
+              goalCreatedAt: createdAt,
+              requestID,
+              revision: "",
+              noteID: first.metadata.receipt?.id,
+            },
+          },
+        })
+        expect(JSON.stringify(events[0])).not.toContain("Read-only audit is underway.")
         const retry = yield* def.execute({ text: "Read-only audit is underway." }, ctx)
         expect(retry.metadata.receipt).toEqual(first.metadata.receipt)
+        expect(events).toHaveLength(1)
         const restarted = yield* ChiefBranches.make(storage).read(parentID)
         expect(restarted?.notes).toHaveLength(1)
         expect(restarted?.notes?.[0]).toMatchObject({
@@ -168,6 +199,7 @@ describe("Chief child notes", () => {
           { ...ctx, callID: "call-unknown" },
         )
         expect(attempt.metadata.state).toBe("unknown")
+        expect(events).toHaveLength(1)
         expect((yield* ChiefBranches.make(storage).read(parentID))?.notes).toHaveLength(1)
         for (let index = 2; index <= 8; index++) {
           yield* ledger.note({

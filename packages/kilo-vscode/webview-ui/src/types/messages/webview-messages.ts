@@ -2059,6 +2059,7 @@ export interface FocusTimerActionMessage {
 }
 
 export type WebviewMessage =
+  | import("../../../../src/shared/chief-notes-messages").ChiefNotesRequest
   | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }
   | RequestAdminMessage
   | PersonalTodoListMessage

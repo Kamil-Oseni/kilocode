@@ -660,18 +660,21 @@ export namespace ChiefBranches {
       )
     })
 
-    const note = Effect.fn("ChiefBranches.note")(function* (input: {
-      goalID: SessionID
-      goalCreatedAt: number
-      requestID: string
-      branchID: string
-      taskCallID: string
-      childSessionID: SessionID
-      childMessageID: MessageID
-      senderMessageID: MessageID
-      toolCallID: string
-      text: string
-    }) {
+    const note = Effect.fn("ChiefBranches.note")(function* (
+      input: {
+        goalID: SessionID
+        goalCreatedAt: number
+        requestID: string
+        branchID: string
+        taskCallID: string
+        childSessionID: SessionID
+        childMessageID: MessageID
+        senderMessageID: MessageID
+        toolCallID: string
+        text: string
+      },
+      notify?: (saved: Note, revision: string) => Effect.Effect<void>,
+    ) {
       if (!input.text.trim() || input.text.length > 1_500)
         throw new Error("Chief note must contain 1 to 1,500 characters")
       return yield* mutation(
@@ -727,6 +730,13 @@ export namespace ChiefBranches {
             state: "delivered",
           }
           yield* storage.replace(key(input.goalID), { ...old, notes: [...(old.notes ?? []), saved] } satisfies Record)
+          // A publish is only a hint. Confirm the durable receipt under the same mutation lock,
+          // then emit once for this new note; retries that find `existing` above never emit.
+          if (notify) {
+            const current = yield* read(input.goalID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            if (current?.notes?.some((item) => item.id === saved.id && JSON.stringify(item) === JSON.stringify(saved)))
+              yield* notify(saved, old.revision).pipe(Effect.catchCause(() => Effect.void))
+          }
           return saved
         }),
       )

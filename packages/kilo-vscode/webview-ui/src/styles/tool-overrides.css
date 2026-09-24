@@ -229,6 +229,57 @@
   white-space: pre-wrap;
 }
 
+.chief-notes {
+  display: grid;
+  gap: 10px;
+  margin-block: 16px 8px;
+  color: var(--text-base);
+  font-size: var(--kilo-font-size-12);
+}
+
+.chief-notes__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-weak);
+}
+
+.chief-notes__heading button {
+  padding: 2px 0;
+  color: var(--text-base);
+}
+
+.chief-notes__message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chief-notes__message > [data-component="icon"] {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-weak);
+}
+
+.chief-notes__name {
+  font-weight: 600;
+}
+.chief-notes__name span {
+  font-weight: 400;
+  color: var(--text-weak);
+}
+.chief-notes__message p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chief-notes__error {
+  margin: 0;
+  color: var(--text-weak);
+}
+
 /* ============================================
    Background Process Tool
    ============================================ */

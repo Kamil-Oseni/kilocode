@@ -15,7 +15,7 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
 
 describe("Chief note readback", () => {
-  it.live("returns one exact active plan's durable notes and refuses stale identities", () =>
+  it.live("returns one exact active or completed plan's durable notes and refuses stale identities", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const sessionID = SessionID.make(`ses_chief_${crypto.randomUUID()}`)
@@ -101,6 +101,15 @@ describe("Chief note readback", () => {
         },
       ])
       expect((yield* ChiefNotes.read(input, deps)).notes).toEqual(first.notes)
+      expect(
+        (yield* ChiefNotes.read(input, {
+          ...deps,
+          goals: { get: () => Effect.succeed({ ...goal, status: "complete" }) } as Pick<
+            ReturnType<typeof RayaGoal.make>,
+            "get"
+          >,
+        })).notes,
+      ).toEqual(first.notes)
       expect(
         Exit.isFailure(
           yield* ChiefNotes.read({ ...input, sessionID: SessionID.make("ses_other") }, deps).pipe(Effect.exit),

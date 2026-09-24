@@ -87,6 +87,7 @@ import { interceptMessage } from "./kilo-provider/git-changes-request"
 import { matchFollowup, recordFollowup, type Followup } from "./kilo-provider/followup-session"
 import { clearCommandsCache, loadCommands } from "./kilo-provider/commands"
 import { fetchMessagePage, MESSAGE_PAGE_LIMIT } from "./kilo-provider/message-page"
+import type { ChiefNotesRequest } from "./shared/chief-notes-messages"
 import { editPaths } from "./kilo-provider/session-edits"
 import {
   dismissNotification,
@@ -1154,6 +1155,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           backgroundJobs: (sessionID, requestID) => this.fetchAndSendBackgroundJobs(sessionID, requestID),
           cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
+          chiefNotes: (input) => this.readChiefNotes(input),
           childSteer: (message) => this.steerChild(message),
           speech: this.speech, // raya_change - Milestone H
           voiceScope: (sid) => {
@@ -1330,9 +1332,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "retryConnection":
           console.log("[Raya] Provider: 🔄 Retrying connection...")
-          this.initializeConnection().catch((e) =>
-            console.error("[Raya] Provider: ❌ Retry connection failed:", e),
-          )
+          this.initializeConnection().catch((e) => console.error("[Raya] Provider: ❌ Retry connection failed:", e))
           break
         case "reload":
           this.handleReload().catch((e) => console.error("[Raya] Provider: Reload failed:", e))
@@ -1392,9 +1392,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.fetchAndSendCommands().catch((e) => console.error("[Raya] fetchAndSendCommands failed:", e))
           break
         case "removeSkill":
-          this.removeSkillViaCli(message.location).catch((e: unknown) =>
-            console.error("[Raya] removeSkill failed:", e),
-          )
+          this.removeSkillViaCli(message.location).catch((e: unknown) => console.error("[Raya] removeSkill failed:", e))
           break
         case "removeAgent":
           this.handleRemoveAgent(message.name).catch((e) => console.error("[Raya] handleRemoveAgent failed:", e))
@@ -1465,9 +1463,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.fetchAndSendGlobalConfig().catch((e) => console.error("[Raya] fetchAndSendGlobalConfig failed:", e))
           break
         case "requestIndexingStatus":
-          this.fetchAndSendIndexingStatus().catch((e) =>
-            console.error("[Raya] fetchAndSendIndexingStatus failed:", e),
-          )
+          this.fetchAndSendIndexingStatus().catch((e) => console.error("[Raya] fetchAndSendIndexingStatus failed:", e))
           break
         case "requestIndexingSettings": {
           const project = await this.sendIndexingSettings(message.projectId)
@@ -1561,9 +1557,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.sendTimelineSetting()
           break
         case "requestNotifications":
-          this.fetchAndSendNotifications().catch((e) =>
-            console.error("[Raya] fetchAndSendNotifications failed:", e),
-          )
+          this.fetchAndSendNotifications().catch((e) => console.error("[Raya] fetchAndSendNotifications failed:", e))
           break
         case "requestCloudSessions":
           await handleRequestCloudSessions(this.cloudSessionCtx, message)
@@ -2314,6 +2308,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           if (event.type === "kilo-sessions.remote-status-changed") return true
           if (event.type === "memory.status" || event.type === "memory.updated" || event.type === "memory.error")
             return true
+          if ((event as { type: string }).type === "raya.chief.note.available") {
+            const raw = (event as { properties?: unknown }).properties
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false
+            const props = raw as Record<string, unknown>
+            return typeof props.sessionID === "string" && this.trackedSessionIds.has(props.sessionID)
+          }
           const sessionId = this.resolveEventSessionId(event)
 
           // message.part.* events are always session-scoped; drop if session unknown.
@@ -2603,6 +2603,47 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "projectUsageLoaded", requestID, error: "Could not load model usage history." })
       })
   } // raya_change - historical project analytics over persisted settled steps
+
+  private async readChiefNotes(input: ChiefNotesRequest): Promise<void> {
+    const config = this.connectionService.getServerConfig()
+    if (!config) {
+      this.postMessage({
+        type: "chiefNotesLoaded",
+        id: input.id,
+        sessionID: input.sessionID,
+        error: "Raya is disconnected.",
+      })
+      return
+    }
+    const dir = this.getWorkspaceDirectory(input.sessionID)
+    const url = new URL(`/session/${encodeURIComponent(input.sessionID)}/chief/notes`, config.baseUrl)
+    url.searchParams.set("directory", dir)
+    url.searchParams.set("goalCreatedAt", String(input.goalCreatedAt))
+    url.searchParams.set("requestID", input.requestID)
+    url.searchParams.set("revision", input.revision)
+    try {
+      const auth = Buffer.from(`kilo:${config.password}`).toString("base64")
+      const abort = new AbortController()
+      const timeout = setTimeout(() => abort.abort(), 10_000)
+      const data: unknown = await (async () => {
+        try {
+          const response = await fetch(url, { headers: { Authorization: `Basic ${auth}` }, signal: abort.signal })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          return await response.json()
+        } finally {
+          clearTimeout(timeout)
+        }
+      })()
+      this.postMessage({ type: "chiefNotesLoaded", id: input.id, sessionID: input.sessionID, data })
+    } catch {
+      this.postMessage({
+        type: "chiefNotesLoaded",
+        id: input.id,
+        sessionID: input.sessionID,
+        error: "Specialist messages could not be refreshed.",
+      })
+    }
+  }
 
   private async handleLoadMessages(
     sessionID: string,
@@ -5727,6 +5768,30 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Filters events by project ID and tracked session IDs so each webview only sees its own sessions.
    */
   private handleEvent(event: ProviderEvent, directory?: string): void {
+    if ((event as { type: string }).type === "raya.chief.note.available") {
+      const raw = (event as { properties?: unknown }).properties
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return
+      const props = raw as Record<string, unknown>
+      if (
+        props.version === 1 &&
+        typeof props.sessionID === "string" &&
+        this.trackedSessionIds.has(props.sessionID) &&
+        typeof props.goalCreatedAt === "number" &&
+        typeof props.requestID === "string" &&
+        typeof props.revision === "string" &&
+        typeof props.noteID === "string" &&
+        (!directory || directory === "global" || sameDirectory(directory, this.getWorkspaceDirectory(props.sessionID)))
+      )
+        this.postMessage({
+          type: "chiefNotesAvailable",
+          sessionID: props.sessionID,
+          goalCreatedAt: props.goalCreatedAt,
+          requestID: props.requestID,
+          revision: props.revision,
+          noteID: props.noteID,
+        })
+      return
+    }
     if (event.type === "kilo-sessions.remote-status-changed") {
       this.remoteService?.updateFromEvent({ enabled: event.properties.enabled, connected: event.properties.connected })
       return
@@ -6234,9 +6299,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private getSessionDirectory(sessionId: string, session?: Session): string {
     const routed = this.routeSessionDirectory(sessionId)
     if (routed === null)
-      console.warn(
-        `[Raya] Provider: session ${sessionId} is ambiguous across projects, using tracked directory`,
-      )
+      console.warn(`[Raya] Provider: session ${sessionId} is ambiguous across projects, using tracked directory`)
     if (routed) return routed
     return this.sessionDirectories.get(sessionId) ?? session?.directory ?? this.getRootDirectory()
   }

@@ -5,6 +5,8 @@ import type { RayaGoal } from "@/kilocode/goal"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { RayaChief } from "@/kilocode/chief"
 import { TaskName } from "@/kilocode/tool/task-name"
+import { ChiefNoteEvent } from "@/kilocode/chief/event"
+import { GlobalBus } from "@/bus/global"
 import * as Tool from "@/tool/tool"
 
 /** A planned child can leave a bounded note in its Chief's durable inbox. This does not wake the parent model. */
@@ -92,7 +94,27 @@ export function chiefMessageTool(deps: {
             toolCallID: ctx.callID,
             text: input.text,
           }
-          const saved = yield* ledger.note(request).pipe(Effect.exit)
+          const saved = yield* ledger
+            .note(request, (note, revision) =>
+              Effect.sync(() => {
+                GlobalBus.emit("event", {
+                  directory: parent.directory,
+                  project: parent.projectID,
+                  payload: {
+                    type: ChiefNoteEvent.type,
+                    properties: {
+                      version: 1,
+                      sessionID: parent.id,
+                      goalCreatedAt: plan.goalCreatedAt,
+                      requestID: plan.requestID,
+                      revision,
+                      noteID: note.id,
+                    },
+                  },
+                })
+              }),
+            )
+            .pipe(Effect.exit)
           const current = Exit.isSuccess(saved)
             ? saved.value
             : (yield* ledger.read(parent.id).pipe(Effect.catch(() => Effect.succeed(undefined))))?.notes?.find(

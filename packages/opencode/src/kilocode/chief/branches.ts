@@ -87,6 +87,11 @@ export namespace ChiefBranches {
   })
   export type Note = typeof Note.Type
 
+  const Attention = Schema.Struct({
+    version: Schema.Literal(1),
+    pending: Schema.Array(Schema.String),
+  })
+
   /** Reports and evidence belong to the admitted input turn, never a later child conversation. */
   export function turn(rows: readonly MessageV2.WithParts[], id: MessageID | undefined) {
     if (!id) return
@@ -115,6 +120,7 @@ export namespace ChiefBranches {
     createdAt: Schema.Number,
     branches: Schema.Array(Branch).check(Schema.isMinLength(2), Schema.isMaxLength(3)),
     notes: Schema.optional(Schema.Array(Note)),
+    attention: Schema.optional(Attention),
     synthesis: Schema.optional(
       Schema.Struct({
         summary: Schema.String,
@@ -714,6 +720,11 @@ export namespace ChiefBranches {
           }
           if ((old.notes ?? []).filter((item) => item.branchID === input.branchID).length >= 8)
             throw new Error("Chief branch has reached its eight-note limit")
+          if (
+            (old.attention?.pending.length ?? 0) >= 24 ||
+            new Set(old.attention?.pending ?? []).size !== (old.attention?.pending.length ?? 0)
+          )
+            throw new Error("Chief attention ledger is full or inconsistent")
           const saved: Note = {
             version: 1,
             id,
@@ -729,7 +740,11 @@ export namespace ChiefBranches {
             at: Date.now(),
             state: "delivered",
           }
-          yield* storage.replace(key(input.goalID), { ...old, notes: [...(old.notes ?? []), saved] } satisfies Record)
+          yield* storage.replace(key(input.goalID), {
+            ...old,
+            notes: [...(old.notes ?? []), saved],
+            attention: { version: 1, pending: [...(old.attention?.pending ?? []), saved.id] },
+          } satisfies Record)
           // A publish is only a hint. Confirm the durable receipt under the same mutation lock,
           // then emit once for this new note; retries that find `existing` above never emit.
           if (notify) {
@@ -738,6 +753,118 @@ export namespace ChiefBranches {
               yield* notify(saved, old.revision).pipe(Effect.catchCause(() => Effect.void))
           }
           return saved
+        }),
+      )
+    })
+
+    const pending = Effect.fn("ChiefBranches.pending")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      requestID: string
+      revision: string
+    }) {
+      const record = yield* read(input.goalID)
+      if (
+        !record ||
+        record.version !== 2 ||
+        record.goalCreatedAt !== input.goalCreatedAt ||
+        record.requestID !== input.requestID ||
+        record.revision !== input.revision
+      )
+        throw new Error("Chief attention no longer matches the planned request")
+      yield* active(input.goalID, input.goalCreatedAt, input.revision)
+      const ids = record.attention?.pending ?? []
+      if (ids.length > 24 || new Set(ids).size !== ids.length) throw new Error("Chief attention ledger is inconsistent")
+      const notes = ids.map((id) => record.notes?.find((note) => note.id === id))
+      if (notes.some((note) => !note)) throw new Error("Chief attention references a missing note")
+      return notes as Note[]
+    })
+
+    const acknowledge = Effect.fn("ChiefBranches.acknowledge")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      requestID: string
+      revision: string
+      inspect: { messageID: MessageID; partID: string; callID: string }
+      ids: readonly string[]
+    }) {
+      if (!sessions || !input.ids.length || input.ids.length > 24 || new Set(input.ids).size !== input.ids.length)
+        throw new Error("Chief attention acknowledgement is incomplete")
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const record = yield* read(input.goalID)
+          if (
+            !record ||
+            record.version !== 2 ||
+            record.goalCreatedAt !== input.goalCreatedAt ||
+            record.requestID !== input.requestID ||
+            record.revision !== input.revision
+          )
+            throw new Error("Chief attention no longer matches the planned request")
+          yield* active(input.goalID, input.goalCreatedAt, input.revision)
+          const rows = yield* sessions.messages({ sessionID: input.goalID })
+          const parts = rows.flatMap((row) =>
+            row.info.role === "assistant" && row.info.id === input.inspect.messageID
+              ? row.parts.filter(
+                  (part): part is MessageV2.ToolPart =>
+                    part.type === "tool" &&
+                    part.id === input.inspect.partID &&
+                    part.callID === input.inspect.callID &&
+                    part.tool === "chief_inspect" &&
+                    part.state.status === "completed",
+                )
+              : [],
+          )
+          if (parts.length !== 1) throw new Error("Matching saved Chief inspection receipt was not found")
+          const part = parts[0]
+          if (
+            part.state.status !== "completed" ||
+            part.state.metadata?.requestID !== record.requestID ||
+            part.state.metadata?.goalCreatedAt !== record.goalCreatedAt ||
+            part.state.time.end < record.createdAt
+          )
+            throw new Error("Chief inspection receipt belongs to another plan")
+          const output = part.state.output
+          const raw = yield* Effect.try({
+            try: () => JSON.parse(output),
+            catch: () => new Error("Chief inspection receipt is unreadable"),
+          })
+          const decoded = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              requestID: Schema.String,
+              branches: Schema.Array(Schema.Struct({ id: Schema.String, notes: Schema.Array(Note) })),
+            }),
+          )(raw).pipe(Effect.mapError(() => new Error("Chief inspection receipt is unreadable")))
+          if (decoded.requestID !== record.requestID)
+            throw new Error("Chief inspection receipt belongs to another request")
+          for (const id of input.ids) {
+            const saved = record.notes?.find((note) => note.id === id)
+            if (!saved) throw new Error("Chief attention references a missing note")
+            const branch = record.branches.find((item) => item.id === saved.branchID)
+            const shown = decoded.branches
+              .filter((item) => item.id === saved.branchID)
+              .flatMap((item) => item.notes.filter((note) => note.id === id))
+            if (
+              !branch ||
+              branch.callID !== saved.taskCallID ||
+              branch.sessionID !== saved.childSessionID ||
+              branch.messageID !== saved.childMessageID ||
+              shown.length !== 1 ||
+              JSON.stringify(shown[0]) !== JSON.stringify(saved) ||
+              saved.at > part.state.time.end
+            )
+              throw new Error("Chief inspection did not return this branch note")
+          }
+          const current = record.attention?.pending ?? []
+          const next = current.filter((id) => !input.ids.includes(id))
+          if (next.length === current.length) return []
+          yield* storage.replace(key(input.goalID), {
+            ...record,
+            attention: { version: 1, pending: next },
+          } satisfies Record)
+          return current.filter((id) => input.ids.includes(id))
         }),
       )
     })
@@ -949,6 +1076,8 @@ export namespace ChiefBranches {
       reconcile,
       settle,
       note,
+      pending,
+      acknowledge,
       review,
       synthesize,
       completion,

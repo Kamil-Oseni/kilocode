@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 01:39 America/Toronto - durable Chief note attention ledger
+
+New Chief notes now append their stable IDs to an optional version-one `attention.pending` ledger in the same durable write as the note. Existing ledgers without that field retain readable notes but project zero pending attention, so deployment cannot re-alert historical messages. Exact active goal, request and revision are required to read pending notes. Clearing IDs requires one saved completed parent `chief_inspect` receipt with matching message, part, call, plan metadata, branch, child lineage, exact note content and inspection time; retries are idempotent, and later notes remain pending. No model wake, prompt scheduling, UI change or SSE behavior was added.
+
+Sixteen focused and existing Chief tests pass with 132 assertions, including duplicate save/ack, wrong branch or child, later note, paused/stale goal and legacy storage. CLI typecheck, formatting and upstream annotation guard pass. This is source-only. Next coalesce pending IDs into the existing goal continuation at a verified idle boundary with durable dispatch/ack and restart recovery; do not prompt directly from a child event. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 01:12 America/Toronto - installed live Chief note snapshot
 
 Commit `0449d2b7c2` is pushed and installed as `eden.raya@7.4.23-snapshot+0449d2b7c2.kamil-oseni.1790226445642`. The protected push passed 29 JavaScript/TypeScript package typechecks and the JetBrains typecheck. The low-memory snapshot workflow regenerated the SDK, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed sequential extension/webview typechecks and lint, bundled production assets, packaged and installed the VSIX; VS Code lists the exact version. Retained rollback VSIX SHA-256: `D10B6F28F82100038D77AE068D6C4EAAE35200F89471EFB9E1FE4ECBACE5F3BD`. This proves source and artifact identity, not real chat delivery in the running host. The live two-specialist conversation, narrow/wide layout, missed-event reconnect and backend/VS Code restart matrix remain open. Interim notes still do not wake the parent model; `FUT-AGENT-01/02` remain In progress.

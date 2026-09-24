@@ -10,6 +10,7 @@ import "../src/styles/prompt-input.css" // raya_change - preview the composer ch
 import "../src/styles/history.css" // raya_change - preview the history + session-list surfaces
 import "../src/styles/tool-overrides.css" // raya_change - preview the bundled tool-call group (#8)
 import "../src/styles/chat-layout.css" // raya_change - preview conversation lane + turn rhythm (#12)
+import "../src/styles/welcome.css"
 import "../src/styles/memory-provenance.css"
 import "../src/styles/routines.css"
 import "../src/styles/chat.css"
@@ -23,6 +24,7 @@ import {
   AgentManagerSubagentsPreview,
   ChildViewerPreview,
   ComposerPreview,
+  WelcomePreview,
   CloudRecoveryPreview,
   HistoryPreview,
   ReviewPreview,
@@ -73,6 +75,7 @@ type PvState =
   | "review-workspace"
   | "composer"
   | "composer-focus"
+  | "welcome"
   | "cloud-recovery"
   | "topnav"
   | "transcript"
@@ -115,6 +118,7 @@ const states: PvState[] = [
   "review-workspace",
   "composer",
   "composer-focus",
+  "welcome",
   "cloud-recovery",
   "topnav",
   "transcript",
@@ -449,6 +453,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "composer-focus"}>
         <ComposerPreview focus />
+      </Show>
+      <Show when={props.state === "welcome"}>
+        <WelcomePreview />
       </Show>
       <Show when={props.state === "cloud-recovery"}>
         <CloudRecoveryPreview />

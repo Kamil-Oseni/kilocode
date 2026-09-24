@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 18:51 America/Toronto - chat entry copy handoff
+
+The browser-panel copy/layout and compact composer configuration requested in the original goal are present in source; a focused browser panel DOM suite passes, but live rendering is not proved. The remaining repetitive first-chat paragraph has been removed, leaving the heading, composer placeholder and recent sessions. Isolated production-component previews at 320px and 900px were inspected; extension/webview typechecks, lint, preview build and 11 focused composer browser tests pass. Commit/push/install this user-visible change, then check the live VS Code view. Continue the larger Routines organization UX and installed Computer Use crash, latency and recovery work; `FUT-CU-01` remains In progress.
+
+Do not replace the desktop sequence's fresh post-action PowerShell capture with a late-arriving native stream packet. The native stream is stdout-only; packet arrival, worker scene version and renewed-image time cannot prove when its pixels were acquired relative to native input. A safe lower-latency path needs a versioned, request-identified native barrier sent after dispatch, a qualifying subsequent desktop present for the exact target, bounded fallback when no present arrives, and fail-closed handling for malformed or mismatched replies. Preserve the current fresh capture until the implementation and adverse installed-host proof exist.
+
 ## ChatGPT 2026-09-24 18:44 America/Toronto - installed guarded sequence checkpoint
 
 `d0c332dca2` is pushed and installed as `eden.raya@7.4.23-snapshot+d0c332dca2.kamil-oseni.1790289751988`; the retained 446-file rollback VSIX SHA-256 is `FE121C702CB2439128A1839536F4AC6035959980D706FD9E1A2270790CD3A594`. The push hook and low-memory packaging/installation gates passed. The source saves one serial foreground lookup per guarded Windows sequence step; actual p50/p95 and changed-window behavior remain unmeasured in the installed host. Do not dismiss the user's native error dialog; obtain a fault receipt before claiming a crash fix. Next run interactive latency, changed-window, Stop/takeover, disconnect/restart and prolonged-use checks. `FUT-CU-01` remains In progress.

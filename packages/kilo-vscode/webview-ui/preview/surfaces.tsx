@@ -3,6 +3,7 @@ import { Dynamic } from "solid-js/web"
 import { ToolRegistry } from "@kilocode/kilo-ui/message-part"
 import HistoryView from "../src/components/history/HistoryView"
 import { PromptInput } from "../src/components/chat/PromptInput"
+import { WelcomeEmptyState } from "../src/components/chat/WelcomeEmptyState"
 import { SessionReviewCluster } from "../src/components/chat/SessionReviewCluster"
 import { registerVscodeToolOverrides } from "../src/components/chat/VscodeToolOverrides"
 import { editReview } from "../src/components/chat/edit-review"
@@ -98,6 +99,8 @@ export const ComposerPreview: Component<{ focus?: boolean }> = (props) =>
       },
     }),
   )
+
+export const WelcomePreview: Component = () => wrap("s1", () => createComponent(WelcomeEmptyState, {}))
 
 const CloudRecovery: Component = () => {
   const session = useSession()

@@ -16,12 +16,6 @@
   }
 }
 
-.kilo-about-text {
-  max-width: 260px;
-  font-size: var(--kilo-font-size-13);
-  line-height: 1.4;
-}
-
 /* ============================================
    Work Style Picker
    ============================================ */

@@ -238,9 +238,16 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   min-width: 0;
+  max-width: 100%;
+}
+
+.session-review-status {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--font-family-sans);
+  font-size: var(--kilo-font-size-12);
 }
 
 .session-move-changes {

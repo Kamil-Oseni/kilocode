@@ -75,7 +75,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [discarding, setDiscarding] = createSignal(false)
   const [reviewing, setReviewing] = createSignal<ReviewRequest>()
   const [failed, setFailed] = createSignal<ReviewRequest>()
+  const [waiting, setWaiting] = createSignal(false)
   let epoch = 0
+  let reviewTimer: ReturnType<typeof setTimeout> | undefined
   const [revision, setRevision] = createSignal<{ session: string; value: string; expected?: Record<string, string> }>()
   let worktreeRef: HTMLDivElement | undefined
 
@@ -184,22 +186,52 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const details = revision()
     return !!key && ready(id(), details) && kept() !== key && !session.revert()
   }
+  const clearReviewTimer = () => {
+    if (reviewTimer) clearTimeout(reviewTimer)
+    reviewTimer = undefined
+  }
+  const refreshReview = () => {
+    const sid = id()
+    if (!sid || props.readonly) return
+    clearReviewTimer()
+    setWaiting(true)
+    reviewTimer = setTimeout(() => {
+      if (id() === sid) setWaiting(false)
+      reviewTimer = undefined
+    }, 5000)
+    vscode.postMessage({ type: "requestReviewStats", sessionID: sid })
+  }
   const requestReview = (action: "keep" | "undo", file?: string) => {
     const sid = id()
-    if (!sid || props.readonly || reviewing() || session.status() !== "idle" || server.connectionState() !== "connected") return
+    if (
+      !sid ||
+      props.readonly ||
+      reviewing() ||
+      session.status() !== "idle" ||
+      server.connectionState() !== "connected"
+    )
+      return
     const selected = file ? editReview.select(sid, file) : undefined
     const expected = file ? selected?.expected : revision()?.session === sid ? revision()?.expected : undefined
     if (!expected || Object.keys(expected).length === 0) {
-      vscode.postMessage({ type: "requestReviewStats", sessionID: sid })
-      showToast({ title: "Refreshing review details. Try the action again when the controls return." })
+      refreshReview()
       return
     }
-    const attempt = { session: sid, key: changeKey(), epoch, file: selected?.file, revision: selected && expected[selected.file], action }
+    const attempt = {
+      session: sid,
+      key: changeKey(),
+      epoch,
+      file: selected?.file,
+      revision: selected && expected[selected.file],
+      action,
+    }
     const request = retry(failed(), attempt) ?? crypto.randomUUID()
     setReviewing({ ...attempt, request })
     const files = selected ? [selected.file] : undefined
-    if (action === "keep") vscode.postMessage({ type: "editReviewKeepAll", sessionID: sid, requestID: request, expected, files })
-    if (action === "undo") vscode.postMessage({ type: "discardSessionChanges", sessionID: sid, requestID: request, expected, files })
+    if (action === "keep")
+      vscode.postMessage({ type: "editReviewKeepAll", sessionID: sid, requestID: request, expected, files })
+    if (action === "undo")
+      vscode.postMessage({ type: "discardSessionChanges", sessionID: sid, requestID: request, expected, files })
   }
   const keepAll = () => requestReview("keep")
   const discardAll = () => requestReview("undo")
@@ -210,16 +242,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   createEffect(() => {
     const sid = id()
     if (!sid || props.readonly) return
-    onCleanup(editReview.connect(sid, {
-      request: requestReview,
-      busy: () => !!reviewing() || session.status() !== "idle" || server.connectionState() !== "connected",
-    }))
+    onCleanup(
+      editReview.connect(sid, {
+        request: requestReview,
+        busy: () => !!reviewing() || session.status() !== "idle" || server.connectionState() !== "connected",
+      }),
+    )
   })
 
-  createEffect(() => {
-    const sid = id()
-    if (!sid || props.readonly || session.status() !== "idle") return
-    vscode.postMessage({ type: "requestReviewStats", sessionID: sid })
+  onCleanup(() => {
+    clearReviewTimer()
   })
 
   const moveToWorktree = () => {
@@ -271,6 +303,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     setDiscarding(false)
     setKept(undefined)
     setRevision(undefined)
+    setWaiting(false)
+    clearReviewTimer()
   })
 
   createEffect(() => {
@@ -287,17 +321,29 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     epoch++
     setKept(undefined)
     setRevision(undefined)
+    setWaiting(false)
+    clearReviewTimer()
+  })
+
+  createEffect(() => {
+    const sid = id()
+    if (!sid || props.readonly || session.status() !== "idle") return
+    refreshReview()
   })
 
   const offReview = vscode.onMessage((message) => {
     if (message.type === "reviewStatsLoaded" && message.sessionID && message.sessionID === id() && message.revision) {
+      clearReviewTimer()
+      setWaiting(false)
       editReview.update(message.sessionID, message.expected ?? {}, message.aliases, message.windows, message.accepted)
       setRevision({ session: message.sessionID, value: message.revision, expected: message.expected })
       if (message.accepted && message.expected) {
         const files = Object.entries(message.expected)
-        setKept(files.length > 0 && files.every(([file, hash]) => message.accepted?.[file] === hash)
-          ? `${message.sessionID}:${message.revision}:${message.files}:${message.additions}:${message.deletions}`
-          : undefined)
+        setKept(
+          files.length > 0 && files.every(([file, hash]) => message.accepted?.[file] === hash)
+            ? `${message.sessionID}:${message.revision}:${message.files}:${message.additions}:${message.deletions}`
+            : undefined,
+        )
       }
       return
     }
@@ -454,12 +500,15 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               additions={stats()?.additions ?? 0}
               deletions={stats()?.deletions ?? 0}
               pending={!!pending()}
+              missing={!ready(id(), revision())}
+              loading={waiting() || session.status() !== "idle"}
               discarding={discarding()}
               reviewing={!!reviewing()}
               idle={session.status() === "idle"}
               label={language.t("command.session.show.changes")}
               hint={changesTooltip()}
               onOpen={openChanges}
+              onRetry={refreshReview}
               onKeep={keepAll}
               onUndo={() => setDiscarding(true)}
               onConfirm={discardAll}

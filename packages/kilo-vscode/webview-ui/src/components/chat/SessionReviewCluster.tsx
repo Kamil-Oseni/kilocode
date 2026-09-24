@@ -8,12 +8,15 @@ export const SessionReviewCluster: Component<{
   additions: number
   deletions: number
   pending: boolean
+  missing: boolean
+  loading: boolean
   discarding: boolean
   reviewing: boolean
   idle: boolean
   label: string
   hint: JSX.Element
   onOpen: () => void
+  onRetry: () => void
   onKeep: () => void
   onUndo: () => void
   onConfirm: () => void
@@ -40,6 +43,22 @@ export const SessionReviewCluster: Component<{
         </Show>
       </Button>
     </Tooltip>
+    <Show when={props.files > 0 && props.missing}>
+      <span class="session-review-status" role="status">
+        {props.loading ? "Checking review details" : "Review details unavailable"}
+      </span>
+      <Show when={!props.loading}>
+        <Button
+          variant="ghost"
+          size="small"
+          class="session-move-changes"
+          disabled={!props.idle}
+          onClick={props.onRetry}
+        >
+          Retry
+        </Button>
+      </Show>
+    </Show>
     <Show when={props.pending}>
       <Show when={!props.discarding}>
         <Tooltip value="Keep every file edit in this chat" placement="top">

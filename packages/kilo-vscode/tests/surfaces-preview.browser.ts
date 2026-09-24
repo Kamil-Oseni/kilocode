@@ -162,6 +162,24 @@ test("light review cluster", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Confirm undo" })).toBeVisible()
 })
 
+for (const width of [320, 760]) {
+  test(`review details load, fail, and retry without exposing bulk actions at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-review-loading")
+    await expect(page.getByRole("status")).toHaveText("Checking review details")
+    await expect(page.getByRole("button", { name: "Keep all" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Undo all" })).toHaveCount(0)
+    await page.goto("/?state=light-review-unavailable")
+    await expect(page.getByRole("status")).toHaveText("Review details unavailable")
+    await page.screenshot({ path: info.outputPath(`review-unavailable-${width}.png`), fullPage: true })
+    await page.getByRole("button", { name: "Retry" }).click()
+    await expect(page.getByRole("status")).toHaveText("Checking review details")
+    await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Keep all" })).toHaveCount(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  })
+}
+
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {
     test(`${theme} production file review at ${width}px`, async ({ page }, info) => {

@@ -68,6 +68,8 @@ type PvState =
   | "slash"
   | "review"
   | "review-undo"
+  | "review-loading"
+  | "review-unavailable"
   | "composer"
   | "composer-focus"
   | "cloud-recovery"
@@ -107,6 +109,8 @@ const states: PvState[] = [
   "slash",
   "review",
   "review-undo",
+  "review-loading",
+  "review-unavailable",
   "composer",
   "composer-focus",
   "cloud-recovery",
@@ -428,6 +432,12 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "review-undo"}>
         <ReviewPreview confirming />
+      </Show>
+      <Show when={props.state === "review-loading"}>
+        <ReviewPreview status="loading" />
+      </Show>
+      <Show when={props.state === "review-unavailable"}>
+        <ReviewPreview status="unavailable" />
       </Show>
       <Show when={props.state === "composer"}>
         <ComposerPreview />

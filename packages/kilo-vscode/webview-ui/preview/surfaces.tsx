@@ -312,26 +312,32 @@ export const RecoveryPreview: Component = () =>
     </div>
   ))
 
-export const ReviewPreview: Component<{ confirming?: boolean }> = (props) => (
-  <div class="session-actions-row">
-    <SessionReviewCluster
-      files={4}
-      additions={128}
-      deletions={14}
-      pending
-      discarding={!!props.confirming}
-      reviewing={false}
-      idle
-      label="Show Changes"
-      hint="4 files changed"
-      onOpen={() => {}}
-      onKeep={() => {}}
-      onUndo={() => {}}
-      onConfirm={() => {}}
-      onCancel={() => {}}
-    />
-  </div>
-)
+export const ReviewPreview: Component<{ confirming?: boolean; status?: "loading" | "unavailable" }> = (props) => {
+  const [retry, setRetry] = createSignal(false)
+  return (
+    <div class="session-actions-row">
+      <SessionReviewCluster
+        files={4}
+        additions={128}
+        deletions={14}
+        pending={!props.status}
+        missing={!!props.status}
+        loading={props.status === "loading" || retry()}
+        discarding={!!props.confirming}
+        reviewing={false}
+        idle
+        label="Show Changes"
+        hint="4 files changed"
+        onOpen={() => {}}
+        onRetry={() => setRetry(true)}
+        onKeep={() => {}}
+        onUndo={() => {}}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    </div>
+  )
+}
 
 registerVscodeToolOverrides()
 

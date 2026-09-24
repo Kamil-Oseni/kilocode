@@ -53,12 +53,13 @@ describe("Chief edit preview", () => {
     const item = await repo()
     await Bun.write(path.join(item.dir, "large.txt"), "a".repeat(3000))
     await Bun.write(path.join(item.dir, "raw.bin"), new Uint8Array([0, 1, 2]))
+    await Bun.write(path.join(item.dir, "invalid.txt"), new Uint8Array([0xc3, 0x28]))
     const preview = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base, maxBytes: 1024 })
     expect(preview.truncated).toBe(true)
     expect(preview.digest).toBeUndefined()
-    expect(preview.files[0]).toMatchObject({ path: "large.txt", truncated: true, patch: undefined })
-    expect(preview.files[1]?.patch).toBeUndefined()
-    const binary = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base, maxFiles: 2 })
+    expect(preview.files.find((file) => file.path === "large.txt")).toMatchObject({ truncated: true, patch: undefined })
+    expect(preview.files.find((file) => file.path === "invalid.txt")).toMatchObject({ binary: true, patch: undefined })
+    const binary = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base, maxFiles: 3 })
     expect(binary.files.find((file) => file.path === "raw.bin")).toMatchObject({ binary: true, patch: undefined })
     const limited = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base, maxFiles: 1 })
     expect(limited.truncated).toBe(true)
@@ -82,6 +83,17 @@ describe("Chief edit preview", () => {
       conflict: true,
       patch: undefined,
     })
+  }, 30_000)
+
+  test("withholds fingerprints for Git link modes", async () => {
+    const item = await repo()
+    await Bun.write(path.join(item.dir, "target.txt"), "tracked.txt")
+    const blob = git(item.dir, "hash-object", "-w", "target.txt")
+    git(item.dir, "update-index", "--add", "--cacheinfo", `120000,${blob},link.txt`)
+    await Bun.write(path.join(item.dir, "link.txt"), "tracked.txt")
+    const preview = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base })
+    expect(preview.digest).toBeUndefined()
+    expect(preview.files.find((file) => file.path === "link.txt")).toMatchObject({ binary: true, patch: undefined })
   }, 30_000)
 
   test("rejects wrong roots and fixed base identities", async () => {

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
+import { isUtf8 } from "node:buffer"
 import { lstat, realpath } from "node:fs/promises"
 import path from "node:path"
 
@@ -143,7 +144,7 @@ export namespace ChiefEdits {
             .arrayBuffer(),
         )
         const truncated = stat.size > remaining || bytes.length > remaining
-        const binary = bytes.includes(0)
+        const binary = bytes.includes(0) || !isUtf8(bytes)
         const patch = truncated || binary ? undefined : bytes.toString("utf8")
         remaining -= Math.min(bytes.length, remaining)
         files.push({ path: name, status: meta.status, untracked: true, conflict, binary, truncated, patch })
@@ -158,7 +159,12 @@ export namespace ChiefEdits {
       const truncated = result.truncated || bytes.length > remaining
       const binary = truncated
         ? undefined
-        : bytes.includes(Buffer.from("GIT binary patch")) || bytes.includes(Buffer.from("Binary files"))
+        : bytes.includes(Buffer.from("GIT binary patch")) ||
+          bytes.includes(Buffer.from("Binary files")) ||
+          !isUtf8(bytes) ||
+          /^(?:old mode|new mode|deleted file mode|new file mode|index) .*\b(?:120000|160000)\b/m.test(
+            bytes.toString("utf8").split("\n@@")[0] ?? "",
+          )
       const patch = truncated || binary ? undefined : bytes.toString("utf8")
       remaining -= Math.min(bytes.length, remaining)
       files.push({ path: name, status: meta.status, untracked: false, conflict, binary, truncated, patch })

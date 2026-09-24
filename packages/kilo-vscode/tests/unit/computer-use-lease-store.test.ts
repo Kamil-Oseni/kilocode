@@ -43,6 +43,85 @@ function memory(seed?: unknown) {
 }
 
 describe("Computer Use lease store", () => {
+  it("Stop cancels a pending durable grant before it can authorize or survive restart", async () => {
+    let release!: () => void
+    let signal!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const called = new Promise<void>((resolve) => (signal = resolve))
+    let value: unknown
+    let writes = 0
+    const storage: LeaseStorage = {
+      get: <T>() => value as T | undefined,
+      update: async (_key, next) => {
+        writes++
+        if (writes === 1) {
+          signal()
+          await gate
+        }
+        value = structuredClone(next)
+      },
+    }
+    const store = new ComputerUseLeaseStore(storage, () => 100)
+    const pending = store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "until_stopped",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    await called
+    expect(store.authorize(auth()).decision).toBe("ask")
+    const stopped = store.stop()
+    release()
+    await expect(pending).rejects.toThrow(/changed before persistence/i)
+    await stopped
+    expect(writes).toBe(2)
+    expect(value).toBeUndefined()
+    expect(store.authorize(auth()).decision).toBe("deny")
+    expect(new ComputerUseLeaseStore(storage, () => 100).current()).toBeUndefined()
+  })
+
+  it("does not authorize an uncommitted grant and recovers after a failed write", async () => {
+    let fail!: (error: Error) => void
+    let signal!: () => void
+    const called = new Promise<void>((resolve) => (signal = resolve))
+    let writes = 0
+    const storage: LeaseStorage = {
+      get: () => undefined,
+      update: () => {
+        writes++
+        if (writes === 1)
+          return new Promise<void>((_resolve, reject) => {
+            fail = reject
+            signal()
+          })
+        return Promise.resolve()
+      },
+    }
+    const store = new ComputerUseLeaseStore(storage, () => 100)
+    const input: GrantInput = {
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "until_stopped",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    }
+    const pending = store.grant(input)
+    expect(store.current()).toBeUndefined()
+    expect(store.authorize(auth()).decision).toBe("ask")
+    await called
+    fail(new Error("Storage write failed"))
+    await expect(pending).rejects.toThrow("Storage write failed")
+    expect(store.current()).toBeUndefined()
+    const saved = await store.grant(input)
+    expect(writes).toBe(2)
+    expect(store.authorize(auth()).grantID).toBe(saved.id)
+  })
+
   it("rejects malformed grant messages before creating or widening authority", async () => {
     const store = new ComputerUseLeaseStore(memory(), () => 100)
     const valid: GrantInput = {

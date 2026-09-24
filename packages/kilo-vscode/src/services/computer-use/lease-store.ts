@@ -81,6 +81,8 @@ export class ComputerUseLeaseStore {
   private readonly sessions = new Set<string>()
   private readonly revoked = new Set<string>()
   private writes = Promise.resolve()
+  private revision = 0
+  private pending: { revision: number; sessionID: string } | undefined
 
   constructor(
     private readonly storage: LeaseStorage,
@@ -138,16 +140,25 @@ export class ComputerUseLeaseStore {
       sensitiveSessionID: input.sessionID,
       cooperativeInput: input.cooperativeInput,
     }
-    this.lease = lease
-    this.revoked.delete(input.sessionID)
-    await this.persist()
-    this.emit()
-    return this.current()!
+    const revision = ++this.revision
+    this.pending = { revision, sessionID: input.sessionID }
+    try {
+      await this.persist(lease)
+      if (this.revision !== revision) throw new Error("Computer Use grant changed before persistence completed")
+      this.lease = lease
+      this.revoked.delete(input.sessionID)
+      this.emit()
+      return this.current()!
+    } finally {
+      if (this.pending?.revision === revision) this.pending = undefined
+    }
   }
 
   async pause(): Promise<void> {
-    if (!this.lease || this.lease.state !== "active") return
-    this.lease = { ...this.lease, state: "paused" }
+    if (!this.pending && (!this.lease || this.lease.state !== "active")) return
+    ++this.revision
+    if (this.lease?.state === "active") this.lease = { ...this.lease, state: "paused" }
+    this.pending = undefined
     this.emit()
     await this.persist()
   }
@@ -158,13 +169,17 @@ export class ComputerUseLeaseStore {
       await this.stop()
       return
     }
+    ++this.revision
     this.lease = { ...this.lease, state: "active" }
     await this.persist()
     this.emit()
   }
 
   async stop(): Promise<void> {
-    if (!this.lease) return
+    if (!this.lease && !this.pending) return
+    ++this.revision
+    if (this.pending) this.revoked.add(this.pending.sessionID)
+    this.pending = undefined
     for (const session of this.sessions) this.revoked.add(session)
     this.sessions.clear()
     this.lease = undefined
@@ -205,9 +220,9 @@ export class ComputerUseLeaseStore {
     return this.authorize(request)
   }
 
-  private persist(): Promise<void> {
-    const value = this.lease?.lifetime.kind === "all_sessions" ? this.lease : undefined
-    this.writes = this.writes.then(() => Promise.resolve(this.storage.update(key, value)))
+  private persist(lease = this.lease): Promise<void> {
+    const value = lease?.lifetime.kind === "all_sessions" ? lease : undefined
+    this.writes = this.writes.catch(() => undefined).then(() => Promise.resolve(this.storage.update(key, value)))
     return this.writes
   }
 

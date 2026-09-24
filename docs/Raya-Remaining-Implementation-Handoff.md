@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 11:16 America/Toronto - durable grant activation boundary
+
+The Computer Use lease store now activates a grant only after its storage write succeeds. A rejected write leaves no new active authority and no permanently poisoned write queue; Stop invalidates a pending grant and queues a removal behind its write. Focused tests pass 11 cases / 61 assertions, including rejected storage and Stop-before-write-completion; both extension typechecks and lint pass. This source fix is not installed yet. Do not claim durable Stop if the removal write itself fails: the prior stored all-session lease can return after restart. Continue with explicit failed-removal recovery and the continuous capture worker/real Windows benchmark. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 11:04 America/Toronto - validated Computer Use grant installed
 
 `8a3d058d84` is pushed and installed as `eden.raya@7.4.23-snapshot+8a3d058d84.kamil-oseni.1790262143674`; VS Code lists that version. The retained rollback VSIX SHA-256 is `3c13509ef483e7fff668ff1ca1a739ebe204a8bf6aaa018a05a2d8ac1246839d`. The unchanged CLI/SDK were reused; extension/webview typechecks, lint, production packaging and install passed. Runtime grant validation is packaged, but no installed-host Computer Use acceptance was run. Next implement a persistent cancellable native capture worker with exact target/scene identity and bounded changed-region transport, benchmark WGC and DXGI on an interactive host before changing the default, then continue UIA correlation and the release matrix. Keep `FUT-CU-01` In progress.

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 18:44 America/Toronto - installed guarded sequence checkpoint
+
+`d0c332dca2` is pushed and installed as `eden.raya@7.4.23-snapshot+d0c332dca2.kamil-oseni.1790289751988`; the retained 446-file rollback VSIX SHA-256 is `FE121C702CB2439128A1839536F4AC6035959980D706FD9E1A2270790CD3A594`. The push hook and low-memory packaging/installation gates passed. The source saves one serial foreground lookup per guarded Windows sequence step; actual p50/p95 and changed-window behavior remain unmeasured in the installed host. Do not dismiss the user's native error dialog; obtain a fault receipt before claiming a crash fix. Next run interactive latency, changed-window, Stop/takeover, disconnect/restart and prolonged-use checks. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 18:41 America/Toronto - guarded sequence latency handoff
 
 The Windows bounded-action sequence reuses its versioned exact target and saves one foreground PowerShell lookup per step. The native dispatch script still checks foreground window ID, location, and selected process identity immediately before input; other drivers keep a fresh lookup. Changed-target input is refused with an unknown, no-replay outcome. Focused adverse tests, extension typecheck and lint pass. Commit, push and install remain, followed by real stage p50/p95 measurement and installed changed-window proof. Do not substitute a cached pre-action frame for the fresh post-action capture. The user's native access-violation dialog was reported for diagnosis, not dismissal; no fault receipt proves its cause. `FUT-CU-01` remains In progress.

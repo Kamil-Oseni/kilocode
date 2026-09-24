@@ -406,6 +406,8 @@ export const MessageList: Component<MessageListProps> = (props) => {
 
   function toolText(part: Part & { type: "tool" }): ToolChunk[] {
     const state = part.state
+    if (part.tool === "task" && state.status === "error")
+      return [...taskText(part, state), ...(state.error ? [state.error] : [])]
     if (state.status === "error") return state.error ? [state.error] : []
     // task's trigger (title "{type} Agent" + input.description subtitle) and
     // question's dock (question text + full option list) render the same
@@ -483,6 +485,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
       title: (agent) => i18n.t("ui.tool.agent", { type: agent }),
     })
     const chunks = [visible.title]
+    if (visible.status) chunks.push(visible.status)
     if (visible.description) chunks.push(visible.description)
     if (visible.access) chunks.push(visible.access === "read" ? "Read only" : "Can edit")
     // Markdown links contribute their visible labels, never hidden URLs.

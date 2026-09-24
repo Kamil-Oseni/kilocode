@@ -13,6 +13,7 @@ import {
   taskResult,
   taskRunning,
   taskSearchText,
+  taskStatus,
   taskVisible,
 } from "../../webview-ui/src/components/chat/task-tool-state" // raya_change
 
@@ -48,6 +49,27 @@ describe("completed task hydration", () => {
     expect(taskResult("plain output", undefined)).toBe("plain output")
   })
 
+  it("distinguishes a saved background start from a finished child report", () => {
+    const started =
+      '<task id="ses_child" state="running">\n<task_result>The task is working in the background.</task_result>\n</task>'
+    const finished =
+      '<task id="ses_child" state="completed">\n<task_result>Audit findings are ready.</task_result>\n</task>'
+    expect(taskResult(started, undefined)).toBeUndefined()
+    expect(taskStatus("completed", started)).toBe("Started in background")
+    const legacy = "task_id: ses_child\nstate: running\n\n<task_result>Task is still running.</task_result>"
+    expect(taskResult(legacy, undefined)).toBeUndefined()
+    expect(taskStatus("completed", legacy)).toBe("Started in background")
+    expect(taskStatus("completed", finished)).toBe("Report ready")
+    expect(taskResult(finished, undefined)).toBe("Audit findings are ready.")
+    expect(taskStatus("running", undefined)).toBe("Working")
+    expect(taskStatus("error", undefined)).toBe("Needs attention")
+    expect(taskStatus("completed", '<task id="ses_child" state="completed"></task>')).toBeUndefined()
+    expect(taskSearchText({ status: "completed", output: started, title: (agent) => agent })).toMatchObject({
+      status: "Started in background",
+      result: undefined,
+    })
+  })
+
   it("indexes the durable child name and completed report that the task card renders", () => {
     const input = { subagent_type: "explore", description: "Audit search behavior" }
     const part = { selectedAgent: "researcher", displayName: "Search audit" }
@@ -56,7 +78,8 @@ describe("completed task hydration", () => {
     const completed = taskSearchText({ status: "completed", input, part, output, child: "ses_child", title })
     expect(completed).toEqual({
       title: "Search audit",
-      description: "Audit search behavior",
+      description: undefined,
+      status: "Report ready",
       access: undefined,
       result: "Found the missing report",
     })
@@ -65,6 +88,9 @@ describe("completed task hydration", () => {
     expect(taskSearchText({ status: "running", input, part, output, child: "ses_child", title }).result).toBeUndefined()
     expect(taskSearchText({ status: "completed", input, output, child: "ses_child", title }).title).toBe(
       "explore Agent",
+    )
+    expect(taskSearchText({ status: "completed", input, output, child: "ses_child", title }).description).toBe(
+      "Audit search behavior",
     )
   })
 

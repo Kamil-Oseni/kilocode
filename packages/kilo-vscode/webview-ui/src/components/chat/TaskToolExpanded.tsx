@@ -21,7 +21,16 @@ import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { childID } from "../../context/session-utils"
 import { openSubagent } from "./open-subagent"
-import { agentIcon, taskAccess, taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
+import {
+  agentIcon,
+  taskAccess,
+  taskAgent,
+  taskModel,
+  taskResult,
+  taskRunning,
+  taskStatus,
+  taskVisible,
+} from "./task-tool-state" // raya_change
 import { chiefReceipt, type ChiefPart } from "./chief-activity"
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
@@ -92,6 +101,8 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
   const description = createMemo(() => {
     return taskMetadata().description // raya_change - distinguish automatic Chief routing from explicit overrides
   })
+  const brief = createMemo(() => (started() || taskMetadata().displayName ? undefined : description()))
+  const status = createMemo(() => taskStatus(props.status, props.output) ?? (started() ? "Started" : undefined))
 
   // All tool parts from the child session — the compact summary list
   const childToolParts = createMemo(() => {
@@ -163,19 +174,20 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
         <span data-slot="basic-tool-tool-title" class="capitalize">
           {title()}
         </span>
-        <Show when={started() || description() || access() || childToolCount() > 0}>
+        <Show when={status() || brief() || access() || (running() && childToolCount() > 0)}>
           <span data-slot="basic-tool-tool-subtitle">
-            {started() ? "Started" : description()}
+            {status() ?? brief()}
+            <Show when={status() && brief()}> · {brief()}</Show>
             <Show when={access()}>
               {(value) => (
                 <>
-                  {started() || description() ? " · " : ""}
+                  {status() || brief() ? " · " : ""}
                   {value() === "read" ? "Read only" : "Can edit"}
                 </>
               )}
             </Show>
-            <Show when={childToolCount() > 0}>
-              {started() || description() || access() ? " · " : ""}
+            <Show when={running() && childToolCount() > 0}>
+              {status() || brief() || access() ? " · " : ""}
               {language.t(childToolCount() === 1 ? "task.subagent.steps.one" : "task.subagent.steps.many", {
                 count: String(childToolCount()),
               })}

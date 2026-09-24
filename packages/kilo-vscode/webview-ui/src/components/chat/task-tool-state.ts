@@ -6,10 +6,29 @@ export function taskVisible(open: boolean | undefined, id: string | undefined) {
   return open ? id : undefined
 }
 
+function taskOutputState(output: string) {
+  return (
+    /^\s*<task\b[^>]*\bstate="([^"]+)"[^>]*>/.exec(output)?.[1] ??
+    /^\s*task_id:[^\n]*\nstate:\s*(running|completed|error)\b/.exec(output)?.[1]
+  )
+}
+
 export function taskResult(output: string | undefined, id: string | undefined) {
   if (id || typeof output !== "string") return
+  const state = taskOutputState(output)
+  if (state && state !== "completed") return
   const match = /<task_result>\s*([\s\S]*?)\s*<\/task_result>/.exec(output)
+  if (state && !match) return
   return match?.[1] ?? output
+}
+
+/** A compact, historical task status derived from its saved tool result. */
+export function taskStatus(status: string | undefined, output: string | undefined) {
+  if (taskRunning(status)) return "Working"
+  if (status === "error") return "Needs attention"
+  if (status !== "completed") return
+  if (output && taskOutputState(output) === "running") return "Started in background"
+  if (taskResult(output, undefined)?.trim()) return "Report ready"
 }
 
 /** Use the routed specialist, never the task title, to choose chat chrome. */
@@ -80,9 +99,11 @@ export function taskSearchText(opts: {
   title: (agent: string) => string
 }) {
   const agent = taskAgent(opts.input, opts.part, opts.metadata)
+  const status = taskStatus(opts.status, opts.output)
   return {
     title: agent.displayName ?? opts.title(agent.agent),
-    description: agent.description,
+    description: agent.displayName ? undefined : agent.description,
+    status,
     access: taskAccess(opts.part, opts.metadata),
     result: taskResult(opts.output, taskRunning(opts.status) ? opts.child : undefined),
   }

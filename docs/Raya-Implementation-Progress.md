@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 10:22 America/Toronto - ordinary-chat Chief snapshot installed
+
+**Status: source committed/pushed in `e349b9f782`, production snapshot installed; live acceptance remains open.** The low-memory workflow rebuilt the CLI, passed CLI version/models/sandbox-worker smoke tests, extension and webview typechecks and lint, packaged 443 files, and installed `eden.raya@7.4.23-snapshot+e349b9f782.kamil-oseni.1790259507752`. VS Code lists that exact version. The retained rollback VSIX SHA-256 is `1ef77bc3344e63bf4ad2822af92767a1150b63fa5c7c5cb5ed08f54e52a43ee8`. SDK generation left no tracked diff.
+
+This makes read-only, request-bound specialist planning and review available in the installed backend. The exact real-chat two-specialist run, narrow/wide presentation, backend restart, VS Code restart and partial-attention recovery have not been demonstrated. Keep `FUT-AGENT-01/02` **In progress**.
+
 ## ChatGPT 2026-09-24 10:15 America/Toronto - ordinary-chat Chief tools reach saved request plans
 
 **Status: source implemented and focused tests pass; not yet committed, pushed, or installed.** `chief_plan` now records two or three exact, read-only branches for an ordinary routed request when no active goal owns the turn. It rotates a prior request marker only after saved terminal review and synthesis; paused or blocked goals cannot become an ordinary request plan. `chief_inspect`, `chief_review` and `chief_synthesize` use the version-three request ledger when its marker exists. Review requires an exact completed child tool reference and the exact saved inspection tool reference; a newer user turn or mismatched child evidence refuses review. Goal-bound branch behavior remains on its existing path. Auto's instruction now distinguishes ordinary read-only plans from edit-capable active-goal plans.

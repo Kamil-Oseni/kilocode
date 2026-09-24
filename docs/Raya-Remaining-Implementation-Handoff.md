@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 10:22 America/Toronto - request-Chief snapshot installed
+
+`e349b9f782` is pushed and installed as `eden.raya@7.4.23-snapshot+e349b9f782.kamil-oseni.1790259507752`. VS Code lists that version; the rollback VSIX SHA-256 is `1ef77bc3344e63bf4ad2822af92767a1150b63fa5c7c5cb5ed08f54e52a43ee8`. The low-memory build passed CLI smoke tests, extension/webview typechecks and lint, packaged 443 files and left no generated SDK diff. Next is a real ordinary chat requiring two independent read-only specialists, followed by saved child reports and exact review, then narrow/wide UI and backend/VS Code restart checks. Keep `FUT-AGENT-01/02` In progress until these and the remaining permission/recovery cases pass.
+
 ## ChatGPT 2026-09-24 10:15 America/Toronto - ordinary request tool bridge
 
 The four registered Auto Chief tools now branch on an exact version-three request marker: ordinary chat can save read-only plans, inspect real child turns, review only with a matching saved inspection receipt and exact child tool evidence, and synthesize all reviewed branches. A later request rotates a terminal predecessor before planning. Active goal plans keep their version-two behavior. The relevant routing, request, rotation and Task suite passes 70 tests / 429 assertions; CLI typecheck, formatting and source guards pass. Source is not yet in an installed snapshot. Next: commit/push, install a low-memory snapshot and test a real two-specialist chat with restarted backend and VS Code. Do not claim provider-driven fanout or `FUT-AGENT-01/02` Verified from fixtures alone.

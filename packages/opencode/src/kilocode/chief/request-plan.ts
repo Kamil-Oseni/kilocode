@@ -28,11 +28,19 @@ export namespace ChiefRequestPlan {
     identity: Identity,
     createdAt: Schema.Number,
     branches: Schema.Array(ChiefBranches.Branch).check(Schema.isMinLength(2), Schema.isMaxLength(3)),
+    synthesis: Schema.optional(
+      Schema.Struct({
+        version: Schema.Literal(1),
+        summary: Schema.String,
+        findings: Schema.Array(Schema.Struct({ branchID: Schema.String, conclusion: Schema.String })),
+        at: Schema.Number,
+      }),
+    ),
   })
   export type Record = typeof Record.Type
 
   const marker = (id: SessionID) => ["raya", "chief", "request-plan", id, "active"]
-  const key = (id: SessionID, request: MessageID) => ["raya", "chief", "request-plan", id, request]
+  export const key = (id: SessionID, request: MessageID) => ["raya", "chief", "request-plan", id, request]
   const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
   export const active = Effect.fn("ChiefRequestPlan.active")(function* (
@@ -89,6 +97,22 @@ export namespace ChiefRequestPlan {
       const record = yield* read(id, marker.identity.requestID)
       if (!record || JSON.stringify(record.identity) !== JSON.stringify(marker.identity))
         throw new Error("Chief request plan is incomplete or changed")
+      const ids = record.branches.map((branch) => branch.id)
+      const calls = record.branches.flatMap((branch) => (branch.callID ? [branch.callID] : []))
+      const children = record.branches.flatMap((branch) => (branch.sessionID ? [branch.sessionID] : []))
+      if (
+        record.branches.some(
+          (branch) =>
+            branch.access !== "read" ||
+            (branch.state === "planned" && (branch.callID || branch.sessionID || branch.messageID)) ||
+            (branch.state === "admitted" && !branch.callID) ||
+            (branch.state === "completed" && (!branch.callID || !branch.sessionID || !branch.messageID)),
+        ) ||
+        new Set(ids).size !== ids.length ||
+        new Set(calls).size !== calls.length ||
+        new Set(children).size !== children.length
+      )
+        throw new Error("Chief request plan has inconsistent branch authority or lineage")
       return record
     })
 
@@ -319,6 +343,16 @@ export namespace ChiefRequestPlan {
       )
     })
 
-    return { active: (id: SessionID) => active(storage, id), read, load, start, reserve, admit, settle, reconcile }
+    return {
+      active: (id: SessionID) => active(storage, id),
+      read,
+      saved,
+      load,
+      start,
+      reserve,
+      admit,
+      settle,
+      reconcile,
+    }
   }
 }

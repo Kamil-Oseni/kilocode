@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 15:20 America/Toronto - native display-change guard
+
+The DXGI candidate now checks the monitor rectangle, window DPI, DXGI output coordinates and rotation on every acquired frame before the GPU copy; a stale crop after same-size display reconfiguration fails closed. The child supervisor reports nonzero exit status and retains no pixels; a Windows synthetic-exit test showed Bun exposes only the low byte, so status alone cannot prove the user-reported access violation. MSVC `/W4` compile/self-test, 44 focused tests / 245 assertions, extension/webview typechecks and lint pass. The crash screenshot predates the cursor install. A read-only audit found no definite C++ buffer or COM-lifetime bug; the live DXGI copy/map/WIC path remains untested by `--self-test`. Commit/push/install this guard, then collect a symbolized interactive crash trace and verify actual cursor frames. Continue all-monitor, recovery and latency work without promoting the candidate or marking `FUT-CU-01` Verified.
+
 ## ChatGPT 2026-09-24 15:18 America/Toronto - installed cursor checkpoint
 
 `ac2921925c` is pushed and installed as `eden.raya@7.4.23-snapshot+ac2921925c.kamil-oseni.1790277046853`; the retained VSIX contains the native executable and has SHA-256 `FEF205A918CB04EFB2FDC579B6F666434C3D3A7B521ED18A7BF79358909E8CD9`. Low-memory packaging passed native compile/self-test, extension/webview typechecks, lint and installation (444 files); 43 focused tests / 241 assertions and 30 repeated native self-tests pass. A user-observed native memory-read application error is still unexplained; controlled runs found no dump or matching event. Keep DXGI opt-in and GDI default. The next concrete action is an interactive fault trace and real cursor-frame validation, followed by multi-monitor/rotated implementation and installed-host recovery/latency/resource acceptance. `FUT-CU-01` remains In progress.

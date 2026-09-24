@@ -286,9 +286,16 @@ struct Target {
   HWND handle;
   HMONITOR monitor;
   RECT rect;
+  RECT display;
+  UINT dpi;
   std::string id;
   std::string location;
 };
+
+static bool equal(RECT first, RECT second) {
+  return first.left == second.left && first.top == second.top &&
+         first.right == second.right && first.bottom == second.bottom;
+}
 
 static RECT intersect(RECT rect, RECT desktop) {
   RECT visible{std::max(rect.left, desktop.left), std::max(rect.top, desktop.top),
@@ -318,6 +325,8 @@ static Target target() {
   if (!monitor) throw Failure("unsupported_surface", "foreground window has no monitor");
   MONITORINFO info{sizeof(info)};
   if (!GetMonitorInfoW(monitor, &info)) throw std::runtime_error("monitor bounds unavailable");
+  UINT dpi = GetDpiForWindow(handle);
+  if (!dpi) throw Failure("unsupported_surface", "foreground DPI is unavailable");
   if (rect.left < info.rcMonitor.left || rect.top < info.rcMonitor.top || rect.right > info.rcMonitor.right || rect.bottom > info.rcMonitor.bottom)
     throw Failure("unsupported_surface", "foreground window spans monitors or exceeds the monitor");
   DWORD pid = 0;
@@ -331,12 +340,13 @@ static Target target() {
   std::ostringstream location;
   location << "pid:" << pid << ";title:" << utf8(std::wstring(title, size_t(count))) << ";bounds:"
            << rect.left << ',' << rect.top << ',' << width << ',' << height;
-  return {handle, monitor, rect, id.str(), location.str()};
+  return {handle, monitor, rect, info.rcMonitor, dpi, id.str(), location.str()};
 }
 
 static void same(const Target& original) {
   auto current = target();
-  if (current.handle != original.handle || current.monitor != original.monitor || current.location != original.location)
+  if (current.handle != original.handle || current.monitor != original.monitor || current.location != original.location ||
+      !equal(current.display, original.display) || current.dpi != original.dpi)
     throw Failure("target_changed", "foreground target changed during capture");
 }
 
@@ -463,6 +473,10 @@ static void run(HANDLE pipe) {
     require(resource.As(&source), "capture texture");
     D3D11_TEXTURE2D_DESC current{};
     source->GetDesc(&current);
+    DXGI_OUTPUT_DESC active{};
+    require(output->GetDesc(&active), "active output GetDesc");
+    if (!equal(active.DesktopCoordinates, outputDesc.DesktopCoordinates) || active.Rotation != outputDesc.Rotation)
+      throw Failure("display_changed", "DXGI output geometry changed before copy");
     if (current.Format != texture.Format || current.Width != desc.ModeDesc.Width ||
         current.Height != desc.ModeDesc.Height || box.right > current.Width || box.bottom > current.Height)
       throw Failure("display_changed", "DXGI source dimensions changed before copy");
@@ -527,6 +541,8 @@ int wmain(int argc, wchar_t** argv) {
         RECT visible = intersect(RECT{-8, -8, 1928, 1088}, RECT{0, 0, 1920, 1080});
         if (visible.left != 0 || visible.top != 0 || visible.right != 1920 || visible.bottom != 1080)
           throw Failure("capture_failed", "visible desktop clipping self-test failed");
+        if (equal(RECT{0, 0, 1920, 1080}, RECT{0, 0, 1920, 1079}))
+          throw Failure("capture_failed", "display geometry change self-test failed");
         bool refused = false;
         try {
           intersect(RECT{-100, -100, -1, -1}, RECT{0, 0, 1920, 1080});

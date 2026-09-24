@@ -61,6 +61,24 @@ describe("native desktop capture host", () => {
     expect(errors).toHaveLength(1)
   })
 
+  const windows = process.platform === "win32" ? it : it.skip
+  windows("reports a nonzero native exit and retains no frame", async () => {
+    const errors: Error[] = []
+    const host = new NativeCaptureHost("cmd.exe", (error) => errors.push(error), [
+      "/d",
+      "/c",
+      "exit",
+      "/b",
+      "-1073741819",
+    ])
+    host.start()
+    await until(() => errors.length === 1)
+    expect(errors[0]?.message).toContain("0x00000005")
+    expect(host.latest()).toBeUndefined()
+    await Bun.sleep(20)
+    expect(errors).toHaveLength(1)
+  })
+
   it("stops on an explicit native error and never retains late pixels after Stop", async () => {
     const errors: Error[] = []
     const terminal = new NativeCaptureHost(process.execPath, (error) => errors.push(error), [

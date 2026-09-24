@@ -51,7 +51,8 @@ export class NativeCaptureHost {
       if (generation !== this.generation) return
       try {
         parser.finish()
-        this.fail(new Error(`Native desktop capture exited before Stop (${code ?? "unknown"})`), generation)
+        const status = code === null ? "unknown" : `0x${(code >>> 0).toString(16).toUpperCase().padStart(8, "0")}`
+        this.fail(new Error(`Native desktop capture exited before Stop (${status})`), generation)
       } catch (error) {
         this.fail(error, generation)
       }

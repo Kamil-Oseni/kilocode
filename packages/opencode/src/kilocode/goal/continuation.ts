@@ -15,9 +15,47 @@ import { RayaGoal } from "."
 import type { Database } from "@opencode-ai/core/database/database"
 import { continuation } from "@/kilocode/task/continuation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { ChiefBranches } from "@/kilocode/chief/branches"
 
 const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
+
+const identifier = /^[A-Za-z0-9_:-]{1,128}$/
+
+function reminder(storage: Storage.Interface, sessionID: SessionID, goal: RayaGoal.State) {
+  return Effect.gen(function* () {
+    if (goal.completion === "reply") return
+    const ledger = ChiefBranches.make(storage)
+    const plan = yield* ledger.read(sessionID)
+    if (!plan || plan.version !== 2 || !ChiefBranches.matches(plan, goal)) return
+    if (!identifier.test(plan.requestID) || (plan.revision !== "" && !identifier.test(plan.revision))) return
+    const notes = yield* ledger.pending({
+      goalID: sessionID,
+      goalCreatedAt: plan.goalCreatedAt,
+      requestID: plan.requestID,
+      revision: plan.revision,
+    })
+    if (!notes.length || notes.some((note) => !identifier.test(note.id))) return
+    const ids = notes
+      .slice(0, 8)
+      .map((note) => note.id)
+      .join(", ")
+    const rest = notes.length > 8 ? `; ${notes.length - 8} more saved note IDs` : ""
+    return `<system-reminder>
+The current Chief plan has ${notes.length} unacknowledged specialist note${notes.length === 1 ? "" : "s"} (request ${plan.requestID}, revision ${plan.revision || "initial"}). Saved note IDs: ${ids}${rest}.
+Call chief_inspect to read their current contents and branch evidence. These interim notes are not completed task results. Do not restart or replay a child task because of this reminder.
+</system-reminder>`
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause)
+        ? Effect.interrupt
+        : Effect.sync(() => {
+            log.warn("Chief note reminder skipped", { sessionID, err: Cause.squash(cause) })
+            return undefined
+          }),
+    ),
+  )
+}
 
 const prompt = (objective: string, completion?: "reply") =>
   completion === "reply"
@@ -55,6 +93,7 @@ async function continueGoal(
   signal: AbortSignal,
   files?: readonly SessionV1.FilePartInput[],
   completion?: "reply",
+  note?: string,
 ): Promise<unknown> {
   const [{ AppRuntime }, { SessionPrompt }, { InstanceStore }] = await Promise.all([
     import("@/effect/app-runtime"),
@@ -71,7 +110,14 @@ async function continueGoal(
               sessionID,
               messageID,
               goalQueuedAt: queuedAt,
-              parts: [...(files ?? []), { type: "text", text: prompt(objective, completion), synthetic: true }],
+              parts: [
+                ...(files ?? []),
+                {
+                  type: "text",
+                  text: [prompt(objective, completion), note].filter(Boolean).join("\n\n"),
+                  synthetic: true,
+                },
+              ],
               goalObjective: objective, // raya_change - route the latest steered objective, not the original turn
             })
             .pipe(
@@ -113,6 +159,7 @@ type Run = (
   signal: AbortSignal,
   files?: readonly SessionV1.FilePartInput[],
   completion?: "reply",
+  note?: string,
 ) => Promise<unknown>
 type Loop = (sessionID: SessionID, directory: string, signal: AbortSignal) => Promise<unknown>
 
@@ -135,6 +182,7 @@ function invoke(input: {
   quiet?: boolean
   files?: readonly SessionV1.FilePartInput[]
   completion?: "reply"
+  note?: string
   complete?: () => Effect.Effect<void>
 }) {
   return Effect.tryPromise({
@@ -148,6 +196,7 @@ function invoke(input: {
         signal,
         input.files,
         input.completion,
+        input.note,
       ),
     catch: (err) => err,
   }).pipe(
@@ -196,6 +245,7 @@ function launch(input: {
   quiet?: boolean
   dispatch: string
   database?: Database.Interface
+  storage: Storage.Interface
 }) {
   return input.permitted().pipe(
     Effect.flatMap((allowed) =>
@@ -206,6 +256,7 @@ function launch(input: {
       const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
       return Effect.gen(function* () {
         const delivery = inbox ? yield* inbox.delivery(input.sessionID, goal.dispatch!.messageID!) : undefined
+        const note = yield* reminder(input.storage, input.sessionID, goal)
         yield* invoke({
           goals: input.goals,
           sessionID: input.sessionID,
@@ -218,6 +269,7 @@ function launch(input: {
           quiet: input.quiet,
           files: delivery?.files,
           completion: goal.completion,
+          note,
           complete: delivery ? () => inbox!.delivered(input.sessionID, goal.dispatch!.messageID!) : undefined,
         })
       })
@@ -316,6 +368,7 @@ export namespace RayaGoalContinuation {
         // delivered_at means SessionPrompt persisted the owned user intake. It does not mean the model turn completed.
         if (delivery && user) yield* inbox!.delivered(input.sessionID, goal.dispatch.messageID!)
         if (delivery && !delivery.delivered && !user && goal.dispatch.messageID) {
+          const note = yield* reminder(input.storage, input.sessionID, goal)
           yield* invoke({
             goals,
             sessionID: input.sessionID,
@@ -328,6 +381,7 @@ export namespace RayaGoalContinuation {
             quiet: true,
             files: delivery.files,
             completion: goal.completion,
+            note,
             complete: () => inbox!.delivered(input.sessionID, goal.dispatch!.messageID!),
           })
           return
@@ -405,6 +459,7 @@ export namespace RayaGoalContinuation {
         quiet: true,
         dispatch: queued.dispatch.id,
         database: input.database,
+        storage: input.storage,
       })
     })
   }
@@ -467,6 +522,7 @@ export namespace RayaGoalContinuation {
                 permitted: () => continuation({ ...input, session }),
                 run: input.run,
                 dispatch: retry.dispatch.id,
+                storage: input.storage,
               })
               return
             }
@@ -487,6 +543,7 @@ export namespace RayaGoalContinuation {
               permitted: () => continuation({ ...input, session }),
               run: input.run,
               dispatch: queued.dispatch.id,
+              storage: input.storage,
             })
           }).pipe(
             Effect.catchCause((cause) =>

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 10:51 America/Toronto - grant input validation
+
+The Computer Use grant store now rejects malformed runtime webview values before any lease is created: an unrecognized duration previously became all-sessions/until-stopped, and an unrecognized control level bypassed both Observe and Assisted checks. The focused 9-test lease suite, both extension typechecks, lint and formatting pass. The independent read-only capture audit confirmed the installed path remains request-driven GDI in one persistent PowerShell host: exact unchanged frames skip encoding, but changed frames use full PNG/JPEG base64 JSON; synchronous UIA remains on normal `observe()`. WGC/DXGI are standalone benchmark-only and have not acquired frames here. Commit/push and install the grant fix. Then build a cancellable native capture worker behind the current driver, keeping GDI fallback and exact target identity; test cancellation, worker loss, stale delta base, changed HWND/display/DPI and dirty-region bounds before selecting a default from real interactive-host benchmarks. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 10:36 America/Toronto - final request-Chief snapshot
 
 `e2fa0b59a3` is pushed and installed as `eden.raya@7.4.23-snapshot+e2fa0b59a3.kamil-oseni.1790260351874`. VS Code lists the exact version; the rollback VSIX SHA-256 is `3fc7156dcee29d65b9c58bd061527e507afc9df526c900253174c448651e828f`. Low-memory packaging passed CLI smoke tests, extension/webview typechecks and lint, packaged 443 files and left no tracked generated diff. Next: prove an actual two-specialist ordinary request with read-only scopes, visible named progress/messages and report review; then send a later single-specialist request and verify safe rotation. Repeat across backend and VS Code restarts. Keep `FUT-AGENT-01/02` In progress and do not mistake installation for live acceptance.

@@ -102,9 +102,13 @@ export class ComputerUseLeaseStore {
   }
 
   async grant(input: GrantInput): Promise<ComputerUseLease> {
+    check(input)
     const policy = decodePolicy(input.sensitive)
     if (!policy) throw new Error("Choose a policy for every sensitive action category")
-    if (input.applications === "current" && !input.windowID)
+    if (
+      input.applications === "current" &&
+      (typeof input.windowID !== "string" || !input.windowID || input.windowID.length > 200)
+    )
       throw new Error("The current application is no longer available; choose all visible applications")
     if (input.applications === "current" && input.duration !== "session")
       throw new Error(
@@ -210,6 +214,19 @@ export class ComputerUseLeaseStore {
   private emit(): void {
     for (const listener of this.listeners) listener(this.current())
   }
+}
+
+function check(input: GrantInput): void {
+  if (typeof input.sessionID !== "string" || !input.sessionID || input.sessionID.length > 200)
+    throw new Error("Computer Use grant needs a valid task identity")
+  if (!["observe", "assisted", "autonomous"].includes(input.level))
+    throw new Error("Choose a valid Computer Use control level")
+  if (!["session", "hour", "until_stopped"].includes(input.duration))
+    throw new Error("Choose a valid Computer Use duration")
+  if (!["all", "current"].includes(input.applications)) throw new Error("Choose a valid Computer Use application scope")
+  if (typeof input.cooperativeInput !== "boolean")
+    throw new Error("Choose whether Computer Use pauses for manual input")
+  if (!Array.isArray(input.actions)) throw new Error("Choose Computer Use action categories")
 }
 
 function sensitive(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {

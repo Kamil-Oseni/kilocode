@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import type { DesktopRequest } from "@kilocode/sdk/v2/client"
 import {
   ComputerUseLeaseStore,
+  type GrantInput,
   type LeaseStorage,
   type SensitivePolicy,
 } from "../../src/services/computer-use/lease-store"
@@ -42,6 +43,33 @@ function memory(seed?: unknown) {
 }
 
 describe("Computer Use lease store", () => {
+  it("rejects malformed grant messages before creating or widening authority", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const valid: GrantInput = {
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "current",
+      windowID: "window_test",
+      actions: ["pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    }
+    for (const patch of [
+      { level: "unexpected" },
+      { duration: "unlimited" },
+      { applications: "everywhere" },
+      { windowID: 42 },
+      { actions: "pointer" },
+      { sessionID: "" },
+      { cooperativeInput: "false" },
+    ]) {
+      await expect(store.grant({ ...valid, ...patch } as unknown as GrantInput)).rejects.toThrow()
+      expect(store.current()).toBeUndefined()
+      expect(store.authorize(auth()).decision).toBe("ask")
+    }
+  })
+
   it("allows an ordinary exact-session action and keeps the grant memory-only", async () => {
     const storage = memory()
     const store = new ComputerUseLeaseStore(storage, () => 100)

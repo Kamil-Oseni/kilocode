@@ -32,6 +32,7 @@ import {
   taskVisible,
 } from "./task-tool-state" // raya_change
 import { chiefReceipt, type ChiefPart } from "./chief-activity"
+import { TaskToolBody } from "./TaskToolBody"
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
   const i18n = useI18n()
@@ -221,46 +222,46 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
         onOpenChange={setOpen}
       >
         <div ref={viewport} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
-          <div ref={content} data-component="task-tools">
-            <details data-slot="task-model-details">
-              <summary>{language.t("task.subagent.modelDetails")}</summary>
-              <div data-slot="task-model-selection">{taskModel(props.partMetadata, props.metadata)}</div>
-            </details>
-            <Show when={running() && childToolCount() === 0}>
+          <TaskToolBody
+            contentRef={content}
+            running={running()}
+            count={childToolCount()}
+            label={language.t(childToolCount() === 1 ? "task.subagent.actions.one" : "task.subagent.actions.many", {
+              count: String(childToolCount()),
+            })}
+            report={result() ? <Markdown text={result()!} /> : undefined}
+            starting={
               <div data-slot="task-tool-item" data-state="starting">
                 <span data-slot="task-tool-title">{language.t("session.messages.taskStarting")}</span>
               </div>
-            </Show>
-            <Index each={childToolParts()}>
-              {(item) => {
-                const info = createMemo(() => getToolInfo(item().tool, item().state?.input))
-                const subtitle = createMemo(() => {
-                  if (info().subtitle) return info().subtitle
-                  const state = item().state as { status: string; title?: string }
-                  if (state.status === "completed" || state.status === "running") return state.title
-                  return undefined
-                })
-                return (
-                  <div data-slot="task-tool-item" data-status={item().state.status}>
-                    <Icon name={info().icon} size="small" />
-                    <span data-slot="task-tool-text">
-                      <span data-slot="task-tool-title">{info().title}</span>
-                      <Show when={subtitle()}>
-                        <span data-slot="task-tool-subtitle">{subtitle()}</span>
-                      </Show>
-                    </span>
-                  </div>
-                )
-              }}
-            </Index>
-            <Show when={result()}>
-              {(text) => (
-                <div data-slot="task-result" data-after-activity={childToolCount() > 0 ? "" : undefined}>
-                  <Markdown text={text()} />
-                </div>
-              )}
-            </Show>
-          </div>
+            }
+            actions={
+              <Index each={childToolParts()}>
+                {(item) => {
+                  const info = createMemo(() => getToolInfo(item().tool, item().state?.input))
+                  const subtitle = createMemo(() => {
+                    if (info().subtitle) return info().subtitle
+                    const state = item().state as { status: string; title?: string }
+                    if (state.status === "completed" || state.status === "running") return state.title
+                    return undefined
+                  })
+                  return (
+                    <div data-slot="task-tool-item" data-status={item().state.status}>
+                      <Icon name={info().icon} size="small" />
+                      <span data-slot="task-tool-text">
+                        <span data-slot="task-tool-title">{info().title}</span>
+                        <Show when={subtitle()}>
+                          <span data-slot="task-tool-subtitle">{subtitle()}</span>
+                        </Show>
+                      </span>
+                    </div>
+                  )
+                }}
+              </Index>
+            }
+            model={taskModel(props.partMetadata, props.metadata)}
+            modelLabel={language.t("task.subagent.modelDetails")}
+          />
         </div>
       </BasicTool>
     </div>

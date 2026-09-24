@@ -22,19 +22,36 @@
   min-width: 0;
   max-width: 100%;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--border-weak-base);
   color: var(--text-weaker);
   font-size: var(--kilo-font-size-12);
 }
 
-[data-slot="task-model-details"] summary {
+[data-slot="task-model-details"] summary,
+[data-slot="task-actions"] summary {
   width: fit-content;
   cursor: pointer;
 }
 
-[data-slot="task-model-details"] summary:focus-visible {
+[data-slot="task-model-details"] summary:focus-visible,
+[data-slot="task-actions"] summary:focus-visible {
   outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
   outline-offset: 2px;
+}
+
+[data-component="task-tools"] > [data-slot="task-actions"] {
+  padding: 6px 0;
+  border-top: 1px solid var(--border-weak-base);
+}
+
+[data-slot="task-actions"] summary {
+  margin-inline: 12px;
+  color: var(--text-weak);
+  font-size: var(--kilo-font-size-12);
+}
+
+[data-slot="task-actions"][open] summary {
+  margin-bottom: 4px;
 }
 
 [data-slot="task-model-selection"] {
@@ -80,11 +97,6 @@
   min-width: 0;
   padding: 8px 12px 10px;
   overflow-wrap: anywhere;
-}
-
-[data-component="task-tools"] [data-slot="task-result"][data-after-activity] {
-  margin-top: 6px;
-  border-top: 1px solid var(--border-weak-base);
 }
 
 /* Chief branch activity stays in the conversation, with details available on demand. */

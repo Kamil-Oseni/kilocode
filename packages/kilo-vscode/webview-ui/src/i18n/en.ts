@@ -1266,6 +1266,8 @@ export const dict = {
   "task.backgroundAgents.viewReport": "View report",
   "task.backgroundAgents.untitled": "Background agent",
   "task.subagent.modelDetails": "Model details",
+  "task.subagent.actions.one": "{{count}} action",
+  "task.subagent.actions.many": "{{count}} actions",
   "task.subagent.steps.one": "{{count}} step",
   "task.subagent.steps.many": "{{count}} steps",
   "task.childSteer.label": "Instruction for sub-agent",

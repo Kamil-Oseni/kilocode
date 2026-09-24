@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 19:13 America/Toronto - installed older Work checkpoint
+
+`90bdeed2da` is pushed and installed as `eden.raya@7.4.23-snapshot+90bdeed2da.kamil-oseni.1790291520508`; the retained 446-file rollback VSIX SHA-256 is `2295E0358C4E30F02C895BDF7C2DECE80DD392B133714CB1077D27913BBDB999`. Packaging and push gates passed. A 51-request preview proves Current can load an older active request, but live VS Code behavior is still unverified. Next run installed organization Work pagination and continue broader Routines UX, native crash diagnosis, and the Autonomous Desktop Mode benchmark. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 19:09 America/Toronto - organization work paging handoff
 
 Current organization Work could report an active request without showing it when 50 newer finished requests filled the first page; only History exposed Load earlier work. The source now exposes paging from either view and avoids claiming there is no active work while the global count says otherwise. A 51-request fixture verifies the older active request can be loaded at 320px and 900px; screenshots show the compact hint and button before loading and the request after. Typecheck, lint, formatting and both focused browser cases pass after the final copy adjustment. Commit/push/install, then confirm in the installed VS Code host. Continue the broader Routines flow and Computer Use acceptance; do not mark `FUT-CU-01` Verified.

@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 19:13 America/Toronto - older active Work snapshot installed
+
+**Status: `90bdeed2da` pushed and installed.** The push hook passed non-JetBrains monorepo and JetBrains typechecks. The low-memory snapshot passed SDK preparation, extension/webview typechecks, lint, production bundling, native MSVC build/self-test, VSIX packaging and VS Code installation. Installed version: `eden.raya@7.4.23-snapshot+90bdeed2da.kamil-oseni.1790291520508`. The retained 446-file rollback VSIX SHA-256 is `2295E0358C4E30F02C895BDF7C2DECE80DD392B133714CB1077D27913BBDB999`. The adverse 51-request browser proof is below. Next verify live organization Work pagination, continue the Routines design and desktop autonomy work, and obtain an interactive native crash receipt and benchmark. `FUT-CU-01` remains **In progress**.
+
 ## ChatGPT 2026-09-24 19:09 America/Toronto - older active organization work stays reachable
 
 **Status: source and focused browser proof; commit/install pending.** Organization Work pages the newest 50 requests without filtering by state, while its Current count covers the whole organization. A still-active request older than 50 completed ones could therefore show “Current 1” beside a false empty message, with the pagination button stranded in History. Current and History can now load earlier pages, and the empty Current view says active work may be on an earlier page when the saved totals and cursor indicate more. No persistence or API behavior changed. An adverse 51-request preview fixture proves the older active request appears after loading, at 320px and 900px with no horizontal overflow; before/after screenshots were inspected. Extension/webview typecheck, full extension lint, formatting, and both focused browser cases pass after the final copy adjustment. Next commit/push/install. Live VS Code behavior and the broader Routines usability acceptance remain open.

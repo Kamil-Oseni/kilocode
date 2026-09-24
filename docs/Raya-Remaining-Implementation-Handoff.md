@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 10:36 America/Toronto - final request-Chief snapshot
+
+`e2fa0b59a3` is pushed and installed as `eden.raya@7.4.23-snapshot+e2fa0b59a3.kamil-oseni.1790260351874`. VS Code lists the exact version; the rollback VSIX SHA-256 is `3fc7156dcee29d65b9c58bd061527e507afc9df526c900253174c448651e828f`. Low-memory packaging passed CLI smoke tests, extension/webview typechecks and lint, packaged 443 files and left no tracked generated diff. Next: prove an actual two-specialist ordinary request with read-only scopes, visible named progress/messages and report review; then send a later single-specialist request and verify safe rotation. Repeat across backend and VS Code restarts. Keep `FUT-AGENT-01/02` In progress and do not mistake installation for live acceptance.
+
 ## ChatGPT 2026-09-24 10:26 America/Toronto - direct task after request fanout
 
 Task binding now safely retires a fully reviewed/synthesized request plan when a later authored request asks for a single specialist, so the prior branch marker no longer blocks ordinary direct delegation. An unfinished or unknown plan remains blocking, and a stale branch ID cannot rotate it. Real Session/Storage regression passes 3 cases / 28 assertions; the full Task suite passes 54 tests / 334 assertions; CLI typecheck, formatting and source guards pass. This source fix is not in the `e349b9f782` installed snapshot yet. Commit, push, install and check a multi-specialist request followed by a direct specialist request after restart.

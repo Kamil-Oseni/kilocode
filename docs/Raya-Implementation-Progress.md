@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 10:36 America/Toronto - direct-task transition snapshot installed
+
+**Status: `e2fa0b59a3` pushed and production snapshot installed; active-host acceptance remains open.** The low-memory build passed CLI version/models/sandbox-worker smoke tests, extension/webview typechecks and lint, packaged 443 files, and installed `eden.raya@7.4.23-snapshot+e2fa0b59a3.kamil-oseni.1790260351874`. VS Code lists that version. The retained rollback VSIX SHA-256 is `3fc7156dcee29d65b9c58bd061527e507afc9df526c900253174c448651e828f`. SDK regeneration left no tracked diff.
+
+The installed source now covers ordinary read-only specialist fanout, exact review/synthesis and a later single-specialist task after a completed fanout. A real provider-driven two-specialist chat, final UI presentation, backend/VS Code restart, partial-attention recovery and broad permission matrix remain unverified. Keep `FUT-AGENT-01/02` **In progress**.
+
 ## ChatGPT 2026-09-24 10:26 America/Toronto - retire finished fanout before a direct task
 
 **Status: source tested; not yet committed, pushed or installed.** A later ordinary request can now launch one direct specialist after a prior request fanout has been fully reviewed and synthesized. Task binding rotates the old marker with the exact newer authored request before checking whether a branch is required. An incomplete or unknown prior fanout still refuses the direct task; a stale branch ID cannot bypass that boundary. The real Session/Storage rotation tests pass 3 cases / 28 assertions, and the full Task suite passes 54 tests / 334 assertions. CLI typecheck, formatting and source guards pass. This transition still needs installed-host review.

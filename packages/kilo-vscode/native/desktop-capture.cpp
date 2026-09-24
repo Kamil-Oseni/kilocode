@@ -464,6 +464,21 @@ struct Output {
   bool ready = false;
 };
 
+static bool touches(const Pointer& pointer, const Output* owner, RECT target) {
+  if (!owner || !pointer.visible) return false;
+  validate(pointer);
+  const auto rows = pointer.shape.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME
+                      ? pointer.shape.Height / 2 : pointer.shape.Height;
+  const int64_t x = int64_t(owner->desc.DesktopCoordinates.left) + pointer.position.x;
+  const int64_t y = int64_t(owner->desc.DesktopCoordinates.top) + pointer.position.y;
+  return x < target.right && y < target.bottom &&
+         x + pointer.shape.Width > target.left && y + rows > target.top;
+}
+
+static bool presented(const DXGI_OUTDUPL_FRAME_INFO& info, bool ready) {
+  return !ready || info.LastPresentTime.QuadPart || info.AccumulatedFrames || info.TotalMetadataBufferSize;
+}
+
 static bool admit(bool next, bool owns, LONGLONG last, LONGLONG stamp) {
   if (!next && !owns) return false;
   if (next && !owns && last > stamp) return false;
@@ -476,6 +491,11 @@ static void stable(const Output& item) {
   if (!active.AttachedToDesktop || active.Monitor != item.desc.Monitor ||
       !equal(active.DesktopCoordinates, item.desc.DesktopCoordinates) || active.Rotation != item.desc.Rotation)
     throw Failure("display_changed", "DXGI output geometry changed");
+  DXGI_OUTDUPL_DESC mode{};
+  item.duplicate->GetDesc(&mode);
+  if (mode.ModeDesc.Width != item.mode.ModeDesc.Width || mode.ModeDesc.Height != item.mode.ModeDesc.Height ||
+      mode.ModeDesc.Format != item.mode.ModeDesc.Format || mode.Rotation != item.mode.Rotation)
+    throw Failure("display_changed", "DXGI duplication mode changed");
 }
 
 static BOOL WINAPI control(DWORD signal) {
@@ -572,6 +592,7 @@ static void run(HANDLE pipe) {
       Lease lease(item->duplicate.Get());
       same(original);
       stable(*item);
+      const bool previous = touches(pointer, owner, original.rect);
       if (info.LastMouseUpdateTime.QuadPart) {
         const bool next = info.PointerPosition.Visible != 0;
         if (admit(next, owner == item.get(), stamp, info.LastMouseUpdateTime.QuadPart)) {
@@ -595,17 +616,22 @@ static void run(HANDLE pipe) {
       }
       if (pointer.visible && pointer.pixels.empty())
         throw Failure("unsupported_surface", "visible pointer has no captured shape");
-      ComPtr<ID3D11Texture2D> source;
-      require(resource.As(&source), "capture texture");
-      D3D11_TEXTURE2D_DESC current{};
-      source->GetDesc(&current);
-      if (current.Format != DXGI_FORMAT_B8G8R8A8_UNORM || current.Width != item->mode.ModeDesc.Width ||
-          current.Height != item->mode.ModeDesc.Height || item->box.right > current.Width ||
-          item->box.bottom > current.Height)
-        throw Failure("display_changed", "DXGI source dimensions changed before copy");
-      item->context->CopySubresourceRegion(item->staging.Get(), 0, 0, 0, 0, source.Get(), 0, &item->box);
-      item->ready = true;
-      changed = true;
+      const bool desktop = presented(info, item->ready);
+      if (desktop) {
+        ComPtr<ID3D11Texture2D> source;
+        require(resource.As(&source), "capture texture");
+        D3D11_TEXTURE2D_DESC current{};
+        source->GetDesc(&current);
+        if (current.Format != DXGI_FORMAT_B8G8R8A8_UNORM || current.Width != item->mode.ModeDesc.Width ||
+            current.Height != item->mode.ModeDesc.Height || item->box.right > current.Width ||
+            item->box.bottom > current.Height)
+          throw Failure("display_changed", "DXGI source dimensions changed before copy");
+        item->context->CopySubresourceRegion(item->staging.Get(), 0, 0, 0, 0, source.Get(), 0, &item->box);
+        item->ready = true;
+      }
+      const bool moved = info.LastMouseUpdateTime.QuadPart || info.PointerShapeBufferSize;
+      changed = changed || desktop || (moved &&
+        (previous || touches(pointer, owner, original.rect)));
     }
     auto acquired = Clock::now();
     same(original);
@@ -613,6 +639,7 @@ static void run(HANDLE pipe) {
     if (!std::all_of(outputs.begin(), outputs.end(), [](const auto& item) { return item->ready; })) continue;
     if (!changed && base) {
       if (Clock::now() - emitted < std::chrono::milliseconds(50)) continue;
+      for (const auto& item : outputs) stable(*item);
       std::ostringstream header;
       header << "{\"v\":1,\"type\":\"unchanged\",\"sequence\":" << ++sequence
              << ",\"base\":" << base
@@ -746,6 +773,61 @@ int wmain(int argc, wchar_t** argv) {
         if (admit(false, false, 10, 11) || admit(true, false, 10, 9) ||
             !admit(true, false, 10, 11) || !admit(false, true, 10, 11))
           throw Failure("capture_failed", "cross-output pointer handoff self-test failed");
+        DXGI_OUTDUPL_FRAME_INFO info{};
+        if (!presented(info, false) || presented(info, true))
+          throw Failure("capture_failed", "initial or pointer-only frame classification failed");
+        info.LastPresentTime.QuadPart = 1;
+        if (!presented(info, true)) throw Failure("capture_failed", "desktop present was skipped");
+        info.LastPresentTime.QuadPart = 0;
+        info.TotalMetadataBufferSize = 1;
+        if (!presented(info, true)) throw Failure("capture_failed", "desktop metadata was skipped");
+        info.TotalMetadataBufferSize = 0;
+        info.AccumulatedFrames = 1;
+        if (!presented(info, true)) throw Failure("capture_failed", "accumulated desktop frame was skipped");
+        Output sample;
+        sample.desc.DesktopCoordinates = RECT{-1920, 0, 0, 1080};
+        Pointer cursor;
+        cursor.visible = true;
+        cursor.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR;
+        cursor.shape.Width = 4;
+        cursor.shape.Height = 1;
+        cursor.shape.Pitch = 16;
+        cursor.pixels.resize(16);
+        cursor.position = POINT{1890, 0};
+        RECT crop{-20, 0, 20, 20};
+        if (touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "off-window pointer touched capture");
+        cursor.position.x = 1899;
+        if (!touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "cross-output pointer missed capture edge");
+        cursor.position.x = 1940;
+        if (touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "right-edge pointer touched capture");
+        cursor.position.x = 1899;
+        cursor.visible = false;
+        if (touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "hidden pointer touched capture");
+        cursor.visible = true;
+        cursor.shape.Width = 1;
+        cursor.shape.Pitch = 4;
+        cursor.pixels.resize(4);
+        if (touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "old pointer shape touched capture");
+        cursor.shape.Width = 2;
+        cursor.shape.Pitch = 8;
+        cursor.pixels.resize(8);
+        if (!touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "shape-only pointer change missed capture");
+        cursor.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME;
+        cursor.shape.Height = 4;
+        cursor.shape.Pitch = 1;
+        cursor.pixels.resize(4);
+        cursor.position = POINT{1900, -2};
+        if (touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "monochrome pointer buffer height touched capture");
+        cursor.position.y = -1;
+        if (!touches(cursor, &sample, crop))
+          throw Failure("capture_failed", "monochrome drawn height missed capture");
         ComPtr<IWICImagingFactory> imaging;
         require(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                  IID_PPV_ARGS(imaging.GetAddressOf())), "WIC factory");

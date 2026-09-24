@@ -102,6 +102,8 @@ export class DesktopOutcomeError extends Error {
 }
 
 export interface DesktopDriver {
+  // Only drivers that atomically verify the exact target before native input may set this.
+  guarded?: true
   observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame>
   windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
@@ -302,7 +304,12 @@ export class DesktopSession {
           { scene, steps: input.steps, maxDurationMs: input.maxDurationMs },
           {
             step: async (planned, before) => {
-              const current = await this.driver.current()
+              // Windows perform checks the retained window and location in the same
+              // native dispatch script. Other drivers still need a fresh preflight.
+              const current =
+                this.driver.guarded && before.observation.target.location
+                  ? before.observation.target
+                  : await this.driver.current()
               const action = { ...planned, observationID: before.observation.id } as DesktopAction
               this.validate(action)
               if (

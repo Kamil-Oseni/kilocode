@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 18:41 America/Toronto - guarded sequence latency handoff
+
+The Windows bounded-action sequence reuses its versioned exact target and saves one foreground PowerShell lookup per step. The native dispatch script still checks foreground window ID, location, and selected process identity immediately before input; other drivers keep a fresh lookup. Changed-target input is refused with an unknown, no-replay outcome. Focused adverse tests, extension typecheck and lint pass. Commit, push and install remain, followed by real stage p50/p95 measurement and installed changed-window proof. Do not substitute a cached pre-action frame for the fresh post-action capture. The user's native access-violation dialog was reported for diagnosis, not dismissal; no fault receipt proves its cause. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 18:28 America/Toronto - installed organization and selected-grant checkpoint
 
 `a1d7882bb7` is pushed and installed as `eden.raya@7.4.23-snapshot+a1d7882bb7.kamil-oseni.1790288631569`. The retained 446-file rollback VSIX SHA-256 is `651AC14CB392CE7F45F8421D9761D61D60329AE8D6E293EA60AC42F822E1092D` and contains the native executable and PDB. The push and low-memory packaging gates passed. Next, exercise the in-dialog organization work review and selected-app computer child in the installed VS Code host; verify Stop, manual takeover, backend disconnect, restart, changed-window refusal, and the real native crash receipt if `raya-desktop-capture.exe` fails again. Record local stage p50/p95 and model latency separately. Until live recovery, prolonged-use, and benchmark evidence passes, keep `FUT-CU-01` In progress and do not claim the access violation is fixed.

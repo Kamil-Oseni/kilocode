@@ -760,6 +760,9 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).not.toContain(text)
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::EnableDpiAwareness()")
     expect(test.scripts[0]).toContain(Buffer.from(JSON.stringify({ action, target }), "utf8").toString("base64"))
+    expect(test.scripts[0]).toContain(
+      "$window.WindowID -ne $payload.target.windowID -or $window.Location -ne $payload.target.location",
+    )
     driver.cancel()
     expect(test.cancelled()).toBe(1)
   })

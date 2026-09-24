@@ -407,6 +407,63 @@ describe("native desktop session boundary", () => {
     expect(driver.fresh).toEqual([false, true, true])
   })
 
+  it("uses the guarded dispatch target without a second foreground lookup", async () => {
+    class Guarded extends Driver {
+      readonly guarded = true as const
+      reads = 0
+
+      override async current() {
+        this.reads += 1
+        return super.current()
+      }
+
+      override async perform(action: DesktopAction, target: { windowID: string; location?: string }) {
+        if (target.windowID !== this.target.windowID || target.location !== this.target.location)
+          throw new Error("Native guard refused a changed foreground target")
+        this.actions.push(action)
+      }
+    }
+
+    const driver = new Guarded()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    driver.frames.push({ ...driver.target, ...driver.frame, data: "after" })
+    const run = () =>
+      session.sequence({
+        observationID: initial.observation.id,
+        maxDurationMs: 5_000,
+        steps: [
+          {
+            action: { operation: "key", windowID: "window-1", sensitive: false, key: "Tab" },
+            postconditions: [{ kind: "pixels", change: "changed" }],
+            recovery: "stop",
+          },
+        ],
+      })
+
+    expect((await run()).status).toBe("completed")
+    expect(driver.reads).toBe(0)
+    expect(driver.actions).toHaveLength(1)
+
+    const next = await session.observe()
+    driver.target = { ...driver.target, location: "Different" }
+    await expect(
+      session.sequence({
+        observationID: next.observation.id,
+        maxDurationMs: 5_000,
+        steps: [
+          {
+            action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+            postconditions: [{ kind: "pixels", change: "changed" }],
+            recovery: "stop",
+          },
+        ],
+      }),
+    ).rejects.toThrow(/may have taken effect/i)
+    expect(driver.reads).toBe(0)
+    expect(driver.actions).toHaveLength(1)
+  })
+
   it("does not accept a cached pre-action frame as a sequence postcondition", async () => {
     class Cached extends Driver {
       override async observe(options?: { fresh?: boolean }) {

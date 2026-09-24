@@ -1227,6 +1227,7 @@ function semanticResult(input: Record<string, unknown>, target: { windowID: stri
 }
 
 export class WindowsDesktopDriver implements DesktopDriver {
+  readonly guarded = true as const
   private readonly runner: Runner
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined

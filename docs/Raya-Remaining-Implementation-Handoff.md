@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 10:15 America/Toronto - ordinary request tool bridge
+
+The four registered Auto Chief tools now branch on an exact version-three request marker: ordinary chat can save read-only plans, inspect real child turns, review only with a matching saved inspection receipt and exact child tool evidence, and synthesize all reviewed branches. A later request rotates a terminal predecessor before planning. Active goal plans keep their version-two behavior. The relevant routing, request, rotation and Task suite passes 70 tests / 429 assertions; CLI typecheck, formatting and source guards pass. Source is not yet in an installed snapshot. Next: commit/push, install a low-memory snapshot and test a real two-specialist chat with restarted backend and VS Code. Do not claim provider-driven fanout or `FUT-AGENT-01/02` Verified from fixtures alone.
+
 ## ChatGPT 2026-09-24 09:42 America/Toronto - installed Chief/chat snapshot
 
 Source through `e28a6755ad` was pushed, and `eden.raya@7.4.23-snapshot+e28a6755ad.kamil-oseni.1790256901913` was production-built and installed. The VS Code extension listing confirms that version; the retained rollback VSIX SHA-256 is `66c271abb02817a6f5205ace6945129eebbb7c56af52f9a3958f33d996158ebd`. SDK generation during packaging added the Chief attention field to `packages/sdk/js/src/v2/gen/types.gen.ts`; retain and commit the generated change. This proves packaging and installation, not active-host visual or restart behavior. Next: wire the dormant exact request Chief planner/inspect/review/synthesis tools into ordinary chat, then test a real two-specialist request, narrow/wide UI, backend restart, VS Code restart and attention recovery. Do not mark `FUT-AGENT-01/02` Verified yet.

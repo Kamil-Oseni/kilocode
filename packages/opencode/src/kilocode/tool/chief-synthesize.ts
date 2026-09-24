@@ -1,22 +1,25 @@
 import { Effect, Schema } from "effect"
 import { RayaChief } from "@/kilocode/chief"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
+import { ChiefRequestReview } from "@/kilocode/chief/request-review"
 import type { RayaGoal } from "@/kilocode/goal"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
 
-/** Unregistered until the complete Chief fanout lifecycle is accepted. */
+type Metadata = { requestID: string; goalCreatedAt?: number; requestRevision?: string }
+
 export function chiefSynthesizeTool(deps: {
   storage: Storage.Interface
-  sessions: Pick<Session.Interface, "get">
+  sessions: Pick<Session.Interface, "get" | "messages">
   goals: Pick<ReturnType<typeof RayaGoal.make>, "get">
 }) {
   const parameters = Schema.Struct({
     summary: Schema.String,
     findings: Schema.Array(Schema.Struct({ branch_id: Schema.String, conclusion: Schema.String })),
   })
-  return Tool.define(
+  return Tool.define<typeof parameters, Metadata, never>(
     "chief_synthesize",
     Effect.succeed({
       description:
@@ -28,6 +31,21 @@ export function chiefSynthesizeTool(deps: {
           const parent = yield* deps.sessions.get(ctx.sessionID)
           if (RayaChief.phase(parent.metadata) !== "task" && RayaChief.phase(parent.metadata) !== "goal")
             throw new Error("Auto Chief synthesis is unavailable in this phase")
+          const request = yield* ChiefRequestPlan.active(deps.storage, ctx.sessionID)
+          if (request) {
+            const saved = yield* ChiefRequestReview.make(deps.storage, deps.sessions).synthesize({
+              sessionID: ctx.sessionID,
+              requestID: request.identity.requestID,
+              revision: request.identity.revision,
+              summary: input.summary,
+              findings: input.findings.map((item) => ({ branchID: item.branch_id, conclusion: item.conclusion })),
+            })
+            return {
+              title: "Chief branch synthesis saved",
+              output: JSON.stringify({ summary: saved.summary, findings: saved.findings }, null, 2),
+              metadata: { requestID: request.identity.requestID, requestRevision: request.identity.revision },
+            }
+          }
           const goal = yield* deps.goals.get(ctx.sessionID)
           const branches = ChiefBranches.make(deps.storage)
           const plan = yield* branches.read(ctx.sessionID)

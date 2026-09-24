@@ -5,6 +5,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Permission } from "@/permission"
+import { Agent } from "@/agent/agent"
 import { Session } from "@/session/session"
 import { MessageID, PartID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
@@ -12,6 +13,11 @@ import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { ChiefRequestReview } from "@/kilocode/chief/request-review"
 import { RayaChief } from "@/kilocode/chief"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
+import { chiefInspectTool } from "@/kilocode/tool/chief-inspect"
+import { chiefPlanTool } from "@/kilocode/tool/chief-plan"
+import { chiefReviewTool } from "@/kilocode/tool/chief-review"
+import { chiefSynthesizeTool } from "@/kilocode/tool/chief-synthesize"
+import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node, Storage.node])))
@@ -224,6 +230,93 @@ const receipt = Effect.fn("ChiefRequestReviewTest.receipt")(function* (
 })
 
 describe("request-bound Chief review eligibility", () => {
+  it.instance(
+    "exposes exact read-only inspection, review, and synthesis through Auto tools",
+    () =>
+      Effect.gen(function* () {
+        const state = yield* setup()
+        const agents = {
+          get: () => Effect.succeed({ permission: Permission.fromConfig({ task: "allow" }) }),
+          list: () =>
+            Effect.succeed([
+              { name: "researcher", mode: "subagent" },
+              { name: "designer", mode: "subagent" },
+            ]),
+        } as unknown as Agent.Interface
+        const truncate = {
+          output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
+        } as Truncate.Interface
+        const deps = {
+          storage: state.storage,
+          sessions: state.sessions,
+          goals: { get: () => Effect.succeed(undefined) },
+        }
+        const ctx = {
+          sessionID: state.parent.id,
+          messageID: MessageID.ascending(),
+          agent: "auto",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const planner = yield* chiefPlanTool({ ...deps, agents }).pipe(
+          Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Truncate.Service, truncate),
+        )
+        const planned = yield* (yield* planner.init()).execute({ proposals }, ctx)
+        expect(planned.metadata.revision).toBe(state.plan.identity.revision)
+        const safety = yield* child(state, "safety")
+        const design = yield* child(state, "design")
+        const inspect = yield* chiefInspectTool(deps).pipe(
+          Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Truncate.Service, truncate),
+        )
+        const review = yield* chiefReviewTool(deps).pipe(
+          Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Truncate.Service, truncate),
+        )
+        const synthesize = yield* chiefSynthesizeTool(deps).pipe(
+          Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Truncate.Service, truncate),
+        )
+        const view = yield* (yield* inspect.init()).execute({}, ctx)
+        expect(view.metadata.requestRevision).toBe(state.plan.identity.revision)
+        expect(JSON.parse(view.output).branches).toHaveLength(2)
+        const first = yield* receipt(state, JSON.parse(view.output))
+        const accept = yield* review.init()
+        expect(
+          Exit.isFailure(
+            yield* accept
+              .execute({ branch_id: "safety", assessment: "Verified", evidence: safety.evidence }, ctx)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        yield* accept.execute(
+          { branch_id: "safety", assessment: "Verified", inspect: first, evidence: safety.evidence },
+          ctx,
+        )
+        const second = yield* receipt(state)
+        yield* accept.execute(
+          { branch_id: "design", assessment: "Verified", inspect: second, evidence: design.evidence },
+          ctx,
+        )
+        const result = yield* (yield* synthesize.init()).execute(
+          {
+            summary: "Both audits passed",
+            findings: [
+              { branch_id: "safety", conclusion: "Authorization checked" },
+              { branch_id: "design", conclusion: "Navigation checked" },
+            ],
+          },
+          ctx,
+        )
+        expect(result.metadata.requestRevision).toBe(state.plan.identity.revision)
+        expect((yield* state.ledger.read(state.parent.id, state.user.id))?.synthesis?.findings).toHaveLength(2)
+      }),
+    30_000,
+  )
+
   it.instance(
     "requires two exact reviewed child turns before durable synthesis",
     () =>

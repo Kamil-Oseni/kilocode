@@ -3,17 +3,25 @@ import type { Session } from "@/session/session"
 import type { RayaGoal } from "@/kilocode/goal"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefEdits } from "@/kilocode/chief/edits"
+import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
+import { ChiefRequestReview } from "@/kilocode/chief/request-review"
 import { RayaChief } from "@/kilocode/chief"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
 
-/** Intentionally unregistered until the bounded Chief review flow is complete. */
+type Metadata = {
+  requestID: string
+  goalCreatedAt?: number
+  requestRevision?: string
+  digests?: Record<string, string>
+}
+
 export function chiefInspectTool(deps: {
   storage: Storage.Interface
   sessions: Pick<Session.Interface, "get" | "messages">
   goals: Pick<ReturnType<typeof RayaGoal.make>, "get">
 }) {
-  return Tool.define(
+  return Tool.define<Schema.Struct<{}>, Metadata, never>(
     "chief_inspect",
     Effect.succeed({
       description:
@@ -25,6 +33,15 @@ export function chiefInspectTool(deps: {
           const parent = yield* deps.sessions.get(ctx.sessionID)
           if (RayaChief.phase(parent.metadata) !== "task" && RayaChief.phase(parent.metadata) !== "goal")
             throw new Error("Auto Chief branch inspection is unavailable in this phase")
+          const request = yield* ChiefRequestPlan.active(deps.storage, ctx.sessionID)
+          if (request) {
+            const view = yield* ChiefRequestReview.make(deps.storage, deps.sessions).inspect(ctx.sessionID)
+            return {
+              title: "Auto Chief branch results",
+              output: JSON.stringify(view),
+              metadata: { requestID: view.identity.requestID, requestRevision: view.identity.revision },
+            }
+          }
           const goal = yield* deps.goals.get(ctx.sessionID)
           const ledger = ChiefBranches.make(deps.storage, deps.sessions)
           const plan = yield* ledger.read(ctx.sessionID)

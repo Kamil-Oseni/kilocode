@@ -55,7 +55,10 @@ describe("Auto Chief branch synthesis", () => {
         ],
       })
       const parent = { metadata: { [RayaChief.phaseKey]: "task" } } as unknown as Session.Info
-      const sessions = { get: () => Effect.succeed(parent) } as Pick<Session.Interface, "get">
+      const sessions = {
+        get: () => Effect.succeed(parent),
+        messages: () => Effect.succeed([]),
+      } as Pick<Session.Interface, "get" | "messages">
       const agents = { get: () => Effect.succeed({}) } as unknown as Agent.Interface
       const truncate = {
         output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),

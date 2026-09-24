@@ -207,7 +207,8 @@ describe("Chief note attention", () => {
           },
         )
         part.state.output = result.output
-        part.state.metadata = result.metadata
+        if (result.metadata.goalCreatedAt === undefined) throw new Error("Expected goal-bound inspection")
+        part.state.metadata = { requestID: result.metadata.requestID, goalCreatedAt: result.metadata.goalCreatedAt }
         part.state.time.end = Date.now() + 1
         expect(yield* ledger.acknowledge({ ...input, ids: [second.id] })).toEqual([second.id])
         expect((yield* ledger.read(goalID))?.attention?.prepared).toEqual({ ...next, ids: [later.id] })

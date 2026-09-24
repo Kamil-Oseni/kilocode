@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 20:17 America/Toronto - Chief edit state in parent chat
+
+The parent-chat Chief summary distinguishes isolated edits awaiting application from reports and applied work. The webview projects the `edits` and `integration` fields of a matching `chief_inspect` receipt, preserving older plan displays that lack a worktree. It labels a reviewed isolated edit “Ready to apply” and an integrated edit “Applied”; an unknown integration is not shown as success. Focused unit tests and webview typecheck pass. Build and install after the backend apply workflow is safe, then inspect narrow and wide host layouts before accepting the UI.
+
 ## ChatGPT 2026-09-23 20:12 America/Toronto - exact edit source manifest, apply still missing
 
 `ChiefEdits.manifest({ preview })` now returns fixed-base and final raw content hashes, sizes and regular-file modes for each path, plus a deterministic manifest digest. It refuses unsupported or incomplete previews, changed source, oversize blobs and nonregular Git/filesystem entries; it re-previews after reading. This is read-only source, with nine real-Git tests and CLI typecheck passing, and no installed snapshot. It does not hold a source lock or copy bytes for a later write. An apply tool must re-read the manifest immediately before dispatch or use stable content copies, compare it to the reviewed preview digest, and verify parent paths and final content under a repository-wide durable lock. No native apply or goal completion claim is valid yet.

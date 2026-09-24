@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 20:17 America/Toronto - distinguish reviewed edits from applied work in chat
+
+The compact Chief activity now shows an isolated editing specialist as “Changes ready” before review, “Ready to apply” after review, and “Applied” only when a matching later inspection reports an integrated receipt. An unknown integration outcome remains unknown rather than appearing complete; existing read-only report labels remain unchanged. A focused five-test projection suite and webview typecheck pass. This is source-only pending the apply path and a rebuilt snapshot, so no live visual claim is made.
+
 ## ChatGPT 2026-09-23 20:12 America/Toronto - byte-exact Chief edit manifest
 
 A complete fixed-base edit preview can now produce a read-only manifest of every changed regular file, with base/final raw SHA-256 hashes, byte sizes and Git file modes. Manifest collection refuses stale source, truncated or conflicting previews, invalid UTF-8, binary content, symlinks, submodules, nonregular files and oversized blobs. It rechecks the worktree after collection so a changed source cannot silently become the reviewed input. Nine real-Git tests / 37 assertions and CLI typecheck pass (one concurrent test run had a timed-out cleanup hook; a standalone rerun passed). This remains source-only. A repository-wide lock, canonical parent preflight, one-time apply, postcondition verification, explicit authorization and installed-host acceptance are still required before an edit branch can finish a goal.

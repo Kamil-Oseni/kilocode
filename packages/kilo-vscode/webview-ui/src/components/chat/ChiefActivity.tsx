@@ -8,6 +8,7 @@ const label = {
   planned: "Ready to start",
   working: "Working",
   ready: "Report ready",
+  pending: "Ready to apply",
   reviewed: "Reviewed",
   failed: "Needs attention",
   cancelled: "Stopped",
@@ -23,9 +24,11 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
   const summary = createMemo(() => {
     const current = activity()
     if (!current) return "Specialists"
-    if (current.synthesized) return `${current.branches.length} specialist reports combined`
     const working = current.branches.filter((branch) => branch.state === "working").length
     if (working) return `${working} of ${current.branches.length} specialists working`
+    const pending = current.branches.filter((branch) => branch.state === "pending").length
+    if (pending) return `${pending} edit${pending === 1 ? "" : "s"} ready to apply`
+    if (current.synthesized) return `${current.branches.length} specialist reports combined`
     const ready = current.branches.filter((branch) => branch.state === "ready" || branch.state === "reviewed").length
     if (ready === current.branches.length) return `${ready} specialist reports ready`
     const attention = current.branches.filter((branch) =>
@@ -63,11 +66,22 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                         <Show when={branch.access}>{branch.access === "read" ? "Read only" : "Can edit"}</Show>
                       </span>
                     </Show>
-                    <Show when={branch.report && (branch.state === "ready" || branch.state === "reviewed")}>
+                    <Show
+                      when={
+                        branch.report &&
+                        (branch.state === "ready" || branch.state === "pending" || branch.state === "reviewed")
+                      }
+                    >
                       <span class="chief-activity__report">{branch.report}</span>
                     </Show>
                   </span>
-                  <span class="chief-activity__status">{label[branch.state]}</span>
+                  <span class="chief-activity__status">
+                    {branch.access === "edit" && branch.state === "ready"
+                      ? "Changes ready"
+                      : branch.access === "edit" && branch.state === "reviewed"
+                        ? "Applied"
+                        : label[branch.state]}
+                  </span>
                 </li>
               )}
             </For>

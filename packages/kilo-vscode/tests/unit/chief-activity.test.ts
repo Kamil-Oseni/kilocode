@@ -151,4 +151,51 @@ describe("chiefActivity", () => {
       ["Improve the chat", "edit", undefined],
     ])
   })
+
+  it("keeps isolated edits pending until an exact integration is recorded", () => {
+    const saved: ChiefPart = {
+      ...plan,
+      state: {
+        ...plan.state,
+        input: {
+          proposals: [
+            { id: "docs", name: "Docs edit", specialist: "researcher", access: "edit" },
+            { id: "ux", name: "UX audit", specialist: "designer", access: "read" },
+          ],
+        },
+      },
+    }
+    const receipt = (integration?: string): ChiefPart => ({
+      ...inspect([
+        ["docs", "completed", true],
+        ["ux", "completed", true],
+      ]),
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          branches: [
+            {
+              id: "docs",
+              state: "completed",
+              reviewed: true,
+              edits: { digest: "saved" },
+              integration,
+              report: "Files changed.",
+            },
+            { id: "ux", state: "completed", reviewed: true, report: "Audit complete." },
+          ],
+        }),
+        metadata: { requestID: "request", goalCreatedAt: 1 },
+      },
+    })
+    expect(chiefActivity(saved, [saved, receipt()])?.branches.map((item) => item.state)).toEqual([
+      "pending",
+      "reviewed",
+    ])
+    expect(chiefActivity(saved, [saved, receipt("integrated")])?.branches.map((item) => item.state)).toEqual([
+      "reviewed",
+      "reviewed",
+    ])
+    expect(chiefActivity(saved, [saved, receipt("unknown")])?.branches[0]?.state).toBe("unknown")
+  })
 })

@@ -9,7 +9,7 @@ export type ChiefBranch = {
   access?: "read" | "edit"
   objective?: string
   report?: string
-  state: "planned" | "working" | "ready" | "reviewed" | "failed" | "cancelled" | "unknown"
+  state: "planned" | "working" | "ready" | "pending" | "reviewed" | "failed" | "cancelled" | "unknown"
 }
 
 export type ChiefActivity = { branches: ChiefBranch[]; synthesized: boolean }
@@ -32,7 +32,16 @@ function inspect(part: ChiefPart) {
     const data = object(JSON.parse(part.state.output))
     if (!Array.isArray(data?.branches)) return []
     return data.branches.flatMap(
-      (value): { id: string; state: ChiefBranch["state"]; reviewed: boolean; report?: string }[] => {
+      (
+        value,
+      ): {
+        id: string
+        state: ChiefBranch["state"]
+        reviewed: boolean
+        isolated: boolean
+        integration?: string
+        report?: string
+      }[] => {
         const item = object(value)
         const id = text(item?.id)
         const state = item?.state
@@ -43,6 +52,8 @@ function inspect(part: ChiefPart) {
             id,
             state: state === "admitted" ? "working" : state === "completed" ? "ready" : (state as ChiefBranch["state"]),
             reviewed: item?.reviewed === true,
+            isolated: object(item?.edits) !== undefined,
+            ...(text(item?.integration) ? { integration: text(item?.integration) } : {}),
             ...(text(item?.report) ? { report: text(item?.report)?.slice(0, 240) } : {}),
           },
         ]
@@ -79,15 +90,28 @@ function planned(value: unknown): ChiefBranch[] | undefined {
   return branches
 }
 
+function editing(
+  report: ReturnType<typeof inspect>[number] | undefined,
+  reviewed: boolean,
+  access: ChiefBranch["access"],
+) {
+  if (access !== "edit" || !report?.isolated) return
+  if (report.integration === "unknown") return "unknown" as const
+  if ((reviewed || report.reviewed) && report.integration !== "integrated") return "pending" as const
+}
+
 function status(
   report: ReturnType<typeof inspect>[number] | undefined,
   task: ChiefPart | undefined,
   reviewed: boolean,
+  access: ChiefBranch["access"],
 ) {
   const state = report?.state
   const outcome = task?.state.output?.match(/<task\s+[^>]*state="(completed|error)"/)?.[1]
   if (state === "unknown" || state === "cancelled" || state === "failed") return state
   if (task?.state.status === "error" || outcome === "error") return "failed" as const
+  const edit = editing(report, reviewed, access)
+  if (edit) return edit
   if (reviewed || report?.reviewed) return "reviewed" as const
   if (state === "ready" || outcome === "completed") return "ready" as const
   if (state === "working" || task) return "working" as const
@@ -147,11 +171,13 @@ export function chiefActivity(plan: ChiefPart, parts: readonly ChiefPart[]): Chi
     const report = reports.get(branch.id)
     const tasks = later.filter((part) => part.tool === "task" && part.state.input?.branch_id === branch.id)
     const task = tasks.at(-1)
-    const current = status(report, task, reviews.has(branch.id))
+    const current = status(report, task, reviews.has(branch.id), branch.access)
     return {
       ...branch,
       state: current,
-      ...((current === "ready" || current === "reviewed") && report?.report ? { report: report.report } : {}),
+      ...((current === "ready" || current === "pending" || current === "reviewed") && report?.report
+        ? { report: report.report }
+        : {}),
     }
   })
   const synthesized = later.some(

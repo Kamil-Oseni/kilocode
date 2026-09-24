@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 12:08 America/Toronto - owner clarified specialist experience
+
+The owner wants Codex-like judgment and chat presentation: Raya should spawn named specialists only when the task benefits, keep independent audits read-only until an authorized edit is needed, show clean icon/name/status/message activity, and review child evidence before the parent answer. Request-bound Chief planning, review and compact cards exist in source, but the real installed two-specialist conversation and visual/restart acceptance remain unproven. This requirement is recorded in the handoff; `FUT-AGENT-01/02` remain **In progress**.
+
 ## ChatGPT 2026-09-24 12:03 America/Toronto - Stop revocation snapshot installed
 
 **Status: `243fbeb682` pushed and production snapshot installed; autonomous acceptance remains open.** VS Code lists `eden.raya@7.4.23-snapshot+243fbeb682.kamil-oseni.1790265586618`. The low-memory build reused unchanged CLI/SDK inputs, passed extension/webview typechecks and lint, packaged 443 files and installed the VSIX. The retained rollback VSIX SHA-256 is `CB6897C090BFEB01AE8B642644F69372175CB755E2AB4F0DFB3BF23B3A379ABE`. Focused source tests pass 18 cases / 91 assertions. Real installed-host Stop/restart and prolonged-use acceptance have not run. Continuous native capture and the release benchmark remain; keep `FUT-CU-01` **In progress**.

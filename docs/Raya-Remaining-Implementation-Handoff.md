@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 12:08 America/Toronto - owner's intelligent specialist UX target
+
+The owner confirmed the desired ordinary-chat behavior by example: Raya should recognize independent specialist work, choose useful named specialists, explain the split in one concise parent update, and begin with read-only authority when the work is inspection. Editing access should follow an actual edit task and its approved authority ceiling. Parent chat should show a calm, compact activity trail: distinctive high-quality role icons, human names, working/finished state, meaningful tool and message events, and reports that can be opened without flooding the main answer. The Chief must review the child evidence, message specialists when needed, and synthesize a coherent answer. Existing request-bound Chief tools and compact cards are a foundation, not visual or behavioral acceptance. Verify this with a real ordinary two-specialist conversation, narrow/wide layout, keyboard use, 10+ children, and backend/VS Code restart. Keep `FUT-AGENT-01/02` In progress.
+
 ## ChatGPT 2026-09-24 12:03 America/Toronto - installed Stop revocation boundary
 
 Commit `243fbeb682` is pushed and installed as `eden.raya@7.4.23-snapshot+243fbeb682.kamil-oseni.1790265586618`; VS Code lists it. Rollback VSIX SHA-256: `CB6897C090BFEB01AE8B642644F69372175CB755E2AB4F0DFB3BF23B3A379ABE`. Focused tests pass 18 cases / 91 assertions and the low-memory production build passed typechecks, lint, package and install. The new record protects Stop against a failed VS Code settings write in source tests. Next verify Stop/restart in the installed host, then implement and measure the cancellable continuous native capture path with WGC/DXGI and GDI fallback. `FUT-CU-01` remains In progress.

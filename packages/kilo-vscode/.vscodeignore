@@ -14,6 +14,7 @@ coverage/**
 src/**
 webview-ui/**
 script/**
+native/**
 .gitignore
 .yarnrc
 .npmrc

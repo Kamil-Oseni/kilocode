@@ -22,6 +22,8 @@ using Clock = std::chrono::steady_clock;
 static constexpr UINT kPixels = 8'294'400;
 static constexpr UINT kEdge = 4'096;
 static constexpr DWORD kImageBytes = 15'000'000;
+static constexpr UINT kPointerEdge = 1'024;
+static constexpr UINT kPointerBytes = 4 * 1'024 * 1'024;
 static volatile LONG stopped = 0;
 
 struct Failure : std::runtime_error {
@@ -131,6 +133,153 @@ static DWORD encode(IWICImagingFactory* imaging, UINT width, UINT height, UINT s
   require(frame->Commit(), "frame Commit");
   require(encoder->Commit(), "encoder Commit");
   return pngsize(image);
+}
+
+struct Pointer {
+  DXGI_OUTDUPL_POINTER_SHAPE_INFO shape{};
+  std::vector<BYTE> pixels;
+  POINT position{};
+  bool visible = false;
+};
+
+static void validate(const Pointer& pointer) {
+  const auto& shape = pointer.shape;
+  if (!shape.Width || !shape.Height || shape.Width > kPointerEdge || shape.Height > 2 * kPointerEdge ||
+      !shape.Pitch || shape.Pitch > kPointerBytes)
+    throw Failure("unsupported_surface", "pointer dimensions exceed bounds");
+  uint64_t minimum = 0;
+  switch (shape.Type) {
+    case DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR:
+    case DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR:
+      if (shape.Height > kPointerEdge || shape.Pitch < uint64_t(shape.Width) * 4)
+        throw Failure("unsupported_surface", "pointer color pitch is invalid");
+      minimum = uint64_t(shape.Pitch) * shape.Height;
+      break;
+    case DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME:
+      if (shape.Height % 2 || shape.Pitch < (uint64_t(shape.Width) + 7) / 8)
+        throw Failure("unsupported_surface", "pointer mask dimensions are invalid");
+      minimum = uint64_t(shape.Pitch) * shape.Height;
+      break;
+    default:
+      throw Failure("unsupported_surface", "pointer shape type is unsupported");
+  }
+  if (minimum > kPointerBytes || pointer.pixels.size() < minimum || pointer.pixels.size() > kPointerBytes)
+    throw Failure("unsupported_surface", "pointer shape buffer is invalid");
+}
+
+static void compose(BYTE* pixels, UINT width, UINT height, UINT stride, const Pointer& pointer, LONG left, LONG top) {
+  if (!pointer.visible) return; // DXGI already included the pointer in the desktop surface.
+  validate(pointer);
+  if (!pixels || !width || !height || width > kEdge || height > kEdge || stride < uint64_t(width) * 4)
+    throw Failure("unsupported_surface", "pointer target bounds are invalid");
+  const auto& shape = pointer.shape;
+  const auto count = shape.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME ? shape.Height / 2 : shape.Height;
+  const int64_t x = int64_t(pointer.position.x) - left;
+  const int64_t y = int64_t(pointer.position.y) - top;
+  const int64_t x0 = std::max<int64_t>(0, x);
+  const int64_t y0 = std::max<int64_t>(0, y);
+  const int64_t x1 = std::min<int64_t>(width, x + shape.Width);
+  const int64_t y1 = std::min<int64_t>(height, y + count);
+  for (int64_t row = y0; row < y1; ++row) {
+    const auto sy = size_t(row - y);
+    for (int64_t col = x0; col < x1; ++col) {
+      const auto sx = size_t(col - x);
+      BYTE* dst = pixels + size_t(row) * stride + size_t(col) * 4;
+      if (shape.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
+        const auto offset = sy * shape.Pitch + sx / 8;
+        const BYTE bit = BYTE(0x80 >> (sx % 8));
+        const bool mask = (pointer.pixels[offset] & bit) != 0;
+        const bool xorbit = (pointer.pixels[offset + size_t(count) * shape.Pitch] & bit) != 0;
+        for (int channel = 0; channel < 3; ++channel) dst[channel] = BYTE((dst[channel] & (mask ? 0xFF : 0)) ^ (xorbit ? 0xFF : 0));
+      } else {
+        const BYTE* src = pointer.pixels.data() + sy * shape.Pitch + sx * 4;
+        if (shape.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR) {
+          if (src[3] != 0 && src[3] != 255)
+            throw Failure("unsupported_surface", "masked pointer alpha is invalid");
+          for (int channel = 0; channel < 3; ++channel) dst[channel] = src[3] ? BYTE(dst[channel] ^ src[channel]) : src[channel];
+        } else {
+          for (int channel = 0; channel < 3; ++channel)
+            dst[channel] = BYTE((unsigned(src[channel]) * src[3] + unsigned(dst[channel]) * (255 - src[3]) + 127) / 255);
+        }
+      }
+      dst[3] = 255;
+    }
+  }
+}
+
+static void pointertest() {
+  auto check = [](bool value, const char* detail) {
+    if (!value) throw Failure("capture_failed", detail);
+  };
+  Pointer pointer;
+  BYTE surface[16]{10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255};
+  pointer.visible = true;
+  pointer.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR;
+  pointer.shape.Width = 1;
+  pointer.shape.Height = 1;
+  pointer.shape.Pitch = 4;
+  pointer.pixels = {110, 120, 130, 128};
+  pointer.position = POINT{1, 0};
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[4] == 75 && surface[5] == 85 && surface[6] == 95, "color alpha pointer self-test failed");
+  pointer.visible = false;
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[4] == 75, "hidden pointer changed desktop pixels");
+  pointer.visible = true;
+  pointer.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR;
+  pointer.pixels = {1, 2, 3, 255};
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[4] == BYTE(75 ^ 1) && surface[5] == BYTE(85 ^ 2), "masked XOR pointer self-test failed");
+  pointer.pixels = {5, 6, 7, 0};
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[4] == 5 && surface[5] == 6 && surface[6] == 7, "masked replacement pointer self-test failed");
+  pointer.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME;
+  pointer.shape.Height = 2;
+  pointer.shape.Pitch = 1;
+  pointer.position = POINT{0, 0};
+  pointer.pixels = {0x80, 0}; // AND=1, XOR=0: preserve the first pixel.
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[0] == 10 && surface[1] == 20, "monochrome preserve pointer self-test failed");
+  pointer.pixels = {0x80, 0x80}; // AND=1, XOR=1: invert the first pixel.
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[0] == BYTE(10 ^ 255) && surface[1] == BYTE(20 ^ 255), "monochrome XOR pointer self-test failed");
+  pointer.position = POINT{-1, 0}; // One-pixel shape is entirely clipped.
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[0] == BYTE(10 ^ 255), "clipped pointer changed pixels");
+  pointer.shape.Width = 2;
+  pointer.pixels = {0xC0, 0x40}; // Partial left clip leaves the second shape pixel visible.
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[0] == 10 && surface[1] == 20, "negative-edge pointer clipping self-test failed");
+  pointer.position = POINT{1, 1};
+  compose(surface, 2, 2, 8, pointer, 0, 0);
+  check(surface[12] == 100, "right-edge pointer clipping self-test failed");
+  pointer.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR;
+  pointer.shape.Width = 1;
+  pointer.shape.Height = 1;
+  pointer.shape.Pitch = 4;
+  pointer.pixels = {255, 0, 0, 255};
+  pointer.position = POINT{1, 0};
+  compose(surface, 2, 2, 8, pointer, 1, 0); // Window crop starts after the pointer position.
+  check(surface[0] == 255 && surface[1] == 0, "cropped pointer position self-test failed");
+  pointer.shape.Pitch = 3;
+  bool refused = false;
+  try { compose(surface, 2, 2, 8, pointer, 0, 0); }
+  catch (const Failure& error) { refused = error.code == "unsupported_surface"; }
+  check(refused, "malformed color pointer was not refused");
+  pointer.shape.Pitch = 4;
+  pointer.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME;
+  pointer.shape.Height = 3;
+  refused = false;
+  try { compose(surface, 2, 2, 8, pointer, 0, 0); }
+  catch (const Failure& error) { refused = error.code == "unsupported_surface"; }
+  check(refused, "malformed monochrome pointer was not refused");
+  pointer.shape.Type = DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR;
+  pointer.shape.Height = 1;
+  pointer.pixels = {0, 0, 0, 128};
+  refused = false;
+  try { compose(surface, 2, 2, 8, pointer, 0, 0); }
+  catch (const Failure& error) { refused = error.code == "unsupported_surface"; }
+  check(refused, "malformed masked pointer was not refused");
 }
 
 struct Target {
@@ -266,6 +415,8 @@ static void run(HANDLE pipe) {
                 UINT(original.rect.right - outputDesc.DesktopCoordinates.left),
                 UINT(original.rect.bottom - outputDesc.DesktopCoordinates.top), 1};
   std::vector<unsigned char> image(kImageBytes);
+  std::vector<BYTE> surface(size_t(width) * height * 4);
+  Pointer pointer;
   uint64_t sequence = 0;
   uint64_t base = 0;
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
@@ -290,6 +441,24 @@ static void run(HANDLE pipe) {
     Lease lease(duplicate.Get());
     auto acquired = Clock::now();
     same(original);
+    if (info.LastMouseUpdateTime.QuadPart) {
+      pointer.position = info.PointerPosition.Position;
+      pointer.visible = info.PointerPosition.Visible != 0;
+    }
+    if (info.PointerShapeBufferSize) {
+      if (info.PointerShapeBufferSize > kPointerBytes)
+        throw Failure("unsupported_surface", "pointer shape exceeds fixed buffer");
+      pointer.pixels.resize(info.PointerShapeBufferSize);
+      UINT required = 0;
+      require(duplicate->GetFramePointerShape(info.PointerShapeBufferSize, pointer.pixels.data(),
+                                              &required, &pointer.shape), "GetFramePointerShape");
+      if (!required || required > info.PointerShapeBufferSize)
+        throw Failure("capture_failed", "pointer shape size changed during capture");
+      pointer.pixels.resize(required);
+      validate(pointer);
+    }
+    if (pointer.visible && pointer.pixels.empty())
+      throw Failure("unsupported_surface", "visible pointer has no captured shape");
     ComPtr<ID3D11Texture2D> source;
     require(resource.As(&source), "capture texture");
     D3D11_TEXTURE2D_DESC current{};
@@ -302,7 +471,20 @@ static void run(HANDLE pipe) {
     require(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
     DWORD size = 0;
     try {
-      size = encode(imaging.Get(), width, height, mapped.RowPitch, static_cast<BYTE*>(mapped.pData), image);
+      if (mapped.RowPitch < uint64_t(width) * 4)
+        throw Failure("unsupported_surface", "mapped capture pitch is invalid");
+      BYTE* pixels = static_cast<BYTE*>(mapped.pData);
+      UINT stride = mapped.RowPitch;
+      if (pointer.visible) {
+        for (UINT row = 0; row < height; ++row)
+          std::memcpy(surface.data() + size_t(row) * width * 4,
+                      pixels + size_t(row) * mapped.RowPitch, size_t(width) * 4);
+        // PointerPosition is output-relative. The crop starts at box.left/top; HotSpot is not subtracted.
+        compose(surface.data(), width, height, width * 4, pointer, LONG(box.left), LONG(box.top));
+        pixels = surface.data();
+        stride = width * 4;
+      }
+      size = encode(imaging.Get(), width, height, stride, pixels, image);
     } catch (...) {
       context->Unmap(staging.Get(), 0);
       throw;
@@ -341,6 +523,7 @@ int wmain(int argc, wchar_t** argv) {
   try {
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
       {
+        pointertest();
         RECT visible = intersect(RECT{-8, -8, 1928, 1088}, RECT{0, 0, 1920, 1080});
         if (visible.left != 0 || visible.top != 0 || visible.right != 1920 || visible.bottom != 1080)
           throw Failure("capture_failed", "visible desktop clipping self-test failed");

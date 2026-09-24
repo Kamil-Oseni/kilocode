@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 20:59 America/Toronto - Chief Windows apply now fails closed
+
+The dormant Chief integration boundary now refuses both its pre-dispatch check and direct dispatch on Windows before any parent write or one-time reservation. Five focused real-Git tests / 19 assertions pass, including tracked and untracked attempts with unchanged parent and outside sentinel; CLI typecheck, formatting and diff checks pass. The tool remains unregistered and no installed snapshot contains a usable native apply path. The owner reaffirmed that Chief should select independently useful named specialists, enforce read-only versus edit authority for each job, and show a compact, accurate parent-chat event trail with recognizable role icons, messages and full reports on demand. Existing Chief planning/ledger/activity work is a foundation; installed parallel and restart acceptance still remains.
+
+## ChatGPT 2026-09-23 20:56 America/Toronto - Windows junction escape blocks Chief native apply
+
+A separate real Windows Git fixture proved that a junction swapped into a tracked path after preflight can make both `git apply --check` and `git apply` succeed while modifying a file outside the parent checkout. Exact-byte postcondition checks detect a mismatch only after that unauthorized native effect. Root-level untracked writes have the same unresolved root-swap class. The previous positive temporary-worktree dispatch tests are not a Windows safety release gate. Do not register the tool, install this unfinished edit flow as accepted, or mark `FUT-AGENT-01/02` Verified.
+
 ## ChatGPT 2026-09-23 20:48 America/Toronto - one-time Chief integration boundary kept unregistered
 
 An unregistered `chief_integrate` tool now ties the exact reviewed diff and saved child worktree to the canonical parent. It rechecks source and parent under a repository-wide durable lock, obtains the existing edit permission once for exact paths, reserves an integration attempt before native effects, dispatches the prepared patch/copies once, verifies every final byte and records `integrated` or `unknown`. Four real-Git tests / 16 assertions pass: LF bytes remain exact with `core.autocrlf=true`, a partial dispatch fails verification, abort immediately after reservation settles unknown without replay, and nested untracked files are refused before effects. This is source-only and deliberately unregistered. External path-swap behavior for tracked `git apply`, installed-host sandbox/permission behavior, restart and prolonged-use acceptance remain open. Do not claim Chief edit integration is user-ready or mark `FUT-AGENT-01/02` Verified.

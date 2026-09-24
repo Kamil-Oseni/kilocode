@@ -38,6 +38,8 @@ export namespace ChiefIntegrate {
   }
 
   export function check(parent: string, prepared: ChiefIntegration.Prepared) {
+    if (process.platform === "win32")
+      throw new Error("Windows integration requires an anchored no-reparse native file driver")
     if (prepared.untracked.some((item) => item.path.includes("/")))
       throw new Error("Nested untracked integration requires anchored native file creation")
     if (!prepared.patch.length) return
@@ -46,6 +48,8 @@ export namespace ChiefIntegrate {
 
   /** Called once, only after reserveIntegration has been durably written. */
   export async function dispatch(parent: string, prepared: ChiefIntegration.Prepared) {
+    if (process.platform === "win32")
+      throw new Error("Windows integration requires an anchored no-reparse native file driver")
     if (prepared.untracked.some((item) => item.path.includes("/")))
       throw new Error("Nested untracked integration requires anchored native file creation")
     if (prepared.patch.length)

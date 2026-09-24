@@ -59,7 +59,6 @@ async function prepared(item: Awaited<ReturnType<typeof repos>>) {
   const manifest = await ChiefEdits.manifest({ preview })
   const ready = await ChiefIntegration.prepare({ manifest, preview })
   await ChiefIntegration.preflight({ manifest, parent: item.root })
-  ChiefIntegrate.check(item.root, ready)
   return { manifest, ready }
 }
 
@@ -202,6 +201,16 @@ describe("Chief native integration boundary", () => {
           metadata: () => Effect.void,
           ask: () => Effect.void,
         }
+        if (process.platform === "win32") {
+          expect(
+            Exit.isFailure(yield* def.execute({ branch_id: "edit", digest: preview.digest! }, ctx).pipe(Effect.exit)),
+          ).toBe(true)
+          expect(
+            (yield* ledger.read(id))?.branches.find((entry) => entry.id === "edit")?.worktree?.integration,
+          ).toBeUndefined()
+          expect(yield* Effect.promise(() => readFile(path.join(item.root, "tracked.txt"), "utf8"))).toBe("base\n")
+          return
+        }
         const result = yield* def.execute({ branch_id: "edit", digest: preview.digest! }, ctx)
         expect(result.metadata.phase).toBe("unknown")
         expect(
@@ -215,12 +224,20 @@ describe("Chief native integration boundary", () => {
     30_000,
   )
 
-  test("dispatches the prepared tracked patch and untracked bytes once with exact postconditions", async () => {
+  test("dispatches the prepared tracked patch and untracked bytes once on supported hosts", async () => {
     const item = await repos()
     await Bun.write(path.join(item.child, "tracked.txt"), "changed\n")
     await Bun.write(path.join(item.child, "new.txt"), "copied\n")
     git(item.root, "config", "core.autocrlf", "true")
     const result = await prepared(item)
+    if (process.platform === "win32") {
+      expect(() => ChiefIntegrate.check(item.root, result.ready)).toThrow("anchored no-reparse native file driver")
+      expect(ChiefIntegrate.dispatch(item.root, result.ready)).rejects.toThrow("anchored no-reparse native file driver")
+      expect(await readFile(path.join(item.root, "tracked.txt"), "utf8")).toBe("base\n")
+      expect(await Bun.file(path.join(item.root, "new.txt")).exists()).toBe(false)
+      return
+    }
+    ChiefIntegrate.check(item.root, result.ready)
     await ChiefIntegrate.dispatch(item.root, result.ready)
     expect(await ChiefIntegrate.verify(item.root, result.manifest)).toBe(true)
     expect(await readFile(path.join(item.root, "tracked.txt"), "utf8")).toBe("changed\n")
@@ -235,10 +252,32 @@ describe("Chief native integration boundary", () => {
     await Bun.write(path.join(item.child, "new.txt"), "copied\n")
     const result = await prepared(item)
     await Bun.write(path.join(item.root, "new.txt"), "outside edit\n")
+    if (process.platform === "win32") {
+      expect(ChiefIntegrate.dispatch(item.root, result.ready)).rejects.toThrow("anchored no-reparse native file driver")
+      expect(await readFile(path.join(item.root, "tracked.txt"), "utf8")).toBe("base\n")
+      expect(await readFile(path.join(item.root, "new.txt"), "utf8")).toBe("outside edit\n")
+      return
+    }
     expect(ChiefIntegrate.dispatch(item.root, result.ready)).rejects.toThrow()
     expect(await ChiefIntegrate.verify(item.root, result.manifest)).toBe(false)
     expect(await readFile(path.join(item.root, "tracked.txt"), "utf8")).toBe("changed\n")
     expect(await readFile(path.join(item.root, "new.txt"), "utf8")).toBe("outside edit\n")
+  }, 30_000)
+
+  test("Windows refuses an untracked-only copy before touching parent or outside files", async () => {
+    if (process.platform !== "win32") return
+    const item = await repos()
+    const outside = await mkdtemp(path.join(tmpdir(), "raya-chief-outside-"))
+    dirs.push(outside)
+    await Bun.write(path.join(outside, "sentinel.txt"), "outside\n")
+    await Bun.write(path.join(item.child, "new.txt"), "copied\n")
+    const result = await prepared(item)
+    expect(result.ready.patch.length).toBe(0)
+    expect(() => ChiefIntegrate.check(item.root, result.ready)).toThrow("anchored no-reparse native file driver")
+    expect(ChiefIntegrate.dispatch(item.root, result.ready)).rejects.toThrow("anchored no-reparse native file driver")
+    expect(await Bun.file(path.join(item.root, "new.txt")).exists()).toBe(false)
+    expect(await readFile(path.join(item.root, "tracked.txt"), "utf8")).toBe("base\n")
+    expect(await readFile(path.join(outside, "sentinel.txt"), "utf8")).toBe("outside\n")
   }, 30_000)
 
   test("refuses nested untracked paths before any native effect", async () => {
@@ -255,8 +294,10 @@ describe("Chief native integration boundary", () => {
     const manifest = await ChiefEdits.manifest({ preview })
     const ready = await ChiefIntegration.prepare({ manifest, preview })
     await ChiefIntegration.preflight({ manifest, parent: item.root })
-    expect(() => ChiefIntegrate.check(item.root, ready)).toThrow("anchored native file creation")
-    expect(ChiefIntegrate.dispatch(item.root, ready)).rejects.toThrow("anchored native file creation")
+    const message =
+      process.platform === "win32" ? "anchored no-reparse native file driver" : "anchored native file creation"
+    expect(() => ChiefIntegrate.check(item.root, ready)).toThrow(message)
+    expect(ChiefIntegrate.dispatch(item.root, ready)).rejects.toThrow(message)
     expect(await readFile(path.join(item.root, "tracked.txt"), "utf8")).toBe("base\n")
   }, 30_000)
 })

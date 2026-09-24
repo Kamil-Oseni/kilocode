@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 14:45 America/Toronto - native Stop exit evidence awaiting installation
+
+`NativeCaptureHost.stop()` now clears/rejects local frame state immediately, closes the stdout pipe, kills the child, retries after 500 ms if it has not exited and emits a failure after 1.5 seconds if still alive. A real child-process test confirms its PID disappears after Stop; 44 focused tests / 253 assertions, extension/webview typechecks, lint and formatting pass. Commit/push/install this change. It does not prove forced termination under OS failure or substitute for the installed-host Stop/manual takeover/disconnect matrix. Static-frame freshness, cursor composition, cross-monitor handling, resource and latency benchmarks remain open. `FUT-CU-01` stays In progress.
+
 ## ChatGPT 2026-09-24 14:42 America/Toronto - installed native bounds checkpoint
 
 `287ed44bf1` is pushed and installed as `eden.raya@7.4.23-snapshot+287ed44bf1.kamil-oseni.1790275214563`. The retained VSIX contains the native executable and has SHA-256 `116491C9891F4C650CBBEB2453D4B10C456599E018AFA6A8786AC869EA5B1EED`. Extension/webview typechecks, lint, native `/W4` compile/self-test and low-memory packaging passed. The candidate stays behind `RAYA_NATIVE_CAPTURE_CANDIDATE=1`; this shell still has no foreground frame or latency evidence. Next harden Stop to confirm child termination, then address static-frame freshness and hardware cursor before the interactive installed-host matrix. `FUT-CU-01` remains In progress.

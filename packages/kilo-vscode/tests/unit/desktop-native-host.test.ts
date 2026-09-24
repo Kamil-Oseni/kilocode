@@ -134,4 +134,37 @@ describe("native desktop capture host", () => {
     expect(errors[0]?.message).toContain("device_lost")
     expect(host.latest()).toBeUndefined()
   })
+
+  it("terminates the native child after Stop, beyond clearing its retained frame", async () => {
+    const errors: Error[] = []
+    const header = {
+      v: 1,
+      type: "frame",
+      sequence: 1,
+      windowID: "0x12AB",
+      location: "pid:0;title:Editor;bounds:0,0,100,80",
+      width: 100,
+      height: 80,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    }
+    const script = `const h=${JSON.stringify(header)};h.location="pid:"+process.pid+";title:Editor;bounds:0,0,100,80";const j=Buffer.from(JSON.stringify(h));const p=Buffer.alloc(8+j.length+9);p.writeUInt32LE(j.length,0);j.copy(p,4);p.writeUInt32LE(9,4+j.length);Buffer.from([137,80,78,71,13,10,26,10,1]).copy(p,8+j.length);process.stdout.write(p);setInterval(()=>{},1000)`
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script])
+    host.start()
+    const frame = await host.next()
+    const pid = Number(frame.location.match(/^pid:(\d+);/)?.[1])
+    host.stop()
+    expect(Number.isInteger(pid)).toBe(true)
+    await until(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+    expect(host.latest()).toBeUndefined()
+    expect(errors).toHaveLength(0)
+  })
 })

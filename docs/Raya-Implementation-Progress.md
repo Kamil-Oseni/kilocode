@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 14:45 America/Toronto - native Stop watches child termination
+
+**Status: source verified; commit/push/install pending.** `NativeCaptureHost.stop()` still clears frames and rejects pending waits synchronously, and now destroys the pipe, requests child termination, retries an unexited child after 500 ms and reports a still-running child after 1.5 seconds. A real spawned child test embeds its PID in a valid frame and confirms that the process no longer exists after Stop. The focused lifecycle, worker, parser, host and driver suite passes 44 tests / 253 assertions; extension/webview typechecks, lint and formatting pass. This proves the ordinary local Stop path and a bounded failure alarm, not the OS-level ability to terminate a hostile process in every circumstance. Next commit/push/install, then test Stop/manual takeover/backend loss on the installed interactive host. The static-frame expiry and missing hardware cursor remain open; keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 14:42 America/Toronto - native bounds correction installed
 
 **Status: `287ed44bf1` pushed and installed.** VS Code lists `eden.raya@7.4.23-snapshot+287ed44bf1.kamil-oseni.1790275214563`; the retained VSIX contains `extension/bin/raya-desktop-capture.exe` and has SHA-256 `116491C9891F4C650CBBEB2453D4B10C456599E018AFA6A8786AC869EA5B1EED`. The low-memory build passed extension/webview typechecks and lint, compiled and self-tested the corrected native executable, packaged 444 files and installed. This verifies the off-screen clipping and display-change guard at source/self-test/package level, not on an interactive desktop. The native candidate remains opt-in, with GDI as default. Next verify termination after Stop and avoid static-frame expiry, then run the live capture/recovery/latency matrix. Keep `FUT-CU-01` **In progress**.

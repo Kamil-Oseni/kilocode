@@ -74,8 +74,25 @@ export class NativeCaptureHost {
     this.parser = undefined
     this.frame?.data.fill(0)
     this.frame = undefined
-    this.process?.kill()
+    const child = this.process
     this.process = undefined
+    if (!child) return
+    child.stdout?.destroy()
+    child.kill()
+    const retry = setTimeout(() => {
+      if (child.exitCode !== null || child.signalCode !== null) return
+      child.kill("SIGKILL")
+    }, 500)
+    const alarm = setTimeout(() => {
+      if (child.exitCode !== null || child.signalCode !== null) return
+      this.failed(new Error("Native desktop capture did not exit after Stop"))
+    }, 1_500)
+    retry.unref()
+    alarm.unref()
+    child.once("close", () => {
+      clearTimeout(retry)
+      clearTimeout(alarm)
+    })
   }
 
   private fail(error: unknown, generation: number): void {

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 18:59 America/Toronto - installed quiet chat checkpoint
+
+`879e9ba0fe` is pushed and installed as `eden.raya@7.4.23-snapshot+879e9ba0fe.kamil-oseni.1790290667929`; the retained 446-file rollback VSIX SHA-256 is `839C9376A45ACA4843B3F1BC5DE1D9CBB14BB48E4CD77277F59DA11BD34D8D13`. The push hook and low-memory packaging gates passed. Verify the first chat and browser page in the live VS Code host; isolated source previews cannot prove those interactions. Continue the Routines UX overhaul and native Computer Use barrier/recovery benchmark. The native crash cause remains unknown; `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 18:51 America/Toronto - chat entry copy handoff
 
 The browser-panel copy/layout and compact composer configuration requested in the original goal are present in source; a focused browser panel DOM suite passes, but live rendering is not proved. The remaining repetitive first-chat paragraph has been removed, leaving the heading, composer placeholder and recent sessions. Isolated production-component previews at 320px and 900px were inspected; extension/webview typechecks, lint, preview build and 11 focused composer browser tests pass. Commit/push/install this user-visible change, then check the live VS Code view. Continue the larger Routines organization UX and installed Computer Use crash, latency and recovery work; `FUT-CU-01` remains In progress.

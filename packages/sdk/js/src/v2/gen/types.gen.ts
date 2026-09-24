@@ -21368,6 +21368,13 @@ export type KilocodeGoalGetResponses = {
       assistantID?: string
       worker?: string
       outcome?: "completed" | "error" | "interrupted"
+      attention?: {
+        batchID: string
+        goalCreatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        requestID: string
+        revision: string
+        ids: Array<string>
+      }
     }
     retryEvents?: Array<string>
     accounted?: {
@@ -22019,6 +22026,13 @@ export type KilocodeGoalUpdateResponses = {
       assistantID?: string
       worker?: string
       outcome?: "completed" | "error" | "interrupted"
+      attention?: {
+        batchID: string
+        goalCreatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        requestID: string
+        revision: string
+        ids: Array<string>
+      }
     }
     retryEvents?: Array<string>
     accounted?: {
@@ -22651,6 +22665,13 @@ export type KilocodeGoalCreateResponses = {
       assistantID?: string
       worker?: string
       outcome?: "completed" | "error" | "interrupted"
+      attention?: {
+        batchID: string
+        goalCreatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        requestID: string
+        revision: string
+        ids: Array<string>
+      }
     }
     retryEvents?: Array<string>
     accounted?: {

@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 09:42 America/Toronto - Chief and specialist chat snapshot installed
+
+**Status: source pushed and production snapshot installed; installed-host behavior remains unverified.** Source through `e28a6755ad` includes exact request branch admission, saved review/synthesis and rotation, receipt-backed Chief attention, and clearer specialist task cards with reports before action history. The low-memory workflow packaged 443 files and installed `eden.raya@7.4.23-snapshot+e28a6755ad.kamil-oseni.1790256901913`; `code --list-extensions --show-versions` reports that version. The retained rollback VSIX has SHA-256 `66c271abb02817a6f5205ace6945129eebbb7c56af52f9a3958f33d996158ebd`. Snapshot SDK generation added the saved Chief attention field to `packages/sdk/js/src/v2/gen/types.gen.ts`; commit that generated contract with this note.
+
+Focused CLI, UI, typecheck and lint checks passed before packaging. The ordinary-chat Chief planner remains dormant, and the installed extension has not passed a live two-specialist, narrow/wide visual, backend-restart or VS Code-restart check. Keep `FUT-AGENT-01/02` **In progress**. Next: expose exact ordinary-chat planning and review through registered tools, then run those live acceptance checks.
+
 ## ChatGPT 2026-09-24 09:18 America/Toronto - request rotation and report-first specialist cards
 
 Source commits: `bcb00d13b1` (rotation), `8574526914` (note receipts), and `c51057e023` (report-first card).

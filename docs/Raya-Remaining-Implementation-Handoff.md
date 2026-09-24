@@ -1,5 +1,23 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 09:18 America/Toronto - request rotation, note receipts and task-card hierarchy
+
+Source commits: `bcb00d13b1` (rotation), `8574526914` (note receipts), and `c51057e023` (report-first card).
+
+Version-three request plans have a dormant terminal rotation method: it requires real saved branch reviews and synthesis, writes and reads back a predecessor receipt before removing the active marker, and leaves incomplete or unknown work blocked. A later request may plan after intervening no-plan turns only when the predecessor receipt matches an authored message. The ordinary-chat `chief_plan`/inspect/review/synthesis tool path is still not wired. Chief idle wake can now acknowledge only notes proven by a completed exact-turn `chief_inspect` receipt; absent or partial receipts remain pending, so an explicit inbox/resolve UX is still needed for unseen notes. The completed Task card shows its report before collapsed action history; running actions stay visible. Targeted tests and typechecks pass, but no real installed-host visual or restart matrix has passed. Keep `FUT-AGENT-01/02` In progress.
+
+## ChatGPT 2026-09-24 06:50 America/Toronto - Chief note idle wake
+
+`ec360e0d21` adds an exact prepared-note origin to a saved goal dispatch. Note hints, parent TurnClose and startup recovery call the same idle/queue/newer-user gate; the goal ledger saves one continuation, and partial intake remains unresolved rather than replayed. Focused Chief and full goal-state tests plus CLI typecheck pass. Do not claim immediate arrival while the parent is active: it wakes at the next proven idle boundary. A finished but unacknowledged batch suppresses replay, so new notes behind it may wait for acknowledgement or the next normal continuation; define and test that recovery. Installed-host two-specialist, reconnect and restart acceptance remain open. Keep `FUT-AGENT-01/02` In progress.
+
+## ChatGPT 2026-09-24 06:31 America/Toronto - dormant request review boundary
+
+`cdf74ab4c7` adds `ChiefRequestReview.inspect/review/synthesize` for exact saved read-only request branches. Review verifies the bound child input turn, completed child tool evidence and matching saved `chief_inspect` receipt; synthesis requires all branches completed and reviewed. A newer authored user turn refuses old-plan review even though an already admitted child may still settle by immutable lineage. This path is unregistered and needs terminal marker rotation, partial marker handling, ordinary-chat tool/prompt wiring, real two-specialist use, process restart and installed-host visual acceptance before claiming the target UX. Keep `FUT-AGENT-01/02` In progress.
+
+## ChatGPT 2026-09-24 06:15 America/Toronto - specialist task-card hierarchy
+
+Commit `613ffe1004` was local pending the next coherent push and snapshot at this checkpoint. The compact child card now distinguishes a saved background start from a finished report and shows a readable status beside the specialist name and verified access. It omits duplicate brief and finished step-count text from named cards. The separate Chief activity remains the source of later branch updates; do not retroactively label the historical task-start receipt as a completed child report. Focused UI tests and package typechecks pass, but installed-host narrow/wide visual and restart checks remain open. Continue exact request-bound review/synthesis, then safely expose ordinary-chat planning and test a real two-specialist conversation. Keep `FUT-AGENT-01/02` In progress.
+
 ## ChatGPT 2026-09-24 05:28 America/Toronto - dormant request branch execution boundary
 
 `ChiefRequestPlan.reserve` locks a read-only branch and call ID before Task creates a child; `admit` binds the exact child session and input message, and `settle` uses that immutable lineage even when a newer user message arrives. A reserved branch cannot replay after restart, and `reconcile` marks it unknown only when the original process is proven dead. `ChiefTaskBinding` rejects simultaneous active v2 goal and v3 request plans. Task uses the saved branch brief, specialist and authority; the v2 edit worktree path remains separate. Do not expose v3 planning yet: inspect/review/synthesis, marker-only partial-write repair, terminal marker rotation for later requests, and installed-host restart tests remain. Keep `FUT-AGENT-01/02` In progress.

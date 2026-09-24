@@ -1,5 +1,27 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 09:18 America/Toronto - request rotation and report-first specialist cards
+
+Source commits: `bcb00d13b1` (rotation), `8574526914` (note receipts), and `c51057e023` (report-first card).
+
+The dormant version-three Chief request ledger now retires an old plan only after its branches have real saved reviews and synthesis, with a durable old-to-new receipt before marker removal. A new plan refuses a missing or marker-only predecessor; a verified rotation still permits intervening ordinary no-plan messages before a later fanout. Focused real-storage rotation and idle-attention tests pass 3 cases / 44 assertions, CLI typecheck passes, and no ordinary-chat planner has been exposed. The child task card now places a completed report before a collapsible action history; live actions remain visible while running. A 20-action Solid DOM fixture passes outside the restricted Windows test sandbox; extension/webview typechecks and lint pass. Installed-host visual and restart acceptance remain open; `FUT-AGENT-01/02` remain In progress.
+
+## ChatGPT 2026-09-24 09:18 America/Toronto - receipt-backed Chief note acknowledgement
+
+The idle Chief wake now checks completed `chief_inspect` receipts in the exact finished parent turn and calls the existing strict acknowledgement validator for only the notes actually shown. Missing or corrupt receipts do not acknowledge notes or replay a finished dispatch; a matching receipt frees a later pending note to form a new batch. Partial old batches without full observed evidence remain pending for explicit recovery. This is source-tested only; installed-host timing and restart behavior remain unverified.
+
+## ChatGPT 2026-09-24 06:50 America/Toronto - durable idle Chief attention
+
+Commit `ec360e0d21` lets a saved specialist note trigger one parent Chief continuation after the parent is idle and its prior goal turn is accounted. An exact prepared batch is bound to one durable goal dispatch; note events, parent turn close and startup recovery use that state. Partial saved user intake does not replay a model turn, and pause or a newer user request suppresses the wake. Four focused Chief tests and 111 goal-state tests pass, as do CLI typecheck, formatting, annotation and diff checks. This is backend source evidence: real installed-host delivery, restart and parent-chat timing remain unverified. A finished attention dispatch whose notes were not acknowledged suppresses the same batch; notes behind that batch need a later explicit recovery/normal continuation. `FUT-AGENT-01/02` remain In progress.
+
+## ChatGPT 2026-09-24 06:31 America/Toronto - dormant request-bound review and synthesis
+
+Commit `cdf74ab4c7` adds an exact read-only review boundary for saved version-three Chief request plans. Inspection projects each admitted child's bound input turn; review requires its completed tool evidence and a matching saved inspection receipt; synthesis requires every branch completed and reviewed with one bounded conclusion each. Corrupted edit authority, duplicate lineage, forged inspection, wrong-child evidence, unknown outcomes, and a newer authored user turn fail closed. Real Session/Storage tests pass 2 cases / 14 assertions, CLI typecheck and source guards pass, and the full Task suite from the prior admission slice passes 54 tests / 334 assertions. A fresh ledger instance reads the synthesis, but process/installed-host restart is untested. No planner or review tool exposes this path yet; `FUT-AGENT-01/02` remain In progress.
+
+## ChatGPT 2026-09-24 06:15 America/Toronto - clearer specialist task cards
+
+Commit `613ffe1004` makes the compact child task card show a saved-status distinction between working, started in background, report ready, and needs attention. It retains the saved specialist name, role icon, and verified read/edit access, while removing a repeated brief and finished step count from named cards. Background-start instructions are no longer rendered or search-indexed as a completed report. Focused webview tests pass 12 cases / 66 assertions; extension and webview typechecks, targeted lint, formatting, and diff checks pass. This was local and not installed at this checkpoint; live narrow/wide and restart acceptance remain open. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 05:28 America/Toronto - dormant request-bound branch admission
 
 A saved version-three request plan can now admit only its exact read-only branch through Task, using the saved specialist, brief and child permission ceiling. Reservation occurs before child creation; the saved call, child session and child input message bind admission and settlement. A repeat, changed request, substituted authority or specialist, partial plan marker, concurrent goal plan, or uncertain result cannot launch another child. A proven dead owner can move an admitted branch to unknown without replay. This path is dormant: no ordinary-chat `chief_plan` exposure, branch review, synthesis or completed request lifecycle exists yet. Focused request/v2-goal tests pass 5 cases / 46 assertions and CLI typecheck passes. `FUT-AGENT-01/02` remain In progress.

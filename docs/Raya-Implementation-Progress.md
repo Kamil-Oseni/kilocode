@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 03:47 America/Toronto - installed fail-closed intake recovery snapshot
+
+`557c6a2768` is pushed and installed as `eden.raya@7.4.23-snapshot+557c6a2768.kamil-oseni.1790235732687`; VS Code lists the exact version. Low-memory packaging regenerated the SDK without tracked changes, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed extension/webview typechecks and lint, bundled production assets, and installed the VSIX. Retained rollback VSIX SHA-256: `43B79D8F94EAFE3C418092B8AD442A6291778706D75B650710008DE2337BE12B`. This installs the partial-intake recovery guard; a real crash/restart through that boundary remains unobserved because native computer use still fails to initialize (`CreateProcessWithLogonW failed: 2`). No immediate Chief wake or ordinary non-goal fanout is claimed. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 03:24 America/Toronto - fail-closed goal intake recovery
 
 Restart recovery now checks the exact saved goal user message and its final synthetic text before resuming a model loop. A missing or partial intake stays at its started dispatch; routine attachment delivery is not acknowledged until the complete text is saved. The check accepts the base continuation prompt or its bounded Chief-note reminder and never creates another user message. Focused routine recovery tests cover missing, truncated and complete text. This is a narrow safety correction, not a new parent wake. Ordinary multi-specialist fanout still requires an active goal; request-bound non-goal fanout is the next separate slice. `FUT-AGENT-01/02` remain In progress.

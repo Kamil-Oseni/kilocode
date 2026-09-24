@@ -16,6 +16,9 @@ import type { Database } from "@opencode-ai/core/database/database"
 import { continuation } from "@/kilocode/task/continuation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { gate } from "@/kilocode/session/input-gate"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
+import { ChiefNoteEvent } from "@/kilocode/chief/event"
 
 const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
@@ -362,6 +365,14 @@ export namespace RayaGoalContinuation {
               const goal = yield* RayaGoal.make(input).get(sessionID)
               if (!goal || goal.status !== "active" || !goal.dispatch) return
               if (!(yield* input.idle(sessionID))) return
+              if (
+                yield* wake({
+                  ...input,
+                  sessionID,
+                  projectID: session.projectID,
+                })
+              )
+                return
               yield* resume({
                 ...input,
                 sessionID,
@@ -382,6 +393,132 @@ export namespace RayaGoalContinuation {
           }).pipe(recovery.withPermits(1)),
         { concurrency: 2, discard: true },
       )
+    })
+  }
+
+  /** A note event is only a hint; durable prepared and goal dispatch state decide whether one turn may start. */
+  export function wake(input: {
+    database?: Database.Interface
+    sessionID: SessionID
+    directory: string
+    projectID?: string
+    storage: Storage.Interface
+    sessions: Pick<Session.Interface, "get" | "messages" | "children">
+    enabled: () => Effect.Effect<boolean>
+    idle: (sessionID: SessionID) => Effect.Effect<boolean>
+    run?: Run
+    loop?: Loop
+  }) {
+    const goals = RayaGoal.make(input)
+    return Effect.gen(function* () {
+      const selected = yield* Effect.gen(function* () {
+        if (!(yield* input.enabled()) || !(yield* input.idle(input.sessionID))) return false
+        if (KiloSessionPromptQueue.active(input.sessionID) || KiloSessionPromptQueue.snapshot(input.sessionID).length)
+          return false
+        const session = yield* input.sessions.get(input.sessionID)
+        if (session.directory !== input.directory || (input.projectID && session.projectID !== input.projectID))
+          return false
+        if (!(yield* continuation({ ...input, session }))) return false
+        const goal = yield* goals.get(input.sessionID)
+        const plan = yield* ChiefBranches.make(input.storage).read(input.sessionID)
+        if (
+          !goal ||
+          goal.completion === "reply" ||
+          !plan ||
+          plan.version !== 2 ||
+          !ChiefBranches.matches(plan, goal) ||
+          !plan.attention?.pending.length
+        )
+          return false
+        const dispatch = goal.dispatch
+        if (!dispatch?.messageID) return false
+        const rows = yield* input.sessions.messages({ sessionID: input.sessionID })
+        if (
+          rows.some(
+            (row) =>
+              row.info.role === "user" &&
+              row.info.id !== dispatch.messageID &&
+              (row.info.id > dispatch.messageID! || row.info.time.created > dispatch.queuedAt),
+          )
+        )
+          return false
+        const prior = dispatch.attention
+        if (prior && dispatch.phase === "finished" && plan.attention.pending.every((id) => prior.ids.includes(id)))
+          return false
+        if (prior && dispatch.phase !== "finished") {
+          const batch = plan.attention.prepared
+          return (
+            batch?.id === prior.batchID &&
+            batch.ids.length === prior.ids.length &&
+            batch.ids.every((id, index) => id === prior.ids[index])
+          )
+        }
+        if (dispatch.phase !== "finished") return false
+        const batch = yield* ChiefBranches.make(input.storage).prepare({
+          goalID: input.sessionID,
+          goalCreatedAt: plan.goalCreatedAt,
+          requestID: plan.requestID,
+          revision: plan.revision,
+        })
+        if (!batch?.ids.length) return false
+        if (prior?.batchID === batch.id) return false
+        const next = yield* goals.continuedChief(input.sessionID, {
+          goalCreatedAt: plan.goalCreatedAt,
+          requestID: plan.requestID,
+          revision: plan.revision,
+          batchID: batch.id,
+          ids: batch.ids,
+        })
+        return next?.dispatch?.attention?.batchID === batch.id && next.dispatch.phase === "queued"
+      }).pipe(gate.withLock(input.sessionID))
+      if (!selected) return false
+      yield* resume({
+        ...input,
+        permitted: () =>
+          Effect.gen(function* () {
+            if (!(yield* input.enabled()) || !(yield* input.idle(input.sessionID))) return false
+            return (
+              !KiloSessionPromptQueue.active(input.sessionID) &&
+              KiloSessionPromptQueue.snapshot(input.sessionID).length === 0
+            )
+          }),
+      })
+      return true
+    })
+  }
+
+  export function subscribeAttention(input: {
+    database?: Database.Interface
+    directory: string
+    projectID: string
+    storage: Storage.Interface
+    sessions: Pick<Session.Interface, "get" | "messages" | "children">
+    enabled: () => Effect.Effect<boolean>
+    idle: (sessionID: SessionID) => Effect.Effect<boolean>
+  }) {
+    return Effect.gen(function* () {
+      const bridge = yield* EffectBridge.make()
+      const listener = (event: GlobalEvent) => {
+        if (
+          event.directory !== input.directory ||
+          event.project !== input.projectID ||
+          event.payload?.type !== ChiefNoteEvent.type
+        )
+          return
+        const data = event.payload?.properties
+        if (!data || data.version !== 1 || typeof data.sessionID !== "string") return
+        bridge.fork(
+          wake({ ...input, sessionID: SessionID.make(data.sessionID) }).pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.interrupt
+                : Effect.sync(() => log.warn("Chief note wake skipped", { err: Cause.squash(cause) })),
+            ),
+          ),
+        )
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
     })
   }
 
@@ -410,6 +547,42 @@ export namespace RayaGoalContinuation {
         const complete = user && goal.dispatch.messageID && intact(user, input.sessionID, goal.dispatch.messageID, goal)
         // delivered_at means SessionPrompt persisted the owned user intake. It does not mean the model turn completed.
         if (delivery && complete) yield* inbox!.delivered(input.sessionID, goal.dispatch.messageID)
+        if (goal.dispatch.attention && !user && goal.dispatch.messageID && input.permitted) {
+          if (!(yield* input.permitted())) return
+          if (KiloSessionPromptQueue.active(input.sessionID) || KiloSessionPromptQueue.snapshot(input.sessionID).length)
+            return
+          const origin = goal.dispatch.attention
+          const plan = yield* ChiefBranches.make(input.storage).read(input.sessionID)
+          const batch = plan?.attention?.prepared
+          if (
+            !plan ||
+            plan.version !== 2 ||
+            !ChiefBranches.matches(plan, goal) ||
+            plan.goalCreatedAt !== origin.goalCreatedAt ||
+            plan.requestID !== origin.requestID ||
+            plan.revision !== origin.revision ||
+            batch?.id !== origin.batchID ||
+            batch.ids.length !== origin.ids.length ||
+            batch.ids.some((id, index) => id !== origin.ids[index])
+          )
+            return
+          const note = yield* reminder(input.storage, input.sessionID, goal)
+          if (!note) return
+          yield* invoke({
+            goals,
+            sessionID: input.sessionID,
+            directory: session.directory,
+            objective: goal.objective,
+            messageID: goal.dispatch.messageID,
+            queuedAt: goal.dispatch.queuedAt,
+            revision: goal.revision,
+            run: input.run,
+            quiet: true,
+            completion: goal.completion,
+            note,
+          })
+          return
+        }
         if (delivery && !delivery.delivered && !user && goal.dispatch.messageID) {
           const note = yield* reminder(input.storage, input.sessionID, goal)
           yield* invoke({
@@ -514,6 +687,7 @@ export namespace RayaGoalContinuation {
     sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
     run?: Run
     enabled?: () => Effect.Effect<boolean> // raya_change - Milestone I continuation default
+    idle?: (sessionID: SessionID) => Effect.Effect<boolean>
   }): Effect.Effect<void> {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
@@ -571,6 +745,19 @@ export namespace RayaGoalContinuation {
             }
 
             const turn = yield* recover(goals.recordTurn(sid, event.properties.messageID, active.intent), active.intent)
+            if (
+              input.enabled &&
+              input.idle &&
+              (yield* wake({
+                ...input,
+                sessionID: sid,
+                directory: session.directory,
+                projectID: session.projectID,
+                enabled: input.enabled,
+                idle: input.idle,
+              }))
+            )
+              return
             if (!turn || turn.state.status !== "active") return
             if (!turn.productive && !turn.retry) return
             if (input.enabled && !(yield* input.enabled())) return // raya_change - Milestone I

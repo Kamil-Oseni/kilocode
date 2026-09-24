@@ -29,6 +29,7 @@ import { RayaTask } from "@/kilocode/task"
 import { Database } from "@opencode-ai/core/database/database"
 import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
 import { recoverPending } from "@/kilocode/tool/apply-patch-transaction"
+import { InstanceState } from "@/effect/instance-state"
 
 const log = Log.create({ service: "kilocode-bootstrap" })
 
@@ -56,6 +57,19 @@ export namespace KilocodeBootstrap {
       const config = yield* Config.Service // raya_change - Milestone I
       const database = yield* Database.Service
       const routines = storage ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database }) : undefined
+      const attention = storage
+        ? yield* InstanceState.make((ctx) =>
+            RayaGoalContinuation.subscribeAttention({
+              database,
+              directory: ctx.directory,
+              projectID: ctx.project.id,
+              sessions,
+              storage,
+              enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
+              idle: (id) => runs.inspect(id).pipe(Effect.map((state) => state.phase === "idle")),
+            }),
+          )
+        : undefined
 
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
         if (storage) {
@@ -91,7 +105,9 @@ export namespace KilocodeBootstrap {
             sessions,
             storage,
             enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
+            idle: (id) => runs.inspect(id).pipe(Effect.map((state) => state.phase === "idle")),
           }) // raya_change - Milestones A/I configurable idle continuation
+          if (attention) yield* InstanceState.get(attention)
           if (routines) yield* routines()
           yield* RayaGoalContinuation.restore({
             database,

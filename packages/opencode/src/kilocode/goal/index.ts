@@ -321,6 +321,15 @@ export namespace RayaGoal {
         assistantID: Schema.optional(MessageID),
         worker: Schema.optional(Schema.String),
         outcome: Schema.optional(Schema.Literals(["completed", "error", "interrupted"])),
+        attention: Schema.optional(
+          Schema.Struct({
+            batchID: Schema.String,
+            goalCreatedAt: Schema.Number,
+            requestID: Schema.String,
+            revision: Schema.String,
+            ids: Schema.Array(Schema.String),
+          }),
+        ),
       }),
     ),
     retryEvents: Schema.optional(Schema.Array(Schema.String)),
@@ -2150,6 +2159,85 @@ export namespace RayaGoal {
       })
     })
 
+    /** Queue one Chief-note continuation only after the prior parent turn is durably accounted. */
+    const continuedChief = Effect.fn("RayaGoal.continuedChief")(function* (
+      sessionID: SessionID,
+      input: { goalCreatedAt: number; requestID: string; revision: string; batchID: string; ids: readonly string[] },
+    ) {
+      const state = yield* get(sessionID)
+      if (!state || state.status !== "active" || state.createdAt !== input.goalCreatedAt) return
+      const dispatch = state.dispatch
+      if (
+        !dispatch ||
+        dispatch.phase !== "finished" ||
+        dispatch.intent !== (state.intent ?? "unset") ||
+        dispatch.outcome !== "completed" ||
+        !dispatch.assistantID ||
+        !dispatch.messageID ||
+        state.accounted?.userID !== dispatch.messageID ||
+        !state.accounted.messages.includes(dispatch.assistantID)
+      )
+        return
+      const now = Date.now()
+      if (yield* pauseBudget(sessionID, state, now)) return
+      const check = Effect.fn("RayaGoal.continuedChief.check")(function* () {
+        const plan = yield* ChiefBranches.make(deps.storage).read(sessionID)
+        const batch = plan?.attention?.prepared
+        if (
+          !plan ||
+          plan.version !== 2 ||
+          !ChiefBranches.matches(plan, state) ||
+          plan.goalCreatedAt !== input.goalCreatedAt ||
+          plan.requestID !== input.requestID ||
+          plan.revision !== input.revision ||
+          batch?.id !== input.batchID ||
+          !batch.ids.length ||
+          batch.ids.length !== input.ids.length ||
+          batch.ids.some((id, index) => id !== input.ids[index])
+        )
+          return false
+        return true
+      })
+      if (!(yield* check())) return
+      return yield* save(
+        sessionID,
+        {
+          ...state,
+          updatedAt: now,
+          usage: { ...state.usage, continuations: state.usage.continuations + 1 },
+          dispatch: {
+            id: crypto.randomUUID(),
+            messageID: MessageID.ascending(),
+            intent: state.intent ?? "unset",
+            phase: "queued",
+            queuedAt: now,
+            attention: {
+              batchID: input.batchID,
+              goalCreatedAt: input.goalCreatedAt,
+              requestID: input.requestID,
+              revision: input.revision,
+              ids: [...input.ids],
+            },
+          },
+          progress: progress(state, {
+            at: now,
+            kind: "continuation",
+            message: "Chief specialist updates queued for inspection.",
+          }),
+        },
+        state,
+        (candidate) =>
+          check().pipe(
+            Effect.mapError((err) => new AuditError({ message: String(err) })),
+            Effect.flatMap((valid) =>
+              valid
+                ? Effect.succeed(candidate.revision!)
+                : Effect.fail(new AuditError({ conflict: true, message: "Chief attention changed before dispatch." })),
+            ),
+          ),
+      )
+    })
+
     const retried = Effect.fn("RayaGoal.retried")(function* (
       sessionID: SessionID,
       detail: string,
@@ -2340,6 +2428,7 @@ export namespace RayaGoal {
       evidence,
       recordTurn,
       continued,
+      continuedChief,
       retried,
       charged,
       limited,

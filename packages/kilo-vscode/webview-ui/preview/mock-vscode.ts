@@ -421,6 +421,69 @@ const attachment = (message: WebviewMessage) => {
   return true
 }
 
+const activity = (message: Extract<WebviewMessage, { type: "routineOrganizationActivity" }>) => {
+  const buried = scene === "older-active"
+  const rows: Work[] = buried
+    ? [
+        ...Array.from({ length: 50 }, (_, index) => ({
+          ...older(message.organizationID),
+          id: `rdg_finished_${index}`,
+          state: "completed" as const,
+          objective: `Finished request ${index + 1}`,
+          reason: undefined,
+          time: 100 - index,
+          updated: 100 - index,
+        })),
+        {
+          ...older(message.organizationID),
+          id: "rdg_older_active",
+          state: "running",
+          objective: "Confirm the older active request.",
+          reason: undefined,
+        },
+      ]
+    : [...work(message.organizationID), older(message.organizationID)]
+  const recordedCost = rows.reduce((total, item) => total + (item.cost ?? 0), 0)
+  const committedCost = rows.reduce(
+    (total, item) =>
+      total +
+      (item.state === "queued" || item.state === "accepted" || item.state === "running" || item.state === "needs_input"
+        ? (item.budget ?? 0)
+        : (item.cost ?? 0)),
+    0,
+  )
+  emit({
+    type: "routineOrganizationActivity",
+    requestID: message.requestID,
+    organizationID: message.organizationID,
+    items: buried
+      ? message.cursor === "older"
+        ? rows.slice(50)
+        : rows.slice(0, 50)
+      : message.cursor === "older"
+        ? [older(message.organizationID)]
+        : work(message.organizationID),
+    summary: {
+      total: rows.length,
+      active: rows.filter(
+        (item) =>
+          item.state === "queued" ||
+          item.state === "accepted" ||
+          item.state === "running" ||
+          item.state === "needs_input",
+      ).length,
+      needsAttention: rows.filter((item) => item.state === "needs_input" || item.state === "failed").length,
+      uncertain: 0,
+      recordedCost,
+      standaloneCost: 0,
+      coordinatorCost: 0,
+      committedCost,
+    },
+    ...(message.cursor ? {} : { next: "older" }),
+  })
+  return true
+}
+
 const preview = (message: WebviewMessage) => {
   if (delegates(message)) return true
   if (message.type === "routineAuthorityServices") return services(message)
@@ -443,45 +506,7 @@ const preview = (message: WebviewMessage) => {
     })
     return true
   }
-  if (message.type === "routineOrganizationActivity") {
-    const rows = [...work(message.organizationID), older(message.organizationID)]
-    const recordedCost = rows.reduce((total, item) => total + (item.cost ?? 0), 0)
-    const committedCost = rows.reduce(
-      (total, item) =>
-        total +
-        (item.state === "queued" ||
-        item.state === "accepted" ||
-        item.state === "running" ||
-        item.state === "needs_input"
-          ? (item.budget ?? 0)
-          : (item.cost ?? 0)),
-      0,
-    )
-    emit({
-      type: "routineOrganizationActivity",
-      requestID: message.requestID,
-      organizationID: message.organizationID,
-      items: message.cursor === "older" ? [older(message.organizationID)] : work(message.organizationID),
-      summary: {
-        total: rows.length,
-        active: rows.filter(
-          (item) =>
-            item.state === "queued" ||
-            item.state === "accepted" ||
-            item.state === "running" ||
-            item.state === "needs_input",
-        ).length,
-        needsAttention: rows.filter((item) => item.state === "needs_input" || item.state === "failed").length,
-        uncertain: 0,
-        recordedCost,
-        standaloneCost: 0,
-        coordinatorCost: 0,
-        committedCost,
-      },
-      ...(message.cursor ? {} : { next: "older" }),
-    })
-    return true
-  }
+  if (message.type === "routineOrganizationActivity") return activity(message)
   if (message.type === "routineDelegateChain") {
     const org = "org_11111111111111111111111111111111"
     const rows = work(org)

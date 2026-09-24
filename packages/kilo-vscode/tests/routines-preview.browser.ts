@@ -667,6 +667,25 @@ test("organization work filters loaded and earlier activity", async ({ page }, i
   expect(result.violations).toEqual([])
 })
 
+for (const width of [320, 900]) {
+  test(`older active organization work remains reachable at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-routines&target=organization&scene=older-active")
+    const work = page.locator(".routines-organization-work")
+    await expect(work.getByRole("button", { name: "Current 1" })).toHaveAttribute("aria-pressed", "true")
+    await expect(work.getByText("Active work may be on an earlier page.")).toBeVisible()
+    await page.screenshot({ path: info.outputPath(`older-active-before-${width}.png`), fullPage: true })
+    await work.getByRole("button", { name: "Load earlier work" }).click()
+    await expect(work.getByText("Confirm the older active request.")).toBeVisible()
+    await expect(work.getByText("Active work may be on an earlier page.")).toBeHidden()
+    await page.screenshot({ path: info.outputPath(`older-active-${width}.png`), fullPage: true })
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBeLessThanOrEqual(1)
+  })
+}
+
 test("routines organization editor separates reporting, delegation, and archive", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")

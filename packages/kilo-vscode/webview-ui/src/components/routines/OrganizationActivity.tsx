@@ -151,6 +151,12 @@ function loading(budget: number | undefined, total: Summary | undefined) {
   return budget !== undefined && !total
 }
 
+function empty(active: number, more: boolean) {
+  if (!active) return "No work is active right now. Finished requests are in History."
+  if (more) return "Active work may be on an earlier page."
+  return "Active work is not shown here. Refresh work to check again."
+}
+
 export const OrganizationActivity: Component<{
   id: string
   item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
@@ -657,7 +663,7 @@ export const OrganizationActivity: Component<{
       <Show when={items().length && !visible().length}>
         <p class="routines-empty">
           {view() === "current"
-            ? "No work is active right now. Finished requests are in History."
+            ? empty(summary()?.active ?? 0, !!next())
             : query() || phase() !== "all" || worker() !== "all"
               ? "No work matches these filters."
               : "No finished work yet."}
@@ -674,7 +680,7 @@ export const OrganizationActivity: Component<{
           Retry work
         </Button>
       </Show>
-      <Show when={view() === "history" && next()}>
+      <Show when={next()}>
         <Button variant="ghost" size="small" disabled={busy()} onClick={() => load(next())}>
           Load earlier work
         </Button>

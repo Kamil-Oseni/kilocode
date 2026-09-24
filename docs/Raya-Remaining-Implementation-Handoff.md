@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 14:42 America/Toronto - installed native bounds checkpoint
+
+`287ed44bf1` is pushed and installed as `eden.raya@7.4.23-snapshot+287ed44bf1.kamil-oseni.1790275214563`. The retained VSIX contains the native executable and has SHA-256 `116491C9891F4C650CBBEB2453D4B10C456599E018AFA6A8786AC869EA5B1EED`. Extension/webview typechecks, lint, native `/W4` compile/self-test and low-memory packaging passed. The candidate stays behind `RAYA_NATIVE_CAPTURE_CANDIDATE=1`; this shell still has no foreground frame or latency evidence. Next harden Stop to confirm child termination, then address static-frame freshness and hardware cursor before the interactive installed-host matrix. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 14:39 America/Toronto - native geometry correction awaiting installation
 
 The native candidate now intersects foreground window bounds with the virtual desktop before building its `pid/title/bounds` identity. This matches the PowerShell `Get-RayaWindow` identity for off-screen maximized borders. It also rejects DXGI source dimensions or format that no longer match the duplication mode/crop before `CopySubresourceRegion`. MSVC `/W4` compile, WIC/positive-and-disjoint geometry self-tests and a controlled no-foreground smoke pass; the smoke produced zero pixels and no latency claim. A read-only crash audit found no remaining source-level COM/packet allocation cause for the earlier application-error dialog. Commit/push/install this source before live testing. Further native work: verify child termination after Stop, prevent static-frame freshness expiry from silently falling back to GDI, compose hardware cursor, support cross-monitor/rotated surfaces, and run interactive mode/DPI-change, restart, resource and latency checks. `FUT-CU-01` remains In progress.

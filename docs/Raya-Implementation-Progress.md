@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 12:03 America/Toronto - Stop revocation snapshot installed
+
+**Status: `243fbeb682` pushed and production snapshot installed; autonomous acceptance remains open.** VS Code lists `eden.raya@7.4.23-snapshot+243fbeb682.kamil-oseni.1790265586618`. The low-memory build reused unchanged CLI/SDK inputs, passed extension/webview typechecks and lint, packaged 443 files and installed the VSIX. The retained rollback VSIX SHA-256 is `CB6897C090BFEB01AE8B642644F69372175CB755E2AB4F0DFB3BF23B3A379ABE`. Focused source tests pass 18 cases / 91 assertions. Real installed-host Stop/restart and prolonged-use acceptance have not run. Continuous native capture and the release benchmark remain; keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 11:38 America/Toronto - restart-safe Computer Use Stop source
 
 **Status: source tested; production installation and live Windows acceptance still pending.** Computer Use now keeps an independent, atomic local record of stopped lease IDs in the extension's global storage. Stop removes in-memory authority and cancels the desktop session before waiting for disk writes. On restart, a recorded revocation overrides an older all-session grant left in VS Code settings when that setting's removal failed. A second adverse test makes both durable stores fail: Stop still removes local authority and reports that persistence was not confirmed. The record refuses malformed data and overflow rather than dropping older revocations. Focused tests and typechecks pass; this is not evidence of live installed-host behavior. Continuous capture, UIA correlation, sensitive-intent enforcement and the real Windows benchmark remain open. Keep `FUT-CU-01` **In progress**.

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 12:03 America/Toronto - installed Stop revocation boundary
+
+Commit `243fbeb682` is pushed and installed as `eden.raya@7.4.23-snapshot+243fbeb682.kamil-oseni.1790265586618`; VS Code lists it. Rollback VSIX SHA-256: `CB6897C090BFEB01AE8B642644F69372175CB755E2AB4F0DFB3BF23B3A379ABE`. Focused tests pass 18 cases / 91 assertions and the low-memory production build passed typechecks, lint, package and install. The new record protects Stop against a failed VS Code settings write in source tests. Next verify Stop/restart in the installed host, then implement and measure the cancellable continuous native capture path with WGC/DXGI and GDI fallback. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 11:38 America/Toronto - Computer Use Stop revocation source
 
 Stop now records lease IDs in `revocations.json` under VS Code extension global storage. `ComputerUseLeaseStore` rejects any restored all-session lease whose ID is in that record, so a failed main-settings removal cannot resurrect it. The panel cancels desktop control before waiting on durable writes, and reports when neither store confirms revocation. Focused adverse tests cover restart with failed settings removal, dual-store failure, malformed records, full records and concurrent writes. Build and install the production snapshot, then verify Stop/restart against the real installed host. A corrupt revocation record currently fails extension activation closed rather than recovering a usable Computer Use panel; a future slice should isolate that failure while retaining a no-authority state. Continue the cancellable native capture worker and Windows benchmark. `FUT-CU-01` remains In progress.

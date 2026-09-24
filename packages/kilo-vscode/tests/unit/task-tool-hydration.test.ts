@@ -7,6 +7,7 @@ import {
 } from "../../../kilo-ui/src/components/tool-open-state"
 import {
   agentIcon,
+  taskAccess,
   taskAgent,
   taskModel,
   taskResult,
@@ -56,6 +57,7 @@ describe("completed task hydration", () => {
     expect(completed).toEqual({
       title: "Search audit",
       description: "Audit search behavior",
+      access: undefined,
       result: "Found the missing report",
     })
     expect(JSON.stringify(completed)).not.toContain("private-debug-id")
@@ -64,6 +66,24 @@ describe("completed task hydration", () => {
     expect(taskSearchText({ status: "completed", input, output, child: "ses_child", title }).title).toBe(
       "explore Agent",
     )
+  })
+
+  it("shows only a versioned saved child authority, never a requested or malformed access", () => {
+    const title = (agent: string) => `${agent} Agent`
+    const read = { "raya.task.authority": { version: 1, access: "read" } }
+    const edit = { "raya.task.authority": { version: 1, access: "edit" } }
+    expect(taskAccess(read)).toBe("read")
+    expect(taskAccess(edit)).toBe("edit")
+    expect(taskSearchText({ status: "completed", part: read, title }).access).toBe("read")
+    expect(taskAccess(undefined, edit)).toBe("edit")
+    expect(taskAccess()).toBeUndefined()
+    expect(taskAccess({ access: "edit" })).toBeUndefined()
+    expect(taskAccess({ "raya.task.authority": { version: 2, access: "read" } })).toBeUndefined()
+    expect(taskAccess({ "raya.task.authority": { version: 1, access: "all" } })).toBeUndefined()
+    expect(taskAccess({ "raya.task.authority": null }, read)).toBeUndefined()
+    expect(
+      taskSearchText({ status: "completed", input: { subagent_type: "explore", access: "edit" }, title }).access,
+    ).toBeUndefined()
   })
 
   // raya_change - Milestone D nested threads expose automatic routing and final summaries

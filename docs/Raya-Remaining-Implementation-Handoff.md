@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 04:21 America/Toronto - request-bound Chief plan prerequisite
+
+`ChiefRequestPlan` now has version-three storage keyed to the exact latest authored user request and a durable blocking marker written before the plan. `ChiefTaskBinding.load` refuses Task dispatch while that marker is present, so a partial write cannot fall through to an unplanned child. No no-goal `chief_plan` path invokes this storage yet, and no request-bound child can launch. Next bind branch admission to the saved request identity and revision, add restart reconciliation for marker-only records, then expose a read-only ordinary-chat planner path. Keep v2 goal-bound plans compatible and `FUT-AGENT-01/02` In progress.
+
+## ChatGPT 2026-09-24 04:13 America/Toronto - ordinary child authority receipt and UI
+
+Task now mirrors only the saved child `raya.task.authority` version-one record into the parent tool receipt after child metadata is written and read back. The ordinary compact Task card shows **Read only** or **Can edit** from a valid receipt, while legacy/malformed records and requested input alone show no label. Search uses the same visible wording. Focused backend and webview tests and both typechecks pass; packaging, installed-host narrow/wide inspection and restart readback remain. Keep the Chief plan's own access row distinct from this ordinary Task child receipt, and do not claim the wider intelligent delegation flow complete from a UI label.
+
 ## ChatGPT 2026-09-24 03:47 America/Toronto - installed intake recovery and next agent slice
 
 Source `557c6a2768` is pushed and installed as `eden.raya@7.4.23-snapshot+557c6a2768.kamil-oseni.1790235732687`; VS Code lists it. Low-memory SDK/CLI rebuild, Windows CLI and sandbox-worker smoke tests, extension/webview typechecks, lint, production bundle, VSIX packaging and installation passed. Rollback vault VSIX SHA-256: `43B79D8F94EAFE3C418092B8AD442A6291778706D75B650710008DE2337BE12B`. The fail-closed partial-intake guard is source-tested but needs a real restart at the user-row-before-parts boundary. Native UI capture remains unavailable (`CreateProcessWithLogonW failed: 2`), so live visual and restart acceptance remain open. For the owner's Codex-like subagent target, ordinary independent requests still cannot create a Chief plan without an active goal; implement a saved-request-bound plan with exact identity, permission ceilings, review and recovery before claiming that flow works for normal chat. Immediate specialist-note parent wake is separately pending a durable idle/queue dispatch handoff. Keep `FUT-AGENT-01/02` In progress.

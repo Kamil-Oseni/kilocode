@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 04:21 America/Toronto - dormant request-bound Chief plan prerequisite
+
+Raya can save a version-three Chief plan against the exact latest authored user message, its creation time and a content digest. Admission currently accepts only two or three independent read-only branches, and a durable session marker blocks Task dispatch in the production storage-backed path if a request plan is present, including a partial write with no plan record. This is source infrastructure only: no ordinary-chat planning path or request-bound child launch is exposed. Focused storage, stale/edited/synthetic request, edit/dependency/overlap, marker-only and legacy goal-plan tests pass. Next implement exact request-bound branch admission and restart reconciliation before enabling the planner; `FUT-AGENT-01/02` remain In progress.
+
+## ChatGPT 2026-09-24 04:13 America/Toronto - ordinary child access shown from saved authority
+
+The ordinary Task child card now shows **Read only** or **Can edit** only when its tool receipt contains a version-one copy of the child session's saved `TaskAuthority` record. The backend reads that record back after saving child metadata; the webview never infers scope from requested task input, and legacy or malformed receipts show no access label. Conversation search indexes the same visible label. This uses the existing compact subtitle and role icon without badges or color. Focused read, resumed read, edit and legacy backend tests pass 3 cases / 42 assertions; child-card tests pass 11 cases / 55 assertions, and CLI/webview typechecks pass. This source change still needs packaging and real installed-host inspection at narrow and wide widths; `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 03:47 America/Toronto - installed fail-closed intake recovery snapshot
 
 `557c6a2768` is pushed and installed as `eden.raya@7.4.23-snapshot+557c6a2768.kamil-oseni.1790235732687`; VS Code lists the exact version. Low-memory packaging regenerated the SDK without tracked changes, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed extension/webview typechecks and lint, bundled production assets, and installed the VSIX. Retained rollback VSIX SHA-256: `43B79D8F94EAFE3C418092B8AD442A6291778706D75B650710008DE2337BE12B`. This installs the partial-intake recovery guard; a real crash/restart through that boundary remains unobserved because native computer use still fails to initialize (`CreateProcessWithLogonW failed: 2`). No immediate Chief wake or ordinary non-goal fanout is claimed. `FUT-AGENT-01/02` remain In progress.

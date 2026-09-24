@@ -21,7 +21,7 @@ import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { childID } from "../../context/session-utils"
 import { openSubagent } from "./open-subagent"
-import { agentIcon, taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
+import { agentIcon, taskAccess, taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
 import { chiefReceipt, type ChiefPart } from "./chief-activity"
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
@@ -38,6 +38,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     return taskAgent(props.input, part, state)
   }
   const selectedAgent = () => taskMetadata().agent
+  const access = createMemo(() => taskAccess(props.partMetadata, props.metadata))
   // raya_change end
 
   const childSessionId = () =>
@@ -162,11 +163,19 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
         <span data-slot="basic-tool-tool-title" class="capitalize">
           {title()}
         </span>
-        <Show when={started() || description() || childToolCount() > 0}>
+        <Show when={started() || description() || access() || childToolCount() > 0}>
           <span data-slot="basic-tool-tool-subtitle">
             {started() ? "Started" : description()}
+            <Show when={access()}>
+              {(value) => (
+                <>
+                  {started() || description() ? " · " : ""}
+                  {value() === "read" ? "Read only" : "Can edit"}
+                </>
+              )}
+            </Show>
             <Show when={childToolCount() > 0}>
-              {started() || description() ? " · " : ""}
+              {started() || description() || access() ? " · " : ""}
               {language.t(childToolCount() === 1 ? "task.subagent.steps.one" : "task.subagent.steps.many", {
                 count: String(childToolCount()),
               })}

@@ -523,6 +523,8 @@ export const TaskTool = Tool.define(
         })
         .pipe(Effect.tapError(() => lease.release))
       // kilocode_change end
+      // kilocode_change - mirror only the saved child authority in this task receipt
+      const authority = TaskAuthority.read((yield* sessions.get(nextSession.id)).metadata) // kilocode_change
       // kilocode_change start - rebuild in-memory ancestry and inherit confinement after creation/resume
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
       yield* (
@@ -565,6 +567,7 @@ export const TaskTool = Tool.define(
         childMessageID?: MessageID // kilocode_change - older results lack verifiable input lineage
         selectedAgent?: string
         displayName?: string // raya_change - durable identity for compact child monitors
+        [TaskAuthority.key]?: { version: 1; access: TaskAuthority.Access } // kilocode_change - verified child authority
         selection?: "auto" | "explicit"
         stepCap?: number
         model: typeof model
@@ -579,6 +582,7 @@ export const TaskTool = Tool.define(
         childMessageID: message, // kilocode_change
         selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
         displayName, // raya_change
+        ...(authority ? { [TaskAuthority.key]: { version: 1 as const, access: authority } } : {}), // kilocode_change
         selection, // raya_change
         ...(limit === undefined ? {} : { stepCap: limit }), // kilocode_change // raya_change - keep background metadata JSON-safe
         model,

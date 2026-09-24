@@ -484,6 +484,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
     })
     const chunks = [visible.title]
     if (visible.description) chunks.push(visible.description)
+    if (visible.access) chunks.push(visible.access === "read" ? "Read only" : "Can edit")
     // Markdown links contribute their visible labels, never hidden URLs.
     if (visible.result) chunks.push(stripMarkdownLinkUrls(visible.result))
     return chunks

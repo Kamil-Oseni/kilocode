@@ -52,12 +52,29 @@ export function taskAgent(
 }
 // raya_change end
 
+type TaskMetadata = {
+  selectedAgent?: string
+  selection?: string
+  displayName?: string
+  "raya.task.authority"?: unknown
+}
+
+/** Show a scope only when the backend mirrored a valid saved authority record. */
+export function taskAccess(part?: unknown, state?: unknown): "read" | "edit" | undefined {
+  const key = "raya.task.authority"
+  const first = record(part) ? part : undefined
+  const source = first && Object.hasOwn(first, key) ? first : record(state) ? state : undefined
+  const value = source?.[key]
+  if (!record(value) || value.version !== 1) return
+  if (value.access === "read" || value.access === "edit") return value.access
+}
+
 /** Match the visible task trigger and result when indexing conversation search. */
 export function taskSearchText(opts: {
   status: string
   input?: { subagent_type?: unknown; description?: unknown }
-  part?: { selectedAgent?: string; selection?: string; displayName?: string }
-  metadata?: { selectedAgent?: string; selection?: string; displayName?: string }
+  part?: TaskMetadata
+  metadata?: TaskMetadata
   output?: string
   child?: string
   title: (agent: string) => string
@@ -66,6 +83,7 @@ export function taskSearchText(opts: {
   return {
     title: agent.displayName ?? opts.title(agent.agent),
     description: agent.description,
+    access: taskAccess(opts.part, opts.metadata),
     result: taskResult(opts.output, taskRunning(opts.status) ? opts.child : undefined),
   }
 }

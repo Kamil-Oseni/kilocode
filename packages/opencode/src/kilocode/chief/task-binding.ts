@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { RayaChief } from "@/kilocode/chief"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 
@@ -28,6 +29,10 @@ export namespace ChiefTaskBinding {
     }
   }) {
     return Effect.gen(function* () {
+      // Request-bound branch execution is not wired yet. A durable marker blocks every
+      // fallback task path, including an unbound child after a partial plan write.
+      if (input.storage && (yield* ChiefRequestPlan.active(input.storage, input.sessionID)))
+        throw new Error("Request-bound Chief plan dispatch is unavailable until exact branch admission is supported")
       const record = input.branches ? yield* input.branches.read(input.sessionID) : undefined
       const goal =
         record && input.storage

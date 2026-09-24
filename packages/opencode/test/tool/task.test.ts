@@ -19,6 +19,8 @@ import path from "node:path" // kilocode_change - verify real child edit destina
 import { unlink } from "node:fs/promises" // kilocode_change - restore dirty-parent test fixture
 import { Storage } from "@/storage/storage" // kilocode_change - durable Chief branch test
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - durable Chief branch test
+import { ChiefRequestPlan } from "@/kilocode/chief/request-plan" // kilocode_change - request-bound prerequisite
+import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - fail-closed request plan guard
 import { RayaGoal } from "@/kilocode/goal" // kilocode_change - durable Chief branch test
 import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - rejected branch releases its child lease
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
@@ -122,6 +124,214 @@ const clean = (storage: Storage.Interface, id: SessionID) =>
       Effect.ignore,
     ),
   )
+// kilocode_change end
+
+// kilocode_change start - request plans are saved but cannot dispatch until exact admission is wired
+describe("request-bound Chief plan prerequisite", () => {
+  const proposals = [
+    {
+      id: "safety",
+      name: "Safety audit",
+      specialist: "researcher",
+      access: "read" as const,
+      brief: { objective: "Audit authorization", constraints: [], expectedReturn: "Safety findings" },
+      scope: ["authorization"],
+      dependsOn: [],
+      independence: "Can inspect policy separately.",
+      authority: "Read-only inspection is sufficient.",
+    },
+    {
+      id: "design",
+      name: "UX audit",
+      specialist: "designer",
+      access: "read" as const,
+      brief: { objective: "Audit navigation", constraints: [], expectedReturn: "UX findings" },
+      scope: ["navigation"],
+      dependsOn: [],
+      independence: "Can inspect navigation separately.",
+      authority: "Read-only inspection is sufficient.",
+    },
+  ]
+
+  planned.instance(
+    "saves exact request identity but refuses every unbound task",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const agents = yield* Agent.Service
+        const { chat, assistant } = yield* seed()
+        const request = "Audit authorization and navigation"
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
+        })
+        const ledger = ChiefRequestPlan.make(storage, sessions)
+        const input = {
+          sessionID: chat.id,
+          requestID: assistant.parentID,
+          proposals,
+          agents: yield* agents.list(),
+          parent: Permission.fromConfig({ task: "allow", edit: "allow" }),
+        }
+        const saved = yield* ledger.start(input)
+        expect(saved.version).toBe(3)
+        expect(saved.identity).toMatchObject({ version: 1, sessionID: chat.id, requestID: assistant.parentID })
+        expect(saved.identity.digest).toMatch(/^[0-9a-f]{64}$/)
+        expect(saved.identity.revision).toMatch(/^[0-9a-f]{64}$/)
+        expect((yield* ledger.start(input)).identity.revision).toBe(saved.identity.revision)
+        expect((yield* ChiefRequestPlan.make(storage, sessions).read(chat.id, assistant.parentID))?.identity).toEqual(
+          saved.identity,
+        )
+      expect((yield* ChiefRequestPlan.active(storage, chat.id))?.identity).toEqual(saved.identity)
+      yield* storage.remove(["raya", "chief", "request-plan", chat.id, assistant.parentID])
+      expect(yield* ChiefRequestPlan.make(storage, sessions).read(chat.id, assistant.parentID)).toBeUndefined()
+
+      const binding = yield* ChiefTaskBinding.load({
+          storage,
+          branches: ChiefBranches.make(storage),
+          sessionID: chat.id,
+          agent: "auto",
+          metadata: (yield* sessions.get(chat.id)).metadata,
+          callID: "unbound",
+          params: { access: "edit", subagent_type: "designer" },
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(binding)).toBe(true)
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const run = yield* def
+          .execute(
+            { description: "Unbound task", prompt: "Change files", subagent_type: "designer", access: "edit" },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "auto",
+              abort: new AbortController().signal,
+              extra: { promptOps: stubOps() },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(run)).toBe(true)
+        expect(yield* sessions.children(chat.id)).toHaveLength(0)
+      }),
+    20_000,
+  )
+
+  planned.instance(
+    "rejects edited, newer, synthetic, edit, and overlapping requests before storage",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const agents = yield* Agent.Service
+        const { chat, assistant } = yield* seed()
+        const request = "Audit authorization and navigation"
+        const part = PartID.ascending()
+        yield* sessions.updatePart({
+          id: part,
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
+        })
+        const ledger = ChiefRequestPlan.make(storage, sessions)
+        const base = {
+          sessionID: chat.id,
+          requestID: assistant.parentID,
+          proposals,
+          agents: yield* agents.list(),
+          parent: Permission.fromConfig({ task: "allow", edit: "allow" }),
+        }
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .start({ ...base, proposals: [{ ...proposals[0], access: "edit" }, proposals[1]] })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .start({ ...base, proposals: [proposals[0], { ...proposals[1], scope: ["authorization"] }] })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .start({ ...base, proposals: [proposals[0], { ...proposals[1], dependsOn: ["safety"] }] })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(yield* ChiefRequestPlan.active(storage, chat.id)).toBeUndefined()
+
+        yield* sessions.updatePart({
+          id: part,
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: "Edited request",
+        })
+        expect(Exit.isFailure(yield* ledger.start(base).pipe(Effect.exit))).toBe(true)
+        yield* sessions.updatePart({
+          id: part,
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+        })
+        const newer = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: chat.id,
+          agent: "auto",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: newer.id,
+          sessionID: chat.id,
+          type: "text",
+          text: "A different user request",
+        })
+        expect(Exit.isFailure(yield* ledger.start(base).pipe(Effect.exit))).toBe(true)
+        const synthetic = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: chat.id,
+          agent: "auto",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: synthetic.id,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+          synthetic: true,
+        })
+        expect(Exit.isFailure(yield* ledger.start({ ...base, requestID: synthetic.id }).pipe(Effect.exit))).toBe(true)
+        expect(yield* ChiefRequestPlan.active(storage, chat.id)).toBeUndefined()
+      }),
+    20_000,
+  )
+})
 // kilocode_change end
 
 // kilocode_change start - a saved branch, rather than the caller's task fields, owns its child execution
@@ -1050,6 +1260,7 @@ describe("tool.task", () => {
         )
         const child = yield* sessions.get(created.metadata.sessionId)
         expect(TaskAuthority.read(child.metadata)).toBe("read")
+        expect(created.metadata[TaskAuthority.key]).toEqual({ version: 1, access: "read" })
         expect(TaskAuthority.read(JSON.parse(JSON.stringify(child.metadata)))).toBe("read")
         expect(() => TaskAuthority.read({ [TaskAuthority.key]: { access: "edit" } })).toThrow(
           "Invalid child authority record",
@@ -1062,7 +1273,7 @@ describe("tool.task", () => {
         }
         expect(Permission.evaluate("read", "*", effective).action).toBe("allow")
 
-        yield* def.execute(
+        const continued = yield* def.execute(
           {
             description: "Continue audit",
             prompt: "Inspect the remaining policy",
@@ -1073,6 +1284,7 @@ describe("tool.task", () => {
         )
         const resumed = yield* sessions.get(child.id)
         expect(TaskAuthority.read(resumed.metadata)).toBe("read")
+        expect(continued.metadata[TaskAuthority.key]).toEqual({ version: 1, access: "read" })
         expect(
           Permission.evaluate("bash", "*", Permission.merge(specialist.permission, resumed.permission ?? [])).action,
         ).toBe("deny")
@@ -1152,6 +1364,7 @@ describe("tool.task", () => {
       )
       const child = yield* sessions.get(created.metadata.sessionId)
       expect(TaskAuthority.read(child.metadata)).toBe("edit")
+      expect(created.metadata[TaskAuthority.key]).toEqual({ version: 1, access: "edit" })
     }),
   )
   // kilocode_change end
@@ -1300,6 +1513,7 @@ describe("tool.task", () => {
       })
       // kilocode_change end
       expect(child.metadata?.["raya.task.stepCap"]).toBe(4)
+      expect(result.metadata[TaskAuthority.key]).toBeUndefined() // kilocode_change
       expect(result.metadata).toMatchObject({
         selectedAgent: "explore",
         displayName: "Map API routes · Explore", // kilocode_change - raya_change

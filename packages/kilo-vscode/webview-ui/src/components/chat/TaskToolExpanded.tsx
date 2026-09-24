@@ -22,6 +22,7 @@ import { useWorktreeMode } from "../../context/worktree-mode"
 import { childID } from "../../context/session-utils"
 import { openSubagent } from "./open-subagent"
 import { agentIcon, taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
+import { chiefReceipt, type ChiefPart } from "./chief-activity"
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
   const i18n = useI18n()
@@ -75,7 +76,17 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     if (synced) session.unsyncSession(synced)
   })
 
-  const title = createMemo(() => taskMetadata().displayName ?? i18n.t("ui.tool.agent", { type: selectedAgent() })) // raya_change
+  const started = createMemo(() => {
+    const id = session.currentSessionID()
+    if (!id) return
+    const parts = session.getSessionToolParts(id) as ChiefPart[]
+    const part = parts.find((item) => item.id === props.partID)
+    if (!part) return
+    return chiefReceipt(part, parts)?.find((event) => event.status === "Started")
+  })
+  const title = createMemo(
+    () => started()?.name ?? taskMetadata().displayName ?? i18n.t("ui.tool.agent", { type: selectedAgent() }),
+  ) // raya_change
 
   const description = createMemo(() => {
     return taskMetadata().description // raya_change - distinguish automatic Chief routing from explicit overrides
@@ -151,11 +162,11 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
         <span data-slot="basic-tool-tool-title" class="capitalize">
           {title()}
         </span>
-        <Show when={description() || childToolCount() > 0}>
+        <Show when={started() || description() || childToolCount() > 0}>
           <span data-slot="basic-tool-tool-subtitle">
-            {description()}
+            {started() ? "Started" : description()}
             <Show when={childToolCount() > 0}>
-              {description() ? " · " : ""}
+              {started() || description() ? " · " : ""}
               {language.t(childToolCount() === 1 ? "task.subagent.steps.one" : "task.subagent.steps.many", {
                 count: String(childToolCount()),
               })}

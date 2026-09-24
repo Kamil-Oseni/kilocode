@@ -1,6 +1,12 @@
 type State = { status: string; input?: Record<string, unknown>; output?: string; metadata?: Record<string, unknown> }
 
-export type ChiefPart = { id: string; tool: string; state: State; metadata?: Record<string, unknown> }
+export type ChiefPart = {
+  id: string
+  sessionID?: string
+  tool: string
+  state: State
+  metadata?: Record<string, unknown>
+}
 
 export type ChiefBranch = {
   id: string
@@ -131,6 +137,37 @@ function related(plan: ChiefPart, part: ChiefPart) {
   )
 }
 
+function started(plan: ChiefPart, part: ChiefPart, branches: ChiefBranch[], prior: readonly ChiefPart[]) {
+  if (part.tool !== "task" || part.state.status !== "completed") return
+  const source = metadata(plan)
+  const receipt = metadata(part)
+  const id = text(part.state.input?.branch_id)
+  const branch = branches.find((item) => item.id === id)
+  const child = text(receipt.sessionId)
+  if (
+    !branch ||
+    !child ||
+    !text(receipt.childMessageID) ||
+    !plan.sessionID ||
+    part.sessionID !== plan.sessionID ||
+    receipt.parentSessionId !== plan.sessionID ||
+    receipt.requestID !== source.requestID ||
+    receipt.goalCreatedAt !== source.goalCreatedAt ||
+    receipt.selectedAgent !== branch.specialist ||
+    receipt.background !== true ||
+    part.state.input?.background !== true ||
+    !part.state.output?.startsWith(`<task id="${child}" state="running">\n<summary>Background task started</summary>\n`)
+  )
+    return
+  if (
+    prior.some(
+      (item) => item.tool === "task" && text(item.state.input?.branch_id) === id && started(plan, item, branches, []),
+    )
+  )
+    return []
+  return [{ name: branch.name, specialist: branch.specialist, status: "Started" }]
+}
+
 function receipts(plan: ChiefPart, branches: ChiefBranch[], later: readonly ChiefPart[]) {
   const reports = new Map<string, ReturnType<typeof inspect>[number]>()
   const reviews = new Set<string>()
@@ -244,9 +281,10 @@ function reviewEvent(
 
 /** Anchor visible Chief progress to the saved receipt that first established each fact. */
 export function chiefReceipt(part: ChiefPart, parts: readonly ChiefPart[]): ChiefEvent[] | undefined {
-  if (!["chief_inspect", "chief_review", "chief_synthesize"].includes(part.tool)) return
+  if (!["task", "chief_inspect", "chief_review", "chief_synthesize"].includes(part.tool)) return
   const index = parts.findIndex((item) => item.id === part.id)
-  if (index < 0 || part.state.status !== "completed") return
+  const receipt = parts[index]
+  if (!receipt || receipt.tool !== part.tool || receipt.state.status !== "completed") return
   const start = parts
     .slice(0, index)
     .findLastIndex((item) => item.tool === "chief_plan" && item.state.status === "completed")
@@ -255,8 +293,9 @@ export function chiefReceipt(part: ChiefPart, parts: readonly ChiefPart[]): Chie
   const branches = planned(plan.state.input?.proposals)
   if (!branches || typeof metadata(plan).requestID !== "string" || typeof metadata(plan).goalCreatedAt !== "number")
     return
-  if (!related(plan, part)) return
   const prior = parts.slice(start + 1, index)
+  if (receipt.tool === "task") return started(plan, receipt, branches, prior)
+  if (!related(plan, receipt)) return
   const reports = new Map<string, ReturnType<typeof inspect>[number]>()
   const valid = (item: ChiefPart) => {
     if (item.tool !== "chief_inspect" || !related(plan, item)) return
@@ -273,12 +312,12 @@ export function chiefReceipt(part: ChiefPart, parts: readonly ChiefPart[]): Chie
     const rows = valid(item)
     if (rows) for (const row of rows) reports.set(row.id, row)
   }
-  if (part.tool === "chief_inspect") {
-    const rows = valid(part)
+  if (receipt.tool === "chief_inspect") {
+    const rows = valid(receipt)
     if (!rows) return
     return changes(rows, branches, reports)
   }
-  if (part.tool === "chief_review") return reviewEvent(part, prior, plan, branches, reports)
+  if (receipt.tool === "chief_review") return reviewEvent(receipt, prior, plan, branches, reports)
   if (
     prior.some((item) => item.tool === "chief_synthesize" && item.state.status === "completed" && related(plan, item))
   )

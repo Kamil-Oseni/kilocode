@@ -228,6 +228,73 @@ describe("chiefReceipt", () => {
     },
   })
 
+  it("shows one saved background start on its task row after hydration", () => {
+    const parent = { ...saved, sessionID: "ses_parent" }
+    const start: ChiefPart = {
+      id: "start",
+      sessionID: "ses_parent",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { branch_id: "docs", background: true },
+        output:
+          '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n<task_result>Working</task_result>\n</task>',
+        metadata: {
+          parentSessionId: "ses_parent",
+          sessionId: "ses_child",
+          childMessageID: "msg_child",
+          selectedAgent: "researcher",
+          background: true,
+          requestID: "request",
+          goalCreatedAt: 1,
+        },
+      },
+    }
+    const duplicate = { ...start, id: "duplicate" }
+    const parts = [parent, start, duplicate]
+    expect(chiefReceipt(start, parts)).toEqual([{ name: "Docs audit", specialist: "researcher", status: "Started" }])
+    expect(chiefReceipt(duplicate, parts)).toEqual([])
+    expect(chiefReceipt(start, structuredClone(parts))).toEqual(chiefReceipt(start, parts))
+    expect(chiefReceipt(start, [parent, { ...start, state: { ...start.state, status: "running" } }])).toBeUndefined()
+    expect(chiefReceipt(start, [parent, { ...start, state: { ...start.state, output: "unknown" } }])).toBeUndefined()
+  })
+
+  it("refuses starts with stale, missing or substituted Chief identity", () => {
+    const parent = { ...saved, sessionID: "ses_parent" }
+    const start: ChiefPart = {
+      id: "start",
+      sessionID: "ses_parent",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { branch_id: "docs", background: true },
+        output: '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n',
+        metadata: {
+          parentSessionId: "ses_parent",
+          sessionId: "ses_child",
+          childMessageID: "msg_child",
+          selectedAgent: "researcher",
+          background: true,
+          requestID: "request",
+          goalCreatedAt: 1,
+        },
+      },
+    }
+    const invalid = [
+      { ...start, sessionID: "ses_other" },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, parentSessionId: "ses_other" } } },
+      { ...start, state: { ...start.state, input: { branch_id: "ux", background: true } } },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, requestID: "old" } } },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, goalCreatedAt: 2 } } },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, childMessageID: undefined } } },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, selectedAgent: "designer" } } },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, background: false } } },
+      { ...start, state: { ...start.state, metadata: { ...start.state.metadata, sessionId: "ses_other" } } },
+    ]
+    for (const item of invalid) expect(chiefReceipt(item, [parent, item])).toBeUndefined()
+    expect(chiefReceipt(start, [{ ...parent, id: "previous" }, { ...saved, id: "next" }, start])).toBeUndefined()
+  })
+
   it("places only changed specialist states at the matching inspection receipt", () => {
     const first = snapshot("first", "admitted", "planned")
     const second = snapshot("second", "completed", "completed")

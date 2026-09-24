@@ -571,6 +571,8 @@ export const TaskTool = Tool.define(
         provenance?: typeof selected.provenance // kilocode_change - actual selection, not the Chief proposal
         variant?: string
         background?: boolean
+        requestID?: string // kilocode_change - bind a planned Chief start to its saved request
+        goalCreatedAt?: number // kilocode_change - bind a planned Chief start to its saved goal
       } = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
@@ -583,6 +585,7 @@ export const TaskTool = Tool.define(
         ...(selected.provenance === undefined ? {} : { provenance: selected.provenance }), // kilocode_change - retain the selection source without serializing undefined
         ...(variant === undefined ? {} : { variant }), // kilocode_change - optional JSON fields must be absent, not undefined
         ...(runInBackground ? { background: true } : {}),
+        ...(branch && plan ? { requestID: plan.requestID, goalCreatedAt: plan.goalCreatedAt } : {}), // kilocode_change
       }
 
       yield* ctx

@@ -606,6 +606,8 @@ describe("tool.task planned Auto Chief branch", () => {
         yield* Deferred.await(ready)
         expect(safety.metadata.background).toBe(true)
         expect(design.metadata.background).toBe(true)
+        expect(safety.metadata).toMatchObject({ requestID: assistant.parentID, goalCreatedAt: goal.createdAt }) // kilocode_change
+        expect(design.metadata).toMatchObject({ requestID: assistant.parentID, goalCreatedAt: goal.createdAt }) // kilocode_change
         expect(safety.metadata.sessionId).not.toBe(design.metadata.sessionId)
         expect((yield* jobs.get(safety.metadata.sessionId))?.status).toBe("running")
         expect((yield* jobs.get(design.metadata.sessionId))?.status).toBe("running")

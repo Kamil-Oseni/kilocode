@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 14:49 America/Toronto - installed native Stop checkpoint
+
+`5a62b0abdf` is pushed and installed as `eden.raya@7.4.23-snapshot+5a62b0abdf.kamil-oseni.1790275592336`. The retained rollback VSIX contains the native executable and has SHA-256 `4386CBEE2ABBA14FEB2A6F45495CF25C79F265E78D73C94EAE545DDECCE719F7`. The package compiled/self-tested native capture, passed extension/webview typechecks and lint, and installed 444 files; focused tests pass 44 cases / 253 assertions, including a real child PID exit after Stop. GDI remains default and the DXGI candidate requires `RAYA_NATIVE_CAPTURE_CANDIDATE=1`. Next implement static-scene continuity without repeated full-frame/base64 work and cursor composition, then run the interactive installed-host Stop, disconnect, restart, changed-window, DPI/display, resource and latency matrix. Do not mark `FUT-CU-01` Verified.
+
 ## ChatGPT 2026-09-24 14:45 America/Toronto - native Stop exit evidence awaiting installation
 
 `NativeCaptureHost.stop()` now clears/rejects local frame state immediately, closes the stdout pipe, kills the child, retries after 500 ms if it has not exited and emits a failure after 1.5 seconds if still alive. A real child-process test confirms its PID disappears after Stop; 44 focused tests / 253 assertions, extension/webview typechecks, lint and formatting pass. Commit/push/install this change. It does not prove forced termination under OS failure or substitute for the installed-host Stop/manual takeover/disconnect matrix. Static-frame freshness, cursor composition, cross-monitor handling, resource and latency benchmarks remain open. `FUT-CU-01` stays In progress.

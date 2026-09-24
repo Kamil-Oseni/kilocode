@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 23:42 America/Toronto - durable Chief note snapshot installed
+
+Commit `53a639de3a` is pushed and installed as `eden.raya@7.4.23-snapshot+53a639de3a.kamil-oseni.1790221050398`. The protected push passed 29 JavaScript/TypeScript package typechecks and the cached JetBrains check. The low-memory workflow regenerated the SDK, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed sequential extension/webview typechecks and ESLint, bundled production assets, packaged and installed the VSIX. VS Code lists the exact version. Retained rollback VSIX SHA-256: `8F31E3BABB83229E0C85A410E9BC32A3BE010632DA3CC8235D49E63833807012`. This proves artifact identity and source checks, not a real specialist conversation in the running host. Live two-specialist note delivery, chat layout and backend/VS Code restart acceptance remain open; immediate parent wake is not implemented. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-23 23:28 America/Toronto - durable Chief specialist notes and inspected chat updates
 
 A planned Chief child can now call `chief_message` to save up to eight 1,500-character interim notes for its branch in the parent's durable Chief ledger. Admission checks the active goal/request, branch and task call, exact parent/child session lineage, saved specialist identity and the child input-turn tool call. A repeat of the same call returns its original receipt; changed content is refused; an unconfirmed storage write returns `unknown` without automatic replay. `chief_inspect` exposes each branch's saved notes only on that branch. A real storage regression sends under a child worktree instance directory and reads under a separate parent directory, confirming the shared storage root. One focused backend test / 16 assertions, including the eight-note cap, and CLI typecheck pass.

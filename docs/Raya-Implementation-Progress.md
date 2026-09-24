@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 22:00 America/Toronto - Chief receipt updates appear in chat order
+
+The parent chat now places compact named specialist updates at each matching `chief_inspect`, `chief_review` or `chief_synthesize` receipt. It shows only newly established states, suppresses duplicate refreshes, distinguishes stopped/unknown/integration outcomes, and rejects malformed or cross-plan receipts. The existing task card remains at its actual position for child tool detail. Eight focused projection tests / 31 assertions, webview typecheck, extension lint and diff check pass. Child-to-parent messages are not yet shown as separate event rows; no live host visual acceptance has occurred for this new source. Build/install the next snapshot and inspect a real parallel conversation before marking the agent chat requirement Verified.
+
 ## ChatGPT 2026-09-23 21:43 America/Toronto - Chief routing and named-chat snapshot installed
 
 Commit `219c3d4e2a` is pushed and installed as `eden.raya@7.4.23-snapshot+219c3d4e2a.kamil-oseni.1790213720450`. SDK generation, Windows CLI/version/models and sandbox-worker smoke tests, sequential extension/webview typechecks, ESLint, production bundle, packaging and VS Code installation pass. VS Code lists the exact version; retained rollback VSIX SHA-256 is `9ACF056EBC2F647C247AD033D04C12BE9DBC114AD8D400C4AD07246E9B373AD6`. The first sandboxed packaging attempt could not write Raya state under the user profile; the authorized retry completed. Computer Use's native helper exited twice (`CreateProcessWithLogonW failed: 2`) before listing windows, so the running VS Code chat, narrow/wide rows, direct-answer turn and restart behavior remain unobserved. Keep agent acceptance rows In progress.

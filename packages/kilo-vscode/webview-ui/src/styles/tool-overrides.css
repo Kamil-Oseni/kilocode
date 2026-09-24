@@ -189,6 +189,34 @@
   }
 }
 
+.chief-receipt {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-base);
+  font-size: var(--kilo-font-size-12);
+}
+
+.chief-receipt li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chief-receipt li > [data-component="icon"] {
+  flex: none;
+  color: var(--text-weak);
+}
+
+.chief-receipt__status {
+  margin-left: auto;
+  color: var(--text-weak);
+  text-align: right;
+}
+
 /* ============================================
    Background Process Tool
    ============================================ */

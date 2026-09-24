@@ -14,6 +14,8 @@ export type ChiefBranch = {
 
 export type ChiefActivity = { branches: ChiefBranch[]; synthesized: boolean }
 
+export type ChiefEvent = { name: string; specialist?: string; status: string }
+
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
 }
@@ -184,4 +186,102 @@ export function chiefActivity(plan: ChiefPart, parts: readonly ChiefPart[]): Chi
     (part) => part.tool === "chief_synthesize" && part.state.status === "completed" && related(plan, part),
   )
   return { branches: state, synthesized }
+}
+
+function changes(
+  rows: ReturnType<typeof inspect>,
+  branches: ChiefBranch[],
+  reports: Map<string, ReturnType<typeof inspect>[number]>,
+): ChiefEvent[] {
+  return branches.flatMap((branch): ChiefEvent[] => {
+    const row = rows.find((item) => item.id === branch.id)!
+    const old = reports.get(branch.id)
+    if (row.integration === "unknown" && old?.integration !== "unknown")
+      return [{ name: branch.name, specialist: branch.specialist, status: "Apply status unknown" }]
+    if (row.integration === "integrated" && old?.integration !== "integrated")
+      return [{ name: branch.name, specialist: branch.specialist, status: "Applied" }]
+    if (row.state === old?.state || row.state === "planned") return []
+    const labels: Partial<Record<ChiefBranch["state"], string>> = {
+      working: "Working",
+      ready: branch.access === "edit" && row.isolated ? "Changes ready" : "Report ready",
+      failed: "Needs attention",
+      cancelled: "Stopped",
+      unknown: "Status unknown",
+    }
+    const status = labels[row.state]
+    return status ? [{ name: branch.name, specialist: branch.specialist, status }] : []
+  })
+}
+
+function reviewEvent(
+  part: ChiefPart,
+  prior: readonly ChiefPart[],
+  plan: ChiefPart,
+  branches: ChiefBranch[],
+  reports: Map<string, ReturnType<typeof inspect>[number]>,
+): ChiefEvent[] | undefined {
+  const id = text(metadata(part).branchID)
+  const branch = branches.find((item) => item.id === id)
+  if (!branch || !reports.has(branch.id)) return
+  if (
+    prior.some(
+      (item) =>
+        item.tool === "chief_review" &&
+        item.state.status === "completed" &&
+        related(plan, item) &&
+        metadata(item).branchID === id,
+    )
+  )
+    return []
+  return [
+    {
+      name: branch.name,
+      specialist: branch.specialist,
+      status: branch.access === "edit" ? "Ready to apply" : "Reviewed",
+    },
+  ]
+}
+
+/** Anchor visible Chief progress to the saved receipt that first established each fact. */
+export function chiefReceipt(part: ChiefPart, parts: readonly ChiefPart[]): ChiefEvent[] | undefined {
+  if (!["chief_inspect", "chief_review", "chief_synthesize"].includes(part.tool)) return
+  const index = parts.findIndex((item) => item.id === part.id)
+  if (index < 0 || part.state.status !== "completed") return
+  const start = parts
+    .slice(0, index)
+    .findLastIndex((item) => item.tool === "chief_plan" && item.state.status === "completed")
+  if (start < 0) return
+  const plan = parts[start]
+  const branches = planned(plan.state.input?.proposals)
+  if (!branches || typeof metadata(plan).requestID !== "string" || typeof metadata(plan).goalCreatedAt !== "number")
+    return
+  if (!related(plan, part)) return
+  const prior = parts.slice(start + 1, index)
+  const reports = new Map<string, ReturnType<typeof inspect>[number]>()
+  const valid = (item: ChiefPart) => {
+    if (item.tool !== "chief_inspect" || !related(plan, item)) return
+    const rows = inspect(item)
+    if (
+      rows.length !== branches.length ||
+      new Set(rows.map((row) => row.id)).size !== rows.length ||
+      rows.some((row) => !branches.some((branch) => branch.id === row.id))
+    )
+      return
+    return rows
+  }
+  for (const item of prior) {
+    const rows = valid(item)
+    if (rows) for (const row of rows) reports.set(row.id, row)
+  }
+  if (part.tool === "chief_inspect") {
+    const rows = valid(part)
+    if (!rows) return
+    return changes(rows, branches, reports)
+  }
+  if (part.tool === "chief_review") return reviewEvent(part, prior, plan, branches, reports)
+  if (
+    prior.some((item) => item.tool === "chief_synthesize" && item.state.status === "completed" && related(plan, item))
+  )
+    return []
+  return [{ name: "Specialists", status: "Reports combined" }]
 }

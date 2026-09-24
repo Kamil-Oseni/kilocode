@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { chiefActivity, type ChiefPart } from "../../webview-ui/src/components/chat/chief-activity"
+import { chiefActivity, chiefReceipt, type ChiefPart } from "../../webview-ui/src/components/chat/chief-activity"
 
 const plan: ChiefPart = {
   id: "plan",
@@ -197,5 +197,103 @@ describe("chiefActivity", () => {
       "reviewed",
     ])
     expect(chiefActivity(saved, [saved, receipt("unknown")])?.branches[0]?.state).toBe("unknown")
+  })
+})
+
+describe("chiefReceipt", () => {
+  const saved: ChiefPart = {
+    ...plan,
+    state: {
+      ...plan.state,
+      input: {
+        proposals: [
+          { id: "docs", name: "Docs audit", specialist: "researcher", access: "read" },
+          { id: "ux", name: "UX edit", specialist: "designer", access: "edit" },
+        ],
+      },
+    },
+  }
+  const snapshot = (id: string, docs: string, ux: string, integration?: string): ChiefPart => ({
+    id,
+    tool: "chief_inspect",
+    state: {
+      status: "completed",
+      output: JSON.stringify({
+        branches: [
+          { id: "docs", state: docs },
+          { id: "ux", state: ux, edits: { digest: "edit" }, integration },
+        ],
+      }),
+      metadata: { requestID: "request", goalCreatedAt: 1 },
+    },
+  })
+
+  it("places only changed specialist states at the matching inspection receipt", () => {
+    const first = snapshot("first", "admitted", "planned")
+    const second = snapshot("second", "completed", "completed")
+    const repeat = snapshot("repeat", "completed", "completed")
+    const parts = [saved, first, second, repeat]
+    expect(chiefReceipt(first, parts)?.map((event) => [event.name, event.status])).toEqual([["Docs audit", "Working"]])
+    expect(chiefReceipt(second, parts)?.map((event) => [event.name, event.status])).toEqual([
+      ["Docs audit", "Report ready"],
+      ["UX edit", "Changes ready"],
+    ])
+    expect(chiefReceipt(repeat, parts)).toEqual([])
+  })
+
+  it("shows review, integration, unknown and synthesis only after their matching saved receipts", () => {
+    const ready = snapshot("ready", "completed", "completed")
+    const review: ChiefPart = {
+      id: "review",
+      tool: "chief_review",
+      state: { status: "completed", metadata: { requestID: "request", goalCreatedAt: 1, branchID: "ux" } },
+    }
+    const repeat = { ...review, id: "repeat" }
+    const applied = snapshot("applied", "completed", "completed", "integrated")
+    const unknown = snapshot("unknown", "completed", "completed", "unknown")
+    const synth: ChiefPart = {
+      id: "synth",
+      tool: "chief_synthesize",
+      state: { status: "completed", metadata: { requestID: "request", goalCreatedAt: 1 } },
+    }
+    const parts = [saved, ready, review, repeat, applied, unknown, synth]
+    expect(chiefReceipt(review, parts)?.map((event) => event.status)).toEqual(["Ready to apply"])
+    expect(chiefReceipt(repeat, parts)).toEqual([])
+    expect(chiefReceipt(applied, parts)?.map((event) => event.status)).toEqual(["Applied"])
+    expect(chiefReceipt(unknown, parts)?.map((event) => event.status)).toEqual(["Apply status unknown"])
+    expect(chiefReceipt(synth, parts)?.map((event) => event.status)).toEqual(["Reports combined"])
+  })
+
+  it("rejects mismatched, incomplete and malformed receipts without borrowing another plan", () => {
+    const current = snapshot("current", "completed", "cancelled")
+    const wrong = {
+      ...current,
+      id: "wrong",
+      state: { ...current.state, metadata: { requestID: "other", goalCreatedAt: 1 } },
+    }
+    const malformed = {
+      ...current,
+      id: "malformed",
+      state: {
+        ...current.state,
+        output: JSON.stringify({
+          branches: [
+            { id: "docs", state: "completed" },
+            { id: "docs", state: "failed" },
+          ],
+        }),
+      },
+    }
+    const failed = { ...current, id: "failed", state: { ...current.state, status: "error" } }
+    const next = { ...saved, id: "next", state: { ...saved.state, metadata: { requestID: "next", goalCreatedAt: 2 } } }
+    const parts = [saved, wrong, malformed, failed, current, next]
+    expect(chiefReceipt(wrong, parts)).toBeUndefined()
+    expect(chiefReceipt(malformed, parts)).toBeUndefined()
+    expect(chiefReceipt(failed, parts)).toBeUndefined()
+    expect(chiefReceipt(current, parts)?.map((event) => [event.name, event.status])).toEqual([
+      ["Docs audit", "Report ready"],
+      ["UX edit", "Stopped"],
+    ])
+    expect(chiefReceipt(current, [saved, next, current])).toBeUndefined()
   })
 })

@@ -2,7 +2,7 @@ import { Index, Show, createMemo, type Component } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useSession } from "../../context/session"
 import { agentIcon } from "./task-tool-state"
-import { chiefActivity, type ChiefPart } from "./chief-activity"
+import { chiefActivity, type ChiefEvent, type ChiefPart } from "./chief-activity"
 
 const label = {
   planned: "Ready to start",
@@ -88,3 +88,23 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
     </Show>
   )
 }
+
+export const ChiefReceipt: Component<{ events: ChiefEvent[] }> = (props) => (
+  <Show when={props.events.length}>
+    <ul class="chief-receipt" aria-label="Specialist update">
+      <Index each={props.events}>
+        {(event) => (
+          <li>
+            <Icon
+              name={event().specialist ? agentIcon(event().specialist) : "subagent"}
+              size="small"
+              aria-hidden="true"
+            />
+            <span>{event().name}</span>
+            <span class="chief-receipt__status">{event().status}</span>
+          </li>
+        )}
+      </Index>
+    </ul>
+  </Show>
+)

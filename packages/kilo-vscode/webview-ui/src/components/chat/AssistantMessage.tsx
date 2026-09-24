@@ -45,8 +45,8 @@ import { toolDefaultOpen } from "./tool-default-open"
 import { useVSCode } from "../../context/vscode"
 import { provenance } from "../../../../src/shared/memory-provenance"
 import { MemoryProvenance } from "./MemoryProvenance"
-import { ChiefActivity } from "./ChiefActivity"
-import { chiefActivity, type ChiefPart } from "./chief-activity"
+import { ChiefActivity, ChiefReceipt } from "./ChiefActivity"
+import { chiefActivity, chiefReceipt, type ChiefPart } from "./chief-activity"
 
 type PlanStep = { id: string; description: string; status?: string }
 
@@ -413,6 +413,11 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
             if (!id || !chiefActivity(plan, session.getSessionToolParts(id) as ChiefPart[])) return
             return plan
           })
+          const chiefEvents = createMemo(() => {
+            if (part.type !== "tool" || !["chief_inspect", "chief_review", "chief_synthesize"].includes(part.tool)) return
+            const id = session.currentSessionID()
+            return id ? chiefReceipt(part as unknown as ChiefPart, session.getSessionToolParts(id) as ChiefPart[]) : undefined
+          })
           const forceOpen = createMemo(() => !!props.forceOpenPartID && part.id === props.forceOpenPartID)
 
           // Lights up when this part is behind the hovered/focused task-timeline
@@ -470,6 +475,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                                   when={isUpstreamSuppressed}
                                   fallback={
                                     chiefPlan() ? <ChiefActivity plan={chiefPlan()!} /> :
+                                    chiefEvents() !== undefined ? <ChiefReceipt events={chiefEvents()!} /> :
                                     <Part
                                       part={part}
                                       message={props.message as SDKMessage}

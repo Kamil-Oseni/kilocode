@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 02:05 America/Toronto - prepared Chief attention batches
+
+`ChiefBranches.prepare` now coalesces up to 24 pending specialist note IDs into one durable, exact-plan batch. A repeat or restart reads the same batch identity; notes saved afterward stay pending outside it. A matching saved `chief_inspect` receipt can acknowledge the batch IDs in parts and releases the reservation when they are all read. The reservation is explicitly **prepared**, not delivered, dispatched or a parent-model wake. It creates no prompt and cannot replay a child action. Sixteen Chief tests / 147 assertions pass, including actual `chiefInspectTool` output, idempotency, legacy storage, pause and revision refusal; CLI typecheck and formatting pass. This is source-only. Next bind one prepared ID to a durable goal dispatch and persisted parent intake after an idle/queue check, then recover every crash boundary without creating a duplicate turn. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 02:00 America/Toronto - keep unrendered Chief notes visible
 
 Live Chief-note hydration now suppresses an inbox note only when the corresponding saved `chief_inspect` receipt actually projects a visible specialist message in the parent chat. Previously a matching raw note inside inspection output could hide the inbox copy even if the inspection could not render because its exact saved task launch was absent. The receipt projection now carries the note ID internally for stable deduplication; the UI still shows the same compact name, role icon and message. Thirteen focused chat tests / 69 assertions pass, including the missing-launch case; extension/webview typechecks and lint pass. This user-visible source fix needs a new snapshot and installed-host acceptance. `FUT-AGENT-01/02` remain In progress.

@@ -90,6 +90,9 @@ export namespace ChiefBranches {
   const Attention = Schema.Struct({
     version: Schema.Literal(1),
     pending: Schema.Array(Schema.String),
+    prepared: Schema.optional(
+      Schema.Struct({ id: Schema.String, ids: Schema.Array(Schema.String), at: Schema.Number }),
+    ),
   })
 
   /** Reports and evidence belong to the admitted input turn, never a later child conversation. */
@@ -743,7 +746,11 @@ export namespace ChiefBranches {
           yield* storage.replace(key(input.goalID), {
             ...old,
             notes: [...(old.notes ?? []), saved],
-            attention: { version: 1, pending: [...(old.attention?.pending ?? []), saved.id] },
+            attention: {
+              version: 1,
+              pending: [...(old.attention?.pending ?? []), saved.id],
+              prepared: old.attention?.prepared,
+            },
           } satisfies Record)
           // A publish is only a hint. Confirm the durable receipt under the same mutation lock,
           // then emit once for this new note; retries that find `existing` above never emit.
@@ -778,6 +785,53 @@ export namespace ChiefBranches {
       const notes = ids.map((id) => record.notes?.find((note) => note.id === id))
       if (notes.some((note) => !note)) throw new Error("Chief attention references a missing note")
       return notes as Note[]
+    })
+
+    /** Reserve one stable, bounded note batch. Preparation does not deliver a parent intake or start a turn. */
+    const prepare = Effect.fn("ChiefBranches.prepare")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      requestID: string
+      revision: string
+    }) {
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const record = yield* read(input.goalID)
+          if (
+            !record ||
+            record.version !== 2 ||
+            record.goalCreatedAt !== input.goalCreatedAt ||
+            record.requestID !== input.requestID ||
+            record.revision !== input.revision
+          )
+            throw new Error("Chief attention no longer matches the planned request")
+          yield* active(input.goalID, input.goalCreatedAt, input.revision)
+          const ids = record.attention?.pending ?? []
+          if (ids.length > 24 || new Set(ids).size !== ids.length)
+            throw new Error("Chief attention ledger is inconsistent")
+          if (ids.some((id) => !record.notes?.some((note) => note.id === id)))
+            throw new Error("Chief attention references a missing note")
+          if (!ids.length) return
+          const prior = record.attention?.prepared
+          if (prior) {
+            if (!prior.id || !prior.ids.length || new Set(prior.ids).size !== prior.ids.length)
+              throw new Error("Chief attention preparation is inconsistent")
+            if (prior.ids.every((id) => ids.includes(id))) return prior
+            throw new Error("Chief attention preparation no longer matches pending notes")
+          }
+          const prepared = { id: crypto.randomUUID(), ids: [...ids], at: Date.now() }
+          yield* storage.replace(key(input.goalID), {
+            ...record,
+            attention: { version: 1, pending: ids, prepared },
+          } satisfies Record)
+          const current = yield* read(input.goalID)
+          if (JSON.stringify(current?.attention?.prepared) !== JSON.stringify(prepared))
+            throw new Error("Chief attention preparation outcome is unknown")
+          return prepared
+        }),
+      )
     })
 
     const acknowledge = Effect.fn("ChiefBranches.acknowledge")(function* (input: {
@@ -860,9 +914,15 @@ export namespace ChiefBranches {
           const current = record.attention?.pending ?? []
           const next = current.filter((id) => !input.ids.includes(id))
           if (next.length === current.length) return []
+          const prepared = record.attention?.prepared
+          const remaining = prepared?.ids.filter((id) => next.includes(id))
           yield* storage.replace(key(input.goalID), {
             ...record,
-            attention: { version: 1, pending: next },
+            attention: {
+              version: 1,
+              pending: next,
+              prepared: prepared && remaining?.length ? { ...prepared, ids: remaining } : undefined,
+            },
           } satisfies Record)
           return current.filter((id) => input.ids.includes(id))
         }),
@@ -1077,6 +1137,7 @@ export namespace ChiefBranches {
       settle,
       note,
       pending,
+      prepare,
       acknowledge,
       review,
       synthesize,

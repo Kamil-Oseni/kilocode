@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 02:05 America/Toronto - prepared Chief note handoff
+
+The optional Chief attention v1 record now supports `prepared: { id, ids, at }`. `prepare()` checks the exact active plan, coalesces saved pending IDs and durably reads back one stable reservation; retries reuse it, new notes do not widen it, and legacy records remain readable. Receipt-backed `acknowledge()` shrinks or clears the reservation only for notes returned by a saved matching `chief_inspect` result. Tests use the real inspect tool output and pass 16 Chief cases / 147 assertions; CLI typecheck and formatting pass. Nothing invokes a parent model yet. Next attach this prepared ID and its note IDs to exactly one saved `RayaGoal` dispatch and parent input at a verified idle boundary. Reconcile reservation-before-dispatch, dispatch-before-intake and intake-before-model-completion separately on restart; never call process-local `ops.prompt` directly from a child note event or replay unknown work. Keep `FUT-AGENT-01/02` In progress.
+
 ## ChatGPT 2026-09-24 02:00 America/Toronto - Chief note dedupe correction
 
 The live inbox now removes a note only when `chiefReceipt` produced the matching visible note event, including the exact saved task launch and plan lineage. The event carries `noteID` internally for dedupe; it is not a new visible label or delivery claim. A raw `chief_inspect` output that cannot render no longer silently hides the inbox message. Focused chat tests, typechecks and lint pass. Commit/push and install this source, then check an actual two-specialist chat, missing/late task hydration, repeated inspection, narrow/wide layout and restart. Parent-model attention remains a separate durable dispatch problem.

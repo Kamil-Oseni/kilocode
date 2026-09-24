@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,7 @@ static constexpr UINT kEdge = 4'096;
 static constexpr DWORD kImageBytes = 15'000'000;
 static constexpr UINT kPointerEdge = 1'024;
 static constexpr UINT kPointerBytes = 4 * 1'024 * 1'024;
+static constexpr UINT kOutputs = 8;
 static volatile LONG stopped = 0;
 
 struct Failure : std::runtime_error {
@@ -284,9 +286,8 @@ static void pointertest() {
 
 struct Target {
   HWND handle;
-  HMONITOR monitor;
   RECT rect;
-  RECT display;
+  RECT desktop;
   UINT dpi;
   std::string id;
   std::string location;
@@ -305,6 +306,58 @@ static RECT intersect(RECT rect, RECT desktop) {
   return visible;
 }
 
+static bool overlap(RECT first, RECT second, RECT& result) {
+  result = RECT{std::max(first.left, second.left), std::max(first.top, second.top),
+                std::min(first.right, second.right), std::min(first.bottom, second.bottom)};
+  return result.right > result.left && result.bottom > result.top;
+}
+
+static void coverage(RECT rect, const std::vector<RECT>& tiles) {
+  for (size_t i = 0; i < tiles.size(); ++i)
+    for (size_t j = i + 1; j < tiles.size(); ++j) {
+      RECT shared{};
+      if (overlap(tiles[i], tiles[j], shared))
+        throw Failure("unsupported_surface", "DXGI outputs overlap in the foreground capture");
+    }
+  std::vector<LONG> cuts{rect.top, rect.bottom};
+  for (auto tile : tiles) {
+    cuts.push_back(tile.top);
+    cuts.push_back(tile.bottom);
+  }
+  std::sort(cuts.begin(), cuts.end());
+  cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+  for (size_t row = 1; row < cuts.size(); ++row) {
+    if (cuts[row] <= rect.top || cuts[row - 1] >= rect.bottom) continue;
+    LONG edge = rect.left;
+    std::vector<RECT> spans;
+    for (auto tile : tiles)
+      if (tile.top <= cuts[row - 1] && tile.bottom >= cuts[row]) spans.push_back(tile);
+    std::sort(spans.begin(), spans.end(), [](RECT a, RECT b) { return a.left < b.left; });
+    for (auto span : spans) {
+      if (span.left > edge) break;
+      edge = std::max(edge, span.right);
+      if (edge >= rect.right) break;
+    }
+    if (edge < rect.right) throw Failure("unsupported_surface", "foreground window crosses an uncaptured display gap");
+  }
+}
+
+static void blit(BYTE* surface, UINT width, UINT height, RECT rect, RECT tile, const BYTE* pixels, UINT stride) {
+  if (tile.right <= tile.left || tile.bottom <= tile.top)
+    throw Failure("unsupported_surface", "capture tile has no area");
+  const auto span = UINT(tile.right - tile.left);
+  const auto rows = UINT(tile.bottom - tile.top);
+  if (!surface || !pixels || !span || !rows || width > kEdge || height > kEdge ||
+      tile.left < rect.left || tile.top < rect.top || tile.right > rect.right || tile.bottom > rect.bottom ||
+      stride < uint64_t(span) * 4 || UINT(rect.right - rect.left) != width || UINT(rect.bottom - rect.top) != height)
+    throw Failure("unsupported_surface", "capture tile cannot be placed in the target");
+  const auto x = size_t(tile.left - rect.left);
+  const auto y = size_t(tile.top - rect.top);
+  for (UINT row = 0; row < rows; ++row)
+    std::memcpy(surface + ((y + row) * width + x) * 4,
+                pixels + size_t(row) * stride, size_t(span) * 4);
+}
+
 static Target target() {
   HWND handle = GetForegroundWindow();
   if (!handle || !IsWindowVisible(handle)) throw Failure("no_foreground_window", "no visible foreground window");
@@ -316,19 +369,14 @@ static Target target() {
   int desktopHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
   if (desktopWidth <= 1 || desktopHeight <= 1)
     throw Failure("unsupported_surface", "virtual desktop bounds are unavailable");
-  rect = intersect(rect, RECT{left, top, left + desktopWidth, top + desktopHeight});
+  RECT desktop{left, top, left + desktopWidth, top + desktopHeight};
+  rect = intersect(rect, desktop);
   auto width = rect.right - rect.left;
   auto height = rect.bottom - rect.top;
   if (width <= 0 || height <= 0 || width > kEdge || height > kEdge || uint64_t(width) * height > kPixels)
     throw Failure("unsupported_surface", "foreground window exceeds capture bounds");
-  HMONITOR monitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONULL);
-  if (!monitor) throw Failure("unsupported_surface", "foreground window has no monitor");
-  MONITORINFO info{sizeof(info)};
-  if (!GetMonitorInfoW(monitor, &info)) throw std::runtime_error("monitor bounds unavailable");
   UINT dpi = GetDpiForWindow(handle);
   if (!dpi) throw Failure("unsupported_surface", "foreground DPI is unavailable");
-  if (rect.left < info.rcMonitor.left || rect.top < info.rcMonitor.top || rect.right > info.rcMonitor.right || rect.bottom > info.rcMonitor.bottom)
-    throw Failure("unsupported_surface", "foreground window spans monitors or exceeds the monitor");
   DWORD pid = 0;
   GetWindowThreadProcessId(handle, &pid);
   if (!pid) throw std::runtime_error("foreground process unavailable");
@@ -340,13 +388,13 @@ static Target target() {
   std::ostringstream location;
   location << "pid:" << pid << ";title:" << utf8(std::wstring(title, size_t(count))) << ";bounds:"
            << rect.left << ',' << rect.top << ',' << width << ',' << height;
-  return {handle, monitor, rect, info.rcMonitor, dpi, id.str(), location.str()};
+  return {handle, rect, desktop, dpi, id.str(), location.str()};
 }
 
 static void same(const Target& original) {
   auto current = target();
-  if (current.handle != original.handle || current.monitor != original.monitor || current.location != original.location ||
-      !equal(current.display, original.display) || current.dpi != original.dpi)
+  if (current.handle != original.handle || current.location != original.location ||
+      !equal(current.desktop, original.desktop) || current.dpi != original.dpi)
     throw Failure("target_changed", "foreground target changed during capture");
 }
 
@@ -358,6 +406,33 @@ struct Lease {
   Lease& operator=(const Lease&) = delete;
 };
 
+struct Output {
+  DXGI_OUTPUT_DESC desc{};
+  DXGI_OUTDUPL_DESC mode{};
+  RECT tile{};
+  D3D11_BOX box{};
+  ComPtr<IDXGIOutput1> output;
+  ComPtr<ID3D11Device> device;
+  ComPtr<ID3D11DeviceContext> context;
+  ComPtr<IDXGIOutputDuplication> duplicate;
+  ComPtr<ID3D11Texture2D> staging;
+  bool ready = false;
+};
+
+static bool admit(bool next, bool owns, LONGLONG last, LONGLONG stamp) {
+  if (!next && !owns) return false;
+  if (next && !owns && last > stamp) return false;
+  return true;
+}
+
+static void stable(const Output& item) {
+  DXGI_OUTPUT_DESC active{};
+  require(item.output->GetDesc(&active), "active output GetDesc");
+  if (!active.AttachedToDesktop || active.Monitor != item.desc.Monitor ||
+      !equal(active.DesktopCoordinates, item.desc.DesktopCoordinates) || active.Rotation != item.desc.Rotation)
+    throw Failure("display_changed", "DXGI output geometry changed");
+}
+
 static BOOL WINAPI control(DWORD signal) {
   if (signal != CTRL_C_EVENT && signal != CTRL_BREAK_EVENT && signal != CTRL_CLOSE_EVENT) return FALSE;
   InterlockedExchange(&stopped, 1);
@@ -368,76 +443,131 @@ static void run(HANDLE pipe) {
   auto original = target();
   ComPtr<IDXGIFactory1> factory;
   require(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(factory.GetAddressOf())), "CreateDXGIFactory1");
-  ComPtr<IDXGIAdapter1> adapter;
-  ComPtr<IDXGIOutput1> output;
-  for (UINT a = 0; !output; ++a) {
-    adapter.Reset();
+  std::vector<std::unique_ptr<Output>> outputs;
+  std::vector<RECT> tiles;
+  uint64_t pixels = 0;
+  for (UINT a = 0;; ++a) {
+    ComPtr<IDXGIAdapter1> adapter;
     HRESULT status = factory->EnumAdapters1(a, adapter.GetAddressOf());
     if (status == DXGI_ERROR_NOT_FOUND) break;
     require(status, "EnumAdapters1");
-    for (UINT o = 0; !output; ++o) {
+    for (UINT o = 0;; ++o) {
       ComPtr<IDXGIOutput> next;
       status = adapter->EnumOutputs(o, next.GetAddressOf());
       if (status == DXGI_ERROR_NOT_FOUND) break;
       require(status, "EnumOutputs");
       DXGI_OUTPUT_DESC desc{};
       require(next->GetDesc(&desc), "GetDesc");
-      if (desc.Monitor != original.monitor) continue;
-      if (desc.Rotation != DXGI_MODE_ROTATION_IDENTITY) throw Failure("unsupported_surface", "rotated monitor is unsupported");
-      require(next.As(&output), "IDXGIOutput1");
-      if (original.rect.left < desc.DesktopCoordinates.left || original.rect.top < desc.DesktopCoordinates.top ||
-          original.rect.right > desc.DesktopCoordinates.right || original.rect.bottom > desc.DesktopCoordinates.bottom)
-        throw Failure("unsupported_surface", "foreground bounds do not match DXGI output");
-      break;
+      RECT tile{};
+      if (!desc.AttachedToDesktop || !overlap(original.rect, desc.DesktopCoordinates, tile)) continue;
+      if (desc.Rotation != DXGI_MODE_ROTATION_IDENTITY)
+        throw Failure("unsupported_surface", "rotated DXGI output is not yet supported");
+      if (outputs.size() >= kOutputs)
+        throw Failure("unsupported_surface", "foreground window intersects too many outputs");
+      auto item = std::make_unique<Output>();
+      item->desc = desc;
+      item->tile = tile;
+      require(next.As(&item->output), "IDXGIOutput1");
+      require(D3D11CreateDevice(adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                                nullptr, 0, D3D11_SDK_VERSION, item->device.GetAddressOf(), nullptr,
+                                item->context.GetAddressOf()), "D3D11CreateDevice");
+      require(item->output->DuplicateOutput(item->device.Get(), item->duplicate.GetAddressOf()), "DuplicateOutput");
+      item->duplicate->GetDesc(&item->mode);
+      const auto screen = desc.DesktopCoordinates;
+      if (item->mode.ModeDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
+          item->mode.ModeDesc.Width != UINT(screen.right - screen.left) ||
+          item->mode.ModeDesc.Height != UINT(screen.bottom - screen.top) ||
+          uint64_t(item->mode.ModeDesc.Width) * item->mode.ModeDesc.Height > 16'588'800)
+        throw Failure("unsupported_surface", "DXGI output format or dimensions are unsupported");
+      pixels += uint64_t(item->mode.ModeDesc.Width) * item->mode.ModeDesc.Height;
+      if (pixels > 66'355'200)
+        throw Failure("unsupported_surface", "combined DXGI output dimensions exceed bounds");
+      item->box = D3D11_BOX{UINT(tile.left - screen.left), UINT(tile.top - screen.top), 0,
+                            UINT(tile.right - screen.left), UINT(tile.bottom - screen.top), 1};
+      D3D11_TEXTURE2D_DESC texture{};
+      texture.Width = UINT(tile.right - tile.left);
+      texture.Height = UINT(tile.bottom - tile.top);
+      texture.MipLevels = 1;
+      texture.ArraySize = 1;
+      texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+      texture.SampleDesc.Count = 1;
+      texture.Usage = D3D11_USAGE_STAGING;
+      texture.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+      require(item->device->CreateTexture2D(&texture, nullptr, item->staging.GetAddressOf()), "CreateTexture2D");
+      tiles.push_back(tile);
+      outputs.push_back(std::move(item));
     }
   }
-  if (!output) throw Failure("unsupported_surface", "foreground monitor has no DXGI output");
-  ComPtr<ID3D11Device> device;
-  ComPtr<ID3D11DeviceContext> context;
-  require(D3D11CreateDevice(adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                            nullptr, 0, D3D11_SDK_VERSION, device.GetAddressOf(), nullptr, context.GetAddressOf()), "D3D11CreateDevice");
-  ComPtr<IDXGIOutputDuplication> duplicate;
-  require(output->DuplicateOutput(device.Get(), duplicate.GetAddressOf()), "DuplicateOutput");
-  DXGI_OUTDUPL_DESC desc{};
-  duplicate->GetDesc(&desc);
-  if (desc.ModeDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
-      uint64_t(desc.ModeDesc.Width) * desc.ModeDesc.Height > 16'588'800)
-    throw Failure("unsupported_surface", "DXGI output format or dimensions are unsupported");
+  if (outputs.empty()) throw Failure("unsupported_surface", "foreground window has no DXGI output");
+  coverage(original.rect, tiles);
   auto width = UINT(original.rect.right - original.rect.left);
   auto height = UINT(original.rect.bottom - original.rect.top);
-  D3D11_TEXTURE2D_DESC texture{};
-  texture.Width = width;
-  texture.Height = height;
-  texture.MipLevels = 1;
-  texture.ArraySize = 1;
-  texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-  texture.SampleDesc.Count = 1;
-  texture.Usage = D3D11_USAGE_STAGING;
-  texture.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-  ComPtr<ID3D11Texture2D> staging;
-  require(device->CreateTexture2D(&texture, nullptr, staging.GetAddressOf()), "CreateTexture2D");
   ComPtr<IWICImagingFactory> imaging;
   require(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(imaging.GetAddressOf())), "WIC factory");
-  DXGI_OUTPUT_DESC outputDesc{};
-  require(output->GetDesc(&outputDesc), "output GetDesc");
-  D3D11_BOX box{UINT(original.rect.left - outputDesc.DesktopCoordinates.left),
-                UINT(original.rect.top - outputDesc.DesktopCoordinates.top), 0,
-                UINT(original.rect.right - outputDesc.DesktopCoordinates.left),
-                UINT(original.rect.bottom - outputDesc.DesktopCoordinates.top), 1};
   std::vector<unsigned char> image(kImageBytes);
   std::vector<BYTE> surface(size_t(width) * height * 4);
   Pointer pointer;
+  Output* owner = nullptr;
+  LONGLONG stamp = 0;
   uint64_t sequence = 0;
   uint64_t base = 0;
+  auto emitted = Clock::now();
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
     same(original);
-    DXGI_OUTDUPL_FRAME_INFO info{};
-    ComPtr<IDXGIResource> resource;
     auto begin = Clock::now();
-    HRESULT status = duplicate->AcquireNextFrame(50, &info, resource.GetAddressOf());
-    if (status == DXGI_ERROR_WAIT_TIMEOUT) {
+    bool changed = false;
+    for (auto& item : outputs) {
+      if (InterlockedCompareExchange(&stopped, 0, 0)) break;
+      stable(*item);
+      DXGI_OUTDUPL_FRAME_INFO info{};
+      ComPtr<IDXGIResource> resource;
+      HRESULT status = item->duplicate->AcquireNextFrame(outputs.size() == 1 ? 50 : 8, &info, resource.GetAddressOf());
+      if (status == DXGI_ERROR_WAIT_TIMEOUT) continue;
+      require(status, "AcquireNextFrame");
+      Lease lease(item->duplicate.Get());
       same(original);
-      if (InterlockedCompareExchange(&stopped, 0, 0) || !base) continue;
+      stable(*item);
+      if (info.LastMouseUpdateTime.QuadPart) {
+        const bool next = info.PointerPosition.Visible != 0;
+        if (admit(next, owner == item.get(), stamp, info.LastMouseUpdateTime.QuadPart)) {
+          pointer.position = info.PointerPosition.Position;
+          pointer.visible = next;
+          owner = item.get();
+          stamp = info.LastMouseUpdateTime.QuadPart;
+        }
+      }
+      if (info.PointerShapeBufferSize) {
+        if (info.PointerShapeBufferSize > kPointerBytes)
+          throw Failure("unsupported_surface", "pointer shape exceeds fixed buffer");
+        pointer.pixels.resize(info.PointerShapeBufferSize);
+        UINT required = 0;
+        require(item->duplicate->GetFramePointerShape(info.PointerShapeBufferSize, pointer.pixels.data(),
+                                                       &required, &pointer.shape), "GetFramePointerShape");
+        if (!required || required > info.PointerShapeBufferSize)
+          throw Failure("capture_failed", "pointer shape size changed during capture");
+        pointer.pixels.resize(required);
+        validate(pointer);
+      }
+      if (pointer.visible && pointer.pixels.empty())
+        throw Failure("unsupported_surface", "visible pointer has no captured shape");
+      ComPtr<ID3D11Texture2D> source;
+      require(resource.As(&source), "capture texture");
+      D3D11_TEXTURE2D_DESC current{};
+      source->GetDesc(&current);
+      if (current.Format != DXGI_FORMAT_B8G8R8A8_UNORM || current.Width != item->mode.ModeDesc.Width ||
+          current.Height != item->mode.ModeDesc.Height || item->box.right > current.Width ||
+          item->box.bottom > current.Height)
+        throw Failure("display_changed", "DXGI source dimensions changed before copy");
+      item->context->CopySubresourceRegion(item->staging.Get(), 0, 0, 0, 0, source.Get(), 0, &item->box);
+      item->ready = true;
+      changed = true;
+    }
+    auto acquired = Clock::now();
+    same(original);
+    if (InterlockedCompareExchange(&stopped, 0, 0)) break;
+    if (!std::all_of(outputs.begin(), outputs.end(), [](const auto& item) { return item->ready; })) continue;
+    if (!changed && base) {
+      if (Clock::now() - emitted < std::chrono::milliseconds(50)) continue;
       std::ostringstream header;
       header << "{\"v\":1,\"type\":\"unchanged\",\"sequence\":" << ++sequence
              << ",\"base\":" << base
@@ -445,67 +575,51 @@ static void run(HANDLE pipe) {
              << ",\"location\":" << quoted(original.location)
              << ",\"width\":" << width << ",\"height\":" << height << '}';
       packet(pipe, header.str(), nullptr, 0);
+      emitted = Clock::now();
       continue;
     }
-    require(status, "AcquireNextFrame");
-    Lease lease(duplicate.Get());
-    auto acquired = Clock::now();
-    same(original);
-    if (info.LastMouseUpdateTime.QuadPart) {
-      pointer.position = info.PointerPosition.Position;
-      pointer.visible = info.PointerPosition.Visible != 0;
-    }
-    if (info.PointerShapeBufferSize) {
-      if (info.PointerShapeBufferSize > kPointerBytes)
-        throw Failure("unsupported_surface", "pointer shape exceeds fixed buffer");
-      pointer.pixels.resize(info.PointerShapeBufferSize);
-      UINT required = 0;
-      require(duplicate->GetFramePointerShape(info.PointerShapeBufferSize, pointer.pixels.data(),
-                                              &required, &pointer.shape), "GetFramePointerShape");
-      if (!required || required > info.PointerShapeBufferSize)
-        throw Failure("capture_failed", "pointer shape size changed during capture");
-      pointer.pixels.resize(required);
-      validate(pointer);
-    }
-    if (pointer.visible && pointer.pixels.empty())
-      throw Failure("unsupported_surface", "visible pointer has no captured shape");
-    ComPtr<ID3D11Texture2D> source;
-    require(resource.As(&source), "capture texture");
-    D3D11_TEXTURE2D_DESC current{};
-    source->GetDesc(&current);
-    DXGI_OUTPUT_DESC active{};
-    require(output->GetDesc(&active), "active output GetDesc");
-    if (!equal(active.DesktopCoordinates, outputDesc.DesktopCoordinates) || active.Rotation != outputDesc.Rotation)
-      throw Failure("display_changed", "DXGI output geometry changed before copy");
-    if (current.Format != texture.Format || current.Width != desc.ModeDesc.Width ||
-        current.Height != desc.ModeDesc.Height || box.right > current.Width || box.bottom > current.Height)
-      throw Failure("display_changed", "DXGI source dimensions changed before copy");
-    context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, source.Get(), 0, &box);
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    require(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
     DWORD size = 0;
-    try {
-      if (mapped.RowPitch < uint64_t(width) * 4)
-        throw Failure("unsupported_surface", "mapped capture pitch is invalid");
-      BYTE* pixels = static_cast<BYTE*>(mapped.pData);
-      UINT stride = mapped.RowPitch;
-      if (pointer.visible) {
-        for (UINT row = 0; row < height; ++row)
-          std::memcpy(surface.data() + size_t(row) * width * 4,
-                      pixels + size_t(row) * mapped.RowPitch, size_t(width) * 4);
-        // PointerPosition is output-relative. The crop starts at box.left/top; HotSpot is not subtracted.
-        compose(surface.data(), width, height, width * 4, pointer, LONG(box.left), LONG(box.top));
-        pixels = surface.data();
-        stride = width * 4;
+    if (outputs.size() == 1 && !pointer.visible) {
+      const auto& item = outputs.front();
+      stable(*item);
+      D3D11_MAPPED_SUBRESOURCE mapped{};
+      require(item->context->Map(item->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
+      try {
+        if (!mapped.pData || mapped.RowPitch < uint64_t(width) * 4)
+          throw Failure("unsupported_surface", "mapped capture pitch is invalid");
+        size = encode(imaging.Get(), width, height, mapped.RowPitch, static_cast<BYTE*>(mapped.pData), image);
+      } catch (...) {
+        item->context->Unmap(item->staging.Get(), 0);
+        throw;
       }
-      size = encode(imaging.Get(), width, height, stride, pixels, image);
-    } catch (...) {
-      context->Unmap(staging.Get(), 0);
-      throw;
+      item->context->Unmap(item->staging.Get(), 0);
+    } else {
+      for (auto& item : outputs) {
+        stable(*item);
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        require(item->context->Map(item->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
+        try {
+          const auto span = UINT(item->tile.right - item->tile.left);
+          if (mapped.RowPitch < uint64_t(span) * 4 || !mapped.pData)
+            throw Failure("unsupported_surface", "mapped capture pitch is invalid");
+          blit(surface.data(), width, height, original.rect, item->tile,
+               static_cast<BYTE*>(mapped.pData), mapped.RowPitch);
+        } catch (...) {
+          item->context->Unmap(item->staging.Get(), 0);
+          throw;
+        }
+        item->context->Unmap(item->staging.Get(), 0);
+      }
+      if (owner && pointer.visible)
+        // PointerPosition is relative to its output. HotSpot is not subtracted.
+        compose(surface.data(), width, height, width * 4, pointer,
+                original.rect.left - owner->desc.DesktopCoordinates.left,
+                original.rect.top - owner->desc.DesktopCoordinates.top);
+      size = encode(imaging.Get(), width, height, width * 4, surface.data(), image);
     }
-    context->Unmap(staging.Get(), 0);
     auto prepared = Clock::now();
     same(original);
+    for (const auto& item : outputs) stable(*item);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     std::ostringstream header;
     base = ++sequence;
@@ -517,6 +631,7 @@ static void run(HANDLE pipe) {
            << ",\"mime\":\"image/png\",\"acquisitionMs\":" << ms(begin, acquired)
            << ",\"preparationMs\":" << ms(acquired, prepared) << '}';
     packet(pipe, header.str(), image.data(), size);
+    emitted = Clock::now();
   }
 }
 
@@ -550,6 +665,37 @@ int wmain(int argc, wchar_t** argv) {
           refused = error.code == "unsupported_surface";
         }
         if (!refused) throw Failure("capture_failed", "disjoint window clipping self-test failed");
+        RECT window{-2, -1, 2, 1};
+        RECT left{};
+        RECT right{};
+        if (!overlap(window, RECT{-1920, -1080, 0, 1080}, left) ||
+            !overlap(window, RECT{0, -1080, 1920, 1080}, right) ||
+            !equal(left, RECT{-2, -1, 0, 1}) || !equal(right, RECT{0, -1, 2, 1}))
+          throw Failure("capture_failed", "negative-origin output clipping self-test failed");
+        coverage(window, {left, right});
+        BYTE leftPixels[16]{1, 0, 0, 255, 2, 0, 0, 255, 3, 0, 0, 255, 4, 0, 0, 255};
+        BYTE rightPixels[16]{5, 0, 0, 255, 6, 0, 0, 255, 7, 0, 0, 255, 8, 0, 0, 255};
+        BYTE joined[32]{};
+        blit(joined, 4, 2, window, left, leftPixels, 8);
+        blit(joined, 4, 2, window, right, rightPixels, 8);
+        if (joined[0] != 1 || joined[4] != 2 || joined[8] != 5 || joined[12] != 6 ||
+            joined[16] != 3 || joined[20] != 4 || joined[24] != 7 || joined[28] != 8)
+          throw Failure("capture_failed", "negative-origin tile composition self-test failed");
+        refused = false;
+        try { coverage(window, {left, RECT{1, -1, 2, 1}}); }
+        catch (const Failure& error) { refused = error.code == "unsupported_surface"; }
+        if (!refused) throw Failure("capture_failed", "display gap was not refused");
+        refused = false;
+        try { coverage(window, {left, RECT{-1, -1, 2, 1}}); }
+        catch (const Failure& error) { refused = error.code == "unsupported_surface"; }
+        if (!refused) throw Failure("capture_failed", "overlapping outputs were not refused");
+        refused = false;
+        try { blit(joined, 4, 2, window, RECT{-3, -1, 0, 1}, leftPixels, 12); }
+        catch (const Failure& error) { refused = error.code == "unsupported_surface"; }
+        if (!refused) throw Failure("capture_failed", "out-of-window tile was not refused");
+        if (admit(false, false, 10, 11) || admit(true, false, 10, 9) ||
+            !admit(true, false, 10, 11) || !admit(false, true, 10, 11))
+          throw Failure("capture_failed", "cross-output pointer handoff self-test failed");
         ComPtr<IWICImagingFactory> imaging;
         require(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                  IID_PPV_ARGS(imaging.GetAddressOf())), "WIC factory");

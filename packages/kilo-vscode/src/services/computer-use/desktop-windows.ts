@@ -9,6 +9,7 @@ import {
   type DesktopWindow,
 } from "./desktop-session"
 import { DesktopCaptureWorker, type CapturedScene } from "./desktop-capture-worker"
+import { NativeCaptureHost } from "./desktop-native-host"
 
 const native = String.raw`
 using System;
@@ -1202,6 +1203,8 @@ export class WindowsDesktopDriver implements DesktopDriver {
   constructor(
     input?: Runner,
     private readonly background?: Runner,
+    private readonly binary?: string,
+    private readonly args: string[] = [],
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
@@ -1263,6 +1266,46 @@ export class WindowsDesktopDriver implements DesktopDriver {
 
   startCapture(failed: (error: unknown) => void): void {
     if (this.worker) return
+    if (this.binary) {
+      const host = new NativeCaptureHost(
+        this.binary,
+        (error) => {
+          this.worker?.stop()
+          this.worker = undefined
+          failed(error)
+        },
+        this.args,
+      )
+      let sequence = 0
+      this.worker = new DesktopCaptureWorker(
+        async () => {
+          const result = await host.next(sequence)
+          sequence = result.sequence
+          const started = performance.now()
+          const data = result.data.toString("base64")
+          result.data.fill(0)
+          const preparationMs = result.preparationMs + performance.now() - started
+          return {
+            windowID: result.windowID,
+            location: result.location,
+            width: result.width,
+            height: result.height,
+            mime: result.mime,
+            data,
+            timing: {
+              acquisitionMs: result.acquisitionMs,
+              preparationMs,
+              totalMs: result.acquisitionMs + preparationMs,
+            },
+          }
+        },
+        () => host.stop(),
+        failed,
+      )
+      host.start()
+      this.worker.start()
+      return
+    }
     const source = this.background ?? runner()
     let prior: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
     this.worker = new DesktopCaptureWorker(

@@ -93,4 +93,45 @@ describe("native desktop capture host", () => {
     expect(late.latest()).toBeUndefined()
     expect(errors).toHaveLength(1)
   })
+
+  it("delivers only newer frames to one waiter and cancels a pending wait on Stop", async () => {
+    const errors: Error[] = []
+    const header = {
+      v: 1,
+      type: "frame",
+      sequence: 1,
+      windowID: "0x12AB",
+      location: "pid:42;title:Editor;bounds:0,0,100,80",
+      width: 100,
+      height: 80,
+      mime: "image/png",
+      acquisitionMs: 2,
+      preparationMs: 3,
+    }
+    const packet = encode(header).toString("base64")
+    const script = `setTimeout(() => process.stdout.write(Buffer.from(${JSON.stringify(packet)}, "base64")), 25); setInterval(() => {}, 1000)`
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script])
+    host.start()
+    const first = await host.next()
+    expect(first.sequence).toBe(1)
+    expect(first.data[0]).toBe(137)
+    const pending = host.next(1)
+    await expect(host.next(1)).rejects.toThrow(/already has a frame waiter/i)
+    host.stop()
+    await expect(pending).rejects.toThrow(/stopped/i)
+    expect(first.data[0]).toBe(137)
+    expect(host.latest()).toBeUndefined()
+    expect(errors).toHaveLength(0)
+  })
+
+  it("rejects a pending waiter once when the native stream fails", async () => {
+    const errors: Error[] = []
+    const packet = encode({ v: 1, type: "error", code: "device_lost" }, Buffer.alloc(0))
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(packet)])
+    host.start()
+    await expect(host.next()).rejects.toThrow(/stopped/i)
+    await until(() => errors.length === 1)
+    expect(errors[0]?.message).toContain("device_lost")
+    expect(host.latest()).toBeUndefined()
+  })
 })

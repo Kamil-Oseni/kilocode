@@ -5,6 +5,7 @@ export class NativeCaptureHost {
   private process: ChildProcess | undefined
   private parser: NativeFrameParser | undefined
   private frame: (NativeFrame & { receivedAt: number }) | undefined
+  private waiting: { after: number; resolve: (frame: NativeFrame) => void; reject: (error: Error) => void } | undefined
   private generation = 0
 
   constructor(
@@ -27,6 +28,11 @@ export class NativeCaptureHost {
           if (result.type === "error") throw new Error(`Native desktop capture stopped: ${result.code}`)
           this.frame?.data.fill(0)
           this.frame = { ...result.frame, receivedAt: performance.now() }
+          if (this.waiting && result.frame.sequence > this.waiting.after) {
+            const waiting = this.waiting
+            this.waiting = undefined
+            waiting.resolve({ ...result.frame, data: Buffer.from(result.frame.data) })
+          }
         }
       } catch (error) {
         this.fail(error, generation)
@@ -50,8 +56,20 @@ export class NativeCaptureHost {
     return { ...frame, data: Buffer.from(frame.data) }
   }
 
+  next(after = 0): Promise<NativeFrame> {
+    if (!this.process) return Promise.reject(new Error("Native desktop capture is stopped"))
+    const frame = this.latest(Infinity, after)
+    if (frame) return Promise.resolve(frame)
+    if (this.waiting) return Promise.reject(new Error("Native desktop capture already has a frame waiter"))
+    return new Promise((resolve, reject) => {
+      this.waiting = { after, resolve, reject }
+    })
+  }
+
   stop(): void {
     this.generation++
+    this.waiting?.reject(new Error("Native desktop capture stopped"))
+    this.waiting = undefined
     this.parser?.clear()
     this.parser = undefined
     this.frame?.data.fill(0)

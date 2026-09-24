@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { join } from "node:path"
 import { DesktopPanel } from "./desktop-panel"
 import { DesktopSession } from "./desktop-session"
 import { WindowsDesktopDriver } from "./desktop-windows"
@@ -24,7 +25,11 @@ export class DesktopAutomationService implements vscode.Disposable {
   constructor(connection: KiloConnectionService, context: vscode.ExtensionContext, lease: ComputerUseLeaseStore) {
     if (process.platform !== "win32") return
     this.lease = lease
-    this.driver = new WindowsDesktopDriver()
+    const binary =
+      process.env.RAYA_NATIVE_CAPTURE_CANDIDATE === "1"
+        ? join(context.extensionPath, "bin", "raya-desktop-capture.exe")
+        : undefined
+    this.driver = new WindowsDesktopDriver(undefined, undefined, binary)
     this.session = new DesktopSession(this.driver)
     this.panel = new DesktopPanel(this.session, this.lease)
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)

@@ -20,6 +20,55 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("joins a real binary child frame only for the exact foreground and stops its stream", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const header = {
+      v: 1,
+      type: "frame",
+      sequence: 1,
+      ...target,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      acquisitionMs: 2,
+      preparationMs: 3,
+    }
+    const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
+    const script = `const h=${JSON.stringify(header)};const image=Buffer.from(${JSON.stringify(image.toString("base64"))},"base64");setInterval(()=>{const json=Buffer.from(JSON.stringify(h));const packet=Buffer.alloc(8+json.length+image.length);packet.writeUInt32LE(json.length,0);json.copy(packet,4);packet.writeUInt32LE(image.length,4+json.length);image.copy(packet,8+json.length);process.stdout.write(packet);h.sequence++},25)`
+    const scripts: string[] = []
+    let moved = false
+    const primary = {
+      run: async (value: string) => {
+        scripts.push(value)
+        const current = moved ? { ...target, location: "pid:5;title:Editor;bounds:1,0,20,10" } : target
+        if (!value.includes("CopyFromScreen")) return JSON.stringify(current)
+        return JSON.stringify({
+          ...current,
+          width: 20,
+          height: 10,
+          mime: "image/png",
+          data: "fallback",
+          acquisitionMs: 0,
+          preparationMs: 0,
+        })
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(primary, undefined, process.execPath, ["-e", script])
+    const errors: unknown[] = []
+    driver.startCapture((error) => errors.push(error))
+    let data = ""
+    for (let index = 0; index < 200 && data !== image.toString("base64"); index++) {
+      data = (await driver.observe({ semantics: false })).data
+      await Bun.sleep(5)
+    }
+    expect(data).toBe(image.toString("base64"))
+    moved = true
+    expect((await driver.observe({ semantics: false })).data).toBe("fallback")
+    driver.stopCapture()
+    expect(errors).toHaveLength(0)
+    expect(scripts.some((value) => value.includes("CopyFromScreen"))).toBe(true)
+  })
   it("collects UI Automation against an exact foreground target without capturing pixels", async () => {
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:10,20,1280,720" }
     const test = harness([

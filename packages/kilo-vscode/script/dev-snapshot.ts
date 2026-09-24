@@ -4,7 +4,7 @@ import { $ } from "bun"
 import { createRequire } from "node:module"
 import { join, dirname, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
-import { rmSync, mkdirSync, existsSync } from "node:fs"
+import { rmSync, mkdirSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { load, identity, digest } from "../../opencode/src/kilocode/self-heal/build-input"
 import { PackageVault } from "../src/services/package-vault"
 import { prune } from "./snapshot-retention"
@@ -15,6 +15,9 @@ const shouldInstall = mode === "install"
 const isRelease = mode === "release"
 
 const root = join(import.meta.dir, "..")
+const capture = join(root, "bin", "raya-desktop-capture.exe")
+// Remove a prior candidate even if this build later fails or targets another platform.
+rmSync(capture, { force: true })
 const repair = await load(join(root, "..", ".."), process.argv[3] ?? process.env.RAYA_REPAIR_BUILD_INPUT)
 if ((mode === "repair") !== Boolean(repair))
   throw new Error("Repair packaging requires its captured build input and cannot install or release")
@@ -66,6 +69,14 @@ if (existsSync(dist)) {
 
 const outDir = isRelease ? join(root, "out") : join(tmpdir(), "raya-vscode-snapshots") // raya_change - release assets land in out/
 mkdirSync(outDir, { recursive: true })
+// Clear deterministic release/repair output before any build step. A failed
+// build must not leave yesterday's VSIX at the expected package path.
+const vsixPath =
+  repair?.output ??
+  (isRelease
+    ? join(outDir, `raya-${target ?? "universal"}.vsix`)
+    : join(outDir, `raya-vscode-snapshot-${sha}-${user}-${stamp}.vsix`))
+rmSync(vsixPath, { force: true })
 
 console.log("\n📦 Preparing SDK...")
 await $`bun run prepare:sdk`.cwd(root)
@@ -87,13 +98,21 @@ if (repair) {
   await Bun.write(join(dist, "raya-build.json"), JSON.stringify({ ...identity(repair), binary: await digest(binary) }))
 }
 
+// The candidate is intentionally limited to native Windows x64 builds. It is never
+// copied from a prior package, cross-compiled implicitly, or included on ARM64.
+const includeCapture = packageTarget === "win32-x64"
+if (includeCapture) {
+  if (process.platform !== "win32" || process.arch !== "x64")
+    throw new Error("Windows x64 desktop capture packaging requires a Windows x64 build host")
+  console.log("\nBuilding and self-testing native desktop capture candidate...")
+  await $`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${join(root, "script", "build-desktop-capture.ps1")} -Output ${capture}`.cwd(
+    root,
+  )
+  if (!existsSync(capture)) throw new Error("Native desktop capture build did not produce its executable")
+}
+
 console.log("\n📦 Packaging VSIX...")
 // raya_change - release VSIX names carry the platform target so VS Code installs the matching build
-const vsixPath =
-  repair?.output ??
-  (isRelease
-    ? join(outDir, `raya-${target ?? "universal"}.vsix`)
-    : join(outDir, `raya-vscode-snapshot-${sha}-${user}-${stamp}.vsix`))
 const require = createRequire(import.meta.url)
 const vsceRequire = createRequire(require.resolve("@vscode/vsce"))
 if (shouldInstall) {
@@ -115,15 +134,28 @@ if (shouldInstall) {
   }
 }
 const { createVSIX } = await import("@vscode/vsce")
-await createVSIX({
-  cwd: root,
-  packagePath: vsixPath,
-  version: snapshotVersion,
-  target: packageTarget, // raya_change - every retained package has an exact platform identity
-  updatePackageJson: false,
-  dependencies: false,
-  skipLicense: true,
-})
+const dir = includeCapture ? mkdtempSync(join(tmpdir(), "raya-vsix-ignore-")) : undefined
+try {
+  const ignore = dir ? join(dir, ".vscodeignore") : undefined
+  if (ignore) {
+    const rule = "bin/raya-desktop-capture.exe"
+    const source = readFileSync(join(root, ".vscodeignore"), "utf8")
+    if (!source.split(/\r?\n/).includes(rule)) throw new Error("Native capture default exclusion is missing")
+    writeFileSync(ignore, source.replace(/^bin\/raya-desktop-capture\.exe$/m, `!${rule}`))
+  }
+  await createVSIX({
+    cwd: root,
+    packagePath: vsixPath,
+    version: snapshotVersion,
+    target: packageTarget, // raya_change - every retained package has an exact platform identity
+    updatePackageJson: false,
+    dependencies: false,
+    skipLicense: true,
+    ignoreFile: ignore,
+  })
+} finally {
+  if (dir) rmSync(dir, { recursive: true, force: true })
+}
 if (repair) await load(join(root, "..", ".."))
 
 if (shouldInstall) {

@@ -33,8 +33,9 @@ AGENTS.md
 # Include dist/ directory for compiled extension (production)
 !dist/**
 
-# Include bin/ directory for CLI binary (production)
-!bin/**
+# bin/ is included by default for the production CLI and its resources.
+# raya_change - native DXGI candidate ships only through a verified Windows x64 snapshot/release/repair build
+bin/raya-desktop-capture.exe
 # .cli-version is a local-source build marker written by local-bin.ts. It must
 # not ship in the VSIX, otherwise production installs are detected as local
 # builds and may inject a dev-only bwrap fallback (see ServerManager.localCli).

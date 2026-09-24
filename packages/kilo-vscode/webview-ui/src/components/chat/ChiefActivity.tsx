@@ -1,7 +1,10 @@
 import { Index, Show, createMemo, type Component } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
+import { useWorktreeMode } from "../../context/worktree-mode"
 import { agentIcon } from "./task-tool-state"
+import { openSubagent } from "./open-subagent"
 import { chiefActivity, type ChiefEvent, type ChiefPart } from "./chief-activity"
 
 const label = {
@@ -17,6 +20,8 @@ const label = {
 
 export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
   const session = useSession()
+  const vscode = useVSCode()
+  const worktree = useWorktreeMode()
   const activity = createMemo(() => {
     const id = session.currentSessionID()
     return id ? chiefActivity(props.plan, session.getSessionToolParts(id) as ChiefPart[]) : undefined
@@ -79,6 +84,26 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                         }
                       >
                         <span class="chief-activity__report">{branch().report}</span>
+                      </Show>
+                      <Show when={branch().child}>
+                        {(child) => (
+                          <button
+                            type="button"
+                            class="chief-activity__open"
+                            onClick={() =>
+                              openSubagent({
+                                sessionID: child(),
+                                title: branch().name,
+                                parentSessionID: session.currentSessionID(),
+                                agent: branch().specialist,
+                                worktree: !!worktree,
+                                post: vscode.postMessage,
+                              })
+                            }
+                          >
+                            Open conversation
+                          </button>
+                        )}
                       </Show>
                     </div>
                   </details>

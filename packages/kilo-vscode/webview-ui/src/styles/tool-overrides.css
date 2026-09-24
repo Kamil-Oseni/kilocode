@@ -195,6 +195,19 @@
   margin-top: 2px;
 }
 
+.chief-activity__open {
+  justify-self: start;
+  padding: 2px 0;
+  color: var(--text-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chief-activity__open:focus-visible {
+  outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
+  outline-offset: 2px;
+}
+
 .chief-activity__status {
   flex: none;
   color: var(--text-weak);

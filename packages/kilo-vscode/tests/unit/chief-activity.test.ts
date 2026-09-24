@@ -254,6 +254,8 @@ describe("chiefReceipt", () => {
     const duplicate = { ...start, id: "duplicate" }
     const parts = [parent, start, duplicate]
     expect(chiefReceipt(start, parts)).toEqual([{ name: "Docs audit", specialist: "researcher", status: "Started" }])
+    expect(chiefActivity(parent, parts)?.branches[0]?.child).toBe("ses_child")
+    expect(chiefActivity(parent, parts)?.branches[1]?.child).toBeUndefined()
     expect(chiefReceipt(duplicate, parts)).toEqual([])
     expect(chiefReceipt(start, structuredClone(parts))).toEqual(chiefReceipt(start, parts))
     expect(chiefReceipt(start, [parent, { ...start, state: { ...start.state, status: "running" } }])).toBeUndefined()
@@ -293,6 +295,7 @@ describe("chiefReceipt", () => {
       { ...start, state: { ...start.state, metadata: { ...start.state.metadata, sessionId: "ses_other" } } },
     ]
     for (const item of invalid) expect(chiefReceipt(item, [parent, item])).toBeUndefined()
+    for (const item of invalid) expect(chiefActivity(parent, [parent, item])?.branches[0]?.child).toBeUndefined()
     expect(chiefReceipt(start, [{ ...parent, id: "previous" }, { ...saved, id: "next" }, start])).toBeUndefined()
   })
 

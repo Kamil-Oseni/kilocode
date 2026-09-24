@@ -13,6 +13,7 @@ export type ChiefBranch = {
   id: string
   name: string
   specialist: string
+  child?: string
   access?: "read" | "edit"
   objective?: string
   report?: string
@@ -263,9 +264,12 @@ export function chiefActivity(plan: ChiefPart, parts: readonly ChiefPart[]): Chi
     const report = reports.get(branch.id)
     const tasks = later.filter((part) => part.tool === "task" && part.state.input?.branch_id === branch.id)
     const task = tasks.at(-1)
+    const launch = tasks.find((part) => started(plan, part, branches, [])?.length)
+    const child = launch ? text(metadata(launch).sessionId) : undefined
     const current = status(report, task, reviews.has(branch.id), branch.access)
     return {
       ...branch,
+      ...(child ? { child } : {}),
       state: current,
       ...((current === "ready" || current === "pending" || current === "reviewed") && report?.report
         ? { report: report.report }

@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 12:50 America/Toronto - open a verified specialist from Chief activity
+
+**Status: source tested; not yet installed or visually reviewed.** Each Chief branch with a saved, exact matching background task launch now offers **Open conversation** in its expanded activity row. The action uses Raya's existing subagent route in Agent Manager or the sidebar; no link is shown for a stale, substituted or incomplete child receipt. This makes the child's real report and message history reachable from the compact parent summary. Focused Chief activity tests pass 11 cases / 67 assertions; extension/webview typechecks, targeted lint and formatting pass. The full named-specialist chat experience remains unverified in a live two-child conversation, narrow/wide layout and restart. Keep `FUT-AGENT-01/02` **In progress**.
+
 ## ChatGPT 2026-09-24 12:33 America/Toronto - isolate damaged Computer Use control state
 
 **Status: source tested; not yet committed or installed.** A malformed or unreadable Computer Use revocation record previously threw during extension activation, preventing unrelated Raya features from starting. A new bootstrap catches that condition and creates an explicitly unavailable lease store: it restores no grant, denies desktop authorization and rejects new grants until the saved record can be read again. The extension reports the problem once while continuing activation. The desktop service now requires the bootstrap lease rather than silently constructing an unguarded store. The focused 19-test suite passes 97 assertions; extension/webview typechecks and targeted lint pass. The continuous Windows capture path remains request-driven GDI; WGC/DXGI are standalone benchmark-only and have no installed-host frame evidence. Keep `FUT-CU-01` **In progress**.

@@ -1619,6 +1619,7 @@ export interface EnhancePromptRequest {
 // Open the standalone changes viewer tab from the sidebar
 export interface OpenChangesRequest {
   type: "openChanges"
+  scope?: "workspace"
   /**
    * When set, opens the viewer scoped to a single turn (identified by the
    * user message ID). The source picker is hidden and polling is disabled

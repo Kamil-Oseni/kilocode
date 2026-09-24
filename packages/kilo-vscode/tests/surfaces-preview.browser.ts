@@ -163,6 +163,16 @@ test("light review cluster", async ({ page }) => {
 })
 
 for (const width of [320, 760]) {
+  test(`workspace-only review has no futile actions at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-review-workspace")
+    await expect(page.getByRole("status")).toHaveText("Workspace changes. Keep and Undo aren't available here.")
+    await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Keep all" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Undo all" })).toHaveCount(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  })
+
   test(`review details load, fail, and retry without exposing bulk actions at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/?state=light-review-loading")

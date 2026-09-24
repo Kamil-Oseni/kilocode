@@ -78,7 +78,15 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [waiting, setWaiting] = createSignal(false)
   let epoch = 0
   let reviewTimer: ReturnType<typeof setTimeout> | undefined
-  const [revision, setRevision] = createSignal<{ session: string; value: string; expected?: Record<string, string> }>()
+  const [revision, setRevision] = createSignal<{
+    session: string
+    value: string
+    source: "session" | "workspace"
+    expected?: Record<string, string>
+    files: number
+    additions: number
+    deletions: number
+  }>()
   let worktreeRef: HTMLDivElement | undefined
 
   // Permissions and questions scoped to this session's family (self + subagents).
@@ -171,9 +179,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const openAgentManager = () => vscode.postMessage({ type: "openAgentManager" })
 
-  const openChanges = () => vscode.postMessage({ type: "openChanges" })
+  const openChanges = () =>
+    vscode.postMessage({
+      type: "openChanges",
+      scope: revision()?.session === id() && revision()?.source === "workspace" ? "workspace" : undefined,
+    })
 
-  const stats = createMemo(() => session.reviewStats()) // raya_change - session snapshots, child tasks, then git
+  const stats = createMemo(() => {
+    const details = revision()
+    if (details?.session === id() && details?.source === "workspace") return details
+    return session.reviewStats() ?? details
+  })
+  const workspace = () => revision()?.session === id() && revision()?.source === "workspace"
 
   const changeKey = () => {
     const sid = id()
@@ -184,7 +201,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const pending = () => {
     const key = changeKey()
     const details = revision()
-    return !!key && ready(id(), details) && kept() !== key && !session.revert()
+    return !!key && !workspace() && ready(id(), details) && kept() !== key && !session.revert()
   }
   const clearReviewTimer = () => {
     if (reviewTimer) clearTimeout(reviewTimer)
@@ -331,12 +348,21 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     refreshReview()
   })
 
+  const origin = (value?: "session" | "workspace") => value ?? "session"
   const offReview = vscode.onMessage((message) => {
     if (message.type === "reviewStatsLoaded" && message.sessionID && message.sessionID === id() && message.revision) {
       clearReviewTimer()
       setWaiting(false)
       editReview.update(message.sessionID, message.expected ?? {}, message.aliases, message.windows, message.accepted)
-      setRevision({ session: message.sessionID, value: message.revision, expected: message.expected })
+      setRevision({
+        session: message.sessionID,
+        value: message.revision,
+        source: origin(message.source),
+        expected: message.expected,
+        files: message.files,
+        additions: message.additions,
+        deletions: message.deletions,
+      })
       if (message.accepted && message.expected) {
         const files = Object.entries(message.expected)
         setKept(
@@ -500,7 +526,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               additions={stats()?.additions ?? 0}
               deletions={stats()?.deletions ?? 0}
               pending={!!pending()}
-              missing={!ready(id(), revision())}
+              missing={!workspace() && !ready(id(), revision())}
+              workspace={!!workspace()}
               loading={waiting() || session.status() !== "idle"}
               discarding={discarding()}
               reviewing={!!reviewing()}

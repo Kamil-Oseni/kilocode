@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 16:33 America/Toronto - workspace review source correction
+
+The Git-only review fallback now carries explicit workspace scope, actual file totals, and a workspace diff destination; it no longer offers Retry or session Keep/Undo without revisions. Focused units (24), extension/webview typechecks, lint, formatting and 320px/760px browser previews pass. A real restored-session click-through and installed snapshot are still pending. Do not treat Git-only counts as session revisions.
+
+## ChatGPT 2026-09-24 16:30 America/Toronto - DXGI crop metadata checkpoint
+
+The native helper can now suppress a full staging-tile copy and PNG when complete DXGI move/dirty rectangles prove the foreground crop unchanged. Any uncertain metadata still copies; cursor changes are handled separately. MSVC `/W4`, 30 self-test repetitions and 25 native/worker/host extension tests pass. This is source evidence only until a snapshot is installed and real frames are measured. The user's `raya-desktop-capture.exe` access violation remains unexplained; recent Windows Application events did not contain a matching record. The next Computer Use action is a live symbolized fault receipt plus foreground/off-window dirty-region benchmark, followed by bounded changed-region transport, rotation and the installed restart/takeover/disconnect matrix. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-24 16:18 America/Toronto - installed capture/review checkpoint
 
 `4bbbbe5596` is pushed and installed as `eden.raya@7.4.23-snapshot+4bbbbe5596.kamil-oseni.1790280987745`. The retained 445-file VSIX SHA-256 is `B4A0942ED3A574F260F1D7F7F2FBEA1B9B211AB725089723E56DE1A92E6DA466`; it contains `raya-desktop-capture.exe` and its PDB. Packaging passed low-memory extension validation and native compile/self-test. The pointer-only change had adversarial review and 46 focused tests / 255 assertions; the review UI passed 16 focused tests / 57 assertions and 320px/760px browser previews after a narrow-width overflow fix. The Computer Use native pipe remains unavailable, so interactive installed-host frame, crash, latency and review-click behavior are unproven. Next capture a real installed native fault receipt if the crash recurs, benchmark cursor-only versus desktop-present frames across monitors, complete dirty/move-region transport and rotation, and run the Stop/takeover/disconnect/restart acceptance matrix. For review actions, verify a restored session with both actionable and Git-only counts; avoid claiming Git-only edits are safe to Keep all or Undo all. `FUT-CU-01` remains In progress.

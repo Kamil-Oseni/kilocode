@@ -9,6 +9,7 @@ export const SessionReviewCluster: Component<{
   deletions: number
   pending: boolean
   missing: boolean
+  workspace: boolean
   loading: boolean
   discarding: boolean
   reviewing: boolean
@@ -43,7 +44,12 @@ export const SessionReviewCluster: Component<{
         </Show>
       </Button>
     </Tooltip>
-    <Show when={props.files > 0 && props.missing}>
+    <Show when={props.files > 0 && props.workspace}>
+      <span class="session-review-status" role="status">
+        Workspace changes. Keep and Undo aren't available here.
+      </span>
+    </Show>
+    <Show when={props.files > 0 && props.missing && !props.workspace}>
       <span class="session-review-status" role="status">
         {props.loading ? "Checking review details" : "Review details unavailable"}
       </span>

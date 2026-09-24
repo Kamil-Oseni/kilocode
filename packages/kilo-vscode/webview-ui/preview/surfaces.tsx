@@ -312,7 +312,9 @@ export const RecoveryPreview: Component = () =>
     </div>
   ))
 
-export const ReviewPreview: Component<{ confirming?: boolean; status?: "loading" | "unavailable" }> = (props) => {
+export const ReviewPreview: Component<{ confirming?: boolean; status?: "loading" | "unavailable" | "workspace" }> = (
+  props,
+) => {
   const [retry, setRetry] = createSignal(false)
   return (
     <div class="session-actions-row">
@@ -321,7 +323,8 @@ export const ReviewPreview: Component<{ confirming?: boolean; status?: "loading"
         additions={128}
         deletions={14}
         pending={!props.status}
-        missing={!!props.status}
+        missing={props.status === "loading" || props.status === "unavailable"}
+        workspace={props.status === "workspace"}
         loading={props.status === "loading" || retry()}
         discarding={!!props.confirming}
         reviewing={false}

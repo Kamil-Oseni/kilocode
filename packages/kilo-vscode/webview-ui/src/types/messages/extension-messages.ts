@@ -1647,6 +1647,7 @@ export interface WorktreeStatsLoadedMessage {
 
 // Sidebar: Session snapshot review stats, including child task sessions
 export interface ReviewStatsLoadedMessage {
+  source?: "session" | "workspace"
   accepted?: Record<string, string>
   aliases?: Record<string, string>
   windows?: boolean

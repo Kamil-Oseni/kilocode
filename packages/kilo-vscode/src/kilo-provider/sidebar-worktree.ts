@@ -4,6 +4,7 @@ import { handleContinueInWorktree } from "./continue-worktree"
 
 interface Msg {
   type: string
+  scope?: "workspace"
   baseBranch?: string
   branchName?: string
   sessionId?: string
@@ -14,7 +15,7 @@ interface Ctx {
   post: (msg: unknown) => void
   openAgentManager: () => Thenable<unknown>
   openAdvancedWorktree: () => Thenable<unknown>
-  openChanges: (sessionId?: string, turnId?: string) => Thenable<unknown>
+  openChanges: (sessionId?: string, turnId?: string, scope?: "workspace") => Thenable<unknown>
   openProfile: () => Thenable<unknown>
   currentSessionId?: string
   createWorktree?: (baseBranch?: string, branchName?: string) => Promise<void>
@@ -56,7 +57,7 @@ export async function handleSidebarWorktreeMessage(message: Msg, ctx: Ctx) {
   }
 
   if (message.type === "openChanges") {
-    await ctx.openChanges(ctx.currentSessionId, message.turnId)
+    await ctx.openChanges(ctx.currentSessionId, message.turnId, message.scope)
     return true
   }
 

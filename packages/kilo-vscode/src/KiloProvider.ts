@@ -80,6 +80,7 @@ import { handleSessionSearch } from "./kilo-provider/session-search"
 import { reconcile as reconcileReconnect } from "./kilo-provider/reconnect-reconcile"
 import { handleFilePicker, handleFolderPicker } from "./kilo-provider/file-picker"
 import { sessionSourceId } from "./diff/sources/session" // raya_change - chat review opens its own snapshot, not unrelated workspace edits
+import { WORKSPACE_SOURCE_ID } from "./diff/sources/worktree"
 import { watchFontSizeConfig } from "./kilo-provider/font-size"
 import { getTerminalContents } from "./services/terminal/context"
 import { disposeGitChangesTarget } from "./kilo-provider/git-changes-target"
@@ -511,6 +512,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private cachedReview: {
     type: "reviewStatsLoaded"
     sessionID: string
+    source: "session" | "workspace"
     files: number
     additions: number
     deletions: number
@@ -1194,12 +1196,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           post: (msg) => this.postMessage(msg),
           openAgentManager: () => vscode.commands.executeCommand("raya.agentManagerOpen"),
           openAdvancedWorktree: () => vscode.commands.executeCommand("raya.agentManager.advancedWorktree"),
-          openChanges: (sessionId?: string, turnId?: string) =>
+          openChanges: (sessionId?: string, turnId?: string, scope?: "workspace") =>
             vscode.commands.executeCommand("raya.showChanges", {
               sessionId,
               turnId,
-              initialSourceId: sessionId && !turnId ? sessionSourceId(sessionId) : undefined,
-              directory: sessionId ? this.sessionGitDirectories.get(sessionId) : undefined,
+              initialSourceId:
+                scope === "workspace"
+                  ? WORKSPACE_SOURCE_ID
+                  : sessionId && !turnId
+                    ? sessionSourceId(sessionId)
+                    : undefined,
+              directory: sessionId
+                ? scope === "workspace"
+                  ? (this.cachedGitDirectory ?? this.getWorkspaceDirectory(sessionId))
+                  : this.sessionGitDirectories.get(sessionId)
+                : undefined,
             }),
           openProfile: () => vscode.commands.executeCommand("raya.profileButtonClicked"),
           currentSessionId: this.currentSession?.id,
@@ -6635,7 +6646,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       additions += item.additions
       deletions += item.deletions
     }
-    // raya_change - session snapshots miss bash-created files; fall back to the working tree
+    // raya_change - session snapshots miss bash-created files; identify the working-tree fallback explicitly
+    let source: "session" | "workspace" = "session"
+    let count = files.size
     if (!files.size) {
       const root = this.cachedGitDirectory ?? this.getWorkspaceDirectory(sid)
       const git = this.statsGitOps ?? new GitOps({ log: () => {} })
@@ -6647,19 +6660,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         : undefined
       if (!this.statsGitOps) git.dispose()
       if (fallback?.files) {
-        files.set("*", { additions: fallback.additions, deletions: fallback.deletions })
+        source = "workspace"
+        count = fallback.files
         additions = fallback.additions
         deletions = fallback.deletions
       }
     }
     if (generation !== this.reviewGeneration) return
     const revision = createHash("sha256").update(JSON.stringify(revisions.sort())).digest("hex")
-    const hash = `${sid}:${revision}:${files.size}:${additions}:${deletions}`
+    const hash = `${sid}:${revision}:${source}:${count}:${additions}:${deletions}`
     this.inEditorReview?.refresh()
     this.lastReviewHash = hash
     const msg = {
       type: "reviewStatsLoaded" as const,
       sessionID: sid,
+      source,
       revision,
       expected: Object.fromEntries(expected),
       accepted: authoritative ? Object.fromEntries(accepted) : undefined,
@@ -6667,7 +6682,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         [...expected.keys()].map((file) => [path.resolve(this.getWorkspaceDirectory(sid), file), file]),
       ),
       windows: process.platform === "win32",
-      files: files.size,
+      files: count,
       additions,
       deletions,
     }

@@ -9,6 +9,62 @@ import { forget, remember } from "../../src/edit-review/attempts"
 import { forget as erase, listed, record } from "../../src/edit-review/undone"
 
 describe("host review acknowledgements", () => {
+  test("Git-only fallback reports its workspace scope and full file count", async () => {
+    const client = { session: { diff: async () => ({ data: [] }) } }
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    provider.postMessage = (message) => messages.push(message)
+    const host = provider as unknown as {
+      statsGitOps: { workingTreeStats: () => Promise<{ files: number; additions: number; deletions: number }> }
+      getWorkspaceDirectory: () => string
+      loadReview: (session: string) => Promise<void>
+    }
+    host.statsGitOps = { workingTreeStats: async () => ({ files: 3, additions: 12, deletions: 4 }) }
+    host.getWorkspaceDirectory = () => process.cwd()
+
+    await host.loadReview("session-a")
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: "reviewStatsLoaded",
+        sessionID: "session-a",
+        source: "workspace",
+        expected: {},
+        files: 3,
+        additions: 12,
+        deletions: 4,
+      }),
+    )
+  })
+
+  test("session revisions remain distinct from workspace counts", async () => {
+    const client = {
+      session: {
+        diff: async () => ({ data: [{ file: "chat.txt", before: "", after: "hello", additions: 1, deletions: 0 }] }),
+      },
+    }
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    provider.postMessage = (message) => messages.push(message)
+    const host = provider as unknown as {
+      statsGitOps: { workingTreeStats: () => Promise<never> }
+      getWorkspaceDirectory: () => string
+      loadReview: (session: string) => Promise<void>
+    }
+    host.statsGitOps = {
+      workingTreeStats: async () => {
+        throw new Error("Git fallback must not run")
+      },
+    }
+    host.getWorkspaceDirectory = () => process.cwd()
+
+    await host.loadReview("session-a")
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({ type: "reviewStatsLoaded", source: "session", files: 1, additions: 1 }),
+    )
+  })
+
   test("review detail refresh is scoped to the current session", () => {
     const provider = new KiloProvider({} as never, {} as never)
     const requested: Array<string | undefined> = []

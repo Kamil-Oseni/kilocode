@@ -25,6 +25,7 @@ static constexpr UINT kEdge = 4'096;
 static constexpr DWORD kImageBytes = 15'000'000;
 static constexpr UINT kPointerEdge = 1'024;
 static constexpr UINT kPointerBytes = 4 * 1'024 * 1'024;
+static constexpr UINT kMetadataBytes = 1'024 * 1'024;
 static constexpr UINT kOutputs = 8;
 static volatile LONG stopped = 0;
 static volatile LONG faulting = 0;
@@ -461,8 +462,58 @@ struct Output {
   ComPtr<ID3D11DeviceContext> context;
   ComPtr<IDXGIOutputDuplication> duplicate;
   ComPtr<ID3D11Texture2D> staging;
+  std::vector<BYTE> metadata;
   bool ready = false;
 };
+
+static bool intersects(RECT rect, const Output& item) {
+  if (rect.left < 0 || rect.top < 0 || rect.right > LONG(item.mode.ModeDesc.Width) ||
+      rect.bottom > LONG(item.mode.ModeDesc.Height) || rect.left >= rect.right || rect.top >= rect.bottom)
+    return true;
+  return int64_t(rect.left) < item.box.right && int64_t(rect.top) < item.box.bottom &&
+         int64_t(rect.right) > item.box.left && int64_t(rect.bottom) > item.box.top;
+}
+
+static bool intersects(const DXGI_OUTDUPL_MOVE_RECT& move, const Output& item) {
+  const RECT dest = move.DestinationRect;
+  if (intersects(dest, item)) return true;
+  const int64_t right = int64_t(move.SourcePoint.x) + dest.right - dest.left;
+  const int64_t bottom = int64_t(move.SourcePoint.y) + dest.bottom - dest.top;
+  if (move.SourcePoint.x < 0 || move.SourcePoint.y < 0 ||
+      right > item.mode.ModeDesc.Width || bottom > item.mode.ModeDesc.Height ||
+      right <= move.SourcePoint.x || bottom <= move.SourcePoint.y)
+    return true;
+  return intersects(RECT{move.SourcePoint.x, move.SourcePoint.y, LONG(right), LONG(bottom)}, item);
+}
+
+// Metadata can prove a cropped tile unchanged, but an incomplete list must never suppress a copy.
+static bool affects(Output& item, const DXGI_OUTDUPL_FRAME_INFO& info) {
+  const UINT size = info.TotalMetadataBufferSize;
+  if (!item.ready || !size || size > kMetadataBytes ||
+      !info.LastPresentTime.QuadPart || !info.AccumulatedFrames)
+    return true;
+  item.metadata.resize(size);
+  UINT used = 0;
+  HRESULT status = item.duplicate->GetFrameMoveRects(size, reinterpret_cast<DXGI_OUTDUPL_MOVE_RECT*>(item.metadata.data()), &used);
+  if (status == DXGI_ERROR_ACCESS_LOST) require(status, "GetFrameMoveRects");
+  if (status != S_OK || used > size || used % sizeof(DXGI_OUTDUPL_MOVE_RECT)) return true;
+  for (UINT offset = 0; offset < used; offset += sizeof(DXGI_OUTDUPL_MOVE_RECT)) {
+    DXGI_OUTDUPL_MOVE_RECT move{};
+    std::memcpy(&move, item.metadata.data() + offset, sizeof(move));
+    if (intersects(move, item)) return true;
+  }
+  UINT dirty = 0;
+  status = item.duplicate->GetFrameDirtyRects(size - used,
+    reinterpret_cast<RECT*>(item.metadata.data() + used), &dirty);
+  if (status == DXGI_ERROR_ACCESS_LOST) require(status, "GetFrameDirtyRects");
+  if (status != S_OK || dirty > size - used || dirty % sizeof(RECT) || used + dirty != size) return true;
+  for (UINT offset = 0; offset < dirty; offset += sizeof(RECT)) {
+    RECT rect{};
+    std::memcpy(&rect, item.metadata.data() + used + offset, sizeof(rect));
+    if (intersects(rect, item)) return true;
+  }
+  return false;
+}
 
 static bool touches(const Pointer& pointer, const Output* owner, RECT target) {
   if (!owner || !pointer.visible) return false;
@@ -616,7 +667,7 @@ static void run(HANDLE pipe) {
       }
       if (pointer.visible && pointer.pixels.empty())
         throw Failure("unsupported_surface", "visible pointer has no captured shape");
-      const bool desktop = presented(info, item->ready);
+      const bool desktop = presented(info, item->ready) && affects(*item, info);
       if (desktop) {
         ComPtr<ID3D11Texture2D> source;
         require(resource.As(&source), "capture texture");
@@ -784,6 +835,41 @@ int wmain(int argc, wchar_t** argv) {
         info.TotalMetadataBufferSize = 0;
         info.AccumulatedFrames = 1;
         if (!presented(info, true)) throw Failure("capture_failed", "accumulated desktop frame was skipped");
+        Output cropout;
+        cropout.mode.ModeDesc.Width = 1920;
+        cropout.mode.ModeDesc.Height = 1080;
+        cropout.box = D3D11_BOX{100, 100, 0, 300, 300, 1};
+        if (intersects(RECT{0, 0, 100, 100}, cropout) ||
+            !intersects(RECT{99, 99, 101, 101}, cropout) ||
+            !intersects(RECT{-1, 0, 10, 10}, cropout) ||
+            !intersects(RECT{10, 10, 10, 20}, cropout) ||
+            !intersects(RECT{1900, 100, 1930, 200}, cropout))
+          throw Failure("capture_failed", "dirty-region crop classification failed");
+        DXGI_OUTDUPL_MOVE_RECT move{};
+        move.SourcePoint = POINT{0, 0};
+        move.DestinationRect = RECT{400, 400, 450, 450};
+        if (intersects(move, cropout)) throw Failure("capture_failed", "off-window move affected crop");
+        move.SourcePoint = POINT{150, 150};
+        if (!intersects(move, cropout)) throw Failure("capture_failed", "move source missed crop");
+        move.SourcePoint = POINT{0, 0};
+        move.DestinationRect = RECT{250, 250, 350, 350};
+        if (!intersects(move, cropout)) throw Failure("capture_failed", "move destination missed crop");
+        move.DestinationRect = RECT{400, 400, 450, 450};
+        move.SourcePoint = POINT{1910, 100};
+        if (!intersects(move, cropout)) throw Failure("capture_failed", "invalid move source was not copied");
+        cropout.ready = true;
+        DXGI_OUTDUPL_FRAME_INFO metadata{};
+        metadata.LastPresentTime.QuadPart = 1;
+        metadata.AccumulatedFrames = 1;
+        if (!affects(cropout, metadata))
+          throw Failure("capture_failed", "missing dirty metadata was not copied");
+        metadata.TotalMetadataBufferSize = kMetadataBytes + 1;
+        if (!affects(cropout, metadata))
+          throw Failure("capture_failed", "oversized dirty metadata was not copied");
+        metadata.TotalMetadataBufferSize = 1;
+        metadata.AccumulatedFrames = 0;
+        if (!affects(cropout, metadata))
+          throw Failure("capture_failed", "contradictory dirty metadata was not copied");
         Output sample;
         sample.desc.DesktopCoordinates = RECT{-1920, 0, 0, 1080};
         Pointer cursor;

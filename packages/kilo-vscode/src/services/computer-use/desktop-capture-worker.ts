@@ -1,0 +1,83 @@
+import { changed, DesktopCadence } from "./desktop-cadence"
+import { CAPTURE, type DesktopFrame } from "./desktop-session"
+
+export type CapturedScene = {
+  frame: DesktopFrame
+  sequence: number
+  capturedAt: number
+}
+
+export class DesktopCaptureWorker {
+  private generation = 0
+  private sequence = 0
+  private scene: CapturedScene | undefined
+  private timer: ReturnType<typeof setTimeout> | undefined
+  private wake: (() => void) | undefined
+  private running = false
+
+  constructor(
+    private readonly capture: () => Promise<DesktopFrame>,
+    private readonly cancel: () => void,
+    private readonly failed: (error: unknown) => void,
+  ) {}
+
+  start(): void {
+    if (this.running) return
+    this.running = true
+    const generation = ++this.generation
+    const cadence = new DesktopCadence(1_000)
+    void this.loop(generation, cadence)
+  }
+
+  stop(): void {
+    if (!this.running && !this.scene) return
+    this.running = false
+    this.generation += 1
+    this.scene = undefined
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = undefined
+    this.wake?.()
+    this.wake = undefined
+    this.cancel()
+  }
+
+  latest(maxAgeMs = 125): CapturedScene | undefined {
+    if (!this.running || !this.scene) return
+    if (performance.now() - this.scene.capturedAt > maxAgeMs) return
+    return this.scene
+  }
+
+  private async loop(generation: number, cadence: DesktopCadence): Promise<void> {
+    while (this.running && generation === this.generation) {
+      const frame = await this.capture().catch((error: unknown) => {
+        if (generation !== this.generation) return
+        this.stop()
+        this.failed(error)
+      })
+      if (!frame || !this.running || generation !== this.generation) return
+      if (
+        !frame.windowID ||
+        !frame.location ||
+        frame.width <= 0 ||
+        frame.height <= 0 ||
+        frame.width > CAPTURE.edge ||
+        frame.height > CAPTURE.edge ||
+        frame.width * frame.height > CAPTURE.pixels ||
+        Buffer.byteLength(frame.data, "ascii") > CAPTURE.data
+      ) {
+        this.stop()
+        this.failed(new Error("Continuous desktop capture exceeded its scene or memory bounds"))
+        return
+      }
+      const previous = this.scene?.frame
+      this.scene = { frame, sequence: ++this.sequence, capturedAt: performance.now() }
+      const delay = cadence.next(changed(previous, frame))
+      await new Promise<void>((resolve) => {
+        this.wake = resolve
+        this.timer = setTimeout(resolve, delay)
+      })
+      this.wake = undefined
+      this.timer = undefined
+    }
+  }
+}

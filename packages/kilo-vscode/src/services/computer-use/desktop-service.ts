@@ -7,20 +7,25 @@ import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } 
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 import { WindowsPauseHotkey } from "./windows-pause-hotkey"
 import { bounded, changed, DesktopCadence, limit, WATCH } from "./desktop-cadence"
+import { DesktopCaptureLifecycle } from "./desktop-capture-lifecycle"
 
 export class DesktopAutomationService implements vscode.Disposable {
+  private readonly driver: WindowsDesktopDriver | undefined
   private readonly session: DesktopSession | undefined
   private readonly panel: DesktopPanel | undefined
   private readonly bridge: DesktopBridge | undefined
   private readonly lease: ComputerUseLeaseStore | undefined
   private readonly indicator: vscode.StatusBarItem | undefined
   private readonly offLease: (() => void) | undefined
+  private readonly offConnection: (() => void) | undefined
+  private readonly capture: DesktopCaptureLifecycle | undefined
   private hotkey: WindowsPauseHotkey | undefined
 
   constructor(connection: KiloConnectionService, context: vscode.ExtensionContext, lease: ComputerUseLeaseStore) {
     if (process.platform !== "win32") return
     this.lease = lease
-    this.session = new DesktopSession(new WindowsDesktopDriver())
+    this.driver = new WindowsDesktopDriver()
+    this.session = new DesktopSession(this.driver)
     this.panel = new DesktopPanel(this.session, this.lease)
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
     this.indicator.name = "Raya desktop control"
@@ -110,6 +115,17 @@ export class DesktopAutomationService implements vscode.Disposable {
       async (request) => this.panel!.authorize(request),
       (request) => this.lease!.authorize(request),
     )
+    this.capture = new DesktopCaptureLifecycle(this.lease, this.session, this.driver, connection, () => {
+      void this.pause("Raya desktop control paused because continuous capture stopped unexpectedly.").catch((error) =>
+        console.error("[Raya] Failed to persist desktop pause after capture loss", error),
+      )
+    })
+    this.offConnection = connection.onStateChange((state) => {
+      if (state === "disconnected" || state === "error")
+        void this.pause("Raya desktop control paused because the backend disconnected.").catch((error) =>
+          console.error("[Raya] Failed to persist desktop pause after disconnect", error),
+        )
+    })
   }
 
   async show(): Promise<void> {
@@ -129,11 +145,13 @@ export class DesktopAutomationService implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.capture?.dispose()
     this.hotkey?.dispose()
     this.bridge?.dispose()
     this.panel?.dispose()
     this.session?.dispose()
     this.offLease?.()
+    this.offConnection?.()
     this.indicator?.dispose()
   }
 }

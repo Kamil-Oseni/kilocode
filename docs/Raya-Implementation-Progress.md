@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 13:14 America/Toronto - cancellable continuous GDI capture source
+
+**Status: source tested; not yet committed, pushed or installed.** A separate persistent Windows capture host now samples the foreground continuously while an active, connected, all-app/all-monitor desktop grant includes observation and Raya has foreground control. The worker retains one bounded visual scene, uses a 50–1000 ms adaptive cadence and clears/cancels on Pause, Stop, manual takeover, backend loss or disposal. A visual-only observation may reuse a frame no older than 125 ms only after a fresh exact foreground HWND/location check; otherwise it takes the existing request capture path. Selected-app grants remain request-driven so the worker cannot capture pixels from an unselected foreground app. Model-facing UIA observations remain fresh and request-driven. Combined focused checks pass 92 tests / 426 assertions, extension/webview typechecks, lint and formatting. This is GDI infrastructure, not WGC/DXGI, changed-region/binary transport, live latency proof or `FUT-CU-01` completion.
+
 ## ChatGPT 2026-09-24 13:01 America/Toronto - unreadable-control recovery snapshot installed
 
 **Status: `e898de204b` pushed and production snapshot installed.** VS Code lists `eden.raya@7.4.23-snapshot+e898de204b.kamil-oseni.1790267882762`; retained rollback VSIX SHA-256 is `A50EF1B5A9A2F29D7FB9F7F5427351946F44327899F8E501C740BA644CD23549`. The low-memory build reused unchanged CLI/SDK inputs, passed extension/webview typechecks and lint, packaged 443 files and installed the VSIX. The corrupt-record fail-closed behavior is proven in source tests, not a live installed-host fault injection. Keep `FUT-CU-01` **In progress**.

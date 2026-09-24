@@ -20,6 +20,47 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("serves a recent continuous visual frame only for the exact foreground target", async () => {
+    const visual = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      data: "background pixels",
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    const primary = harness([
+      JSON.stringify({ windowID: visual.windowID, location: visual.location }),
+      JSON.stringify({ windowID: visual.windowID, location: "pid:5;title:Editor;bounds:1,0,20,10" }),
+      JSON.stringify({ ...visual, location: "pid:5;title:Editor;bounds:1,0,20,10", data: "fresh pixels" }),
+    ])
+    let captures = 0
+    let cancelled = 0
+    const background = {
+      run: async () => {
+        captures++
+        if (captures === 1) return JSON.stringify(visual)
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => {
+        cancelled++
+      },
+    }
+    const driver = new WindowsDesktopDriver(primary.runner, background)
+    const errors: unknown[] = []
+    driver.startCapture((error) => errors.push(error))
+    for (let index = 0; index < 50 && captures < 2; index++) await Bun.sleep(2)
+    expect(captures).toBe(2)
+    expect((await driver.observe({ semantics: false })).data).toBe("background pixels")
+    expect((await driver.observe({ semantics: false })).data).toBe("fresh pixels")
+    expect(primary.scripts.filter((script) => script.includes("CopyFromScreen"))).toHaveLength(1)
+    driver.cancel()
+    expect(cancelled).toBe(1)
+    expect(errors).toHaveLength(0)
+  })
+
   it("parses foreground-window observations and identity", async () => {
     const test = harness([
       JSON.stringify({

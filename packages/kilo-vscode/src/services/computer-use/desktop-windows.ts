@@ -8,6 +8,7 @@ import {
   type DesktopSemantics,
   type DesktopWindow,
 } from "./desktop-session"
+import { DesktopCaptureWorker, type CapturedScene } from "./desktop-capture-worker"
 
 const native = String.raw`
 using System;
@@ -1104,13 +1105,21 @@ function frame(
 export class WindowsDesktopDriver implements DesktopDriver {
   private readonly runner: Runner
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
+  private worker: DesktopCaptureWorker | undefined
 
-  constructor(input?: Runner) {
+  constructor(
+    input?: Runner,
+    private readonly background?: Runner,
+  ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
   }
 
   async observe(options?: { semantics?: boolean }): Promise<DesktopFrame> {
+    if (options?.semantics === false) {
+      const scene = this.worker?.latest()
+      if (scene && (await this.matches(scene))) return scene.frame
+    }
     const started = performance.now()
     const result = object(await this.runner.run(options?.semantics === false ? pixels : observe))
     const next = frame(result, performance.now() - started, this.last)
@@ -1123,6 +1132,49 @@ export class WindowsDesktopDriver implements DesktopDriver {
       data: next.data,
     }
     return next
+  }
+
+  startCapture(failed: (error: unknown) => void): void {
+    if (this.worker) return
+    const source = this.background ?? runner()
+    let prior: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
+    this.worker = new DesktopCaptureWorker(
+      async () => {
+        const started = performance.now()
+        const result = object(await source.run(pixels))
+        const next = frame(result, performance.now() - started, prior)
+        prior = {
+          windowID: next.windowID,
+          location: next.location,
+          width: next.width,
+          height: next.height,
+          mime: next.mime,
+          data: next.data,
+        }
+        return next
+      },
+      () => {
+        prior = undefined
+        source.cancel()
+      },
+      failed,
+    )
+    this.worker.start()
+  }
+
+  stopCapture(): void {
+    this.worker?.stop()
+    this.worker = undefined
+  }
+
+  private async matches(scene: CapturedScene): Promise<boolean> {
+    const current = await this.current()
+    const latest = this.worker?.latest()
+    return (
+      latest?.sequence === scene.sequence &&
+      current.windowID === scene.frame.windowID &&
+      current.location === scene.frame.location
+    )
   }
 
   async windows(): Promise<DesktopWindow[]> {
@@ -1165,6 +1217,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   cancel(): void {
+    this.stopCapture()
     this.last = undefined
     this.runner.cancel()
   }

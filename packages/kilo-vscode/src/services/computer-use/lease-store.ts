@@ -13,7 +13,7 @@ export type SensitiveCategory = Exclude<AuthorizationRequest["sensitive"], boole
 export type SensitiveRule = "allow_session" | "allow_always" | "ask" | "deny"
 export type SensitivePolicy = Record<SensitiveCategory, SensitiveRule>
 
-type Scope = { kind: "all" } | { kind: "selected"; values: string[] }
+type Scope = { kind: "all" } | { kind: "selected"; values: string[]; identity?: string }
 type Lifetime = { kind: "session"; sessionID: string } | { kind: "all_sessions" }
 type Expiry = { kind: "until_stopped" } | { kind: "expires_at"; expiresAt: number }
 
@@ -40,6 +40,7 @@ export type GrantInput = {
   duration: "session" | "hour" | "until_stopped"
   applications: "all" | "current"
   windowID?: string
+  identity?: string
   actions: LeaseAction[]
   sensitive: SensitivePolicy
   cooperativeInput: boolean
@@ -121,15 +122,7 @@ export class ComputerUseLeaseStore {
     check(input)
     const policy = decodePolicy(input.sensitive)
     if (!policy) throw new Error("Choose a policy for every sensitive action category")
-    if (
-      input.applications === "current" &&
-      (typeof input.windowID !== "string" || !input.windowID || input.windowID.length > 200)
-    )
-      throw new Error("The current application is no longer available; choose all visible applications")
-    if (input.applications === "current" && input.duration !== "session")
-      throw new Error(
-        "Selected-application grants are limited to this task until stable application identity is available",
-      )
+    checkSelection(input)
     const unique = [...new Set(input.actions)]
     if (unique.length === 0 || unique.length > 8 || unique.some((action) => !actions.has(action)))
       throw new Error("Choose at least one valid Computer Use action category")
@@ -146,7 +139,10 @@ export class ComputerUseLeaseStore {
         input.duration === "session" ? { kind: "session", sessionID: input.sessionID } : { kind: "all_sessions" },
       expiry:
         input.duration === "hour" ? { kind: "expires_at", expiresAt: now + 60 * 60 * 1000 } : { kind: "until_stopped" },
-      applications: input.applications === "all" ? { kind: "all" } : { kind: "selected", values: [input.windowID!] },
+      applications:
+        input.applications === "all"
+          ? { kind: "all" }
+          : { kind: "selected", values: [input.windowID!], identity: input.identity! },
       monitors: { kind: "all" },
       surfaces: ["browser", "desktop"],
       actions: unique,
@@ -226,10 +222,7 @@ export class ComputerUseLeaseStore {
     const delegation = "delegation" in request ? request.delegation : undefined
     if (this.unavailable) return answer("deny", this.unavailable)
     const lease = this.lease
-    if (!lease)
-      return delegation || this.revoked.has(request.sessionID)
-        ? answer("deny", "Computer Use was stopped for this task")
-        : answer("ask", "No active Computer Use grant")
+    if (!lease) return missing(request.sessionID, !!delegation, this.revoked)
     if (lease.state === "paused") return answer("deny", "Computer Use is paused")
     if (lease.state === "revoked") return answer("deny", "The Computer Use grant was revoked")
     if (expired(lease, this.now())) {
@@ -238,14 +231,19 @@ export class ComputerUseLeaseStore {
     }
     if (delegation && mismatch(lease, request.sessionID, delegation))
       return answer("deny", "Computer Use child delegation no longer matches the active grant")
+    if (invalidAdmission(request))
+      return answer("deny", "Computer Use child admission is only for a parent's ordinary desktop observation grant")
     if (!delegation && lease.lifetime.kind === "session" && lease.lifetime.sessionID !== request.sessionID)
       return answer("ask", "The grant belongs to another task")
     const boundary = scope(lease, request)
-    if (boundary) return boundary
+    if (boundary) return limited(boundary, !!delegation)
     const policy = sensitive(lease, request, delegation?.parentSessionID)
-    if (policy) return delegation && policy.decision === "ask" ? { ...policy, grantID: lease.id } : policy
-    this.sessions.add(request.sessionID)
-    return answer("allow", "Authorized by active Computer Use grant", lease.id)
+    if (policy)
+      return selectedResult(lease, delegation && policy.decision === "ask" ? { ...policy, grantID: lease.id } : policy)
+    const result =
+      selectedAdmission(lease, request) ?? answer("allow", "Authorized by active Computer Use grant", lease.id)
+    if (result.decision === "allow") this.sessions.add(request.sessionID)
+    return selectedResult(lease, result)
   }
 
   review(request: AuthorizationRequest): Authorization {
@@ -266,14 +264,62 @@ export class ComputerUseLeaseStore {
 
 function scope(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
   if (!lease.surfaces.includes(request.surface)) return answer("ask", "This surface is outside the grant")
-  if (
-    lease.applications.kind === "selected" &&
-    (!request.windowID || !lease.applications.values.includes(request.windowID))
-  )
-    return answer("ask", "This application is outside the grant")
+  if (lease.applications.kind === "selected" && request.surface !== "desktop")
+    return answer("deny", "Selected window grants apply only to this desktop window")
+  const admission = "admission" in request && request.admission === "computer_child"
+  const delegation = "delegation" in request ? request.delegation : undefined
+  const window =
+    request.windowID ??
+    delegation?.windowID ??
+    (request.surface === "desktop" && request.action === "observe" && lease.applications.kind === "selected"
+      ? lease.applications.values[0]
+      : undefined)
+  if (lease.applications.kind === "selected" && !admission && (!window || !lease.applications.values.includes(window)))
+    return answer("deny", "This application is outside the selected grant")
   if (lease.level === "observe" && request.action !== "observe")
     return answer("deny", "Observe only cannot control the desktop")
   if (!lease.actions.includes(request.action)) return answer("ask", "This action is outside the grant")
+}
+
+function missing(session: string, delegation: boolean, revoked: Set<string>): Authorization {
+  return delegation || revoked.has(session)
+    ? answer("deny", "Computer Use was stopped for this task")
+    : answer("ask", "No active Computer Use grant")
+}
+
+function limited(result: Authorization, delegation: boolean): Authorization {
+  return delegation && result.decision === "ask" ? { ...result, decision: "deny" } : result
+}
+
+function selectedResult(lease: ComputerUseLease, result: Authorization): Authorization {
+  if (lease.applications.kind !== "selected" || result.decision === "deny") return result
+  if (lease.applications.values.length !== 1 || !lease.applications.identity)
+    return answer("deny", "Selected window has no stable process identity")
+  return { ...result, windowID: lease.applications.values[0], identity: lease.applications.identity }
+}
+
+function invalidAdmission(request: AuthorizationRequest): boolean {
+  if (!("admission" in request) || request.admission !== "computer_child") return false
+  return !!(
+    ("delegation" in request && request.delegation) ||
+    request.surface !== "desktop" ||
+    request.action !== "observe" ||
+    request.sensitive ||
+    request.windowID
+  )
+}
+
+function selectedAdmission(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
+  if (!("admission" in request) || request.admission !== "computer_child" || lease.applications.kind !== "selected")
+    return
+  if (lease.applications.values.length !== 1)
+    return answer("deny", "Computer Use child admission needs one exact selected window")
+  if (!lease.applications.identity) return answer("deny", "Selected window has no stable process identity")
+  return {
+    ...answer("allow", "Authorized by active Computer Use grant", lease.id),
+    windowID: lease.applications.values[0],
+    identity: lease.applications.identity,
+  }
 }
 
 function mismatch(
@@ -285,6 +331,11 @@ function mismatch(
     delegation.childSessionID !== session ||
     delegation.parentSessionID === session ||
     delegation.grantID !== lease.id ||
+    (lease.applications.kind === "selected"
+      ? lease.applications.values.length !== 1 ||
+        delegation.windowID !== lease.applications.values[0] ||
+        delegation.identity !== lease.applications.identity
+      : delegation.windowID !== undefined || delegation.identity !== undefined) ||
     (lease.lifetime.kind === "session" && lease.lifetime.sessionID !== delegation.parentSessionID)
   )
 }
@@ -300,6 +351,23 @@ function check(input: GrantInput): void {
   if (typeof input.cooperativeInput !== "boolean")
     throw new Error("Choose whether Computer Use pauses for manual input")
   if (!Array.isArray(input.actions)) throw new Error("Choose Computer Use action categories")
+}
+
+function checkSelection(input: GrantInput): void {
+  if (input.applications !== "current") return
+  if (
+    typeof input.windowID !== "string" ||
+    !input.windowID ||
+    input.windowID.length > 200 ||
+    typeof input.identity !== "string" ||
+    !input.identity ||
+    input.identity.length > 200
+  )
+    throw new Error("The current application is no longer available; choose all visible applications")
+  if (input.duration !== "session")
+    throw new Error(
+      "Selected-application grants are limited to this task until stable application identity is available",
+    )
 }
 
 function sensitive(lease: ComputerUseLease, request: AuthorizationRequest, parent?: string): Authorization | undefined {
@@ -331,6 +399,7 @@ function decode(value: unknown): ComputerUseLease | undefined {
   const monitors = decodeScope(lease.monitors)
   const sensitive = decodePolicy(lease.sensitive)
   if (!lifetime || !expiry || !applications || !monitors || !sensitive) return
+  if (applications.kind === "selected" && !applications.identity) return
   if (!Array.isArray(lease.surfaces) || lease.surfaces.length < 1 || lease.surfaces.length > 3) return
   if (lease.surfaces.some((surface) => typeof surface !== "string" || !surfaces.has(surface))) return
   if (!Array.isArray(lease.actions) || lease.actions.length < 1 || lease.actions.length > 8) return
@@ -393,5 +462,10 @@ function decodeScope(value: unknown): Scope | undefined {
   if (scope.kind !== "selected" || !Array.isArray(scope.values) || scope.values.length < 1 || scope.values.length > 64)
     return
   if (scope.values.some((item) => typeof item !== "string" || item.length < 1 || item.length > 200)) return
-  return { kind: "selected", values: scope.values as string[] }
+  if (
+    scope.identity !== undefined &&
+    (typeof scope.identity !== "string" || !scope.identity || scope.identity.length > 200)
+  )
+    return
+  return { kind: "selected", values: scope.values as string[], ...(scope.identity ? { identity: scope.identity } : {}) }
 }

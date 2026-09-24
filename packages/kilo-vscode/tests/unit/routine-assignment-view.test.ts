@@ -13,6 +13,16 @@ test("one-worker organization offers its worker chat", () => {
   expect(child.exitCode, child.stdout.toString() + child.stderr.toString()).toBe(0)
 })
 
+test("organization proposal is reviewed before exact route assignment and ignores stale replies", () => {
+  const child = Bun.spawnSync(["bun", "--conditions=browser", "tests/fixtures/routine-assignment-proposal.mjs"], {
+    cwd: root,
+    windowsHide: true,
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  expect(child.exitCode, child.stdout.toString() + child.stderr.toString()).toBe(0)
+})
+
 test("organization assignment dialog has left and bottom inset", async () => {
   const css = await Bun.file(new URL("../../webview-ui/src/styles/routines.css", import.meta.url)).text()
   const start = css.indexOf(".routines-assignment {")

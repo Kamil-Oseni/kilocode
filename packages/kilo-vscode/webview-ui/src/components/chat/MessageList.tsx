@@ -56,7 +56,7 @@ import {
   type MessageTurn,
 } from "../../context/session-queue"
 import { childID } from "../../context/session-utils"
-import { taskSearchText } from "./task-tool-state"
+import { taskAccessLabel, taskSearchText } from "./task-tool-state"
 import { activeQuestionTab, tr } from "./question-dock-utils"
 import { useData } from "@kilocode/kilo-ui/context/data"
 import { getDirectory as getRawDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -487,7 +487,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
     const chunks = [visible.title]
     if (visible.status) chunks.push(visible.status)
     if (visible.description) chunks.push(visible.description)
-    if (visible.access) chunks.push(visible.access === "read" ? "Read only" : "Can edit")
+    if (visible.access) chunks.push(taskAccessLabel(visible.access))
     // Markdown links contribute their visible labels, never hidden URLs.
     if (visible.result) chunks.push(stripMarkdownLinkUrls(visible.result))
     return chunks

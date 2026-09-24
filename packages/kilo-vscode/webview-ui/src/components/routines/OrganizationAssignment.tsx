@@ -8,6 +8,7 @@ import { routineFailure } from "../../utils/routine-recovery"
 
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
 type Agent = { id: string; name: string; enabled: boolean }
+type Proposal = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationProposalResponse
 export type Follow = {
   id: string
   run?: string
@@ -70,6 +71,160 @@ function matches(value: unknown, pending: Sent, item: Organization) {
   )
 }
 
+function prepared(value: unknown, item: Organization, people: { agent: Agent }[]): value is Proposal {
+  if (!value || typeof value !== "object") return false
+  const row = value as Record<string, unknown>
+  if (row.organizationID !== item.id || row.revision !== item.revision) return false
+  if (typeof row.senderID !== "string" || typeof row.recipientID !== "string") return false
+  if (typeof row.objective !== "string" || typeof row.expected !== "string" || typeof row.context !== "string")
+    return false
+  if (!row.objective.trim() || !row.expected.trim()) return false
+  if (row.objective.length > 8000 || row.expected.length > 8000 || row.context.length > 8000) return false
+  if (!item.delegations.some((edge) => edge.senderID === row.senderID && edge.recipientID === row.recipientID))
+    return false
+  return (
+    people.some((person) => person.agent.id === row.senderID && person.agent.enabled) &&
+    people.some((person) => person.agent.id === row.recipientID && person.agent.enabled)
+  )
+}
+
+const Review: Component<{
+  sender: string
+  recipient: string
+  objective: string
+  expected: string
+  context: string
+  limit?: number
+  budget: string
+  cost?: number
+  error: string
+  sent: boolean
+  valid: boolean
+  onBudget: (value: string) => void
+  onRequest: () => void
+  onEdit: () => void
+  onSubmit: () => void
+}> = (props) => (
+  <div class="routines-assignment routines-assignment-review">
+    <p class="routines-assignment-eyebrow">Ready for your review</p>
+    <h3>
+      {props.sender} assigns to {props.recipient}
+    </h3>
+    <div class="routines-assignment-review-content">
+      <div>
+        <span>Work</span>
+        <p>{props.objective}</p>
+      </div>
+      <div>
+        <span>Success looks like</span>
+        <p>{props.expected}</p>
+      </div>
+      <Show when={props.context}>
+        <div>
+          <span>Helpful context</span>
+          <p>{props.context}</p>
+        </div>
+      </Show>
+      <Show when={props.limit !== undefined}>
+        <Show
+          when={props.limit! >= 1}
+          fallback={
+            <p class="routines-hint" role="status">
+              No budget is available for this work. Increase the team's shared limit before assigning it.
+            </p>
+          }
+        >
+          <label class="routines-field">
+            Maximum model cost (USD)
+            <input
+              type="number"
+              min="1"
+              max={props.limit!.toString()}
+              step="1"
+              value={props.budget}
+              onInput={(event) => props.onBudget(event.currentTarget.value)}
+            />
+            <span class="routines-hint">
+              This team has {money(props.limit!)} available. Choose a whole-dollar limit for this work.
+            </span>
+            <Show when={!Number.isSafeInteger(props.cost) || (props.cost ?? Infinity) > props.limit!}>
+              <span class="routines-hint" role="status">
+                Choose a limit within the team's available budget to assign this work.
+              </span>
+            </Show>
+          </label>
+        </Show>
+      </Show>
+    </div>
+    <Show when={props.error}>
+      <p class="routines-error" role="alert">
+        {props.error}
+      </p>
+    </Show>
+    <div class="dialog-confirm-actions">
+      <Button variant="ghost" size="large" disabled={props.sent} onClick={props.onRequest}>
+        Change request
+      </Button>
+      <Button variant="ghost" size="large" disabled={props.sent} onClick={props.onEdit}>
+        Change details
+      </Button>
+      <Button size="large" disabled={!props.valid || props.sent} onClick={props.onSubmit}>
+        {props.sent ? "Assigning" : "Assign work"}
+      </Button>
+    </div>
+  </div>
+)
+
+const Simple: Component<{
+  id: string
+  intent: string
+  planning: boolean
+  error: string
+  onField: (field: HTMLTextAreaElement) => void
+  onInput: (value: string) => void
+  onManual: () => void
+  onPlan: () => void
+}> = (props) => (
+  <form
+    class="routines-assignment routines-assignment-simple"
+    onSubmit={(event) => {
+      event.preventDefault()
+      props.onPlan()
+    }}
+  >
+    <div class="routines-assignment-intro">
+      <h3>What needs to get done?</h3>
+      <p>Say it naturally. Raya will prepare the route and result for you to review before anything starts.</p>
+    </div>
+    <label class="routines-field" for={`${props.id}-intent`}>
+      <span class="sr-only">Describe the work</span>
+      <textarea
+        ref={props.onField}
+        id={`${props.id}-intent`}
+        value={props.intent}
+        maxlength={8000}
+        rows={5}
+        autofocus
+        placeholder="For example: Check that this organization and both workers still exist after restart, then send me a short confirmation."
+        onInput={(event) => props.onInput(event.currentTarget.value)}
+      />
+    </label>
+    <Show when={props.error}>
+      <p class="routines-error" role="alert">
+        {props.error}
+      </p>
+    </Show>
+    <div class="dialog-confirm-actions routines-assignment-simple-actions">
+      <Button type="button" variant="ghost" size="large" onClick={props.onManual}>
+        Choose details myself
+      </Button>
+      <Button type="submit" size="large" disabled={!props.intent.trim() || props.planning}>
+        {props.planning ? "Preparing" : "Review plan"}
+      </Button>
+    </div>
+  </form>
+)
+
 export const OrganizationAssignment: Component<{
   item: Organization
   agents: Agent[]
@@ -104,6 +259,7 @@ export const OrganizationAssignment: Component<{
     }),
   )
   const active = createMemo(() => people().filter((person) => person.agent.enabled))
+  const name = (id: string) => people().find((person) => person.agent.id === id)?.agent.name ?? "Worker"
   const [recipient, setRecipient] = createSignal(targets()[0]?.agent.id ?? "")
   const senders = createMemo(() => {
     if (props.parent)
@@ -123,6 +279,9 @@ export const OrganizationAssignment: Component<{
   const [error, setError] = createSignal("")
   const [intent, setIntent] = createSignal("")
   const [manual, setManual] = createSignal(!!props.parent)
+  const [planning, setPlanning] = createSignal("")
+  const [review, setReview] = createSignal(false)
+  const [reviewed, setReviewed] = createSignal<number>()
   const source = `organization${props.parent ? "-follow" : ""}:${props.item.id}:${crypto.randomUUID()}`
   let intentField: HTMLTextAreaElement | undefined
   let recipientField: HTMLSelectElement | undefined
@@ -146,8 +305,39 @@ export const OrganizationAssignment: Component<{
       (bounded() ? Number.isSafeInteger(cost()) : cost() === undefined || Number.isSafeInteger(cost())) &&
       (ceiling() === undefined || (cost() ?? Number.POSITIVE_INFINITY) <= ceiling()!),
   )
+  const fresh = () => reviewed() === props.item.revision
+  const ready = () => valid() && fresh()
+
+  createEffect(() => {
+    if (!review() || fresh()) return
+    setError("This team changed after the plan was prepared. Review a new plan before assigning work.")
+  })
 
   const receive = (msg: ExtensionMessage) => {
+    if (msg.type === "routineOrganizationProposal") {
+      if (msg.requestID !== planning() || msg.organizationID !== props.item.id) return
+      setPlanning("")
+      const draft = msg.proposal
+      if (msg.error || !draft) {
+        setError(
+          "Raya could not prepare a work plan. Your request is still here; try again or choose the details yourself.",
+        )
+        return
+      }
+      if (!prepared(draft, props.item, people())) {
+        setError("The proposed route is no longer available. Refresh the team or choose the details yourself.")
+        return
+      }
+      setRecipient(draft.recipientID)
+      setSender(draft.senderID)
+      setObjective(draft.objective)
+      setExpected(draft.expected)
+      setContext(draft.context)
+      setError("")
+      setReviewed(draft.revision)
+      setReview(true)
+      return
+    }
     if (msg.type !== "routineDelegated") return
     const pending = sent()
     if (!pending || msg.requestID !== pending.request || msg.agentID !== pending.sender) return
@@ -175,6 +365,7 @@ export const OrganizationAssignment: Component<{
   onCleanup(unsub)
 
   const submit = () => {
+    if (review() && !fresh()) return
     if (!valid() || sent()) return
     const request = crypto.randomUUID()
     const value: Sent = {
@@ -207,6 +398,21 @@ export const OrganizationAssignment: Component<{
       ...(value.context ? { context: value.context } : {}),
       ...(value.deadline === undefined ? {} : { deadline: value.deadline }),
       ...(value.budget === undefined ? {} : { budget: value.budget }),
+    })
+  }
+
+  const plan = () => {
+    const text = intent().trim()
+    if (!text || planning()) return
+    const request = crypto.randomUUID()
+    setPlanning(request)
+    setError("")
+    vscode.postMessage({
+      type: "routineOrganizationProposal",
+      requestID: request,
+      organizationID: props.item.id,
+      revision: props.item.revision,
+      intent: text,
     })
   }
 
@@ -260,53 +466,57 @@ export const OrganizationAssignment: Component<{
         <Show
           when={manual()}
           fallback={
-            <form
-              class="routines-assignment routines-assignment-simple"
-              onSubmit={(event) => {
-                event.preventDefault()
-                const text = intent().trim()
-                if (!text) return
-                dialog.close()
-                queueMicrotask(() => props.onPlan(text))
-              }}
-            >
-              <div class="routines-assignment-intro">
-                <h3>What needs to get done?</h3>
-                <p>
-                  Say it naturally. Raya will choose the best authorized workers and prepare the expected result and
-                  context for you to review.
-                </p>
-              </div>
-              <label class="routines-field" for={`${uid}-intent`}>
-                <span class="sr-only">Describe the work</span>
-                <textarea
-                  ref={intentField}
-                  id={`${uid}-intent`}
-                  value={intent()}
-                  maxlength={8000}
-                  rows={5}
-                  autofocus
-                  placeholder="For example: Check that this organization and both workers still exist after restart, then send me a short confirmation."
-                  onInput={(event) => setIntent(event.currentTarget.value)}
-                />
-              </label>
-              <div class="dialog-confirm-actions routines-assignment-simple-actions">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="large"
-                  onClick={() => {
+            <Show
+              when={review()}
+              fallback={
+                <Simple
+                  id={uid}
+                  intent={intent()}
+                  planning={!!planning()}
+                  error={error()}
+                  onField={(field) => {
+                    intentField = field
+                  }}
+                  onInput={(value) => {
+                    setIntent(value)
+                    setPlanning("")
+                  }}
+                  onManual={() => {
+                    setPlanning("")
+                    setObjective(intent().trim())
                     setManual(true)
                     queueMicrotask(() => recipientField?.focus())
                   }}
-                >
-                  Choose details myself
-                </Button>
-                <Button type="submit" size="large" disabled={!intent().trim()}>
-                  Continue with Raya
-                </Button>
-              </div>
-            </form>
+                  onPlan={plan}
+                />
+              }
+            >
+              <Review
+                sender={name(sender())}
+                recipient={name(recipient())}
+                objective={objective()}
+                expected={expected()}
+                context={context()}
+                limit={ceiling()}
+                budget={budget()}
+                cost={cost()}
+                error={error()}
+                sent={!!sent()}
+                valid={ready()}
+                onBudget={setBudget}
+                onRequest={() => {
+                  setReview(false)
+                  setError("")
+                }}
+                onEdit={() => {
+                  setReview(false)
+                  setError("")
+                  setManual(true)
+                  queueMicrotask(() => recipientField?.focus())
+                }}
+                onSubmit={submit}
+              />
+            </Show>
           }
         >
           <form
@@ -467,6 +677,7 @@ export const OrganizationAssignment: Component<{
                 disabled={!!sent()}
                 onClick={() => {
                   setManual(false)
+                  setReview(false)
                   queueMicrotask(() => intentField?.focus())
                 }}
               >

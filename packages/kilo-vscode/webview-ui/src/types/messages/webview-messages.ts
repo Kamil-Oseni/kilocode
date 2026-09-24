@@ -350,6 +350,13 @@ export interface RoutineOrganizationActivityMessage {
   organizationID: string
   cursor?: string
 }
+export interface RoutineOrganizationProposalMessage {
+  type: "routineOrganizationProposal"
+  requestID: string
+  organizationID: string
+  revision: number
+  intent: string
+}
 
 export interface RoutineOrganizationArchiveMessage {
   type: "routineOrganizationArchive"
@@ -2113,6 +2120,7 @@ export type WebviewMessage =
   | RoutineDelegateCancelMessage
   | RoutineDelegateChainMessage
   | RoutineOrganizationActivityMessage
+  | RoutineOrganizationProposalMessage
   | RoutineOrganizationUpdateMessage
   | RoutineProvisioningUpdateMessage
   | RoutineOrganizationArchiveMessage

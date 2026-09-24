@@ -135,12 +135,17 @@ export class DesktopPanel implements vscode.Disposable {
       return
     }
     try {
+      const windows = message.applications === "current" ? await this.session.windows() : undefined
+      const target = windows?.windows.find((window) => window.windowID === pending.request.windowID)
+      if (message.applications === "current" && !target?.identity)
+        throw new Error("The selected window no longer has a verifiable process identity")
       await this.lease.grant({
         sessionID: pending.request.sessionID,
         level: message.level,
         duration: message.duration,
         applications: message.applications,
         windowID: pending.request.windowID,
+        identity: target?.identity,
         actions: message.actions,
         sensitive: message.sensitive,
         cooperativeInput: message.cooperativeInput,

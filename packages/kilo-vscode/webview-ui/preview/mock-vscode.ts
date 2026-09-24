@@ -426,6 +426,23 @@ const preview = (message: WebviewMessage) => {
   if (message.type === "routineAuthorityServices") return services(message)
   if (accessReview(message)) return true
   if (attachment(message)) return true
+  if (message.type === "routineOrganizationProposal") {
+    emit({
+      type: "routineOrganizationProposal",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      proposal: {
+        organizationID: message.organizationID,
+        revision: message.revision,
+        senderID: "legal",
+        recipientID: "routine",
+        objective: "Prepare a concise website comparison for the owner.",
+        expected: "Compare the three candidates and cite the source for each recommendation.",
+        context: "Use the approved research notes and flag missing facts for review.",
+      },
+    })
+    return true
+  }
   if (message.type === "routineOrganizationActivity") {
     const rows = [...work(message.organizationID), older(message.organizationID)]
     const recordedCost = rows.reduce((total, item) => total + (item.cost ?? 0), 0)

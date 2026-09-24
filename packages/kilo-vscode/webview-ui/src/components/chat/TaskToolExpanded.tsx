@@ -24,6 +24,7 @@ import { openSubagent } from "./open-subagent"
 import {
   agentIcon,
   taskAccess,
+  taskAccessLabel,
   taskAgent,
   taskModel,
   taskResult,
@@ -183,7 +184,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
               {(value) => (
                 <>
                   {status() || brief() ? " · " : ""}
-                  {value() === "read" ? "Read only" : "Can edit"}
+                  {taskAccessLabel(value())}
                 </>
               )}
             </Show>

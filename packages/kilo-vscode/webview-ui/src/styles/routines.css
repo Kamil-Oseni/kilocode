@@ -2913,6 +2913,46 @@ html[data-theme="kilo-vscode"] .routines-assignment-simple-actions {
   justify-content: space-between;
 }
 
+html[data-theme="kilo-vscode"] .routines-assignment-review {
+  padding: var(--raya-space-12);
+  gap: var(--raya-space-12);
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-review h3,
+html[data-theme="kilo-vscode"] .routines-assignment-review p {
+  margin: 0;
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-review h3 {
+  font-size: var(--kilo-font-size-16, 16px);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-eyebrow,
+html[data-theme="kilo-vscode"] .routines-assignment-review-content span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-11);
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-review-content {
+  display: grid;
+  gap: var(--raya-space-12);
+  padding-block: var(--raya-space-12);
+  border-block: var(--raya-hairline, 1px) solid var(--border-weak, var(--vscode-widget-border));
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-review-content > div {
+  display: grid;
+  gap: var(--raya-space-4);
+}
+
+html[data-theme="kilo-vscode"] .routines-assignment-review-content p {
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 html[data-theme="kilo-vscode"] .routines-work-waiting {
   display: flex;
   align-items: center;

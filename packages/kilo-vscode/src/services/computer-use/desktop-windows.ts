@@ -49,6 +49,7 @@ public static class RayaDesktopNative {
 
   public sealed class WindowInfo {
     public string WindowID;
+    public string Identity;
     public string Location;
     public string Title;
     public uint ProcessID;
@@ -166,8 +167,20 @@ public static class RayaDesktopNative {
     GetClassName(handle, kind, kind.Capacity);
     uint process;
     GetWindowThreadProcessId(handle, out process);
+    string identity = null;
+    try {
+      using (var owner = System.Diagnostics.Process.GetProcessById((int)process))
+      using (var hash = System.Security.Cryptography.SHA256.Create()) {
+        var source = String.Format("pid:{0};start:{1};class:{2}", process, owner.StartTime.ToUniversalTime().Ticks, kind.ToString());
+        identity = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(source))).Replace("-", "");
+      }
+    } catch (Exception error) {
+      System.Diagnostics.Debug.WriteLine("Raya window process identity unavailable: " + error.GetType().Name);
+      identity = null;
+    }
     return new WindowInfo {
       WindowID = String.Format("0x{0:X}", handle.ToInt64()),
+      Identity = identity,
       Location = String.Format("pid:{0};class:{1};title:{2}", process, kind.ToString(), title.ToString()),
       Title = title.ToString(),
       ProcessID = process,
@@ -191,10 +204,15 @@ public static class RayaDesktopNative {
     return windows.ToArray();
   }
 
-  public static void Focus(long value, string location, int x, int y, int width, int height, bool minimized, bool foreground) {
+  public static string Identity(long value) {
+    var info = Describe(new IntPtr(value));
+    return info == null ? null : info.Identity;
+  }
+
+  public static void Focus(long value, string location, string identity, int x, int y, int width, int height, bool minimized, bool foreground) {
     var handle = new IntPtr(value);
     var info = Describe(handle);
-    if (info == null || info.Location != location || info.X != x || info.Y != y || info.Width != width || info.Height != height || info.Minimized != minimized || info.Foreground != foreground)
+    if (info == null || info.Location != location || (identity != null && info.Identity != identity) || info.X != x || info.Y != y || info.Width != width || info.Height != height || info.Minimized != minimized || info.Foreground != foreground)
       throw new InvalidOperationException("Desktop window changed before focus");
     ValidateIdleInput();
     uint ignored;
@@ -718,6 +736,7 @@ const windows = `${setup}
 $items = @([RayaDesktopNative]::Windows() | ForEach-Object {
   [pscustomobject]@{
     windowID = $_.WindowID
+    identity = $_.Identity
     location = $_.Location
     title = $_.Title
     processID = [int]$_.ProcessID
@@ -732,6 +751,16 @@ $items = @([RayaDesktopNative]::Windows() | ForEach-Object {
 [pscustomobject]@{ windows = $items } | ConvertTo-Json -Depth 4 -Compress
 `
 
+function identity(windowID: string) {
+  const input = payload({ windowID })
+  return `${setup}
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+if ([string]$target.windowID -notmatch '^0x[0-9A-Fa-f]+$') { throw "Desktop window identity is invalid" }
+$value = [Convert]::ToInt64(([string]$target.windowID).Substring(2), 16)
+[pscustomobject]@{ identity = [RayaDesktopNative]::Identity($value) } | ConvertTo-Json -Compress
+`
+}
+
 function focus(target: DesktopWindow) {
   const input = payload(target)
   return `${setup}
@@ -741,6 +770,7 @@ $value = [Convert]::ToInt64(([string]$target.windowID).Substring(2), 16)
 [RayaDesktopNative]::Focus(
   $value,
   [string]$target.location,
+  $(if ($target.identity) { [string]$target.identity } else { $null }),
   [int]$target.x,
   [int]$target.y,
   [int]$target.width,
@@ -755,12 +785,13 @@ function payload(value: unknown) {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64")
 }
 
-function perform(action: DesktopAction, target: { windowID: string; location?: string }) {
+function perform(action: DesktopAction, target: { windowID: string; location?: string; identity?: string }) {
   const input = payload({ action, target })
   return `${setup}
 $payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
 $window = Get-RayaWindow
 if ($window.WindowID -ne $payload.target.windowID -or $window.Location -ne $payload.target.location) { throw "Foreground window changed before desktop input" }
+if ($payload.target.identity -and [RayaDesktopNative]::Identity($window.Handle) -ne [string]$payload.target.identity) { throw "Selected desktop window process identity changed before input" }
 $action = $payload.action
 
 switch ($action.operation) {
@@ -1364,6 +1395,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const window = value as Record<string, unknown>
       if (
         typeof window.windowID !== "string" ||
+        (window.identity !== null && window.identity !== undefined && typeof window.identity !== "string") ||
         typeof window.location !== "string" ||
         typeof window.title !== "string" ||
         typeof window.processID !== "number" ||
@@ -1386,11 +1418,22 @@ export class WindowsDesktopDriver implements DesktopDriver {
     return { windowID: result.windowID, location: result.location }
   }
 
+  async identity(windowID: string): Promise<string | undefined> {
+    const result = object(await this.runner.run(identity(windowID)))
+    if (result.identity === null || result.identity === undefined) return
+    if (typeof result.identity !== "string" || !/^[A-F0-9]{64}$/.test(result.identity))
+      throw new Error("Windows desktop process identity is invalid")
+    return result.identity
+  }
+
   async focus(target: DesktopWindow): Promise<void> {
     await this.runner.run(focus(target))
   }
 
-  async perform(action: DesktopAction, target: { windowID: string; location?: string }): Promise<void> {
+  async perform(
+    action: DesktopAction,
+    target: { windowID: string; location?: string; identity?: string },
+  ): Promise<void> {
     await this.runner.run(perform(action, target))
   }
 

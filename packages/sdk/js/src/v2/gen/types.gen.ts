@@ -1185,7 +1185,10 @@ export type DesktopRequest =
         parentSessionID: string
         childSessionID: string
         grantID: ComputerUseGrantId
+        windowID?: string
+        identity?: string
       }
+      admission?: "computer_child"
     }
   | {
       id: DesktopRequestId
@@ -1199,6 +1202,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1207,6 +1212,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
     }
@@ -1222,6 +1229,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1230,6 +1239,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
     }
@@ -1245,6 +1256,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1253,6 +1266,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       frameCount: number
@@ -1283,6 +1298,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1291,6 +1308,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
     }
@@ -1319,6 +1338,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1327,6 +1348,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       x: number
@@ -1357,6 +1380,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1365,6 +1390,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       startX: number
@@ -1398,6 +1425,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1406,6 +1435,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       action: "click" | "double_click"
@@ -1438,6 +1469,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1446,6 +1479,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       text: string
@@ -1475,6 +1510,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1483,6 +1520,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       key:
@@ -1540,6 +1579,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
         | {
@@ -1548,6 +1589,8 @@ export type DesktopRequest =
               parentSessionID: string
               childSessionID: string
               grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
             }
           }
       deltaX: number
@@ -1585,6 +1628,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
                 | {
@@ -1593,6 +1638,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
               x: number
@@ -1621,6 +1668,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
                 | {
@@ -1629,6 +1678,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
               startX: number
@@ -1659,6 +1710,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
                 | {
@@ -1667,6 +1720,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
               text: string
@@ -1693,6 +1748,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
                 | {
@@ -1701,6 +1758,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
               key:
@@ -1755,6 +1814,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
                 | {
@@ -1763,6 +1824,8 @@ export type DesktopRequest =
                       parentSessionID: string
                       childSessionID: string
                       grantID: ComputerUseGrantId
+                      windowID?: string
+                      identity?: string
                     }
                   }
               deltaX: number
@@ -6383,6 +6446,8 @@ export type DesktopResult =
       decision: "allow" | "ask" | "deny"
       reason: string
       grantID?: ComputerUseGrantId
+      windowID?: string
+      identity?: string
     }
   | {
       operation: "observe"
@@ -25233,6 +25298,57 @@ export type KilocodeRoutineOrganizationActivityResponses = {
 
 export type KilocodeRoutineOrganizationActivityResponse =
   KilocodeRoutineOrganizationActivityResponses[keyof KilocodeRoutineOrganizationActivityResponses]
+
+export type KilocodeRoutineOrganizationProposalData = {
+  body?: {
+    revision: number
+    intent: string
+  }
+  path: {
+    organizationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/organization/{organizationID}/assignment-proposal"
+}
+
+export type KilocodeRoutineOrganizationProposalErrors = {
+  /**
+   * InvalidRequestError | BadRequest
+   */
+  400: InvalidRequestError | EffectHttpApiErrorBadRequest
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeRoutineOrganizationProposalError =
+  KilocodeRoutineOrganizationProposalErrors[keyof KilocodeRoutineOrganizationProposalErrors]
+
+export type KilocodeRoutineOrganizationProposalResponses = {
+  /**
+   * Review-only organization work proposal
+   */
+  200: {
+    organizationID: string
+    revision: number
+    senderID: string
+    recipientID: string
+    objective: string
+    expected: string
+    context: string
+  }
+}
+
+export type KilocodeRoutineOrganizationProposalResponse =
+  KilocodeRoutineOrganizationProposalResponses[keyof KilocodeRoutineOrganizationProposalResponses]
 
 export type KilocodeRoutineEventData = {
   body?: {

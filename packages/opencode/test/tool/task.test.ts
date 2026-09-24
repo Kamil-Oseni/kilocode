@@ -35,6 +35,8 @@ import { Provider } from "../../src/provider/provider" // kilocode_change
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
 import { KiloTask } from "../../src/kilocode/tool/task" // kilocode_change // raya_change
 import { TaskAuthority } from "../../src/kilocode/tool/task-authority" // kilocode_change - raya_change
+import { Desktop } from "../../src/kilocode/desktop/service" // kilocode_change - selected Computer Use task admission
+import { GrantID } from "../../src/kilocode/computer-use/lease" // kilocode_change - branded selected grant fixture
 import { Permission } from "../../src/permission" // kilocode_change - raya_change
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
@@ -1463,6 +1465,80 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
 }
 
 describe("tool.task", () => {
+  // kilocode_change start - bind one exact selected desktop target to durable child authority
+  it.instance("binds a selected desktop grant and refuses a changed target on resume", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      let window = "window_selected"
+      const calls: Array<{ admission?: string; sessionID: string }> = []
+      const host: Desktop.Interface = {
+        request: (input) =>
+          Effect.sync(() => {
+            if (input.operation !== "authorize") throw new Error("Unexpected desktop operation")
+            calls.push({ admission: input.admission, sessionID: input.sessionID })
+            return {
+              operation: "authorize" as const,
+              decision: "allow" as const,
+              reason: "Active selected grant",
+              grantID: GrantID.make("grant_selected"),
+              windowID: window,
+              identity: "process_test",
+            }
+          }),
+        list: () => Effect.succeed([]),
+        cancelSession: () => Effect.void,
+        reply: () => Effect.void,
+        reject: () => Effect.void,
+      }
+      const tool = yield* TaskTool.pipe(Effect.provideService(Desktop.Service, host))
+      const def = yield* tool.init()
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps() },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const created = yield* def.execute(
+        {
+          description: "Inspect selected desktop",
+          prompt: "Inspect the selected application",
+          subagent_type: "explore",
+          access: "computer",
+        },
+        ctx,
+      )
+      const child = yield* sessions.get(created.metadata.sessionId)
+      expect(TaskAuthority.proof(child.metadata, child.id, chat.id)).toMatchObject({
+        grantID: "grant_selected",
+        windowID: "window_selected",
+        identity: "process_test",
+      })
+      expect(calls).toEqual([{ admission: "computer_child", sessionID: chat.id }])
+      window = "window_other"
+      const resumed = yield* Effect.exit(
+        def.execute(
+          {
+            description: "Continue selected desktop",
+            prompt: "Inspect the selected application",
+            subagent_type: "explore",
+            task_id: child.id,
+          },
+          ctx,
+        ),
+      )
+      expect(Exit.isFailure(resumed)).toBe(true)
+      expect(TaskAuthority.proof((yield* sessions.get(child.id)).metadata, child.id, chat.id)?.windowID).toBe(
+        "window_selected",
+      )
+    }),
+  )
+  // kilocode_change end
+
   // kilocode_change start - raya_change: delegated audits retain a durable authority ceiling
   it.instance(
     "keeps a read-only child below a fully capable specialist after resume",

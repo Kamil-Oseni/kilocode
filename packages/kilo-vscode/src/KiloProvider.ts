@@ -1885,9 +1885,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         })
         return true
       }
-      if (message.type === "routineOrganizationActivity") {
+      if (message.type === "routineOrganizationActivity" || message.type === "routineOrganizationProposal") {
         this.postMessage({
-          type: "routineOrganizationActivity",
+          type: message.type,
           requestID: message.requestID,
           organizationID: message.organizationID,
           error: "Could not connect to organization work. Reconnect and try again.",

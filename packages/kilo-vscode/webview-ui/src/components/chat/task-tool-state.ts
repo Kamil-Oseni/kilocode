@@ -79,13 +79,19 @@ type TaskMetadata = {
 }
 
 /** Show a scope only when the backend mirrored a valid saved authority record. */
-export function taskAccess(part?: unknown, state?: unknown): "read" | "edit" | undefined {
+export function taskAccess(part?: unknown, state?: unknown): "read" | "edit" | "computer" | undefined {
   const key = "raya.task.authority"
   const first = record(part) ? part : undefined
   const source = first && Object.hasOwn(first, key) ? first : record(state) ? state : undefined
   const value = source?.[key]
   if (!record(value) || value.version !== 1) return
-  if (value.access === "read" || value.access === "edit") return value.access
+  if (value.access === "read" || value.access === "edit" || value.access === "computer") return value.access
+}
+
+export function taskAccessLabel(access: NonNullable<ReturnType<typeof taskAccess>>): string {
+  if (access === "read") return "Read only"
+  if (access === "computer") return "Desktop tools"
+  return "Can edit"
 }
 
 /** Match the visible task trigger and result when indexing conversation search. */

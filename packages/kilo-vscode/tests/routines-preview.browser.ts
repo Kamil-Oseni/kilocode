@@ -238,6 +238,27 @@ for (const theme of ["light", "dark"]) {
 }
 
 for (const width of [320, 900]) {
+  test(`organization proposal review fits at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-routines&target=organization")
+    await page.getByRole("button", { name: "Assign work" }).click()
+    const dialog = page.getByRole("dialog", { name: "Give Website Builders work" })
+    await dialog.getByLabel("Describe the work").fill("Prepare a website comparison for me")
+    await dialog.getByRole("button", { name: "Review plan" }).click()
+    await expect(dialog.getByText("Counsel assigns to Books")).toBeVisible()
+    await expect(
+      dialog.getByText("Compare the three candidates and cite the source for each recommendation."),
+    ).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "Assign work" })).toBeDisabled()
+    await expect(
+      dialog.getByText("Choose a limit within the team's available budget to assign this work."),
+    ).toBeVisible()
+    await dialog.getByLabel("Maximum model cost (USD)").fill("10")
+    await expect(dialog.getByRole("button", { name: "Assign work" })).toBeEnabled()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await dialog.screenshot({ path: info.outputPath(`assignment-review-${width}.png`) })
+  })
+
   test(`forced colors routines at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 })
     await page.emulateMedia({ forcedColors: "active" })

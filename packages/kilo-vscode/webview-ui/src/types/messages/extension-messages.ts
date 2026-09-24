@@ -20,6 +20,7 @@ import type {
 import type { AgentManagerSidebarTarget } from "./webview-messages"
 import type { PermissionRequest } from "./permissions"
 import type { AnacondaDesktopExtensionMessage } from "../../../../src/shared/anaconda-desktop-messages"
+import type { ChiefNotesAvailable, ChiefNotesResult } from "../../../../src/shared/chief-notes-messages"
 
 export interface BackgroundJobsLoadedMessage {
   type: "backgroundJobsLoaded"
@@ -477,6 +478,13 @@ export interface RoutineOrganizationActivityResultMessage {
   next?: string
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
+}
+export interface RoutineOrganizationProposalResultMessage {
+  type: "routineOrganizationProposal"
+  requestID: string
+  organizationID: string
+  proposal?: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationProposalResponse
+  error?: string
 }
 
 export interface RoutineOrganizationArchivedMessage {
@@ -1981,8 +1989,8 @@ export interface FocusTimerResultMessage {
 }
 
 export type ExtensionMessage =
-  | import("../../../../src/shared/chief-notes-messages").ChiefNotesResult
-  | import("../../../../src/shared/chief-notes-messages").ChiefNotesAvailable
+  | ChiefNotesResult
+  | ChiefNotesAvailable
   | { type: "speechLiveStarted"; requestId: string }
   | AdminResultMessage
   | PersonalTodoResultMessage
@@ -2040,6 +2048,7 @@ export type ExtensionMessage =
   | RoutineDelegateStoppedMessage
   | RoutineDelegateChainResultMessage
   | RoutineOrganizationActivityResultMessage
+  | RoutineOrganizationProposalResultMessage
   | RoutineOrganizationUpdatedMessage
   | RoutineProvisioningUpdatedMessage
   | RoutineOrganizationArchivedMessage

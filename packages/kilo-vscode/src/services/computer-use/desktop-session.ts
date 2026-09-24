@@ -54,6 +54,7 @@ export type DesktopFrame = {
 
 export type DesktopWindow = {
   windowID: string
+  identity?: string
   location: string
   title: string
   processID: number
@@ -104,8 +105,9 @@ export interface DesktopDriver {
   observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame>
   windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
+  identity?(windowID: string): Promise<string | undefined>
   focus(target: DesktopWindow): Promise<void>
-  perform(action: DesktopAction, target: { windowID: string; location?: string }): Promise<void>
+  perform(action: DesktopAction, target: { windowID: string; location?: string; identity?: string }): Promise<void>
   cancel?(): void
 }
 
@@ -186,7 +188,15 @@ export class DesktopSession {
     return { windows, observation }
   }
 
-  focus(windowID: string, observationID: string, onDispatch?: () => void): Promise<void> {
+  async verify(windowID: string, identity: string): Promise<void> {
+    const actual = this.driver.identity
+      ? await this.driver.identity(windowID)
+      : (await this.driver.windows()).find((window) => window.windowID === windowID)?.identity
+    if (actual === identity) return
+    throw new Error("The selected desktop window was replaced; no control was sent")
+  }
+
+  focus(windowID: string, observationID: string, onDispatch?: () => void, identity?: string): Promise<void> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before switching windows"))
     const run = async () => {
@@ -194,6 +204,8 @@ export class DesktopSession {
       this.validateWindows(windows)
       const target = windows.find((window) => window.windowID === windowID)
       if (!target) throw new Error("The selected desktop window is no longer available; list windows again")
+      if (identity && target.identity !== identity)
+        throw new Error("The selected desktop window was replaced; no focus was sent")
       this.observations.consume(observationID, this.catalog(windows), this.revision)
       const revision = this.revision
       if (this.state.control === "manual" || revision !== this.revision)
@@ -222,7 +234,7 @@ export class DesktopSession {
     return result
   }
 
-  execute(action: DesktopAction, onDispatch?: () => void): Promise<void> {
+  execute(action: DesktopAction, onDispatch?: () => void, identity?: string): Promise<void> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending another action"))
     const run = async () => {
@@ -254,7 +266,7 @@ export class DesktopSession {
       this.update({ control: "agent", busy: true })
       try {
         onDispatch?.()
-        await this.driver.perform(action, current).catch((error: unknown) => {
+        await this.driver.perform(action, { ...current, ...(identity ? { identity } : {}) }).catch((error: unknown) => {
           const detail = error instanceof Error ? error.message : String(error)
           throw new DesktopOutcomeError(action.operation, detail)
         })
@@ -273,7 +285,7 @@ export class DesktopSession {
 
   sequence(
     input: Omit<DesktopSequenceInput, "scene"> & { observationID: string },
-    authorize?: (action: DesktopPlannedAction) => void | Promise<void>,
+    authorize?: (action: DesktopPlannedAction) => string | void | Promise<string | void>,
     onDispatch?: () => void,
   ): Promise<DesktopSequenceResult> {
     if (this.state.control === "manual")
@@ -300,7 +312,7 @@ export class DesktopSession {
                 throw new Error("Desktop sequence scene changed before dispatch; no action was sent")
               const reason = mismatch(action, before.semantics)
               if (reason) throw new Error(reason)
-              await authorize?.(planned)
+              const identity = await authorize?.(planned)
               const token = this.observations.begin(before.observation.id, before.observation.target, revision)
               this.frames.delete(before.observation.id)
               this.semantics.delete(before.observation.id)
@@ -310,11 +322,13 @@ export class DesktopSession {
                 throw new Error("Desktop sequence cancelled for manual takeover; no action was dispatched")
               }
               onDispatch?.()
-              await this.driver.perform(action, current).catch((error: unknown) => {
-                this.observations.cancel(token)
-                const detail = error instanceof Error ? error.message : String(error)
-                throw new DesktopOutcomeError(action.operation, detail)
-              })
+              await this.driver
+                .perform(action, { ...current, ...(identity ? { identity } : {}) })
+                .catch((error: unknown) => {
+                  this.observations.cancel(token)
+                  const detail = error instanceof Error ? error.message : String(error)
+                  throw new DesktopOutcomeError(action.operation, detail)
+                })
               effects += 1
               // A cached pre-action frame cannot prove a local postcondition.
               const frame = await this.capture(true).catch((error: unknown) => {
@@ -413,6 +427,8 @@ export class DesktopSession {
     for (const window of windows) {
       if (!window.windowID || !window.location || !window.title || ids.has(window.windowID))
         throw new Error("Desktop window list contains an invalid or duplicate identity")
+      if (window.identity !== undefined && (!window.identity || window.identity.length > 200))
+        throw new Error("Desktop window process identity is invalid")
       if (
         !Number.isInteger(window.processID) ||
         window.processID < 0 ||

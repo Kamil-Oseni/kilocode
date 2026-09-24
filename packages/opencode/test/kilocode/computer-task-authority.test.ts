@@ -35,8 +35,27 @@ describe("Computer Use child authority", () => {
       parentSessionID: "session_parent",
       childSessionID: "session_child",
       grantID: "grant_one",
+      windowID: "window_selected",
+      identity: "process_test",
     })
-    expect(TaskAuthority.proof(metadata, "session_child", "session_parent")).toMatchObject({ grantID: "grant_one" })
+    expect(TaskAuthority.proof(metadata, "session_child", "session_parent")).toMatchObject({
+      grantID: "grant_one",
+      windowID: "window_selected",
+      identity: "process_test",
+    })
+    expect(() =>
+      TaskAuthority.proof(
+        {
+          ...metadata,
+          [TaskAuthority.computerKey]: {
+            ...(metadata[TaskAuthority.computerKey] as object),
+            windowID: "",
+          },
+        },
+        "session_child",
+        "session_parent",
+      ),
+    ).toThrow()
     expect(() => TaskAuthority.proof(metadata, "session_other", "session_parent")).toThrow()
     expect(() => TaskAuthority.proof(metadata, "session_child", "session_other")).toThrow()
     expect(() => TaskAuthority.proof(TaskAuthority.save({}, "computer"), "session_child", "session_parent")).toThrow()

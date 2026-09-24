@@ -34,6 +34,7 @@ import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace ch
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
+import { propose, validate } from "@/kilocode/task/assignment-proposal"
 import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { MCP } from "@/mcp"
 import { RayaTaskInbox, type Draft as InboxDraft, type Upload as InboxUpload } from "@/kilocode/task/inbox"
@@ -79,6 +80,7 @@ import {
   TaskAuthorityPayload,
   TaskUpdatePayload,
   TaskEventPayload,
+  AssignmentProposalPayload,
   DesignSystemSetPayload, // raya_change - owner design-system lock
   SelfHealCreatePayload, // raya_change
   SelfHealUpdatePayload, // raya_change
@@ -730,6 +732,28 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           ),
         )
     })
+    const organizationProposal = Effect.fn("KilocodeHttpApi.organizationProposal")(function* (ctx: {
+      params: { organizationID: string }
+      payload: typeof AssignmentProposalPayload.Type
+    }) {
+      const item = yield* organizations
+        .get(ctx.params.organizationID)
+        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      if (item.archived || item.revision !== ctx.payload.revision) return yield* new HttpApiError.Conflict({})
+      const workers = yield* runner.tasks.list()
+      const members = workers.filter((worker) => item.members.some((member) => member.agentID === worker.id))
+      const draft = yield* Effect.tryPromise({
+        try: () => propose(item, members, ctx.payload.intent),
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      const current = yield* organizations
+        .get(item.id)
+        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      if (current.archived || current.revision !== item.revision) return yield* new HttpApiError.Conflict({})
+      const latest = yield* runner.tasks.list()
+      if (!validate(draft, current, latest)) return yield* new HttpApiError.Conflict({})
+      return { organizationID: item.id, revision: item.revision, ...draft }
+    })
     const organizationUpdate = Effect.fn("KilocodeHttpApi.organizationUpdate")(function* (ctx: {
       params: { organizationID: string }
       payload: OrganizationUpdate
@@ -1130,6 +1154,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("organizationCreate", organizationCreate)
         .handle("organizationGet", organizationGet)
         .handle("organizationActivity", organizationActivity)
+        .handle("organizationProposal", organizationProposal)
         .handle("organizationUpdate", organizationUpdate)
         .handle("organizationArchive", organizationArchive)
         .handle("agentEvent", agentEvent)

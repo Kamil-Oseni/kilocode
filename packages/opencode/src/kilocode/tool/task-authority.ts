@@ -7,7 +7,14 @@ export namespace TaskAuthority {
   export const computerKey = "raya.task.computer"
   export type Access = "read" | "edit" | "computer"
   type Saved = { version: 1; access: Access }
-  type Computer = { version: 1; parentSessionID: string; childSessionID: string; grantID: string }
+  type Computer = {
+    version: 1
+    parentSessionID: string
+    childSessionID: string
+    grantID: string
+    windowID?: string
+    identity?: string
+  }
 
   const safe = ["read", "grep", "glob", "list", "semantic_search", "todoread", "chief_message"]
   const computer = [
@@ -61,13 +68,20 @@ export namespace TaskAuthority {
       record.childSessionID !== sessionID ||
       record.parentSessionID !== parentID ||
       typeof record.grantID !== "string" ||
-      !record.grantID
+      !record.grantID ||
+      (record.windowID !== undefined &&
+        (typeof record.windowID !== "string" || !record.windowID || record.windowID.length > 200)) ||
+      (record.windowID !== undefined) !== (record.identity !== undefined) ||
+      (record.identity !== undefined &&
+        (typeof record.identity !== "string" || !record.identity || record.identity.length > 200))
     )
       throw new Error("Computer task delegation does not match this child")
     return {
       parentSessionID: record.parentSessionID,
       childSessionID: record.childSessionID,
       grantID: record.grantID,
+      ...(record.windowID ? { windowID: record.windowID } : {}),
+      ...(record.identity ? { identity: record.identity } : {}),
     }
   }
 

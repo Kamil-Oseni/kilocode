@@ -162,6 +162,7 @@ const replies: Record<string, string> = {
   routineDelegateCancel: "routineDelegateStopped",
   routineDelegateChain: "routineDelegateChain",
   routineOrganizationActivity: "routineOrganizationActivity",
+  routineOrganizationProposal: "routineOrganizationProposal",
   routineOrganizationUpdate: "routineOrganizationUpdated",
   routineOrganizationArchive: "routineOrganizationArchived",
   routineProvisioningUpdate: "routineProvisioningUpdated",
@@ -285,6 +286,7 @@ const messages = new Set([
   "routineDelegateCancel",
   "routineDelegateChain",
   "routineOrganizationActivity",
+  "routineOrganizationProposal",
   "routineOrganizationUpdate",
   "routineOrganizationArchive",
   "routineProvisioningUpdate",
@@ -732,6 +734,33 @@ async function revise(ctx: Ctx) {
     organization: result.data,
   })
   await ctx.refresh?.()
+}
+
+async function proposal(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || typeof msg.organizationID !== "string" || !/^org_[a-f0-9]{32}$/.test(msg.organizationID))
+    throw new Error("Reload the organization before preparing work.")
+  if (!Number.isSafeInteger(msg.revision) || Number(msg.revision) < 1)
+    throw new Error("Reload the organization before preparing work.")
+  if (typeof msg.intent !== "string" || !msg.intent.trim() || msg.intent.length > 8000)
+    throw new Error("Describe what needs to get done in 8000 characters or fewer.")
+  const result = await ctx.kilo.organization.proposal(
+    {
+      directory: ctx.dir,
+      organizationID: msg.organizationID,
+      revision: Number(msg.revision),
+      intent: msg.intent.trim(),
+    },
+    { throwOnError: true },
+  )
+  if (!result.data || result.data.organizationID !== msg.organizationID || result.data.revision !== msg.revision)
+    throw new Error("The work proposal could not be verified. Refresh the organization and try again.")
+  ctx.post({
+    type: "routineOrganizationProposal",
+    requestID: msg.requestID,
+    organizationID: msg.organizationID,
+    proposal: result.data,
+  })
 }
 
 async function activity(ctx: Ctx) {
@@ -1246,6 +1275,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineDelegateCancel: halt,
   routineDelegateChain: trace,
   routineOrganizationActivity: activity,
+  routineOrganizationProposal: proposal,
   routineOrganizationUpdate: revise,
   routineOrganizationArchive: retire,
   routineProvisioningUpdate: provision,

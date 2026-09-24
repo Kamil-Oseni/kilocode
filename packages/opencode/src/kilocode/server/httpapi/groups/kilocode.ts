@@ -200,6 +200,19 @@ export const DesktopReplyPayload = Schema.Struct({ result: DesktopResult })
 export const DesktopRejectPayload = Schema.Struct({ error: DesktopFailure })
 export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
 export const CanvasRejectPayload = Schema.Struct({ error: CanvasFailure }) // raya_change - Milestone E
+export const AssignmentProposalPayload = Schema.Struct({
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  intent: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000)),
+})
+export const AssignmentProposal = Schema.Struct({
+  organizationID: Organization.fields.id,
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  senderID: Schema.String,
+  recipientID: Schema.String,
+  objective: Schema.String,
+  expected: Schema.String,
+  context: Schema.String,
+})
 
 export const KilocodePaths = {
   heapSnapshot: `${root}/heap/snapshot`,
@@ -260,6 +273,7 @@ export const KilocodePaths = {
   organizations: `${root}/organization`,
   organizationItem: `${root}/organization/:organizationID`,
   organizationActivity: `${root}/organization/:organizationID/activity`,
+  organizationProposal: `${root}/organization/:organizationID/assignment-proposal`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
   agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
   agentDelegateChain: `${root}/agent/:agentID/delegate/:id/chain`,
@@ -963,6 +977,20 @@ export const KilocodeApi = HttpApi.make("kilocode")
             summary: "List tracked work in a routine organization",
             description:
               "Page durable worker-to-worker requests for one organization with sender, recipient, state, response, lineage references, and authoritative organization-wide spend totals.",
+          }),
+        ),
+        HttpApiEndpoint.post("organizationProposal", KilocodePaths.organizationProposal, {
+          params: { organizationID: Organization.fields.id },
+          query: WorkspaceRoutingQuery,
+          payload: AssignmentProposalPayload,
+          success: described(AssignmentProposal, "Review-only organization work proposal"),
+          error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict, HttpApiError.BadRequest],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.proposal",
+            summary: "Prepare an organization work proposal",
+            description:
+              "Use the configured model to draft work within the saved authorized organization routes. This does not assign work.",
           }),
         ),
         HttpApiEndpoint.patch("organizationUpdate", KilocodePaths.organizationItem, {

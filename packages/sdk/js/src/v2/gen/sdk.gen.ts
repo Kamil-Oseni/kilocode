@@ -314,6 +314,8 @@ import type {
   KilocodeRoutineOrganizationGetResponses,
   KilocodeRoutineOrganizationListErrors,
   KilocodeRoutineOrganizationListResponses,
+  KilocodeRoutineOrganizationProposalErrors,
+  KilocodeRoutineOrganizationProposalResponses,
   KilocodeRoutineOrganizationUpdateErrors,
   KilocodeRoutineOrganizationUpdateResponses,
   KilocodeRoutineRecoveryCloseErrors,
@@ -9452,6 +9454,51 @@ export class Organization2 extends HeyApiClient {
       url: "/kilocode/organization/{organizationID}/activity",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Prepare an organization work proposal
+   *
+   * Use the configured model to draft work within the saved authorized organization routes. This does not assign work.
+   */
+  public proposal<ThrowOnError extends boolean = false>(
+    parameters: {
+      organizationID: string
+      directory?: string
+      workspace?: string
+      revision?: number
+      intent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "organizationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "intent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineOrganizationProposalResponses,
+      KilocodeRoutineOrganizationProposalErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization/{organizationID}/assignment-proposal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

@@ -47,6 +47,56 @@ function memory(seed?: unknown) {
 }
 
 describe("Computer Use lease store", () => {
+  it("admits an all-app child without inventing a selected window", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const lease = await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "all",
+      actions: ["observe", "pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    expect(store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" }))).toEqual({
+      operation: "authorize",
+      decision: "allow",
+      reason: "Authorized by active Computer Use grant",
+      grantID: lease.id,
+    })
+    const delegation = { parentSessionID: "session_test", childSessionID: "session_child", grantID: lease.id }
+    expect(
+      store.authorize(auth({ sessionID: "session_child", action: "observe", windowID: undefined, delegation })),
+    ).toMatchObject({ decision: "allow", grantID: lease.id })
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation: { ...delegation, windowID: "window_test" } }))
+        .decision,
+    ).toBe("deny")
+  })
+
+  it("refuses ambiguous selected-window admission", async () => {
+    const storage = memory()
+    const first = new ComputerUseLeaseStore(storage, () => 100)
+    await first.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "until_stopped",
+      applications: "all",
+      actions: ["observe"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    const saved = storage.read() as NonNullable<ReturnType<ComputerUseLeaseStore["current"]>>
+    await storage.update("raya.computerUse.lease.v1", {
+      ...saved,
+      applications: { kind: "selected", values: ["window_one", "window_two"], identity: "process_test" },
+    })
+    const store = new ComputerUseLeaseStore(storage, () => 100)
+    expect(
+      store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" })),
+    ).toMatchObject({ decision: "deny", reason: "Computer Use child admission needs one exact selected window" })
+  })
+
   it("binds a child to the exact parent session and active grant", async () => {
     const store = new ComputerUseLeaseStore(memory(), () => 100)
     const lease = await store.grant({
@@ -59,6 +109,9 @@ describe("Computer Use lease store", () => {
       cooperativeInput: false,
     })
     const delegation = { parentSessionID: "session_test", childSessionID: "session_child", grantID: lease.id }
+    expect(
+      store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" })),
+    ).toMatchObject({ decision: "ask" })
     expect(
       store.authorize(auth({ sessionID: "session_child", delegation, sensitive: "communications" })),
     ).toMatchObject({ decision: "allow", grantID: lease.id })
@@ -249,6 +302,7 @@ describe("Computer Use lease store", () => {
       duration: "session",
       applications: "current",
       windowID: "window_test",
+      identity: "process_test",
       actions: ["pointer"],
       sensitive: policy(),
       cooperativeInput: false,
@@ -277,6 +331,7 @@ describe("Computer Use lease store", () => {
       duration: "session",
       applications: "current",
       windowID: "window_test",
+      identity: "process_test",
       actions: ["observe", "pointer"],
       sensitive: policy(),
       cooperativeInput: false,
@@ -288,9 +343,40 @@ describe("Computer Use lease store", () => {
       decision: "allow",
       reason: "Authorized by active Computer Use grant",
       grantID: lease.id,
+      windowID: "window_test",
+      identity: "process_test",
     })
     expect(store.authorize(auth({ sessionID: "session_other" }))).toMatchObject({ decision: "ask" })
-    expect(store.authorize(auth({ windowID: "window_other" }))).toMatchObject({ decision: "ask" })
+    expect(store.authorize(auth({ windowID: "window_other" }))).toMatchObject({ decision: "deny" })
+    const admission = store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" }))
+    expect(admission).toMatchObject({ decision: "allow", grantID: lease.id, windowID: "window_test" })
+    const delegation = {
+      parentSessionID: "session_test",
+      childSessionID: "session_child",
+      grantID: lease.id,
+      windowID: "window_test",
+      identity: "process_test",
+    }
+    expect(
+      store.authorize(auth({ sessionID: "session_child", action: "observe", windowID: undefined, delegation })),
+    ).toMatchObject({ decision: "allow", grantID: lease.id })
+    expect(store.authorize(auth({ sessionID: "session_child", delegation, windowID: "window_other" })).decision).toBe(
+      "deny",
+    )
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation: { ...delegation, windowID: "window_other" } }))
+        .decision,
+    ).toBe("deny")
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation: { ...delegation, windowID: undefined } }))
+        .decision,
+    ).toBe("deny")
+    expect(store.authorize(auth({ sessionID: "session_child", action: "observe", windowID: undefined })).decision).toBe(
+      "ask",
+    )
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation, admission: "computer_child" })).decision,
+    ).toBe("deny")
     expect(
       store.authorize({
         id: "browser_authorize_test",
@@ -300,7 +386,19 @@ describe("Computer Use lease store", () => {
         action: "browser",
         sensitive: false,
       }),
-    ).toMatchObject({ decision: "ask" })
+    ).toMatchObject({ decision: "deny" })
+    expect(
+      store.authorize({
+        id: "browser_observe_test",
+        sessionID: "session_test",
+        operation: "authorize",
+        surface: "browser",
+        action: "observe",
+        sensitive: false,
+      }),
+    ).toMatchObject({ decision: "deny" })
+    await store.pause()
+    expect(store.authorize(auth({ sessionID: "session_child", delegation })).decision).toBe("deny")
   })
 
   it("persists all-session authority and restores it without widening scope", async () => {
@@ -386,6 +484,7 @@ describe("Computer Use lease store", () => {
         duration: "until_stopped",
         applications: "current",
         windowID: "window_test",
+        identity: "process_test",
         actions: ["pointer"],
         sensitive: policy(),
         cooperativeInput: false,

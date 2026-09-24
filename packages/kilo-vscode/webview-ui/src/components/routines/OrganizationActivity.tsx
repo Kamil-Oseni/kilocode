@@ -147,6 +147,10 @@ function money(value: number) {
   }).format(value)
 }
 
+function loading(budget: number | undefined, total: Summary | undefined) {
+  return budget !== undefined && !total
+}
+
 export const OrganizationActivity: Component<{
   id: string
   item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
@@ -434,8 +438,8 @@ export const OrganizationActivity: Component<{
           </Show>
         </div>
         <div class="routines-organization-work-actions">
-          <Button size="small" onClick={() => assign()}>
-            Assign work
+          <Button size="small" disabled={loading(props.item.budget, summary())} onClick={() => assign()}>
+            {loading(props.item.budget, summary()) ? "Loading work" : "Assign work"}
           </Button>
         </div>
       </div>

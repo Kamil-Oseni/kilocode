@@ -227,13 +227,21 @@ export const TaskTool = Tool.define(
                 surface: "desktop",
                 action: "observe",
                 sensitive: false,
+                admission: "computer_child",
               })
               if (result.operation !== "authorize" || result.decision !== "allow" || !result.grantID)
                 throw new Error("Computer Use child needs an active parent desktop grant")
+              if (!!result.windowID !== !!result.identity)
+                throw new Error("Selected Computer Use grant lacks an exact window identity")
               const prior = resumed ? TaskAuthority.proof(resumed.metadata, resumed.id, ctx.sessionID) : undefined
-              if (prior && prior.grantID !== result.grantID)
+              if (
+                prior &&
+                (prior.grantID !== result.grantID ||
+                  prior.windowID !== result.windowID ||
+                  prior.identity !== result.identity)
+              )
                 throw new Error("Computer Use grant changed; the existing child cannot be rebound")
-              return result.grantID
+              return { grantID: result.grantID, windowID: result.windowID, identity: result.identity }
             })
           : undefined
       // kilocode_change end
@@ -570,7 +578,9 @@ export const TaskTool = Tool.define(
         ? TaskAuthority.bind(base, {
             parentSessionID: ctx.sessionID,
             childSessionID: nextSession.id,
-            grantID: computer,
+            grantID: computer.grantID,
+            ...(computer.windowID ? { windowID: computer.windowID } : {}),
+            ...(computer.identity ? { identity: computer.identity } : {}),
           })
         : base
       yield* sessions

@@ -8,6 +8,7 @@ import {
 import {
   agentIcon,
   taskAccess,
+  taskAccessLabel,
   taskAgent,
   taskModel,
   taskResult,
@@ -98,8 +99,12 @@ describe("completed task hydration", () => {
     const title = (agent: string) => `${agent} Agent`
     const read = { "raya.task.authority": { version: 1, access: "read" } }
     const edit = { "raya.task.authority": { version: 1, access: "edit" } }
+    const computer = { "raya.task.authority": { version: 1, access: "computer" } }
     expect(taskAccess(read)).toBe("read")
     expect(taskAccess(edit)).toBe("edit")
+    expect(taskAccess(computer)).toBe("computer")
+    expect(taskAccessLabel(taskAccess(computer)!)).toBe("Desktop tools")
+    expect(taskSearchText({ status: "completed", part: computer, title }).access).toBe("computer")
     expect(taskSearchText({ status: "completed", part: read, title }).access).toBe("read")
     expect(taskAccess(undefined, edit)).toBe("edit")
     expect(taskAccess()).toBeUndefined()

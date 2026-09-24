@@ -34,6 +34,11 @@ function setup(
       request: Extract<DesktopRequest, { operation: "authorize" }>,
     ) => ReturnType<ComputerUseLeaseStore["authorize"]>
     pixels?: string[]
+    frameWindow?: string
+    frameWindows?: string[]
+    currentWindow?: string
+    listed?: string[]
+    listedIdentity?: string | (() => string)
   } = {},
 ) {
   const replies: unknown[] = []
@@ -46,7 +51,7 @@ function setup(
   let captured = 0
   const driver: DesktopDriver = {
     observe: async () => ({
-      windowID: "window_1",
+      windowID: input.frameWindows?.[captured] ?? input.frameWindow ?? "window_1",
       location: "process|title|bounds",
       width: 20,
       height: 10,
@@ -74,9 +79,13 @@ function setup(
       },
       timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 3, totalMs: 20 },
     }),
-    windows: async () => [
-      {
-        windowID: "window_2",
+    windows: async () =>
+      (input.listed ?? ["window_2"]).map((windowID) => ({
+        windowID,
+        identity:
+          typeof input.listedIdentity === "function"
+            ? input.listedIdentity()
+            : (input.listedIdentity ?? "process_test"),
         location: "pid:7;class:Browser;title:Browser",
         title: "Browser",
         processID: 7,
@@ -86,9 +95,8 @@ function setup(
         height: 700,
         minimized: false,
         foreground: false,
-      },
-    ],
-    current: async () => ({ windowID: "window_1", location: "process|title|bounds" }),
+      })),
+    current: async () => ({ windowID: input.currentWindow ?? "window_1", location: "process|title|bounds" }),
     focus: async (target) => {
       focused.push(target.windowID)
     },
@@ -187,6 +195,260 @@ function memory(seed?: unknown) {
 }
 
 describe("desktop observation bridge", () => {
+  async function selected() {
+    const store = new ComputerUseLeaseStore(
+      { get: <T>() => undefined as T | undefined, update: async () => {} },
+      () => 100,
+    )
+    const sensitive = Object.fromEntries(
+      [
+        "communications",
+        "financial",
+        "credentials",
+        "software",
+        "system",
+        "deletion",
+        "disclosure",
+        "legal",
+        "publishing",
+      ].map((category) => [category, "ask"]),
+    ) as SensitivePolicy
+    const lease = await store.grant({
+      sessionID: "ses_parent",
+      level: "autonomous",
+      duration: "session",
+      applications: "current",
+      windowID: "window_2",
+      identity: "process_test",
+      actions: ["observe", "pointer", "window"],
+      sensitive,
+      cooperativeInput: false,
+    })
+    return { store, lease }
+  }
+
+  it("refuses a reused parent window handle before frame delivery and input", async () => {
+    const grant = await selected()
+    let identity = "process_test"
+    const test = setup({
+      frameWindow: "window_2",
+      currentWindow: "window_2",
+      listed: ["window_2"],
+      listedIdentity: () => identity,
+      validate: (request) => grant.store.authorize(request),
+    })
+    const observe: DesktopRequest = {
+      ...request,
+      id: "parent_selected_observe",
+      sessionID: "ses_parent",
+      authorization: { kind: "grant", grantID: grant.lease.id },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const first = test.replies[0] as { result: { observation: { id: string } } }
+    identity = "replacement_process"
+    const replaced: DesktopRequest = { ...observe, id: "parent_selected_reused_handle" }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: replaced } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.replies).toHaveLength(1)
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: replaced.id }))
+    const click: DesktopRequest = {
+      id: "parent_selected_reused_click",
+      sessionID: "ses_parent",
+      operation: "click",
+      windowID: "window_2",
+      observationID: first.result.observation.id,
+      sensitive: false,
+      authorization: { kind: "grant", grantID: grant.lease.id },
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.5,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: click.id }))
+    test.bridge.dispose()
+  })
+
+  it("withholds a selected-app frame when the actual foreground target changes", async () => {
+    const grant = await selected()
+    const test = setup({ frameWindow: "window_1", validate: (request) => grant.store.authorize(request) })
+    const delegation = {
+      parentSessionID: "ses_parent",
+      childSessionID: "ses_child",
+      grantID: grant.lease.id,
+      windowID: "window_2",
+      identity: "process_test",
+    }
+    const observe: DesktopRequest = {
+      ...request,
+      id: "selected_wrong_frame",
+      sessionID: "ses_child",
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.replies).toEqual([])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: observe.id,
+        error: expect.objectContaining({ message: expect.stringContaining("selected desktop window changed") }),
+      }),
+    )
+    expect(test.checks).toContainEqual(expect.objectContaining({ windowID: "window_2", delegation }))
+    test.bridge.dispose()
+  })
+
+  it("reveals only the selected window and refuses another target before native dispatch", async () => {
+    const grant = await selected()
+    const test = setup({
+      frameWindow: "window_2",
+      listed: ["window_1", "window_2"],
+      validate: (request) => grant.store.authorize(request),
+    })
+    const delegation = {
+      parentSessionID: "ses_parent",
+      childSessionID: "ses_child",
+      grantID: grant.lease.id,
+      windowID: "window_2",
+      identity: "process_test",
+    }
+    const windows: DesktopRequest = {
+      id: "selected_windows",
+      sessionID: "ses_child",
+      operation: "windows",
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: windows } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const listed = test.replies[0] as { result: { windows: { windowID: string }[]; observation: { id: string } } }
+    expect(listed.result.windows.map((item) => item.windowID)).toEqual(["window_2"])
+    const focus: DesktopRequest = {
+      id: "selected_wrong_focus",
+      sessionID: "ses_child",
+      operation: "focus",
+      windowID: "window_1",
+      observationID: listed.result.observation.id,
+      sensitive: false,
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: focus } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.focused).toEqual([])
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: focus.id }))
+    const observe: DesktopRequest = {
+      ...request,
+      id: "selected_observe",
+      sessionID: "ses_child",
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[1] as { result: { observation: { id: string } } }
+    const click: DesktopRequest = {
+      id: "selected_wrong_click",
+      sessionID: "ses_child",
+      operation: "click",
+      windowID: "window_1",
+      observationID: observed.result.observation.id,
+      sensitive: false,
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: click.id }))
+    const prompt: DesktopRequest = {
+      ...click,
+      id: "selected_wrong_prompt",
+      authorization: { kind: "prompt", delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: prompt } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: prompt.id }))
+    test.bridge.dispose()
+  })
+
+  it("withholds a changed-window sequence frame after input and records an unknown outcome", async () => {
+    const grant = await selected()
+    const test = setup({
+      frameWindows: ["window_2", "window_1"],
+      currentWindow: "window_2",
+      pixels: ["selected", "other-window"],
+      validate: (request) => grant.store.authorize(request),
+    })
+    const delegation = {
+      parentSessionID: "ses_parent",
+      childSessionID: "ses_child",
+      grantID: grant.lease.id,
+      windowID: "window_2",
+      identity: "process_test",
+    }
+    const observe: DesktopRequest = {
+      ...request,
+      id: "selected_sequence_observe",
+      sessionID: "ses_child",
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string } } }
+    const sequence: DesktopRequest = {
+      id: "selected_sequence_changed",
+      sessionID: "ses_child",
+      operation: "sequence",
+      windowID: "window_2",
+      observationID: observed.result.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: {
+            operation: "pointer",
+            action: "click",
+            windowID: "window_2",
+            sensitive: false,
+            authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+            x: 0.5,
+            y: 0.5,
+            button: "left",
+          },
+          preconditions: [],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: sequence } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toHaveLength(1)
+    expect(test.replies).toHaveLength(1)
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: sequence.id,
+        error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
   it("revalidates the exact child delegation on observation and native input", async () => {
     const test = setup({ dispatchDecision: "allow" })
     const delegation = { parentSessionID: "ses_parent", childSessionID: "ses_child", grantID: "grant_test" }
@@ -217,6 +479,7 @@ describe("desktop observation bridge", () => {
       listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
     await Bun.sleep(20)
     expect(test.checks).toMatchObject([
+      { sessionID: "ses_child", delegation },
       { sessionID: "ses_child", delegation },
       { sessionID: "ses_child", delegation },
       { sessionID: "ses_child", delegation },
@@ -1172,6 +1435,61 @@ describe("desktop observation bridge", () => {
         receipt: { effect: "interact", outcome: "confirmed" },
       },
     })
+    test.bridge.dispose()
+  })
+
+  it("records an unknown receipt when the grant is revoked after a sequence effect", async () => {
+    let checks = 0
+    const store = memory()
+    const test = setup({
+      store,
+      rejectFail: true,
+      pixels: ["start", "effect"],
+      dispatch: () => (++checks === 3 ? "deny" : "allow"),
+    })
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string } } }
+    const input: DesktopRequest = {
+      id: "desktop_sequence_revoked_after_effect",
+      sessionID: "ses_desktop",
+      operation: "sequence",
+      windowID: "window_1",
+      observationID: observed.result.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: {
+            operation: "key",
+            windowID: "window_1",
+            sensitive: false,
+            authorization: { kind: "grant", grantID: "grant_test" },
+            key: "Tab",
+            modifiers: [],
+          },
+          preconditions: [],
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: input } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.actions).toHaveLength(1)
+    expect(test.rejects[0]).toMatchObject({
+      requestID: input.id,
+      error: { receipt: { effect: "interact", outcome: "unknown", observationID: input.observationID } },
+    })
+    expect(store.read()).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({ id: input.id, failure: expect.objectContaining({ receipt: expect.anything() }) }),
+        ],
+      }),
+    )
     test.bridge.dispose()
   })
 

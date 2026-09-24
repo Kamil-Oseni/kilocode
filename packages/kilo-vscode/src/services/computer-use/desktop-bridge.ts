@@ -279,15 +279,25 @@ export class DesktopBridge {
         Promise.resolve({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" })
       )
     if (request.operation === "sequence") return this.interact(request, startedAt, onDispatch)
-    enforce(this.validate?.(authorization(request)), request.authorization)
-    if (request.operation === "windows") return this.windows(request, startedAt)
+    const decision = this.validate?.(authorization(request))
+    enforce(decision, request.authorization)
+    if (request.operation === "windows") return this.windows(request, startedAt, decision)
     if (request.operation === "observe" || request.operation === "watch")
-      return this.observe(request, startedAt, signal)
+      return this.observe(request, startedAt, signal, decision)
     return this.interact(request, startedAt, onDispatch)
   }
 
-  private async observe(request: CaptureRequest, startedAt: number, signal: AbortSignal): Promise<DesktopResult> {
+  private async observe(
+    request: CaptureRequest,
+    startedAt: number,
+    signal: AbortSignal,
+    decision?: AuthorizeResult,
+  ): Promise<DesktopResult> {
     const frames = await this.capture(request, signal)
+    const window = decision?.windowID ?? request.authorization?.delegation?.windowID
+    if (window && frames.some((frame) => frame.observation.target.windowID !== window))
+      throw new Error("The selected desktop window changed during observation")
+    if (window) await this.verify(window, decision?.identity ?? request.authorization?.delegation?.identity)
     if (request.operation === "watch") {
       const last = frames.at(-1)
       if (frames.length !== request.frameCount || !last)
@@ -331,21 +341,31 @@ export class DesktopBridge {
     }
   }
 
-  private async windows(request: WindowsRequest, startedAt: number): Promise<DesktopResult> {
+  private async windows(
+    request: WindowsRequest,
+    startedAt: number,
+    decision?: AuthorizeResult,
+  ): Promise<DesktopResult> {
     const result = await this.session.windows()
+    const window = decision?.windowID ?? request.authorization?.delegation?.windowID
+    const identity = decision?.identity ?? request.authorization?.delegation?.identity
+    if (window && !result.windows.some((item) => item.windowID === window && item.identity === identity))
+      throw new Error("The selected desktop window is no longer available")
     return {
       operation: "windows",
-      windows: result.windows.map((window) => ({
-        windowID: window.windowID,
-        title: window.title,
-        processID: window.processID,
-        x: window.x,
-        y: window.y,
-        width: window.width,
-        height: window.height,
-        minimized: window.minimized,
-        foreground: window.foreground,
-      })),
+      windows: result.windows
+        .filter((item) => !window || item.windowID === window)
+        .map((window) => ({
+          windowID: window.windowID,
+          title: window.title,
+          processID: window.processID,
+          x: window.x,
+          y: window.y,
+          width: window.width,
+          height: window.height,
+          minimized: window.minimized,
+          foreground: window.foreground,
+        })),
       observation: result.observation,
       receipt: {
         version: 1,
@@ -361,6 +381,7 @@ export class DesktopBridge {
   }
 
   private async interact(request: ActionRequest, startedAt: number, onDispatch: () => void): Promise<DesktopResult> {
+    if (request.operation === "sequence") return this.sequence(request, startedAt, onDispatch)
     const receipt = {
       version: 1 as const,
       requestID: request.id,
@@ -371,48 +392,12 @@ export class DesktopBridge {
       target: { surface: "desktop" as const, windowID: request.windowID },
       observationID: request.observationID,
     }
-    if (request.operation === "sequence") {
-      const proofs = new Map<object, Authorization>(
-        request.steps.map((step) => [step.action, step.action.authorization]),
-      )
-      const result = await this.session.sequence(
-        {
-          observationID: request.observationID,
-          maxDurationMs: request.maxDurationMs,
-          steps: request.steps,
-        },
-        (action) => {
-          const proof = proofs.get(action)
-          if (!proof) throw new Error("Desktop sequence authorization evidence is incomplete")
-          const decision = this.validate?.(sequenceAuthorization(request, action, proof))
-          enforce(decision, proof)
-        },
-        onDispatch,
-      )
-      const frame = result.scene
-      return {
-        operation: "sequence",
-        status: result.status,
-        completed: result.completed,
-        ...(result.reason ? { reason: result.reason } : {}),
-        width: frame.width,
-        height: frame.height,
-        mime: frame.mime,
-        data: frame.data,
-        timing: frame.timing,
-        ...(frame.semantics ? { semantics: frame.semantics } : {}),
-        observation: frame.observation,
-        evidence: result.evidence,
-        receipt: {
-          ...receipt,
-          finishedAt: Date.now(),
-          target: frame.observation.target,
-          observationID: frame.observation.id,
-        },
-      }
-    }
+    const decision = this.validate?.(authorization(request))
+    enforce(decision, request.authorization)
+    const identity = decision?.identity ?? request.authorization?.delegation?.identity
+    await this.verify(request.windowID, identity)
     if (request.operation === "focus") {
-      await this.session.focus(request.windowID, request.observationID, onDispatch)
+      await this.session.focus(request.windowID, request.observationID, onDispatch, identity)
       return { operation: "focus", receipt: { ...receipt, effect: "manage", finishedAt: Date.now() } }
     }
     if (request.operation === "move") {
@@ -427,6 +412,7 @@ export class DesktopBridge {
           y: request.y,
         },
         onDispatch,
+        identity,
       )
       return { operation: "move", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -444,6 +430,7 @@ export class DesktopBridge {
           button: request.button,
         },
         onDispatch,
+        identity,
       )
       return { operation: "drag", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -460,6 +447,7 @@ export class DesktopBridge {
           button: request.button,
         },
         onDispatch,
+        identity,
       )
       return { operation: "click", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -473,6 +461,7 @@ export class DesktopBridge {
           text: request.text,
         },
         onDispatch,
+        identity,
       )
       return { operation: "type", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -487,6 +476,7 @@ export class DesktopBridge {
           modifiers: request.modifiers,
         },
         onDispatch,
+        identity,
       )
       return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -500,8 +490,82 @@ export class DesktopBridge {
         deltaY: request.deltaY,
       },
       onDispatch,
+      identity,
     )
     return { operation: "scroll", receipt: { ...receipt, finishedAt: Date.now() } }
+  }
+
+  private async sequence(
+    request: Extract<DesktopRequest, { operation: "sequence" }>,
+    startedAt: number,
+    onDispatch: () => void,
+  ): Promise<DesktopResult> {
+    const proofs = new Map<object, Authorization>(request.steps.map((step) => [step.action, step.action.authorization]))
+    const result = await this.session.sequence(
+      {
+        observationID: request.observationID,
+        maxDurationMs: request.maxDurationMs,
+        steps: request.steps,
+      },
+      async (action) => {
+        const proof = proofs.get(action)
+        if (!proof) throw new Error("Desktop sequence authorization evidence is incomplete")
+        const decision = this.validate?.(sequenceAuthorization(request, action, proof))
+        enforce(decision, proof)
+        const identity = decision?.identity ?? proof.delegation?.identity
+        await this.verify(action.windowID, identity)
+        return identity
+      },
+      onDispatch,
+    )
+    const frame = result.scene
+    const proof = request.steps[0]?.action.authorization
+    const decision = (() => {
+      if (!proof) return undefined
+      try {
+        const value = this.validate?.(sequenceAuthorization(request, request.steps[0]!.action, proof))
+        enforce(value, proof)
+        return value
+      } catch (error) {
+        throw new DesktopOutcomeError("sequence postcondition", error instanceof Error ? error.message : String(error))
+      }
+    })()
+    const window = decision?.windowID ?? proof?.delegation?.windowID
+    if (window && frame.observation.target.windowID !== window)
+      throw new DesktopOutcomeError("sequence postcondition", "The selected desktop window changed")
+    if (window)
+      await this.verify(window, decision?.identity ?? proof?.delegation?.identity).catch((error: unknown) => {
+        throw new DesktopOutcomeError("sequence postcondition", error instanceof Error ? error.message : String(error))
+      })
+    return {
+      operation: "sequence",
+      status: result.status,
+      completed: result.completed,
+      ...(result.reason ? { reason: result.reason } : {}),
+      width: frame.width,
+      height: frame.height,
+      mime: frame.mime,
+      data: frame.data,
+      timing: frame.timing,
+      ...(frame.semantics ? { semantics: frame.semantics } : {}),
+      observation: frame.observation,
+      evidence: result.evidence,
+      receipt: {
+        version: 1,
+        requestID: request.id,
+        startedAt,
+        finishedAt: Date.now(),
+        effect: "interact",
+        outcome: "confirmed",
+        target: frame.observation.target,
+        observationID: frame.observation.id,
+      },
+    }
+  }
+
+  private async verify(windowID: string, identity?: string): Promise<void> {
+    if (!identity) return
+    await this.session.verify(windowID, identity)
   }
 
   private async deliver(requestID: string, directory: string, receipt: Receipt): Promise<void> {
@@ -599,7 +663,11 @@ function authorization(
     operation: "authorize",
     surface: "desktop",
     action,
-    ...("windowID" in request ? { windowID: request.windowID } : {}),
+    ...("windowID" in request
+      ? { windowID: request.windowID }
+      : request.authorization?.delegation?.windowID
+        ? { windowID: request.authorization.delegation.windowID }
+        : {}),
     sensitive: "sensitive" in request ? request.sensitive : false,
     ...(request.authorization?.delegation ? { delegation: request.authorization.delegation } : {}),
   }

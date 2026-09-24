@@ -3,12 +3,14 @@ import { RayaChief } from "@/kilocode/chief"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { SessionID } from "@/session/schema"
+import type { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 
 /** Resolve a planned child from durable authority, never from the task caller's substitutions. */
 export namespace ChiefTaskBinding {
   export function load(input: {
     storage?: Storage.Interface
+    sessions?: Pick<Session.Interface, "get" | "messages">
     branches?: ReturnType<typeof ChiefBranches.make>
     sessionID: SessionID
     agent: string
@@ -29,10 +31,11 @@ export namespace ChiefTaskBinding {
     }
   }) {
     return Effect.gen(function* () {
-      // Request-bound branch execution is not wired yet. A durable marker blocks every
-      // fallback task path, including an unbound child after a partial plan write.
-      if (input.storage && (yield* ChiefRequestPlan.active(input.storage, input.sessionID)))
-        throw new Error("Request-bound Chief plan dispatch is unavailable until exact branch admission is supported")
+      const marker = input.storage ? yield* ChiefRequestPlan.active(input.storage, input.sessionID) : undefined
+      if (marker && !input.sessions) throw new Error("Chief request plan requires saved request verification")
+      const request = marker
+        ? yield* ChiefRequestPlan.make(input.storage!, input.sessions!).load(input.sessionID)
+        : undefined
       const record = input.branches ? yield* input.branches.read(input.sessionID) : undefined
       const goal =
         record && input.storage
@@ -50,14 +53,16 @@ export namespace ChiefTaskBinding {
               )
           : undefined
       const plan = record && ChiefBranches.matches(record, goal) ? record : undefined
-      if (input.params.branch_id && !plan) throw new Error("No active Auto Chief branch plan matches this task")
-      if (plan && input.agent !== "auto") throw new Error("Only Auto Chief can run its planned branches")
-      if (plan && RayaChief.phase(input.metadata) !== "task")
+      if (plan && request) throw new Error("Conflicting goal and request Chief plans")
+      if (input.params.branch_id && !plan && !request)
+        throw new Error("No active Auto Chief branch plan matches this task")
+      if ((plan || request) && input.agent !== "auto") throw new Error("Only Auto Chief can run its planned branches")
+      if ((plan || request) && RayaChief.phase(input.metadata) !== "task")
         throw new Error("Auto Chief branches can run only during the task phase")
-      if (plan && (!input.params.branch_id || !input.callID))
+      if ((plan || request) && (!input.params.branch_id || !input.callID))
         throw new Error("A planned Auto Chief task needs its exact branch ID and call ID")
-      const branch = plan?.branches.find((item) => item.id === input.params.branch_id)
-      if (plan && !branch) throw new Error("Unknown Auto Chief branch")
+      const branch = (request ?? plan)?.branches.find((item) => item.id === input.params.branch_id)
+      if ((plan || request) && !branch) throw new Error("Unknown Auto Chief branch")
       if (branch && branch.state !== "planned") throw new Error("Auto Chief branch has already been admitted")
       if (branch && (input.params.task_id || (input.params.access && input.params.access !== branch.access)))
         throw new Error("Auto Chief branch identity or authority cannot be changed")
@@ -81,7 +86,7 @@ export namespace ChiefTaskBinding {
             JSON.stringify(input.params.brief.constraints) !== JSON.stringify(branch.brief.constraints)))
       )
         throw new Error("Auto Chief branch brief cannot be changed")
-      return { plan, branch }
+      return { plan, request, branch }
     })
   }
 }

@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 05:28 America/Toronto - dormant request-bound branch admission
+
+A saved version-three request plan can now admit only its exact read-only branch through Task, using the saved specialist, brief and child permission ceiling. Reservation occurs before child creation; the saved call, child session and child input message bind admission and settlement. A repeat, changed request, substituted authority or specialist, partial plan marker, concurrent goal plan, or uncertain result cannot launch another child. A proven dead owner can move an admitted branch to unknown without replay. This path is dormant: no ordinary-chat `chief_plan` exposure, branch review, synthesis or completed request lifecycle exists yet. Focused request/v2-goal tests pass 5 cases / 46 assertions and CLI typecheck passes. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 04:49 America/Toronto - installed saved child-access snapshot
 
 `6228a441fb` is pushed and installed as `eden.raya@7.4.23-snapshot+6228a441fb.kamil-oseni.1790239462400`; VS Code lists it. The low-memory snapshot regenerated the SDK without tracked changes, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed extension/webview typechecks and lint, bundled production assets, packaged and installed the VSIX. Retained rollback VSIX SHA-256: `2B9696E5686B4B28D25001B2FB674C1CD3AC5FC2BE9C8E3E54BB8467221154A5`. This includes the ordinary Task-card access label and dormant request-plan guard. It does not enable ordinary-chat parallel specialists or prove the live narrow/wide UI, and native Windows capture remains unavailable in this host. `FUT-AGENT-01/02` remain In progress.

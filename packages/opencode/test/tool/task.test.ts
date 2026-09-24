@@ -16,6 +16,7 @@ import { InstanceState } from "@/effect/instance-state" // kilocode_change - ver
 import { InstanceStore } from "@/project/instance-store" // kilocode_change - worktree bootstrap layer
 import { InstanceBootstrap } from "@/project/bootstrap" // kilocode_change - real worktree setup
 import path from "node:path" // kilocode_change - verify real child edit destination
+import { hostname } from "node:os" // kilocode_change - prove dead Chief branch owner recovery
 import { unlink } from "node:fs/promises" // kilocode_change - restore dirty-parent test fixture
 import { Storage } from "@/storage/storage" // kilocode_change - durable Chief branch test
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - durable Chief branch test
@@ -190,11 +191,42 @@ describe("request-bound Chief plan prerequisite", () => {
         expect((yield* ChiefRequestPlan.make(storage, sessions).read(chat.id, assistant.parentID))?.identity).toEqual(
           saved.identity,
         )
-      expect((yield* ChiefRequestPlan.active(storage, chat.id))?.identity).toEqual(saved.identity)
-      yield* storage.remove(["raya", "chief", "request-plan", chat.id, assistant.parentID])
-      expect(yield* ChiefRequestPlan.make(storage, sessions).read(chat.id, assistant.parentID)).toBeUndefined()
+        expect((yield* ChiefRequestPlan.active(storage, chat.id))?.identity).toEqual(saved.identity)
+        const createdAt = Date.now()
+        yield* storage.replace(["raya", "goal", chat.id], {
+          createdAt,
+          status: "active",
+          revisions: [{ id: "goal-revision" }],
+        })
+        yield* storage.replace(["raya", "chief", "branches", chat.id], {
+          version: 2,
+          revision: "goal-revision",
+          goalID: chat.id,
+          goalCreatedAt: createdAt,
+          requestID: assistant.parentID,
+          createdAt,
+          branches: saved.branches,
+        })
+        expect(
+          Exit.isFailure(
+            yield* ChiefTaskBinding.load({
+              storage,
+              sessions,
+              branches: ChiefBranches.make(storage),
+              sessionID: chat.id,
+              agent: "auto",
+              metadata: (yield* sessions.get(chat.id)).metadata,
+              callID: "conflict",
+              params: { branch_id: "safety" },
+            }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        yield* storage.remove(["raya", "chief", "branches", chat.id])
+        yield* storage.remove(["raya", "goal", chat.id])
+        yield* storage.remove(["raya", "chief", "request-plan", chat.id, assistant.parentID])
+        expect(yield* ChiefRequestPlan.make(storage, sessions).read(chat.id, assistant.parentID)).toBeUndefined()
 
-      const binding = yield* ChiefTaskBinding.load({
+        const binding = yield* ChiefTaskBinding.load({
           storage,
           branches: ChiefBranches.make(storage),
           sessionID: chat.id,
@@ -328,6 +360,207 @@ describe("request-bound Chief plan prerequisite", () => {
         })
         expect(Exit.isFailure(yield* ledger.start({ ...base, requestID: synthetic.id }).pipe(Effect.exit))).toBe(true)
         expect(yield* ChiefRequestPlan.active(storage, chat.id)).toBeUndefined()
+      }),
+    20_000,
+  )
+
+  planned.instance(
+    "launches only an exact saved read branch once and retains child lineage",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const agents = yield* Agent.Service
+        const { chat, assistant } = yield* seed()
+        const request = "Audit authorization and navigation"
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
+        })
+        const ledger = ChiefRequestPlan.make(storage, sessions)
+        const plan = yield* ledger.start({
+          sessionID: chat.id,
+          requestID: assistant.parentID,
+          proposals,
+          agents: yield* agents.list(),
+          parent: Permission.fromConfig({ task: "allow", edit: "allow" }),
+        })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const context = (callID: string) => ({
+          sessionID: chat.id,
+          messageID: assistant.id,
+          callID,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        const first = yield* def.execute({ description: "Safety audit", branch_id: "safety" }, context("call-safety"))
+        expect(first.metadata.requestID).toBe(assistant.parentID)
+        expect(first.metadata.requestRevision).toBe(plan.identity.revision)
+        const saved = yield* ledger.read(chat.id, assistant.parentID)
+        const branch = saved?.branches.find((item) => item.id === "safety")
+        expect(branch).toMatchObject({
+          state: "completed",
+          callID: "call-safety",
+          sessionID: first.metadata.sessionId,
+          messageID: first.metadata.childMessageID,
+          access: "read",
+          specialist: "researcher",
+        })
+        expect(
+          Exit.isFailure(
+            yield* def.execute({ description: "Retry", branch_id: "safety" }, context("call-safety")).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* def
+              .execute(
+                { description: "Wrong agent", branch_id: "design", subagent_type: "researcher" },
+                context("call-design"),
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* def
+              .execute({ description: "Edit", branch_id: "design", access: "edit" }, context("call-design"))
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          (yield* ledger.read(chat.id, assistant.parentID))?.branches.find((item) => item.id === "design")?.state,
+        ).toBe("planned")
+      }),
+    20_000,
+  )
+
+  planned.instance(
+    "settles admitted lineage after a newer request and refuses reserved replay",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const agents = yield* Agent.Service
+        const { chat, assistant } = yield* seed()
+        const request = "Audit authorization and navigation"
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.parentID,
+          sessionID: chat.id,
+          type: "text",
+          text: request,
+        })
+        yield* sessions.setMetadata({
+          sessionID: chat.id,
+          metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
+        })
+        const ledger = ChiefRequestPlan.make(storage, sessions)
+        const plan = yield* ledger.start({
+          sessionID: chat.id,
+          requestID: assistant.parentID,
+          proposals,
+          agents: yield* agents.list(),
+          parent: Permission.fromConfig({ task: "allow" }),
+        })
+        const identity = {
+          sessionID: chat.id,
+          requestID: assistant.parentID,
+          revision: plan.identity.revision,
+          branchID: "safety",
+          callID: "call-safety",
+        }
+        yield* ledger.reserve(identity)
+        expect(Exit.isFailure(yield* ledger.reserve(identity).pipe(Effect.exit))).toBe(true)
+        yield* ledger.reserve({ ...identity, branchID: "design", callID: "call-design" })
+        expect((yield* ledger.reconcile(chat.id))?.branches.find((item) => item.id === "design")?.state).toBe(
+          "admitted",
+        )
+        const before = yield* ledger.read(chat.id, assistant.parentID)
+        if (!before) throw new Error("Missing saved request plan")
+        yield* storage.replace(["raya", "chief", "request-plan", chat.id, assistant.parentID], {
+          ...before,
+          branches: before.branches.map((item) =>
+            item.id === "design" ? { ...item, owner: { host: hostname(), pid: 2_147_483_647 } } : item,
+          ),
+        })
+        expect((yield* ledger.reconcile(chat.id))?.branches.find((item) => item.id === "design")?.state).toBe("unknown")
+        const childID = SessionID.create()
+        const messageID = MessageID.ascending()
+        yield* ledger.admit({ ...identity, childID, messageID })
+        const newer = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: chat.id,
+          agent: "auto",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: newer.id,
+          sessionID: chat.id,
+          type: "text",
+          text: "New request",
+        })
+        expect(
+          Exit.isFailure(
+            yield* ledger.reserve({ ...identity, branchID: "design", callID: "call-design" }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .settle({
+                ...identity,
+                childID: SessionID.create(),
+                messageID,
+                state: "completed",
+                result: "Wrong child",
+              })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .settle({
+                ...identity,
+                childID,
+                messageID: MessageID.ascending(),
+                state: "completed",
+                result: "Wrong input",
+              })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const settled = yield* ledger.settle({
+          ...identity,
+          childID,
+          messageID,
+          state: "completed",
+          result: "Verified",
+        })
+        expect(settled.state).toBe("completed")
+        expect(
+          Exit.isFailure(
+            yield* ledger
+              .settle({ ...identity, childID, messageID, state: "completed", result: "Replay" })
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
       }),
     20_000,
   )

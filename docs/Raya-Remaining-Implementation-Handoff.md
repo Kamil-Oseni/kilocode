@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 05:28 America/Toronto - dormant request branch execution boundary
+
+`ChiefRequestPlan.reserve` locks a read-only branch and call ID before Task creates a child; `admit` binds the exact child session and input message, and `settle` uses that immutable lineage even when a newer user message arrives. A reserved branch cannot replay after restart, and `reconcile` marks it unknown only when the original process is proven dead. `ChiefTaskBinding` rejects simultaneous active v2 goal and v3 request plans. Task uses the saved branch brief, specialist and authority; the v2 edit worktree path remains separate. Do not expose v3 planning yet: inspect/review/synthesis, marker-only partial-write repair, terminal marker rotation for later requests, and installed-host restart tests remain. Keep `FUT-AGENT-01/02` In progress.
+
 ## ChatGPT 2026-09-24 04:49 America/Toronto - installed access UI, guarded request storage
 
 Commit `6228a441fb` is pushed and installed as `eden.raya@7.4.23-snapshot+6228a441fb.kamil-oseni.1790239462400`; VS Code lists it. SDK regeneration left no tracked changes; Windows CLI/sandbox-worker smoke tests, extension/webview typechecks, lint, production bundle, VSIX packaging and installation passed. Vault rollback VSIX SHA-256: `2B9696E5686B4B28D25001B2FB674C1CD3AC5FC2BE9C8E3E54BB8467221154A5`. The ordinary Task card now labels validated saved read/edit authority; the v3 request plan is dormant and fail-closed on a saved marker. Next implement exact branch admission, durable child/restart reconciliation, review/synthesis and then expose ordinary read-only fanout. Separately bind prepared Chief notes to one parent continuation at verified idle. Real installed-host two-specialist, narrow/wide, reconnect and restart acceptance remains open; native capture initialization fails with `CreateProcessWithLogonW failed: 2`. Keep `FUT-AGENT-01/02` In progress.

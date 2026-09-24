@@ -34,6 +34,7 @@ import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse f
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - bind planned Auto branches to child calls
 import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - saved branch preflight
+import { ChiefRequestPlan } from "@/kilocode/chief/request-plan" // kilocode_change - request-bound branch admission
 import { ChiefBranchOutcome } from "@/kilocode/chief/outcome" // kilocode_change - exact child terminal receipt
 import { Git } from "@/git" // kilocode_change - pin editing branches to the parent HEAD
 import { Worktree } from "@/worktree" // kilocode_change - isolated Chief edit workspaces
@@ -167,6 +168,7 @@ export const TaskTool = Tool.define(
       // kilocode_change start - a saved fanout plan is authoritative for this active goal
       const binding = yield* ChiefTaskBinding.load({
         storage,
+        sessions,
         branches,
         sessionID: ctx.sessionID,
         agent: ctx.agent,
@@ -175,6 +177,7 @@ export const TaskTool = Tool.define(
         params,
       })
       const plan = binding.plan
+      const requestPlan = binding.request // kilocode_change - dormant request-bound plan
       const branch = binding.branch
       // kilocode_change end
       // kilocode_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
@@ -438,6 +441,19 @@ export const TaskTool = Tool.define(
       const platform = KiloSession.resolvePlatform(ctx.sessionID) // kilocode_change - preserve parent attribution across task creation/resume
       // kilocode_change start // raya_change start - reserve before child creation and release every exit path
       const lease = children ? yield* children.claim(ctx.sessionID) : { release: Effect.void }
+      // kilocode_change start - reserve before child creation; a crash leaves no replayable request branch
+      const requestLedger = requestPlan && storage ? ChiefRequestPlan.make(storage, sessions) : undefined
+      if (requestPlan && branch && ctx.callID && requestLedger)
+        yield* requestLedger
+          .reserve({
+            sessionID: ctx.sessionID,
+            requestID: requestPlan.identity.requestID,
+            revision: requestPlan.identity.revision,
+            branchID: branch.id,
+            callID: ctx.callID,
+          })
+          .pipe(Effect.tapError(() => lease.release))
+      // kilocode_change end
       // kilocode_change end // raya_change end
       // kilocode_change start - create a child session with inherited Kilo restrictions
       // raya_change start - allocate a durable, collision-safe identity only for a new child
@@ -503,6 +519,20 @@ export const TaskTool = Tool.define(
                 : Effect.void,
             ),
           )
+      // kilocode_change start - bind the reserved request branch to this exact child input
+      if (requestPlan && branch && ctx.callID && requestLedger)
+        yield* requestLedger
+          .admit({
+            sessionID: ctx.sessionID,
+            requestID: requestPlan.identity.requestID,
+            revision: requestPlan.identity.revision,
+            branchID: branch.id,
+            callID: ctx.callID,
+            childID: nextSession.id,
+            messageID: message,
+          })
+          .pipe(Effect.tapError(() => lease.release))
+      // kilocode_change end
       // kilocode_change end
       // raya_change end
       // kilocode_change end
@@ -576,6 +606,7 @@ export const TaskTool = Tool.define(
         background?: boolean
         requestID?: string // kilocode_change - bind a planned Chief start to its saved request
         goalCreatedAt?: number // kilocode_change - bind a planned Chief start to its saved goal
+        requestRevision?: string // kilocode_change - exact request-plan revision
       } = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
@@ -590,6 +621,11 @@ export const TaskTool = Tool.define(
         ...(variant === undefined ? {} : { variant }), // kilocode_change - optional JSON fields must be absent, not undefined
         ...(runInBackground ? { background: true } : {}),
         ...(branch && plan ? { requestID: plan.requestID, goalCreatedAt: plan.goalCreatedAt } : {}), // kilocode_change
+        // kilocode_change start - request-bound lineage without a goal
+        ...(branch && requestPlan
+          ? { requestID: requestPlan.identity.requestID, requestRevision: requestPlan.identity.revision }
+          : {}),
+        // kilocode_change end
       }
 
       yield* ctx
@@ -705,7 +741,19 @@ export const TaskTool = Tool.define(
                   sessionID: nextSession.id,
                   exit,
                 })
-              : Effect.void,
+              : branch && requestPlan && requestLedger && ctx.callID
+                ? ChiefBranchOutcome.request({
+                    ledger: requestLedger,
+                    sessionID: ctx.sessionID,
+                    requestID: requestPlan.identity.requestID,
+                    revision: requestPlan.identity.revision,
+                    branchID: branch.id,
+                    callID: ctx.callID,
+                    childID: nextSession.id,
+                    messageID: message,
+                    exit,
+                  })
+                : Effect.void,
           ),
           Effect.ensuring(lease.release.pipe(Effect.orDie)),
         )

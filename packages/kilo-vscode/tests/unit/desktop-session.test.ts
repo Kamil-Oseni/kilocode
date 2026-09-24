@@ -19,6 +19,7 @@ class Driver implements DesktopDriver {
   }
   readonly actions: DesktopAction[] = []
   readonly frames: DesktopFrame[] = []
+  readonly fresh: boolean[] = []
   readonly focused: string[] = []
   list: DesktopWindow[] = [
     {
@@ -36,7 +37,8 @@ class Driver implements DesktopDriver {
   ]
   cancelled = 0
 
-  async observe() {
+  async observe(options?: { fresh?: boolean }) {
+    this.fresh.push(options?.fresh === true)
     const next = this.frames.shift()
     if (next) return next
     return { ...this.target, ...this.frame }
@@ -402,6 +404,45 @@ describe("native desktop session boundary", () => {
     expect(driver.actions.map((action) => action.operation)).toEqual(["pointer", "type"])
     expect(driver.actions[0]?.observationID).toBe(initial.observation.id)
     expect(driver.actions[1]?.observationID).not.toBe(initial.observation.id)
+    expect(driver.fresh).toEqual([false, true, true])
+  })
+
+  it("does not accept a cached pre-action frame as a sequence postcondition", async () => {
+    class Cached extends Driver {
+      override async observe(options?: { fresh?: boolean }) {
+        if (options?.fresh) return super.observe(options)
+        this.fresh.push(false)
+        return { ...this.target, ...this.frame, data: "cached" }
+      }
+
+      override async perform(action: DesktopAction) {
+        await super.perform(action)
+        this.frame = { ...this.frame, data: `after-${this.actions.length}` }
+      }
+    }
+
+    const driver = new Cached()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    const result = await session.sequence({
+      observationID: initial.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: { operation: "key", windowID: "window-1", sensitive: false, key: "Tab" },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+        {
+          action: { operation: "key", windowID: "window-1", sensitive: false, key: "Enter" },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({ status: "completed", completed: 2, scene: { data: "after-2" } })
+    expect(driver.fresh).toEqual([false, true, true])
   })
 
   it("stops a sequence before its next effect when a local postcondition fails", async () => {

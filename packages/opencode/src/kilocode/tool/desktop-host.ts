@@ -7,6 +7,7 @@ import {
   type SensitiveCategory as SensitiveKind,
 } from "@/kilocode/computer-use/lease"
 import { Authorization, Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
+import { Delegation } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -38,6 +39,10 @@ function approve(
   },
 ) {
   return Effect.gen(function* () {
+    const delegation =
+      ctx.extra?.desktopDelegation === undefined
+        ? undefined
+        : Schema.decodeUnknownSync(Delegation)(ctx.extra.desktopDelegation)
     const result = yield* run(
       desktop,
       {
@@ -46,6 +51,7 @@ function approve(
         surface: "desktop",
         action: input.action,
         sensitive: input.sensitive ?? false,
+        ...(delegation ? { delegation } : {}),
         ...(input.windowID ? { windowID: input.windowID } : {}),
       },
       ctx.abort,
@@ -55,7 +61,7 @@ function approve(
     if (auth.decision === "deny") yield* Effect.die(new Error(`Desktop control denied: ${auth.reason}`))
     if (auth.decision === "allow") {
       if (!auth.grantID) return yield* Effect.die(new Error("Desktop grant authorization omitted its grant identity"))
-      return { kind: "grant" as const, grantID: auth.grantID }
+      return { kind: "grant" as const, grantID: auth.grantID, ...(delegation ? { delegation } : {}) }
     }
     if (auth.decision === "ask") {
       yield* ctx.ask({
@@ -64,7 +70,7 @@ function approve(
         always: input.always,
         metadata: input.metadata,
       })
-      return { kind: "prompt" as const }
+      return { kind: "prompt" as const, ...(delegation ? { delegation } : {}) }
     }
     return yield* Effect.die(new Error("Desktop host returned an invalid authorization decision"))
   })

@@ -27,6 +27,11 @@ import { Session } from "@/session/session"
 import { SessionTools } from "@/session/tools"
 import { MessageID, SessionID } from "@/session/schema"
 import { ShellTool } from "@/tool/shell"
+import { DesktopWindowsTool } from "@/kilocode/tool/desktop-host"
+import { Desktop } from "@/kilocode/desktop/service"
+import { GrantID } from "@/kilocode/computer-use/lease"
+import { ObservationID } from "@/kilocode/computer-use/protocol"
+import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import * as Tool from "@/tool/tool"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
@@ -53,7 +58,13 @@ const client = {
   callTool: () => Promise.resolve({ content: [{ type: "text" as const, text: "selected" }] }),
 } as unknown as MCP.McpTool["client"]
 
-function session(directory: string, routine = false, rules = Permission.fromConfig({ "*": "allow" })): Session.Info {
+function session(
+  directory: string,
+  routine = false,
+  rules = Permission.fromConfig({ "*": "allow" }),
+  computer = false,
+  bad = false,
+): Session.Info {
   return {
     id: sessionID,
     slug: "sandbox-session-tools",
@@ -62,7 +73,18 @@ function session(directory: string, routine = false, rules = Permission.fromConf
     title: "Sandbox worktree isolation",
     version: "test",
     permission: rules,
-    ...(routine ? { metadata: { rayaRoutine: { agentID: "routine", runID: "run" } } } : {}),
+    ...(computer
+      ? {
+          parentID: SessionID.make(bad ? "ses_unrelated" : "ses_parent"),
+          metadata: TaskAuthority.bind(TaskAuthority.save({}, "computer"), {
+            parentSessionID: "ses_parent",
+            childSessionID: sessionID,
+            grantID: "grant_parent",
+          }),
+        }
+      : routine
+        ? { metadata: { rayaRoutine: { agentID: "routine", runID: "run" } } }
+        : {}),
     time: { created: 0, updated: 0 },
   }
 }
@@ -170,7 +192,48 @@ const registry = Layer.effect(
   Effect.gen(function* () {
     const write = yield* WriteTool.pipe(Effect.flatMap(Tool.init))
     const shell = yield* ShellTool.pipe(Effect.flatMap(Tool.init))
-    const list = [ToolNetwork.builtin(write), ToolNetwork.builtin(shell)]
+    const desktop = yield* DesktopWindowsTool.pipe(
+      Effect.provideService(
+        Desktop.Service,
+        Desktop.Service.of({
+          request: (input) =>
+            Effect.sync(() =>
+              input.operation === "authorize"
+                ? {
+                    operation: "authorize" as const,
+                    decision: "allow" as const,
+                    reason: "Active grant",
+                    grantID: GrantID.make("grant_parent"),
+                  }
+                : {
+                    operation: "windows" as const,
+                    windows: [],
+                    observation: {
+                      version: 1 as const,
+                      id: ObservationID.make("scene_child"),
+                      observedAt: 1,
+                      validUntil: 100,
+                      target: { surface: "desktop" as const, windowID: "visible-windows" },
+                    },
+                    receipt: {
+                      version: 1 as const,
+                      requestID: "request_child",
+                      startedAt: 1,
+                      finishedAt: 2,
+                      effect: "observe" as const,
+                      outcome: "confirmed" as const,
+                    },
+                  },
+            ),
+          list: () => Effect.succeed([]),
+          cancelSession: () => Effect.void,
+          reply: () => Effect.void,
+          reject: () => Effect.void,
+        }),
+      ),
+      Effect.flatMap(Tool.init),
+    )
+    const list = [ToolNetwork.builtin(write), ToolNetwork.builtin(shell), desktop]
     return ToolRegistry.Service.of({
       ids: () => Effect.succeed(list.map((item) => item.id)),
       all: () => Effect.succeed(list),
@@ -186,16 +249,43 @@ const registry = Layer.effect(
 const it = testEffect(registry)
 const mac = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec") ? it.live : it.live.skip
 
+it.live("resolves desktop tools for an authorized computer child without filesystem write tools", () =>
+  Effect.gen(function* () {
+    const dirs = yield* fixture()
+    const rules = Permission.merge(
+      TaskAuthority.rules("computer"),
+      TaskAuthority.denies("computer", Permission.fromConfig({ "*": "deny" })),
+    )
+    const tools = yield* resolve(dirs.ctx, [], false, rules, true)
+
+    expect(Object.keys(tools)).toContain("desktop_windows")
+    expect(Object.keys(tools)).not.toContain("write")
+    expect(Object.keys(tools)).not.toContain("bash")
+  }),
+)
+
+it.live("refuses to resolve a computer child with mismatched parent lineage", () =>
+  Effect.gen(function* () {
+    const dirs = yield* fixture()
+    const result = yield* resolve(dirs.ctx, [], false, [...TaskAuthority.rules("computer")], true, true).pipe(
+      Effect.exit,
+    )
+    expect(Exit.isFailure(result)).toBe(true)
+  }),
+)
+
 function resolve(
   ctx: InstanceContext,
   metadataCalls: { toolCallID: string; value: Record<string, any> }[] = [],
   routine = false,
   rules = Permission.fromConfig({ "*": "allow" }),
+  computer = false,
+  bad = false,
 ) {
   return SessionTools.resolve({
     agent,
     model,
-    session: session(ctx.directory, routine, rules),
+    session: session(ctx.directory, routine, rules, computer, bad),
     processor: {
       message: message(ctx),
       // capture metadata writes so tests can assert on recorded approval provenance

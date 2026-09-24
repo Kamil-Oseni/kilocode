@@ -30,9 +30,10 @@ export const ScrollDelta = Schema.Number.check(
 const Base = { id: RequestID, sessionID: SessionID }
 const Sensitive = Schema.Union([Schema.Boolean, SensitiveCategory])
 const ClassifiedSensitive = Schema.Union([Schema.Literal(false), SensitiveCategory])
+export const Delegation = Schema.Struct({ parentSessionID: SessionID, childSessionID: SessionID, grantID: GrantID })
 export const Authorization = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("grant"), grantID: GrantID }),
-  Schema.Struct({ kind: Schema.Literal("prompt") }),
+  Schema.Struct({ kind: Schema.Literal("grant"), grantID: GrantID, delegation: Schema.optional(Delegation) }),
+  Schema.Struct({ kind: Schema.Literal("prompt"), delegation: Schema.optional(Delegation) }),
 ])
 export const Key = Schema.Union([
   Schema.Literals([
@@ -100,6 +101,7 @@ export const AuthorizeRequest = Schema.Struct({
   action: LeaseAction,
   windowID: Schema.optional(Identity),
   sensitive: Sensitive,
+  delegation: Schema.optional(Delegation),
 })
 
 export const ClickRequest = Schema.Struct({

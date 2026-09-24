@@ -35,6 +35,91 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(AppNodeBuilder.build(Agent.node), AppNodeBuilder.build(Truncate.node)))
 
+it.instance("carries a validated child delegation from the model tool through both host requests", () =>
+  Effect.gen(function* () {
+    const calls: Desktop.Input[] = []
+    let mode: "allow" | "ask" = "allow"
+    const delegation = {
+      parentSessionID: SessionID.make("ses_parent"),
+      childSessionID: SessionID.make("ses_child"),
+      grantID: GrantID.make("grant_parent"),
+    }
+    const observation = {
+      version: 1 as const,
+      id: ObservationID.make("observation_child"),
+      observedAt: 1,
+      validUntil: 10_000,
+      target: { surface: "desktop" as const, windowID: "visible-windows" },
+    }
+    const host: Desktop.Interface = {
+      request: (input) =>
+        Effect.sync(() => {
+          calls.push(input)
+          if (input.operation === "authorize")
+            return {
+              operation: "authorize" as const,
+              decision: mode,
+              reason: mode === "allow" ? "Active grant" : "Sensitive action needs approval",
+              grantID: delegation.grantID,
+            }
+          return {
+            operation: "windows" as const,
+            windows: [],
+            observation,
+            receipt: {
+              version: 1 as const,
+              requestID: "child_windows",
+              startedAt: 1,
+              finishedAt: 2,
+              effect: "observe" as const,
+              outcome: "confirmed" as const,
+              target: observation.target,
+              observationID: observation.id,
+            },
+          }
+        }),
+      list: () => Effect.succeed([]),
+      cancelSession: () => Effect.void,
+      reply: () => Effect.void,
+      reject: () => Effect.void,
+    }
+    const ctx: Tool.Context = {
+      sessionID: delegation.childSessionID,
+      messageID: MessageID.make("msg_child"),
+      agent: "generalist",
+      abort: new AbortController().signal,
+      messages: [],
+      extra: { desktopDelegation: delegation },
+      metadata: () => Effect.void,
+      ask: () => Effect.die(new Error("An active delegated grant must not prompt")),
+    }
+    yield* DesktopWindowsTool.pipe(
+      Effect.provideService(Desktop.Service, host),
+      Effect.flatMap(Tool.init),
+      Effect.flatMap((tool) => tool.execute({}, ctx)),
+    )
+    expect(calls).toMatchObject([
+      { operation: "authorize", sessionID: delegation.childSessionID, delegation },
+      {
+        operation: "windows",
+        sessionID: delegation.childSessionID,
+        authorization: { kind: "grant", grantID: delegation.grantID, delegation },
+      },
+    ])
+    mode = "ask"
+    calls.length = 0
+    yield* DesktopWindowsTool.pipe(
+      Effect.provideService(Desktop.Service, host),
+      Effect.flatMap(Tool.init),
+      Effect.flatMap((tool) => tool.execute({}, { ...ctx, ask: () => Effect.void })),
+    )
+    expect(calls).toMatchObject([
+      { operation: "authorize", delegation },
+      { operation: "windows", authorization: { kind: "prompt", delegation } },
+    ])
+  }),
+)
+
 test("keeps legacy per-action approval as the fail-closed VS Code fallback", () => {
   const client = process.env.KILO_CLIENT
   process.env.KILO_CLIENT = "vscode"

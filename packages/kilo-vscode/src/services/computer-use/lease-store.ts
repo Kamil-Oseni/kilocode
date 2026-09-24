@@ -223,10 +223,11 @@ export class ComputerUseLeaseStore {
   }
 
   authorize(request: AuthorizationRequest): Authorization {
+    const delegation = "delegation" in request ? request.delegation : undefined
     if (this.unavailable) return answer("deny", this.unavailable)
     const lease = this.lease
     if (!lease)
-      return this.revoked.has(request.sessionID)
+      return delegation || this.revoked.has(request.sessionID)
         ? answer("deny", "Computer Use was stopped for this task")
         : answer("ask", "No active Computer Use grant")
     if (lease.state === "paused") return answer("deny", "Computer Use is paused")
@@ -235,24 +236,20 @@ export class ComputerUseLeaseStore {
       void this.stop()
       return answer("deny", "The Computer Use grant expired")
     }
-    if (lease.lifetime.kind === "session" && lease.lifetime.sessionID !== request.sessionID)
+    if (delegation && mismatch(lease, request.sessionID, delegation))
+      return answer("deny", "Computer Use child delegation no longer matches the active grant")
+    if (!delegation && lease.lifetime.kind === "session" && lease.lifetime.sessionID !== request.sessionID)
       return answer("ask", "The grant belongs to another task")
-    if (!lease.surfaces.includes(request.surface)) return answer("ask", "This surface is outside the grant")
-    if (lease.applications.kind === "selected") {
-      if (!request.windowID || !lease.applications.values.includes(request.windowID))
-        return answer("ask", "This application is outside the grant")
-    }
-    if (lease.level === "observe" && request.action !== "observe")
-      return answer("deny", "Observe only cannot control the desktop")
-    if (!lease.actions.includes(request.action)) return answer("ask", "This action is outside the grant")
-    const policy = sensitive(lease, request)
-    if (policy) return policy
+    const boundary = scope(lease, request)
+    if (boundary) return boundary
+    const policy = sensitive(lease, request, delegation?.parentSessionID)
+    if (policy) return delegation && policy.decision === "ask" ? { ...policy, grantID: lease.id } : policy
     this.sessions.add(request.sessionID)
     return answer("allow", "Authorized by active Computer Use grant", lease.id)
   }
 
   review(request: AuthorizationRequest): Authorization {
-    if (!this.lease) this.revoked.delete(request.sessionID)
+    if (!this.lease && !("delegation" in request && request.delegation)) this.revoked.delete(request.sessionID)
     return this.authorize(request)
   }
 
@@ -265,6 +262,31 @@ export class ComputerUseLeaseStore {
   private emit(): void {
     for (const listener of this.listeners) listener(this.current())
   }
+}
+
+function scope(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
+  if (!lease.surfaces.includes(request.surface)) return answer("ask", "This surface is outside the grant")
+  if (
+    lease.applications.kind === "selected" &&
+    (!request.windowID || !lease.applications.values.includes(request.windowID))
+  )
+    return answer("ask", "This application is outside the grant")
+  if (lease.level === "observe" && request.action !== "observe")
+    return answer("deny", "Observe only cannot control the desktop")
+  if (!lease.actions.includes(request.action)) return answer("ask", "This action is outside the grant")
+}
+
+function mismatch(
+  lease: ComputerUseLease,
+  session: string,
+  delegation: NonNullable<Extract<DesktopRequest, { operation: "authorize" }>["delegation"]>,
+): boolean {
+  return (
+    delegation.childSessionID !== session ||
+    delegation.parentSessionID === session ||
+    delegation.grantID !== lease.id ||
+    (lease.lifetime.kind === "session" && lease.lifetime.sessionID !== delegation.parentSessionID)
+  )
 }
 
 function check(input: GrantInput): void {
@@ -280,14 +302,14 @@ function check(input: GrantInput): void {
   if (!Array.isArray(input.actions)) throw new Error("Choose Computer Use action categories")
 }
 
-function sensitive(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
+function sensitive(lease: ComputerUseLease, request: AuthorizationRequest, parent?: string): Authorization | undefined {
   if (request.sensitive === true) return answer("ask", "This sensitive action requires a separate decision")
   if (!request.sensitive) return
   const rule = lease.sensitive[request.sensitive]
   if (rule === "deny") return answer("deny", "This sensitive action is denied by your policy")
   if (lease.level === "assisted") return answer("ask", "Assisted control asks before sensitive actions")
   if (rule === "ask") return answer("ask", "Your policy requires approval for this sensitive action")
-  if (rule === "allow_session" && request.sessionID !== lease.sensitiveSessionID)
+  if (rule === "allow_session" && (parent ?? request.sessionID) !== lease.sensitiveSessionID)
     return answer("ask", "This sensitive action was allowed only for the original session")
 }
 

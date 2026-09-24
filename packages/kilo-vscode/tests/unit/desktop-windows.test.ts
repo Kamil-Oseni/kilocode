@@ -230,6 +230,7 @@ describe("Windows native desktop driver", () => {
     }
     const primary = harness([
       JSON.stringify({ windowID: visual.windowID, location: visual.location }),
+      JSON.stringify({ ...visual, data: "fresh pixels" }),
       JSON.stringify({ windowID: visual.windowID, location: "pid:5;title:Editor;bounds:1,0,20,10" }),
       JSON.stringify({ ...visual, location: "pid:5;title:Editor;bounds:1,0,20,10", data: "fresh pixels" }),
     ])
@@ -251,8 +252,10 @@ describe("Windows native desktop driver", () => {
     for (let index = 0; index < 50 && captures < 2; index++) await Bun.sleep(2)
     expect(captures).toBe(2)
     expect((await driver.observe({ semantics: false })).data).toBe("background pixels")
-    expect((await driver.observe({ semantics: false })).data).toBe("fresh pixels")
+    expect((await driver.observe({ semantics: false, fresh: true })).data).toBe("fresh pixels")
     expect(primary.scripts.filter((script) => script.includes("CopyFromScreen"))).toHaveLength(1)
+    expect((await driver.observe({ semantics: false })).data).toBe("fresh pixels")
+    expect(primary.scripts.filter((script) => script.includes("CopyFromScreen"))).toHaveLength(2)
     driver.cancel()
     expect(cancelled).toBe(1)
     expect(errors).toHaveLength(0)

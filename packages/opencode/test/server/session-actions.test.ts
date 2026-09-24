@@ -3,6 +3,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Fiber, Layer } from "effect" // kilocode_change
 import { BackgroundJob } from "@/background/job" // kilocode_change
 import { Session as SessionNs } from "@/session/session"
+import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - reserved child metadata route coverage
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { pollWithTimeout, testEffect } from "../lib/effect" // kilocode_change
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
@@ -91,6 +92,54 @@ describe("session action routes", () => {
       }),
     { git: true },
   )
+  // kilocode_change start - public metadata routes must not mint or erase Computer Use child authority
+  it.instance(
+    "rejects forged child authority and preserves server-issued proof on metadata updates",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "Content-Type": "application/json" }
+        const forged = { [TaskAuthority.key]: { version: 1, access: "computer" } }
+        const rejected = yield* requestInDirectory("/session", test.directory, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ metadata: forged }),
+        })
+        expect(rejected.status).toBe(400)
+
+        const created = yield* requestInDirectory("/session", test.directory, { method: "POST" })
+        expect(created.status).toBe(200)
+        const session = (yield* created.json) as SessionNs.Info
+        const proof = {
+          [TaskAuthority.key]: { version: 1, access: "computer" },
+          [TaskAuthority.computerKey]: {
+            version: 1,
+            parentSessionID: "ses_parent",
+            childSessionID: session.id,
+            grantID: "grant_parent",
+          },
+        }
+        yield* SessionNs.use.setMetadata({ sessionID: session.id, metadata: proof })
+
+        const rewrite = yield* requestInDirectory(`/session/${session.id}`, test.directory, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ metadata: { [TaskAuthority.computerKey]: { version: 1, grantID: "grant_forged" } } }),
+        })
+        expect(rewrite.status).toBe(400)
+
+        const updated = yield* requestInDirectory(`/session/${session.id}`, test.directory, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ metadata: { label: "retained" } }),
+        })
+        expect(updated.status).toBe(200)
+        expect(((yield* updated.json) as SessionNs.Info).metadata).toEqual({ label: "retained", ...proof })
+        yield* SessionNs.use.remove(session.id)
+      }),
+    { git: true },
+  )
+  // kilocode_change end
   it.instance(
     "abort route returns success",
     () =>

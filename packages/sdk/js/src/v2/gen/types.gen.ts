@@ -1181,6 +1181,11 @@ export type DesktopRequest =
         | "disclosure"
         | "legal"
         | "publishing"
+      delegation?: {
+        parentSessionID: string
+        childSessionID: string
+        grantID: ComputerUseGrantId
+      }
     }
   | {
       id: DesktopRequestId
@@ -1190,9 +1195,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
     }
   | {
@@ -1203,9 +1218,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
     }
   | {
@@ -1216,9 +1241,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       frameCount: number
       intervalMs: number
@@ -1244,9 +1279,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
     }
   | {
@@ -1270,9 +1315,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       x: number
       y: number
@@ -1298,9 +1353,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       startX: number
       startY: number
@@ -1329,9 +1394,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       action: "click" | "double_click"
       x: number
@@ -1359,9 +1434,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       text: string
     }
@@ -1386,9 +1471,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       key:
         | "Backspace"
@@ -1441,9 +1536,19 @@ export type DesktopRequest =
         | {
             kind: "grant"
             grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
         | {
             kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+            }
           }
       deltaX: number
       deltaY: number
@@ -1476,9 +1581,19 @@ export type DesktopRequest =
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
                 | {
                     kind: "prompt"
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
               x: number
               y: number
@@ -1502,9 +1617,19 @@ export type DesktopRequest =
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
                 | {
                     kind: "prompt"
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
               startX: number
               startY: number
@@ -1530,9 +1655,19 @@ export type DesktopRequest =
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
                 | {
                     kind: "prompt"
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
               text: string
             }
@@ -1554,9 +1689,19 @@ export type DesktopRequest =
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
                 | {
                     kind: "prompt"
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
               key:
                 | "Backspace"
@@ -1606,9 +1751,19 @@ export type DesktopRequest =
                 | {
                     kind: "grant"
                     grantID: ComputerUseGrantId
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
                 | {
                     kind: "prompt"
+                    delegation?: {
+                      parentSessionID: string
+                      childSessionID: string
+                      grantID: ComputerUseGrantId
+                    }
                   }
               deltaX: number
               deltaY: number

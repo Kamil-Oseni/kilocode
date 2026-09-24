@@ -79,6 +79,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const sandboxed = (yield* SandboxPolicy.status(input.session.id)).enabled // kilocode_change
   // kilocode_change start - Routine catalogs expose only exact durable tool grants
   const routine = input.session.metadata?.rayaRoutine !== undefined
+  TaskAuthority.proof(input.session.metadata, input.session.id, input.session.parentID) // kilocode_change - reject forged child lineage before exposing desktop tools
   const authority = routine ? Permission.merge(input.agent.permission, input.session.permission ?? []) : undefined
   const visible = (id: string) =>
     TaskAuthority.permits(TaskAuthority.read(input.session.metadata), id, "*") &&
@@ -94,6 +95,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       sandboxed, // kilocode_change
       capabilities: catalog.inspect, // kilocode_change
       sandboxEscalation: false,
+      desktopDelegation: TaskAuthority.proof(input.session.metadata, input.session.id, input.session.parentID), // kilocode_change - exact child Computer Use grant
     }
     return {
       sessionID: input.session.id,
@@ -170,6 +172,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     networkRestricted: restricted, // kilocode_change - let the registry suppress code-mode in restricted sessions
     trustedOnly: routine, // kilocode_change - fail closed on local plugin tools in Routines
   })) {
+    if (!visible(item.id)) continue // kilocode_change - the model must not see tools outside child authority
     const base = ToolJsonSchema.fromTool(item)
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
@@ -467,7 +470,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   }
 
   // kilocode_change start - synthetic resource tools follow the same exact Routine scope
-  if (routine) {
+  if (routine || TaskAuthority.read(input.session.metadata)) {
     for (const id of Object.values(MCP_RESOURCE_TOOLS)) {
       if (!visible(id)) delete tools[id]
     }

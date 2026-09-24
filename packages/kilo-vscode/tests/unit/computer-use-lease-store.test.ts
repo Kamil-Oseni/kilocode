@@ -47,6 +47,59 @@ function memory(seed?: unknown) {
 }
 
 describe("Computer Use lease store", () => {
+  it("binds a child to the exact parent session and active grant", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const lease = await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy("allow_session"),
+      cooperativeInput: false,
+    })
+    const delegation = { parentSessionID: "session_test", childSessionID: "session_child", grantID: lease.id }
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation, sensitive: "communications" })),
+    ).toMatchObject({ decision: "allow", grantID: lease.id })
+    expect(store.authorize(auth({ sessionID: "session_other", delegation })).decision).toBe("deny")
+    expect(
+      store.authorize(
+        auth({ sessionID: "session_child", delegation: { ...delegation, parentSessionID: "session_other" } }),
+      ).decision,
+    ).toBe("deny")
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation: { ...delegation, grantID: "grant_other" } }))
+        .decision,
+    ).toBe("deny")
+    await store.stop()
+    expect(store.authorize(auth({ sessionID: "session_child", delegation })).decision).toBe("deny")
+  })
+
+  it("identifies the exact active grant on a delegated sensitive prompt", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const lease = await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy("ask"),
+      cooperativeInput: false,
+    })
+    const delegation = { parentSessionID: "session_test", childSessionID: "session_child", grantID: lease.id }
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation, sensitive: "communications" })),
+    ).toMatchObject({
+      decision: "ask",
+      grantID: lease.id,
+    })
+    await store.stop()
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation, sensitive: "communications" })).decision,
+    ).toBe("deny")
+  })
+
   it("keeps Stop revoked after restart when the main storage write fails", async () => {
     const dir = mkdtempSync(join(tmpdir(), "raya-stop-"))
     try {

@@ -19,7 +19,7 @@ export namespace ChiefTaskBinding {
     params: {
       branch_id?: string
       task_id?: string
-      access?: "read" | "edit"
+      access?: "read" | "edit" | "computer"
       subagent_type?: string
       prompt?: string
       brief?: {

@@ -2,6 +2,7 @@ import { Image } from "@/image/image" // kilocode_change - classify user image v
 import { busyMessage, isBusy } from "@/kilocode/database/sqlite-error" // kilocode_change
 import { DiagnosticError } from "@/kilocode/diagnostic-error" // kilocode_change
 import { KiloSessionHttpApi } from "@/kilocode/server/httpapi/session-fork" // kilocode_change
+import { TaskMetadata } from "@/kilocode/tool/task-metadata" // kilocode_change - protect server-issued child authority
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue" // kilocode_change
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
@@ -182,6 +183,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const decoded = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
+      if (TaskMetadata.reserved(decoded?.metadata)) return yield* Effect.fail(new HttpApiError.BadRequest({})) // kilocode_change
       const payload = decoded
         ? {
             ...decoded,
@@ -201,11 +203,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof UpdatePayload.Type
     }) {
       const current = yield* requireSession(ctx.params.sessionID)
+      if (TaskMetadata.reserved(ctx.payload.metadata)) return yield* Effect.fail(new HttpApiError.BadRequest({})) // kilocode_change
       if (ctx.payload.title !== undefined) {
         yield* session.setTitle({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
       }
       if (ctx.payload.metadata !== undefined) {
-        yield* session.setMetadata({ sessionID: ctx.params.sessionID, metadata: ctx.payload.metadata })
+        // kilocode_change start - client metadata cannot erase server-issued child authority
+        yield* session.setMetadata({
+          sessionID: ctx.params.sessionID,
+          metadata: TaskMetadata.preserve(current.metadata, ctx.payload.metadata),
+        })
+        // kilocode_change end
       }
       if (ctx.payload.permission !== undefined) {
         yield* session.setPermission({
@@ -403,7 +411,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* revertSvc
-        .discardChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files, expected: ctx.payload.expected, requestID: ctx.payload.requestID })
+        .discardChanges({
+          sessionID: ctx.params.sessionID,
+          files: ctx.payload.files,
+          expected: ctx.payload.expected,
+          requestID: ctx.payload.requestID,
+        })
         .pipe(Effect.catchTag("SessionBusyError", (error) => SessionError.mapBusy(Effect.fail(error))))
     })
     // raya_change - Keep / Keep all records the kept boundary for undo stepping
@@ -413,7 +426,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* revertSvc
-        .keepChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files, expected: ctx.payload.expected, requestID: ctx.payload.requestID })
+        .keepChanges({
+          sessionID: ctx.params.sessionID,
+          files: ctx.payload.files,
+          expected: ctx.payload.expected,
+          requestID: ctx.payload.requestID,
+        })
         .pipe(Effect.catchTag("SessionBusyError", (error) => SessionError.mapBusy(Effect.fail(error))))
     })
     // kilocode_change end

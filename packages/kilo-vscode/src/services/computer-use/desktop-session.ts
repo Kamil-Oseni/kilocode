@@ -101,7 +101,7 @@ export class DesktopOutcomeError extends Error {
 }
 
 export interface DesktopDriver {
-  observe(options?: { semantics?: boolean }): Promise<DesktopFrame>
+  observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame>
   windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
   focus(target: DesktopWindow): Promise<void>
@@ -143,8 +143,8 @@ export class DesktopSession {
     return scene
   }
 
-  private async capture(): Promise<DesktopFrame> {
-    const frame = await this.driver.observe()
+  private async capture(fresh = false): Promise<DesktopFrame> {
+    const frame = await this.driver.observe(fresh ? { fresh: true } : undefined)
     if (
       !Number.isInteger(frame.width) ||
       frame.width <= 0 ||
@@ -316,7 +316,8 @@ export class DesktopSession {
                 throw new DesktopOutcomeError(action.operation, detail)
               })
               effects += 1
-              const frame = await this.capture().catch((error: unknown) => {
+              // A cached pre-action frame cannot prove a local postcondition.
+              const frame = await this.capture(true).catch((error: unknown) => {
                 this.observations.cancel(token)
                 const detail = error instanceof Error ? error.message : String(error)
                 throw new DesktopOutcomeError("sequence postcondition", detail)

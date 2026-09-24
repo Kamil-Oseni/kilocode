@@ -6,6 +6,7 @@ import {
   type DesktopReceiptStore,
 } from "../../src/services/computer-use/desktop-bridge"
 import { DesktopSession, type DesktopDriver } from "../../src/services/computer-use/desktop-session"
+import { ComputerUseLeaseStore, type SensitivePolicy } from "../../src/services/computer-use/lease-store"
 import type { ConnectionState } from "../../src/services/cli-backend/connection-service"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 
@@ -28,6 +29,10 @@ function setup(
     decision?: "allow" | "ask" | "deny"
     dispatchDecision?: "allow" | "ask" | "deny"
     dispatch?: () => "allow" | "ask" | "deny"
+    dispatchGrant?: string | null
+    validate?: (
+      request: Extract<DesktopRequest, { operation: "authorize" }>,
+    ) => ReturnType<ComputerUseLeaseStore["authorize"]>
     pixels?: string[]
   } = {},
 ) {
@@ -125,6 +130,7 @@ function setup(
   }
   const session = new DesktopSession(driver)
   let observed = 0
+  const validate = input.validate
   const bridge = new DesktopBridge(
     connection,
     session,
@@ -146,18 +152,25 @@ function setup(
       reason: input.decision === "allow" ? "Authorized by active grant" : "No active grant",
       ...(input.decision === "allow" ? { grantID: "grant_test" } : {}),
     }),
-    input.dispatchDecision || input.dispatch
+    validate
       ? (request) => {
           checks.push(request)
-          const decision = input.dispatch?.() ?? input.dispatchDecision!
-          return {
-            operation: "authorize",
-            decision,
-            reason: decision === "allow" ? "Authorized by active grant" : "Grant stopped",
-            ...(decision === "allow" ? { grantID: "grant_test" } : {}),
-          }
+          return validate(request)
         }
-      : undefined,
+      : input.dispatchDecision || input.dispatch
+        ? (request) => {
+            checks.push(request)
+            const decision = input.dispatch?.() ?? input.dispatchDecision!
+            return {
+              operation: "authorize",
+              decision,
+              reason: decision === "allow" ? "Authorized by active grant" : "Grant stopped",
+              ...(decision === "allow" || (decision === "ask" && "delegation" in request && request.delegation)
+                ? { grantID: input.dispatchGrant === undefined ? "grant_test" : (input.dispatchGrant ?? undefined) }
+                : {}),
+            }
+          }
+        : undefined,
   )
   return { bridge, events, states, replies, rejects, actions, checks, focused, observed: () => observed }
 }
@@ -174,6 +187,139 @@ function memory(seed?: unknown) {
 }
 
 describe("desktop observation bridge", () => {
+  it("revalidates the exact child delegation on observation and native input", async () => {
+    const test = setup({ dispatchDecision: "allow" })
+    const delegation = { parentSessionID: "ses_parent", childSessionID: "ses_child", grantID: "grant_test" }
+    const observe: DesktopRequest = {
+      ...request,
+      id: "child_observe",
+      sessionID: "ses_child",
+      authorization: { kind: "grant", grantID: "grant_test", delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const result = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const click: DesktopRequest = {
+      id: "child_click",
+      sessionID: "ses_child",
+      operation: "click",
+      windowID: result.result.observation.target.windowID,
+      observationID: result.result.observation.id,
+      sensitive: false,
+      authorization: { kind: "grant", grantID: "grant_test", delegation },
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.checks).toMatchObject([
+      { sessionID: "ses_child", delegation },
+      { sessionID: "ses_child", delegation },
+      { sessionID: "ses_child", delegation },
+    ])
+    expect(test.actions).toHaveLength(1)
+    test.bridge.dispose()
+  })
+
+  it("refuses a delegated prompt when its grant stops just before native dispatch", async () => {
+    let checks = 0
+    let stopped: Promise<void> | undefined
+    const storage = { get: <T>() => undefined as T | undefined, update: async () => {} }
+    const leaseStore = new ComputerUseLeaseStore(storage, () => 100)
+    const sensitive: SensitivePolicy = {
+      communications: "ask",
+      financial: "ask",
+      credentials: "ask",
+      software: "ask",
+      system: "ask",
+      deletion: "ask",
+      disclosure: "ask",
+      legal: "ask",
+      publishing: "ask",
+    }
+    const lease = await leaseStore.grant({
+      sessionID: "ses_parent",
+      level: "autonomous",
+      duration: "session",
+      applications: "all",
+      actions: ["observe", "pointer"],
+      sensitive,
+      cooperativeInput: false,
+    })
+    const test = setup({
+      validate: (request) => {
+        const decision = leaseStore.authorize(request)
+        if (request.action === "pointer" && ++checks === 1) stopped = leaseStore.stop()
+        return decision
+      },
+    })
+    const delegation = { parentSessionID: "ses_parent", childSessionID: "ses_child", grantID: lease.id }
+    const observe: DesktopRequest = {
+      ...request,
+      id: "prompt_observe",
+      sessionID: "ses_child",
+      authorization: { kind: "prompt", delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const result = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const click: DesktopRequest = {
+      id: "prompt_click_stopped",
+      sessionID: "ses_child",
+      operation: "click",
+      windowID: result.result.observation.target.windowID,
+      observationID: result.result.observation.id,
+      sensitive: "communications",
+      authorization: { kind: "prompt", delegation },
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    await stopped
+
+    expect(checks).toBe(2)
+    expect(test.checks.slice(-2)).toMatchObject([{ delegation }, { delegation }])
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: click.id,
+        error: expect.objectContaining({ message: expect.stringContaining("no longer authorized") }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
+  it("refuses a delegated prompt when revalidation no longer names the same grant", async () => {
+    const test = setup({ dispatchDecision: "ask", dispatchGrant: "grant_other" })
+    const delegation = { parentSessionID: "ses_parent", childSessionID: "ses_child", grantID: "grant_test" }
+    const observe: DesktopRequest = {
+      ...request,
+      id: "prompt_changed_grant",
+      sessionID: "ses_child",
+      authorization: { kind: "prompt", delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.actions).toEqual([])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: observe.id,
+        error: expect.objectContaining({ message: expect.stringContaining("outside its active grant") }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
   it("negotiates a grant decision without capturing or dispatching input", async () => {
     const test = setup({ decision: "allow" })
     const auth: DesktopRequest = {

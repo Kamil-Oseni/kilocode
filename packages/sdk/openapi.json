@@ -19273,6 +19273,51 @@
                         "outcome": {
                           "type": "string",
                           "enum": ["completed", "error", "interrupted"]
+                        },
+                        "attention": {
+                          "type": "object",
+                          "properties": {
+                            "batchID": {
+                              "type": "string"
+                            },
+                            "goalCreatedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["NaN"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["Infinity"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["-Infinity"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["Infinity", "-Infinity", "NaN"]
+                                }
+                              ]
+                            },
+                            "requestID": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["batchID", "goalCreatedAt", "requestID", "revision", "ids"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["id", "intent", "phase", "queuedAt"],
@@ -22917,6 +22962,51 @@
                         "outcome": {
                           "type": "string",
                           "enum": ["completed", "error", "interrupted"]
+                        },
+                        "attention": {
+                          "type": "object",
+                          "properties": {
+                            "batchID": {
+                              "type": "string"
+                            },
+                            "goalCreatedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["NaN"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["Infinity"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["-Infinity"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["Infinity", "-Infinity", "NaN"]
+                                }
+                              ]
+                            },
+                            "requestID": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["batchID", "goalCreatedAt", "requestID", "revision", "ids"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["id", "intent", "phase", "queuedAt"],
@@ -26479,6 +26569,51 @@
                         "outcome": {
                           "type": "string",
                           "enum": ["completed", "error", "interrupted"]
+                        },
+                        "attention": {
+                          "type": "object",
+                          "properties": {
+                            "batchID": {
+                              "type": "string"
+                            },
+                            "goalCreatedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["NaN"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["Infinity"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["-Infinity"]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": ["Infinity", "-Infinity", "NaN"]
+                                }
+                              ]
+                            },
+                            "requestID": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["batchID", "goalCreatedAt", "requestID", "revision", "ids"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["id", "intent", "phase", "queuedAt"],
@@ -64485,6 +64620,9 @@
             "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
           },
           {
+            "$ref": "#/components/schemas/EventRayaChiefNoteAvailable1"
+          },
+          {
             "$ref": "#/components/schemas/EventKilocodeBrowserRequested"
           },
           {
@@ -67912,6 +68050,24 @@
                     ]
                   }
                 ]
+              },
+              "delegation": {
+                "type": "object",
+                "properties": {
+                  "parentSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "childSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "grantID": {
+                    "$ref": "#/components/schemas/ComputerUseGrantID"
+                  }
+                },
+                "required": ["parentSessionID", "childSessionID", "grantID"],
+                "additionalProperties": false
               }
             },
             "required": ["id", "sessionID", "operation", "surface", "action", "sensitive"],
@@ -67942,6 +68098,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -67953,6 +68127,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -67989,6 +68181,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68000,6 +68210,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68036,6 +68264,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68047,6 +68293,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68123,6 +68387,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68134,6 +68416,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68200,6 +68500,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68211,6 +68529,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68287,6 +68623,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68298,6 +68652,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68400,6 +68772,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68411,6 +68801,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68506,6 +68914,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68517,6 +68943,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68588,6 +69032,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68599,6 +69061,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68712,6 +69192,24 @@
                       },
                       "grantID": {
                         "$ref": "#/components/schemas/ComputerUseGrantID"
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind", "grantID"],
@@ -68723,6 +69221,24 @@
                       "kind": {
                         "type": "string",
                         "enum": ["prompt"]
+                      },
+                      "delegation": {
+                        "type": "object",
+                        "properties": {
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "grantID": {
+                            "$ref": "#/components/schemas/ComputerUseGrantID"
+                          }
+                        },
+                        "required": ["parentSessionID", "childSessionID", "grantID"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["kind"],
@@ -68827,6 +69343,24 @@
                                     },
                                     "grantID": {
                                       "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind", "grantID"],
@@ -68838,6 +69372,24 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": ["prompt"]
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind"],
@@ -68908,6 +69460,24 @@
                                     },
                                     "grantID": {
                                       "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind", "grantID"],
@@ -68919,6 +69489,24 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": ["prompt"]
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind"],
@@ -69008,6 +69596,24 @@
                                     },
                                     "grantID": {
                                       "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind", "grantID"],
@@ -69019,6 +69625,24 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": ["prompt"]
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind"],
@@ -69080,6 +69704,24 @@
                                     },
                                     "grantID": {
                                       "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind", "grantID"],
@@ -69091,6 +69733,24 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": ["prompt"]
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind"],
@@ -69194,6 +69854,24 @@
                                     },
                                     "grantID": {
                                       "$ref": "#/components/schemas/ComputerUseGrantID"
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind", "grantID"],
@@ -69205,6 +69883,24 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": ["prompt"]
+                                    },
+                                    "delegation": {
+                                      "type": "object",
+                                      "properties": {
+                                        "parentSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "childSessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "grantID": {
+                                          "$ref": "#/components/schemas/ComputerUseGrantID"
+                                        }
+                                      },
+                                      "required": ["parentSessionID", "childSessionID", "grantID"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["kind"],
@@ -71508,6 +72204,9 @@
               },
               {
                 "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
+              },
+              {
+                "$ref": "#/components/schemas/EventRayaChiefNoteAvailable"
               },
               {
                 "$ref": "#/components/schemas/EventKilocodeBrowserRequested"
@@ -90566,6 +91265,67 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventRayaChiefNoteAvailable": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.chief.note.available"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "goalCreatedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "requestID": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "noteID": {
+                "type": "string"
+              }
+            },
+            "required": ["version", "sessionID", "goalCreatedAt", "requestID", "revision", "noteID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventKilocodeBrowserRequested": {
         "type": "object",
         "properties": {
@@ -107692,6 +108452,63 @@
           "properties": {
             "type": "object",
             "properties": {}
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventRayaChiefNoteAvailable1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.chief.note.available"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "goalCreatedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              "requestID": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "noteID": {
+                "type": "string"
+              }
+            },
+            "required": ["version", "sessionID", "goalCreatedAt", "requestID", "revision", "noteID"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],

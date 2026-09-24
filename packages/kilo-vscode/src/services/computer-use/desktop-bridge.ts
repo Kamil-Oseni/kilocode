@@ -214,6 +214,8 @@ export class DesktopBridge {
     try {
       const result = await this.dispatch(request, startedAt, controller.signal, () => {
         if (controller.signal.aborted) throw new Error("Desktop action cancelled before native dispatch")
+        if (request.operation !== "authorize" && request.operation !== "sequence")
+          enforce(this.validate?.(authorization(request)), request.authorization)
         dispatched = true
       })
       if (controller.signal.aborted) {
@@ -380,9 +382,9 @@ export class DesktopBridge {
           steps: request.steps,
         },
         (action) => {
-          const decision = this.validate?.(sequenceAuthorization(request, action))
           const proof = proofs.get(action)
           if (!proof) throw new Error("Desktop sequence authorization evidence is incomplete")
+          const decision = this.validate?.(sequenceAuthorization(request, action, proof))
           enforce(decision, proof)
         },
         onDispatch,
@@ -599,12 +601,14 @@ function authorization(
     action,
     ...("windowID" in request ? { windowID: request.windowID } : {}),
     sensitive: "sensitive" in request ? request.sensitive : false,
+    ...(request.authorization?.delegation ? { delegation: request.authorization.delegation } : {}),
   }
 }
 
 function sequenceAuthorization(
   request: Extract<DesktopRequest, { operation: "sequence" }>,
   action: DesktopPlannedAction,
+  proof: Authorization,
 ): AuthorizeRequest {
   return {
     id: request.id,
@@ -619,14 +623,20 @@ function sequenceAuthorization(
           : "pointer",
     windowID: action.windowID,
     sensitive: action.sensitive,
+    ...(proof?.delegation ? { delegation: proof.delegation } : {}),
   }
 }
 
 function enforce(decision: AuthorizeResult | undefined, proof: Authorization): void {
-  if (!decision) return
+  if (!decision) {
+    if (proof?.delegation) throw new Error("Delegated desktop control cannot be revalidated")
+    return
+  }
   if (!proof) throw new Error("Desktop request has no authorization evidence")
   if (proof.kind === "prompt") {
     if (decision.decision === "deny") throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
+    if (proof.delegation && decision.grantID !== proof.delegation.grantID)
+      throw new Error("Delegated desktop prompt is outside its active grant")
     return
   }
   if (decision.decision !== "allow" || decision.grantID !== proof.grantID)

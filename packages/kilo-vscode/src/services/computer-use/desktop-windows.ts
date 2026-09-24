@@ -1210,12 +1210,12 @@ export class WindowsDesktopDriver implements DesktopDriver {
     this.runner = input ?? runner()
   }
 
-  async observe(options?: { semantics?: boolean }): Promise<DesktopFrame> {
+  async observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame> {
     if (options?.semantics === false) {
-      const scene = this.worker?.latest()
+      const scene = this.warm(options)
       if (scene && (await this.matches(scene))) return scene.frame
     }
-    const candidate = options?.semantics === false ? undefined : this.worker?.latest()
+    const candidate = options?.semantics === false ? undefined : this.warm(options)
     if (candidate) {
       const started = performance.now()
       const target = { windowID: candidate.frame.windowID, location: candidate.frame.location ?? "" }
@@ -1255,6 +1255,10 @@ export class WindowsDesktopDriver implements DesktopDriver {
       data: next.data,
     }
     return next
+  }
+
+  private warm(options?: { fresh?: boolean }): CapturedScene | undefined {
+    return options?.fresh ? undefined : this.worker?.latest()
   }
 
   async observeSemantics(target: { windowID: string; location: string }) {

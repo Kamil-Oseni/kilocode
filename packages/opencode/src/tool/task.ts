@@ -32,6 +32,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milesto
 import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_change: durable subagent display identity
 import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse failed equivalent children
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
+import { Desktop } from "@/kilocode/desktop/service" // kilocode_change - exact Computer Use child grant admission
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - bind planned Auto branches to child calls
 import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - saved branch preflight
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan" // kilocode_change - request-bound branch admission
@@ -87,9 +88,10 @@ const BaseParameterFields = {
     description: "Maximum agentic steps for this child (clamped to 1-50; defaults to 12)",
   }),
   // kilocode_change start - raya_change: explicit child authority ceiling
-  access: Schema.optional(Schema.Literals(["read", "edit"])).annotate({
+  access: Schema.optional(Schema.Literals(["read", "edit", "computer"])).annotate({
+    // kilocode_change
     description:
-      'Set "read" for research or audits that must not edit files or run shell commands. Set "edit" only when the parent policy allows changes. Omitted keeps legacy task behavior.',
+      'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" only when the parent policy allows file changes. Omitted keeps legacy task behavior.',
   }),
   branch_id: Schema.optional(Schema.String).annotate({
     description: "Exact branch ID from a saved Auto Chief plan. Required when the active goal has a branch plan.",
@@ -146,6 +148,7 @@ export const TaskTool = Tool.define(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change - raya_change: optional outside durable goal contexts
+    const desktop = Option.getOrUndefined(yield* Effect.serviceOption(Desktop.Service)) // kilocode_change
     const children = storage ? yield* GoalChildren.make({ storage, sessions }) : undefined // kilocode_change - raya_change
     const branches = storage ? ChiefBranches.make(storage) : undefined // kilocode_change
     // kilocode_change start - optional until Chief edit plans request an isolated workspace
@@ -210,10 +213,29 @@ export const TaskTool = Tool.define(
       const ruleset = Permission.merge(caller.permission, parent.permission ?? [])
       // kilocode_change start - resumed child authority cannot be widened
       const access = TaskAuthority.select({
-        requested: branch?.access ?? params.access,
+        requested: branch?.access ?? params.access, // kilocode_change - Chief must request computer access explicitly
         saved: TaskAuthority.read(resumed?.metadata),
         parent: ruleset,
       })
+      const computer =
+        access === "computer"
+          ? yield* Effect.gen(function* () {
+              if (!desktop) throw new Error("Computer Use is unavailable in this client")
+              const result = yield* desktop.request({
+                operation: "authorize",
+                sessionID: ctx.sessionID,
+                surface: "desktop",
+                action: "observe",
+                sensitive: false,
+              })
+              if (result.operation !== "authorize" || result.decision !== "allow" || !result.grantID)
+                throw new Error("Computer Use child needs an active parent desktop grant")
+              const prior = resumed ? TaskAuthority.proof(resumed.metadata, resumed.id, ctx.sessionID) : undefined
+              if (prior && prior.grantID !== result.grantID)
+                throw new Error("Computer Use grant changed; the existing child cannot be rebound")
+              return result.grantID
+            })
+          : undefined
       // kilocode_change end
       const candidates = (yield* agent.list()).filter(
         (item) =>
@@ -537,19 +559,24 @@ export const TaskTool = Tool.define(
       // raya_change end
       // kilocode_change end
       // kilocode_change start - persist a task-specific ceiling consumed by SessionPrompt.runLoop
+      const base = TaskAuthority.save(
+        {
+          ...nextSession.metadata,
+          ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
+        },
+        access,
+      )
+      const bound = computer
+        ? TaskAuthority.bind(base, {
+            parentSessionID: ctx.sessionID,
+            childSessionID: nextSession.id,
+            grantID: computer,
+          })
+        : base
       yield* sessions
         .setMetadata({
           sessionID: nextSession.id,
-          metadata: KiloTask.metadata(
-            TaskAuthority.save(
-              {
-                ...nextSession.metadata,
-                ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
-              },
-              access,
-            ), // kilocode_change - retain authority across restarts and resumes
-            params.step_cap,
-          ),
+          metadata: KiloTask.metadata(bound, params.step_cap), // kilocode_change - retain exact Computer Use delegation
         })
         .pipe(Effect.tapError(() => lease.release))
       // kilocode_change end

@@ -334,6 +334,7 @@ describe("tool.task planned Auto Chief branch", () => {
           context("call-plan"),
         )
         expect(plan.title).toBe("Auto Chief branches planned")
+        expect(plan.metadata.revision).toBe((yield* ChiefBranches.make(storage).read(chat.id))?.revision) // kilocode_change
         const task = get("task")
         const first = yield* task.execute(
           { description: "Safety audit", branch_id: "safety", background: true },

@@ -29,6 +29,7 @@ import { WorkspaceApi } from "./groups/workspace"
 // kilocode_change start - Kilo HttpApi groups
 import { AgentBuilderApi } from "@/kilocode/server/httpapi/groups/agent-builder"
 import { BranchNameApi } from "@/kilocode/server/httpapi/groups/branch-name"
+import { ChiefNotesApi } from "@/kilocode/server/httpapi/groups/chief-notes"
 import { CommitMessageApi } from "@/kilocode/server/httpapi/groups/commit-message"
 import { BackgroundProcessApi } from "@/kilocode/server/httpapi/groups/background-process"
 import { ConfigConsoleApi } from "@/kilocode/server/httpapi/groups/config-console"
@@ -127,6 +128,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(FocusTimerApi)
   .addHttpApi(AdminApi)
   .addHttpApi(ContactApi)
+  .addHttpApi(ChiefNotesApi)
   // kilocode_change end
   .middleware(SchemaErrorMiddleware)
 

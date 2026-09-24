@@ -31424,6 +31424,60 @@ export type RayaContactMessageGetResponses = {
 
 export type RayaContactMessageGetResponse = RayaContactMessageGetResponses[keyof RayaContactMessageGetResponses]
 
+export type KilocodeSessionChiefNotesData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    goalCreatedAt: string
+    requestID: string
+    revision: string
+  }
+  url: "/session/{sessionID}/chief/notes"
+}
+
+export type KilocodeSessionChiefNotesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSessionChiefNotesError = KilocodeSessionChiefNotesErrors[keyof KilocodeSessionChiefNotesErrors]
+
+export type KilocodeSessionChiefNotesResponses = {
+  /**
+   * Notes from the exact active Chief plan
+   */
+  200: {
+    version: 1
+    sessionID: string
+    goalCreatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    requestID: string
+    revision: string
+    notes: Array<{
+      version: 1
+      id: string
+      branchID: string
+      branchName: string
+      childSessionID: string
+      text: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      state: "delivered"
+    }>
+  }
+}
+
+export type KilocodeSessionChiefNotesResponse =
+  KilocodeSessionChiefNotesResponses[keyof KilocodeSessionChiefNotesResponses]
+
 export type V2HealthGetData = {
   body?: never
   path?: never

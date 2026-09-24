@@ -16,6 +16,7 @@ import { agentBuilderHandlers } from "./handlers/agent-builder"
 import { anacondaDesktopHandlers } from "./handlers/anaconda-desktop"
 import { backgroundProcessHandlers } from "./handlers/background-process"
 import { branchNameHandlers } from "./handlers/branch-name"
+import { chiefNotesHandlers } from "./handlers/chief-notes"
 import { childSteerHandlers } from "./handlers/child-steer"
 import { commitMessageHandlers } from "./handlers/commit-message"
 import { configConsoleHandlers } from "./handlers/config-console"
@@ -44,6 +45,7 @@ export const provide = Layer.provide([
   anacondaDesktopHandlers.pipe(Layer.provide(AnacondaDesktop.liveLayer)),
   backgroundProcessHandlers,
   branchNameHandlers,
+  chiefNotesHandlers,
   childSteerHandlers,
   commitMessageHandlers,
   configConsoleHandlers,

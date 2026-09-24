@@ -10,7 +10,7 @@ import type { RayaGoal } from "@/kilocode/goal"
 import * as Tool from "@/tool/tool"
 
 const Parameters = Schema.Struct({ proposals: Schema.Array(ChiefPlan.Proposal) })
-type Metadata = { goalCreatedAt: number; requestID: string }
+type Metadata = { goalCreatedAt: number; requestID: string; revision: string }
 
 /** Kept out of the tool registry until the full fanout and synthesis lifecycle is accepted. */
 export function chiefPlanTool(deps: {
@@ -58,7 +58,7 @@ export function chiefPlanTool(deps: {
           return {
             title: "Auto Chief branches planned",
             output: JSON.stringify({ requestID: saved.requestID, branches: saved.branches }, null, 2),
-            metadata: { goalCreatedAt: saved.goalCreatedAt, requestID: saved.requestID },
+            metadata: { goalCreatedAt: saved.goalCreatedAt, requestID: saved.requestID, revision: saved.revision },
           }
         }).pipe(Effect.orDie),
     }),

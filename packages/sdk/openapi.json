@@ -58425,6 +58425,211 @@
         ]
       }
     },
+    "/session/{sessionID}/chief/notes": {
+      "get": {
+        "tags": ["Raya API"],
+        "operationId": "kilocode.session.chiefNotes",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "goalCreatedAt",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "requestID",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notes from the exact active Chief plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "goalCreatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "requestID": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "branchID": {
+                            "type": "string"
+                          },
+                          "branchName": {
+                            "type": "string"
+                          },
+                          "childSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": ["delivered"]
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "id",
+                          "branchID",
+                          "branchName",
+                          "childSessionID",
+                          "text",
+                          "at",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["version", "sessionID", "goalCreatedAt", "requestID", "revision", "notes"],
+                  "additionalProperties": false,
+                  "description": "Notes from the exact active Chief plan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read bounded, durable notes for an exact active Chief request and revision.",
+        "summary": "Read Chief branch notes",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.session.chiefNotes({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["Raya API"],
@@ -108710,6 +108915,9 @@
     },
     {
       "name": "raya-contact"
+    },
+    {
+      "name": "Raya API"
     },
     {
       "name": "Raya API",

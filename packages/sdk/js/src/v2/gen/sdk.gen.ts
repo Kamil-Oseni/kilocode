@@ -350,6 +350,8 @@ import type {
   KilocodeSelfHealUpdateResponses,
   KilocodeSelfHealVerificationPublishErrors,
   KilocodeSelfHealVerificationPublishResponses,
+  KilocodeSessionChiefNotesErrors,
+  KilocodeSessionChiefNotesResponses,
   KilocodeSessionChildSteerErrors,
   KilocodeSessionChildSteerResponses,
   KilocodeSessionImportMessageErrors,
@@ -11314,6 +11316,48 @@ export class Session4 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Read Chief branch notes
+   *
+   * Read bounded, durable notes for an exact active Chief request and revision.
+   */
+  public chiefNotes<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      goalCreatedAt: string
+      requestID: string
+      revision: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "goalCreatedAt" },
+            { in: "query", key: "requestID" },
+            { in: "query", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeSessionChiefNotesResponses,
+      KilocodeSessionChiefNotesErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/chief/notes",
+      ...options,
+      ...params,
     })
   }
 }

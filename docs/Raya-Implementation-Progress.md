@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 20:48 America/Toronto - one-time Chief integration boundary kept unregistered
+
+An unregistered `chief_integrate` tool now ties the exact reviewed diff and saved child worktree to the canonical parent. It rechecks source and parent under a repository-wide durable lock, obtains the existing edit permission once for exact paths, reserves an integration attempt before native effects, dispatches the prepared patch/copies once, verifies every final byte and records `integrated` or `unknown`. Four real-Git tests / 16 assertions pass: LF bytes remain exact with `core.autocrlf=true`, a partial dispatch fails verification, abort immediately after reservation settles unknown without replay, and nested untracked files are refused before effects. This is source-only and deliberately unregistered. External path-swap behavior for tracked `git apply`, installed-host sandbox/permission behavior, restart and prolonged-use acceptance remain open. Do not claim Chief edit integration is user-ready or mark `FUT-AGENT-01/02` Verified.
+
 ## ChatGPT 2026-09-23 20:31 America/Toronto - stable Chief edit preparation
 
 `ChiefIntegration.prepare` now rechecks the reviewed preview and byte-exact manifest, captures a bounded tracked Git patch and copies untracked regular-file bytes into memory, then rechecks the source again. It refuses changed or mismatched review evidence and leaves both checkouts untouched. Seven focused real-Git tests / 23 assertions pass, including tracked deletion and changed-source cases; CLI typecheck and formatting pass. This provides stable input to a future one-time apply, but does not authorize, reserve, mutate or verify any parent effect. The apply tool is being implemented separately and remains unregistered until its adverse cases pass.

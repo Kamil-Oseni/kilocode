@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -29,6 +30,74 @@ async function repo() {
 }
 
 describe("Chief edit preview", () => {
+  test("builds a byte-exact manifest for changed, added, and deleted regular files", async () => {
+    const item = await repo()
+    await Bun.write(path.join(item.dir, "delete.txt"), "remove me\n")
+    git(item.dir, "add", "delete.txt")
+    git(item.dir, "commit", "-qm", "add deletion fixture")
+    const base = git(item.dir, "rev-parse", "HEAD")
+    await Bun.write(path.join(item.dir, "tracked.txt"), "updated\n")
+    await rm(path.join(item.dir, "delete.txt"))
+    await Bun.write(path.join(item.dir, "new.txt"), "added\n")
+    const first = await ChiefEdits.preview({ directory: item.dir, baseCommit: base })
+    const manifest = await ChiefEdits.manifest({ preview: first })
+    expect(manifest.previewDigest).toBe(first.digest!)
+    expect(manifest.digest).toMatch(/^[0-9a-f]{64}$/)
+    expect(manifest.files.map((file) => file.path)).toEqual(["delete.txt", "new.txt", "tracked.txt"])
+    expect(manifest.files[0]).toMatchObject({
+      base: { sha256: createHash("sha256").update("remove me\n").digest("hex"), type: "file", mode: "100644" },
+      final: null,
+    })
+    expect(manifest.files[1]).toMatchObject({
+      base: null,
+      final: { sha256: createHash("sha256").update("added\n").digest("hex"), type: "file", mode: "100644" },
+    })
+    expect(manifest.files[2]).toMatchObject({
+      base: { sha256: createHash("sha256").update("base\n").digest("hex") },
+      final: { sha256: createHash("sha256").update("updated\n").digest("hex") },
+    })
+    expect((await ChiefEdits.manifest({ preview: first })).digest).toBe(manifest.digest)
+  }, 30_000)
+
+  test("refuses stale, truncated, binary, and invalid UTF-8 previews", async () => {
+    const item = await repo()
+    await Bun.write(path.join(item.dir, "new.txt"), "ready\n")
+    const first = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base })
+    await Bun.write(path.join(item.dir, "new.txt"), "changed\n")
+    expect(ChiefEdits.manifest({ preview: first })).rejects.toThrow("changed")
+    await Bun.write(path.join(item.dir, "new.txt"), "a".repeat(3000))
+    const truncated = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base, maxBytes: 1024 })
+    expect(ChiefEdits.manifest({ preview: truncated })).rejects.toThrow("incomplete")
+    await Bun.write(path.join(item.dir, "new.txt"), new Uint8Array([0xff, 0x00]))
+    const binary = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base })
+    expect(ChiefEdits.manifest({ preview: binary })).rejects.toThrow("incomplete")
+    await Bun.write(path.join(item.dir, "new.txt"), new Uint8Array([0xc3, 0x28]))
+    const invalid = await ChiefEdits.preview({ directory: item.dir, baseCommit: item.base })
+    expect(ChiefEdits.manifest({ preview: invalid })).rejects.toThrow("incomplete")
+  }, 30_000)
+
+  test("refuses a symlink in the fixed base tree", async () => {
+    const item = await repo()
+    await Bun.write(path.join(item.dir, "link-content.txt"), "tracked.txt")
+    const blob = git(item.dir, "hash-object", "-w", "link-content.txt")
+    git(item.dir, "update-index", "--add", "--cacheinfo", `120000,${blob},link.txt`)
+    git(item.dir, "commit", "-qm", "link in base")
+    const base = git(item.dir, "rev-parse", "HEAD")
+    git(item.dir, "rm", "-q", "link.txt")
+    const first = await ChiefEdits.preview({ directory: item.dir, baseCommit: base })
+    expect(ChiefEdits.manifest({ preview: first })).rejects.toThrow("incomplete or contains unsupported content")
+  }, 30_000)
+
+  test("refuses a submodule in the fixed base tree", async () => {
+    const item = await repo()
+    git(item.dir, "update-index", "--add", "--cacheinfo", `160000,${item.base},module`)
+    git(item.dir, "commit", "-qm", "submodule in base")
+    const base = git(item.dir, "rev-parse", "HEAD")
+    git(item.dir, "rm", "-q", "--cached", "module")
+    const first = await ChiefEdits.preview({ directory: item.dir, baseCommit: base })
+    expect(ChiefEdits.manifest({ preview: first })).rejects.toThrow("incomplete or contains unsupported content")
+  }, 30_000)
+
   test("shows fixed-base committed, working, staged, and untracked edits in stable order", async () => {
     const item = await repo()
     await Bun.write(path.join(item.dir, "tracked.txt"), "changed\n")

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 20:12 America/Toronto - exact edit source manifest, apply still missing
+
+`ChiefEdits.manifest({ preview })` now returns fixed-base and final raw content hashes, sizes and regular-file modes for each path, plus a deterministic manifest digest. It refuses unsupported or incomplete previews, changed source, oversize blobs and nonregular Git/filesystem entries; it re-previews after reading. This is read-only source, with nine real-Git tests and CLI typecheck passing, and no installed snapshot. It does not hold a source lock or copy bytes for a later write. An apply tool must re-read the manifest immediately before dispatch or use stable content copies, compare it to the reviewed preview digest, and verify parent paths and final content under a repository-wide durable lock. No native apply or goal completion claim is valid yet.
+
 ## ChatGPT 2026-09-23 19:57 America/Toronto - Chief edit preview and integration receipt foundation
 
 `ChiefEdits.preview` now inspects an exact worktree root against its fixed base, includes tracked and untracked paths, caps file count and bytes, and withholds complete fingerprints for conflict, binary, unsupported or truncated content. Chief inspection includes this bounded evidence and saves the diff fingerprint in its tool metadata. Chief review requires the same inspected fingerprint and rechecks the worktree before recording it. The branch ledger can reserve a one-time integration attempt and persist integrated or unknown outcomes; stopped reservations become unknown without automatic replay. These are backend source changes only, not an installed snapshot. The integration ledger cannot yet be called by an apply tool, and a synthetic receipt alone is not proof of a merged parent.

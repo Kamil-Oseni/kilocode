@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 20:12 America/Toronto - byte-exact Chief edit manifest
+
+A complete fixed-base edit preview can now produce a read-only manifest of every changed regular file, with base/final raw SHA-256 hashes, byte sizes and Git file modes. Manifest collection refuses stale source, truncated or conflicting previews, invalid UTF-8, binary content, symlinks, submodules, nonregular files and oversized blobs. It rechecks the worktree after collection so a changed source cannot silently become the reviewed input. Nine real-Git tests / 37 assertions and CLI typecheck pass (one concurrent test run had a timed-out cleanup hook; a standalone rerun passed). This remains source-only. A repository-wide lock, canonical parent preflight, one-time apply, postcondition verification, explicit authorization and installed-host acceptance are still required before an edit branch can finish a goal.
+
 ## ChatGPT 2026-09-23 19:57 America/Toronto - bound Chief edit review to a saved diff
 
 The isolated Chief worktree now has a read-only, size-capped fixed-base preview covering committed, staged, working and untracked changes. It reports conflicts, binary files and incomplete previews without presenting them as complete text patches. A complete preview has a SHA-256 fingerprint; `chief_inspect` presents the files and binds that fingerprint to its exact inspection receipt. `chief_review` re-reads the worktree and records the same fingerprint only if the inspected snapshot is still current. The integration ledger reserves one attempt, rejects a changed review or duplicate attempt, and reconciles a proven stopped owner to unknown rather than replaying native effects. Real Git preview and ledger tests pass; CLI typecheck and targeted lint pass. This is source-only. No apply tool or parent-checkout conflict check exists yet, so editing branches still cannot satisfy goal completion. `FUT-AGENT-01/02` remain In progress.

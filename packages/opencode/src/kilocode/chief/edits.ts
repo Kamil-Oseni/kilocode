@@ -26,6 +26,27 @@ export namespace ChiefEdits {
     clean: boolean
   }
 
+  export type Content = {
+    sha256: string
+    size: number
+    type: "file"
+    mode: "100644" | "100755"
+  }
+
+  export type Entry = {
+    path: string
+    base: Content | null
+    final: Content | null
+  }
+
+  export type Manifest = {
+    directory: string
+    baseCommit: string
+    previewDigest: string
+    digest: string
+    files: Entry[]
+  }
+
   function git(dir: string, args: string[], limit = 1024 * 1024) {
     const result = spawnSync("git", args, {
       cwd: dir,
@@ -52,7 +73,7 @@ export namespace ChiefEdits {
     const relative = path.relative(dir, path.resolve(dir, name))
     if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
       throw new Error("Edit path escapes its worktree")
-    return relative
+    return relative.split(path.sep).join("/")
   }
 
   /** A capped or conflicted preview is evidence for review, never an approval to integrate. */
@@ -180,6 +201,94 @@ export namespace ChiefEdits {
       conflicts: [...conflicts].sort(),
       truncated,
       clean: paths.length === 0,
+    }
+  }
+
+  /** Capture exact regular-file content identities only after a complete human-reviewable preview. */
+  export async function manifest(input: { preview: Preview; maxBlobBytes?: number }): Promise<Manifest> {
+    const first = input.preview
+    if (
+      !first.digest ||
+      first.truncated ||
+      first.conflicts.length ||
+      first.files.some((file) => file.patch === undefined || file.binary !== false || file.truncated || file.conflict)
+    )
+      throw new Error("Edit preview is incomplete or contains unsupported content")
+    const dir = await realpath(first.directory)
+    const root = git(dir, ["rev-parse", "--show-toplevel"]).bytes.toString("utf8").trim()
+    if (path.normalize(await realpath(root)).toLowerCase() !== path.normalize(dir).toLowerCase())
+      throw new Error("Edit manifest requires the worktree root")
+    const limit = Math.max(1024, Math.min(input.maxBlobBytes ?? 16 * 1024 * 1024, 32 * 1024 * 1024))
+    const files: Entry[] = []
+    for (const file of first.files) {
+      const name = inside(dir, file.path)
+      const tree = git(dir, ["ls-tree", "-z", first.baseCommit, "--", name]).bytes
+      const items = names(tree)
+      if (items.length > 1) throw new Error(`Ambiguous base path: ${name}`)
+      const base = (() => {
+        if (!items.length) return null
+        const match = items[0]!.match(/^(\d{6}) (\w+) ([0-9a-f]{40,64})\t([\s\S]+)$/)
+        if (!match || match[4] !== name) throw new Error(`Invalid base tree entry: ${name}`)
+        if (match[2] !== "blob" || (match[1] !== "100644" && match[1] !== "100755"))
+          throw new Error(`Unsupported base file type: ${name}`)
+        const result = git(dir, ["cat-file", "blob", match[3]!], limit)
+        if (result.truncated || result.bytes.length > limit)
+          throw new Error(`Base file exceeds manifest limit: ${name}`)
+        if (!isUtf8(result.bytes) || result.bytes.includes(0)) throw new Error(`Invalid UTF-8 base file: ${name}`)
+        return {
+          sha256: createHash("sha256").update(result.bytes).digest("hex"),
+          size: result.bytes.length,
+          type: "file" as const,
+          mode: match[1] as "100644" | "100755",
+        }
+      })()
+      const target = path.join(dir, name)
+      const final = await (async () => {
+        if (file.status === "D") return null
+        const before = await lstat(target)
+        if (!before.isFile()) throw new Error(`Unsupported final file type: ${name}`)
+        const actual = await realpath(target)
+        inside(dir, path.relative(dir, actual))
+        if (before.size > limit) throw new Error(`Final file exceeds manifest limit: ${name}`)
+        const bytes = Buffer.from(await Bun.file(target).arrayBuffer())
+        const after = await lstat(target)
+        if (
+          !after.isFile() ||
+          before.size !== after.size ||
+          before.mtimeMs !== after.mtimeMs ||
+          before.ino !== after.ino ||
+          before.mode !== after.mode ||
+          bytes.length !== after.size
+        )
+          throw new Error(`Edit source changed while collecting: ${name}`)
+        if (bytes.length > limit) throw new Error(`Final file exceeds manifest limit: ${name}`)
+        if (!isUtf8(bytes) || bytes.includes(0)) throw new Error(`Invalid UTF-8 final file: ${name}`)
+        return {
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          size: bytes.length,
+          type: "file" as const,
+          mode: (after.mode & 0o111 ? "100755" : "100644") as "100644" | "100755",
+        }
+      })()
+      if (!base && !final) throw new Error(`Edit path has no content: ${name}`)
+      files.push({ path: name, base, final })
+    }
+    const second = await preview({
+      directory: dir,
+      baseCommit: first.baseCommit,
+      maxFiles: 1000,
+      maxBytes: 1024 * 1024,
+    })
+    if (second.digest !== first.digest || second.files.length !== files.length)
+      throw new Error("Edit source changed while collecting")
+    return {
+      directory: dir,
+      baseCommit: first.baseCommit,
+      previewDigest: first.digest,
+      digest: createHash("sha256")
+        .update(JSON.stringify({ baseCommit: first.baseCommit, files }))
+        .digest("hex"),
+      files,
     }
   }
 }

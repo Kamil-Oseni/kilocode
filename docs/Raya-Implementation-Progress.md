@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 22:46 America/Toronto - confirmed specialist-start snapshot installed
+
+Commit `885d9a64a4` is pushed and installed as `eden.raya@7.4.23-snapshot+885d9a64a4.kamil-oseni.1790217716573`. The protected push passed 29 JavaScript/TypeScript package typechecks and the cached JetBrains check. The low-memory workflow regenerated the SDK, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed sequential extension/webview typechecks and ESLint, bundled production assets, packaged the VSIX and installed it. VS Code lists the exact version. Retained rollback VSIX SHA-256: `3F2074DBFC6EDA6D66A795D37F7876AAD2CB79DBF4F65660AE71AB6AADA22FAB`. No live parent-chat or restart acceptance occurred in this host; real two-specialist narrow/wide and restart review remains open. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-23 22:36 America/Toronto - confirmed Chief specialist starts
 
 The existing expandable task card now identifies a planned Chief specialist by its saved name and shows **Started** only after a confirmed background-start tool result. The projection binds the task to the exact saved plan request and goal, parent and child sessions, branch and specialist; duplicate, stale and substituted receipts produce no start. Planned task metadata now carries the request ID and goal creation time needed for that check. The child tool history remains available in the same card, without a second activity row or an invented child message. Ten focused Chief projection tests, twenty combined webview unit tests, the planned-branch backend integration test, CLI and webview typechecks, extension lint, formatting, annotation and diff checks pass. This is source evidence pending a new installed snapshot and real two-specialist narrow/wide and restart review. Child-to-parent interim messaging still needs a separate durable delivery contract; `FUT-AGENT-01/02` remain In progress.

@@ -36,8 +36,40 @@ async function fixture() {
   await Bun.write(path.join(child, "new.txt"), "added\n")
   const preview = await ChiefEdits.preview({ directory: child, baseCommit: base })
   const manifest = await ChiefEdits.manifest({ preview })
-  return { parent, child, base, manifest }
+  return { parent, child, base, preview, manifest }
 }
+
+describe("Chief integration preparation", () => {
+  test("captures an exact tracked patch and stable untracked bytes without writing either checkout", async () => {
+    const item = await fixture()
+    const prepared = await ChiefIntegration.prepare({ manifest: item.manifest, preview: item.preview })
+    expect(prepared.digest).toBe(item.manifest.digest)
+    expect(prepared.patch.toString("utf8")).toContain("+edited")
+    expect(prepared.untracked).toEqual([{ path: "new.txt", bytes: Buffer.from("added\n"), mode: "100644" }])
+    await Bun.write(path.join(item.child, "new.txt"), "changed later\n")
+    expect(prepared.untracked[0]?.bytes.toString("utf8")).toBe("added\n")
+    expect(await Bun.file(path.join(item.parent, "tracked.txt")).text()).toBe("base\n")
+    expect(await Bun.file(path.join(item.parent, "new.txt")).exists()).toBe(false)
+  }, 30_000)
+
+  test("refuses changed source bytes and mismatched review", async () => {
+    const item = await fixture()
+    await Bun.write(path.join(item.child, "tracked.txt"), "changed after review\n")
+    expect(ChiefIntegration.prepare({ manifest: item.manifest, preview: item.preview })).rejects.toThrow("changed")
+    const wrong = { ...item.manifest, previewDigest: "f".repeat(64) }
+    expect(ChiefIntegration.prepare({ manifest: wrong, preview: item.preview })).rejects.toThrow("do not match")
+  }, 30_000)
+
+  test("prepares tracked deletions without reading the deleted source path", async () => {
+    const item = await fixture()
+    await rm(path.join(item.child, "tracked.txt"))
+    const preview = await ChiefEdits.preview({ directory: item.child, baseCommit: item.base })
+    const manifest = await ChiefEdits.manifest({ preview })
+    const prepared = await ChiefIntegration.prepare({ manifest, preview })
+    expect(prepared.patch.toString("utf8")).toContain("deleted file mode")
+    expect(prepared.untracked[0]?.bytes.toString("utf8")).toBe("added\n")
+  }, 30_000)
+})
 
 describe("Chief integration preflight", () => {
   test("accepts exact fixed-base targets without touching the parent", async () => {

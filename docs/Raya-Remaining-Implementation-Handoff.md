@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 20:31 America/Toronto - prepared bytes for a one-time Chief apply
+
+The read-only `ChiefIntegration.prepare({ manifest, preview })` returns exact tracked patch bytes and copied untracked regular-file bytes after matching the reviewed preview, manifest, per-file hashes and a final source recheck. It caps the tracked patch at 1 MB and the prepared content at 16 MB. Focused real-Git tests pass 7/7. It does not mutate the parent or hold a lock. The apply caller must obtain the existing edit permission for exact paths, take a repository-wide durable lock, repeat source preparation and parent preflight inside that lock, reserve a single integration attempt before dispatch, verify every final file, and mark any uncertain or partial effect unknown without replay. No snapshot is installed from this source yet.
+
 ## ChatGPT 2026-09-23 20:22 America/Toronto - fixed-base parent preflight
 
 `ChiefIntegration.preflight({ manifest, parent })` is a read-only gate for the canonical parent checkout. It verifies exact HEAD, base tree and index identities, current target bytes/mode or absence, case-folded path collisions and symlink/junction ancestors; four real-Git tests cover clean, stale, dirty, collision and nested-link cases. It does not close the time between inspection and mutation. The next action is to add a repository-wide durable lock, collect stable final bytes, revalidate the reviewed source manifest and parent preflight under that lock, run the saved edit permission policy once for the exact paths, reserve a one-time effect, dispatch once, verify all postconditions, and preserve ambiguous outcomes as unknown. The owner's authorization for edits should be respected through the existing permission policy without inventing a mandatory prompt for every ordinary merge. This is source-only; no snapshot or live acceptance claim.

@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 20:31 America/Toronto - stable Chief edit preparation
+
+`ChiefIntegration.prepare` now rechecks the reviewed preview and byte-exact manifest, captures a bounded tracked Git patch and copies untracked regular-file bytes into memory, then rechecks the source again. It refuses changed or mismatched review evidence and leaves both checkouts untouched. Seven focused real-Git tests / 23 assertions pass, including tracked deletion and changed-source cases; CLI typecheck and formatting pass. This provides stable input to a future one-time apply, but does not authorize, reserve, mutate or verify any parent effect. The apply tool is being implemented separately and remains unregistered until its adverse cases pass.
+
 ## ChatGPT 2026-09-23 20:22 America/Toronto - read-only Chief parent preflight
 
 Before any integration effect, a read-only preflight can now verify that the target is the canonical parent checkout at the fixed base commit and that each touched path still matches its recorded base bytes and mode. It refuses staged edits, modified or missing targets, untracked and case-insensitive collisions, overlapping paths, and symlink or junction ancestors. Four real-Git tests / 13 assertions pass, including a nested path; the CLI typecheck and targeted lint pass. This preflight must be rerun under a repository-wide integration lock immediately before a one-time apply. No apply tool, authorization flow or native-effect postcondition exists yet, so no edit branch is integrated by this slice.

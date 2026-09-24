@@ -1,17 +1,26 @@
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
+import { isUtf8 } from "node:buffer"
 import { lstat, readFile, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
-import type { ChiefEdits } from "./edits"
+import { ChiefEdits } from "./edits"
 
 /** Read-only admission check. The caller must repeat it under an integration lock before dispatch. */
 export namespace ChiefIntegration {
-  function git(dir: string, args: string[]) {
+  export type Prepared = {
+    directory: string
+    baseCommit: string
+    digest: string
+    patch: Buffer
+    untracked: { path: string; bytes: Buffer; mode: "100644" | "100755" }[]
+  }
+
+  function git(dir: string, args: string[], limit = 32 * 1024 * 1024) {
     const result = spawnSync("git", args, {
       cwd: dir,
       encoding: "buffer",
       timeout: 15_000,
-      maxBuffer: 32 * 1024 * 1024,
+      maxBuffer: limit,
       windowsHide: true,
       env: { ...process.env, GIT_LITERAL_PATHSPECS: "1", GIT_NO_REPLACE_OBJECTS: "1" },
     })
@@ -53,6 +62,107 @@ export namespace ChiefIntegration {
       if (err.code === "ENOENT") return undefined
       throw err
     })
+  }
+
+  /** Captures only reviewed regular-file bytes; no source or parent files are changed. */
+  export async function prepare(input: {
+    manifest: ChiefEdits.Manifest
+    preview: ChiefEdits.Preview
+  }): Promise<Prepared> {
+    const source = input.preview
+    const manifest = input.manifest
+    if (
+      !source.digest ||
+      source.digest !== manifest.previewDigest ||
+      source.baseCommit !== manifest.baseCommit ||
+      source.directory !== manifest.directory ||
+      manifest.files.length > 100 ||
+      source.files.length !== manifest.files.length
+    )
+      throw new Error("Edit review and manifest do not match")
+    const dir = await realpath(source.directory)
+    const fresh = await ChiefEdits.preview({
+      directory: dir,
+      baseCommit: manifest.baseCommit,
+      maxFiles: 1000,
+      maxBytes: 1024 * 1024,
+    })
+    if (!fresh.digest || fresh.digest !== source.digest) throw new Error("Edit source changed after review")
+    const current = await ChiefEdits.manifest({ preview: fresh })
+    if (current.digest !== manifest.digest) throw new Error("Edit bytes changed after review")
+    const chunks: Buffer[] = []
+    const untracked: Prepared["untracked"] = []
+    let total = 0
+    for (const file of fresh.files) {
+      const name = file.path
+      const parts = valid(name)
+      const identity = manifest.files.find((item) => item.path === name)
+      if (!identity || file.patch === undefined || file.binary || file.conflict || file.truncated)
+        throw new Error(`Unsupported edit content: ${name}`)
+      let target = dir
+      for (const [index, part] of parts.entries()) {
+        target = path.join(target, part)
+        const info = await stat(target)
+        if (!info && index === parts.length - 1 && identity.final === null) continue
+        if (!info) throw new Error(`Source path disappeared: ${name}`)
+        if (index === parts.length - 1 && identity.final === null)
+          throw new Error(`Deleted source path reappeared: ${name}`)
+        if (info.isSymbolicLink() || (index < parts.length - 1 && !info.isDirectory()))
+          throw new Error(`Unsafe source path: ${name}`)
+        if (
+          index < parts.length - 1 &&
+          path.normalize(await realpath(target)).toLowerCase() !== path.normalize(target).toLowerCase()
+        )
+          throw new Error(`Reparsed source ancestor: ${name}`)
+        if (index === parts.length - 1 && identity.final !== null && !info.isFile())
+          throw new Error(`Unsupported source file: ${name}`)
+      }
+      if (!file.untracked) {
+        const bytes = git(
+          dir,
+          ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--binary", manifest.baseCommit, "--", name],
+          1024 * 1024 + 1,
+        )
+        if (!isUtf8(bytes) || bytes.toString("utf8") !== file.patch)
+          throw new Error(`Tracked patch changed after review: ${name}`)
+        total += bytes.length
+        if (total > 1024 * 1024) throw new Error("Tracked patch exceeds preparation limit")
+        chunks.push(bytes)
+        continue
+      }
+      if (identity.base || !identity.final) throw new Error(`Invalid untracked manifest entry: ${name}`)
+      const before = await lstat(target)
+      if (!before.isFile() || before.size > 16 * 1024 * 1024)
+        throw new Error(`Untracked file exceeds preparation limit: ${name}`)
+      const bytes = await readFile(target)
+      const after = await lstat(target)
+      if (
+        !after.isFile() ||
+        before.ino !== after.ino ||
+        before.mtimeMs !== after.mtimeMs ||
+        bytes.length !== identity.final.size ||
+        createHash("sha256").update(bytes).digest("hex") !== identity.final.sha256 ||
+        (after.mode & 0o111 ? "100755" : "100644") !== identity.final.mode
+      )
+        throw new Error(`Untracked bytes changed after review: ${name}`)
+      total += bytes.length
+      if (total > 16 * 1024 * 1024) throw new Error("Prepared content exceeds limit")
+      untracked.push({ path: name, bytes: Buffer.from(bytes), mode: identity.final.mode })
+    }
+    const last = await ChiefEdits.preview({
+      directory: dir,
+      baseCommit: manifest.baseCommit,
+      maxFiles: 1000,
+      maxBytes: 1024 * 1024,
+    })
+    if (last.digest !== fresh.digest) throw new Error("Edit source changed during preparation")
+    return {
+      directory: dir,
+      baseCommit: manifest.baseCommit,
+      digest: manifest.digest,
+      patch: Buffer.concat(chunks),
+      untracked,
+    }
   }
 
   /** Proves the parent still contains the fixed base at every touched path. No files are changed. */

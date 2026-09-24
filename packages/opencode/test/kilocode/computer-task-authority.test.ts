@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { Permission } from "@/permission"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
+import { addAuto } from "@/kilocode/agent"
+import { RayaChief } from "@/kilocode/chief"
 
 describe("Computer Use child authority", () => {
   it("keeps filesystem mutation denied while admitting desktop tools under Auto's wildcard", () => {
@@ -64,5 +66,51 @@ describe("Computer Use child authority", () => {
 
   it("does not infer computer access when a task omits access", () => {
     expect(TaskAuthority.select({ parent: Permission.fromConfig({ "*": "deny" }) })).toBeUndefined()
+  })
+
+  it("makes a new unplanned Auto inspection child read-only without changing legacy callers", () => {
+    const parent = Permission.fromConfig({ "*": "allow" })
+    const read = TaskAuthority.admit({ auto: true, goalActive: false, parent })
+    const metadata = TaskAuthority.save({}, read)
+    const child = Permission.merge(TaskAuthority.rules(read), TaskAuthority.denies(read, parent))
+    expect(TaskAuthority.read(metadata)).toBe("read")
+    expect(Permission.evaluate("read", "*", child).action).toBe("allow")
+    expect(Permission.evaluate("write", "*", child).action).toBe("deny")
+    expect(Permission.evaluate("edit", "*", child).action).toBe("deny")
+    expect(Permission.evaluate("bash", "*", child).action).toBe("deny")
+    expect(TaskAuthority.admit({ auto: false, goalActive: false, parent })).toBeUndefined()
+    expect(TaskAuthority.admit({ auto: true, goalActive: false, parent })).toBe("read")
+  })
+
+  it("lets an Auto inspection child read while keeping the coordinator tool list curated", () => {
+    const agents: Parameters<typeof addAuto>[0] = {}
+    addAuto(agents, Permission.fromConfig({}))
+    const parent = agents.auto?.permission ?? []
+    const child = Permission.merge(TaskAuthority.rules("read"), TaskAuthority.denies("read", parent))
+    expect(Permission.evaluate("read", "*", child).action).toBe("allow")
+    expect(Permission.evaluate("grep", "*", child).action).toBe("allow")
+    expect(Permission.evaluate("chief_message", "*", child).action).toBe("allow")
+    expect(Permission.evaluate("edit", "*", child).action).toBe("deny")
+    expect(Object.keys(RayaChief.tools({ read: true, chief_route: true, task: true }, undefined))).toEqual([
+      "chief_route",
+      "task",
+    ])
+  })
+
+  it("admits single Auto edits only with an active goal and explicit parent editing permission", () => {
+    const parent = Permission.fromConfig({ "*": "allow" })
+    expect(() => TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, parent })).toThrow(
+      "active goal",
+    )
+    expect(() => TaskAuthority.admit({ auto: true, saved: "edit", goalActive: false, parent })).toThrow("active goal")
+    expect(TaskAuthority.admit({ auto: true, requested: "edit", goalActive: true, parent })).toBe("edit")
+    expect(() =>
+      TaskAuthority.admit({
+        auto: true,
+        requested: "edit",
+        goalActive: true,
+        parent: Permission.fromConfig({ edit: "deny" }),
+      }),
+    ).toThrow("parent policy")
   })
 })

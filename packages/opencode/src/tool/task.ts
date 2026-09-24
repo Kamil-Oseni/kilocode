@@ -26,6 +26,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Permission } from "@/permission" // raya_change - Milestone D auto-routing respects inherited task denies
 import { RayaChief } from "@/kilocode/chief" // raya_change - Milestone B enforced Auto decision
 import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - raya_change: goal child reservations
+import { RayaGoal } from "@/kilocode/goal" // kilocode_change - validate Auto edit goal state
 import { Storage } from "@/storage/storage" // kilocode_change - raya_change: durable goal child limit
 import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
@@ -91,7 +92,7 @@ const BaseParameterFields = {
   access: Schema.optional(Schema.Literals(["read", "edit", "computer"])).annotate({
     // kilocode_change
     description:
-      'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" only when the parent policy allows file changes. Omitted keeps legacy task behavior.',
+      'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" only for an active goal with authorized file changes. Auto tasks without saved authority default to read-only; other agents retain legacy behavior.',
   }),
   branch_id: Schema.optional(Schema.String).annotate({
     description: "Exact branch ID from a saved Auto Chief plan. Required when the active goal has a branch plan.",
@@ -212,9 +213,24 @@ export const TaskTool = Tool.define(
       const caller = yield* agent.get(ctx.agent)
       const ruleset = Permission.merge(caller.permission, parent.permission ?? [])
       // kilocode_change start - resumed child authority cannot be widened
-      const access = TaskAuthority.select({
-        requested: branch?.access ?? params.access, // kilocode_change - Chief must request computer access explicitly
-        saved: TaskAuthority.read(resumed?.metadata),
+      const saved = TaskAuthority.read(resumed?.metadata)
+      const gated = ctx.agent === "auto" && !branch && (params.access === "edit" || saved === "edit")
+      const goal = gated
+        ? storage
+          ? yield* storage.read<unknown>(["raya", "goal", ctx.sessionID]).pipe(
+              Effect.catchIf(
+                (err) => Storage.NotFoundError.isInstance(err),
+                () => Effect.succeed(undefined),
+              ),
+            )
+          : yield* Effect.fail(new Error("Auto editing requires an active goal"))
+        : undefined
+      const access = TaskAuthority.admit({
+        auto: ctx.agent === "auto",
+        planned: branch?.access,
+        requested: params.access,
+        saved,
+        goalActive: Schema.is(RayaGoal.State)(goal) && goal.status === "active",
         parent: ruleset,
       })
       const computer =

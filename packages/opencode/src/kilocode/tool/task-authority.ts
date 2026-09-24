@@ -135,4 +135,19 @@ export namespace TaskAuthority {
     }
     return access
   }
+
+  /** Admit Auto children with a durable minimum authority and goal-bound edits. */
+  export function admit(input: {
+    auto: boolean
+    planned?: Access
+    requested?: Access
+    saved?: Access
+    goalActive: boolean
+    parent: Permission.Ruleset
+  }) {
+    const requested = input.planned ?? input.requested ?? input.saved ?? (input.auto ? "read" : undefined)
+    if (input.auto && !input.planned && (requested === "edit" || input.saved === "edit") && !input.goalActive)
+      throw new Error("Auto editing requires an active goal")
+    return select({ requested, saved: input.saved, parent: input.parent })
+  }
 }

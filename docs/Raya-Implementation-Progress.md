@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 03:24 America/Toronto - fail-closed goal intake recovery
+
+Restart recovery now checks the exact saved goal user message and its final synthetic text before resuming a model loop. A missing or partial intake stays at its started dispatch; routine attachment delivery is not acknowledged until the complete text is saved. The check accepts the base continuation prompt or its bounded Chief-note reminder and never creates another user message. Focused routine recovery tests cover missing, truncated and complete text. This is a narrow safety correction, not a new parent wake. Ordinary multi-specialist fanout still requires an active goal; request-bound non-goal fanout is the next separate slice. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 02:50 America/Toronto - installed Chief attention and access snapshot
 
 Source `8ec31fe9ed` is installed as `eden.raya@7.4.23-snapshot+8ec31fe9ed.kamil-oseni.1790232333738`; VS Code lists the version. The low-memory build regenerated the SDK with no tracked changes, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed sequential extension/webview typechecks and lint, bundled the production extension, packaged and installed the VSIX. Retained rollback VSIX SHA-256: `E92F26B1138559D40A62ADB6F5739C288075742A722A45A624387D983DB3D860`. This includes durable prepared note batches, a reminder only in an existing Chief continuation, visible-note dedupe and the collapsed-row access label. It does not prove immediate child-to-parent model wake or live two-specialist/restart UI behavior. Next bind a prepared batch to a single durable parent dispatch at a verified idle/queue boundary and run real host acceptance; keep `FUT-AGENT-01/02` In progress.

@@ -5,7 +5,7 @@ import { Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
-import { SessionID } from "@/session/schema"
+import { PartID, SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
@@ -345,36 +345,54 @@ test("a persisted routine user turn resumes its dangling model loop without repl
       } as unknown as MessageV2.WithParts
       rows.push(user)
       let loops = 0
-      yield* RayaGoalContinuation.resume({
-        database,
+      const resume = () =>
+        RayaGoalContinuation.resume({
+          database,
+          sessionID: sid,
+          storage,
+          sessions,
+          run: async () => {
+            throw new Error("must not enqueue the persisted user message again")
+          },
+          loop: async () => {
+            loops++
+            rows.push({
+              info: {
+                id: MessageID.ascending(),
+                parentID: started.dispatch!.messageID!,
+                sessionID: sid,
+                role: "assistant",
+                time: { created: Date.now(), completed: Date.now() },
+                agent: "generalist",
+                mode: "generalist",
+                path: { cwd: process.cwd(), root: process.cwd() },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                providerID: "test",
+                modelID: "test",
+                finish: "stop",
+              },
+              parts: [],
+            } as unknown as MessageV2.WithParts)
+          },
+        })
+      yield* resume()
+      expect(loops).toBe(0)
+      expect((yield* inbox.delivery(sid, started.dispatch.messageID))?.delivered).toBe(false)
+      const text = {
+        id: PartID.make(`prt_${crypto.randomUUID()}`),
+        type: "text" as const,
         sessionID: sid,
-        storage,
-        sessions,
-        run: async () => {
-          throw new Error("must not enqueue the persisted user message again")
-        },
-        loop: async () => {
-          loops++
-          rows.push({
-            info: {
-              id: MessageID.ascending(),
-              parentID: started.dispatch!.messageID!,
-              sessionID: sid,
-              role: "assistant",
-              time: { created: Date.now(), completed: Date.now() },
-              agent: "generalist",
-              mode: "generalist",
-              path: { cwd: process.cwd(), root: process.cwd() },
-              cost: 0,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              providerID: "test",
-              modelID: "test",
-              finish: "stop",
-            },
-            parts: [],
-          } as unknown as MessageV2.WithParts)
-        },
-      })
+        messageID: started.dispatch.messageID,
+        synthetic: true,
+        text: RayaGoalContinuation.expected("Review the attached ledger").slice(0, -16),
+      }
+      user.parts.push(text as MessageV2.TextPart)
+      yield* resume()
+      expect(loops).toBe(0)
+      expect((yield* inbox.delivery(sid, started.dispatch.messageID))?.delivered).toBe(false)
+      text.text = RayaGoalContinuation.expected("Review the attached ledger")
+      yield* resume()
       expect(loops).toBe(1)
       expect((yield* inbox.delivery(sid, started.dispatch.messageID))?.delivered).toBe(true)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),

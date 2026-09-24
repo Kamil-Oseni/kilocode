@@ -21,6 +21,8 @@ const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
 
 const identifier = /^[A-Za-z0-9_:-]{1,128}$/
+const inspect =
+  "Call chief_inspect to read their current contents and branch evidence. These interim notes are not completed task results. Do not restart or replay a child task because of this reminder."
 
 function reminder(storage: Storage.Interface, sessionID: SessionID, goal: RayaGoal.State) {
   return Effect.gen(function* () {
@@ -43,7 +45,7 @@ function reminder(storage: Storage.Interface, sessionID: SessionID, goal: RayaGo
     const rest = notes.length > 8 ? `; ${notes.length - 8} more saved note IDs` : ""
     return `<system-reminder>
 The current Chief plan has ${notes.length} unacknowledged specialist note${notes.length === 1 ? "" : "s"} (request ${plan.requestID}, revision ${plan.revision || "initial"}). Saved note IDs: ${ids}${rest}.
-Call chief_inspect to read their current contents and branch evidence. These interim notes are not completed task results. Do not restart or replay a child task because of this reminder.
+${inspect}
 </system-reminder>`
   }).pipe(
     Effect.catchCause((cause) =>
@@ -83,6 +85,45 @@ Include every saved criterion in the audit. A criterion explicitly marked requir
 
 Immediately before update_goal(status="complete"), derive every concrete requirement from get_goal and cite real successful tool evidence for each one. Complete the goal only when the full objective is evidenced. Give concise progress updates without exposing private chain-of-thought.
 </system-reminder>`
+
+/** The goal text is written last, after any attachment parts, and closes the saved intake. */
+function intact(
+  row: SessionV1.WithParts | undefined,
+  sessionID: SessionID,
+  messageID: MessageID,
+  goal: RayaGoal.State,
+) {
+  if (!row || row.info.role !== "user" || row.info.id !== messageID || row.info.sessionID !== sessionID) return false
+  const part = row.parts.at(-1)
+  if (
+    !part ||
+    part.type !== "text" ||
+    part.synthetic !== true ||
+    !part.id ||
+    part.sessionID !== sessionID ||
+    part.messageID !== messageID
+  )
+    return false
+  const base = prompt(goal.objective, goal.completion)
+  if (part.text === base) return true
+  const prefix = `${base}\n\n<system-reminder>\nThe current Chief plan has `
+  const suffix = `.\n${inspect}\n</system-reminder>`
+  if (!part.text.startsWith(prefix) || !part.text.endsWith(suffix) || part.text.length > base.length + 1_800)
+    return false
+  const text = part.text.slice(prefix.length, -suffix.length)
+  const match =
+    /^([1-9]|1\d|2[0-4]) unacknowledged specialist (note|notes) \(request ([A-Za-z0-9_:-]{1,128}), revision ([A-Za-z0-9_:-]{1,128})\)\. Saved note IDs: (.+)$/.exec(
+      text,
+    )
+  if (!match) return false
+  const count = Number(match[1])
+  if (match[2] !== (count === 1 ? "note" : "notes")) return false
+  const pieces = match[5].split("; ")
+  if (pieces.length > 2) return false
+  const ids = pieces[0].split(", ")
+  if (!ids.length || ids.length !== Math.min(count, 8) || ids.some((id) => !identifier.test(id))) return false
+  return count <= 8 ? pieces.length === 1 : pieces[1] === `${count - 8} more saved note IDs`
+}
 
 async function continueGoal(
   sessionID: SessionID,
@@ -294,6 +335,7 @@ function detail(error: unknown) {
 
 export namespace RayaGoalContinuation {
   export const limit = RayaGoal.retryLimit
+  export const expected = prompt
 
   export function restore(input: {
     database?: Database.Interface
@@ -364,9 +406,10 @@ export namespace RayaGoalContinuation {
         const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
         const delivery =
           inbox && goal.dispatch.messageID ? yield* inbox.delivery(input.sessionID, goal.dispatch.messageID) : undefined
-        const user = messages.some((row) => row.info.role === "user" && row.info.id === goal.dispatch?.messageID)
+        const user = messages.find((row) => row.info.role === "user" && row.info.id === goal.dispatch?.messageID)
+        const complete = user && goal.dispatch.messageID && intact(user, input.sessionID, goal.dispatch.messageID, goal)
         // delivered_at means SessionPrompt persisted the owned user intake. It does not mean the model turn completed.
-        if (delivery && user) yield* inbox!.delivered(input.sessionID, goal.dispatch.messageID!)
+        if (delivery && complete) yield* inbox!.delivered(input.sessionID, goal.dispatch.messageID)
         if (delivery && !delivery.delivered && !user && goal.dispatch.messageID) {
           const note = yield* reminder(input.storage, input.sessionID, goal)
           yield* invoke({
@@ -389,7 +432,7 @@ export namespace RayaGoalContinuation {
         const found = response(messages, goal.dispatch.messageID!)
         const reply = found
           ? found
-          : delivery && user
+          : delivery && complete
             ? yield* Effect.gen(function* () {
                 const current = yield* goals.get(input.sessionID)
                 if (

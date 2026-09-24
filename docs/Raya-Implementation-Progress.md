@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 01:12 America/Toronto - installed live Chief note snapshot
+
+Commit `0449d2b7c2` is pushed and installed as `eden.raya@7.4.23-snapshot+0449d2b7c2.kamil-oseni.1790226445642`. The protected push passed 29 JavaScript/TypeScript package typechecks and the JetBrains typecheck. The low-memory snapshot workflow regenerated the SDK, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed sequential extension/webview typechecks and lint, bundled production assets, packaged and installed the VSIX; VS Code lists the exact version. Retained rollback VSIX SHA-256: `D10B6F28F82100038D77AE068D6C4EAAE35200F89471EFB9E1FE4ECBACE5F3BD`. This proves source and artifact identity, not real chat delivery in the running host. The live two-specialist conversation, narrow/wide layout, missed-event reconnect and backend/VS Code restart matrix remain open. Interim notes still do not wake the parent model; `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 00:52 America/Toronto - live Chief specialist note hydration
 
 The parent chat now reads bounded saved specialist notes for its exact active or completed Chief plan on open and reconnect. A newly committed note emits a minimal `raya.chief.note.available` SSE hint only after storage readback; the hint carries plan identity and note ID, never note text. The extension validates the tracked parent session and directory, fetches through an authenticated 10-second request, and the webview rejects stale or mismatched responses, deduplicates note IDs and avoids repeating notes already rendered by a matching saved `chief_inspect` receipt. Named specialist messages use the existing role icons and appear only when present. This is UI hydration, not parent-model attention or a guarantee that process-local SSE is replayed.

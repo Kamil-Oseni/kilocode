@@ -23,6 +23,13 @@ export namespace ChiefRequestPlan {
   export type Identity = typeof Identity.Type
 
   const Marker = Schema.Struct({ version: Schema.Literal(1), identity: Identity })
+  const Rotation = Schema.Struct({
+    version: Schema.Literal(1),
+    prior: Identity,
+    next: Identity,
+    at: Schema.Number,
+  })
+  export type Rotation = typeof Rotation.Type
   const Record = Schema.Struct({
     version: Schema.Literal(3),
     identity: Identity,
@@ -41,6 +48,7 @@ export namespace ChiefRequestPlan {
 
   const marker = (id: SessionID) => ["raya", "chief", "request-plan", id, "active"]
   export const key = (id: SessionID, request: MessageID) => ["raya", "chief", "request-plan", id, request]
+  const rotated = (id: SessionID, request: MessageID) => ["raya", "chief", "request-plan", id, request, "rotation"]
   const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
   export const active = Effect.fn("ChiefRequestPlan.active")(function* (
@@ -88,6 +96,16 @@ export namespace ChiefRequestPlan {
       if (raw === undefined) return
       return yield* Schema.decodeUnknownEffect(Record)(raw).pipe(
         Effect.mapError(() => new Error("Chief request plan is unreadable")),
+      )
+    })
+
+    const readRotation = Effect.fn("ChiefRequestPlan.readRotation")(function* (id: SessionID, request: MessageID) {
+      const raw = yield* storage
+        .read<unknown>(rotated(id, request))
+        .pipe(Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)))
+      if (raw === undefined) return
+      return yield* Schema.decodeUnknownEffect(Rotation)(raw).pipe(
+        Effect.mapError(() => new Error("Chief request plan rotation receipt is unreadable")),
       )
     })
 
@@ -185,6 +203,31 @@ export namespace ChiefRequestPlan {
             )
               return old
             throw new Error("Chief request plan outcome is already saved or uncertain")
+          }
+          const prior = rows.filter((row) => row.info.role === "user" && row.info.id !== input.requestID).reverse()
+          for (const row of prior) {
+            const plan = yield* read(input.sessionID, row.info.id)
+            const receipt = yield* readRotation(input.sessionID, row.info.id)
+            if (!plan && !receipt) continue
+            const target = rows.find((item) => item.info.role === "user" && item.info.id === receipt?.next.requestID)
+            const text = target ? RayaChief.requestText(target.parts) : ""
+            if (
+              !plan ||
+              !receipt ||
+              JSON.stringify(receipt.prior) !== JSON.stringify(plan.identity) ||
+              !target ||
+              target.info.role !== "user" ||
+              !text ||
+              rows.indexOf(target) <= rows.indexOf(row) ||
+              rows.indexOf(target) > rows.indexOf(latest) ||
+              receipt.next.sessionID !== input.sessionID ||
+              receipt.next.userCreatedAt !== target.info.time.created ||
+              receipt.next.digest !== hash(text) ||
+              receipt.next.revision !==
+                hash(JSON.stringify([input.sessionID, target.info.id, target.info.time.created, text]))
+            )
+              throw new Error("Prior Chief request plan has no exact terminal rotation receipt")
+            break
           }
           const now = Date.now()
           const plan: Record = {
@@ -343,6 +386,115 @@ export namespace ChiefRequestPlan {
       )
     })
 
+    /** Retire only a fully reviewed and synthesized request before admitting a later authored request. */
+    const rotate = Effect.fn("ChiefRequestPlan.rotate")(function* (input: {
+      sessionID: SessionID
+      priorRequestID: MessageID
+      nextRequestID: MessageID
+    }) {
+      return yield* mutation(
+        storage,
+        input.sessionID,
+        Effect.gen(function* () {
+          const session = yield* sessions.get(input.sessionID)
+          if (RayaChief.phase(session.metadata) !== "task")
+            throw new Error("Chief request rotation requires a routed task phase")
+          const rows = yield* sessions.messages({ sessionID: input.sessionID })
+          const authored = rows.filter((row) => row.info.role === "user" && RayaChief.requestText(row.parts))
+          const latest = authored.at(-1)
+          const prior = authored.find((row) => row.info.id === input.priorRequestID)
+          if (
+            !latest ||
+            latest.info.role !== "user" ||
+            latest.info.id !== input.nextRequestID ||
+            !prior ||
+            prior.info.role !== "user" ||
+            authored.indexOf(prior) >= authored.length - 1
+          )
+            throw new Error("Chief request rotation needs a strictly later authored user request")
+          const request = RayaChief.requestText(latest.parts)
+          if (RayaChief.request(session.metadata) !== request)
+            throw new Error("Chief request rotation does not match the routed new request")
+          const next: Identity = {
+            version: 1,
+            sessionID: input.sessionID,
+            requestID: latest.info.id,
+            userCreatedAt: latest.info.time.created,
+            digest: hash(request),
+            revision: hash(JSON.stringify([input.sessionID, latest.info.id, latest.info.time.created, request])),
+          }
+          const current = yield* active(storage, input.sessionID)
+          const receipt = yield* readRotation(input.sessionID, input.priorRequestID)
+          if (!current) {
+            const plan = yield* read(input.sessionID, input.priorRequestID)
+            if (
+              receipt &&
+              plan &&
+              JSON.stringify(receipt.prior) === JSON.stringify(plan.identity) &&
+              JSON.stringify(receipt.next) === JSON.stringify(next)
+            )
+              return receipt
+            throw new Error("No active Chief request plan or matching rotation receipt")
+          }
+          if (current.identity.requestID !== input.priorRequestID)
+            throw new Error("Another Chief request plan owns this session")
+          const record = yield* read(input.sessionID, input.priorRequestID)
+          if (!record) throw new Error("Marker-only Chief request plan cannot rotate without branch-state proof")
+          const plan = yield* saved(input.sessionID)
+          if (!plan) throw new Error("Chief request plan is unavailable for rotation")
+          const old = prior.info.time.created
+          const text = RayaChief.requestText(prior.parts)
+          if (
+            plan.identity.userCreatedAt !== old ||
+            plan.identity.digest !== hash(text) ||
+            plan.identity.revision !== hash(JSON.stringify([input.sessionID, input.priorRequestID, old, text]))
+          )
+            throw new Error("Prior authored request changed before rotation")
+          if (
+            plan.branches.some(
+              (branch) =>
+                branch.state !== "completed" ||
+                !branch.review ||
+                !branch.callID ||
+                !branch.sessionID ||
+                !branch.messageID,
+            ) ||
+            !plan.synthesis ||
+            plan.synthesis.findings.length !== plan.branches.length ||
+            new Set(plan.synthesis.findings.map((item) => item.branchID)).size !== plan.branches.length ||
+            plan.branches.some(
+              (branch) =>
+                !plan.synthesis?.findings.some((item) => item.branchID === branch.id && !!item.conclusion.trim()),
+            )
+          )
+            throw new Error("Chief request plan has unresolved or unsynthesized branches")
+          const goalPlan = yield* ChiefBranches.make(storage).read(input.sessionID)
+          if (goalPlan) {
+            const goal = yield* storage
+              .read<{
+                createdAt?: number
+                status?: string
+                revisions?: { id?: string }[]
+              }>(["raya", "goal", input.sessionID])
+              .pipe(Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)))
+            if (ChiefBranches.matches(goalPlan, goal))
+              throw new Error("Active goal-bound Chief plan prevents request rotation")
+          }
+          if (receipt && (receipt.prior.revision !== plan.identity.revision || receipt.next.revision !== next.revision))
+            throw new Error("Chief request rotation receipt belongs to another request")
+          const savedReceipt: Rotation = receipt ?? { version: 1, prior: plan.identity, next, at: Date.now() }
+          if (!receipt) yield* storage.create(rotated(input.sessionID, input.priorRequestID), savedReceipt)
+          const confirmed = yield* readRotation(input.sessionID, input.priorRequestID)
+          if (JSON.stringify(confirmed) !== JSON.stringify(savedReceipt))
+            throw new Error("Chief request rotation receipt outcome is unknown")
+          yield* storage.remove(marker(input.sessionID))
+          if (yield* active(storage, input.sessionID))
+            throw new Error("Chief request marker removal outcome is unknown")
+          return savedReceipt
+        }),
+      )
+    })
+
     return {
       active: (id: SessionID) => active(storage, id),
       read,
@@ -353,6 +505,8 @@ export namespace ChiefRequestPlan {
       admit,
       settle,
       reconcile,
+      readRotation,
+      rotate,
     }
   }
 }

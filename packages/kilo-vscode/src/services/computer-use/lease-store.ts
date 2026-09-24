@@ -93,7 +93,9 @@ export class ComputerUseLeaseStore {
     private readonly storage: LeaseStorage,
     private readonly now = () => Date.now(),
     private readonly revocations?: LeaseRevocations,
+    private readonly unavailable?: string,
   ) {
+    if (unavailable) return
     this.lease = decode(storage.get<unknown>(key))
     if (
       this.lease &&
@@ -115,6 +117,7 @@ export class ComputerUseLeaseStore {
   }
 
   async grant(input: GrantInput): Promise<ComputerUseLease> {
+    if (this.unavailable) throw new Error(this.unavailable)
     check(input)
     const policy = decodePolicy(input.sensitive)
     if (!policy) throw new Error("Choose a policy for every sensitive action category")
@@ -152,7 +155,12 @@ export class ComputerUseLeaseStore {
       cooperativeInput: input.cooperativeInput,
     }
     const revision = ++this.revision
-    this.pending = { id: lease.id, revision, sessionID: input.sessionID, durable: lease.lifetime.kind === "all_sessions" }
+    this.pending = {
+      id: lease.id,
+      revision,
+      sessionID: input.sessionID,
+      durable: lease.lifetime.kind === "all_sessions",
+    }
     try {
       await this.persist(lease)
       if (this.revision !== revision) throw new Error("Computer Use grant changed before persistence completed")
@@ -215,6 +223,7 @@ export class ComputerUseLeaseStore {
   }
 
   authorize(request: AuthorizationRequest): Authorization {
+    if (this.unavailable) return answer("deny", this.unavailable)
     const lease = this.lease
     if (!lease)
       return this.revoked.has(request.sessionID)

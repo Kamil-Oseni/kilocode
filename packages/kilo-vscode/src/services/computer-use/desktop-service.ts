@@ -17,9 +17,9 @@ export class DesktopAutomationService implements vscode.Disposable {
   private readonly offLease: (() => void) | undefined
   private hotkey: WindowsPauseHotkey | undefined
 
-  constructor(connection: KiloConnectionService, context: vscode.ExtensionContext, lease?: ComputerUseLeaseStore) {
+  constructor(connection: KiloConnectionService, context: vscode.ExtensionContext, lease: ComputerUseLeaseStore) {
     if (process.platform !== "win32") return
-    this.lease = lease ?? new ComputerUseLeaseStore(context.globalState)
+    this.lease = lease
     this.session = new DesktopSession(new WindowsDesktopDriver())
     this.panel = new DesktopPanel(this.session, this.lease)
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)

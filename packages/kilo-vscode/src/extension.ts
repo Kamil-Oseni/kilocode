@@ -21,8 +21,7 @@ import { AutocompleteServiceManager } from "./services/autocomplete/Autocomplete
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
 import { DesktopAutomationService } from "./services/computer-use"
-import { ComputerUseLeaseStore } from "./services/computer-use/lease-store"
-import { ComputerUseRevocationStore } from "./services/computer-use/revocation-store"
+import { createComputerUseLease } from "./services/computer-use/lease-bootstrap"
 import { registerGrantAllPermissions } from "./kilo-provider/grant-all-permissions" // raya_change - global all-tools toggle
 import { mentions } from "./kilo-provider/file-picker"
 import { registerDesignSystemLock } from "./kilo-provider/design-system-lock" // raya_change - owner design-system lock
@@ -91,11 +90,14 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // raya_change start - Milestone F shared persistent browser and in-editor panel
-  const lease = new ComputerUseLeaseStore(
-    context.globalState,
-    undefined,
-    new ComputerUseRevocationStore(context.globalStorageUri.fsPath),
-  )
+  const control = createComputerUseLease(context.globalState, context.globalStorageUri.fsPath)
+  if (control.error) {
+    console.error("[Raya] Computer Use revocation record unavailable:", control.error)
+    void vscode.window.showErrorMessage(
+      "Raya Computer Use is unavailable because its saved control record could not be read. Other Raya features remain available.",
+    )
+  }
+  const lease = control.lease
   const desktop = new DesktopAutomationService(connectionService, context, lease)
   const browserAutomationService = new BrowserAutomationService(
     connectionService,

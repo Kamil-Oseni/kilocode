@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 12:33 America/Toronto - isolate damaged Computer Use control state
+
+**Status: source tested; not yet committed or installed.** A malformed or unreadable Computer Use revocation record previously threw during extension activation, preventing unrelated Raya features from starting. A new bootstrap catches that condition and creates an explicitly unavailable lease store: it restores no grant, denies desktop authorization and rejects new grants until the saved record can be read again. The extension reports the problem once while continuing activation. The desktop service now requires the bootstrap lease rather than silently constructing an unguarded store. The focused 19-test suite passes 97 assertions; extension/webview typechecks and targeted lint pass. The continuous Windows capture path remains request-driven GDI; WGC/DXGI are standalone benchmark-only and have no installed-host frame evidence. Keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 12:08 America/Toronto - owner clarified specialist experience
 
 The owner wants Codex-like judgment and chat presentation: Raya should spawn named specialists only when the task benefits, keep independent audits read-only until an authorized edit is needed, show clean icon/name/status/message activity, and review child evidence before the parent answer. Request-bound Chief planning, review and compact cards exist in source, but the real installed two-specialist conversation and visual/restart acceptance remain unproven. This requirement is recorded in the handoff; `FUT-AGENT-01/02` remain **In progress**.

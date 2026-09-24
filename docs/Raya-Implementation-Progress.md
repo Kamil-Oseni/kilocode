@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 13:54 America/Toronto - observed-scene rejection snapshot installed
+
+**Status: `6da68376fa` pushed and production snapshot installed; live acceptance remains open.** VS Code lists `eden.raya@7.4.23-snapshot+6da68376fa.kamil-oseni.1790272368616`; retained rollback VSIX SHA-256 is `A9FB4FDC9166A6753344C04153292875597FF4D396C35D1C0302A2EB09AE4511`. The low-memory build passed extension/webview typechecks and lint, packaged 443 files and installed the VSIX. Source tests cover 72 cases / 329 assertions. The installed-host rapid-change, Stop/restart, latency and prolonged-use matrix has not run; this visual version catches observed changes only. Keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 13:51 America/Toronto - reject changed pixels during UIA collection
 
 **Status: source tested; commit, push and install pending.** The previous warm-frame join could accept a newer worker frame after same-window pixels changed while UI Automation was collecting controls. The worker now tracks capture sequence separately from a visual scene version: repeated identical captures refresh age without changing the version; changed pixels, dimensions, target or location advance it. A normal desktop observation refuses the pixel/UIA join when the visual version changes during collection. Focused capture, Windows driver, session, lifecycle and bridge checks pass 72 tests / 329 assertions; extension/webview typechecks and lint pass. This detects changes the worker actually observed, not changes between native samples, and does not prove complete scene continuity or real-host latency. A read-only WGC/DXGI audit confirmed those drivers remain standalone benchmark prototypes with single-monitor acquisition and no production transport. Keep `FUT-CU-01` **In progress**.

@@ -429,11 +429,9 @@ function Get-RayaWindow {
 }
 `
 
-const observe = `${setup}
-Add-Type -AssemblyName System.Drawing
+const semanticSetup = String.raw`
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-$collectSemantics = $true
 function Get-RayaControls($window) {
   $controls = @()
   $root = [Windows.Automation.AutomationElement]::FromHandle($window.Handle)
@@ -528,6 +526,52 @@ function Get-RayaControls($window) {
     truncated = $truncated -or $queue.Count -gt 0
   }
 }
+`
+
+function semanticOnly(target: { windowID: string; location: string }) {
+  const input = payload(target)
+  return `${setup}
+${semanticSetup}
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+$window = Get-RayaWindow
+if ($window.WindowID -ne $target.windowID -or $window.Location -ne $target.location) {
+  throw "Foreground window changed before semantic observation"
+}
+$timer = [Diagnostics.Stopwatch]::StartNew()
+try {
+  $output = @(Get-RayaControls $window)
+  $semantics = $output[-1]
+  if (-not $semantics -or $semantics.source -ne 'windows_ui_automation') {
+    throw "Windows UI Automation returned no bounded observation"
+  }
+} catch {
+  $semantics = [pscustomobject]@{
+    source = 'windows_ui_automation'
+    status = 'unavailable'
+    viewport = [pscustomobject]@{ x = $window.Rect.Left; y = $window.Rect.Top; width = $window.Width; height = $window.Height }
+    controls = @()
+    truncated = $false
+  }
+} finally {
+  $timer.Stop()
+}
+$after = Get-RayaWindow
+if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
+  throw "Foreground window changed while correlating semantic observations"
+}
+[pscustomobject]@{
+  windowID = $window.WindowID
+  location = $window.Location
+  semantics = $semantics
+  semanticsMs = $timer.Elapsed.TotalMilliseconds
+} | ConvertTo-Json -Depth 8 -Compress
+`
+}
+
+const observe = `${setup}
+Add-Type -AssemblyName System.Drawing
+${semanticSetup}
+$collectSemantics = $true
 function Test-RayaImage($stream) {
   if ($stream.Length -le 0) { throw "Desktop capture encoder returned no image" }
   $stream.Position = 0
@@ -1102,6 +1146,54 @@ function frame(
   }
 }
 
+function semanticBounds(location: string, result: DesktopSemantics) {
+  const match = /^pid:\d+;title:[\s\S]*;bounds:(-?\d+),(-?\d+),(\d+),(\d+)$/.exec(location)
+  if (!match || match.length !== 5) throw new Error("Semantic-only desktop target bounds are invalid")
+  const rect = match.slice(1).map(Number)
+  if (
+    !rect.every(Number.isSafeInteger) ||
+    rect[2] <= 0 ||
+    rect[3] <= 0 ||
+    rect[2] > 32_768 ||
+    rect[3] > 32_768 ||
+    result.viewport.x !== rect[0] ||
+    result.viewport.y !== rect[1] ||
+    result.viewport.width !== rect[2] ||
+    result.viewport.height !== rect[3]
+  )
+    throw new Error("Windows UI Automation viewport changed from the exact target bounds")
+  return rect
+}
+
+function semanticResult(input: Record<string, unknown>, target: { windowID: string; location: string }) {
+  if (input.windowID !== target.windowID || input.location !== target.location)
+    throw new Error("Foreground window changed during semantic observation")
+  if (input.mime !== undefined || input.data !== undefined)
+    throw new Error("Semantic-only desktop observation unexpectedly contains pixels")
+  const result = semantics(input.semantics)
+  if (!result) throw new Error("Windows UI Automation observation is missing")
+  const rect = semanticBounds(target.location, result)
+  if (
+    result.controls.some(
+      (control) =>
+        ![control.x, control.y, control.width, control.height].every(Number.isSafeInteger) ||
+        control.x >= rect[0] + rect[2] ||
+        control.y >= rect[1] + rect[3] ||
+        control.x + control.width <= rect[0] ||
+        control.y + control.height <= rect[1],
+    )
+  )
+    throw new Error("Windows UI Automation control lies outside the exact target bounds")
+  if (
+    typeof input.semanticsMs !== "number" ||
+    !Number.isFinite(input.semanticsMs) ||
+    input.semanticsMs < 0 ||
+    input.semanticsMs > 120_000
+  )
+    throw new Error("Windows desktop semantic timing is invalid")
+  return { windowID: target.windowID, location: target.location, semantics: result, semanticsMs: input.semanticsMs }
+}
+
 export class WindowsDesktopDriver implements DesktopDriver {
   private readonly runner: Runner
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
@@ -1120,6 +1212,32 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const scene = this.worker?.latest()
       if (scene && (await this.matches(scene))) return scene.frame
     }
+    const candidate = options?.semantics === false ? undefined : this.worker?.latest()
+    if (candidate) {
+      const started = performance.now()
+      const target = { windowID: candidate.frame.windowID, location: candidate.frame.location ?? "" }
+      const result = await this.observeSemantics(target)
+      const scene = this.worker?.latest()
+      if (scene) {
+        if (scene.frame.windowID !== target.windowID || scene.frame.location !== target.location)
+          throw new Error("Foreground window changed while correlating desktop pixels and controls")
+        if (!(await this.matches(scene)))
+          throw new Error("Foreground window changed while correlating desktop pixels and controls")
+        return {
+          ...scene.frame,
+          semantics: result.semantics,
+          timing: {
+            ...scene.frame.timing,
+            semanticsMs: result.semanticsMs,
+            totalMs: Math.max(
+              performance.now() - started,
+              scene.frame.timing.acquisitionMs + scene.frame.timing.preparationMs,
+              result.semanticsMs,
+            ),
+          },
+        }
+      }
+    }
     const started = performance.now()
     const result = object(await this.runner.run(options?.semantics === false ? pixels : observe))
     const next = frame(result, performance.now() - started, this.last)
@@ -1132,6 +1250,13 @@ export class WindowsDesktopDriver implements DesktopDriver {
       data: next.data,
     }
     return next
+  }
+
+  async observeSemantics(target: { windowID: string; location: string }) {
+    if (!/^0x[0-9A-F]+$/.test(target.windowID) || !target.location || target.location.length > 4096)
+      throw new Error("Semantic-only desktop target identity is invalid")
+    const output = object(await this.runner.run(semanticOnly(target)))
+    return semanticResult(output, target)
   }
 
   startCapture(failed: (error: unknown) => void): void {

@@ -180,6 +180,19 @@ describe("native desktop session boundary", () => {
     await expect(session.observe()).rejects.toThrow(/timing is invalid/i)
 
     driver.frame = {
+      ...driver.frame,
+      semantics: {
+        source: "windows_ui_automation",
+        status: "available",
+        viewport: { x: 0, y: 0, width: 1280, height: 720 },
+        controls: [],
+        truncated: false,
+      },
+      timing: { acquisitionMs: 50, preparationMs: 40, semanticsMs: 900, totalMs: 950 },
+    }
+    expect((await session.observe()).timing.totalMs).toBe(950)
+
+    driver.frame = {
       width: 1280,
       height: 720,
       mime: "image/png",

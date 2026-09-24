@@ -20,6 +20,144 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("collects UI Automation against an exact foreground target without capturing pixels", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:10,20,1280,720" }
+    const test = harness([
+      JSON.stringify({
+        ...target,
+        semanticsMs: 12,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          viewport: { x: 10, y: 20, width: 1280, height: 720 },
+          controls: [
+            {
+              controlID: "42.7",
+              role: "Button",
+              name: "Save",
+              x: 100,
+              y: 80,
+              width: 64,
+              height: 28,
+              enabled: true,
+              focused: false,
+              actions: ["invoke"],
+            },
+          ],
+          truncated: false,
+        },
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    expect(await driver.observeSemantics(target)).toEqual({
+      ...target,
+      semanticsMs: 12,
+      semantics: expect.objectContaining({
+        status: "available",
+        controls: [expect.objectContaining({ controlID: "42.7", name: "Save" })],
+      }),
+    })
+    expect(test.scripts[0]).toContain("Get-RayaControls $window")
+    expect(test.scripts[0]).toContain("Foreground window changed before semantic observation")
+    expect(test.scripts[0]).toContain("Foreground window changed while correlating semantic observations")
+    expect(test.scripts[0]).toContain(Buffer.from(JSON.stringify(target), "utf8").toString("base64"))
+    expect(test.scripts[0]).not.toContain("CopyFromScreen")
+    expect(test.scripts[0]).not.toContain("Drawing.Bitmap")
+    expect(test.scripts[0]).not.toContain("ToBase64String($stream")
+  })
+
+  it("accepts explicitly unavailable UI Automation without inventing controls", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:10,20,1280,720" }
+    const test = harness([
+      JSON.stringify({
+        ...target,
+        semanticsMs: 3,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "unavailable",
+          viewport: { x: 10, y: 20, width: 1280, height: 720 },
+          controls: [],
+          truncated: false,
+        },
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    expect((await driver.observeSemantics(target)).semantics).toEqual({
+      source: "windows_ui_automation",
+      status: "unavailable",
+      viewport: { x: 10, y: 20, width: 1280, height: 720 },
+      controls: [],
+      truncated: false,
+    })
+  })
+
+  it("refuses changed targets and malformed semantic-only output", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:10,20,1280,720" }
+    const semantic = {
+      source: "windows_ui_automation",
+      status: "unavailable",
+      viewport: { x: 10, y: 20, width: 1280, height: 720 },
+      controls: [],
+      truncated: false,
+    }
+    const test = harness([
+      JSON.stringify({ ...target, windowID: "0x456", semanticsMs: 1, semantics: semantic }),
+      JSON.stringify({ ...target, semanticsMs: 1, semantics: { ...semantic, controls: [{}] } }),
+      JSON.stringify({ ...target, semanticsMs: 1, semantics: semantic, data: "pixels" }),
+      JSON.stringify({ ...target, semanticsMs: -1, semantics: semantic }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    await expect(driver.observeSemantics(target)).rejects.toThrow(/foreground window changed/i)
+    await expect(driver.observeSemantics(target)).rejects.toThrow(/UI Automation control identity is incomplete/i)
+    await expect(driver.observeSemantics(target)).rejects.toThrow(/unexpectedly contains pixels/i)
+    await expect(driver.observeSemantics(target)).rejects.toThrow(/semantic timing is invalid/i)
+  })
+
+  it("refuses semantic bounds that differ from or fall outside the target", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:10,20,1280,720" }
+    const base = {
+      ...target,
+      semanticsMs: 1,
+      semantics: {
+        source: "windows_ui_automation",
+        status: "available",
+        viewport: { x: 11, y: 20, width: 1280, height: 720 },
+        controls: [],
+        truncated: false,
+      },
+    }
+    const test = harness([
+      JSON.stringify(base),
+      JSON.stringify({
+        ...base,
+        semantics: {
+          ...base.semantics,
+          viewport: { x: 10, y: 20, width: 1280, height: 720 },
+          controls: [
+            {
+              controlID: "outside",
+              role: "Button",
+              x: 2000,
+              y: 80,
+              width: 20,
+              height: 20,
+              enabled: true,
+              focused: false,
+              actions: [],
+            },
+          ],
+        },
+      }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    await expect(driver.observeSemantics(target)).rejects.toThrow(/viewport changed/i)
+    await expect(driver.observeSemantics(target)).rejects.toThrow(/outside the exact target/i)
+  })
+
   it("serves a recent continuous visual frame only for the exact foreground target", async () => {
     const visual = {
       windowID: "0x123",
@@ -59,6 +197,95 @@ describe("Windows native desktop driver", () => {
     driver.cancel()
     expect(cancelled).toBe(1)
     expect(errors).toHaveLength(0)
+  })
+
+  it("joins a warm visual frame with UI Automation for a normal desktop observation", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const visual = {
+      ...target,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      data: "warm pixels",
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    const semantic = {
+      source: "windows_ui_automation",
+      status: "available",
+      viewport: { x: 0, y: 0, width: 20, height: 10 },
+      controls: [],
+      truncated: false,
+    }
+    const primary = harness([
+      JSON.stringify({ ...target, semanticsMs: 4, semantics: semantic }),
+      JSON.stringify(target),
+    ])
+    let captures = 0
+    const background = {
+      run: async () => {
+        captures++
+        if (captures === 1) return JSON.stringify(visual)
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(primary.runner, background)
+    driver.startCapture(() => undefined)
+    for (let index = 0; index < 50 && captures < 1; index++) await Bun.sleep(2)
+    await Bun.sleep(2)
+
+    const result = await driver.observe()
+    expect(result.data).toBe("warm pixels")
+    expect(result.semantics).toEqual(semantic)
+    expect(result.timing).toMatchObject({ acquisitionMs: 0, preparationMs: 0, semanticsMs: 4 })
+    expect(result.timing.totalMs).toBeGreaterThanOrEqual(4)
+    expect(primary.scripts).toHaveLength(2)
+    expect(primary.scripts.some((script) => script.includes("CopyFromScreen"))).toBe(false)
+    driver.cancel()
+  })
+
+  it("refuses to join warm pixels when the foreground target changes during UI Automation", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const primary = harness([
+      JSON.stringify({
+        ...target,
+        semanticsMs: 1,
+        semantics: {
+          source: "windows_ui_automation",
+          status: "unavailable",
+          viewport: { x: 0, y: 0, width: 20, height: 10 },
+          controls: [],
+          truncated: false,
+        },
+      }),
+      JSON.stringify({ ...target, windowID: "0x456" }),
+    ])
+    let captures = 0
+    const driver = new WindowsDesktopDriver(primary.runner, {
+      run: async () => {
+        captures++
+        if (captures === 1)
+          return JSON.stringify({
+            ...target,
+            width: 20,
+            height: 10,
+            mime: "image/png",
+            data: "warm pixels",
+            acquisitionMs: 0,
+            preparationMs: 0,
+          })
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    })
+    driver.startCapture(() => undefined)
+    for (let index = 0; index < 50 && captures < 1; index++) await Bun.sleep(2)
+    await Bun.sleep(2)
+
+    await expect(driver.observe()).rejects.toThrow(/foreground window changed/i)
+    expect(primary.scripts.some((script) => script.includes("CopyFromScreen"))).toBe(false)
+    driver.cancel()
   })
 
   it("parses foreground-window observations and identity", async () => {

@@ -170,7 +170,8 @@ export class DesktopSession {
         ...(frame.timing.semanticsMs === undefined ? [] : [frame.timing.semanticsMs]),
         frame.timing.totalMs,
       ].every((value) => Number.isFinite(value) && value >= 0 && value <= 120_000) ||
-      frame.timing.totalMs < frame.timing.acquisitionMs + frame.timing.preparationMs + (frame.timing.semanticsMs ?? 0)
+      frame.timing.totalMs <
+        Math.max(frame.timing.acquisitionMs + frame.timing.preparationMs, frame.timing.semanticsMs ?? 0)
     )
       throw new Error("Desktop observation timing is invalid")
     return frame

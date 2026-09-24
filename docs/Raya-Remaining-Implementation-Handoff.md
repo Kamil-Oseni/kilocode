@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 13:01 America/Toronto - installed unreadable-control recovery
+
+`e898de204b` is pushed and installed as `eden.raya@7.4.23-snapshot+e898de204b.kamil-oseni.1790267882762`; VS Code lists it. Rollback VSIX SHA-256: `A50EF1B5A9A2F29D7FB9F7F5427351946F44327899F8E501C740BA644CD23549`. The low-memory production build passed extension/webview typechecks, lint, package and install; 19 focused tests / 97 assertions cover the lease and corrupt record path. Real installed-host corruption/restart behavior is untested. Continue the active capture-worker slice and ensure capture starts when a persisted grant becomes connected, stops on every lease/manual/backend loss transition, and never surfaces a late frame after Stop. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-24 12:50 America/Toronto - Chief child navigation source
 
 `chiefActivity` now projects a child session ID only from the same validated background task receipt used for saved Chief start status. The branch row offers **Open conversation** through `openSubagent`, retaining Agent Manager versus sidebar navigation and parent breadcrumbs. Stale request, wrong parent, wrong role, changed child or missing child-message receipts expose no link. Focused parser tests and extension/webview typechecks pass. This is source-only; package/install the UI and inspect the actual narrow/wide view and keyboard flow before calling it accepted. A real two-specialist ordinary chat and restart remain required for `FUT-AGENT-01/02`.

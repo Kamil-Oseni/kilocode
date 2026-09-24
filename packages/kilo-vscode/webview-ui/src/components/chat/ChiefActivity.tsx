@@ -29,6 +29,10 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
   const summary = createMemo(() => {
     const current = activity()
     if (!current) return "Specialists"
+    const attention = current.branches.filter((branch) =>
+      ["failed", "cancelled", "unknown"].includes(branch.state),
+    ).length
+    if (attention) return `${attention} specialist${attention === 1 ? " needs" : "s need"} attention`
     const working = current.branches.filter((branch) => branch.state === "working").length
     if (working) return `${working} of ${current.branches.length} specialists working`
     const pending = current.branches.filter((branch) => branch.state === "pending").length
@@ -36,10 +40,6 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
     if (current.synthesized) return `${current.branches.length} specialist reports combined`
     const ready = current.branches.filter((branch) => branch.state === "ready" || branch.state === "reviewed").length
     if (ready === current.branches.length) return `${ready} specialist reports ready`
-    const attention = current.branches.filter((branch) =>
-      ["failed", "cancelled", "unknown"].includes(branch.state),
-    ).length
-    if (attention) return `${attention} specialist${attention === 1 ? " needs" : "s need"} attention`
     if (ready) return `${ready} of ${current.branches.length} specialist reports ready`
     return `${current.branches.length} specialists planned`
   })

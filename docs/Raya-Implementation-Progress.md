@@ -1,8 +1,12 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 13:01 America/Toronto - unreadable-control recovery snapshot installed
+
+**Status: `e898de204b` pushed and production snapshot installed.** VS Code lists `eden.raya@7.4.23-snapshot+e898de204b.kamil-oseni.1790267882762`; retained rollback VSIX SHA-256 is `A50EF1B5A9A2F29D7FB9F7F5427351946F44327899F8E501C740BA644CD23549`. The low-memory build reused unchanged CLI/SDK inputs, passed extension/webview typechecks and lint, packaged 443 files and installed the VSIX. The corrupt-record fail-closed behavior is proven in source tests, not a live installed-host fault injection. Keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 12:50 America/Toronto - open a verified specialist from Chief activity
 
-**Status: source tested; not yet installed or visually reviewed.** Each Chief branch with a saved, exact matching background task launch now offers **Open conversation** in its expanded activity row. The action uses Raya's existing subagent route in Agent Manager or the sidebar; no link is shown for a stale, substituted or incomplete child receipt. This makes the child's real report and message history reachable from the compact parent summary. Focused Chief activity tests pass 11 cases / 67 assertions; extension/webview typechecks, targeted lint and formatting pass. The full named-specialist chat experience remains unverified in a live two-child conversation, narrow/wide layout and restart. Keep `FUT-AGENT-01/02` **In progress**.
+**Status: source tested; not yet installed or visually reviewed.** Each Chief branch with a saved, exact matching background task launch now offers **Open conversation** in its expanded activity row. The action uses Raya's existing subagent route in Agent Manager or the sidebar; no link is shown for a stale, substituted or incomplete child receipt. This makes the child's real report and message history reachable from the compact parent summary. A branch needing attention now takes priority over a simultaneous working branch in the summary. Focused Chief activity tests pass 11 cases / 67 assertions; extension/webview typechecks, targeted lint and formatting pass. The full named-specialist chat experience remains unverified in a live two-child conversation, narrow/wide layout and restart. Keep `FUT-AGENT-01/02` **In progress**.
 
 ## ChatGPT 2026-09-24 12:33 America/Toronto - isolate damaged Computer Use control state
 

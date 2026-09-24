@@ -1275,6 +1275,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
           failed(error)
         },
         this.args,
+        (result) => {
+          this.worker?.renew(result.base, result)
+        },
       )
       let sequence = 0
       this.worker = new DesktopCaptureWorker(
@@ -1292,6 +1295,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
             height: result.height,
             mime: result.mime,
             data,
+            sourceSequence: result.sequence,
             timing: {
               acquisitionMs: result.acquisitionMs,
               preparationMs,
@@ -1341,7 +1345,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
     const current = await this.current()
     const latest = this.worker?.latest()
     return (
-      latest?.sequence === scene.sequence &&
+      latest?.version === scene.version &&
       current.windowID === scene.frame.windowID &&
       current.location === scene.frame.location
     )

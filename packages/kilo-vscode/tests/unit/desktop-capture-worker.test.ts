@@ -63,6 +63,35 @@ describe("continuous desktop capture worker", () => {
     worker.stop()
   })
 
+  it("renews a native scene only from its exact image base without copying pixels", async () => {
+    let count = 0
+    const visual = frame()
+    const worker = new DesktopCaptureWorker(
+      async () => {
+        count++
+        if (count === 1) return { ...visual, sourceSequence: 7 }
+        return new Promise<DesktopFrame>(() => undefined)
+      },
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    worker.start()
+    await until(() => worker.latest()?.sequence === 1)
+    await Bun.sleep(140)
+    expect(worker.latest()).toBeUndefined()
+    expect(worker.renew(8, visual)).toBe(false)
+    expect(worker.renew(7, { ...visual, location: "pid:1;title:Changed;bounds:0,0,100,100" })).toBe(false)
+    expect(worker.renew(7, visual)).toBe(true)
+    expect(worker.latest()?.sequence).toBe(2)
+    expect(worker.latest()?.version).toBe(1)
+    expect(worker.latest()?.frame.data).toBe("pixels")
+    expect(count).toBeLessThanOrEqual(2)
+    worker.stop()
+    expect(worker.renew(7, visual)).toBe(false)
+  })
+
   it("discards a capture that resolves after Stop and accepts a new generation", async () => {
     const pending: Array<(frame: DesktopFrame) => void> = []
     const worker = new DesktopCaptureWorker(

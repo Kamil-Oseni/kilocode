@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process"
-import { NativeFrameParser, type NativeFrame } from "./desktop-native-frame"
+import { NativeFrameParser, type NativeFrame, type NativeUnchanged } from "./desktop-native-frame"
 
 export class NativeCaptureHost {
   private process: ChildProcess | undefined
@@ -12,6 +12,7 @@ export class NativeCaptureHost {
     private readonly binary: string,
     private readonly failed: (error: Error) => void,
     private readonly args: string[] = [],
+    private readonly renewed?: (frame: NativeUnchanged) => void,
   ) {}
 
   start(): void {
@@ -26,6 +27,13 @@ export class NativeCaptureHost {
       try {
         for (const result of parser.push(chunk)) {
           if (result.type === "error") throw new Error(`Native desktop capture stopped: ${result.code}`)
+          if (result.type === "unchanged") {
+            if (!this.frame || result.frame.base !== this.frame.sequence)
+              throw new Error("Native desktop continuity has no matching image")
+            this.frame.receivedAt = performance.now()
+            this.renewed?.(result.frame)
+            continue
+          }
           this.frame?.data.fill(0)
           this.frame = { ...result.frame, receivedAt: performance.now() }
           if (this.waiting && result.frame.sequence > this.waiting.after) {

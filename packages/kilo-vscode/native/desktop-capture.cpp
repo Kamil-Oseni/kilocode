@@ -267,13 +267,25 @@ static void run(HANDLE pipe) {
                 UINT(original.rect.bottom - outputDesc.DesktopCoordinates.top), 1};
   std::vector<unsigned char> image(kImageBytes);
   uint64_t sequence = 0;
+  uint64_t base = 0;
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
     same(original);
     DXGI_OUTDUPL_FRAME_INFO info{};
     ComPtr<IDXGIResource> resource;
     auto begin = Clock::now();
     HRESULT status = duplicate->AcquireNextFrame(50, &info, resource.GetAddressOf());
-    if (status == DXGI_ERROR_WAIT_TIMEOUT) continue;
+    if (status == DXGI_ERROR_WAIT_TIMEOUT) {
+      same(original);
+      if (InterlockedCompareExchange(&stopped, 0, 0) || !base) continue;
+      std::ostringstream header;
+      header << "{\"v\":1,\"type\":\"unchanged\",\"sequence\":" << ++sequence
+             << ",\"base\":" << base
+             << ",\"windowID\":" << quoted(original.id)
+             << ",\"location\":" << quoted(original.location)
+             << ",\"width\":" << width << ",\"height\":" << height << '}';
+      packet(pipe, header.str(), nullptr, 0);
+      continue;
+    }
     require(status, "AcquireNextFrame");
     Lease lease(duplicate.Get());
     auto acquired = Clock::now();
@@ -300,8 +312,9 @@ static void run(HANDLE pipe) {
     same(original);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     std::ostringstream header;
+    base = ++sequence;
     header << std::fixed << std::setprecision(3)
-           << "{\"v\":1,\"type\":\"frame\",\"sequence\":" << ++sequence
+           << "{\"v\":1,\"type\":\"frame\",\"sequence\":" << base
            << ",\"windowID\":" << quoted(original.id)
            << ",\"location\":" << quoted(original.location)
            << ",\"width\":" << width << ",\"height\":" << height

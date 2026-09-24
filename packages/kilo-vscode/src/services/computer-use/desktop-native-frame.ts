@@ -17,7 +17,14 @@ export type NativeFrame = {
   data: Buffer
 }
 
-type NativePacket = { type: "frame"; frame: NativeFrame } | { type: "error"; code: string }
+export type NativeUnchanged = Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height"> & {
+  base: number
+}
+
+type NativePacket =
+  | { type: "frame"; frame: NativeFrame }
+  | { type: "unchanged"; frame: NativeUnchanged }
+  | { type: "error"; code: string }
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Native desktop header is invalid")
@@ -80,6 +87,17 @@ function packet(header: unknown, data: Buffer): NativePacket {
       throw new Error("Native desktop error packet is invalid")
     return { type: "error", code: value.code }
   }
+  if (value.type === "unchanged") {
+    if (data.length) throw new Error("Native desktop unchanged packet contains an image")
+    const frame = {
+      ...dimensions(value),
+      ...identity(value),
+      base: number(value.base, "base", Number.MAX_SAFE_INTEGER),
+    }
+    if (!Number.isSafeInteger(frame.base) || frame.base < 1 || frame.base >= frame.sequence)
+      throw new Error("Native desktop unchanged base is invalid")
+    return { type: "unchanged", frame }
+  }
   if (value.type !== "frame") throw new Error("Native desktop packet type is invalid")
   return {
     type: "frame",
@@ -97,6 +115,7 @@ export class NativeFrameParser {
   private readonly bytes = Buffer.allocUnsafe(LIMIT)
   private size = 0
   private sequence = 0
+  private image?: Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height">
   private failed = false
 
   push(chunk: Buffer): NativePacket[] {
@@ -126,10 +145,7 @@ export class NativeFrameParser {
         const header = JSON.parse(UTF8.decode(this.bytes.subarray(4, 4 + headerSize))) as unknown
         const data = Buffer.from(this.bytes.subarray(8 + headerSize, this.size))
         const result = packet(header, data)
-        if (result.type === "frame") {
-          if (result.frame.sequence <= this.sequence) throw new Error("Native desktop frame sequence replayed")
-          this.sequence = result.frame.sequence
-        }
+        this.accept(result)
         packets.push(result)
         this.size = 0
         if (result.type === "error") {
@@ -158,7 +174,34 @@ export class NativeFrameParser {
   clear(): void {
     this.failed = true
     this.size = 0
+    this.image = undefined
     this.bytes.fill(0)
+  }
+
+  private accept(result: NativePacket): void {
+    if (result.type === "error") return
+    const frame = result.frame
+    if (frame.sequence <= this.sequence) throw new Error("Native desktop frame sequence replayed")
+    if (result.type === "unchanged") {
+      if (!this.image || result.frame.base !== this.image.sequence)
+        throw new Error("Native desktop unchanged packet has no matching base image")
+      if (
+        frame.windowID !== this.image.windowID ||
+        frame.location !== this.image.location ||
+        frame.width !== this.image.width ||
+        frame.height !== this.image.height
+      )
+        throw new Error("Native desktop unchanged target differs from the base image")
+    }
+    this.sequence = frame.sequence
+    if (result.type === "frame")
+      this.image = {
+        sequence: frame.sequence,
+        windowID: frame.windowID,
+        location: frame.location,
+        width: frame.width,
+        height: frame.height,
+      }
   }
 
   private expected(): number {

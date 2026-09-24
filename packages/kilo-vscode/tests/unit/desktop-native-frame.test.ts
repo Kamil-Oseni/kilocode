@@ -14,6 +14,16 @@ const target = {
   acquisitionMs: 4,
   preparationMs: 3,
 }
+const unchanged = {
+  v: 1,
+  type: "unchanged",
+  sequence: 2,
+  base: 1,
+  windowID: target.windowID,
+  location: target.location,
+  width: target.width,
+  height: target.height,
+}
 
 function encode(header: Record<string, unknown>, image = png) {
   const json = Buffer.from(JSON.stringify(header), "utf8")
@@ -37,6 +47,70 @@ describe("bounded native desktop frame protocol", () => {
     expect(result[1]).toMatchObject({ type: "frame", frame: { sequence: 2 } })
     expect(result[0]?.type === "frame" && result[0].frame.data.equals(png)).toBe(true)
     parser.finish()
+  })
+
+  it("accepts zero-image unchanged packets linked to the latest matching image", () => {
+    const parser = new NativeFrameParser()
+    const result = parser.push(
+      Buffer.concat([
+        encode(target),
+        encode(unchanged, Buffer.alloc(0)),
+        encode({ ...unchanged, sequence: 3 }, Buffer.alloc(0)),
+        encode({ ...target, sequence: 4 }),
+        encode({ ...unchanged, sequence: 5, base: 4 }, Buffer.alloc(0)),
+      ]),
+    )
+    expect(result.map((item) => item.type)).toEqual(["frame", "unchanged", "unchanged", "frame", "unchanged"])
+    expect(result[1]).toEqual({
+      type: "unchanged",
+      frame: {
+        sequence: 2,
+        base: 1,
+        windowID: target.windowID,
+        location: target.location,
+        width: target.width,
+        height: target.height,
+      },
+    })
+    parser.finish()
+  })
+
+  it("refuses unchanged packets without a prior image or a matching base", () => {
+    expect(() => new NativeFrameParser().push(encode(unchanged, Buffer.alloc(0)))).toThrow(/no matching base/i)
+    const parser = new NativeFrameParser()
+    parser.push(encode(target))
+    expect(() => parser.push(encode({ ...unchanged, base: 0 }, Buffer.alloc(0)))).toThrow(/base is invalid/i)
+    const stale = new NativeFrameParser()
+    stale.push(encode(target))
+    stale.push(encode({ ...target, sequence: 2 }))
+    expect(() => stale.push(encode({ ...unchanged, sequence: 3 }, Buffer.alloc(0)))).toThrow(/matching base/i)
+    expect(() => new NativeFrameParser().push(encode({ ...unchanged, base: 2 }, Buffer.alloc(0)))).toThrow(
+      /base is invalid/i,
+    )
+  })
+
+  it("refuses image-bearing, replayed, malformed or retargeted unchanged packets", () => {
+    const image = new NativeFrameParser()
+    image.push(encode(target))
+    expect(() => image.push(encode(unchanged))).toThrow(/contains an image/i)
+
+    const replay = new NativeFrameParser()
+    replay.push(encode(target))
+    replay.push(encode(unchanged, Buffer.alloc(0)))
+    expect(() => replay.push(encode(unchanged, Buffer.alloc(0)))).toThrow(/sequence replayed/i)
+
+    const retargeted = new NativeFrameParser()
+    retargeted.push(encode(target))
+    expect(() =>
+      retargeted.push(encode({ ...unchanged, location: "pid:43;title:Editor;bounds:10,20,100,80" }, Buffer.alloc(0))),
+    ).toThrow(/target differs/i)
+
+    expect(() => new NativeFrameParser().push(encode({ ...unchanged, width: 5000 }, Buffer.alloc(0)))).toThrow(
+      /width is invalid/i,
+    )
+    expect(() => new NativeFrameParser().push(encode({ ...unchanged, sequence: 1 }, Buffer.alloc(0)))).toThrow(
+      /base is invalid/i,
+    )
   })
 
   it("accepts explicit zero-pixel failure packets and refuses image-bearing errors", () => {

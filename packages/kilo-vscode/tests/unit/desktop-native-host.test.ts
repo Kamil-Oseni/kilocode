@@ -167,4 +167,43 @@ describe("native desktop capture host", () => {
     expect(host.latest()).toBeUndefined()
     expect(errors).toHaveLength(0)
   })
+
+  it("renews an exact unchanged image without delivering a second full frame", async () => {
+    const errors: Error[] = []
+    const renewed: number[] = []
+    const target = {
+      windowID: "0x12AB",
+      location: "pid:42;title:Editor;bounds:0,0,100,80",
+      width: 100,
+      height: 80,
+    }
+    const full = encode({
+      v: 1,
+      type: "frame",
+      sequence: 1,
+      ...target,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    })
+    const unchanged = encode({ v: 1, type: "unchanged", sequence: 2, base: 1, ...target }, Buffer.alloc(0))
+    const script = `process.stdout.write(Buffer.from(${JSON.stringify(full.toString("base64"))},"base64"));setTimeout(()=>process.stdout.write(Buffer.from(${JSON.stringify(unchanged.toString("base64"))},"base64")),50);setInterval(()=>{},1000)`
+    const host = new NativeCaptureHost(
+      process.execPath,
+      (error) => errors.push(error),
+      ["-e", script],
+      (frame) => {
+        renewed.push(frame.base)
+      },
+    )
+    host.start()
+    expect((await host.next()).sequence).toBe(1)
+    await until(() => renewed.length === 1)
+    expect(renewed).toEqual([1])
+    expect(host.latest()?.sequence).toBe(1)
+    const pending = host.next(1)
+    host.stop()
+    await expect(pending).rejects.toThrow(/stopped/i)
+    expect(errors).toHaveLength(0)
+  })
 })

@@ -34,7 +34,13 @@ describe("Windows native desktop driver", () => {
       preparationMs: 3,
     }
     const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
-    const script = `const h=${JSON.stringify(header)};const image=Buffer.from(${JSON.stringify(image.toString("base64"))},"base64");setInterval(()=>{const json=Buffer.from(JSON.stringify(h));const packet=Buffer.alloc(8+json.length+image.length);packet.writeUInt32LE(json.length,0);json.copy(packet,4);packet.writeUInt32LE(image.length,4+json.length);image.copy(packet,8+json.length);process.stdout.write(packet);h.sequence++},25)`
+    const script = `
+      const h=${JSON.stringify(header)};
+      const image=Buffer.from(${JSON.stringify(image.toString("base64"))},"base64");
+      const send=(meta,data)=>{const json=Buffer.from(JSON.stringify(meta));const packet=Buffer.alloc(8+json.length+data.length);packet.writeUInt32LE(json.length,0);json.copy(packet,4);packet.writeUInt32LE(data.length,4+json.length);data.copy(packet,8+json.length);process.stdout.write(packet)};
+      send(h,image);
+      setInterval(()=>send({v:1,type:"unchanged",sequence:++h.sequence,base:1,windowID:h.windowID,location:h.location,width:h.width,height:h.height},Buffer.alloc(0)),25);
+    `
     const scripts: string[] = []
     let moved = false
     const primary = {
@@ -63,6 +69,10 @@ describe("Windows native desktop driver", () => {
       await Bun.sleep(5)
     }
     expect(data).toBe(image.toString("base64"))
+    const before = scripts.filter((value) => value.includes("CopyFromScreen")).length
+    await Bun.sleep(200)
+    expect((await driver.observe({ semantics: false })).data).toBe(image.toString("base64"))
+    expect(scripts.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(before)
     moved = true
     expect((await driver.observe({ semantics: false })).data).toBe("fallback")
     driver.stopCapture()
@@ -246,6 +256,45 @@ describe("Windows native desktop driver", () => {
     driver.cancel()
     expect(cancelled).toBe(1)
     expect(errors).toHaveLength(0)
+  })
+
+  it("keeps a pixel-identical scene usable when capture advances during target verification", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const visual = {
+      ...target,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      data: "same pixels",
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    let captures = 0
+    const background = {
+      run: async () => {
+        captures++
+        if (captures <= 2) return JSON.stringify(visual)
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    }
+    const primary = {
+      run: async (script: string) => {
+        expect(script).not.toContain("CopyFromScreen")
+        await Bun.sleep(115)
+        return JSON.stringify(target)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(primary, background)
+    driver.startCapture((error) => {
+      throw error
+    })
+    for (let index = 0; index < 100 && captures < 1; index++) await Bun.sleep(2)
+    await Bun.sleep(2)
+    expect((await driver.observe({ semantics: false })).data).toBe("same pixels")
+    expect(captures).toBeGreaterThanOrEqual(2)
+    driver.stopCapture()
   })
 
   it("joins a warm visual frame with UI Automation for a normal desktop observation", async () => {

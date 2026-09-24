@@ -1,4 +1,4 @@
-import { For, Show, createMemo, type Component } from "solid-js"
+import { Index, Show, createMemo, type Component } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useSession } from "../../context/session"
 import { agentIcon } from "./task-tool-state"
@@ -42,51 +42,48 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
   return (
     <Show when={activity()}>
       {(current) => (
-        <details class="chief-activity">
-          <summary class="chief-activity__summary">
-            <span class="chief-activity__icons" aria-hidden="true">
-              <For each={current().branches}>
-                {(branch) => <Icon name={agentIcon(branch.specialist)} size="small" />}
-              </For>
-            </span>
-            <span>{summary()}</span>
-            <Icon name="chevron-right" size="small" data-slot="chief-activity-chevron" />
-          </summary>
+        <section class="chief-activity" aria-label="Specialist activity">
+          <p class="chief-activity__heading">{summary()}</p>
           <ul class="chief-activity__branches">
-            <For each={current().branches}>
+            <Index each={current().branches}>
               {(branch) => (
                 <li>
-                  <Icon name={agentIcon(branch.specialist)} size="small" aria-hidden="true" />
-                  <span class="chief-activity__content">
-                    <span class="chief-activity__name">{branch.name}</span>
-                    <Show when={branch.objective || branch.access}>
-                      <span class="chief-activity__brief">
-                        {branch.objective}
-                        <Show when={branch.objective && branch.access}> · </Show>
-                        <Show when={branch.access}>{branch.access === "read" ? "Read only" : "Can edit"}</Show>
+                  <details class="chief-activity__branch">
+                    <summary class="chief-activity__summary">
+                      <Icon name={agentIcon(branch().specialist)} size="small" aria-hidden="true" />
+                      <span class="chief-activity__name">{branch().name}</span>
+                      <span class="chief-activity__status">
+                        {branch().access === "edit" && branch().state === "ready"
+                          ? "Changes ready"
+                          : branch().access === "edit" && branch().state === "reviewed"
+                            ? "Applied"
+                            : label[branch().state]}
                       </span>
-                    </Show>
-                    <Show
-                      when={
-                        branch.report &&
-                        (branch.state === "ready" || branch.state === "pending" || branch.state === "reviewed")
-                      }
-                    >
-                      <span class="chief-activity__report">{branch.report}</span>
-                    </Show>
-                  </span>
-                  <span class="chief-activity__status">
-                    {branch.access === "edit" && branch.state === "ready"
-                      ? "Changes ready"
-                      : branch.access === "edit" && branch.state === "reviewed"
-                        ? "Applied"
-                        : label[branch.state]}
-                  </span>
+                      <Icon name="chevron-right" size="small" data-slot="chief-activity-chevron" aria-hidden="true" />
+                    </summary>
+                    <div class="chief-activity__content">
+                      <Show when={branch().objective || branch().access}>
+                        <span class="chief-activity__brief">
+                          {branch().objective}
+                          <Show when={branch().objective && branch().access}> · </Show>
+                          <Show when={branch().access}>{branch().access === "read" ? "Read only" : "Can edit"}</Show>
+                        </span>
+                      </Show>
+                      <Show
+                        when={
+                          branch().report &&
+                          (branch().state === "ready" || branch().state === "pending" || branch().state === "reviewed")
+                        }
+                      >
+                        <span class="chief-activity__report">{branch().report}</span>
+                      </Show>
+                    </div>
+                  </details>
                 </li>
               )}
-            </For>
+            </Index>
           </ul>
-        </details>
+        </section>
       )}
     </Show>
   )

@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 21:15 America/Toronto - named Chief specialists stay visible
+
+The Chief activity view now keeps one compact neutral row per saved specialist visible, with its role icon, name and current receipt-derived state. Each row opens objective, read/edit access and available report without crowding the chat. Five focused projection tests / 18 assertions, webview typecheck, targeted lint and formatting pass. This source change still needs a built snapshot and live narrow/wide parallel-chat review; the later chronological event trail must use actual saved receipts rather than retroactively presenting a rewritten status as history.
+
 ## ChatGPT 2026-09-23 20:59 America/Toronto - Chief Windows apply now fails closed
 
 The dormant Chief integration boundary now refuses both its pre-dispatch check and direct dispatch on Windows before any parent write or one-time reservation. Five focused real-Git tests / 19 assertions pass, including tracked and untracked attempts with unchanged parent and outside sentinel; CLI typecheck, formatting and diff checks pass. The tool remains unregistered and no installed snapshot contains a usable native apply path. The owner reaffirmed that Chief should select independently useful named specialists, enforce read-only versus edit authority for each job, and show a compact, accurate parent-chat event trail with recognizable role icons, messages and full reports on demand. Existing Chief planning/ledger/activity work is a foundation; installed parallel and restart acceptance still remains.

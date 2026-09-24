@@ -11,6 +11,7 @@ import { Storage } from "@/storage/storage"
 import { RayaChief } from "@/kilocode/chief"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { ChiefRequestReview } from "@/kilocode/chief/request-review"
+import { ChiefTaskBinding } from "@/kilocode/chief/task-binding"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import { testEffect } from "../lib/effect"
 
@@ -261,6 +262,45 @@ const complete = Effect.fn("ChiefRequestRotationTest.complete")(function* (
 })
 
 describe("request-bound Chief marker rotation", () => {
+  it.instance(
+    "retires a completed prior fanout before a later single-specialist task",
+    () =>
+      Effect.gen(function* () {
+        const done = yield* setup()
+        yield* complete(done)
+        yield* advance(done)
+        const input = {
+          storage: done.storage,
+          sessions: done.sessions,
+          sessionID: done.parent.id,
+          agent: "auto",
+          metadata: { [RayaChief.phaseKey]: "task" },
+          callID: "call-direct",
+          params: { subagent_type: "researcher", prompt: "Handle the next request" },
+        }
+        expect((yield* ChiefTaskBinding.load(input)).branch).toBeUndefined()
+        expect(yield* ChiefRequestPlan.active(done.storage, done.parent.id)).toBeUndefined()
+        expect((yield* done.ledger.readRotation(done.parent.id, done.user.id))?.prior).toEqual(done.plan.identity)
+
+        const pending = yield* setup()
+        yield* advance(pending)
+        expect(
+          Exit.isFailure(
+            yield* ChiefTaskBinding.load({
+              ...input,
+              storage: pending.storage,
+              sessions: pending.sessions,
+              sessionID: pending.parent.id,
+            }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect((yield* ChiefRequestPlan.active(pending.storage, pending.parent.id))?.identity.requestID).toBe(
+          pending.user.id,
+        )
+      }),
+    60_000,
+  )
+
   it.instance(
     "retires only a fully synthesized plan and binds a later authored request",
     () =>

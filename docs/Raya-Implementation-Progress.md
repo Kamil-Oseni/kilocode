@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 10:26 America/Toronto - retire finished fanout before a direct task
+
+**Status: source tested; not yet committed, pushed or installed.** A later ordinary request can now launch one direct specialist after a prior request fanout has been fully reviewed and synthesized. Task binding rotates the old marker with the exact newer authored request before checking whether a branch is required. An incomplete or unknown prior fanout still refuses the direct task; a stale branch ID cannot bypass that boundary. The real Session/Storage rotation tests pass 3 cases / 28 assertions, and the full Task suite passes 54 tests / 334 assertions. CLI typecheck, formatting and source guards pass. This transition still needs installed-host review.
+
 ## ChatGPT 2026-09-24 10:22 America/Toronto - ordinary-chat Chief snapshot installed
 
 **Status: source committed/pushed in `e349b9f782`, production snapshot installed; live acceptance remains open.** The low-memory workflow rebuilt the CLI, passed CLI version/models/sandbox-worker smoke tests, extension and webview typechecks and lint, packaged 443 files, and installed `eden.raya@7.4.23-snapshot+e349b9f782.kamil-oseni.1790259507752`. VS Code lists that exact version. The retained rollback VSIX SHA-256 is `1ef77bc3344e63bf4ad2822af92767a1150b63fa5c7c5cb5ed08f54e52a43ee8`. SDK generation left no tracked diff.

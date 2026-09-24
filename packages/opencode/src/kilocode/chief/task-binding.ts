@@ -33,9 +33,21 @@ export namespace ChiefTaskBinding {
     return Effect.gen(function* () {
       const marker = input.storage ? yield* ChiefRequestPlan.active(input.storage, input.sessionID) : undefined
       if (marker && !input.sessions) throw new Error("Chief request plan requires saved request verification")
-      const request = marker
-        ? yield* ChiefRequestPlan.make(input.storage!, input.sessions!).load(input.sessionID)
-        : undefined
+      const rows = marker && input.sessions ? yield* input.sessions.messages({ sessionID: input.sessionID }) : []
+      const latest = rows.filter((row) => row.info.role === "user" && RayaChief.requestText(row.parts)).at(-1)
+      const stale = marker && latest && marker.identity.requestID !== latest.info.id
+      if (stale && !input.params.branch_id && input.agent === "auto" && RayaChief.phase(input.metadata) === "task")
+        yield* ChiefRequestPlan.make(input.storage!, input.sessions!).rotate({
+          sessionID: input.sessionID,
+          priorRequestID: marker.identity.requestID,
+          nextRequestID: latest.info.id,
+        })
+      const request =
+        marker && !stale
+          ? yield* ChiefRequestPlan.make(input.storage!, input.sessions!).load(input.sessionID)
+          : undefined
+      if (stale && (yield* ChiefRequestPlan.active(input.storage!, input.sessionID)))
+        throw new Error("A prior Chief request plan has not been safely retired")
       const record = input.branches ? yield* input.branches.read(input.sessionID) : undefined
       const goal =
         record && input.storage

@@ -1,4 +1,4 @@
-// Experimental native capture host. No extension path launches this binary yet.
+// Experimental native capture host, launched only by the explicit Windows candidate switch.
 #define NOMINMAX
 #include <windows.h>
 #include <d3d11.h>
@@ -141,11 +141,26 @@ struct Target {
   std::string location;
 };
 
+static RECT intersect(RECT rect, RECT desktop) {
+  RECT visible{std::max(rect.left, desktop.left), std::max(rect.top, desktop.top),
+               std::min(rect.right, desktop.right), std::min(rect.bottom, desktop.bottom)};
+  if (visible.right <= visible.left || visible.bottom <= visible.top)
+    throw Failure("unsupported_surface", "foreground window has no observable area");
+  return visible;
+}
+
 static Target target() {
   HWND handle = GetForegroundWindow();
   if (!handle || !IsWindowVisible(handle)) throw Failure("no_foreground_window", "no visible foreground window");
   RECT rect{};
   if (!GetWindowRect(handle, &rect)) throw std::runtime_error("foreground window bounds unavailable");
+  int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+  int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+  int desktopWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+  int desktopHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  if (desktopWidth <= 1 || desktopHeight <= 1)
+    throw Failure("unsupported_surface", "virtual desktop bounds are unavailable");
+  rect = intersect(rect, RECT{left, top, left + desktopWidth, top + desktopHeight});
   auto width = rect.right - rect.left;
   auto height = rect.bottom - rect.top;
   if (width <= 0 || height <= 0 || width > kEdge || height > kEdge || uint64_t(width) * height > kPixels)
@@ -265,6 +280,11 @@ static void run(HANDLE pipe) {
     same(original);
     ComPtr<ID3D11Texture2D> source;
     require(resource.As(&source), "capture texture");
+    D3D11_TEXTURE2D_DESC current{};
+    source->GetDesc(&current);
+    if (current.Format != texture.Format || current.Width != desc.ModeDesc.Width ||
+        current.Height != desc.ModeDesc.Height || box.right > current.Width || box.bottom > current.Height)
+      throw Failure("display_changed", "DXGI source dimensions changed before copy");
     context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, source.Get(), 0, &box);
     D3D11_MAPPED_SUBRESOURCE mapped{};
     require(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
@@ -308,6 +328,16 @@ int wmain(int argc, wchar_t** argv) {
   try {
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
       {
+        RECT visible = intersect(RECT{-8, -8, 1928, 1088}, RECT{0, 0, 1920, 1080});
+        if (visible.left != 0 || visible.top != 0 || visible.right != 1920 || visible.bottom != 1080)
+          throw Failure("capture_failed", "visible desktop clipping self-test failed");
+        bool refused = false;
+        try {
+          intersect(RECT{-100, -100, -1, -1}, RECT{0, 0, 1920, 1080});
+        } catch (const Failure& error) {
+          refused = error.code == "unsupported_surface";
+        }
+        if (!refused) throw Failure("capture_failed", "disjoint window clipping self-test failed");
         ComPtr<IWICImagingFactory> imaging;
         require(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                  IID_PPV_ARGS(imaging.GetAddressOf())), "WIC factory");

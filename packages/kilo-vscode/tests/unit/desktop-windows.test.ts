@@ -288,6 +288,55 @@ describe("Windows native desktop driver", () => {
     driver.cancel()
   })
 
+  it("refuses accessibility data when the worker observed changed pixels during collection", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const visual = {
+      ...target,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    let captures = 0
+    const primary = {
+      run: async (script: string) => {
+        if (script.includes("Get-RayaControls $window")) {
+          for (let index = 0; index < 100 && captures < 2; index++) await Bun.sleep(2)
+          await Bun.sleep(2)
+          return JSON.stringify({
+            ...target,
+            semanticsMs: 1,
+            semantics: {
+              source: "windows_ui_automation",
+              status: "unavailable",
+              viewport: { x: 0, y: 0, width: 20, height: 10 },
+              controls: [],
+              truncated: false,
+            },
+          })
+        }
+        return JSON.stringify(target)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(primary, {
+      run: async () => {
+        captures++
+        if (captures === 1) return JSON.stringify({ ...visual, data: "first" })
+        if (captures === 2) return JSON.stringify({ ...visual, data: "second" })
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    })
+    driver.startCapture(() => undefined)
+    for (let index = 0; index < 50 && captures < 1; index++) await Bun.sleep(2)
+    await Bun.sleep(2)
+
+    await expect(driver.observe()).rejects.toThrow(/pixels changed while correlating/i)
+    driver.cancel()
+  })
+
   it("parses foreground-window observations and identity", async () => {
     const test = harness([
       JSON.stringify({

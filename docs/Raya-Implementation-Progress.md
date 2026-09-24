@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 13:51 America/Toronto - reject changed pixels during UIA collection
+
+**Status: source tested; commit, push and install pending.** The previous warm-frame join could accept a newer worker frame after same-window pixels changed while UI Automation was collecting controls. The worker now tracks capture sequence separately from a visual scene version: repeated identical captures refresh age without changing the version; changed pixels, dimensions, target or location advance it. A normal desktop observation refuses the pixel/UIA join when the visual version changes during collection. Focused capture, Windows driver, session, lifecycle and bridge checks pass 72 tests / 329 assertions; extension/webview typechecks and lint pass. This detects changes the worker actually observed, not changes between native samples, and does not prove complete scene continuity or real-host latency. A read-only WGC/DXGI audit confirmed those drivers remain standalone benchmark prototypes with single-monitor acquisition and no production transport. Keep `FUT-CU-01` **In progress**.
+
 ## ChatGPT 2026-09-24 13:47 America/Toronto - warm-frame and UIA snapshot installed
 
 **Status: `c722e97973` pushed and production snapshot installed; live acceptance remains open.** VS Code lists `eden.raya@7.4.23-snapshot+c722e97973.kamil-oseni.1790271908085`; the retained rollback VSIX SHA-256 is `F8D4A29712E3D46D3B0792F2474C1661A8D537532AF7C3236999EE092E7E5602`. The low-memory build passed extension/webview typechecks and lint, packaged 443 files, and installed the VSIX. Focused source tests pass 40 cases / 209 assertions. Installation does not prove interactive frame latency, pixel/UIA scene continuity under rapid same-window changes, Pause/Stop/manual takeover, restart, or prolonged resource use. The local benchmark had no foreground window and zero samples. Keep `FUT-CU-01` **In progress**.

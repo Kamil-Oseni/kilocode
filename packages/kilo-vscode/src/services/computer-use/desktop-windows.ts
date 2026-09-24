@@ -1219,6 +1219,8 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const result = await this.observeSemantics(target)
       const scene = this.worker?.latest()
       if (scene) {
+        if (scene.version !== candidate.version)
+          throw new Error("Desktop pixels changed while correlating accessibility controls")
         if (scene.frame.windowID !== target.windowID || scene.frame.location !== target.location)
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
         if (!(await this.matches(scene)))

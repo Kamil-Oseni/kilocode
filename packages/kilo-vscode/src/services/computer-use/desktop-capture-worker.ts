@@ -4,12 +4,14 @@ import { CAPTURE, type DesktopFrame } from "./desktop-session"
 export type CapturedScene = {
   frame: DesktopFrame
   sequence: number
+  version: number
   capturedAt: number
 }
 
 export class DesktopCaptureWorker {
   private generation = 0
   private sequence = 0
+  private version = 0
   private scene: CapturedScene | undefined
   private timer: ReturnType<typeof setTimeout> | undefined
   private wake: (() => void) | undefined
@@ -70,8 +72,14 @@ export class DesktopCaptureWorker {
         return
       }
       const previous = this.scene?.frame
-      this.scene = { frame, sequence: ++this.sequence, capturedAt: performance.now() }
-      const delay = cadence.next(changed(previous, frame))
+      const updated = changed(previous, frame)
+      this.scene = {
+        frame,
+        sequence: ++this.sequence,
+        version: updated ? ++this.version : this.version,
+        capturedAt: performance.now(),
+      }
+      const delay = cadence.next(updated)
       await new Promise<void>((resolve) => {
         this.wake = resolve
         this.timer = setTimeout(resolve, delay)

@@ -39,6 +39,30 @@ describe("continuous desktop capture worker", () => {
     expect(count).toBe(1)
   })
 
+  it("advances capture sequence for every sample but scene version only for changed pixels", async () => {
+    const frames = [frame("0x1", "first"), frame("0x1", "first"), frame("0x1", "second")]
+    let count = 0
+    const worker = new DesktopCaptureWorker(
+      async () => {
+        const next = frames[count++]
+        if (next) return next
+        return new Promise<DesktopFrame>(() => undefined)
+      },
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    worker.start()
+    await until(() => worker.latest()?.sequence === 1)
+    expect(worker.latest()?.version).toBe(1)
+    await until(() => worker.latest()?.sequence === 2)
+    expect(worker.latest()?.version).toBe(1)
+    await until(() => worker.latest()?.sequence === 3)
+    expect(worker.latest()?.version).toBe(2)
+    worker.stop()
+  })
+
   it("discards a capture that resolves after Stop and accepts a new generation", async () => {
     const pending: Array<(frame: DesktopFrame) => void> = []
     const worker = new DesktopCaptureWorker(

@@ -6,7 +6,16 @@ const plan: ChiefPart = {
   id: "plan",
   sessionID: "parent",
   tool: "chief_plan",
-  state: { status: "completed", metadata: { goalCreatedAt: 12, requestID: "request", revision: "revision" } },
+  state: {
+    status: "completed",
+    input: {
+      proposals: [
+        { id: "audit", name: "Safety audit", specialist: "researcher", access: "read" },
+        { id: "other", name: "Other audit", specialist: "designer", access: "read" },
+      ],
+    },
+    metadata: { goalCreatedAt: 12, requestID: "request", revision: "revision" },
+  },
 }
 const note = {
   version: 1,
@@ -25,6 +34,26 @@ const response = {
   requestID: "request",
   revision: "revision",
   notes: [note],
+}
+const launch: ChiefPart = {
+  id: "launch",
+  callID: "task-call",
+  sessionID: "parent",
+  tool: "task",
+  state: {
+    status: "completed",
+    input: { branch_id: "audit", background: true },
+    output: '<task id="child" state="running">\n<summary>Background task started</summary>\n',
+    metadata: {
+      parentSessionId: "parent",
+      sessionId: "child",
+      childMessageID: "child-message",
+      selectedAgent: "researcher",
+      background: true,
+      requestID: "request",
+      goalCreatedAt: 12,
+    },
+  },
 }
 
 describe("Chief note hydration", () => {
@@ -49,21 +78,40 @@ describe("Chief note hydration", () => {
         status: "completed",
         metadata: { goalCreatedAt: 12, requestID: "request" },
         output: JSON.stringify({
-          branches: [{ id: "audit", notes: [{ ...note, goalCreatedAt: 12, requestID: "request" }] }],
+          branches: [
+            {
+              id: "audit",
+              state: "admitted",
+              notes: [
+                {
+                  ...note,
+                  goalCreatedAt: 12,
+                  requestID: "request",
+                  taskCallID: "task-call",
+                  childMessageID: "child-message",
+                  toolCallID: "note-call",
+                },
+              ],
+            },
+            { id: "other", state: "planned", notes: [] },
+          ],
         }),
       },
     }
     expect(chiefUnseenNotes(data, [plan])).toEqual(data.notes)
-    expect(chiefUnseenNotes(data, [plan, inspect])).toEqual([])
+    expect(chiefUnseenNotes(data, [plan, inspect])).toEqual(data.notes)
+    expect(chiefUnseenNotes(data, [plan, launch, inspect])).toEqual([])
     expect(
       chiefUnseenNotes(data, [
         plan,
+        launch,
         { ...inspect, state: { ...inspect.state, metadata: { goalCreatedAt: 12, requestID: "other" } } },
       ]),
     ).toEqual(data.notes)
     expect(
       chiefUnseenNotes(data, [
         plan,
+        launch,
         {
           ...inspect,
           state: {
@@ -78,6 +126,7 @@ describe("Chief note hydration", () => {
     expect(
       chiefUnseenNotes(data, [
         plan,
+        launch,
         {
           ...inspect,
           state: {

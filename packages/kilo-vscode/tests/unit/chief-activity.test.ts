@@ -350,7 +350,7 @@ describe("chiefReceipt", () => {
     const first = inspect("first")
     const repeat = inspect("repeat")
     expect(chiefReceipt(first, [parent, start, first])?.filter((event) => event.message)).toEqual([
-      { name: "Docs audit", specialist: "researcher", status: "Message received", message: note.text },
+      { name: "Docs audit", specialist: "researcher", status: "Message received", message: note.text, noteID: note.id },
     ])
     expect(chiefReceipt(repeat, [parent, start, first, repeat])).toEqual([])
     for (const value of [

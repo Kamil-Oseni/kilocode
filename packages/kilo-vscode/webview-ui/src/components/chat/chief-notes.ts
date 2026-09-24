@@ -1,4 +1,4 @@
-import type { ChiefPart } from "./chief-activity"
+import { chiefReceipt, type ChiefPart } from "./chief-activity"
 
 export type ChiefNote = {
   version: 1
@@ -92,46 +92,13 @@ export function chiefNotesData(raw: unknown, plan: ChiefNotesPlan): ChiefNotesDa
   return { ...plan, version: 1, notes: notes.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)) }
 }
 
-function inspected(raw: unknown, branch: unknown, data: ChiefNotesData) {
-  const note = object(raw)
-  const saved = data.notes.find((item) => item.id === note?.id)
-  if (
-    !saved ||
-    branch !== saved.branchID ||
-    note?.state !== "delivered" ||
-    note.requestID !== data.requestID ||
-    note.goalCreatedAt !== data.goalCreatedAt ||
-    note.branchID !== saved.branchID ||
-    note.childSessionID !== saved.childSessionID ||
-    note.text !== saved.text
-  )
-    return
-  return saved.id
-}
-
 export function chiefUnseenNotes(data: ChiefNotesData, parts: readonly ChiefPart[]): ChiefNote[] {
   const seen = new Set<string>()
   for (const part of parts) {
     if (part.tool !== "chief_inspect" || part.state.status !== "completed") continue
-    const meta = metadata(part)
-    if (meta.requestID !== data.requestID || meta.goalCreatedAt !== data.goalCreatedAt) continue
-    if (!part.state.output) continue
-    let output: unknown
-    try {
-      output = JSON.parse(part.state.output)
-    } catch {
-      continue
-    }
-    const branches = object(output)?.branches
-    if (!Array.isArray(branches)) continue
-    for (const raw of branches) {
-      const branch = object(raw)
-      const notes = branch?.notes
-      if (!Array.isArray(notes)) continue
-      for (const rawNote of notes) {
-        const id = inspected(rawNote, branch?.id, data)
-        if (id) seen.add(id)
-      }
+    for (const event of chiefReceipt(part, parts) ?? []) {
+      const saved = data.notes.find((note) => note.id === event.noteID)
+      if (saved && saved.text === event.message && saved.branchName === event.name) seen.add(saved.id)
     }
   }
   return data.notes.filter((note) => !seen.has(note.id))

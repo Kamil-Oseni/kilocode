@@ -21,7 +21,7 @@ export type ChiefBranch = {
 
 export type ChiefActivity = { branches: ChiefBranch[]; synthesized: boolean }
 
-export type ChiefEvent = { name: string; specialist?: string; status: string; message?: string }
+export type ChiefEvent = { name: string; specialist?: string; status: string; message?: string; noteID?: string }
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
@@ -386,7 +386,15 @@ export function chiefReceipt(part: ChiefPart, parts: readonly ChiefPart[]): Chie
         )
         if (!launch) return []
         seen.add(note.id)
-        return [{ name: branch.name, specialist: branch.specialist, status: "Message received", message: note.text }]
+        return [
+          {
+            name: branch.name,
+            specialist: branch.specialist,
+            status: "Message received",
+            message: note.text,
+            noteID: note.id,
+          },
+        ]
       })
     })
     return [...changes(rows, branches, reports), ...notes]

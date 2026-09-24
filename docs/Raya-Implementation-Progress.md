@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 02:00 America/Toronto - keep unrendered Chief notes visible
+
+Live Chief-note hydration now suppresses an inbox note only when the corresponding saved `chief_inspect` receipt actually projects a visible specialist message in the parent chat. Previously a matching raw note inside inspection output could hide the inbox copy even if the inspection could not render because its exact saved task launch was absent. The receipt projection now carries the note ID internally for stable deduplication; the UI still shows the same compact name, role icon and message. Thirteen focused chat tests / 69 assertions pass, including the missing-launch case; extension/webview typechecks and lint pass. This user-visible source fix needs a new snapshot and installed-host acceptance. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 01:39 America/Toronto - durable Chief note attention ledger
 
 New Chief notes now append their stable IDs to an optional version-one `attention.pending` ledger in the same durable write as the note. Existing ledgers without that field retain readable notes but project zero pending attention, so deployment cannot re-alert historical messages. Exact active goal, request and revision are required to read pending notes. Clearing IDs requires one saved completed parent `chief_inspect` receipt with matching message, part, call, plan metadata, branch, child lineage, exact note content and inspection time; retries are idempotent, and later notes remain pending. No model wake, prompt scheduling, UI change or SSE behavior was added.

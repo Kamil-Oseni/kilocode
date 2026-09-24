@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 02:00 America/Toronto - Chief note dedupe correction
+
+The live inbox now removes a note only when `chiefReceipt` produced the matching visible note event, including the exact saved task launch and plan lineage. The event carries `noteID` internally for dedupe; it is not a new visible label or delivery claim. A raw `chief_inspect` output that cannot render no longer silently hides the inbox message. Focused chat tests, typechecks and lint pass. Commit/push and install this source, then check an actual two-specialist chat, missing/late task hydration, repeated inspection, narrow/wide layout and restart. Parent-model attention remains a separate durable dispatch problem.
+
 ## ChatGPT 2026-09-24 01:39 America/Toronto - Chief attention ledger boundary
 
 `ChiefBranches` now durably records only newly saved note IDs in optional `attention.pending`; old records without the field mean no pending work. `pending()` checks exact active goal/request/revision and returns bounded saved notes. `acknowledge()` removes cited IDs only after reading one saved completed parent `chief_inspect` part and validating its plan identity, branch/child lineage, note content and time; repeat ack returns no new IDs. The ledger does not wake a model. Sixteen Chief tests / 132 assertions, CLI typecheck, Prettier and annotation guard pass. Next design a durable attention reservation and intake through the existing `RayaGoalContinuation` dispatch path at idle/TurnClose: coalesce notes, defer during a user or model turn, check goal revision and pause, recover lost events/restarts, and never replay unknown actions. Wire inspection acknowledgement only after the actual persisted parent tool receipt is available. Keep the Windows Chief edit integration unregistered and agent/chat rows In progress.

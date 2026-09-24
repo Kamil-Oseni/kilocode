@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 02:37 America/Toronto - named specialist access in the collapsed row
+
+Chief activity now exposes each saved branch's read/edit access next to its name without requiring expansion. Keep the currently separate state label, role icon, objective and report. Verify narrow-width wrapping and actual installed-host activity after the next snapshot. The owner explicitly wants Codex-like intelligent selection of independent specialists, task-specific read-only/edit authority, meaningful names and tidy live reporting. Existing saved Chief branch scope and named activity are foundations; UI labels alone are not enforcement. Continue the durable note-attention dispatch/ack and real multi-specialist/restart matrix before marking the agent/chat rows Verified.
+
 ## ChatGPT 2026-09-24 02:19 America/Toronto - existing-dispatch Chief note reminder
 
 The parent goal continuation now reads exact active Chief pending IDs during its existing `launch` and started-without-saved-intake recovery. It appends a bounded synthetic reminder to that same saved dispatch's parent input, with request/revision and up to eight safe note IDs but no child text. The model is told to call `chief_inspect` and not replay child work. It does not schedule a new turn, subscribe to the process-local note event, acknowledge attention or claim immediate wake. Paused/stale plans suppress the reminder. Focused tests prove unchanged dispatch identity, pending notes remain durable, no child text, stale/paused refusal and repeat `resume` without a second invocation; CLI typecheck passes. Next link the prepared batch to one durable goal dispatch only after verifying an idle parent and empty user queue; recover reservation-before-dispatch, dispatch-before-intake, and intake-before-model-completion without replay. Then install and inspect a real parallel Chief conversation and restart matrix. Keep `FUT-AGENT-01/02` In progress.

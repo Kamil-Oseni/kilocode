@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 02:37 America/Toronto - specialist access visible in chat
+
+The compact Chief activity row now shows each specialist's saved **Read only** or **Can edit** scope beside its name and live status, without opening the details. The expanded row keeps the objective and report without repeating the access label. This follows `docs/designer.md` by using existing typography and muted text rather than badges or decorative color. This is visibility into the saved scope, not a new permission grant. The owner's broader target remains task-aware specialist selection, enforced per-child access, intelligible status and messages, and safe parent attention; `FUT-AGENT-01/02` remain In progress. Thirteen focused chat tests / 69 assertions, extension and webview typechecks, lint and diff check pass. Installed snapshot and host acceptance remain pending.
+
 ## ChatGPT 2026-09-24 02:19 America/Toronto - Chief note reminder in an existing continuation
 
 When `RayaGoalContinuation` already owns a saved queued or started parent dispatch, it now reads the exact active Chief plan and pending note IDs before creating that dispatch's synthetic input. A bounded reminder lists at most eight validated IDs, asks the model to call `chief_inspect`, and explicitly says interim notes are not completed task results and must not cause child replay. The reminder never includes child text. Paused, revised, stale or corrupt plans add no reminder, and saved-intake recovery continues the existing turn rather than generating another prompt. There is no event-triggered dispatch or immediate parent wake; the prepared attention batch is not yet linked to a new durable goal dispatch. The focused reminder/attention tests pass 3 cases / 42 assertions, CLI typecheck and diff check pass. This behavior is source-only until a snapshot is installed. `FUT-AGENT-01/02` remain In progress.

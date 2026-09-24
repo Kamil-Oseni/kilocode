@@ -51,7 +51,14 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                   <details class="chief-activity__branch">
                     <summary class="chief-activity__summary">
                       <Icon name={agentIcon(branch().specialist)} size="small" aria-hidden="true" />
-                      <span class="chief-activity__name">{branch().name}</span>
+                      <span class="chief-activity__identity">
+                        <span class="chief-activity__name">{branch().name}</span>
+                        <Show when={branch().access}>
+                          <span class="chief-activity__access">
+                            {branch().access === "read" ? "Read only" : "Can edit"}
+                          </span>
+                        </Show>
+                      </span>
                       <span class="chief-activity__status">
                         {branch().access === "edit" && branch().state === "ready"
                           ? "Changes ready"
@@ -62,12 +69,8 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                       <Icon name="chevron-right" size="small" data-slot="chief-activity-chevron" aria-hidden="true" />
                     </summary>
                     <div class="chief-activity__content">
-                      <Show when={branch().objective || branch().access}>
-                        <span class="chief-activity__brief">
-                          {branch().objective}
-                          <Show when={branch().objective && branch().access}> · </Show>
-                          <Show when={branch().access}>{branch().access === "read" ? "Read only" : "Can edit"}</Show>
-                        </span>
+                      <Show when={branch().objective}>
+                        <span class="chief-activity__brief">{branch().objective}</span>
                       </Show>
                       <Show
                         when={

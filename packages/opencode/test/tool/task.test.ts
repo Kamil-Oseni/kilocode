@@ -1385,6 +1385,129 @@ describe("tool.task", () => {
     }),
   )
 
+  // kilocode_change start - direct Chief answers do not launch children
+  it.instance("Chief answers a self-contained question without admitting a child", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { [RayaChief.modelKey]: ref, [RayaChief.requestKey]: "What does idempotency mean?" },
+      })
+      const route = yield* ChiefRouteTool
+      const routed = yield* (yield* route.init()).execute(
+        { objective: "What does idempotency mean?" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          callID: "direct-route",
+          abort: new AbortController().signal,
+          extra: {},
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const saved = yield* sessions.get(chat.id)
+      expect(routed.metadata.decision.direct).toBe(true)
+      expect(RayaChief.phase(saved.metadata)).toBe("done")
+      expect(RayaChief.history(saved.metadata)[0]?.direct).toBe(true)
+      let called = false
+      const task = yield* TaskTool
+      const refused = yield* (yield* task.init())
+        .execute(
+          { description: "Unneeded child" },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "auto",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ onPrompt: () => (called = true) }) },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(refused)).toBe(true)
+      if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain("no subagent is authorized")
+      expect(called).toBe(false)
+      expect(yield* sessions.children(chat.id)).toEqual([])
+
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: {
+          ...saved.metadata,
+          [RayaChief.requestKey]: "Implement a typed API endpoint",
+          [RayaChief.phaseKey]: "task",
+          "raya.goal.open": true,
+        },
+      })
+      const resumed = yield* sessions.get(chat.id)
+      expect(RayaChief.pending(resumed.metadata)).toBeUndefined()
+      expect(RayaChief.follow(resumed.metadata)).toBeUndefined()
+      const result = yield* (yield* task.init()).execute(
+        { description: "Implement API endpoint" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: () => (called = true) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(result.metadata.selectedAgent).toBe("coder")
+      expect(called).toBe(true)
+    }),
+  )
+
+  it.instance("Chief keeps action and open-goal requests on delegated routes", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const route = yield* ChiefRouteTool
+      const def = yield* route.init()
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "auto",
+        callID: "route",
+        abort: new AbortController().signal,
+        extra: {},
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { [RayaChief.modelKey]: ref, [RayaChief.requestKey]: "Write a greeting in a file" },
+      })
+      expect(
+        (yield* def.execute({ objective: "Write a greeting in a file" }, ctx)).metadata.decision.direct,
+      ).toBeUndefined()
+      expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
+
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: {
+          [RayaChief.modelKey]: ref,
+          [RayaChief.requestKey]: "What does idempotency mean?",
+          [RayaChief.phaseKey]: "route",
+          "raya.goal.open": true,
+        },
+      })
+      expect(
+        (yield* def.execute({ objective: "What does idempotency mean?" }, ctx)).metadata.decision.direct,
+      ).toBeUndefined()
+      expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
+    }),
+  )
+  // kilocode_change end
+
   it.instance("Chief raises an in-chat option question before resolving a low-confidence route", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service

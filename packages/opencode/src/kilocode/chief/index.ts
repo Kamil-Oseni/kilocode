@@ -131,6 +131,7 @@ export namespace RayaChief {
     chiefModel: Schema.String,
     candidates: Schema.Array(Candidate),
     prompted: Schema.Boolean,
+    direct: Schema.optional(Schema.Boolean),
   })
   export type Decision = typeof Decision.Type
 
@@ -151,6 +152,7 @@ export namespace RayaChief {
     prompted: boolean
     latency: number
     chiefModel: string
+    direct?: boolean
   }
 
   type Profile = {
@@ -363,6 +365,17 @@ export namespace RayaChief {
     )
   }
 
+  /** Only self-contained conversational turns can finish in Chief without a child or tools. */
+  export function direct(request: string) {
+    const value = request.trim()
+    if (/^(?:hi|hello|hey|thanks|thank you)[!. ]*$/i.test(value)) return true
+    if (!/^(?:what does [a-z][a-z -]{2,60} mean\??|explain the term [a-z][a-z -]{2,60}[?.]?)$/i.test(value))
+      return false
+    return !/\b(?:my|our|your|this|that|these|those|file|repo|repository|code|log|error|today|now|latest|current)\b/i.test(
+      value,
+    )
+  }
+
   // raya_change - listing or sequencing a redesign is not Designer work
   function listing(request: string) {
     return (
@@ -458,7 +471,7 @@ export namespace RayaChief {
       .join("\n")
     return `You are Raya's Chief coordinator. Requests to create or manage a routine, recurring worker, team of agents, or organization are a direct primary-chat workflow: use the available Routines tools yourself. For other new requests, first call chief_route exactly once; it uses the saved original request. Make one tool call per response and inspect its result before the next call. Ask the user with ask_options only when a decision genuinely requires them.
 
-Choose delegation by the work itself. Use one task for a simple or dependent request. For a goal-bound request with two or three truly independent, bounded pieces, call chief_plan first. Give each branch a distinct short name, specialist, scope, objective, expected result, independence reason and access reason. Choose read access for inspection and edit only where changes are required and already authorized. If chief_plan says there is no matching active goal, use the single-task path; do not invent a goal or retry a rejected plan unchanged. A saved plan requires one task call per exact branch_id. Start independent branches with background:true so they can run together. Never replace a branch or replay a child whose outcome is unknown. If background execution is unavailable, report that limitation rather than launch a misleading parallel plan.
+Choose delegation by the work itself. When chief_route returns direct:true, answer the self-contained conversational request yourself and do not call task. Use one task for a simple or dependent request that needs work. For a goal-bound request with two or three truly independent, bounded pieces, call chief_plan first. Give each branch a distinct short name, specialist, scope, objective, expected result, independence reason and access reason. Choose read access for inspection and edit only where changes are required and already authorized. If chief_plan says there is no matching active goal, use the single-task path; do not invent a goal or retry a rejected plan unchanged. A saved plan requires one task call per exact branch_id. Start independent branches with background:true so they can run together. Never replace a branch or replay a child whose outcome is unknown. If background execution is unavailable, report that limitation rather than launch a misleading parallel plan.
 
 After starting all planned branches, call chief_inspect. If work is running, give a short progress update and wait for background completion to resume the conversation; do not repeatedly poll. When a branch completes, inspect its actual child reply and completed tool evidence. Call chief_review only for a completed branch whose result satisfies its saved brief, citing an exact child tool reference from chief_inspect. A conversational assertion with no tool evidence is not verified. If a branch fails, is cancelled, or has unknown outcome, report it honestly and do not synthesize it as success. Once all branches are reviewed, call chief_synthesize with one conclusion per branch. Then call get_goal and handle an existing goal with update_goal based on its actual evidence; a rejected completion leaves work to resolve. If no goal exists, give a concise synthesis. On a continuation, do not call chief_route again. Never invent tools, evidence or completion.
 
@@ -475,6 +488,7 @@ ${registry}`
     if (typeof item.confidence !== "number" || typeof item.reason !== "string") return undefined
     if (typeof item.needs_plan !== "boolean" || typeof item.prompted !== "boolean") return undefined
     if (typeof item.latency !== "number" || typeof item.chiefModel !== "string") return undefined
+    if (item.direct === true && phase(metadata) !== "done") return undefined
     return item as Pending
   }
 
@@ -501,6 +515,7 @@ ${registry}`
     if (ready) return ready
     const last = history(metadata).at(-1)
     if (!last) return undefined
+    if (last.direct) return undefined
     const role = last.candidates.find((item: Candidate) => item.agent === last.agent)?.role
     if (!role) return undefined
     return { ...last, role } satisfies Pending

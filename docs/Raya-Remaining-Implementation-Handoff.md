@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-23 21:24 America/Toronto - direct-answer route and remaining fanout gap
+
+`RayaChief.direct` admits only self-contained greetings and term questions to a saved `direct` Chief decision. `chief_route` records `done` without resolving a child model, and `task` refuses a child in that turn. New requests and goal continuations ignore stale direct state. Focused tests pass 13 cases / 67 assertions, CLI typecheck and the opencode annotation guard pass. Do not broaden the classifier to requests needing files, current facts, tools or goal evidence without an explicit authority and completion design. A real Auto parent-chat turn and subsequent action turn still need installed-host acceptance. Ordinary independent audits without an active goal still cannot use `chief_plan`; that needs a durable request-bound ledger, terminal/unknown recovery and synthesis gate, not only a prompt change. Keep the existing 2-3 branch goal-bound path intact while designing that larger slice.
+
 ## ChatGPT 2026-09-23 21:15 America/Toronto - visible named Chief rows, event history still open
 
 `ChiefActivity.tsx` now shows every specialist's existing role icon, name and current state without opening the activity block. Native per-row disclosure contains job, access and available report; compact neutral styling follows `docs/designer.md`. Five focused projection tests / 18 assertions, webview typecheck, targeted lint and formatting pass. This is source-only until the next snapshot. The current component still derives one latest state from later `chief_inspect`/`chief_review` receipts and renders it at the original plan; it does not yet show receipt-backed chronological starts, messages and finishes at their actual chat positions. Add that as a separate bounded UI/data slice and verify real installed parallel chat, narrow/wide layout and restart before accepting the owner's Codex-like activity requirement.

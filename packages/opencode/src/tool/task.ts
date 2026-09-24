@@ -179,6 +179,13 @@ export const TaskTool = Tool.define(
       // kilocode_change end
       // kilocode_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
       const chief = ctx.agent === "auto" ? RayaChief.pending(parent.metadata) : undefined
+      // kilocode_change start - a direct Chief answer cannot launch a child
+      if (chief?.direct) {
+        return yield* Effect.fail(
+          new Error("Auto Chief selected a direct answer; no subagent is authorized for this request"),
+        )
+      }
+      // kilocode_change end
       const follow = ctx.agent === "auto" ? RayaChief.follow(parent.metadata) : undefined
       const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
       if (ctx.agent === "auto" && !branch && !follow && !continued) {

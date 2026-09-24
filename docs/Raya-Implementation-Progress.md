@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 21:24 America/Toronto - Chief can choose no subagent for narrow conversation
+
+Auto Chief now records a `direct` routing decision for a conservative set of self-contained greetings and term questions, answers from the parent conversation, and refuses `task` in that routed turn. Action requests and active goals keep their specialist route; a later goal continuation ignores stale direct state. Focused routing/task tests pass 13 cases / 67 assertions, CLI typecheck and shared-file annotation guard pass. This is a small step toward choosing whether a specialist is useful, not general direct execution or ordinary no-goal parallel fanout. A snapshot and real host conversation remain to be checked.
+
 ## ChatGPT 2026-09-23 21:15 America/Toronto - named Chief specialists stay visible
 
 The Chief activity view now keeps one compact neutral row per saved specialist visible, with its role icon, name and current receipt-derived state. Each row opens objective, read/edit access and available report without crowding the chat. Five focused projection tests / 18 assertions, webview typecheck, targeted lint and formatting pass. This source change still needs a built snapshot and live narrow/wide parallel-chat review; the later chronological event trail must use actual saved receipts rather than retroactively presenting a rewritten status as history.

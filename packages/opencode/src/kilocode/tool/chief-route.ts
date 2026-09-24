@@ -35,7 +35,7 @@ export const ChiefRouteTool = Tool.define<
 
     return {
       description:
-        "Classify the complete user request through Raya's Chief policy. This must be called exactly once before task in Auto mode. It validates and logs a strict routing decision and asks the user to choose when confidence is low.",
+        "Classify the complete user request through Raya's Chief policy. Call once for each new Auto request. A direct decision needs no child; other decisions may delegate. Ask the user to choose when confidence is low.",
       parameters: Parameters,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -46,7 +46,9 @@ export const ChiefRouteTool = Tool.define<
             if (!decision) return yield* Effect.die(new Error("Auto routing phase advanced without a decision"))
             return {
               title: "Auto already routed",
-              output: "Routing is already complete for this turn. Continue with task, then goal verification.",
+              output: decision.direct
+                ? "Routing is complete. Answer this self-contained request directly."
+                : "Routing is already complete for this turn. Continue with task, then goal verification.",
               metadata: { decision },
             }
           } // raya_change - repeated same-response calls stay known but cannot restart the workflow
@@ -72,6 +74,12 @@ export const ChiefRouteTool = Tool.define<
           const selected = available.find((item) => item.name === chosen)
           // raya_change end
           if (!selected) throw new Error("The selected Auto specialist is unavailable")
+          const direct =
+            selected.name === "generalist" &&
+            !answer &&
+            RayaChief.request(session.metadata) === request &&
+            session.metadata?.["raya.goal.open"] !== true &&
+            RayaChief.direct(request)
 
           const message = yield* sessions
             .findMessage(ctx.sessionID, (item) => item.info.id === ctx.messageID)
@@ -87,14 +95,16 @@ export const ChiefRouteTool = Tool.define<
             : assistant
               ? { providerID: assistant.providerID, modelID: assistant.modelID }
               : yield* provider.defaultModel()
-          const resolved = yield* KiloTask.resolveModel({
-            name: selected.name,
-            agent: selected,
-            config: cfg,
-            parent,
-            variant: saved?.variant,
-            provider,
-          })
+          const resolved = direct
+            ? undefined
+            : yield* KiloTask.resolveModel({
+                name: selected.name,
+                agent: selected,
+                config: cfg,
+                parent,
+                variant: saved?.variant,
+                provider,
+              })
           const chiefModel = assistant
             ? `${assistant.providerID}/${assistant.modelID}`
             : `${parent.providerID}/${parent.modelID}`
@@ -114,16 +124,17 @@ export const ChiefRouteTool = Tool.define<
             latency: Math.max(0, Date.now() - (assistant?.time.created ?? started)),
             chiefModel,
           }
+          if (direct) pending.direct = true
           const decision: RayaChief.Decision = {
             ...pending,
-            model: `${resolved.model.providerID}/${resolved.model.modelID}`,
+            model: resolved ? `${resolved.model.providerID}/${resolved.model.modelID}` : chiefModel,
           }
           yield* sessions.setMetadata({
             sessionID: ctx.sessionID,
             metadata: {
               ...session.metadata,
               [RayaChief.pendingKey]: pending,
-              [RayaChief.phaseKey]: "task", // raya_change - only task is legal after Chief
+              [RayaChief.phaseKey]: direct ? "done" : "task",
               [RayaChief.logKey]: [...RayaChief.history(session.metadata), decision],
             },
           })

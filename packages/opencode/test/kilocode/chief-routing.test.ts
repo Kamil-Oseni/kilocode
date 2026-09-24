@@ -75,6 +75,17 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(false)
   })
 
+  it("answers only self-contained conversational turns without a child", () => {
+    expect(RayaChief.direct("Hi! ")).toBe(true)
+    expect(RayaChief.direct("What does idempotency mean? ")).toBe(true)
+    expect(RayaChief.direct("Explain the term idempotency.")).toBe(true)
+    expect(RayaChief.direct("What does this error mean?")).toBe(false)
+    expect(RayaChief.direct("Explain my code")).toBe(false)
+    expect(RayaChief.direct("Define a function")).toBe(false)
+    expect(RayaChief.direct("Write a greeting in a file")).toBe(false)
+    expect(RayaChief.direct("Find the latest invoice")).toBe(false)
+  })
+
   // raya_change - regression for a trivial file task previously sent to Designer
   it("sends difficult implementation to Engineer and everyday coding to coder", () => {
     const agentsWithEngineer = agents

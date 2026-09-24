@@ -1,7 +1,7 @@
 import * as GoalMessage from "./message"
 import path from "node:path"
 // raya_change - Milestone A idle continuation with no-tool spin suppression
-import { Cause, Effect, Semaphore } from "effect"
+import { Cause, Effect, Schema, Semaphore } from "effect"
 import type { Bus } from "@/bus"
 import type { Session } from "@/session/session"
 import { SessionID, type MessageID } from "@/session/schema"
@@ -60,6 +60,86 @@ ${inspect}
           }),
     ),
   )
+}
+
+/** A completed inspection in the exact parent turn can clear notes it actually returned. */
+function observed(input: {
+  storage: Storage.Interface
+  sessions: Pick<Session.Interface, "messages">
+  sessionID: SessionID
+  goal: RayaGoal.State
+  plan: ChiefBranches.Record
+  rows: readonly SessionV1.WithParts[]
+}) {
+  return Effect.gen(function* () {
+    const dispatch = input.goal.dispatch
+    const origin = dispatch?.attention
+    if (
+      !dispatch?.messageID ||
+      !origin ||
+      dispatch.phase !== "finished" ||
+      dispatch.outcome !== "completed" ||
+      !dispatch.assistantID ||
+      input.goal.accounted?.userID !== dispatch.messageID ||
+      !input.goal.accounted.messages.includes(dispatch.assistantID) ||
+      input.plan.attention?.prepared?.id !== origin.batchID
+    )
+      return input.plan
+    const view = Schema.Struct({
+      requestID: Schema.String,
+      branches: Schema.Array(Schema.Struct({ notes: Schema.Array(Schema.Struct({ id: Schema.String })) })),
+    })
+    const ledger = ChiefBranches.make(input.storage, input.sessions)
+    const parts = input.rows.flatMap((row) =>
+      row.info.role === "assistant" && row.info.parentID === dispatch.messageID && row.info.id <= dispatch.assistantID!
+        ? row.parts.flatMap((part) =>
+            part.type === "tool" &&
+            part.tool === "chief_inspect" &&
+            part.state.status === "completed" &&
+            part.state.metadata?.requestID === origin.requestID &&
+            part.state.metadata?.goalCreatedAt === origin.goalCreatedAt
+              ? [{ messageID: row.info.id, part }]
+              : [],
+          )
+        : [],
+    )
+    for (const entry of parts) {
+      if (entry.part.state.status !== "completed") continue
+      const output = entry.part.state.output
+      const raw = yield* Effect.try({
+        try: () => JSON.parse(output) as unknown,
+        catch: () => new Error("Chief inspection receipt is unreadable"),
+      }).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(view)),
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (!raw || raw.requestID !== origin.requestID) continue
+      const current = yield* ledger.read(input.sessionID)
+      if (!current || current.attention?.prepared?.id !== origin.batchID) break
+      const visible = new Set(raw.branches.flatMap((branch) => branch.notes.map((note) => note.id)))
+      const ids = current.attention.pending.filter((id) => visible.has(id))
+      if (!ids.length) continue
+      yield* ledger
+        .acknowledge({
+          goalID: input.sessionID,
+          goalCreatedAt: origin.goalCreatedAt,
+          requestID: origin.requestID,
+          revision: origin.revision,
+          inspect: { messageID: entry.messageID, partID: entry.part.id, callID: entry.part.callID },
+          ids,
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.interrupt
+              : Effect.sync(() =>
+                  log.warn("Chief inspection receipt did not acknowledge notes", { cause: Cause.squash(cause) }),
+                ),
+          ),
+        )
+    }
+    return (yield* ledger.read(input.sessionID)) ?? input.plan
+  })
 }
 
 const prompt = (objective: string, completion?: "reply") =>
@@ -420,14 +500,14 @@ export namespace RayaGoalContinuation {
           return false
         if (!(yield* continuation({ ...input, session }))) return false
         const goal = yield* goals.get(input.sessionID)
-        const plan = yield* ChiefBranches.make(input.storage).read(input.sessionID)
+        const current = yield* ChiefBranches.make(input.storage).read(input.sessionID)
         if (
           !goal ||
           goal.completion === "reply" ||
-          !plan ||
-          plan.version !== 2 ||
-          !ChiefBranches.matches(plan, goal) ||
-          !plan.attention?.pending.length
+          !current ||
+          current.version !== 2 ||
+          !ChiefBranches.matches(current, goal) ||
+          !current.attention?.pending.length
         )
           return false
         const dispatch = goal.dispatch
@@ -442,6 +522,16 @@ export namespace RayaGoalContinuation {
           )
         )
           return false
+        const plan = yield* observed({
+          storage: input.storage,
+          sessions: input.sessions,
+          sessionID: input.sessionID,
+          goal,
+          plan: current,
+          rows,
+        })
+        if (plan.version !== 2 || !ChiefBranches.matches(plan, goal)) return false
+        if (!plan.attention?.pending.length) return false
         const prior = dispatch.attention
         if (prior && dispatch.phase === "finished" && plan.attention.pending.every((id) => prior.ids.includes(id)))
           return false

@@ -182,15 +182,76 @@ describe("Chief idle attention", () => {
         })
         expect(yield* wake()).toBe(false)
         expect(calls).toHaveLength(1)
-        yield* goals.control(id, "paused")
+        const later = yield* ledger.note({
+          goalID: id,
+          goalCreatedAt: goal.createdAt,
+          requestID: plan.requestID,
+          branchID: "safety",
+          taskCallID: "task-safety",
+          childSessionID: child,
+          childMessageID: input,
+          senderMessageID: MessageID.ascending(),
+          toolCallID: "call-later",
+          text: "A later update",
+        })
+        const exact = JSON.stringify({
+          requestID: plan.requestID,
+          branches: [
+            { id: "safety", notes: [note] },
+            { id: "design", notes: [] },
+          ],
+        })
+        const part = {
+          id: "part-inspect",
+          type: "tool",
+          tool: "chief_inspect",
+          callID: "call-inspect",
+          state: {
+            status: "completed",
+            input: {},
+            output: exact,
+            metadata: { requestID: plan.requestID, goalCreatedAt: goal.createdAt },
+            title: "Auto Chief branch results",
+            time: { start: goal.createdAt, end: Date.now() + 1 },
+          },
+        }
+        const receipt = {
+          info: {
+            id: reply,
+            sessionID: id,
+            parentID: previous,
+            role: "assistant",
+            time: { created: Date.now(), completed: Date.now() },
+          },
+          parts: [part],
+        }
+        rows.push(receipt as unknown as SessionV1.WithParts)
+        expect(yield* wake()).toBe(false)
+        receipt.info.parentID = running.dispatch.messageID
+        part.state.output = JSON.stringify({
+          requestID: plan.requestID,
+          branches: [
+            { id: "safety", notes: [{ ...note, text: "corrupted" }] },
+            { id: "design", notes: [] },
+          ],
+        })
         expect(yield* wake()).toBe(false)
         expect(calls).toHaveLength(1)
+        expect((yield* ledger.read(id))?.attention?.pending).toEqual([note.id, later.id])
+        part.state.output = exact
+        expect(yield* wake()).toBe(true)
+        expect(calls).toHaveLength(2)
+        expect((yield* ledger.read(id))?.attention?.pending).toEqual([later.id])
+        expect((yield* ledger.read(id))?.attention?.prepared?.ids).toEqual([later.id])
+        yield* goals.control(id, "paused")
+        expect(yield* wake()).toBe(false)
+        expect(calls).toHaveLength(2)
         expect(calls[0]?.note).toContain(note.id)
         expect(calls[0]?.note).toContain("chief_inspect")
         expect(calls[0]?.note).not.toContain(note.text)
         const saved = yield* goals.get(id)
-        expect(saved?.dispatch?.attention?.ids).toEqual([note.id])
-        expect(saved?.dispatch?.messageID).toBe(calls[0]?.id)
+        expect(saved?.dispatch?.attention?.ids).toEqual([later.id])
+        expect(saved?.dispatch?.messageID).toBe(calls[1]?.id)
       }),
     30_000,
   )

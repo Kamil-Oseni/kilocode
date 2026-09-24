@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 18:28 America/Toronto - installed organization and selected-grant checkpoint
+
+`a1d7882bb7` is pushed and installed as `eden.raya@7.4.23-snapshot+a1d7882bb7.kamil-oseni.1790288631569`. The retained 446-file rollback VSIX SHA-256 is `651AC14CB392CE7F45F8421D9761D61D60329AE8D6E293EA60AC42F822E1092D` and contains the native executable and PDB. The push and low-memory packaging gates passed. Next, exercise the in-dialog organization work review and selected-app computer child in the installed VS Code host; verify Stop, manual takeover, backend disconnect, restart, changed-window refusal, and the real native crash receipt if `raya-desktop-capture.exe` fails again. Record local stage p50/p95 and model latency separately. Until live recovery, prolonged-use, and benchmark evidence passes, keep `FUT-CU-01` In progress and do not claim the access violation is fixed.
+
 ## ChatGPT 2026-09-24 18:18 America/Toronto - selected grant and assignment review handoff
 
 Source is verified but not yet committed or installed. The selected-app computer child now binds its saved delegation to parent grant ID, exact Windows handle, and process-start/class identity. The same identity is checked on parent and child paths before frame delivery and native input; a different process reusing the handle is denied. Selected Windows grants are desktop-only and session-only; same-process indistinguishable window recreation remains possible, and performance cost of the extra identity check is unmeasured. Retain the fail-closed, unknown/no-replay result when a sequence loses authority after native effects. Do not mark `FUT-CU-01` Verified.

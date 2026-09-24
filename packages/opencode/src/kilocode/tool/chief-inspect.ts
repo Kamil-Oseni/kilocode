@@ -56,6 +56,7 @@ export function chiefInspectTool(deps: {
                 independence: item.independence,
                 authority: item.authority,
                 state: item.state,
+                notes: (current.notes ?? []).filter((note) => note.branchID === item.id),
                 edits,
               })
               continue
@@ -91,6 +92,7 @@ export function chiefInspectTool(deps: {
               independence: item.independence,
               authority: item.authority,
               state: item.state,
+              notes: (current.notes ?? []).filter((note) => note.branchID === item.id),
               callID: item.callID,
               reviewed: !!item.review,
               edits,

@@ -40,6 +40,7 @@ import { chiefPlanTool } from "./chief-plan"
 import { chiefInspectTool } from "./chief-inspect"
 import { chiefReviewTool } from "./chief-review"
 import { chiefSynthesizeTool } from "./chief-synthesize"
+import { chiefMessageTool } from "./chief-message"
 import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C selectable options
 import { BrowserTools } from "./browser-host" // raya_change - Milestone F browser tools
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
@@ -171,6 +172,11 @@ export namespace KiloToolRegistry {
                 goals: goalState,
               }),
               chiefSynthesize: chiefSynthesizeTool({
+                storage: goalDeps.storage,
+                sessions: goalDeps.sessions,
+                goals: goalState,
+              }),
+              chiefMessage: chiefMessageTool({
                 storage: goalDeps.storage,
                 sessions: goalDeps.sessions,
                 goals: goalState,
@@ -464,6 +470,7 @@ export namespace KiloToolRegistry {
   export function available(tool: Tool.Def, agent: Agent.Info) {
     if (["chief_route", "chief_plan", "chief_inspect", "chief_review", "chief_synthesize"].includes(tool.id))
       return agent.name === "auto"
+    if (tool.id === "chief_message") return agent.mode !== "primary"
     if (
       [
         "schedule_task",

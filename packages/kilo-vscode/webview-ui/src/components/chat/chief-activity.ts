@@ -2,6 +2,7 @@ type State = { status: string; input?: Record<string, unknown>; output?: string;
 
 export type ChiefPart = {
   id: string
+  callID?: string
   sessionID?: string
   tool: string
   state: State
@@ -20,7 +21,7 @@ export type ChiefBranch = {
 
 export type ChiefActivity = { branches: ChiefBranch[]; synthesized: boolean }
 
-export type ChiefEvent = { name: string; specialist?: string; status: string }
+export type ChiefEvent = { name: string; specialist?: string; status: string; message?: string }
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
@@ -32,6 +33,56 @@ function text(value: unknown): string | undefined {
 
 function metadata(part: ChiefPart) {
   return part.metadata ?? part.state.metadata ?? {}
+}
+
+type Note = {
+  id: string
+  requestID: string
+  goalCreatedAt: number
+  taskCallID: string
+  childSessionID: string
+  childMessageID: string
+  text: string
+}
+
+function noteShape(raw: unknown, branch: string) {
+  const value = object(raw)
+  if (!value || value.version !== 1 || value.state !== "delivered" || value.branchID !== branch) return
+  return value
+}
+
+function note(raw: unknown, branch: string): Note[] {
+  const value = noteShape(raw, branch)
+  if (!value) return []
+  const id = text(value.id)
+  const child = text(value.childSessionID)
+  const message = text(value.childMessageID)
+  const body = text(value.text)
+  const request = text(value.requestID)
+  const call = text(value.taskCallID)
+  if (
+    !id ||
+    !child ||
+    !message ||
+    !text(value?.toolCallID) ||
+    !request ||
+    typeof value?.goalCreatedAt !== "number" ||
+    !call ||
+    !body ||
+    body.length > 1_500
+  )
+    return []
+  return [
+    {
+      id,
+      requestID: request,
+      goalCreatedAt: value.goalCreatedAt,
+      taskCallID: call,
+      childSessionID: child,
+      childMessageID: message,
+      text: body,
+    },
+  ]
 }
 
 function inspect(part: ChiefPart) {
@@ -49,6 +100,7 @@ function inspect(part: ChiefPart) {
         isolated: boolean
         integration?: string
         report?: string
+        notes: Note[]
       }[] => {
         const item = object(value)
         const id = text(item?.id)
@@ -63,6 +115,7 @@ function inspect(part: ChiefPart) {
             isolated: object(item?.edits) !== undefined,
             ...(text(item?.integration) ? { integration: text(item?.integration) } : {}),
             ...(text(item?.report) ? { report: text(item?.report)?.slice(0, 240) } : {}),
+            notes: Array.isArray(item?.notes) ? item.notes.slice(0, 8).flatMap((raw) => note(raw, id)) : [],
           },
         ]
       },
@@ -315,7 +368,28 @@ export function chiefReceipt(part: ChiefPart, parts: readonly ChiefPart[]): Chie
   if (receipt.tool === "chief_inspect") {
     const rows = valid(receipt)
     if (!rows) return
-    return changes(rows, branches, reports)
+    const seen = new Set(prior.flatMap((item) => valid(item)?.flatMap((row) => row.notes.map((note) => note.id)) ?? []))
+    const notes = rows.flatMap((row): ChiefEvent[] => {
+      const branch = branches.find((item) => item.id === row.id)!
+      return row.notes.flatMap((note) => {
+        if (seen.has(note.id)) return []
+        if (note.requestID !== metadata(plan).requestID || note.goalCreatedAt !== metadata(plan).goalCreatedAt)
+          return []
+        const launch = prior.find(
+          (item) =>
+            item.tool === "task" &&
+            item.state.input?.branch_id === branch.id &&
+            started(plan, item, branches, [])?.length &&
+            item.callID === note.taskCallID &&
+            metadata(item).sessionId === note.childSessionID &&
+            metadata(item).childMessageID === note.childMessageID,
+        )
+        if (!launch) return []
+        seen.add(note.id)
+        return [{ name: branch.name, specialist: branch.specialist, status: "Message received", message: note.text }]
+      })
+    })
+    return [...changes(rows, branches, reports), ...notes]
   }
   if (receipt.tool === "chief_review") return reviewEvent(receipt, prior, plan, branches, reports)
   if (

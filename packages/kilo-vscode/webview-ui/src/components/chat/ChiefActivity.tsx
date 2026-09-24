@@ -94,7 +94,7 @@ export const ChiefReceipt: Component<{ events: ChiefEvent[] }> = (props) => (
     <ul class="chief-receipt" aria-label="Specialist update">
       <Index each={props.events}>
         {(event) => (
-          <li>
+          <li class={event().message ? "chief-receipt__note" : undefined}>
             <Icon
               name={event().specialist ? agentIcon(event().specialist) : "subagent"}
               size="small"
@@ -102,6 +102,7 @@ export const ChiefReceipt: Component<{ events: ChiefEvent[] }> = (props) => (
             />
             <span>{event().name}</span>
             <span class="chief-receipt__status">{event().status}</span>
+            <Show when={event().message}>{(message) => <p class="chief-receipt__message">{message()}</p>}</Show>
           </li>
         )}
       </Index>

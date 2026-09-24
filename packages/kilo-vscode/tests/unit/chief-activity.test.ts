@@ -232,6 +232,7 @@ describe("chiefReceipt", () => {
     const parent = { ...saved, sessionID: "ses_parent" }
     const start: ChiefPart = {
       id: "start",
+      callID: "call-task",
       sessionID: "ses_parent",
       tool: "task",
       state: {
@@ -293,6 +294,78 @@ describe("chiefReceipt", () => {
     ]
     for (const item of invalid) expect(chiefReceipt(item, [parent, item])).toBeUndefined()
     expect(chiefReceipt(start, [{ ...parent, id: "previous" }, { ...saved, id: "next" }, start])).toBeUndefined()
+  })
+
+  it("shows a saved specialist note only when the parent inspects the matching child", () => {
+    const parent = { ...saved, sessionID: "ses_parent" }
+    const start: ChiefPart = {
+      id: "start",
+      callID: "call-task",
+      sessionID: "ses_parent",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { branch_id: "docs", background: true },
+        output: '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n',
+        metadata: {
+          parentSessionId: "ses_parent",
+          sessionId: "ses_child",
+          childMessageID: "msg_child",
+          selectedAgent: "researcher",
+          background: true,
+          requestID: "request",
+          goalCreatedAt: 1,
+        },
+      },
+    }
+    const note = {
+      version: 1,
+      id: "note_1",
+      branchID: "docs",
+      requestID: "request",
+      goalCreatedAt: 1,
+      taskCallID: "call-task",
+      childSessionID: "ses_child",
+      childMessageID: "msg_child",
+      toolCallID: "call_note",
+      text: "Found the source document.",
+      at: 1,
+      state: "delivered",
+    }
+    const inspect = (id: string, value = note): ChiefPart => ({
+      id,
+      sessionID: "ses_parent",
+      tool: "chief_inspect",
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          branches: [
+            { id: "docs", state: "admitted", notes: [value] },
+            { id: "ux", state: "planned" },
+          ],
+        }),
+        metadata: { requestID: "request", goalCreatedAt: 1 },
+      },
+    })
+    const first = inspect("first")
+    const repeat = inspect("repeat")
+    expect(chiefReceipt(first, [parent, start, first])?.filter((event) => event.message)).toEqual([
+      { name: "Docs audit", specialist: "researcher", status: "Message received", message: note.text },
+    ])
+    expect(chiefReceipt(repeat, [parent, start, first, repeat])).toEqual([])
+    for (const value of [
+      { ...note, branchID: "ux" },
+      { ...note, requestID: "old" },
+      { ...note, goalCreatedAt: 2 },
+      { ...note, taskCallID: "call-other" },
+      { ...note, childSessionID: "ses_other" },
+      { ...note, childMessageID: "msg_other" },
+      { ...note, state: "unknown" },
+    ]) {
+      const invalid = inspect("invalid", value)
+      expect(chiefReceipt(invalid, [parent, start, invalid])?.some((event) => !!event.message)).toBe(false)
+    }
+    expect(chiefReceipt(first, [parent, first])?.some((event) => !!event.message)).toBe(false)
   })
 
   it("places only changed specialist states at the matching inspection receipt", () => {

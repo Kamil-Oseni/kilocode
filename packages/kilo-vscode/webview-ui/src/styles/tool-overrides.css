@@ -217,6 +217,18 @@
   text-align: right;
 }
 
+.chief-receipt li.chief-receipt__note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.chief-receipt__message {
+  grid-column: 2 / -1;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* ============================================
    Background Process Tool
    ============================================ */

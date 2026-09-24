@@ -70,6 +70,23 @@ export namespace ChiefBranches {
   })
   export type Branch = typeof Branch.Type
 
+  export const Note = Schema.Struct({
+    version: Schema.Literal(1),
+    id: Schema.String,
+    branchID: Schema.String,
+    requestID: Schema.String,
+    goalCreatedAt: Schema.Number,
+    taskCallID: Schema.String,
+    childSessionID: SessionID,
+    childMessageID: MessageID,
+    senderMessageID: MessageID,
+    toolCallID: Schema.String,
+    text: Schema.String,
+    at: Schema.Number,
+    state: Schema.Literal("delivered"),
+  })
+  export type Note = typeof Note.Type
+
   /** Reports and evidence belong to the admitted input turn, never a later child conversation. */
   export function turn(rows: readonly MessageV2.WithParts[], id: MessageID | undefined) {
     if (!id) return
@@ -97,6 +114,7 @@ export namespace ChiefBranches {
     requestID: Schema.String,
     createdAt: Schema.Number,
     branches: Schema.Array(Branch).check(Schema.isMinLength(2), Schema.isMaxLength(3)),
+    notes: Schema.optional(Schema.Array(Note)),
     synthesis: Schema.optional(
       Schema.Struct({
         summary: Schema.String,
@@ -642,6 +660,78 @@ export namespace ChiefBranches {
       )
     })
 
+    const note = Effect.fn("ChiefBranches.note")(function* (input: {
+      goalID: SessionID
+      goalCreatedAt: number
+      requestID: string
+      branchID: string
+      taskCallID: string
+      childSessionID: SessionID
+      childMessageID: MessageID
+      senderMessageID: MessageID
+      toolCallID: string
+      text: string
+    }) {
+      if (!input.text.trim() || input.text.length > 1_500)
+        throw new Error("Chief note must contain 1 to 1,500 characters")
+      return yield* mutation(
+        storage,
+        input.goalID,
+        Effect.gen(function* () {
+          const old = yield* read(input.goalID)
+          if (
+            !old ||
+            old.version !== 2 ||
+            old.goalCreatedAt !== input.goalCreatedAt ||
+            old.requestID !== input.requestID
+          )
+            throw new Error("Chief note no longer matches the planned request")
+          yield* active(input.goalID, input.goalCreatedAt, old.revision)
+          const branch = old.branches.find((item) => item.id === input.branchID)
+          if (
+            !branch ||
+            branch.state !== "admitted" ||
+            branch.callID !== input.taskCallID ||
+            branch.sessionID !== input.childSessionID ||
+            branch.messageID !== input.childMessageID
+          )
+            throw new Error("Chief note sender is not the admitted running branch")
+          const id = `${input.senderMessageID}:${input.toolCallID}`
+          const existing = old.notes?.find((item) => item.id === id)
+          if (existing) {
+            if (
+              existing.branchID !== input.branchID ||
+              existing.childSessionID !== input.childSessionID ||
+              existing.childMessageID !== input.childMessageID ||
+              existing.toolCallID !== input.toolCallID ||
+              existing.text !== input.text.trim()
+            )
+              throw new Error("Chief note call was reused with different content")
+            return existing
+          }
+          if ((old.notes ?? []).filter((item) => item.branchID === input.branchID).length >= 8)
+            throw new Error("Chief branch has reached its eight-note limit")
+          const saved: Note = {
+            version: 1,
+            id,
+            branchID: input.branchID,
+            requestID: input.requestID,
+            goalCreatedAt: input.goalCreatedAt,
+            taskCallID: input.taskCallID,
+            childSessionID: input.childSessionID,
+            childMessageID: input.childMessageID,
+            senderMessageID: input.senderMessageID,
+            toolCallID: input.toolCallID,
+            text: input.text.trim(),
+            at: Date.now(),
+            state: "delivered",
+          }
+          yield* storage.replace(key(input.goalID), { ...old, notes: [...(old.notes ?? []), saved] } satisfies Record)
+          return saved
+        }),
+      )
+    })
+
     const evidence = Effect.fn("ChiefBranches.evidence")(function* (
       item: Branch,
       ref: {
@@ -848,6 +938,7 @@ export namespace ChiefBranches {
       admit,
       reconcile,
       settle,
+      note,
       review,
       synthesize,
       completion,

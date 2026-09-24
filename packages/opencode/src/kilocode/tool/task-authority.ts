@@ -7,7 +7,7 @@ export namespace TaskAuthority {
   export type Access = "read" | "edit"
   type Saved = { version: 1; access: Access }
 
-  const safe = ["read", "grep", "glob", "list", "semantic_search", "todoread"]
+  const safe = ["read", "grep", "glob", "list", "semantic_search", "todoread", "chief_message"]
 
   export function read(metadata?: Record<string, unknown>): Access | undefined {
     const value = metadata?.[key]

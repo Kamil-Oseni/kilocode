@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-24 04:49 America/Toronto - installed saved child-access snapshot
+
+`6228a441fb` is pushed and installed as `eden.raya@7.4.23-snapshot+6228a441fb.kamil-oseni.1790239462400`; VS Code lists it. The low-memory snapshot regenerated the SDK without tracked changes, rebuilt and smoke-tested the Windows CLI and sandbox worker, passed extension/webview typechecks and lint, bundled production assets, packaged and installed the VSIX. Retained rollback VSIX SHA-256: `2B9696E5686B4B28D25001B2FB674C1CD3AC5FC2BE9C8E3E54BB8467221154A5`. This includes the ordinary Task-card access label and dormant request-plan guard. It does not enable ordinary-chat parallel specialists or prove the live narrow/wide UI, and native Windows capture remains unavailable in this host. `FUT-AGENT-01/02` remain In progress.
+
 ## ChatGPT 2026-09-24 04:21 America/Toronto - dormant request-bound Chief plan prerequisite
 
 Raya can save a version-three Chief plan against the exact latest authored user message, its creation time and a content digest. Admission currently accepts only two or three independent read-only branches, and a durable session marker blocks Task dispatch in the production storage-backed path if a request plan is present, including a partial write with no plan record. This is source infrastructure only: no ordinary-chat planning path or request-bound child launch is exposed. Focused storage, stale/edited/synthetic request, edit/dependency/overlap, marker-only and legacy goal-plan tests pass. Next implement exact request-bound branch admission and restart reconciliation before enabling the planner; `FUT-AGENT-01/02` remain In progress.

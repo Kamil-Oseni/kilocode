@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-23 22:06 America/Toronto - receipt-timeline snapshot installed
+
+Commit `19544a78cd` is pushed and installed as `eden.raya@7.4.23-snapshot+19544a78cd.kamil-oseni.1790215416381`. SDK output and the CLI binary were unchanged from the prior snapshot; sequential extension/webview typechecks, ESLint, production bundle, VSIX packaging and installation pass. VS Code lists the exact version. Retained rollback VSIX SHA-256: `B0BEF0E70B04AE6435FA4D10FB7463A7D1374ECFBCA7195F0559EAD7162C43A8`. Computer Use still has no native window surface in this environment, so the running chat was not visually inspected and no restart acceptance is claimed. The installed package contains receipt-backed chronology, but `FUT-AGENT-01/02` and chat acceptance remain In progress.
+
 ## ChatGPT 2026-09-23 22:00 America/Toronto - Chief receipt updates appear in chat order
 
 The parent chat now places compact named specialist updates at each matching `chief_inspect`, `chief_review` or `chief_synthesize` receipt. It shows only newly established states, suppresses duplicate refreshes, distinguishes stopped/unknown/integration outcomes, and rejects malformed or cross-plan receipts. The existing task card remains at its actual position for child tool detail. Eight focused projection tests / 31 assertions, webview typecheck, extension lint and diff check pass. Child-to-parent messages are not yet shown as separate event rows; no live host visual acceptance has occurred for this new source. Build/install the next snapshot and inspect a real parallel conversation before marking the agent chat requirement Verified.

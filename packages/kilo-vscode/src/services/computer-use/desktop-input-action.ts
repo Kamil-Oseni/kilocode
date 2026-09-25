@@ -1,4 +1,4 @@
-import type { DesktopAction } from "./desktop-session"
+import type { DesktopAction, DesktopDispatchTarget } from "./desktop-session"
 
 export type NativeInputTarget = {
   windowID: string
@@ -124,4 +124,22 @@ export function target(value: NativeInputTarget) {
   )
     throw new Error("Native desktop target or scene is invalid")
   return { ...value, windowID: value.windowID.slice(2).toLowerCase() }
+}
+
+export function resolve(value: DesktopDispatchTarget): NativeInputTarget {
+  const match = /^pid:(\d+);title:[\s\S]*;bounds:(-?\d+),(-?\d+),(\d+),(\d+)$/.exec(value.location ?? "")
+  if (!match || !value.identity) throw new Error("Native desktop dispatch requires observed window bounds and identity")
+  const [pid, left, top, width, height] = match.slice(1).map(Number)
+  return target({
+    windowID: value.windowID,
+    pid,
+    identity: value.identity,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    scene: value.scene,
+    observedAt: value.observedAt,
+    validUntil: value.validUntil,
+  })
 }

@@ -12,12 +12,8 @@ const action = {
 }
 const target = {
   windowID: "0x123",
-  pid: 42,
   identity: "A".repeat(64),
-  left: 0,
-  top: 0,
-  right: 100,
-  bottom: 100,
+  location: "pid:42;title:Editor;bounds:0,0,100,100",
   scene: 1,
   observedAt: Date.now(),
   validUntil: Date.now() + 1000,

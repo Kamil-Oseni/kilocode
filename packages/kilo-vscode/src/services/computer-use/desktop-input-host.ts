@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import type { DesktopAction } from "./desktop-session"
-import { input, target, type NativeInputTarget } from "./desktop-input-action"
+import type { DesktopAction, DesktopDispatchTarget } from "./desktop-session"
+import { input, resolve } from "./desktop-input-action"
 
 type Kind = "hello" | "dispatch" | "cancel" | "quiescent"
 type Status = "ready" | "refused" | "cancelled" | "quiescent" | "confirmed" | "unknown"
@@ -105,10 +105,10 @@ export class NativeInputHost {
     this.state = "ready"
   }
 
-  async dispatch(action: DesktopAction, value: NativeInputTarget): Promise<Reply> {
+  async dispatch(action: DesktopAction, value: DesktopDispatchTarget): Promise<Reply> {
     if (this.state !== "ready") throw new Error("Native input broker is not ready")
     if (this.pending.size) throw new Error("Native input broker already has a request in flight")
-    const detail = target(value)
+    const detail = resolve(value)
     const effect = input(action)
     if (action.windowID.toLowerCase() !== value.windowID.toLowerCase())
       throw new Error("Native input action and target differ")

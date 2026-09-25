@@ -4,6 +4,7 @@ import {
   DesktopSession,
   type DesktopAction,
   type DesktopDriver,
+  type DesktopDispatchTarget,
   type DesktopFrame,
   type DesktopWindow,
 } from "../../src/services/computer-use/desktop-session"
@@ -18,6 +19,7 @@ class Driver implements DesktopDriver {
     timing: { acquisitionMs: 5, preparationMs: 7, totalMs: 20 },
   }
   readonly actions: DesktopAction[] = []
+  readonly targets: DesktopDispatchTarget[] = []
   readonly frames: DesktopFrame[] = []
   readonly fresh: boolean[] = []
   readonly focused: string[] = []
@@ -56,8 +58,9 @@ class Driver implements DesktopDriver {
     this.focused.push(target.windowID)
   }
 
-  async perform(action: DesktopAction) {
+  async perform(action: DesktopAction, target: DesktopDispatchTarget) {
     this.actions.push(action)
+    this.targets.push(target)
   }
 
   cancel() {
@@ -119,6 +122,13 @@ describe("native desktop session boundary", () => {
     await session.execute(action)
     await expect(session.execute(action)).rejects.toThrow(/unknown or was already used/i)
     expect(driver.actions).toEqual([action])
+    expect(driver.targets[0]).toMatchObject({
+      windowID: frame.windowID,
+      location: frame.location,
+      scene: frame.observation.sequence,
+      observedAt: frame.observation.observedAt,
+      validUntil: frame.observation.observedAt + 10_000,
+    })
   })
 
   it("consumes and refuses a misclassified accessible sensitive target before native dispatch", async () => {
@@ -404,6 +414,8 @@ describe("native desktop session boundary", () => {
     expect(driver.actions.map((action) => action.operation)).toEqual(["pointer", "type"])
     expect(driver.actions[0]?.observationID).toBe(initial.observation.id)
     expect(driver.actions[1]?.observationID).not.toBe(initial.observation.id)
+    expect(driver.targets.map((target) => target.scene)).toEqual([1, 2])
+    expect(driver.targets.every((target) => target.validUntil - target.observedAt <= 10_000)).toBe(true)
     expect(driver.fresh).toEqual([false, true, true])
   })
 

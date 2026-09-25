@@ -101,6 +101,15 @@ export class DesktopOutcomeError extends Error {
   }
 }
 
+export type DesktopDispatchTarget = {
+  windowID: string
+  location?: string
+  identity?: string
+  scene: number
+  observedAt: number
+  validUntil: number
+}
+
 export interface DesktopDriver {
   // Only drivers that atomically verify the exact target before native input may set this.
   guarded?: true
@@ -109,7 +118,7 @@ export interface DesktopDriver {
   current(): Promise<{ windowID: string; location?: string }>
   identity?(windowID: string): Promise<string | undefined>
   focus(target: DesktopWindow): Promise<void>
-  perform(action: DesktopAction, target: { windowID: string; location?: string; identity?: string }): Promise<void>
+  perform(action: DesktopAction, target: DesktopDispatchTarget): Promise<void>
   cancel?(): void
 }
 
@@ -247,7 +256,7 @@ export class DesktopSession {
       const semantic = this.semantics.get(action.observationID)
       this.semantics.delete(action.observationID)
       this.frames.delete(action.observationID)
-      this.observations.consume(
+      const observed = this.observations.consume(
         action.observationID,
         {
           surface: "desktop",
@@ -268,10 +277,18 @@ export class DesktopSession {
       this.update({ control: "agent", busy: true })
       try {
         onDispatch?.()
-        await this.driver.perform(action, { ...current, ...(identity ? { identity } : {}) }).catch((error: unknown) => {
-          const detail = error instanceof Error ? error.message : String(error)
-          throw new DesktopOutcomeError(action.operation, detail)
-        })
+        await this.driver
+          .perform(action, {
+            ...current,
+            ...(identity ? { identity } : {}),
+            scene: observed.sequence,
+            observedAt: observed.observedAt,
+            validUntil: Math.min(observed.validUntil, observed.observedAt + 10_000),
+          })
+          .catch((error: unknown) => {
+            const detail = error instanceof Error ? error.message : String(error)
+            throw new DesktopOutcomeError(action.operation, detail)
+          })
       } finally {
         this.active = Math.max(0, this.active - 1)
         if (this.state.control === "agent") this.update({ control: "agent", busy: this.active > 0 })
@@ -330,7 +347,13 @@ export class DesktopSession {
               }
               onDispatch?.()
               await this.driver
-                .perform(action, { ...current, ...(identity ? { identity } : {}) })
+                .perform(action, {
+                  ...current,
+                  ...(identity ? { identity } : {}),
+                  scene: before.observation.sequence,
+                  observedAt: before.observation.observedAt,
+                  validUntil: Math.min(before.observation.validUntil, before.observation.observedAt + 10_000),
+                })
                 .catch((error: unknown) => {
                   this.observations.cancel(token)
                   const detail = error instanceof Error ? error.message : String(error)

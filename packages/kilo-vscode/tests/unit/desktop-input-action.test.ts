@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { input, target } from "../../src/services/computer-use/desktop-input-action"
+import { input, resolve, target } from "../../src/services/computer-use/desktop-input-action"
 
 const base = { windowID: "0xABCD", observationID: "obs", sensitive: false as const }
 
@@ -63,5 +63,24 @@ describe("native desktop action encoding", () => {
     expect(() => target({ ...value, identity: "" })).toThrow(/target or scene/i)
     expect(() => target({ ...value, validUntil: 11_001 })).toThrow(/target or scene/i)
     expect(() => target({ ...value, left: 100 })).toThrow(/target or scene/i)
+    expect(
+      resolve({
+        windowID: value.windowID,
+        location: "pid:42;title:Editor; draft;bounds:-10,20,110,180",
+        identity: value.identity,
+        scene: value.scene,
+        observedAt: value.observedAt,
+        validUntil: value.validUntil,
+      }),
+    ).toEqual({ ...value, windowID: "abcd" })
+    expect(() =>
+      resolve({
+        windowID: value.windowID,
+        location: "pid:42;title:Editor;bounds:-10,20,110,180",
+        scene: value.scene,
+        observedAt: value.observedAt,
+        validUntil: value.validUntil,
+      }),
+    ).toThrow(/bounds and identity/i)
   })
 })

@@ -4,15 +4,20 @@
 #include <wincrypt.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <charconv>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
+#include <deque>
 #include <limits>
 #include <map>
 #include <cmath>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -257,6 +262,7 @@ bool exact(const Frame& frame) {
 }
 
 using Sender = UINT (*)(UINT, LPINPUT, int);
+using Waiter = void (*)(const Frame&);
 
 bool valid(const Frame& frame) {
   const auto& a = frame.args;
@@ -369,9 +375,11 @@ std::vector<INPUT> events(const Frame& frame) {
 class Broker {
 public:
   explicit Broker(Sender sender = SendInput, bool (*target)(const Frame&) = exact,
-                  bool (*available)(const Frame&) = idle, uint64_t (*clock)() = now)
-    : sender(sender), target(target), available(available), clock(clock) {}
+                  bool (*available)(const Frame&) = idle, uint64_t (*clock)() = now,
+                  Waiter waiter = nullptr)
+    : sender(sender), target(target), available(available), clock(clock), waiter(waiter) {}
   Reply handle(const Frame& frame) {
+    std::unique_lock<std::mutex> lock(mutex);
     const auto reply = [&](std::string type, std::string code) {
       return Reply{std::move(type), frame.session, frame.request, frame.sequence, std::move(code)};
     };
@@ -396,47 +404,78 @@ public:
     seen.push_back(frame.request);
     if (seen.size() > kHistory) seen.erase(seen.begin());
     if (frame.type == "cancel") {
-      cancelled = true;
+      cancelled.store(true, std::memory_order_release);
       return reply("cancelled", "ok");
     }
-    if (frame.type == "quiescent") return uncertain ? reply("unknown", "partial") : reply("quiescent", "ok");
-    if (cancelled || uncertain) return reply("refused", cancelled ? "cancelled" : "unknown");
+    if (frame.type == "quiescent") {
+      if (active && waiter) waiter(frame);
+      settled.wait(lock, [&] { return !active; });
+      return uncertain ? reply("unknown", "partial") : reply("quiescent", "ok");
+    }
+    if (cancelled.load(std::memory_order_acquire) || uncertain)
+      return reply("refused", cancelled.load(std::memory_order_acquire) ? "cancelled" : "unknown");
+    if (active) return reply("refused", "input_busy");
     if (!frame.pid || !frame.scene || frame.window == "0") return reply("refused", "bad_target");
     if (frame.scene <= scene) return reply("refused", "stale");
     scene = frame.scene;
     if (!valid(frame)) return reply("refused", "unsupported");
+    active = true;
+    lock.unlock();
+    const auto finish = [&](Reply result) {
+      lock.lock();
+      active = false;
+      settled.notify_all();
+      return result;
+    };
     const uint64_t current = clock();
-    if (frame.observed > current + 100 || frame.until < current) return reply("refused", "expired");
-    if (!target(frame)) return reply("refused", "changed_target");
-    if (!available(frame)) return reply("refused", "input_busy");
+    if (frame.observed > current + 100 || frame.until < current) return finish(reply("refused", "expired"));
+    if (!target(frame)) return finish(reply("refused", "changed_target"));
+    if (!available(frame)) return finish(reply("refused", "input_busy"));
     std::vector<INPUT> input = events(frame);
-    if (input.empty() || input.size() > 512) return reply("refused", "unsupported");
+    if (input.empty() || input.size() > 512) return finish(reply("refused", "unsupported"));
     uintptr_t tag = 0;
     const auto parsed = std::from_chars(frame.nonce.data(), frame.nonce.data() + 8, tag, 16);
-    if (parsed.ec != std::errc{}) return reply("refused", "bad_nonce");
+    if (parsed.ec != std::errc{}) return finish(reply("refused", "bad_nonce"));
     for (auto& item : input) {
       if (item.type == INPUT_MOUSE) item.mi.dwExtraInfo = tag;
       if (item.type == INPUT_KEYBOARD) item.ki.dwExtraInfo = tag;
     }
     // This is the final check before SendInput. A partial batch has an unknown
     // outcome: never retry or release keys without physical-event ownership proof.
-    if (cancelled || !target(frame) || frame.until < clock()) return reply("refused", "changed_target");
+    if (!target(frame) || frame.until < clock()) return finish(reply("refused", "changed_target"));
+    // This lock linearizes dispatch commitment against CANCEL. Once committed,
+    // CANCEL may acknowledge, but QUIESCENT waits for this SendInput receipt.
+    lock.lock();
+    if (cancelled.load(std::memory_order_acquire)) {
+      active = false;
+      settled.notify_all();
+      return reply("refused", "cancelled");
+    }
+    lock.unlock();
     const UINT attempted = static_cast<UINT>(input.size());
     const UINT accepted = sender(attempted, input.data(), sizeof(INPUT));
     Reply result = reply(accepted == attempted ? "confirmed" : accepted ? "unknown" : "refused",
                          accepted == attempted ? "ok" : accepted ? "partial" : "input_failed");
     result.accepted = accepted;
     result.attempted = attempted;
+    lock.lock();
     if (accepted && accepted != attempted) uncertain = true;
+    active = false;
+    settled.notify_all();
     return result;
   }
+  void stop() { cancelled.store(true, std::memory_order_release); }
 private:
+  std::mutex mutex;
+  std::condition_variable settled;
   Sender sender;
   bool (*target)(const Frame&);
   bool (*available)(const Frame&);
   uint64_t (*clock)();
+  Waiter waiter;
   bool bound = false;
-  bool cancelled = false;
+  std::atomic<bool> cancelled = false;
+  bool active = false;
   bool uncertain = false;
   uint64_t sequence = 0;
   uint64_t scene = 0;
@@ -480,6 +519,41 @@ bool send(HANDLE pipe, const Reply& reply) {
 bool allowed(const Frame&) { return true; }
 UINT partial(UINT count, LPINPUT, int) { return count - 1; }
 UINT rejected(UINT, LPINPUT, int) { return 0; }
+std::mutex test_mutex;
+std::condition_variable test_ready;
+int test_checks = 0;
+bool test_entered = false;
+bool test_released = false;
+std::atomic<int> test_sent = 0;
+bool test_sender_entered = false;
+bool test_sender_released = false;
+bool test_waiting = false;
+bool test_partial = false;
+bool blocking(const Frame&) {
+  if (++test_checks != 2) return true;
+  std::unique_lock<std::mutex> lock(test_mutex);
+  test_entered = true;
+  test_ready.notify_all();
+  test_ready.wait(lock, [] { return test_released; });
+  return true;
+}
+UINT counting(UINT count, LPINPUT, int) {
+  ++test_sent;
+  return count;
+}
+UINT waiting_sender(UINT count, LPINPUT, int) {
+  ++test_sent;
+  std::unique_lock<std::mutex> lock(test_mutex);
+  test_sender_entered = true;
+  test_ready.notify_all();
+  test_ready.wait(lock, [] { return test_sender_released; });
+  return test_partial ? count - 1 : count;
+}
+void waiting(const Frame&) {
+  std::lock_guard<std::mutex> lock(test_mutex);
+  test_waiting = true;
+  test_ready.notify_all();
+}
 
 int selftest() {
   const std::string first = "11111111111111111111111111111111";
@@ -576,6 +650,110 @@ int selftest() {
   std::string malformed = raw("dispatch", "77777777777777777777777777777777", 1, "1", 1, 1);
   malformed.insert(malformed.size() - 1, ",\"surprise\":1");
   if (parse(malformed, frame) != Parse::malformed) return 30;
+  Broker preempted(counting, blocking, allowed);
+  if (preempted.handle(Frame{.type="hello", .session=first, .request=second,
+                             .nonce=third, .window="0"}).type != "ready") return 32;
+  Frame pending;
+  if (parse(raw("dispatch", "99999999999999999999999999999999", 1, "1", 1, 1), pending) != Parse::valid)
+    return 33;
+  Reply stopped;
+  std::thread action([&] { stopped = preempted.handle(pending); });
+  {
+    std::unique_lock<std::mutex> lock(test_mutex);
+    test_ready.wait(lock, [] { return test_entered; });
+  }
+  Frame halt;
+  if (parse(raw("cancel", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 2), halt) != Parse::valid ||
+      preempted.handle(halt).type != "cancelled") {
+    { std::lock_guard<std::mutex> lock(test_mutex); test_released = true; }
+    test_ready.notify_all();
+    action.join();
+    return 34;
+  }
+  Frame later;
+  if (parse(raw("dispatch", "cccccccccccccccccccccccccccccccc", 3, "1", 1, 2), later) != Parse::valid ||
+      preempted.handle(later).code != "cancelled") {
+    { std::lock_guard<std::mutex> lock(test_mutex); test_released = true; }
+    test_ready.notify_all();
+    action.join();
+    return 37;
+  }
+  Frame quiet;
+  if (parse(raw("quiescent", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 4), quiet) != Parse::valid) {
+    { std::lock_guard<std::mutex> lock(test_mutex); test_released = true; }
+    test_ready.notify_all();
+    action.join();
+    return 35;
+  }
+  Reply settled;
+  std::thread receipt([&] { settled = preempted.handle(quiet); });
+  {
+    std::lock_guard<std::mutex> lock(test_mutex);
+    test_released = true;
+  }
+  test_ready.notify_all();
+  action.join();
+  receipt.join();
+  if (stopped.type != "refused" || stopped.code != "cancelled" ||
+      settled.type != "quiescent" || test_sent != 0) return 36;
+  const auto committed_case = [&](bool partial) {
+    {
+      std::lock_guard<std::mutex> lock(test_mutex);
+      test_sender_entered = false;
+      test_sender_released = false;
+      test_waiting = false;
+      test_partial = partial;
+    }
+    test_sent = 0;
+    Broker committed(waiting_sender, allowed, allowed, now, waiting);
+    if (committed.handle(Frame{.type="hello", .session=first, .request=second,
+                                .nonce=third, .window="0"}).type != "ready") return false;
+    Frame effect;
+    if (parse(raw("dispatch", "99999999999999999999999999999999", 1, "1", 1, 1), effect) != Parse::valid)
+      return false;
+    effect.action = "click";
+    Reply result;
+    std::thread dispatch([&] { result = committed.handle(effect); });
+    {
+      std::unique_lock<std::mutex> lock(test_mutex);
+      test_ready.wait(lock, [] { return test_sender_entered; });
+    }
+    Frame stop;
+    Frame receipt_frame;
+    const bool parsed = parse(raw("cancel", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 2), stop) == Parse::valid &&
+      parse(raw("quiescent", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 3), receipt_frame) == Parse::valid;
+    if (!parsed) {
+      { std::lock_guard<std::mutex> lock(test_mutex); test_sender_released = true; }
+      test_ready.notify_all();
+      dispatch.join();
+      return false;
+    }
+    const bool cancelled_reply = parsed && committed.handle(stop).type == "cancelled";
+    Reply receipt_reply;
+    std::atomic<bool> receipt_done = false;
+    std::thread receipt_thread([&] {
+      receipt_reply = committed.handle(receipt_frame);
+      receipt_done.store(true, std::memory_order_release);
+    });
+    bool waited = false;
+    {
+      std::unique_lock<std::mutex> lock(test_mutex);
+      test_ready.wait(lock, [] { return test_waiting; });
+      waited = !receipt_done.load(std::memory_order_acquire);
+      test_sender_released = true;
+    }
+    test_ready.notify_all();
+    dispatch.join();
+    receipt_thread.join();
+    return cancelled_reply && waited && test_sent == 1 &&
+      (partial ? result.type == "unknown" && result.code == "partial" &&
+                   result.accepted == 2 && result.attempted == 3 &&
+                   receipt_reply.type == "unknown" && receipt_reply.code == "partial"
+               : result.type == "confirmed" && result.accepted == 3 &&
+                   receipt_reply.type == "quiescent");
+  };
+  if (!committed_case(false)) return 38;
+  if (!committed_case(true)) return 39;
   std::puts("desktop input broker self-test passed");
   return 0;
 }
@@ -589,40 +767,94 @@ int main(int argc, char** argv) {
   const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
   if (!input || input == INVALID_HANDLE_VALUE || !output || output == INVALID_HANDLE_VALUE) return 3;
   Broker broker;
+  std::mutex queued_mutex;
+  std::condition_variable ready;
+  std::mutex output_mutex;
+  std::deque<Frame> queued;
+  bool ending = false;
+  const auto respond = [&](const Reply& reply) {
+    std::lock_guard<std::mutex> lock(output_mutex);
+    return send(output, reply);
+  };
+  std::thread worker([&] {
+    for (;;) {
+      Frame frame;
+      {
+        std::unique_lock<std::mutex> lock(queued_mutex);
+        ready.wait(lock, [&] { return ending || !queued.empty(); });
+        if (queued.empty()) return;
+        frame = std::move(queued.front());
+        queued.pop_front();
+      }
+      if (!respond(broker.handle(frame))) {
+        broker.stop();
+        // The reader may be blocked on stdin while its output pipe is gone.
+        // A dispatch receipt cannot be delivered, so terminate without replay.
+        TerminateProcess(GetCurrentProcess(), 9);
+        return;
+      }
+    }
+  });
+  const auto finish = [&](int code) {
+    broker.stop();
+    {
+      std::lock_guard<std::mutex> lock(queued_mutex);
+      ending = true;
+    }
+    ready.notify_one();
+    worker.join();
+    return code;
+  };
   for (;;) {
     uint32_t length = 0;
     bool eof = false;
-    if (!read(input, &length, sizeof(length), eof)) return eof ? 0 : 4;
+    if (!read(input, &length, sizeof(length), eof)) return finish(eof ? 0 : 4);
     if (!length || length > kHeader) {
       std::fprintf(stderr, "invalid native input frame length %u\n", length);
-      return 5;
+      return finish(5);
     }
     std::string header(length, '\0');
-    if (!read(input, header.data(), length, eof)) return 6;
+    if (!read(input, header.data(), length, eof)) return finish(6);
     uint32_t payload = 0;
-    if (!read(input, &payload, sizeof(payload), eof) || payload > 512) return 7;
+    if (!read(input, &payload, sizeof(payload), eof) || payload > 512) return finish(7);
     std::string data(payload, '\0');
-    if (payload && !read(input, data.data(), payload, eof)) return 7;
+    if (payload && !read(input, data.data(), payload, eof)) return finish(7);
     Frame frame;
     const Parse parsed = parse(header, frame);
     if (parsed != Parse::valid) {
       const char* code = parsed == Parse::version ? "bad_version" : "bad_frame";
-      if (!send(output, Reply{"refused", std::string(kZero), std::string(kZero), 0, code})) return 8;
+      if (!respond(Reply{"refused", std::string(kZero), std::string(kZero), 0, code})) return finish(8);
       continue;
     }
     if (frame.type == "dispatch" && frame.action == "text") {
-      if (!payload || payload % 2) return 7;
+      if (!payload || payload % 2) return finish(7);
       for (size_t i = 0; i < data.size(); i += 2)
         frame.text.push_back(static_cast<char16_t>(static_cast<unsigned char>(data[i]) |
           (static_cast<unsigned char>(data[i + 1]) << 8)));
       for (size_t i = 0; i < frame.text.size(); ++i) {
         const char16_t c = frame.text[i];
-        if (!c) return 7;
+        if (!c) return finish(7);
         if (c >= 0xD800 && c <= 0xDBFF) {
-          if (++i >= frame.text.size() || frame.text[i] < 0xDC00 || frame.text[i] > 0xDFFF) return 7;
-        } else if (c >= 0xDC00 && c <= 0xDFFF) return 7;
+          if (++i >= frame.text.size() || frame.text[i] < 0xDC00 || frame.text[i] > 0xDFFF) return finish(7);
+        } else if (c >= 0xDC00 && c <= 0xDFFF) return finish(7);
       }
-    } else if (payload) return 7;
-    if (!send(output, broker.handle(frame))) return 9;
+    } else if (payload) return finish(7);
+    if (frame.type == "hello" || frame.type == "cancel") {
+      if (!respond(broker.handle(frame))) return finish(9);
+      continue;
+    }
+    bool accepted = false;
+    {
+      std::lock_guard<std::mutex> lock(queued_mutex);
+      if (queued.size() < 16) {
+        queued.push_back(std::move(frame));
+        accepted = true;
+      }
+    }
+    if (accepted) {
+      ready.notify_one();
+      continue;
+    }
+    if (!respond(Reply{"refused", frame.session, frame.request, frame.sequence, "input_busy"})) return finish(9);
   }
 }

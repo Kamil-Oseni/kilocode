@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 - installed Todo, Routines and History handoff
+
+`0a613107dd` is pushed and installed as `eden.raya@7.4.23-snapshot+0a613107dd.kamil-oseni.1790332471526`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.dbed32eeb9614f8ce7c33c06360b5cba9842d38fb3d3e25af5556713ee96e9a8.vsix`, 545,204,129 bytes, SHA-256 `DBED32EEB9614F8CE7C33C06360B5CBA9842D38FB3D3E25AF5556713EE96E9A8`. Reload the open VS Code host before checking the redesigned Todo timer/planning/task cards, Routines workforce/team views, and local/cloud History at narrow and wide widths. Then run the live Todo proposal and organization/delegation workflows described below; installation alone proves neither. The user-owned image and document files and `debug.log` were not included in this commit.
+
 ## ChatGPT 2026-09-25 - Todo, Routines and History redesign handoff
 
 The source now presents Todo as a prioritized card workspace with a visual timer and Raya planning entry, Routines as a workforce/team overview over the existing durable editors, and History as one consistent searchable surface for local/worktree/cloud chats. Local chats support inline rename, export, confirmed delete and confirmed multi-select deletion. Focused Todo, Routines, History and cloud stale-response checks pass, as do extension/webview typecheck and lint. Commit, push and installation are still pending at this checkpoint.

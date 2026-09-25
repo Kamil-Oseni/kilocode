@@ -1,6 +1,7 @@
-// Raya's isolated Windows input broker protocol foundation. No input is injected here.
+// Raya's isolated Windows input broker. Native input is gated by a bound session and exact target.
 #define NOMINMAX
 #include <windows.h>
+#include <wincrypt.h>
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -8,6 +9,7 @@
 #include <cstdio>
 #include <limits>
 #include <map>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -19,6 +21,7 @@ constexpr size_t kHistory = 1024;
 constexpr std::string_view kZero = "00000000000000000000000000000000";
 
 struct Frame {
+  uint32_t version = 1;
   std::string type;
   std::string session;
   std::string request;
@@ -27,6 +30,13 @@ struct Frame {
   uint64_t sequence = 0;
   uint64_t scene = 0;
   uint32_t pid = 0;
+  std::string identity;
+  RECT rect{};
+  std::string action;
+  std::array<int64_t, 5> args{};
+  uint64_t observed = 0;
+  uint64_t until = 0;
+  std::u16string text;
 };
 
 struct Reply {
@@ -35,6 +45,8 @@ struct Reply {
   std::string request;
   uint64_t sequence = 0;
   std::string code;
+  uint32_t accepted = 0;
+  uint32_t attempted = 0;
 };
 
 bool id(std::string_view value) {
@@ -44,6 +56,13 @@ bool id(std::string_view value) {
 
 bool number(std::string_view value, uint64_t& result) {
   if (value.empty() || (value.size() > 1 && value[0] == '0')) return false;
+  const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
+  return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size();
+}
+
+bool signed_number(std::string_view value, int64_t& result) {
+  if (value.empty() || (value.size() > 1 && value[0] == '0') ||
+      (value.size() > 1 && value[0] == '-' && value[1] == '0')) return false;
   const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
   return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size();
 }
@@ -115,13 +134,22 @@ Parse parse(std::string_view input, Frame& frame) {
     comma = true;
   }
   space();
-  if (pos != input.size() || values.size() != 9) return Parse::malformed;
+  if (pos != input.size() || !values.contains("type") || values["type"].empty() || values["type"][0] != '"') return Parse::malformed;
+  const bool dispatch = values["type"] == "\"dispatch";
+  if (values.size() != (dispatch ? 22 : 9)) return Parse::malformed;
   static constexpr std::array<std::string_view, 9> keys = {
     "v", "type", "session", "request", "sequence", "nonce", "windowID", "pid", "scene"
   };
   for (auto key : keys) if (!values.contains(std::string(key))) return Parse::malformed;
+  if (dispatch) {
+    static constexpr std::array<std::string_view, 13> extras = {
+      "identity", "left", "top", "right", "bottom", "action", "a", "b", "c", "d", "e", "observedAt", "validUntil"
+    };
+    for (auto key : extras) if (!values.contains(std::string(key))) return Parse::malformed;
+  }
   if (!values["v"].empty() && values["v"][0] == '"') return Parse::malformed;
-  if (values["v"] != "1") return Parse::version;
+  if (values["v"] != "2") return Parse::version;
+  frame.version = 2;
   for (auto key : {"type", "session", "request", "nonce", "windowID"})
     if (values[key].empty() || values[key][0] != '"') return Parse::malformed;
   for (auto key : {"v", "sequence", "pid", "scene"})
@@ -135,6 +163,28 @@ Parse parse(std::string_view input, Frame& frame) {
   if (!number(values["sequence"], frame.sequence) || !number(values["pid"], pid) ||
       !number(values["scene"], frame.scene) || pid > std::numeric_limits<uint32_t>::max()) return Parse::malformed;
   frame.pid = static_cast<uint32_t>(pid);
+  if (dispatch) {
+    for (auto key : {"identity", "action"})
+      if (values[key].empty() || values[key][0] != '"') return Parse::malformed;
+    for (auto key : {"left", "top", "right", "bottom", "a", "b", "c", "d", "e", "observedAt", "validUntil"})
+      if (values[key].empty() || values[key][0] == '"') return Parse::malformed;
+    const auto field = [&](const char* key, int64_t& value) { return signed_number(values[key], value); };
+    std::array<int64_t, 9> fields{};
+    const std::array<const char*, 9> names = {"left", "top", "right", "bottom", "a", "b", "c", "d", "e"};
+    for (size_t i = 0; i < names.size(); ++i) if (!field(names[i], fields[i])) return Parse::malformed;
+    if (fields[0] < INT32_MIN || fields[0] > INT32_MAX || fields[1] < INT32_MIN || fields[1] > INT32_MAX ||
+        fields[2] < INT32_MIN || fields[2] > INT32_MAX || fields[3] < INT32_MIN || fields[3] > INT32_MAX ||
+        fields[2] <= fields[0] || fields[3] <= fields[1] ||
+        !number(values["observedAt"], frame.observed) || !number(values["validUntil"], frame.until)) return Parse::malformed;
+    frame.rect = RECT{static_cast<LONG>(fields[0]), static_cast<LONG>(fields[1]),
+                      static_cast<LONG>(fields[2]), static_cast<LONG>(fields[3])};
+    std::copy(fields.begin() + 4, fields.end(), frame.args.begin());
+    frame.identity = values["identity"].substr(1);
+    frame.action = values["action"].substr(1);
+    if (frame.identity.size() != 64 || !std::all_of(frame.identity.begin(), frame.identity.end(), [](char c) {
+          return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
+        })) return Parse::malformed;
+  }
   uintptr_t target = 0;
   return id(frame.session) && id(frame.request) && id(frame.nonce) &&
     frame.session != kZero && frame.request != kZero && frame.nonce != kZero &&
@@ -142,23 +192,185 @@ Parse parse(std::string_view input, Frame& frame) {
 }
 
 std::string json(const Reply& reply) {
-  return "{\"v\":1,\"type\":\"" + reply.type + "\",\"session\":\"" + reply.session +
+  return "{\"v\":2,\"type\":\"" + reply.type + "\",\"session\":\"" + reply.session +
     "\",\"request\":\"" + reply.request + "\",\"sequence\":" +
-    std::to_string(reply.sequence) + ",\"code\":\"" + reply.code + "\"}";
+    std::to_string(reply.sequence) + ",\"code\":\"" + reply.code + "\",\"accepted\":" +
+    std::to_string(reply.accepted) + ",\"attempted\":" + std::to_string(reply.attempted) + "}";
 }
 
 bool exact(const Frame& frame) {
   uintptr_t value = 0;
   if (!window(frame.window, value) || !value) return false;
   const HWND target = reinterpret_cast<HWND>(value);
-  if (!IsWindow(target)) return false;
+  if (!IsWindow(target) || !IsWindowVisible(target)) return false;
   DWORD pid = 0;
   if (!GetWindowThreadProcessId(target, &pid) || pid != frame.pid) return false;
-  return GetForegroundWindow() == target;
+  if (GetForegroundWindow() != target) return false;
+  RECT rect{};
+  if (!GetWindowRect(target, &rect)) return false;
+  const LONG left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+  const LONG top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+  const LONG right = left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+  const LONG bottom = top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  rect.left = std::max(rect.left, left);
+  rect.top = std::max(rect.top, top);
+  rect.right = std::min(rect.right, right);
+  rect.bottom = std::min(rect.bottom, bottom);
+  if (rect.left != frame.rect.left || rect.top != frame.rect.top ||
+      rect.right != frame.rect.right || rect.bottom != frame.rect.bottom) return false;
+  wchar_t cls[512]{};
+  if (!GetClassNameW(target, cls, 512)) return false;
+  const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (!process) return false;
+  FILETIME creation{}, exit{}, kernel{}, user{};
+  const bool times = GetProcessTimes(process, &creation, &exit, &kernel, &user) != 0;
+  CloseHandle(process);
+  if (!times) return false;
+  const uint64_t ticks = (static_cast<uint64_t>(creation.dwHighDateTime) << 32) |
+                          creation.dwLowDateTime;
+  const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, cls, -1, nullptr, 0, nullptr, nullptr);
+  if (bytes <= 1 || bytes > 2048) return false;
+  std::string name(static_cast<size_t>(bytes), '\0');
+  if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, cls, -1, name.data(), bytes, nullptr, nullptr)) return false;
+  name.pop_back();
+  const std::string source = "pid:" + std::to_string(pid) + ";start:" +
+    std::to_string(ticks + 504911232000000000ULL) + ";class:" + name;
+  HCRYPTPROV provider = 0;
+  if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return false;
+  HCRYPTHASH hash = 0;
+  const bool created = CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash) != 0;
+  std::array<BYTE, 32> digest{};
+  DWORD size = static_cast<DWORD>(digest.size());
+  const bool hashed = created && CryptHashData(hash, reinterpret_cast<const BYTE*>(source.data()),
+    static_cast<DWORD>(source.size()), 0) && CryptGetHashParam(hash, HP_HASHVAL, digest.data(), &size, 0);
+  if (created) CryptDestroyHash(hash);
+  CryptReleaseContext(provider, 0);
+  if (!hashed || size != digest.size()) return false;
+  static constexpr char digits[] = "0123456789ABCDEF";
+  std::string identity;
+  identity.reserve(64);
+  for (BYTE byte : digest) {
+    identity.push_back(digits[byte >> 4]);
+    identity.push_back(digits[byte & 15]);
+  }
+  return identity == frame.identity;
+}
+
+using Sender = UINT (*)(UINT, LPINPUT, int);
+
+bool valid(const Frame& frame) {
+  const auto& a = frame.args;
+  if (frame.until < frame.observed || frame.until - frame.observed > 10000) return false;
+  if (frame.action == "move" || frame.action == "click" || frame.action == "double_click")
+    return a[0] >= 0 && a[0] <= 1000000 && a[1] >= 0 && a[1] <= 1000000 &&
+      a[2] >= 0 && a[2] <= 1 && a[3] == 0 && a[4] == 0 && frame.text.empty();
+  if (frame.action == "drag")
+    return a[0] >= 0 && a[0] <= 1000000 && a[1] >= 0 && a[1] <= 1000000 &&
+      a[2] >= 0 && a[2] <= 1000000 && a[3] >= 0 && a[3] <= 1000000 &&
+      a[4] >= 0 && a[4] <= 1 && frame.text.empty();
+  if (frame.action == "scroll") return a[0] >= -1200 && a[0] <= 1200 &&
+    a[1] >= -1200 && a[1] <= 1200 && (a[0] || a[1]) && !a[2] && !a[3] && !a[4] && frame.text.empty();
+  if (frame.action == "chord") return a[0] >= 1 && a[0] <= 255 && a[1] >= 0 && a[1] <= 15 &&
+    !a[2] && !a[3] && !a[4] && frame.text.empty();
+  if (frame.action == "text") return !a[0] && !a[1] && !a[2] && !a[3] && !a[4] &&
+    !frame.text.empty() && frame.text.size() <= 256;
+  return false;
+}
+
+uint64_t now() {
+  FILETIME time{};
+  GetSystemTimePreciseAsFileTime(&time);
+  const uint64_t ticks = (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+  return ticks / 10000 - 11644473600000ULL;
+}
+
+bool idle(const Frame& frame) {
+  if (frame.action == "click" || frame.action == "double_click" || frame.action == "drag")
+    return !(GetAsyncKeyState(frame.args[frame.action == "drag" ? 4 : 2] ? VK_RBUTTON : VK_LBUTTON) & 0x8000);
+  if (frame.action == "chord") {
+    const int key = static_cast<int>(frame.args[0]);
+    if (GetAsyncKeyState(key) & 0x8000) return false;
+    for (int modifier : {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN})
+      if (GetAsyncKeyState(modifier) & 0x8000) return false;
+  }
+  return true;
+}
+
+std::vector<INPUT> events(const Frame& frame) {
+  std::vector<INPUT> result;
+  const auto addmouse = [&](DWORD flags, LONG x = 0, LONG y = 0, DWORD data = 0) {
+    INPUT input{};
+    input.type = INPUT_MOUSE;
+    input.mi.dx = x;
+    input.mi.dy = y;
+    input.mi.mouseData = data;
+    input.mi.dwFlags = flags;
+    result.push_back(input);
+  };
+  const auto addkey = [&](WORD key, DWORD flags) {
+    INPUT input{};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = key;
+    input.ki.dwFlags = flags;
+    result.push_back(input);
+  };
+  const auto position = [&](int64_t x, int64_t y) {
+    const int64_t px = frame.rect.left + (x * (frame.rect.right - frame.rect.left - 1) + 500000) / 1000000;
+    const int64_t py = frame.rect.top + (y * (frame.rect.bottom - frame.rect.top - 1) + 500000) / 1000000;
+    const int64_t left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int64_t top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int64_t width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int64_t height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (width <= 1 || height <= 1) return false;
+    addmouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+      static_cast<LONG>(((px - left) * 65535 + (width - 1) / 2) / (width - 1)),
+      static_cast<LONG>(((py - top) * 65535 + (height - 1) / 2) / (height - 1)));
+    return true;
+  };
+  if (frame.action == "move" || frame.action == "click" || frame.action == "double_click" || frame.action == "drag") {
+    if (!position(frame.args[0], frame.args[1])) return {};
+    if (frame.action == "move") return result;
+    const bool right = frame.args[frame.action == "drag" ? 4 : 2] == 1;
+    const DWORD down = right ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
+    const DWORD up = right ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP;
+    addmouse(down);
+    if (frame.action == "drag" && !position(frame.args[2], frame.args[3])) return {};
+    addmouse(up);
+    if (frame.action == "double_click") { addmouse(down); addmouse(up); }
+    return result;
+  }
+  if (frame.action == "scroll") {
+    if (frame.args[0]) addmouse(MOUSEEVENTF_HWHEEL, 0, 0, static_cast<DWORD>(frame.args[0]));
+    if (frame.args[1]) addmouse(MOUSEEVENTF_WHEEL, 0, 0, static_cast<DWORD>(frame.args[1]));
+    return result;
+  }
+  if (frame.action == "chord") {
+    const std::array<WORD, 4> keys = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN};
+    for (size_t i = 0; i < keys.size(); ++i) if (frame.args[1] & (1LL << i)) addkey(keys[i], 0);
+    addkey(static_cast<WORD>(frame.args[0]), 0);
+    addkey(static_cast<WORD>(frame.args[0]), KEYEVENTF_KEYUP);
+    for (size_t i = keys.size(); i-- > 0;) if (frame.args[1] & (1LL << i)) addkey(keys[i], KEYEVENTF_KEYUP);
+    return result;
+  }
+  if (frame.action == "text") {
+    for (char16_t code : frame.text) {
+      INPUT down{};
+      down.type = INPUT_KEYBOARD;
+      down.ki.wScan = static_cast<WORD>(code);
+      down.ki.dwFlags = KEYEVENTF_UNICODE;
+      result.push_back(down);
+      down.ki.dwFlags |= KEYEVENTF_KEYUP;
+      result.push_back(down);
+    }
+  }
+  return result;
 }
 
 class Broker {
 public:
+  explicit Broker(Sender sender = SendInput, bool (*target)(const Frame&) = exact,
+                  bool (*available)(const Frame&) = idle, uint64_t (*clock)() = now)
+    : sender(sender), target(target), available(available), clock(clock) {}
   Reply handle(const Frame& frame) {
     const auto reply = [&](std::string type, std::string code) {
       return Reply{std::move(type), frame.session, frame.request, frame.sequence, std::move(code)};
@@ -187,16 +399,47 @@ public:
       cancelled = true;
       return reply("cancelled", "ok");
     }
-    if (frame.type == "quiescent") return reply("quiescent", "ok");
-    if (cancelled) return reply("refused", "cancelled");
+    if (frame.type == "quiescent") return uncertain ? reply("unknown", "partial") : reply("quiescent", "ok");
+    if (cancelled || uncertain) return reply("refused", cancelled ? "cancelled" : "unknown");
     if (!frame.pid || !frame.scene || frame.window == "0") return reply("refused", "bad_target");
-    if (!exact(frame)) return reply("refused", "changed_target");
-    return reply("refused", "unsupported");
+    if (frame.scene <= scene) return reply("refused", "stale");
+    scene = frame.scene;
+    if (!valid(frame)) return reply("refused", "unsupported");
+    const uint64_t current = clock();
+    if (frame.observed > current + 100 || frame.until < current) return reply("refused", "expired");
+    if (!target(frame)) return reply("refused", "changed_target");
+    if (!available(frame)) return reply("refused", "input_busy");
+    std::vector<INPUT> input = events(frame);
+    if (input.empty() || input.size() > 512) return reply("refused", "unsupported");
+    uintptr_t tag = 0;
+    const auto parsed = std::from_chars(frame.nonce.data(), frame.nonce.data() + 8, tag, 16);
+    if (parsed.ec != std::errc{}) return reply("refused", "bad_nonce");
+    for (auto& item : input) {
+      if (item.type == INPUT_MOUSE) item.mi.dwExtraInfo = tag;
+      if (item.type == INPUT_KEYBOARD) item.ki.dwExtraInfo = tag;
+    }
+    // This is the final check before SendInput. A partial batch has an unknown
+    // outcome: never retry or release keys without physical-event ownership proof.
+    if (cancelled || !target(frame) || frame.until < clock()) return reply("refused", "changed_target");
+    const UINT attempted = static_cast<UINT>(input.size());
+    const UINT accepted = sender(attempted, input.data(), sizeof(INPUT));
+    Reply result = reply(accepted == attempted ? "confirmed" : accepted ? "unknown" : "refused",
+                         accepted == attempted ? "ok" : accepted ? "partial" : "input_failed");
+    result.accepted = accepted;
+    result.attempted = attempted;
+    if (accepted && accepted != attempted) uncertain = true;
+    return result;
   }
 private:
+  Sender sender;
+  bool (*target)(const Frame&);
+  bool (*available)(const Frame&);
+  uint64_t (*clock)();
   bool bound = false;
   bool cancelled = false;
+  bool uncertain = false;
   uint64_t sequence = 0;
+  uint64_t scene = 0;
   std::string session;
   std::string nonce;
   std::vector<std::string> seen;
@@ -234,16 +477,25 @@ bool send(HANDLE pipe, const Reply& reply) {
   return write(pipe, &length, sizeof(length)) && write(pipe, header.data(), length) && write(pipe, &empty, sizeof(empty));
 }
 
+bool allowed(const Frame&) { return true; }
+UINT partial(UINT count, LPINPUT, int) { return count - 1; }
+UINT rejected(UINT, LPINPUT, int) { return 0; }
+
 int selftest() {
   const std::string first = "11111111111111111111111111111111";
   const std::string second = "22222222222222222222222222222222";
   const std::string third = "33333333333333333333333333333333";
   const auto raw = [&](std::string type, std::string request, uint64_t sequence,
                        std::string target = "0", uint32_t pid = 0, uint64_t scene = 0) {
-    return "{\"v\":1,\"type\":\"" + type + "\",\"session\":\"" + first +
+    const std::string extra = type == "dispatch" ?
+      ",\"identity\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\""
+      ",\"left\":0,\"top\":0,\"right\":100,\"bottom\":100"
+      ",\"action\":\"move\",\"a\":500000,\"b\":500000,\"c\":0,\"d\":0,\"e\":0"
+      ",\"observedAt\":" + std::to_string(now()) + ",\"validUntil\":" + std::to_string(now() + 1000) : "";
+    return "{\"v\":2,\"type\":\"" + type + "\",\"session\":\"" + first +
       "\",\"request\":\"" + request + "\",\"sequence\":" + std::to_string(sequence) +
       ",\"nonce\":\"" + third + "\",\"windowID\":\"" + target +
-      "\",\"pid\":" + std::to_string(pid) + ",\"scene\":" + std::to_string(scene) + "}";
+      "\",\"pid\":" + std::to_string(pid) + ",\"scene\":" + std::to_string(scene) + extra + "}";
   };
   Frame frame;
   Broker broker;
@@ -269,8 +521,61 @@ int selftest() {
   trailing.insert(trailing.size() - 1, ",");
   if (parse(trailing, frame) != Parse::malformed) return 14;
   std::string version = raw("quiescent", first, 7);
-  version.replace(5, 1, "2");
+  version.replace(5, 1, "1");
   if (parse(version, frame) != Parse::version) return 15;
+  if (parse(raw("dispatch", second, 1, "1", 1, 1), frame) != Parse::valid) return 16;
+  const std::vector<INPUT> move = events(frame);
+  if (move.size() != 1 || move[0].type != INPUT_MOUSE ||
+      !(move[0].mi.dwFlags & MOUSEEVENTF_VIRTUALDESK)) return 17;
+  Broker interrupted(partial, allowed, allowed);
+  if (interrupted.handle(Frame{.type="hello", .session=first, .request=second, .nonce=third, .window="0"}).type != "ready") return 18;
+  frame.request = "44444444444444444444444444444444";
+  const Reply broken = interrupted.handle(frame);
+  if (broken.type != "refused" || broken.code != "input_failed" || broken.accepted != 0 || broken.attempted != 1) return 19;
+  Broker uncertain(partial, allowed, allowed);
+  if (uncertain.handle(Frame{.type="hello", .session=first, .request=second, .nonce=third, .window="0"}).type != "ready") return 20;
+  frame.action = "click";
+  const Reply unknown = uncertain.handle(frame);
+  if (unknown.type != "unknown" || unknown.code != "partial" || unknown.accepted != 2 || unknown.attempted != 3) return 21;
+  frame.request = "55555555555555555555555555555555";
+  frame.sequence = 2;
+  frame.scene = 2;
+  if (uncertain.handle(frame).code != "unknown") return 22;
+  frame.type = "quiescent";
+  frame.request = "88888888888888888888888888888888";
+  frame.sequence = 3;
+  frame.window = "0";
+  frame.pid = 0;
+  frame.scene = 0;
+  if (uncertain.handle(frame).type != "unknown") return 31;
+  frame.type = "dispatch";
+  frame.window = "1";
+  frame.pid = 1;
+  Broker denied(rejected, allowed, allowed);
+  if (denied.handle(Frame{.type="hello", .session=first, .request=second, .nonce=third, .window="0"}).type != "ready") return 23;
+  frame.request = "66666666666666666666666666666666";
+  frame.sequence = 1;
+  frame.scene = 1;
+  const Reply zero = denied.handle(frame);
+  if (zero.code != "input_failed" || zero.accepted != 0 || zero.attempted != 3) return 24;
+  frame.action = "double_click";
+  if (!valid(frame) || events(frame).size() != 5) return 25;
+  frame.action = "drag";
+  frame.args = {0, 0, 1000000, 1000000, 0};
+  if (!valid(frame) || events(frame).size() != 4) return 26;
+  frame.action = "scroll";
+  frame.args = {-120, 120, 0, 0, 0};
+  if (!valid(frame) || events(frame).size() != 2) return 27;
+  frame.action = "chord";
+  frame.args = {static_cast<int64_t>('C'), 3, 0, 0, 0};
+  if (!valid(frame) || events(frame).size() != 6) return 28;
+  frame.action = "text";
+  frame.args = {};
+  frame.text = u"A\u00E9";
+  if (!valid(frame) || events(frame).size() != 4) return 29;
+  std::string malformed = raw("dispatch", "77777777777777777777777777777777", 1, "1", 1, 1);
+  malformed.insert(malformed.size() - 1, ",\"surprise\":1");
+  if (parse(malformed, frame) != Parse::malformed) return 30;
   std::puts("desktop input broker self-test passed");
   return 0;
 }
@@ -279,6 +584,7 @@ int selftest() {
 int main(int argc, char** argv) {
   if (argc == 2 && std::string_view(argv[1]) == "--self-test") return selftest();
   if (argc != 1) return 2;
+  if (!SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) return 10;
   const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
   const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
   if (!input || input == INVALID_HANDLE_VALUE || !output || output == INVALID_HANDLE_VALUE) return 3;
@@ -294,7 +600,9 @@ int main(int argc, char** argv) {
     std::string header(length, '\0');
     if (!read(input, header.data(), length, eof)) return 6;
     uint32_t payload = 0;
-    if (!read(input, &payload, sizeof(payload), eof) || payload) return 7;
+    if (!read(input, &payload, sizeof(payload), eof) || payload > 512) return 7;
+    std::string data(payload, '\0');
+    if (payload && !read(input, data.data(), payload, eof)) return 7;
     Frame frame;
     const Parse parsed = parse(header, frame);
     if (parsed != Parse::valid) {
@@ -302,6 +610,19 @@ int main(int argc, char** argv) {
       if (!send(output, Reply{"refused", std::string(kZero), std::string(kZero), 0, code})) return 8;
       continue;
     }
+    if (frame.type == "dispatch" && frame.action == "text") {
+      if (!payload || payload % 2) return 7;
+      for (size_t i = 0; i < data.size(); i += 2)
+        frame.text.push_back(static_cast<char16_t>(static_cast<unsigned char>(data[i]) |
+          (static_cast<unsigned char>(data[i + 1]) << 8)));
+      for (size_t i = 0; i < frame.text.size(); ++i) {
+        const char16_t c = frame.text[i];
+        if (!c) return 7;
+        if (c >= 0xD800 && c <= 0xDBFF) {
+          if (++i >= frame.text.size() || frame.text[i] < 0xDC00 || frame.text[i] > 0xDFFF) return 7;
+        } else if (c >= 0xDC00 && c <= 0xDFFF) return 7;
+      }
+    } else if (payload) return 7;
     if (!send(output, broker.handle(frame))) return 9;
   }
 }

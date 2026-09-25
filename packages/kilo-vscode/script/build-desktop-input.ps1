@@ -1,5 +1,6 @@
 param(
-  [string] $Output = (Join-Path $env:TEMP 'raya-desktop-input.exe')
+  [string] $Output = (Join-Path $env:TEMP 'raya-desktop-input.exe'),
+  [switch] $NativeOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,14 +16,16 @@ Remove-Item -LiteralPath $Output -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $symbol -Force -ErrorAction SilentlyContinue
 $ready = $false
 try {
-  $command = '"{0}" >nul && cl /nologo /std:c++20 /EHsc /O2 /Z7 /W4 /Zc:__cplusplus /Fo:"{1}" /Fe:"{2}" "{3}" user32.lib /link /DEBUG:FULL /INCREMENTAL:NO /PDB:"{4}"' -f $vcvars, $object, $Output, $source, $symbol
+  $command = '"{0}" >nul && cl /nologo /std:c++20 /EHsc /O2 /Z7 /W4 /Zc:__cplusplus /Fo:"{1}" /Fe:"{2}" "{3}" user32.lib advapi32.lib /link /DEBUG:FULL /INCREMENTAL:NO /PDB:"{4}"' -f $vcvars, $object, $Output, $source, $symbol
   & cmd.exe /s /c $command
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Output)) { throw "Desktop input broker compile failed with exit code $LASTEXITCODE" }
   if (-not (Test-Path -LiteralPath $symbol)) { throw 'Desktop input broker symbols were not produced' }
   & $Output --self-test
   if ($LASTEXITCODE -ne 0) { throw "Desktop input broker self-test failed with exit code $LASTEXITCODE" }
-  & bun (Join-Path $PSScriptRoot 'test-desktop-input-host.ts') $Output
-  if ($LASTEXITCODE -ne 0) { throw "Desktop input host round trip failed with exit code $LASTEXITCODE" }
+  if (-not $NativeOnly) {
+    & bun (Join-Path $PSScriptRoot 'test-desktop-input-host.ts') $Output
+    if ($LASTEXITCODE -ne 0) { throw "Desktop input host round trip failed with exit code $LASTEXITCODE" }
+  }
   $ready = $true
   Write-Output $Output
 } finally {

@@ -1,15 +1,19 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomBytes } from "node:crypto"
+import type { DesktopAction } from "./desktop-session"
+import { input, target, type NativeInputTarget } from "./desktop-input-action"
 
 type Kind = "hello" | "dispatch" | "cancel" | "quiescent"
-type Status = "ready" | "refused" | "cancelled" | "quiescent"
+type Status = "ready" | "refused" | "cancelled" | "quiescent" | "confirmed" | "unknown"
 type Reply = {
-  v: 1
+  v: 2
   type: Status
   session: string
   request: string
   sequence: number
   code: string
+  accepted: number
+  attempted: number
 }
 
 const hex = /^[a-f0-9]{32}$/
@@ -25,15 +29,22 @@ const codes = new Set([
   "changed_target",
   "unsupported",
   "cancelled",
+  "input_failed",
+  "partial",
+  "unknown",
+  "expired",
+  "input_busy",
 ])
 
-function frame(value: object): Buffer {
+function frame(value: object, payload: Buffer = Buffer.alloc(0)): Buffer {
   const data = Buffer.from(JSON.stringify(value), "utf8")
   if (data.length > 4096) throw new Error("Native input request exceeds the protocol bound")
-  const packet = Buffer.alloc(8 + data.length)
+  if (payload.length > 512) throw new Error("Native input payload exceeds the protocol bound")
+  const packet = Buffer.alloc(8 + data.length + payload.length)
   packet.writeUInt32LE(data.length, 0)
   data.copy(packet, 4)
-  packet.writeUInt32LE(0, 4 + data.length)
+  packet.writeUInt32LE(payload.length, 4 + data.length)
+  payload.copy(packet, 8 + data.length)
   return packet
 }
 
@@ -42,15 +53,20 @@ function parse(value: unknown, session: string): Reply {
     throw new Error("Native input broker returned a malformed reply")
   const reply = value as Record<string, unknown>
   if (
-    Object.keys(reply).length !== 6 ||
-    reply.v !== 1 ||
-    !["ready", "refused", "cancelled", "quiescent"].includes(String(reply.type)) ||
+    Object.keys(reply).length !== 8 ||
+    reply.v !== 2 ||
+    !["ready", "refused", "cancelled", "quiescent", "confirmed", "unknown"].includes(String(reply.type)) ||
     reply.session !== session ||
     typeof reply.request !== "string" ||
     !hex.test(reply.request) ||
     !Number.isSafeInteger(reply.sequence) ||
     typeof reply.code !== "string" ||
-    !codes.has(reply.code)
+    !codes.has(reply.code) ||
+    !Number.isSafeInteger(reply.accepted) ||
+    !Number.isSafeInteger(reply.attempted) ||
+    (reply.accepted as number) < 0 ||
+    (reply.attempted as number) < 0 ||
+    (reply.accepted as number) > (reply.attempted as number)
   )
     throw new Error("Native input broker returned a malformed reply")
   return reply as Reply
@@ -89,23 +105,16 @@ export class NativeInputHost {
     this.state = "ready"
   }
 
-  async probe(target: { windowID: string; pid: number; scene: number }): Promise<Reply> {
+  async dispatch(action: DesktopAction, value: NativeInputTarget): Promise<Reply> {
     if (this.state !== "ready") throw new Error("Native input broker is not ready")
     if (this.pending.size) throw new Error("Native input broker already has a request in flight")
-    if (
-      !/^0x[0-9a-fA-F]+$/.test(target.windowID) ||
-      !Number.isSafeInteger(target.pid) ||
-      target.pid <= 0 ||
-      target.pid > 0xffffffff ||
-      !Number.isSafeInteger(target.scene) ||
-      target.scene <= 0
-    )
-      throw new Error("Native input target identity is invalid")
-    return this.send("dispatch", undefined, {
-      windowID: target.windowID.slice(2).toLowerCase(),
-      pid: target.pid,
-      scene: target.scene,
-    })
+    const detail = target(value)
+    const effect = input(action)
+    if (action.windowID.toLowerCase() !== value.windowID.toLowerCase())
+      throw new Error("Native input action and target differ")
+    const reply = await this.send("dispatch", undefined, { ...detail, ...effect }, effect.payload)
+    if (reply.type === "unknown" || reply.code === "partial") this.state = "blocked"
+    return reply
   }
 
   async cancel(): Promise<void> {
@@ -133,22 +142,24 @@ export class NativeInputHost {
     this.buffer = Buffer.alloc(0)
   }
 
-  private send(kind: Kind, sequence?: number, target?: { windowID: string; pid: number; scene: number }) {
+  private send(kind: Kind, sequence?: number, detail?: Record<string, unknown>, payload?: Buffer) {
     const child = this.child
     if (!child || this.state === "closed") return Promise.reject(new Error("Native input broker is stopped"))
     const request = randomBytes(16).toString("hex")
     const next = sequence ?? ++this.sequence
-    const packet = frame({
-      v: 1,
+    const header = {
+      v: 2,
       type: kind,
       session: this.session,
       request,
       sequence: next,
       nonce: this.nonce,
-      windowID: target?.windowID ?? "0",
-      pid: target?.pid ?? 0,
-      scene: target?.scene ?? 0,
-    })
+      windowID: detail?.windowID ?? "0",
+      pid: detail?.pid ?? 0,
+      scene: detail?.scene ?? 0,
+      ...(kind === "dispatch" ? this.fields(detail) : {}),
+    }
+    const packet = frame(header, payload)
     return new Promise<Reply>((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new Error("Native input broker response timed out")), 5_000)
       this.pending.set(request, { sequence: next, resolve, reject, timer })
@@ -156,6 +167,24 @@ export class NativeInputHost {
         if (error) this.fail(error)
       })
     })
+  }
+
+  private fields(detail?: Record<string, unknown>) {
+    return {
+      identity: detail?.identity,
+      left: detail?.left,
+      top: detail?.top,
+      right: detail?.right,
+      bottom: detail?.bottom,
+      action: detail?.action,
+      a: detail?.a,
+      b: detail?.b,
+      c: detail?.c,
+      d: detail?.d,
+      e: detail?.e,
+      observedAt: detail?.observedAt,
+      validUntil: detail?.validUntil,
+    }
   }
 
   private read(chunk: Buffer): void {

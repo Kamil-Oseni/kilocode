@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 20:43 America/Toronto - installed input-recovery checkpoint
+
+`64f18e1a3d` is pushed and installed as `eden.raya@7.4.23-snapshot+64f18e1a3d.kamil-oseni.1790296862637`; rollback VSIX SHA-256 `A878CCC63C2ADCFBAB37D2E2D47E6807AD698C23B94BDB12BE459E00F2278C3E`. The source-level accepted-prefix correction and real Windows no-injection helper test passed alongside 49 focused desktop tests and snapshot validation. Do not mistake this for held-input recovery: PowerShell cancellation can still kill an in-flight input helper, and no installed physical ownership test has passed. Build the separate input broker and guardian described below. The user's capture-error dialog was not dismissed; the native crash remains undiagnosed. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-24 20:38 America/Toronto - accepted-prefix recovery checkpoint
 
 The current Windows `SendInput` path now avoids releasing buttons/keys whose downs were never in the accepted batch prefix; the actual embedded C# recovery logic passed a no-injection Windows test. This is a bounded reduction of an existing hazard, **not** complete Pause/held-input recovery. `runner.cancel()` still kills the PowerShell process that injects input, so an interrupted in-flight action can lose its in-process recovery. A concurrently held physical key cannot be distinguished from Raya's synthetic key by the accepted count alone. Next route input through a separate native broker with one in-flight request, exact-target revalidation, bounded cancellation acknowledgement and unknown/no-replay on broker loss; follow with an ownership-aware guardian using Raya-tagged events and physical-input tracking. Never use unconditional key-up or mouse-up as fallback. Validate installed physical Pause, takeover, backend loss, changed target and broker crash before claiming recovery. Keep the capture dialog untouched and `FUT-CU-01` In progress.

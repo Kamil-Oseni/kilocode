@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 05:11 America/Toronto - installed Ask/chat polish handoff
+
+`54fe9c29f3` is pushed and installed as `eden.raya@7.4.23-snapshot+54fe9c29f3.kamil-oseni.1790327245989`; focused checks, push hook, and low-memory package gates pass. The retained 545,087,158-byte VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.9138b79aea2d529ed1b12bd585a1f9cae94062e0c869ef46f79d1ca7b25d8952.vsix`, SHA-256 `9138B79AEA2D529ED1B12BD585A1F9CAE94062E0C869EF46F79D1CA7B25D8952`. Reload the open VS Code host, then run the live Ask, History, timestamp, English-output, and two-specialist checks described below. Installation alone does not prove activation or provider behavior. Keep `FUT-AGENT-01/02` and `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-25 04:59 America/Toronto - Ask submission and chat/history handoff
 
 Reload the next installed snapshot, then complete a fresh five-question Ask through Review and Submit. Confirm the backend receives exactly one answer set and the card disappears; the historical `Feeling check-in via questions` tool is still pending because its earlier answers were never saved. Inspect the assistant Copy/time row on hover, top-aligned recent chats, History hover Delete confirmation, and absence of the redundant background button at narrow and wide widths. Run a fresh English request through the same DeepSeek/Chief path that produced Chinese in `Raya chat activity & composer styles review`; prompt guidance is added, but provider behavior is unproven. Then run the real two-specialist/restart checks from the previous handoff. Keep `FUT-AGENT-01/02` and `FUT-CU-01` In progress.

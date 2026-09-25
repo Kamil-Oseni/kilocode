@@ -501,6 +501,56 @@ test("restart finishes a stopped scheduled worker after an in-flight start clear
   )
 })
 
+test("archived organizations cannot restart recurring or event workers after recovery", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const sessions = {
+        create: () => Effect.die("archived worker started a session"),
+        get: () => Effect.die("unexpected session"),
+        messages: () => Effect.die("unexpected session"),
+        children: () => Effect.die("unexpected session"),
+      }
+      const runner = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const cron = yield* runner.tasks.create({
+        name: "Recurring",
+        objective: "Work each minute",
+        schedule: { kind: "cron", expr: "* * * * *", tz: "UTC" },
+      })
+      const event = yield* runner.tasks.create({
+        name: "Event",
+        objective: "Work on an event",
+        schedule: { kind: "event", source: "archive-test" },
+      })
+      const queue = RayaTaskQueue.make(database)
+      const at = Date.now() + 60_000
+      yield* queue.publish({ agentID: cron.id, version: 1, occurrences: [{ at, observedAt: at }] })
+      const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
+      const item = yield* organizations.create({
+        name: "Scheduled team",
+        members: [
+          { agentID: cron.id, role: "Recurring worker" },
+          { agentID: event.id, role: "Event worker" },
+        ],
+      })
+      expect((yield* organizations.archive(item.id, { expectedRevision: 1 })).archived).toBe(true)
+      expect(yield* queue.pending(cron.id, 1)).toEqual([])
+      const restarted = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      yield* restarted.recoverStops()
+      yield* restarted.revive()
+      yield* restarted.tick(at + 60_000)
+      expect(yield* restarted.announce("archive-test")).toEqual([])
+      for (const worker of [cron, event]) {
+        expect((yield* restarted.tasks.get(worker.id)).enabled).toBe(false)
+        expect(yield* restarted.tasks.runsFor(worker.id)).toEqual([])
+        expect(Exit.isFailure(yield* restarted.fire(worker.id).pipe(Effect.exit))).toBe(true)
+      }
+      expect(yield* queue.pending(cron.id, 1)).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("an orphaned startup claim keeps archive visible until explicit recovery", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

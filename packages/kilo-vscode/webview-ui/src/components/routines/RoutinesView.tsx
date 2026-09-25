@@ -413,7 +413,10 @@ function OrganizationEditor(props: {
           >
             <div>
               <h4 id={`archive-${props.item.id}`}>Remove {props.item.name} from Routines</h4>
-              <p>Raya stops its workers and schedules. Their chats, work and reports stay saved.</p>
+              <p>
+                Raya stops every worker and disables its schedules. They will not restart on their own. Chats, work and
+                reports stay saved.
+              </p>
             </div>
             <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
               Remove organization
@@ -1065,8 +1068,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       <Dialog title={`Remove ${item.name}?`} fit>
         <div class="dialog-confirm-body">
           <span>
-            Raya will stop every worker and schedule, then remove this organization from your active list. Chats, work
-            and reports stay saved.
+            Raya will stop every worker and disable its schedules before removing this organization from your active
+            list. They will not restart on their own. Chats, work and reports stay saved.
           </span>
           <div class="dialog-confirm-actions">
             <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>

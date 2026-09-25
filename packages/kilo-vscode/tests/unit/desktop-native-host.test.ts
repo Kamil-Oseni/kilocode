@@ -142,7 +142,7 @@ describe("native desktop capture host", () => {
     host.stop()
   })
 
-  it("does not report an old capture Stop timeout against a restarted host", async () => {
+  it("reports a capture child that survives Stop even after a new host starts", async () => {
     const errors: Error[] = []
     const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(encode(visual))])
     host.start()
@@ -156,7 +156,7 @@ describe("native desktop capture host", () => {
       expect((await host.next()).sequence).toBe(1)
       await Bun.sleep(1_600)
       expect(host.latest(Infinity)?.sequence).toBe(1)
-      expect(errors).toHaveLength(0)
+      expect(errors.map((error) => error.message)).toContain("Native desktop capture did not exit after Stop")
     } finally {
       kill("SIGKILL")
       host.stop()

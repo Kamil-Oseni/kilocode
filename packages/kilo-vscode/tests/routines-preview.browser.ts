@@ -871,6 +871,35 @@ test("production schedule preview keeps selected weekdays and timezone before co
   await expect(page.getByRole("heading", { name: "Edit schedule" })).toBeHidden()
 })
 
+test("one-shot schedule acknowledgement returns to the roster without runaway memory", async ({ context, page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  const devtools = await context.newCDPSession(page)
+  await devtools.send("Performance.enable")
+  await page.goto("/?state=light-routines")
+  await devtools.send("HeapProfiler.collectGarbage")
+  const initial = await devtools.send("Performance.getMetrics")
+  const baseline = initial.metrics.find((metric) => metric.name === "JSHeapUsedSize")?.value ?? 0
+
+  for (let index = 0; index < 5; index++) {
+    await page.getByRole("button", { name: "Books options" }).click()
+    await page.getByRole("menuitem", { name: "Edit schedule" }).click()
+    await page.getByLabel("Repeat").selectOption({ label: "Once on a date" })
+    await page.getByLabel("Date and time").fill(`2030-07-${String(10 + index).padStart(2, "0")}T09:00`)
+    await page.getByLabel("Calendar timezone").fill("America/Toronto")
+    await page.getByRole("button", { name: "Review schedule" }).click()
+    await expect(page.getByRole("button", { name: "Confirm changes" })).toBeEnabled()
+    await page.getByRole("button", { name: "Confirm changes" }).click()
+    await expect(page.getByRole("heading", { name: "Edit schedule" })).toBeHidden()
+    await expect(page.getByRole("button", { name: "Books options" })).toBeVisible()
+  }
+
+  await devtools.send("HeapProfiler.collectGarbage")
+  const final = await devtools.send("Performance.getMetrics")
+  const heap = final.metrics.find((metric) => metric.name === "JSHeapUsedSize")?.value ?? 0
+  expect(Math.max(0, heap - baseline)).toBeLessThan(32 * 1024 * 1024)
+  expect(await page.locator("*").count()).toBeLessThan(2_000)
+})
+
 test("routine creation asks one question at a time and reviews safe defaults", async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 900 })
   await page.goto("/?state=light-routines")

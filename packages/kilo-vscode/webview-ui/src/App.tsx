@@ -348,8 +348,15 @@ const AppContent: Component = () => {
     }
   }
 
-  const askRaya = (text: string) => {
+  const fresh = () => {
+    const pending = tabs?.add()
+    if (!tabs) session.clearCurrentSession()
     setCurrentView("newTask")
+    return pending
+  }
+
+  const askRaya = (text: string) => {
+    fresh()
     queueMicrotask(() =>
       window.dispatchEvent(
         new CustomEvent("raya:prefill-prompt", {
@@ -365,9 +372,7 @@ const AppContent: Component = () => {
       return
     }
     const model = session.selected(session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID())
-    const pending = tabs?.add()
-    if (!tabs) session.clearCurrentSession()
-    setCurrentView("newTask")
+    const pending = fresh()
     session.sendMessage(text, model?.providerID, model?.modelID, undefined, pending, undefined, undefined, null)
   }
 

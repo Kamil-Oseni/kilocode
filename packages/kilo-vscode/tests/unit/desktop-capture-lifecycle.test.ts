@@ -11,20 +11,35 @@ describe("continuous desktop capture lifecycle", () => {
     const state: {
       lease: "active" | "paused" | undefined
       scope: "all" | "selected"
+      identity: string | undefined
+      monitor: "all" | "selected"
       control: "agent" | "manual"
       connection: string
       ready: boolean
-    } = { lease: undefined, scope: "all", control: "manual", connection: "connected", ready: false }
+    } = {
+      lease: undefined,
+      scope: "all",
+      identity: "A".repeat(64),
+      monitor: "all",
+      control: "manual",
+      connection: "connected",
+      ready: false,
+    }
     let starts = 0
     let stops = 0
+    const targets: Array<{ windowID: string; identity: string } | undefined> = []
     const capture = new DesktopCaptureLifecycle(
       {
         current: () =>
           state.lease
             ? {
                 state: state.lease,
-                applications: { kind: state.scope },
-                monitors: { kind: "all" },
+                id: "grant-1",
+                applications:
+                  state.scope === "selected"
+                    ? { kind: "selected" as const, values: ["0x123"], identity: state.identity }
+                    : { kind: "all" as const },
+                monitors: { kind: state.monitor },
                 surfaces: ["desktop"],
                 actions: ["observe"],
               }
@@ -42,7 +57,10 @@ describe("continuous desktop capture lifecycle", () => {
         },
       },
       {
-        startCapture: () => starts++,
+        startCapture: (_failed, target) => {
+          starts++
+          targets.push(target)
+        },
         stopCapture: () => stops++,
       },
       {
@@ -89,11 +107,19 @@ describe("continuous desktop capture lifecycle", () => {
     state.scope = "selected"
     for (const listener of listeners.lease) listener()
     expect(stops).toBeGreaterThan(before)
+    expect(targets.at(-1)).toEqual({ windowID: "0x123", identity: "A".repeat(64) })
     state.control = "manual"
     for (const listener of listeners.session) listener()
     state.control = "agent"
     for (const listener of listeners.session) listener()
-    expect(starts).toBe(3)
+    expect(starts).toBe(5)
+    state.identity = undefined
+    for (const listener of listeners.lease) listener()
+    expect(stops).toBeGreaterThan(before)
+    state.identity = "A".repeat(64)
+    state.monitor = "selected"
+    for (const listener of listeners.lease) listener()
+    expect(starts).toBe(5)
     capture.dispose()
     expect(listeners.lease.size + listeners.session.size + listeners.connection.size).toBe(0)
   })

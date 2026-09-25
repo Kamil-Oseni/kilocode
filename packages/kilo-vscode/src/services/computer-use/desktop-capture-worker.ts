@@ -19,7 +19,7 @@ export class DesktopCaptureWorker {
   private running = false
 
   constructor(
-    private readonly capture: () => Promise<DesktopFrame & { sourceSequence?: number }>,
+    private readonly capture: () => Promise<(DesktopFrame & { sourceSequence?: number }) | undefined>,
     private readonly cancel: () => void,
     private readonly failed: (error: unknown) => void,
   ) {}
@@ -75,7 +75,18 @@ export class DesktopCaptureWorker {
         this.stop()
         this.failed(error)
       })
-      if (!frame || !this.running || generation !== this.generation) return
+      if (!this.running || generation !== this.generation) return
+      if (!frame) {
+        this.scene = undefined
+        this.token = undefined
+        await new Promise<void>((resolve) => {
+          this.wake = resolve
+          this.timer = setTimeout(resolve, cadence.next(false))
+        })
+        this.wake = undefined
+        this.timer = undefined
+        continue
+      }
       if (
         !frame.windowID ||
         !frame.location ||

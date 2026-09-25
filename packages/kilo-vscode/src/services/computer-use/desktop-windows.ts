@@ -1345,6 +1345,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined
   private host: NativeCaptureHost | undefined
+  private scope: { windowID: string; identity: string } | undefined
 
   get postAction(): boolean {
     return !!this.host
@@ -1362,9 +1363,10 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   async observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame> {
+    const scope = this.scope
     if (options?.semantics === false) {
       const scene = this.warm(options)
-      if (scene && (await this.matches(scene))) return scene.frame
+      if (scene && (await this.matches(scene))) return this.scoped(scene.frame, scope)
     }
     const candidate = options?.semantics === false ? undefined : this.warm(options)
     if (candidate) {
@@ -1379,24 +1381,28 @@ export class WindowsDesktopDriver implements DesktopDriver {
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
         if (!(await this.matches(scene)))
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
-        return {
-          ...scene.frame,
-          semantics: result.semantics,
-          timing: {
-            ...scene.frame.timing,
-            semanticsMs: result.semanticsMs,
-            totalMs: Math.max(
-              performance.now() - started,
-              scene.frame.timing.acquisitionMs + scene.frame.timing.preparationMs,
-              result.semanticsMs,
-            ),
+        return this.scoped(
+          {
+            ...scene.frame,
+            semantics: result.semantics,
+            timing: {
+              ...scene.frame.timing,
+              semanticsMs: result.semanticsMs,
+              totalMs: Math.max(
+                performance.now() - started,
+                scene.frame.timing.acquisitionMs + scene.frame.timing.preparationMs,
+                result.semanticsMs,
+              ),
+            },
           },
-        }
+          scope,
+        )
       }
     }
     const started = performance.now()
     const result = object(await this.runner.run(options?.semantics === false ? pixels : observe))
     const next = frame(result, performance.now() - started, this.last)
+    await this.scoped(next, scope)
     this.last = {
       windowID: next.windowID,
       location: next.location,
@@ -1406,6 +1412,15 @@ export class WindowsDesktopDriver implements DesktopDriver {
       data: next.data,
     }
     return next
+  }
+
+  private async scoped(frame: DesktopFrame, scope: { windowID: string; identity: string } | undefined) {
+    if (scope !== this.scope) throw new Error("Desktop capture scope changed during observation")
+    if (!scope) return frame
+    if (frame.windowID !== scope.windowID) throw new Error("Selected desktop window changed during observation")
+    await this.verifyCurrent({ windowID: scope.windowID, location: frame.location, identity: scope.identity })
+    if (scope !== this.scope) throw new Error("Selected desktop window changed during observation")
+    return frame
   }
 
   async observeAfter(target: DesktopDispatchTarget): Promise<DesktopFrame> {
@@ -1499,7 +1514,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
     return result
   }
 
-  private async verifyCurrent(target: DesktopDispatchTarget): Promise<void> {
+  private async verifyCurrent(
+    target: Pick<DesktopDispatchTarget, "windowID" | "location" | "identity">,
+  ): Promise<void> {
     if (!/^0x[0-9A-F]+$/.test(target.windowID) || !target.location || target.location.length > 4096)
       throw new Error("Post-action desktop target identity is invalid")
     if (target.identity !== undefined && !/^[A-F0-9]{64}$/.test(target.identity))
@@ -1530,9 +1547,10 @@ export class WindowsDesktopDriver implements DesktopDriver {
     return semanticResult(output, target)
   }
 
-  startCapture(failed: (error: unknown) => void): void {
+  startCapture(failed: (error: unknown) => void, target?: { windowID: string; identity: string }): void {
     if (this.worker) return
-    if (this.binary) {
+    this.scope = target
+    if (this.binary && !target) {
       const host = new NativeCaptureHost(
         this.binary,
         (error) => {
@@ -1588,11 +1606,26 @@ export class WindowsDesktopDriver implements DesktopDriver {
     }
     const source = this.background ?? runner()
     let prior: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
+    const discard = () => {
+      prior = undefined
+      source.cancel()
+      return undefined
+    }
     this.worker = new DesktopCaptureWorker(
       async () => {
         const started = performance.now()
         const result = object(await source.run(pixels))
+        if (target && result.windowID !== target.windowID) return discard()
         const next = frame(result, performance.now() - started, prior)
+        if (target) {
+          const current = await this.current()
+          if (
+            current.windowID !== target.windowID ||
+            current.location !== next.location ||
+            (await this.identity(target.windowID)) !== target.identity
+          )
+            return discard()
+        }
         prior = {
           windowID: next.windowID,
           location: next.location,
@@ -1613,9 +1646,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   stopCapture(): void {
+    this.scope = undefined
     this.host = undefined
     this.worker?.stop()
     this.worker = undefined
+    this.last = undefined
   }
 
   private async matches(scene: CapturedScene): Promise<boolean> {

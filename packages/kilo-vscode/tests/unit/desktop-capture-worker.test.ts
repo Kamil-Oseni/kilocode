@@ -39,6 +39,27 @@ describe("continuous desktop capture worker", () => {
     expect(count).toBe(1)
   })
 
+  it("discards a scoped scene when the foreground leaves scope and accepts its return", async () => {
+    const frames = [frame("0x1", "first"), undefined, frame("0x1", "returned")]
+    let count = 0
+    const worker = new DesktopCaptureWorker(
+      async () => frames[count++],
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    worker.start()
+    await until(() => worker.latest()?.frame.data === "first")
+    for (let index = 0; index < 500 && count < 2; index++) await Bun.sleep(2)
+    expect(count).toBeGreaterThanOrEqual(2)
+    expect(worker.latest()).toBeUndefined()
+    for (let index = 0; index < 500 && worker.latest()?.frame.data !== "returned"; index++) await Bun.sleep(2)
+    expect(worker.latest()?.frame.data).toBe("returned")
+    expect(worker.latest()?.version).toBe(2)
+    worker.stop()
+  })
+
   it("advances capture sequence for every sample but scene version only for changed pixels", async () => {
     const frames = [frame("0x1", "first"), frame("0x1", "first"), frame("0x1", "second")]
     let count = 0

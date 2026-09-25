@@ -6,8 +6,9 @@ type Connection = {
 type Lease = {
   current():
     | {
+        id: string
         state: "active" | "paused" | "revoked"
-        applications: { kind: "all" | "selected" }
+        applications: { kind: "all" } | { kind: "selected"; values: string[]; identity?: string }
         monitors: { kind: "all" | "selected" }
         surfaces: readonly string[]
         actions: readonly string[]
@@ -22,13 +23,14 @@ type Session = {
 }
 
 type Driver = {
-  startCapture(failed: (error: unknown) => void): void
+  startCapture(failed: (error: unknown) => void, target?: { windowID: string; identity: string }): void
   stopCapture(): void
 }
 
 export class DesktopCaptureLifecycle {
   private readonly off: Array<() => void>
   private connected: boolean
+  private scope: string | undefined
 
   constructor(
     private readonly lease: Lease,
@@ -52,6 +54,7 @@ export class DesktopCaptureLifecycle {
 
   dispose(): void {
     for (const off of this.off) off()
+    this.scope = undefined
     this.driver.stopCapture()
   }
 
@@ -65,15 +68,30 @@ export class DesktopCaptureLifecycle {
       this.connected &&
       this.ready() &&
       lease?.state === "active" &&
-      lease.applications.kind === "all" &&
       lease.monitors.kind === "all" &&
       lease.surfaces.includes("desktop") &&
       lease.actions.includes("observe") &&
       this.session.current().control === "agent"
     ) {
-      this.driver.startCapture(this.failed)
+      const target =
+        lease.applications.kind === "selected" &&
+        lease.applications.values.length === 1 &&
+        /^0x[0-9A-F]+$/.test(lease.applications.values[0]!) &&
+        /^[0-9A-F]{64}$/.test(lease.applications.identity ?? "")
+          ? { windowID: lease.applications.values[0]!, identity: lease.applications.identity! }
+          : undefined
+      if (lease.applications.kind === "selected" && !target) {
+        this.scope = undefined
+        this.driver.stopCapture()
+        return
+      }
+      const scope = JSON.stringify([lease.id, target])
+      if (this.scope !== scope) this.driver.stopCapture()
+      this.scope = scope
+      this.driver.startCapture(this.failed, target)
       return
     }
+    this.scope = undefined
     this.driver.stopCapture()
   }
 }

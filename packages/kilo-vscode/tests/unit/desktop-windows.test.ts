@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { WindowsDesktopDriver } from "../../src/services/computer-use/desktop-windows"
+import type { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
 
 function harness(outputs: string[]) {
   const scripts: string[] = []
@@ -20,6 +21,81 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("retains only the selected window across foreground changes and rejects a reused identity", async () => {
+    const identity = "A".repeat(64)
+    const chosen = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const other = { windowID: "0x456", location: "pid:6;title:Other;bounds:0,0,20,10" }
+    const state = { window: chosen, identity }
+    let samples = 0
+    let direct = 0
+    const image = (target: typeof chosen, data: string) =>
+      JSON.stringify({
+        ...target,
+        width: 20,
+        height: 10,
+        mime: "image/png",
+        data,
+        acquisitionMs: 0,
+        preparationMs: 0,
+      })
+    const primary = {
+      run: async (script: string) => {
+        if (script.includes("[RayaDesktopNative]::Identity($value)"))
+          return JSON.stringify({ identity: state.identity })
+        if (script.includes("Desktop target changed after post-action capture"))
+          return JSON.stringify({ ...state.window, identity: state.identity })
+        if (script.includes("CopyFromScreen")) {
+          direct++
+          return image(state.window, "direct")
+        }
+        return JSON.stringify(state.window)
+      },
+      cancel: () => undefined,
+    }
+    const background = {
+      run: async () => {
+        samples++
+        if (samples === 1) return image(chosen, "first")
+        if (samples === 2) return image(other, "private")
+        if (samples === 3) return image(chosen, "reused")
+        if (samples === 4) return image(chosen, "returned")
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(primary, background, "not-a-native-binary")
+    const errors: unknown[] = []
+    const latest = () => (Reflect.get(driver, "worker") as DesktopCaptureWorker | undefined)?.latest()
+    driver.startCapture((error) => errors.push(error), { windowID: chosen.windowID, identity })
+    try {
+      for (let index = 0; index < 100 && latest()?.frame.data !== "first"; index++) await Bun.sleep(2)
+      expect(latest()?.frame.data).toBe("first")
+      expect(errors).toHaveLength(0)
+      state.window = other
+      for (let index = 0; index < 100 && samples < 2; index++) await Bun.sleep(2)
+      for (let index = 0; index < 100 && latest(); index++) await Bun.sleep(2)
+      expect(latest()).toBeUndefined()
+      await expect(driver.observe({ semantics: false })).rejects.toThrow(
+        /(selected desktop window|desktop target) changed/i,
+      )
+      state.window = chosen
+      state.identity = "B".repeat(64)
+      for (let index = 0; index < 100 && samples < 3; index++) await Bun.sleep(2)
+      expect(latest()).toBeUndefined()
+      await expect(driver.observe({ semantics: false })).rejects.toThrow(
+        /(selected desktop window|desktop target) changed/i,
+      )
+      state.identity = identity
+      for (let index = 0; index < 100 && latest()?.frame.data !== "returned"; index++) await Bun.sleep(2)
+      expect(latest()?.frame.data).toBe("returned")
+      expect((await driver.observe({ semantics: false })).data).toBe("returned")
+      expect(direct).toBe(2)
+      expect(errors).toHaveLength(0)
+    } finally {
+      driver.stopCapture()
+    }
+  }, 15_000)
+
   it("binds only the foreground window to a verifiable incarnation", async () => {
     const identity = "A".repeat(64)
     const target = { windowID: "0x123", title: "Editor", identity }

@@ -78,6 +78,52 @@
   flex-shrink: 0;
 }
 
+.raya-preloader {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-descriptionForeground);
+  font: 400 12px var(--font-body);
+}
+
+.raya-preloader__mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  animation: raya-boot-pulse 1.5s ease-in-out infinite;
+}
+
+.raya-preloader__mark .kilo-logo {
+  width: 40px;
+  height: 40px;
+}
+
+@keyframes raya-boot-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raya-preloader__mark {
+    animation: none;
+  }
+}
+
 /* ============================================
    Message List
    ============================================ */

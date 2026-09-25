@@ -144,3 +144,39 @@ test("a background completion cannot start overlapping work while its sibling ru
     ),
   ).toBe(false)
 })
+
+test("a repeated brief reuses its running child receipt without spawning another", () => {
+  const user = history("placeholder")[0]!
+  user.info = {
+    id: MessageID.make("msg_user"),
+    sessionID: SessionID.make("ses_parent"),
+    role: "user",
+    agent: "auto",
+    model: { providerID: ProviderV2.ID.make("provider"), modelID: ModelV2.ID.make("model") },
+    time: { created: 1 },
+  }
+  user.parts = [
+    {
+      id: PartID.make("prt_user"),
+      sessionID: SessionID.make("ses_parent"),
+      messageID: MessageID.make("msg_user"),
+      type: "text",
+      text: "Run two independent audits",
+    },
+  ]
+  const started = history("placeholder")[0]!
+  const part = started.parts[0]
+  if (part?.type !== "tool") throw new Error("Expected task fixture")
+  part.state = {
+    status: "completed",
+    input,
+    output: "running",
+    title: "fix deploy · Coder",
+    metadata: { jobId: "ses_child" },
+    time: { start: 2, end: 3 },
+  }
+  const jobs = [{ id: "ses_child", type: "task", status: "running" as const, started_at: 2 }]
+  expect(TaskRepeat.running([user, started], jobs, input)).toMatchObject({ id: "ses_child" })
+  expect(TaskRepeat.running([user, started], jobs, { ...input, description: "other work" })).toBeUndefined()
+  expect(TaskRepeat.running([user, started], [{ ...jobs[0], status: "completed" }], input)).toBeUndefined()
+})

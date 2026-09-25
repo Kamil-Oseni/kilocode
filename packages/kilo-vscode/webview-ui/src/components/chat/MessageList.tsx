@@ -37,7 +37,6 @@ import { RevertBanner } from "./RevertBanner"
 import { AccountSwitcher } from "../shared/AccountSwitcher"
 import { KiloNotifications } from "./KiloNotifications"
 import { TurnOutcome } from "../shared/TurnOutcome"
-import { QuestionDock } from "./QuestionDock"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { SuggestBar } from "./SuggestBar"
 import {
@@ -1427,7 +1426,6 @@ export const MessageList: Component<MessageListProps> = (props) => {
             </For>
             <TurnOutcome />
             <ChiefNotesInbox />
-            <For each={props.questions?.()}>{(req) => <QuestionDock request={req} />}</For>
             <For each={props.suggestions?.()}>{(req) => <SuggestBar request={req} />}</For>
           </Show>
         </div>

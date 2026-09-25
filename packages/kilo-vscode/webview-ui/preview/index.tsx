@@ -27,6 +27,7 @@ import {
   WelcomePreview,
   CloudRecoveryPreview,
   HistoryPreview,
+  QuestionPreview,
   ReviewPreview,
   EditReviewPreview,
   RecoveryPreview,
@@ -81,6 +82,7 @@ type PvState =
   | "transcript"
   | "edit-review"
   | "history"
+  | "question"
   | "conversation"
   | "background-agents"
   | "child-viewer"
@@ -124,6 +126,7 @@ const states: PvState[] = [
   "transcript",
   "edit-review",
   "history",
+  "question",
   "conversation",
   "background-agents",
   "child-viewer",
@@ -471,6 +474,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "history"}>
         <HistoryPreview />
+      </Show>
+      <Show when={props.state === "question"}>
+        <QuestionPreview />
       </Show>
       <Show when={props.state === "conversation"}>
         <ConversationPreview />

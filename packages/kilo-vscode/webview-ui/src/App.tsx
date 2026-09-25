@@ -1,4 +1,4 @@
-import { Component, createSignal, createMemo, Switch, Match, Show, onMount, onCleanup } from "solid-js"
+import { Component, createSignal, createMemo, createEffect, Switch, Match, Show, onMount, onCleanup } from "solid-js"
 import { DataProvider } from "@kilocode/kilo-ui/context/data"
 import Settings from "./components/settings/Settings"
 import ProfileView from "./components/profile/ProfileView"
@@ -11,6 +11,7 @@ import { LocalTabsProvider, useLocalTabs } from "./context/local-tabs"
 import { ProviderShell } from "./context/provider-shell"
 import { ChatView, SubagentViewer, type SubagentTarget } from "./components/chat"
 import { SidebarEmptyState } from "./components/chat/SidebarEmptyState"
+import { KiloLogo } from "./components/chat/WelcomeEmptyState"
 import { SidebarTopBar } from "./components/chat/SidebarTopBar"
 import { registerExpandedTaskTool } from "./components/chat/TaskToolExpanded"
 import { registerVscodeToolOverrides } from "./components/chat/VscodeToolOverrides"
@@ -259,6 +260,10 @@ const AppContent: Component = () => {
   const tabs = useLocalTabs()
   const server = useServer()
   const vscode = useVSCode()
+  const [booted, setBooted] = createSignal(false)
+  createEffect(() => {
+    if (server.connectionState() !== "connecting") setBooted(true)
+  })
 
   onMount(() => {
     const open = (event: Event) => {
@@ -447,6 +452,14 @@ const AppContent: Component = () => {
 
   return (
     <div class="container">
+      <Show when={!booted()}>
+        <div class="raya-preloader" role="status" aria-label="Raya is loading">
+          <div class="raya-preloader__mark">
+            <KiloLogo />
+          </div>
+          <span>Loading Raya</span>
+        </div>
+      </Show>
       <Show when={showTopBar}>
         <SidebarTopBar
           onNewTask={() => handleViewAction("plusButtonClicked")}

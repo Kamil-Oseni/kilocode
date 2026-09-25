@@ -1,10 +1,8 @@
 // raya_change - Raya primary webview branding
-import { type Component, For, Show } from "solid-js"
-import { Icon } from "@kilocode/kilo-ui/icon"
+import { type Component, For, Show, createSignal, onMount } from "solid-js"
 import { useSession } from "../../context/session"
-import { useLanguage } from "../../context/language"
-import { recentSessions } from "../../context/session-utils"
-import { formatRelativeDate } from "../../utils/date"
+import { displayTitle } from "../../utils/session-title"
+import { HistoryPicker, ordered, shortTime } from "../history/HistoryPicker"
 
 interface WelcomeEmptyStateProps {
   onSelectSession?: (id: string) => void
@@ -24,38 +22,48 @@ export const KiloLogo = () => {
 
 export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
   const session = useSession()
-  const language = useLanguage()
-  const recent = () => recentSessions(session.sessions())
+  const [open, setOpen] = createSignal(false)
+  const chats = () => ordered(session.sessions()).filter((item) => !item.parentID)
+  onMount(session.loadSessions)
 
   return (
-    <div class="message-list-empty">
-      <KiloLogo />
-      <h1 class="welcome-outcome-title">{language.t("session.messages.outcome")}</h1>
-      <Show when={recent().length > 0 && props.onSelectSession}>
-        <div class="recent-sessions">
-          <span class="recent-sessions-label">{language.t("session.recent")}</span>
-          <For each={recent()}>
-            {(item) => (
-              <button class="recent-session-item" onClick={() => props.onSelectSession?.(item.id)}>
-                <span class="recent-session-title" dir="auto">
-                  {item.title || language.t("session.untitled")}
-                </span>
-                <span class="recent-session-date">{formatRelativeDate(item.updatedAt)}</span>
-              </button>
-            )}
-          </For>
-          <Show when={props.onShowHistory}>
-            <button class="show-history-btn" onClick={() => props.onShowHistory?.()}>
-              <Icon name="history" size="small" />
-              {language.t("session.showHistory")}
+    <div class="message-list-empty raya-home">
+      <div class="raya-home__heading">Chats</div>
+      <div class="raya-home__recent">
+        <For each={chats().slice(0, 3)}>
+          {(item) => (
+            <button class="raya-home__row" onClick={() => props.onSelectSession?.(item.id)}>
+              <span dir="auto">{displayTitle(item.title, "Untitled chat")}</span>
+              <span>{shortTime(item.updatedAt)}</span>
             </button>
-          </Show>
+          )}
+        </For>
+        <Show when={chats().length > 3}>
+          <button class="raya-home__all" onClick={() => setOpen(true)}>
+            View all ({chats().length})
+          </button>
+        </Show>
+      </div>
+      <div class="raya-home__mark">
+        <KiloLogo />
+      </div>
+      <Show when={open()}>
+        <div class="history-picker__scrim" onClick={() => setOpen(false)}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <HistoryPicker
+              onSelect={(id) => {
+                setOpen(false)
+                props.onSelectSession?.(id)
+              }}
+              onClose={() => setOpen(false)}
+              onRoutines={() => {
+                setOpen(false)
+                window.postMessage({ type: "navigate", view: "routines" }, "*")
+              }}
+            />
+          </div>
         </div>
       </Show>
-      {/* raya_change - the welcome screen is already a fresh session and the
-          toolbar "+" opens a new chat, so a New Session button is redundant.
-          Feedback/Support is a carried-over kilo affordance with no place in an
-          internal tool. Both removed to keep the startup screen minimal. */}
     </div>
   )
 }

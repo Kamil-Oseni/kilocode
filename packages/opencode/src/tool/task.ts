@@ -205,16 +205,22 @@ export const TaskTool = Tool.define(
       // kilocode_change start - reuse an equivalent failed child instead of spawning replacements
       const repeat = TaskRepeat.guard(ctx.messages, params)
       if (repeat) return yield* Effect.fail(new Error(repeat))
-      if (
-        ctx.agent === "auto" &&
-        !branch &&
-        TaskRepeat.pending(
-          yield* sessions.messages({ sessionID: ctx.sessionID }),
-          yield* background.list(),
-          ctx.sessionID,
-          params.task_id,
-        )
-      )
+      const messages = ctx.agent === "auto" ? yield* sessions.messages({ sessionID: ctx.sessionID }) : []
+      const jobs = ctx.agent === "auto" ? yield* background.list() : []
+      const running = ctx.agent === "auto" && !branch ? TaskRepeat.running(messages, jobs, params) : undefined
+      if (running) {
+        return {
+          title: running.title,
+          metadata: running.metadata,
+          output: renderOutput({
+            sessionID: SessionID.make(running.id),
+            state: "running",
+            summary: "Specialist already running",
+            text: "This specialist is already working. Its result will arrive automatically; do not call task or ask the user to wait.",
+          }),
+        }
+      }
+      if (ctx.agent === "auto" && !branch && TaskRepeat.pending(messages, jobs, ctx.sessionID, params.task_id))
         return yield* Effect.fail(
           new Error(
             "Background specialist still running for this request. Wait for its result; do not start overlapping work.",

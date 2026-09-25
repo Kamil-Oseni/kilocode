@@ -4,6 +4,7 @@ import { ToolRegistry } from "@kilocode/kilo-ui/message-part"
 import HistoryView from "../src/components/history/HistoryView"
 import { PromptInput } from "../src/components/chat/PromptInput"
 import { WelcomeEmptyState } from "../src/components/chat/WelcomeEmptyState"
+import { QuestionDock } from "../src/components/chat/QuestionDock"
 import { SessionReviewCluster } from "../src/components/chat/SessionReviewCluster"
 import { registerVscodeToolOverrides } from "../src/components/chat/VscodeToolOverrides"
 import { editReview } from "../src/components/chat/edit-review"
@@ -100,7 +101,54 @@ export const ComposerPreview: Component<{ focus?: boolean }> = (props) =>
     }),
   )
 
-export const WelcomePreview: Component = () => wrap("s1", () => createComponent(WelcomeEmptyState, {}))
+export const WelcomePreview: Component = () =>
+  wrap("s1", () => (
+    <Sessions>
+      <WelcomeEmptyState onSelectSession={() => {}} />
+    </Sessions>
+  ))
+
+export const QuestionPreview: Component = () =>
+  wrap("s1", () => (
+    <VoiceProvider>
+      <div
+        class="chat-view"
+        style={{ height: "100vh", display: "flex", "flex-direction": "column", "justify-content": "flex-end" }}
+      >
+        <div class="chat-input">
+          <QuestionDock
+            request={{
+              id: "preview-question",
+              sessionID: "s1",
+              questions: [
+                {
+                  question: "Who is this todo app mainly for?",
+                  header: "Audience",
+                  options: [
+                    { label: "Just me", description: "" },
+                    { label: "Small teams", description: "" },
+                    { label: "Families or households", description: "" },
+                    { label: "A specific community", description: "" },
+                  ],
+                },
+                {
+                  question: "What should it help them do?",
+                  header: "Purpose",
+                  options: [{ label: "Stay organized", description: "" }],
+                },
+                {
+                  question: "What matters most?",
+                  header: "Priority",
+                  options: [{ label: "Ease of use", description: "" }],
+                },
+              ],
+            }}
+          />
+          <PromptInput boxId="preview-question" />
+        </div>
+      </div>
+    </VoiceProvider>
+  ))
 
 const CloudRecovery: Component = () => {
   const session = useSession()

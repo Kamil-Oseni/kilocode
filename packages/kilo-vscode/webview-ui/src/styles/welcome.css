@@ -392,6 +392,92 @@
   flex-shrink: 0;
 }
 
+.message-list-empty.raya-home {
+  position: relative;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px 9px;
+  color: #d6d6d6;
+  text-align: left;
+}
+
+.raya-home__heading {
+  padding: 1px 2px 7px;
+  color: #bcbcbc;
+  font: 400 13px/20px var(--font-body);
+}
+
+.raya-home__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.raya-home__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 15px;
+  background: transparent;
+  color: #d7d7d7;
+  text-align: left;
+  font: 400 13px/20px var(--font-body);
+  cursor: pointer;
+}
+
+.raya-home__row:hover,
+.raya-home__row:focus-visible {
+  background: #2a2c2d;
+}
+
+.raya-home__row span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.raya-home__row span:last-child {
+  flex: none;
+  color: #929292;
+  font-size: 12px;
+}
+
+.raya-home__all {
+  align-self: flex-start;
+  margin-top: 5px;
+  padding: 3px 2px;
+  border: 0;
+  background: transparent;
+  color: #898989;
+  font: 400 12px var(--font-body);
+  cursor: pointer;
+}
+
+.raya-home__all:hover {
+  color: #c4c4c4;
+}
+
+.raya-home__mark {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.raya-home__mark .kilo-logo {
+  width: 40px;
+  height: 40px;
+}
+
 /* ============================================
    Account Switcher (welcome screen header)
    ============================================ */

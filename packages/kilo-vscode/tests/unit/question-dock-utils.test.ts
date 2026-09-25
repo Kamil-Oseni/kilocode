@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test"
 import {
-  pickOutcome,
   resolveOptimisticQuestionAgent,
   resolveQuestionMode,
   resolveSelectedQuestionMode,
@@ -189,32 +188,6 @@ describe("resolveOptimisticQuestionAgent", () => {
     const result = resolveOptimisticQuestionAgent("ask", "code", "architect")
 
     expect(result).toEqual({ base: "ask", agent: "architect" })
-  })
-})
-
-describe("pickOutcome", () => {
-  it("keeps a single-question single-select option pick pending until explicit submit", () => {
-    expect(pickOutcome({ single: true, multi: false, custom: false })).toEqual({ kind: "stay" })
-  })
-
-  it("advances to the next tab on a multi-question single-select option pick", () => {
-    expect(pickOutcome({ single: false, multi: false, custom: false })).toEqual({ kind: "advance" })
-  })
-
-  it("keeps the last question pending until explicit submit", () => {
-    expect(pickOutcome({ single: false, multi: false, custom: false, last: true })).toEqual({ kind: "stay" })
-  })
-
-  it("stays on the current tab for a multi-select pick", () => {
-    expect(pickOutcome({ single: true, multi: true, custom: false })).toEqual({ kind: "stay" })
-  })
-
-  it("defers submission for a single-select custom-input pick (handleCustomSubmit owns the submit)", () => {
-    expect(pickOutcome({ single: true, multi: false, custom: true })).toEqual({ kind: "stay" })
-  })
-
-  it("stays on the current tab for a multi-select custom-input pick", () => {
-    expect(pickOutcome({ single: false, multi: true, custom: true })).toEqual({ kind: "stay" })
   })
 })
 

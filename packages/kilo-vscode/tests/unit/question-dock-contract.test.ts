@@ -34,9 +34,9 @@ describe("QuestionDock explicit submit contract", () => {
     expect(pick).not.toContain("reply([[answer]])")
   })
 
-  it("still advances multi-question single-select flows", () => {
-    expect(pick).toContain('if (outcome.kind === "advance")')
-    expect(pick).toContain('setStore("tab", store.tab + 1)')
+  it("keeps the selected answer visible until Next is chosen", () => {
+    expect(pick).not.toContain('setStore("tab", store.tab + 1)')
+    expect(source).toContain('data-slot="question-next"')
   })
 
   it("still syncs the optimistic agent selection on pick", () => {
@@ -55,7 +55,8 @@ describe("QuestionDock explicit submit contract", () => {
     expect(reset, "reject should restore the agent before sending the dismissal").toBeLessThan(sending)
   })
 
-  it("hides footer actions while the custom answer form is open", () => {
-    expect(source).toContain('<Show when={!store.editing}>\n              <div data-slot="question-footer-actions">')
+  it("keeps custom response and navigation together in the footer", () => {
+    expect(source).toContain('data-slot="custom-input-form"')
+    expect(source).toContain('data-slot="question-footer-actions"')
   })
 })

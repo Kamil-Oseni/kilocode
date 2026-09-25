@@ -7,14 +7,19 @@
 import { For, Show, createMemo, createEffect, onCleanup } from "solid-js"
 import type { Component } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
+import { useVSCode } from "../../context/vscode"
+import { useServer } from "../../context/server"
+import { useConfig } from "../../context/config"
+import { useProvider } from "../../context/provider"
+import { useSpeechToText } from "../speech-to-text/useSpeechToText"
+import { canUseSpeechToText, selectedSpeechToTextModel } from "../speech-to-text/availability"
+import { useSpeechToTextModels } from "../../context/speech-to-text-models"
 import type { QuestionRequest } from "../../types/messages"
 import {
   clearActiveQuestionTab,
-  pickOutcome,
   questionOptionValue, // raya_change - Milestone C stable option ids
   resolveOptimisticQuestionAgent,
   resolveSelectedQuestionMode,
@@ -27,6 +32,12 @@ import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => {
   const session = useSession()
   const language = useLanguage()
+  const vscode = useVSCode()
+  const server = useServer()
+  const { config } = useConfig()
+  const provider = useProvider()
+  const models = useSpeechToTextModels()
+  const speech = useSpeechToText(vscode, server, language, session.currentSessionID)
   const id = props.request.id
 
   const questions = createMemo(() => props.request.questions)
@@ -66,22 +77,25 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   const confirm = createMemo(() => !single() && store.tab === questions().length)
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
+  const dictate = () => {
+    if (speech.active()) {
+      speech.stop()
+      return
+    }
+    selectCustom()
+    speech.start({
+      model: selectedSpeechToTextModel(config(), models.models()),
+      insert: (text) => {
+        updateCustom([store.custom[store.tab], text].filter(Boolean).join(" "))
+      },
+    })
+  }
   const multi = createMemo(() => question()?.multiple === true)
-  const customPicked = createMemo(() => {
-    if (!multi() && store.editing) return true
-    const value = input()
-    if (!value) return false
-    if (store.kinds[store.tab]?.[value] !== "custom") return false
-    return store.answers[store.tab]?.includes(value) ?? false
-  })
 
   const total = createMemo(() => questions().length)
   const last = createMemo(() => store.tab >= total() - 1)
 
-  const summary = createMemo(() => {
-    const n = Math.min(store.tab + 1, total())
-    return language.t("question.summary", { n, total: total() })
-  })
+  const summary = createMemo(() => `${Math.min(store.tab + 1, total())} of ${total()}`)
 
   // Localized view of the current question. The wire-format `label` is preserved for reply
   // matching; only the display text goes through `tr()`.
@@ -169,11 +183,6 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
       reply(answers)
       return
     }
-
-    const outcome = pickOutcome({ single: single(), multi: multi(), custom, last: last() })
-    if (outcome.kind === "advance") {
-      setStore("tab", store.tab + 1)
-    }
   }
 
   const toggle = (answer: string) => {
@@ -213,13 +222,23 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     setStore("editing", true)
   }
 
+  const updateCustom = (value: string) => {
+    const inputs = [...store.custom]
+    inputs[store.tab] = value
+    setStore("custom", inputs)
+    if (multi()) return
+    const answer = value.trim()
+    const answers = [...store.answers]
+    answers[store.tab] = answer ? [answer] : []
+    setStore("answers", answers)
+    const kinds = [...store.kinds]
+    kinds[store.tab] = answer ? { [answer]: "custom" } : {}
+    setStore("kinds", kinds)
+    syncAgent(answers, kinds)
+  }
+
   const selectOption = (optIndex: number) => {
     if (store.sending) return
-
-    if (optIndex === options().length) {
-      selectCustom()
-      return
-    }
 
     const opt = options()[optIndex]
     if (!opt) return
@@ -284,16 +303,6 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     close()
   }
 
-  const toggleCollapse = () => {
-    const collapsing = !store.collapsed
-    setStore("collapsed", collapsing)
-    // When collapsing inline, the content shrinks and can leave an empty gap
-    // below the viewport. Scroll the dock into view so the gap is eliminated.
-    if (collapsing) {
-      requestAnimationFrame(() => root?.scrollIntoView({ block: "nearest", behavior: "smooth" }))
-    }
-  }
-
   const onRoot = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       e.preventDefault()
@@ -326,7 +335,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   // user has scrolled up to read earlier context).
   createEffect(() => {
     void store.tab
-    if (store.collapsed || store.editing || confirm()) return
+    if (store.tab === 0 || store.collapsed || store.editing || confirm()) return
     requestAnimationFrame(() => {
       if (!document.hasFocus()) return
       const btn = root?.querySelector<HTMLButtonElement>("button[data-slot='question-option']:not(:disabled)")
@@ -343,48 +352,33 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
       onClick={(e: MouseEvent) => e.stopPropagation()}
       onKeyDown={onRoot}
     >
-      {/* Single unified header row — always visible */}
-      <div data-slot="question-dock-header" onClick={toggleCollapse}>
+      <div data-slot="question-dock-header">
         <div data-slot="question-dock-header-content">
-          <div data-slot="question-header-title">{summary()}</div>
-          <Show when={store.collapsed}>
-            <div data-slot="question-collapsed-preview" dir="auto">
-              {questionText()}
-            </div>
-          </Show>
+          <Icon name="help" size="small" />
+          <div data-slot="question-header-title">Question</div>
         </div>
-        <div data-slot="question-header-actions" onClick={(e: MouseEvent) => e.stopPropagation()}>
-          <Show when={!store.collapsed && !single()}>
-            <div data-slot="question-progress">
-              <button
-                type="button"
-                data-slot="question-progress-nav"
-                disabled={store.sending || store.tab <= 0}
-                onClick={back}
-              >
-                <Icon name="chevron-left" size="small" />
-              </button>
-              <button
-                type="button"
-                data-slot="question-progress-nav"
-                disabled={
-                  store.sending ||
-                  store.tab >= questions().length ||
-                  (!confirm() && (store.answers[store.tab]?.length ?? 0) === 0)
-                }
-                onClick={() => selectTab(store.tab + 1)}
-              >
-                <Icon name="chevron-right" size="small" />
-              </button>
-            </div>
-          </Show>
+        <div data-slot="question-header-actions">
           <button
             type="button"
-            data-slot="question-collapse-toggle"
-            onClick={toggleCollapse}
-            aria-label={store.collapsed ? "Expand" : "Collapse"}
+            data-slot="question-progress-nav"
+            disabled={store.sending || store.tab <= 0}
+            onClick={back}
+            aria-label="Previous question"
           >
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-left" size="small" />
+          </button>
+          <span data-slot="question-progress-count">{summary()}</span>
+          <button
+            type="button"
+            data-slot="question-progress-nav"
+            disabled={store.sending || store.tab >= questions().length || (store.answers[store.tab]?.length ?? 0) === 0}
+            onClick={() => selectTab(store.tab + 1)}
+            aria-label="Next question"
+          >
+            <Icon name="chevron-right" size="small" />
+          </button>
+          <button type="button" data-slot="question-close" onClick={reject} aria-label="Close question">
+            <Icon name="close" size="small" />
           </button>
         </div>
       </div>
@@ -396,7 +390,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
             <div data-slot="question-text" dir="auto">
               {questionText()}
             </div>
-            <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
+            <Show when={multi()}>
               <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
             </Show>
             <div data-slot="question-options" onKeyDown={onKey}>
@@ -411,16 +405,8 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                       disabled={store.sending}
                       onClick={() => selectOption(i())}
                     >
-                      <span data-slot="question-option-check" aria-hidden="true">
-                        <span
-                          data-slot="question-option-box"
-                          data-type={multi() ? "checkbox" : "radio"}
-                          data-picked={picked()}
-                        >
-                          <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
-                            <Icon name="check-small" size="small" />
-                          </Show>
-                        </span>
+                      <span data-slot="question-option-number" aria-hidden="true">
+                        {i() + 1}
                       </span>
                       <span data-slot="question-option-main">
                         <span data-slot="option-label" dir="auto">
@@ -432,68 +418,11 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                           </span>
                         </Show>
                       </span>
+                      <Icon name="arrow-right" size="small" class="question-option-arrow" aria-hidden="true" />
                     </button>
                   )
                 }}
               </For>
-              <Show when={question()?.custom !== false}>
-                <button
-                  data-slot="question-option"
-                  data-custom="true"
-                  data-picked={customPicked()}
-                  disabled={store.sending}
-                  onClick={() => selectOption(options().length)}
-                >
-                  <span data-slot="question-option-check" aria-hidden="true">
-                    <span
-                      data-slot="question-option-box"
-                      data-type={multi() ? "checkbox" : "radio"}
-                      data-picked={customPicked()}
-                    >
-                      <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
-                        <Icon name="check-small" size="small" />
-                      </Show>
-                    </span>
-                  </span>
-                  <span data-slot="question-option-main">
-                    <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
-                    <Show when={!store.editing}>
-                      <span data-slot="option-description" data-placeholder={!input()}>
-                        {input() || language.t("ui.question.custom.placeholder")}
-                      </span>
-                    </Show>
-                  </span>
-                </button>
-                <Show when={store.editing}>
-                  <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                    <input
-                      ref={(el) => {
-                        setTimeout(() => {
-                          if (!document.hasFocus()) return
-                          el.focus()
-                        }, 0)
-                      }}
-                      type="text"
-                      data-slot="custom-input"
-                      placeholder={language.t("ui.question.custom.placeholder")}
-                      value={input()}
-                      disabled={store.sending}
-                      onFocus={selectCustom}
-                      onInput={(e) => {
-                        const inputs = [...store.custom]
-                        inputs[store.tab] = e.currentTarget.value
-                        setStore("custom", inputs)
-                      }}
-                    />
-                    <Button type="submit" variant="primary" size="small" disabled={store.sending}>
-                      {multi() ? language.t("ui.common.add") : language.t("ui.common.submit")}
-                    </Button>
-                    <Button type="button" variant="ghost" size="small" disabled={store.sending} onClick={close}>
-                      {language.t("ui.common.cancel")}
-                    </Button>
-                  </form>
-                </Show>
-              </Show>
             </div>
           </Show>
 
@@ -526,37 +455,67 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
             </div>
           </Show>
 
-          {/* Footer row — inside the same box */}
           <div data-slot="question-dock-footer">
-            <Button variant="ghost" size="small" onClick={reject} disabled={store.sending}>
-              {props.request.rejectLabel ?? language.t("ui.common.dismiss")}
-            </Button>
-            <Show when={!store.editing}>
-              <div data-slot="question-footer-actions">
-                <Show when={store.tab > 0}>
-                  <Button variant="secondary" size="small" onClick={back} disabled={store.sending}>
-                    {language.t("ui.common.back")}
-                  </Button>
-                </Show>
-                <Show
-                  when={confirm()}
-                  fallback={
-                    <Button
-                      variant={last() ? "primary" : "secondary"}
-                      size="small"
-                      onClick={last() ? submit : () => selectTab(store.tab + 1)}
-                      disabled={store.sending || (!confirm() && (store.answers[store.tab]?.length ?? 0) === 0)}
-                    >
-                      {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
-                    </Button>
-                  }
-                >
-                  <Button variant="primary" size="small" onClick={submit} disabled={store.sending}>
-                    {language.t("ui.common.submit")}
-                  </Button>
-                </Show>
-              </div>
+            <Show when={!confirm() && question()?.custom !== false}>
+              <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
+                <Icon name="pencil-line" size="small" aria-hidden="true" />
+                <input
+                  type="text"
+                  data-slot="custom-input"
+                  aria-label="Write your own response"
+                  placeholder="Or write your own response"
+                  value={input()}
+                  disabled={store.sending}
+                  onFocus={selectCustom}
+                  onInput={(e) => updateCustom(e.currentTarget.value)}
+                />
+              </form>
             </Show>
+            <div data-slot="question-footer-actions">
+              <button
+                type="button"
+                data-slot="question-microphone"
+                aria-label={speech.active() ? "Stop dictation" : "Dictate response"}
+                aria-pressed={speech.active()}
+                disabled={!canUseSpeechToText(config(), provider.authStates())}
+                title={
+                  canUseSpeechToText(config(), provider.authStates())
+                    ? undefined
+                    : "Set up dictation to use the microphone"
+                }
+                onClick={dictate}
+              >
+                <svg
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <rect x="7" y="2.5" width="6" height="10" rx="3" />
+                  <path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5m-3 0h6" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-slot="question-skip"
+                disabled={store.sending}
+                onClick={last() ? submit : () => selectTab(store.tab + 1)}
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                data-slot="question-next"
+                disabled={store.sending || (!confirm() && (store.answers[store.tab]?.length ?? 0) === 0)}
+                onClick={last() || confirm() ? submit : () => selectTab(store.tab + 1)}
+              >
+                {last() || confirm() ? "Submit" : "Next"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

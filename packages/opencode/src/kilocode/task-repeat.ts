@@ -33,6 +33,25 @@ function rejected(messages: SessionV1.WithParts[], id: string) {
 }
 
 export namespace TaskRepeat {
+  /** Reuse the receipt for an already-running child of this authored request. */
+  export function running(messages: SessionV1.WithParts[], jobs: BackgroundJob.Info[], input: Record<string, unknown>) {
+    const authored = messages.findLastIndex(
+      (row) => row.info.role === "user" && row.parts.some((part) => part.type === "text" && !part.synthetic),
+    )
+    if (authored < 0) return
+    for (const message of messages.slice(authored + 1)) {
+      if (message.info.role !== "assistant") continue
+      for (const part of message.parts) {
+        if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "completed") continue
+        const meta = part.state.metadata
+        const id = typeof meta?.jobId === "string" ? meta.jobId : undefined
+        if (!id || !jobs.some((job) => job.id === id && job.status === "running")) continue
+        if (input.task_id !== id && part.state.input.description !== input.description) continue
+        return { id, title: part.state.title, metadata: meta }
+      }
+    }
+  }
+
   /** A background completion must not start overlapping work while a sibling from the same request is still running. */
   export function pending(
     messages: SessionV1.WithParts[],

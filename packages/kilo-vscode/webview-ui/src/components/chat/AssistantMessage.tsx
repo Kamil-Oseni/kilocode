@@ -39,7 +39,6 @@ import type { TimelineHighlight } from "../../utils/timeline/highlight"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Button } from "@kilocode/kilo-ui/button"
-import { QuestionDock } from "./QuestionDock"
 import { SuggestBar } from "./SuggestBar"
 import { toolDefaultOpen } from "./tool-default-open"
 import { useVSCode } from "../../context/vscode"
@@ -561,7 +560,11 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                 </Show>
               }
             >
-              {(req) => <QuestionDock request={req()} />}
+              {(req) => (
+                <span class="sr-only" data-question-id={req().id}>
+                  Question available above the composer
+                </span>
+              )}
             </Show>
           </div>
         </Show>

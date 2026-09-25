@@ -1,16 +1,12 @@
-/**
- * HistoryView component
- * Unified panel for local, cloud, and optional worktree session history.
- * Contains a source tab bar and an always-visible "Import session" button.
- */
-
-import { Component, Show, createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
-import { Button } from "@kilocode/kilo-ui/button"
+import { For, Show, createMemo, createSignal, onMount, type Accessor, type Component } from "solid-js"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
-import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
+import { displayTitle } from "../../utils/session-title"
+import { KiloLogo } from "../chat/WelcomeEmptyState"
 import { CloudImportDialog } from "../chat/CloudImportDialog"
+import { HistoryPicker, ordered, shortTime } from "./HistoryPicker"
 import SessionList from "./SessionList"
 import CloudSessionList from "./CloudSessionList"
 
@@ -20,172 +16,99 @@ interface HistoryViewProps {
   worktreeSessionIds?: Accessor<ReadonlySet<string> | undefined>
 }
 
-type Source = "local" | "cloud" | "worktree"
-
-const EMPTY_SESSION_IDS = new Set<string>()
-
 const HistoryView: Component<HistoryViewProps> = (props) => {
-  const language = useLanguage()
-  const dialog = useDialog()
   const session = useSession()
   const tabs = useLocalTabs()
-  const worktreeIds = () => props.worktreeSessionIds?.()
-  const [tab, setTab] = createSignal<Source>(worktreeIds() ? "worktree" : "local")
-  let local: HTMLButtonElement | undefined
-  let cloud: HTMLButtonElement | undefined
-  let worktree: HTMLButtonElement | undefined
-  let localPanel: HTMLDivElement | undefined
-  let cloudPanel: HTMLDivElement | undefined
-  let worktreePanel: HTMLDivElement | undefined
+  const dialog = useDialog()
+  const [open, setOpen] = createSignal(false)
+  const [source, setSource] = createSignal<"local" | "cloud" | "worktree">()
+  const chats = createMemo(() => ordered(session.sessions()).filter((item) => !item.parentID))
+  onMount(session.loadSessions)
 
-  createEffect(() => {
-    if (tab() === "worktree" && !worktreeIds()) setTab("local")
-  })
-
-  createEffect(() => {
-    const panel = tab() === "local" ? localPanel : tab() === "cloud" ? cloudPanel : worktreePanel
-
-    const frame = requestAnimationFrame(() => {
-      panel
-        ?.querySelector<
-          HTMLInputElement | HTMLTextAreaElement
-        >('[data-slot="list-search"] input, [data-slot="list-search"] textarea')
-        ?.focus()
-    })
-
-    onCleanup(() => cancelAnimationFrame(frame))
-  })
-
-  function openImport() {
-    dialog.show(() => (
-      <CloudImportDialog
-        onImport={(id) => {
-          selectCloudSession(id)
-        }}
-      />
-    ))
-  }
-
-  function selectCloudSession(id: string) {
+  const cloud = (id: string) => {
     tabs?.previewCloud(id)
     session.selectCloudSession(id)
     props.onBack?.()
   }
 
-  function move(event: KeyboardEvent, current: Source) {
-    const sources: Source[] = worktreeIds() ? ["local", "cloud", "worktree"] : ["local", "cloud"]
-    const index = sources.indexOf(current)
-    const source =
-      event.key === "Home"
-        ? sources[0]
-        : event.key === "End"
-          ? sources.at(-1)
-          : event.key === "ArrowLeft"
-            ? sources[(index - 1 + sources.length) % sources.length]
-            : event.key === "ArrowRight"
-              ? sources[(index + 1) % sources.length]
-              : undefined
-    const next = source === "local" ? local : source === "cloud" ? cloud : source === "worktree" ? worktree : undefined
-    if (!next) return
-    event.preventDefault()
-    next.focus()
-  }
+  const routines = () => window.postMessage({ type: "navigate", view: "routines" }, "*")
 
   return (
-    <div class="history-view">
-      <div class="history-view-header">
-        <Button variant="ghost" size="small" icon="arrow-left" onClick={() => props.onBack?.()}>
-          {language.t("common.goBack")}
-        </Button>
-        <div class="history-view-tabs" role="tablist" aria-label={language.t("session.history.sources")}>
-          <button
-            ref={local}
-            id="history-tab-local"
-            class="history-tab-btn"
-            classList={{ "history-tab-btn--active": tab() === "local" }}
-            type="button"
-            role="tab"
-            aria-selected={tab() === "local"}
-            aria-controls="history-panel-local"
-            tabIndex={tab() === "local" ? 0 : -1}
-            onClick={() => setTab("local")}
-            onKeyDown={(event) => move(event, "local")}
-          >
-            {language.t("session.tab.local")}
+    <div class="history-view history-page">
+      <div class="history-page__header">
+        <button type="button" aria-label="Back to chat" onClick={() => props.onBack?.()}>
+          <Icon name="arrow-left" size="small" />
+        </button>
+        <span>Chats</span>
+        <button
+          type="button"
+          aria-label="Import a chat"
+          onClick={() => dialog.show(() => <CloudImportDialog onImport={cloud} />)}
+        >
+          <Icon name="download" size="small" />
+        </button>
+      </div>
+      <div class="history-page__body">
+        <For each={chats().slice(0, 3)}>
+          {(item) => (
+            <button class="raya-home__row" onClick={() => props.onSelectSession(item.id)}>
+              <span dir="auto">{displayTitle(item.title, "Untitled chat")}</span>
+              <span>{shortTime(item.updatedAt)}</span>
+            </button>
+          )}
+        </For>
+        <button class="raya-home__all" onClick={() => setOpen(true)}>
+          View all ({chats().length})
+        </button>
+        <div class="history-page__category">
+          <button onClick={routines}>
+            Routines <Icon name="chevron-right" size="small" />
           </button>
-          <button
-            ref={cloud}
-            id="history-tab-cloud"
-            class="history-tab-btn"
-            classList={{ "history-tab-btn--active": tab() === "cloud" }}
-            type="button"
-            role="tab"
-            aria-selected={tab() === "cloud"}
-            aria-controls="history-panel-cloud"
-            tabIndex={tab() === "cloud" ? 0 : -1}
-            onClick={() => setTab("cloud")}
-            onKeyDown={(event) => move(event, "cloud")}
-          >
-            {language.t("session.tab.cloud")}
+          <button onClick={() => setSource(source() === "local" ? undefined : "local")}>
+            Manage chats <Icon name="chevron-right" size="small" />
           </button>
-          <Show when={worktreeIds()}>
-            <button
-              ref={worktree}
-              id="history-tab-worktree"
-              class="history-tab-btn"
-              classList={{ "history-tab-btn--active": tab() === "worktree" }}
-              type="button"
-              role="tab"
-              aria-selected={tab() === "worktree"}
-              aria-controls="history-panel-worktree"
-              tabIndex={tab() === "worktree" ? 0 : -1}
-              onClick={() => setTab("worktree")}
-              onKeyDown={(event) => move(event, "worktree")}
-            >
-              {language.t("session.tab.worktree")}
+          <button onClick={() => setSource(source() === "cloud" ? undefined : "cloud")}>
+            Cloud chats <Icon name="chevron-right" size="small" />
+          </button>
+          <Show when={props.worktreeSessionIds?.()}>
+            <button onClick={() => setSource(source() === "worktree" ? undefined : "worktree")}>
+              Worktree chats <Icon name="chevron-right" size="small" />
             </button>
           </Show>
         </div>
-        <Button variant="secondary" size="small" onClick={openImport} class="history-import-btn">
-          {language.t("session.cloud.import")}
-        </Button>
+        <Show when={source() === "local"}>
+          <SessionList onSelectSession={props.onSelectSession} />
+        </Show>
+        <Show when={source() === "cloud"}>
+          <CloudSessionList onSelectSession={cloud} />
+        </Show>
+        <Show when={source() === "worktree"}>
+          <SessionList
+            onSelectSession={props.onSelectSession}
+            sessionIds={() => props.worktreeSessionIds?.() ?? new Set()}
+          />
+        </Show>
+        <Show when={!source()}>
+          <div class="history-page__mark">
+            <KiloLogo />
+          </div>
+        </Show>
       </div>
-
-      <div
-        class="history-view-content"
-        ref={localPanel}
-        id="history-panel-local"
-        role="tabpanel"
-        aria-labelledby="history-tab-local"
-        hidden={tab() !== "local"}
-      >
-        {tab() === "local" && <SessionList onSelectSession={props.onSelectSession} />}
-      </div>
-      <div
-        class="history-view-content"
-        ref={cloudPanel}
-        id="history-panel-cloud"
-        role="tabpanel"
-        aria-labelledby="history-tab-cloud"
-        hidden={tab() !== "cloud"}
-      >
-        {tab() === "cloud" && <CloudSessionList onSelectSession={selectCloudSession} />}
-      </div>
-      <Show when={worktreeIds()}>
-        <div
-          class="history-view-content"
-          ref={worktreePanel}
-          id="history-panel-worktree"
-          role="tabpanel"
-          aria-labelledby="history-tab-worktree"
-          hidden={tab() !== "worktree"}
-        >
-          {tab() === "worktree" && (
-            <SessionList
-              onSelectSession={props.onSelectSession}
-              sessionIds={() => worktreeIds() ?? EMPTY_SESSION_IDS}
+      <Show when={open()}>
+        <div class="history-picker__scrim" onClick={() => setOpen(false)}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <HistoryPicker
+              onSelect={(id) => {
+                setOpen(false)
+                props.onSelectSession(id)
+              }}
+              onClose={() => setOpen(false)}
+              onRoutines={() => {
+                setOpen(false)
+                routines()
+              }}
             />
-          )}
+          </div>
         </div>
       </Show>
     </div>

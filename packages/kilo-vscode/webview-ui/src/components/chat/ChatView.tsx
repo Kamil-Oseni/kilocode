@@ -5,7 +5,17 @@
  * Main chat container that combines all chat components
  */
 
-import { type Component, type JSX, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import {
+  type Component,
+  type JSX,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
@@ -16,6 +26,7 @@ import { TaskHeader } from "./TaskHeader"
 import { MessageList } from "./MessageList"
 import { PromptInput } from "./PromptInput"
 import { PermissionDock } from "./PermissionDock"
+import { QuestionDock } from "./QuestionDock"
 import { SessionDock } from "./SessionDock"
 import { StartupErrorBanner } from "./StartupErrorBanner"
 import { SessionTabStrip } from "./SessionTabStrip"
@@ -96,10 +107,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const familyPermissions = createMemo(() => session.scopedPermissions(id()))
   const familyQuestions = createMemo(() => session.scopedQuestions(id()))
   const familySuggestions = createMemo(() => session.scopedSuggestions(id()))
-  // Non-tool questions (standalone, not from the question tool) render inline in
-  // the message list since they don't have an associated tool part in the conversation.
-  // Tool-linked questions render inline at their tool part position via AssistantMessage.
-  const standaloneQuestions = createMemo(() => familyQuestions().filter((q) => !q.tool))
   const standaloneSuggestions = createMemo(() => familySuggestions().filter((s) => !s.tool))
   const permissionRequest = () => familyPermissions().find((p) => p.sessionID === id()) ?? familyPermissions()[0]
   // Questions and suggestions do not block input; permissions do.
@@ -565,7 +572,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               onSelectSession={props.onSelectSession}
               onShowHistory={props.onShowHistory}
               onForkMessage={props.onForkMessage}
-              questions={standaloneQuestions}
+              questions={familyQuestions}
               suggestions={standaloneSuggestions}
               readonly={props.readonly}
               emptyState={props.emptyState}
@@ -589,6 +596,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 />
               )}
             </Show>
+            <For each={familyQuestions()}>{(req) => <QuestionDock request={req} />}</For>
             <SessionDock
               blocked={dockBlocked()}
               hasActions={() => !props.readonly && hasActions(hasMessages())}

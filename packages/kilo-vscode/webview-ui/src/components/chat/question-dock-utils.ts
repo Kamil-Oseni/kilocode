@@ -47,23 +47,6 @@ export function tr(translate: (key: string) => string, key: string | undefined, 
   return result
 }
 
-export type PickOutcome = { kind: "submit" } | { kind: "advance" } | { kind: "stay" }
-
-/**
- * Decide what should happen after a user picks an option in the question dock.
- *
- * - Multi-select prompts: the pick only toggles local state; no tab change, no submit.
- * - Single-question single-select prompts: keep the pick local and wait for explicit Submit.
- * - Last question of a wizard: stay so Submit is always on the final question.
- * - Multi-question single-select, earlier option pick: advance to the next tab.
- * - Custom-input path for a single-select is handled separately in handleCustomSubmit.
- */
-export function pickOutcome(input: { single: boolean; multi: boolean; custom: boolean; last?: boolean }): PickOutcome {
-  if (input.multi) return { kind: "stay" }
-  if (input.single || input.last) return { kind: "stay" }
-  return { kind: "advance" }
-}
-
 export function toggleAnswer(existing: string[], answer: string): string[] {
   const next = [...existing]
   const index = next.indexOf(answer)

@@ -47,6 +47,7 @@ describe("transcriptRows", () => {
       "u2:assistant",
     ])
     expect(rows.filter((row) => row.type === "assistant").map((row) => row.parts.length)).toEqual([8, 2, 1, 1])
+    expect(rows.filter((row) => row.type === "assistant").map((row) => row.first)).toEqual([true, false, false, true])
   })
 
   it("uses the configured bound and keeps an empty assistant renderable", () => {

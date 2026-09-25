@@ -23,6 +23,7 @@ export interface TranscriptAssistantRow extends TranscriptMeta {
   message: Message
   parts: Part[]
   copy?: string
+  first: boolean
 }
 
 export interface TranscriptDiffRow extends TranscriptMeta {
@@ -92,7 +93,7 @@ function equal(a: TranscriptRow, b: TranscriptRow) {
     )
   }
   if (a.type === "assistant" && b.type === "assistant") {
-    return a.message === b.message && same(a.parts, b.parts) && a.copy === b.copy
+    return a.message === b.message && same(a.parts, b.parts) && a.copy === b.copy && a.first === b.first
   }
   if (a.type === "diff" && b.type === "diff") {
     return a.message === b.message && same(a.diffs, b.diffs)
@@ -162,6 +163,7 @@ export function transcriptRows(
           message: msg,
           parts: visible,
           copy: copied,
+          first: msg === turn.assistant[0],
         })
         continue
       }
@@ -174,6 +176,7 @@ export function transcriptRows(
           message: msg,
           parts: chunk,
           copy: copied,
+          first: msg === turn.assistant[0] && start === 0,
         })
       }
     }

@@ -1,7 +1,6 @@
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Show, type Component } from "solid-js"
 import { ChatView } from "./ChatView"
-import { ChildSteerComposer } from "./ChildSteerComposer"
 
 export type SubagentTarget = {
   sessionID: string
@@ -21,13 +20,12 @@ export const SubagentViewer: Component<Props> = (props) => (
     <Show when={props.target?.parentSessionID}>
       <nav data-slot="subagent-breadcrumb" aria-label="Conversation path">
         <button type="button" onClick={props.onParentClick}>
-          {props.target?.parentTitle?.trim() || "Parent conversation"}
+          <Icon name="arrow-left" size="small" aria-hidden="true" />
+          <span>{props.target?.parentTitle?.trim() || "Back to main chat"}</span>
         </button>
-        <Icon name="chevron-right" size="small" />
-        <span>{props.target?.title?.trim() || props.sessionTitle || "Sub-agent"}</span>
+        <span>{props.target?.title?.trim() || props.sessionTitle || "Subagent"}</span>
       </nav>
     </Show>
     <ChatView readonly />
-    <ChildSteerComposer parentSessionID={props.target?.parentSessionID} childSessionID={props.target?.sessionID} />
   </div>
 )

@@ -226,12 +226,25 @@
 
 [data-slot="subagent-breadcrumb"] button {
   all: unset;
-  max-width: 42%;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+  max-width: 55%;
   overflow: hidden;
   color: var(--text-base, var(--vscode-foreground));
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+[data-slot="subagent-breadcrumb"] button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="subagent-breadcrumb"] > span {
+  font-weight: 600;
+  color: var(--text-base, var(--vscode-foreground));
 }
 
 [data-slot="subagent-breadcrumb"] button:hover {

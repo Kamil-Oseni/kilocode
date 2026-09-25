@@ -243,25 +243,19 @@
 
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 4px;
   font-size: var(--kilo-font-size-12);
   color: var(--vscode-descriptionForeground);
 }
 
-/* On a wide surface (Agent Manager) the dock spans the whole composer. The lane
-   caps how far a long status label may stretch before it ellipsizes, so the
-   indicator stays a centered cluster on the same axis as the actions row instead
-   of reaching for both edges. */
+/* The status starts at the same edge as the transcript, even on wide surfaces. */
 .session-dock-state > .working-indicator {
   width: 100%;
-  max-width: var(--session-dock-lane);
-  margin-inline: auto;
 }
 
-/* The hidden state stays laid out to reserve the row height, so the spinner and
-   the label shimmer would otherwise animate for the whole idle session. */
+/* The hidden state stays laid out to reserve the row height. */
 .session-dock-state:not([data-active]) .working-indicator * {
   animation-play-state: paused;
 }
@@ -420,7 +414,7 @@
   justify-content: center;
   padding: 8px 0 2px;
   color: var(--vscode-descriptionForeground);
-  font-family: var(--font-family-sans);
+  font-family: var(--font-body);
   font-size: var(--kilo-font-size-11);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
@@ -442,6 +436,23 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
+}
+
+.vscode-session-turn-duration {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+  width: 100%;
+  padding: var(--raya-space-8) 0 var(--raya-space-6);
+  border-bottom: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.vscode-session-turn-duration [data-component="icon"] {
+  opacity: 0.6;
 }
 
 [data-component="message-time"] {

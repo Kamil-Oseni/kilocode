@@ -1,4 +1,4 @@
-import { type Component, Show, createEffect } from "solid-js"
+import { type Component, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { DiffChanges } from "@kilocode/kilo-ui/diff-changes"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useI18n } from "@kilocode/kilo-ui/context/i18n"
@@ -20,6 +20,7 @@ interface TranscriptRowViewProps {
   row: TranscriptRow
   index?: number
   timeline?: Date
+  timing?: { start: number; end?: number; working: boolean }
   onForkMessage?: (sessionId: string, messageId: string) => void
   /** Part behind the currently hovered/focused task-timeline bar, if any. */
   highlight?: () => TimelineHighlight | undefined
@@ -38,6 +39,23 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
   const vscode = useVSCode()
   const feedback = useFeedback()
   const i18n = useI18n()
+  const [now, setNow] = createSignal(Date.now())
+
+  createEffect(() => {
+    if (!props.timing?.working || props.row.type !== "assistant" || !props.row.first) return
+    const id = setInterval(() => setNow(Date.now()), 1_000)
+    onCleanup(() => clearInterval(id))
+  })
+  const duration = () => {
+    const value = props.timing
+    if (!value) return undefined
+    const end = value.working ? now() : value.end
+    if (!end || end < value.start) return undefined
+    const total = Math.floor((end - value.start) / 1_000)
+    const mins = Math.floor(total / 60)
+    const secs = total % 60
+    return mins ? `${mins}m ${secs}s` : `${secs}s`
+  }
 
   createEffect(() => session.hydrateParts([props.row.message.id]))
 
@@ -94,6 +112,14 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
       <Show when={props.row.type === "assistant" ? props.row : undefined}>
         {(row) => (
           <div class="vscode-session-turn-assistant">
+            <Show when={row().first && duration()}>
+              <div class="vscode-session-turn-duration" role={props.timing?.working ? "status" : undefined}>
+                <span>
+                  {props.timing?.working ? "Working for" : "Worked for"} {duration()}
+                </span>
+                <Icon name="chevron-right" size="small" aria-hidden="true" />
+              </div>
+            </Show>
             <AssistantMessage
               message={row().message as unknown as SDKAssistantMessage}
               parts={row().parts as unknown as SDKPart[]}

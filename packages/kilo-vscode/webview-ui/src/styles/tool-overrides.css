@@ -462,11 +462,12 @@ html[data-theme="kilo-vscode"]
 .tool-group__summary {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--raya-space-6);
   width: 100%;
-  padding: 4px 8px;
+  min-height: 30px;
+  padding: var(--raya-space-4) 0;
   border: none;
-  border-radius: var(--raya-radius-pill, 999px);
+  border-radius: var(--raya-space-4);
   background: transparent;
   color: var(--text-muted, var(--vscode-descriptionForeground));
   font: inherit;
@@ -479,17 +480,21 @@ html[data-theme="kilo-vscode"]
 }
 
 .tool-group__summary:hover {
-  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 6%, transparent);
+  background: transparent;
   color: var(--text-base, var(--vscode-foreground));
 }
 
 .tool-group__summary [data-component="icon"] {
   flex: none;
   opacity: 0.7;
+}
+
+.tool-group__summary .tool-group__chevron {
+  margin-left: auto;
   transition: transform 140ms ease;
 }
 
-.tool-group[data-open] .tool-group__summary [data-component="icon"] {
+.tool-group[data-open] .tool-group__summary .tool-group__chevron {
   transform: rotate(90deg);
 }
 
@@ -505,6 +510,87 @@ html[data-theme="kilo-vscode"]
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.task-agent-name,
+.chief-activity__link {
+  all: unset;
+  color: var(--text-base, var(--vscode-foreground));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.task-agent-name:hover,
+.chief-activity__link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.task-agent-name:focus-visible,
+.chief-activity__link:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.task-agent-activity {
+  width: 100%;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+}
+
+.task-agent-activity__line {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-6);
+  min-height: 30px;
+}
+
+.task-agent-activity__line > [data-component="icon"] {
+  flex: none;
+}
+
+.task-agent-activity__status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-agent-activity__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: none;
+  border-radius: var(--raya-space-4);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.task-agent-activity__expand:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 6%, transparent);
+}
+
+.task-agent-activity__expand:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.task-agent-activity__expand [data-component="icon"] {
+  transition: transform 140ms ease;
+}
+
+.task-agent-activity__expand[aria-expanded="true"] [data-component="icon"] {
+  transform: rotate(90deg);
+}
+
+.task-agent-activity > [data-component="tool-output"] {
+  margin: var(--raya-space-4) 0 var(--raya-space-8) var(--raya-space-8);
+  padding-left: var(--raya-space-12);
+  border-left: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
 }
 
 .tool-group__body {

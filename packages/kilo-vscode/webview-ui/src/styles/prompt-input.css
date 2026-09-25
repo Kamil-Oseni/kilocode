@@ -1084,3 +1084,145 @@
 .composer-configuration > [data-slot="collapsible-trigger"] {
   text-align: left;
 }
+
+/* The input stays one quiet surface. Configuration opens above it only when asked. */
+.prompt-input {
+  min-height: 52px;
+  padding-bottom: var(--raya-space-8);
+}
+
+.prompt-input-highlight-overlay {
+  padding-bottom: var(--raya-space-8);
+}
+
+.prompt-input-hint,
+.prompt-input-hint:has(.composer-configuration) {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--raya-space-8);
+  padding: 0 var(--raya-space-8) var(--raya-space-8);
+  border-top: none;
+}
+
+.prompt-input-hint-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.prompt-input-hint-selectors,
+.prompt-input-hint-selectors:has(.composer-configuration) {
+  flex: none;
+  flex-basis: auto;
+  width: auto;
+  min-width: 0;
+}
+
+.prompt-input-hint .prompt-attach-button {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+.prompt-context-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-11);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.composer-configuration-shell {
+  position: relative;
+  width: auto;
+  max-width: min(38vw, 240px);
+}
+
+.composer-configuration {
+  width: auto;
+}
+
+.composer-configuration > [data-slot="collapsible-trigger"] {
+  display: inline-flex;
+  justify-content: flex-start;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 0 var(--raya-space-6);
+  border-radius: var(--raya-space-4);
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: var(--kilo-font-size-12);
+  white-space: nowrap;
+}
+
+.composer-configuration > [data-slot="collapsible-trigger"]:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 6%, transparent);
+}
+
+.composer-configuration-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-configuration-value > span:first-child {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-configuration-body {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: calc(100% + var(--raya-space-8));
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(320px, 55vh);
+  overflow: auto;
+  padding: var(--raya-space-12);
+  border: var(--raya-hairline) solid var(--border-base, var(--vscode-panel-border));
+  border-radius: var(--raya-radius-lg);
+  background: var(--surface-raised-base, var(--vscode-input-background));
+  box-shadow: 0 10px 28px rgb(0 0 0 / 18%);
+}
+
+.composer-configuration-controls {
+  gap: var(--raya-space-8);
+}
+
+.prompt-input-hint-actions {
+  align-items: center;
+  margin-left: 0;
+  gap: var(--raya-space-6);
+}
+
+.prompt-input-hint-actions .prompt-send-button,
+.prompt-input-hint-actions .prompt-voice-orb {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50% !important;
+}
+
+@media (max-width: 440px) {
+  .prompt-context-progress > span {
+    display: none;
+  }
+
+  .composer-configuration-shell {
+    max-width: 116px;
+  }
+}
+
+@media (max-width: 320px) {
+  .composer-configuration-shell {
+    max-width: 72px;
+  }
+
+  .prompt-input-hint,
+  .prompt-input-hint:has(.composer-configuration) {
+    gap: var(--raya-space-4);
+  }
+}

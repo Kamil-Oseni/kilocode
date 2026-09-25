@@ -1,17 +1,14 @@
 /**
  * TaskToolExpanded component
- * Registers a custom "task" tool renderer with a compact scrollable list of
- * child tool calls. Running tasks open immediately; completed tasks load their
- * child details only when expanded.
+ * Registers a custom "task" renderer. The parent transcript shows one compact
+ * named activity line; details and child tool calls open on request.
  *
  * Call registerExpandedTaskTool() once at app startup to activate.
  */
 
 import { Component, createEffect, createMemo, createSignal, Index, Show, on, onCleanup } from "solid-js"
 import { ToolRegistry, ToolProps, getToolInfo } from "@kilocode/kilo-ui/message-part"
-import { BasicTool, initialOpen } from "@kilocode/kilo-ui/basic-tool"
 import { Icon } from "@kilocode/kilo-ui/icon"
-import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Markdown } from "@kilocode/kilo-ui/markdown"
 import { useLanguage } from "../../context/language"
 import { useI18n } from "@kilocode/kilo-ui/context/i18n"
@@ -61,19 +58,10 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     })
 
   const running = createMemo(() => taskRunning(props.status))
-  // BasicTool's forceOpen effect only fires onOpenChange on a false->true
-  // transition — a virtualized remount that starts with forceOpen already
-  // true never transitions, so this local signal must also seed itself from
-  // forceOpen directly, or the child list/result below stays hidden even
-  // though the accordion itself renders open.
-  const [open, setOpen] = createSignal(
-    initialOpen({
-      tool: props.tool,
-      partID: props.partID,
-      defaultOpen: running(),
-      forceOpen: props.forceOpen,
-    }),
-  )
+  const [open, setOpen] = createSignal(!!props.forceOpen)
+  createEffect(() => {
+    if (props.forceOpen) setOpen(true)
+  })
 
   let synced: string | undefined
   createEffect(() => {
@@ -155,7 +143,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     }),
   )
 
-  const openInTab = (e: MouseEvent) => {
+  const openInTab = (e: MouseEvent | KeyboardEvent) => {
     e.stopPropagation()
     const id = childSessionId()
     if (!id) return
@@ -169,59 +157,37 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     })
   }
 
-  const trigger = () => (
-    <div data-slot="basic-tool-tool-info-structured">
-      <Icon name={agentIcon(selectedAgent())} size="small" data-slot="task-agent-role-icon" />
-      <div data-slot="basic-tool-tool-info-main">
-        <span data-slot="basic-tool-tool-title" class="capitalize">
-          {title()}
-        </span>
-        <Show when={status() || brief() || access() || (running() && childToolCount() > 0)}>
-          <span data-slot="basic-tool-tool-subtitle">
+  return (
+    <div class="task-agent-activity" data-status={props.status}>
+      <div class="task-agent-activity__line">
+        <Icon name={agentIcon(selectedAgent())} size="small" aria-hidden="true" />
+        <Show when={childSessionId()} fallback={<span class="task-agent-name">{title()}</span>}>
+          <button
+            type="button"
+            class="task-agent-name"
+            onClick={openInTab}
+            aria-label={`Open ${title()}'s read-only chat`}
+          >
+            {title()}
+          </button>
+        </Show>
+        <Show when={status() || brief() || access()}>
+          <span class="task-agent-activity__status">
             {status() ?? brief()}
-            <Show when={status() && brief()}> · {brief()}</Show>
-            <Show when={access()}>
-              {(value) => (
-                <>
-                  {status() || brief() ? " · " : ""}
-                  {taskAccessLabel(value())}
-                </>
-              )}
-            </Show>
-            <Show when={running() && childToolCount() > 0}>
-              {status() || brief() || access() ? " · " : ""}
-              {language.t(childToolCount() === 1 ? "task.subagent.steps.one" : "task.subagent.steps.many", {
-                count: String(childToolCount()),
-              })}
-            </Show>
+            <Show when={access()}>{(value) => <> · {taskAccessLabel(value())}</>}</Show>
           </span>
         </Show>
+        <button
+          type="button"
+          class="task-agent-activity__expand"
+          aria-label={open() ? `Hide ${title()} activity` : `Show ${title()} activity`}
+          aria-expanded={open()}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <Icon name="chevron-right" size="small" aria-hidden="true" />
+        </button>
       </div>
-      <Show when={childSessionId()}>
-        <IconButton
-          icon="square-arrow-top-right"
-          size="small"
-          variant="ghost"
-          aria-label={worktree ? "Open sub-agent in panel" : "Open sub-agent in tab"}
-          onClick={openInTab}
-        />
-      </Show>
-    </div>
-  )
-
-  return (
-    <div data-component="tool-part-wrapper">
-      <BasicTool
-        icon="task"
-        status={props.status}
-        tool={props.tool}
-        partID={props.partID}
-        trigger={trigger()}
-        defaultOpen={running()}
-        forceOpen={props.forceOpen}
-        defer
-        onOpenChange={setOpen}
-      >
+      <Show when={open()}>
         <div ref={viewport} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
           <TaskToolBody
             contentRef={content}
@@ -264,7 +230,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
             modelLabel={language.t("task.subagent.modelDetails")}
           />
         </div>
-      </BasicTool>
+      </Show>
     </div>
   )
 }

@@ -64,7 +64,30 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                     <summary class="chief-activity__summary">
                       <Icon name={agentIcon(branch().specialist)} size="small" aria-hidden="true" />
                       <span class="chief-activity__identity">
-                        <span class="chief-activity__name">{branch().name}</span>
+                        <Show
+                          when={branch().child}
+                          fallback={<span class="chief-activity__name">{branch().name}</span>}
+                        >
+                          {(child) => (
+                            <button
+                              type="button"
+                              class="chief-activity__name chief-activity__link"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openSubagent({
+                                  sessionID: child(),
+                                  title: branch().name,
+                                  parentSessionID: session.currentSessionID(),
+                                  agent: branch().specialist,
+                                  worktree: !!worktree,
+                                  post: vscode.postMessage,
+                                })
+                              }}
+                            >
+                              {branch().name}
+                            </button>
+                          )}
+                        </Show>
                         <Show when={branch().objective}>
                           <span class="chief-activity__brief">{branch().objective}</span>
                         </Show>

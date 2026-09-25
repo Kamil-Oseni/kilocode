@@ -50,7 +50,9 @@ import { chiefActivity, chiefReceipt, type ChiefPart } from "./chief-activity"
 
 type PlanStep = { id: string; description: string; status?: string }
 
-function planExitInfo(part: SDKPart): { plan: string; steps: PlanStep[]; title?: string; summary?: string } | undefined {
+function planExitInfo(
+  part: SDKPart,
+): { plan: string; steps: PlanStep[]; title?: string; summary?: string } | undefined {
   if (part.type !== "tool") return undefined
   const tp = part as unknown as ToolPart
   if (tp.tool !== "plan_exit") return undefined
@@ -58,7 +60,10 @@ function planExitInfo(part: SDKPart): { plan: string; steps: PlanStep[]; title?:
   const meta = (tp.state as { metadata?: Record<string, unknown> }).metadata ?? {}
   const plan = typeof meta.plan === "string" ? meta.plan : undefined
   if (!plan) return undefined
-  const structured = meta.structured && typeof meta.structured === "object" ? (meta.structured as { title?: string; summary?: string; steps?: PlanStep[] }) : undefined
+  const structured =
+    meta.structured && typeof meta.structured === "object"
+      ? (meta.structured as { title?: string; summary?: string; steps?: PlanStep[] })
+      : undefined
   return { plan, steps: structured?.steps ?? [], title: structured?.title, summary: structured?.summary }
 }
 
@@ -122,7 +127,8 @@ function PlanExitCard(props: { part: ToolPart }) {
     const todos = session.todos()
     return i.steps.map((step) => {
       const todo = todos.find((item) => item.content.includes(step.description))
-      const status = todo?.status === "completed" ? "done" : todo?.status === "in_progress" ? "in_progress" : step.status
+      const status =
+        todo?.status === "completed" ? "done" : todo?.status === "in_progress" ? "in_progress" : step.status
       return { ...step, status }
     })
   })
@@ -340,14 +346,16 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   // raya_change start - progressive disclosure. Consecutive "meta/read" tool
   // calls (get_goal, update_goal, read/grep/glob/list, etc.)
   // stacked as one-liners bloat the transcript, so a run of 2+ collapses into a
-  // single inline "N steps" group. Prominent parts stay inline and un-bundled:
+  // semantic activity line. Prominent parts stay inline and un-bundled:
   // assistant text/reasoning, file edits (their inline review chrome must show),
-  // terminal (bash), child agents, plan hand-offs, and any active question/suggestion.
+  // child agents, plan hand-offs, and any active question/suggestion. Successful
+  // terminal commands can join nearby reads; command errors stay visible.
   // PROMINENT_TOOLS lives in transcript-parts so VscodeSessionTurn shares it.
   const bundles = (part: SDKPart) => {
     if (part.type !== "tool") return false
     const tp = part as unknown as ToolPart
-    if (PROMINENT_TOOLS.has(tp.tool)) return false
+    if (PROMINENT_TOOLS.has(tp.tool) && tp.tool !== "bash") return false
+    if (tp.tool === "bash" && tp.state.status === "error") return false
     if (UPSTREAM_SUPPRESSED_TOOLS.has(tp.tool)) return false // todo cards stay inline
     if (matchToolRequest(part, undefined, session.questions())) return false
     if (matchToolRequest(part, "suggest", session.suggestions())) return false
@@ -380,147 +388,160 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
     return out
   })
 
-  const toolName = (part: SDKPart) => (part.type === "tool" ? (part as unknown as ToolPart).tool : part.type)
+  const toolName = (part: SDKPart) => {
+    if (part.type !== "tool") return "Worked"
+    const tool = (part as unknown as ToolPart).tool
+    if (["read", "glob", "grep", "list"].includes(tool)) return "Read files"
+    if (tool === "bash") return "Ran commands"
+    if (["webfetch", "websearch"].includes(tool)) return "Searched the web"
+    if (["get_goal", "update_goal"].includes(tool)) return "Checked the goal"
+    if (["get_session", "list_sessions"].includes(tool)) return "Checked chats"
+    return tool.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())
+  }
 
   const ContentRow: Component<{ part: SDKPart }> = (rp) => {
     const part = rp.part
     {
-          // Upstream PART_MAPPING["tool"] returns null for todowrite/todoread,
-          // so we detect them here and render via ToolRegistry directly.
-          const isUpstreamSuppressed =
-            part.type === "tool" && UPSTREAM_SUPPRESSED_TOOLS.has((part as SDKPart & { tool: string }).tool)
+      // Upstream PART_MAPPING["tool"] returns null for todowrite/todoread,
+      // so we detect them here and render via ToolRegistry directly.
+      const isUpstreamSuppressed =
+        part.type === "tool" && UPSTREAM_SUPPRESSED_TOOLS.has((part as SDKPart & { tool: string }).tool)
 
-          // raya_change - Milestone C any tool can reuse selectable question cards
-          const activeQuestion = createMemo(() => matchToolRequest(part, undefined, session.questions()))
+      // raya_change - Milestone C any tool can reuse selectable question cards
+      const activeQuestion = createMemo(() => matchToolRequest(part, undefined, session.questions()))
 
-          // Active suggestion tool parts render the interactive SuggestBar inline
-          const activeSuggestion = createMemo(() => matchToolRequest(part, "suggest", session.suggestions()))
-          const bash = createMemo(() => {
-            if (part.type !== "tool") return
-            const tool = part as unknown as ToolPart
-            if (tool.tool !== "bash") return
-            if (tool.state?.status === "error") return
-            return part
-          })
-          const planExit = createMemo(() => {
-            if (!planExitInfo(part)) return
-            return part as unknown as ToolPart
-          })
-          const chiefPlan = createMemo(() => {
-            if (part.type !== "tool" || part.tool !== "chief_plan") return
-            const id = session.currentSessionID()
-            const plan = part as unknown as ChiefPart
-            if (!id || !chiefActivity(plan, session.getSessionToolParts(id) as ChiefPart[])) return
-            return plan
-          })
-          const chiefEvents = createMemo(() => {
-            if (part.type !== "tool" || !["chief_inspect", "chief_review", "chief_synthesize"].includes(part.tool)) return
-            const id = session.currentSessionID()
-            return id ? chiefReceipt(part as unknown as ChiefPart, session.getSessionToolParts(id) as ChiefPart[]) : undefined
-          })
-          const forceOpen = createMemo(() => !!props.forceOpenPartID && part.id === props.forceOpenPartID)
+      // Active suggestion tool parts render the interactive SuggestBar inline
+      const activeSuggestion = createMemo(() => matchToolRequest(part, "suggest", session.suggestions()))
+      const bash = createMemo(() => {
+        if (part.type !== "tool") return
+        const tool = part as unknown as ToolPart
+        if (tool.tool !== "bash") return
+        if (tool.state?.status === "error") return
+        return part
+      })
+      const planExit = createMemo(() => {
+        if (!planExitInfo(part)) return
+        return part as unknown as ToolPart
+      })
+      const chiefPlan = createMemo(() => {
+        if (part.type !== "tool" || part.tool !== "chief_plan") return
+        const id = session.currentSessionID()
+        const plan = part as unknown as ChiefPart
+        if (!id || !chiefActivity(plan, session.getSessionToolParts(id) as ChiefPart[])) return
+        return plan
+      })
+      const chiefEvents = createMemo(() => {
+        if (part.type !== "tool" || !["chief_inspect", "chief_review", "chief_synthesize"].includes(part.tool)) return
+        const id = session.currentSessionID()
+        return id
+          ? chiefReceipt(part as unknown as ChiefPart, session.getSessionToolParts(id) as ChiefPart[])
+          : undefined
+      })
+      const forceOpen = createMemo(() => !!props.forceOpenPartID && part.id === props.forceOpenPartID)
 
-          // Lights up when this part is behind the hovered/focused task-timeline
-          // bar, using that bar's own color so the two stay easy to correlate.
-          const highlighted = createMemo(() => {
-            const h = props.highlight?.()
-            return h?.msgId === props.message.id && h?.partId === part.id
-          })
+      // Lights up when this part is behind the hovered/focused task-timeline
+      // bar, using that bar's own color so the two stay easy to correlate.
+      const highlighted = createMemo(() => {
+        const h = props.highlight?.()
+        return h?.msgId === props.message.id && h?.partId === part.id
+      })
 
-          // Throughput badge renders inside the copy/feedback action row of the
-          // text part that carries the copy button (the last text part of the
-          // message), pushed to the right of the buttons rather than below the
-          // message. Only built for that part so non-text parts skip the work.
-          const throughputEl = createMemo<JSX.Element | undefined>(() => {
-            if (!throughputVisible()) return undefined
-            const metrics = throughput()
-            if (!metrics) return undefined
-            if (part.id !== props.showAssistantCopyPartID) return undefined
-            return <ThroughputBadge metrics={metrics} />
-          })
+      // Throughput badge renders inside the copy/feedback action row of the
+      // text part that carries the copy button (the last text part of the
+      // message), pushed to the right of the buttons rather than below the
+      // message. Only built for that part so non-text parts skip the work.
+      const throughputEl = createMemo<JSX.Element | undefined>(() => {
+        if (!throughputVisible()) return undefined
+        const metrics = throughput()
+        if (!metrics) return undefined
+        if (part.id !== props.showAssistantCopyPartID) return undefined
+        return <ThroughputBadge metrics={metrics} />
+      })
 
-          return (
+      return (
+        <Show
+          when={
+            isUpstreamSuppressed ||
+            activeQuestion() ||
+            activeSuggestion() ||
+            bash() ||
+            planExit() ||
+            PART_MAPPING[part.type]
+          }
+        >
+          <div
+            data-component="tool-part-wrapper"
+            data-part-type={part.type}
+            data-part-id={part.id}
+            data-timeline-highlight={highlighted() ? "" : undefined}
+            style={highlighted() ? { "--timeline-color": timelineColor(part as unknown as TimelinePart) } : undefined}
+          >
             <Show
-              when={
-                isUpstreamSuppressed ||
-                activeQuestion() ||
-                activeSuggestion() ||
-                bash() ||
-                planExit() ||
-                PART_MAPPING[part.type]
-              }
-            >
-              <div
-                data-component="tool-part-wrapper"
-                data-part-type={part.type}
-                data-part-id={part.id}
-                data-timeline-highlight={highlighted() ? "" : undefined}
-                style={
-                  highlighted() ? { "--timeline-color": timelineColor(part as unknown as TimelinePart) } : undefined
-                }
-              >
+              when={activeQuestion()}
+              fallback={
                 <Show
-                  when={activeQuestion()}
+                  when={activeSuggestion()}
                   fallback={
                     <Show
-                      when={activeSuggestion()}
+                      when={planExit()}
                       fallback={
                         <Show
-                          when={planExit()}
+                          when={bash()}
                           fallback={
                             <Show
-                              when={bash()}
+                              when={isUpstreamSuppressed}
                               fallback={
-                                <Show
-                                  when={isUpstreamSuppressed}
-                                  fallback={
-                                    chiefPlan() ? <ChiefActivity plan={chiefPlan()!} /> :
-                                    chiefEvents() !== undefined ? <ChiefReceipt events={chiefEvents()!} /> :
-                                    <Part
-                                      part={part}
-                                      message={props.message as SDKMessage}
-                                      showAssistantCopyPartID={props.showAssistantCopyPartID}
-                                      defaultOpen={toolDefaultOpen(part, open(), edit(), mcp())}
-                                      forceOpen={forceOpen()}
-                                      forceOpenFile={forceOpen() ? props.forceOpenFile : undefined}
-                                      reasoningAutoCollapse={display.reasoningAutoCollapse()}
-                                      feedback={props.feedback}
-                                      throughput={throughputEl()}
-                                      animate={
-                                        part.type === "tool" &&
-                                        ((part as unknown as ToolPart).state?.status === "pending" ||
-                                          (part as unknown as ToolPart).state?.status === "running")
-                                      }
-                                    />
-                                  }
-                                >
-                                  <TodoToolCard part={part as unknown as ToolPart} forceOpen={forceOpen()} />
-                                </Show>
+                                chiefPlan() ? (
+                                  <ChiefActivity plan={chiefPlan()!} />
+                                ) : chiefEvents() !== undefined ? (
+                                  <ChiefReceipt events={chiefEvents()!} />
+                                ) : (
+                                  <Part
+                                    part={part}
+                                    message={props.message as SDKMessage}
+                                    showAssistantCopyPartID={props.showAssistantCopyPartID}
+                                    defaultOpen={toolDefaultOpen(part, open(), edit(), mcp())}
+                                    forceOpen={forceOpen()}
+                                    forceOpenFile={forceOpen() ? props.forceOpenFile : undefined}
+                                    reasoningAutoCollapse={display.reasoningAutoCollapse()}
+                                    feedback={props.feedback}
+                                    throughput={throughputEl()}
+                                    animate={
+                                      part.type === "tool" &&
+                                      ((part as unknown as ToolPart).state?.status === "pending" ||
+                                        (part as unknown as ToolPart).state?.status === "running")
+                                    }
+                                  />
+                                )
                               }
                             >
-                              {(tool) => (
-                                <BashToolCard
-                                  part={tool() as unknown as ToolPart}
-                                  defaultOpen={open()}
-                                  forceOpen={forceOpen()}
-                                />
-                              )}
+                              <TodoToolCard part={part as unknown as ToolPart} forceOpen={forceOpen()} />
                             </Show>
                           }
                         >
-                          {(tp) => <PlanExitCard part={tp()} />}
+                          {(tool) => (
+                            <BashToolCard
+                              part={tool() as unknown as ToolPart}
+                              defaultOpen={open()}
+                              forceOpen={forceOpen()}
+                            />
+                          )}
                         </Show>
                       }
                     >
-                      {(req) => <SuggestBar request={req()} />}
+                      {(tp) => <PlanExitCard part={tp()} />}
                     </Show>
                   }
                 >
-                  {(req) => <QuestionDock request={req()} />}
+                  {(req) => <SuggestBar request={req()} />}
                 </Show>
-              </div>
+              }
+            >
+              {(req) => <QuestionDock request={req()} />}
             </Show>
-          )
+          </div>
+        </Show>
+      )
     }
   }
 
@@ -551,9 +572,12 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
     )
     const expanded = createMemo(() => opened() || auto())
     const summary = createMemo(() => {
-      const names = gp.parts.map(toolName)
-      const head = names.slice(0, 3).join(", ")
-      return names.length > 3 ? `${head} +${names.length - 3}` : head
+      const names = [...new Set(gp.parts.map(toolName))]
+      const head = names
+        .slice(0, 3)
+        .map((name, index) => (index === 0 ? name : name.charAt(0).toLowerCase() + name.slice(1)))
+        .join(", ")
+      return names.length > 3 ? `${head}, ${names.length - 3} more` : head
     })
     return (
       <div class="tool-group" data-open={expanded() ? "" : undefined}>
@@ -563,9 +587,9 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
           aria-expanded={expanded()}
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon name="chevron-right" size="small" />
-          <span class="tool-group__count">{gp.parts.length} steps</span>
+          <Icon name="layers" size="small" aria-hidden="true" />
           <span class="tool-group__names">{summary()}</span>
+          <Icon name="chevron-right" size="small" class="tool-group__chevron" aria-hidden="true" />
         </button>
         <Show when={expanded()}>
           <div class="tool-group__body">

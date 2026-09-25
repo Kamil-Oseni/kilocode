@@ -1,4 +1,5 @@
 import { Collapsible } from "@kilocode/kilo-ui/collapsible"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import { createSignal, onCleanup, type Accessor, type ParentComponent } from "solid-js"
 import { useSession } from "../../context/session"
 import { useProvider } from "../../context/provider"
@@ -57,7 +58,7 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
               </span>
             )}
           </span>
-          <span class="composer-configuration-action">{language.t("composer.configuration.action")}</span>
+          <Icon name="chevron-down" size="small" aria-hidden="true" />
         </Collapsible.Trigger>
         <Collapsible.Content hidden={!open()} class="composer-configuration-body">
           <div class="composer-configuration-controls">{props.children}</div>

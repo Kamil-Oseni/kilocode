@@ -25,6 +25,7 @@ import { NativeVoiceControls } from "./NativeVoiceControls"
 import { NativeVoiceUsage } from "./NativeVoiceUsage"
 import { VoiceTranscript } from "./VoiceTranscript"
 import { ComposerConfiguration } from "./ComposerConfiguration"
+import { ContextProgress } from "./ContextProgress"
 import { ModelSelector } from "../shared/ModelSelector"
 import { ModeSwitcher } from "../shared/ModeSwitcher"
 import { SandboxButtonBase, SandboxTooltipContent } from "../shared/SandboxButton"
@@ -1769,6 +1770,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <VoiceTranscript />
       <NativeVoiceUsage />
       <div class="prompt-input-hint">
+        <Tooltip value={language.t("prompt.action.attach")} placement="top" openDelay={0}>
+          <IconButton
+            icon="plus"
+            size="small"
+            variant="ghost"
+            disabled={isDisabled()}
+            onClick={() => uploadRef?.click()}
+            aria-label={language.t("prompt.action.attach")}
+            class="prompt-attach-button"
+          />
+        </Tooltip>
+        <span class="prompt-input-hint-spacer" />
+        <ContextProgress compact />
         <div class="prompt-input-hint-selectors">
           <ComposerConfiguration sessionID={sid} scope={boxKey()}>
             <ModeSwitcher sessionID={sid} trigger={boxKey()} />
@@ -1788,117 +1802,98 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Button>
               </Tooltip>
             </Show>
+            <Tooltip
+              value={
+                autoApprove()
+                  ? language.t("prompt.action.autoApprove.enabled")
+                  : language.t("prompt.action.autoApprove.disabled")
+              }
+              placement="top"
+              openDelay={0}
+            >
+              <Button
+                variant="ghost"
+                size="small"
+                onClick={() => vscode.postMessage({ type: "toggleAutoApprove" })}
+                aria-label={
+                  autoApprove()
+                    ? language.t("prompt.action.autoApprove.disable")
+                    : language.t("prompt.action.autoApprove.enable")
+                }
+                aria-pressed={autoApprove()}
+                class={`prompt-status-button ${autoApprove() ? "prompt-status-button--active" : ""}`}
+              >
+                <Icon name="shield" size="small" />
+              </Button>
+            </Tooltip>
+            <Show when={sandboxVisible()}>
+              <SandboxButtonBase
+                enabled={sandboxEnabled()}
+                available={sandboxReady() ? sandboxAvailable() : undefined}
+                reason={sandboxReason()}
+                disabled={sandboxDisabled()}
+                tooltip={<SandboxTooltipContent enabled={sandboxEnabled()} network={sandboxNetworkEnabled()} />}
+                tooltipClass="prompt-sandbox-tooltip-content"
+                onToggle={toggleSandbox}
+              />
+            </Show>
           </ComposerConfiguration>
         </div>
         <div class="prompt-input-hint-actions">
-          <Tooltip value={language.t("prompt.action.attach")} placement="top" openDelay={0}>
-            <IconButton
-              icon="plus"
-              size="small"
-              variant="ghost"
-              disabled={isDisabled()}
-              onClick={() => uploadRef?.click()}
-              aria-label={language.t("prompt.action.attach")}
-            />
-          </Tooltip>
-          {/* raya_change - explicit attachment entry point complements paste, drop, and @ mentions */}
-          <Tooltip
-            value={
-              autoApprove()
-                ? language.t("prompt.action.autoApprove.enabled")
-                : language.t("prompt.action.autoApprove.disabled")
-            }
-            placement="top"
-            openDelay={0}
-          >
-            <Button
-              variant="ghost"
-              size="small"
-              onClick={() => vscode.postMessage({ type: "toggleAutoApprove" })}
-              aria-label={
-                autoApprove()
-                  ? language.t("prompt.action.autoApprove.disable")
-                  : language.t("prompt.action.autoApprove.enable")
-              }
-              aria-pressed={autoApprove()}
-              class={`prompt-status-button ${autoApprove() ? "prompt-status-button--active" : ""}`}
-            >
-              <Icon name="shield" size="small" />
-            </Button>
-          </Tooltip>
-          <Show when={sandboxVisible()}>
-            <SandboxButtonBase
-              enabled={sandboxEnabled()}
-              available={sandboxReady() ? sandboxAvailable() : undefined}
-              reason={sandboxReason()}
-              disabled={sandboxDisabled()}
-              tooltip={<SandboxTooltipContent enabled={sandboxEnabled()} network={sandboxNetworkEnabled()} />}
-              tooltipClass="prompt-sandbox-tooltip-content"
-              onToggle={toggleSandbox}
-            />
-          </Show>
           <Show when={canUseSpeech()}>
             <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
           </Show>
           <Show
-            when={
-              (["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) || canUseSpeech()) &&
-              !(
-                ["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) &&
-                (voiceActive() || voice.recovery())
-              )
-            }
-          >
-            {/* raya_change - Milestone H keeps dictation on the mic and hands-free
-                conversation on a distinct orb. The orb is a 2026 ElevenLabs-style
-                sphere: layered gradients + a slow flowing sheen, calm when idle and
-                alive when the hands-free session is live. */}
-            <Tooltip value={voiceLabel()} placement="top" openDelay={0}>
-              <button
-                type="button"
-                class="prompt-voice-orb"
-                classList={{ "prompt-voice-orb--active": voiceActive() }}
-                aria-label={voiceLabel()}
-                aria-pressed={voiceActive()}
-                disabled={!voiceActive() && (isDisabled() || voice.startBlocked())}
-                onClick={toggleVoice}
-              >
-                <span class="prompt-voice-orb__core" aria-hidden="true" />
-                <span class="prompt-voice-orb__sheen" aria-hidden="true" />
-              </button>
-            </Tooltip>
-          </Show>
-          <Show
             when={showStop()}
             fallback={
-              <Tooltip value={sendLabel()} placement="top" openDelay={0}>
-                {/* raya_change - send is the primary action: Eden-blue rounded button when armed */}
-                <Button
-                  variant="ghost"
-                  size="small"
-                  class="prompt-send-button"
-                  classList={{ "prompt-send-button--ready": canSend() }}
-                  onClick={handleSendClick}
-                  aria-disabled={!canSend()}
-                  aria-label={sendLabel()}
-                >
-                  {/* raya_change - editorial send: a clean stroked up-arrow (Eden
-                      lucide style), not a filled paper-plane triangle */}
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
+              <Show
+                when={
+                  !hasInput() &&
+                  !voiceActive() &&
+                  !voice.recovery() &&
+                  (["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) || canUseSpeech())
+                }
+                fallback={
+                  <Tooltip value={sendLabel()} placement="top" openDelay={0}>
+                    <Button
+                      variant="ghost"
+                      size="small"
+                      class="prompt-send-button"
+                      classList={{ "prompt-send-button--ready": canSend() }}
+                      onClick={handleSendClick}
+                      aria-disabled={!canSend()}
+                      aria-label={sendLabel()}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M12 19V5" />
+                        <path d="M6 11l6-6 6 6" />
+                      </svg>
+                    </Button>
+                  </Tooltip>
+                }
+              >
+                <Tooltip value={voiceLabel()} placement="top" openDelay={0}>
+                  <button
+                    type="button"
+                    class="prompt-voice-orb"
+                    aria-label={voiceLabel()}
+                    disabled={isDisabled() || voice.startBlocked()}
+                    onClick={toggleVoice}
                   >
-                    <path d="M12 19V5" />
-                    <path d="M6 11l6-6 6 6" />
-                  </svg>
-                </Button>
-              </Tooltip>
+                    <span class="prompt-voice-orb__core" aria-hidden="true" />
+                    <span class="prompt-voice-orb__sheen" aria-hidden="true" />
+                  </button>
+                </Tooltip>
+              </Show>
             }
           >
             <Tooltip value="Stop work" placement="top" openDelay={0}>

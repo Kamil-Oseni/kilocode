@@ -130,6 +130,7 @@ function assistantRow(parts: Part[]): TranscriptAssistantRow {
     live: false,
     message: assistant,
     parts,
+    first: true,
   }
 }
 

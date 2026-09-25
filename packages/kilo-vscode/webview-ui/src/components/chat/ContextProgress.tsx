@@ -15,7 +15,7 @@ import { useSession } from "../../context/session"
 import { useProvider } from "../../context/provider"
 import { formatCompactCount as fmt } from "../../utils/format"
 
-export const ContextProgress: Component = () => {
+export const ContextProgress: Component<{ compact?: boolean }> = (props) => {
   const session = useSession()
   const provider = useProvider()
 
@@ -51,25 +51,61 @@ export const ContextProgress: Component = () => {
   })
 
   return (
-    <Show when={data()}>
-      {(d) => (
-        <div class="context-progress">
-          <span class="context-progress-count">{fmt(d().used)}</span>
-          <Tooltip value={tip()} placement="top">
-            <div class="context-progress-bar">
-              <div
-                class="context-progress-used"
-                classList={{ "context-progress-used--hot": d().pctUsed >= 50 }}
-                style={{ width: `${d().pctUsed}%` }}
-              />
-              <div class="context-progress-reserved" style={{ width: `${d().pctReserved}%` }} />
-              <Show when={d().pctAvail > 0}>
-                <div class="context-progress-available" style={{ width: `${d().pctAvail}%` }} />
-              </Show>
-            </div>
+    <Show
+      when={data()}
+      fallback={
+        props.compact ? (
+          <Tooltip value="Context use appears after the first response" placement="top">
+            <span class="prompt-context-progress" role="img" aria-label="Context use not available yet">
+              <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-opacity="0.3" stroke-width="2" />
+              </svg>
+            </span>
           </Tooltip>
-          <span class="context-progress-count">{fmt(d().limit)}</span>
-        </div>
+        ) : undefined
+      }
+    >
+      {(d) => (
+        <Show
+          when={props.compact}
+          fallback={
+            <div class="context-progress">
+              <span class="context-progress-count">{fmt(d().used)}</span>
+              <Tooltip value={tip()} placement="top">
+                <div class="context-progress-bar">
+                  <div
+                    class="context-progress-used"
+                    classList={{ "context-progress-used--hot": d().pctUsed >= 50 }}
+                    style={{ width: `${d().pctUsed}%` }}
+                  />
+                  <div class="context-progress-reserved" style={{ width: `${d().pctReserved}%` }} />
+                  <Show when={d().pctAvail > 0}>
+                    <div class="context-progress-available" style={{ width: `${d().pctAvail}%` }} />
+                  </Show>
+                </div>
+              </Tooltip>
+              <span class="context-progress-count">{fmt(d().limit)}</span>
+            </div>
+          }
+        >
+          <Tooltip value={tip()} placement="top">
+            <span class="prompt-context-progress" role="img" aria-label={tip()}>
+              <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-opacity="0.3" stroke-width="2" />
+                <circle
+                  cx="10"
+                  cy="10"
+                  r="7"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-dasharray={`${Math.round((d().pctUsed / 100) * 44)} 44`}
+                  transform="rotate(-90 10 10)"
+                />
+              </svg>
+              <span>{Math.round(d().pctUsed)}%</span>
+            </span>
+          </Tooltip>
+        </Show>
       )}
     </Show>
   )

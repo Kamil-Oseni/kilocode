@@ -1,5 +1,30 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
+import { resolve } from "node:path"
+
+test("long specialist names fit narrow receipts and messages", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 })
+  const name = "PersistenceVerificationSpecialistWithAnUnbrokenModelGeneratedName".repeat(2)
+  await page.setContent(`
+    <main style="width: calc(100vw - 32px); margin-inline: 16px; font: 12px sans-serif">
+      <ul class="chief-receipt"><li>
+        <span data-component="icon">◆</span>
+        <span class="chief-receipt__name">${name}</span>
+        <span class="chief-receipt__status">Report ready</span>
+      </li></ul>
+      <section class="chief-notes"><div class="chief-notes__message">
+        <span data-component="icon">◆</span>
+        <div><div class="chief-notes__name">${name} <span>sent a message</span></div><p>Finished.</p></div>
+      </div></section>
+    </main>
+  `)
+  await page.addStyleTag({ path: resolve("webview-ui/src/styles/tool-overrides.css") })
+  for (const selector of [".chief-receipt li", ".chief-notes__message"]) {
+    const box = page.locator(selector)
+    expect(await box.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
 
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 760]) {

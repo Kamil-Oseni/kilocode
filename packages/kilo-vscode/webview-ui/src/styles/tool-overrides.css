@@ -267,6 +267,11 @@
   color: var(--text-weak);
 }
 
+.chief-receipt__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .chief-receipt__status {
   margin-left: auto;
   color: var(--text-weak);
@@ -319,8 +324,13 @@
   color: var(--text-weak);
 }
 
+.chief-notes__message > div {
+  min-width: 0;
+}
+
 .chief-notes__name {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .chief-notes__name span {
   font-weight: 400;

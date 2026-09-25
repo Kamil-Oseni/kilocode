@@ -152,7 +152,7 @@ export const ChiefReceipt: Component<{ events: ChiefEvent[] }> = (props) => (
               size="small"
               aria-hidden="true"
             />
-            <span>{event().name}</span>
+            <span class="chief-receipt__name">{event().name}</span>
             <span class="chief-receipt__status">{event().status}</span>
             <Show when={event().message}>{(message) => <p class="chief-receipt__message">{message()}</p>}</Show>
           </li>

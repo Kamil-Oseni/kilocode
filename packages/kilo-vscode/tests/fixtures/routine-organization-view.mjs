@@ -184,19 +184,22 @@ try {
   assign.click()
   await new Promise((resolve) => setImmediate(resolve))
   assert.match(document.body.textContent, /What needs to get done/)
-  assert.match(document.body.textContent, /Raya will choose the best authorized workers/)
+  assert.match(document.body.textContent, /Raya will prepare the route and result for you to review/)
   const intent = document.querySelector('textarea[placeholder^="For example: Check that this organization"]')
   assert.ok(intent)
   intent.value = "Verify the saved team and send me a concise report."
   intent.dispatchEvent(new window.Event("input", { bubbles: true }))
   await new Promise((resolve) => setImmediate(resolve))
-  const next = [...document.querySelectorAll("button")].find(
-    (button) => button.textContent.trim() === "Continue with Raya",
-  )
+  const next = [...document.querySelectorAll("button")].find((button) => button.textContent.trim() === "Review plan")
   assert.ok(next)
   next.click()
   await new Promise((resolve) => setImmediate(resolve))
-  assert.deepEqual(plans, ["Verify the saved team and send me a concise report."])
+  const draft = sent.findLast((msg) => msg.type === "routineOrganizationProposal")
+  assert.ok(draft)
+  assert.equal(draft.organizationID, item.id)
+  assert.equal(draft.revision, item.revision)
+  assert.equal(draft.intent, "Verify the saved team and send me a concise report.")
+  assert.deepEqual(plans, [])
 } finally {
   dispose()
   window.close()

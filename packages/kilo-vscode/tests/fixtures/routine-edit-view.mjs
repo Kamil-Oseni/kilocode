@@ -138,7 +138,7 @@ try {
     button("Edit output").click()
     await Promise.resolve()
     assert.match(document.activeElement.textContent, /Output requirements for Review/)
-    const edit = root.querySelector("section textarea")
+    const edit = root.querySelector("section.routines-instructions textarea")
     assert.equal(edit.value, output.description)
     edit.value = "Edited report"
     edit.dispatchEvent(new window.Event("input", { bubbles: true }))
@@ -184,7 +184,7 @@ try {
     emit({ type: "routineState", agents: [agent], templates: [] })
     button("Edit output").click()
     assert.equal(button("Save requirements").disabled, true)
-    const fields = root.querySelectorAll("section textarea")
+    const fields = root.querySelectorAll("section.routines-instructions textarea")
     for (const [index, value] of ["New report", "List sources", "Check references"].entries()) {
       fields[index].value = value
       fields[index].dispatchEvent(new window.Event("input", { bubbles: true }))
@@ -197,7 +197,7 @@ try {
     assert.equal(sent.at(-1).type, "routineList")
     button("Close output review").click()
     button("Edit output").click()
-    for (const input of root.querySelectorAll("section textarea")) {
+    for (const input of root.querySelectorAll("section.routines-instructions textarea")) {
       input.value = "Required text"
       input.dispatchEvent(new window.Event("input", { bubbles: true }))
     }
@@ -211,7 +211,7 @@ try {
     const missing = sent.findLast((msg) => msg.type === "routineList")
     emit({ type: "routineState", requestID: missing.requestID, agents: [] })
     assert.match(root.textContent, /no longer available/)
-    assert.equal(root.querySelector("section textarea").value, "Required text")
+    assert.equal(root.querySelector("section.routines-instructions textarea").value, "Required text")
     button("Close output review").click()
     emit({ type: "routineState", agents: [agent], templates: [] })
     await Promise.resolve()
@@ -304,17 +304,10 @@ try {
   })
   assert.doesNotMatch(root.textContent, /Access saved/)
   button("Close").click()
-  assert.match(root.textContent, /Enabling allows future runs and starts a fresh consecutive-block count/)
-  assert.match(root.textContent, /Earlier runs remain in history/)
-  assert.match(
-    document.getElementById(button("Enable").getAttribute("aria-describedby")).textContent,
-    /Resolve the cause of a pause/,
-  )
   button("Enable").click()
   assert.deepEqual(sent.at(-1), { type: "routineUpdate", agentID: "routine", enabled: true })
   assert.equal(sent.filter((msg) => msg.type === "routineRun").length, 0)
   emit({ type: "routineState", agents: [{ ...agent, enabled: true }], templates: [] })
-  assert.doesNotMatch(root.textContent, /Enabling allows future runs/)
   emit({ type: "routineState", agents: [agent], templates: [] })
   emit({
     type: "routineRuns",
@@ -337,9 +330,11 @@ try {
       },
     ],
   })
+  button("Review runs").click()
   assert.match(root.textContent, /Scheduled for/)
   assert.match(root.textContent, /Startup began/)
-  assert.match(root.querySelector(".routines-result-summary").textContent, /Reviewed the release changes/)
+  assert.match(root.textContent, /Reviewed the release changes/)
+  button("Close review").click()
   emit({
     type: "routineState",
     agents: [{ ...agent, execution: { state: "recovery", sessionID: "recovered-session", runID: "recovered" } }],
@@ -390,8 +385,6 @@ try {
       },
     ],
   })
-  assert.match(root.textContent, /No saved goal is available/)
-  assert.equal(root.querySelector(".routines-result-summary"), null)
   assert.match(root.textContent, /Recovery review required before another run/)
   assert.equal(root.querySelector(".routines-row").getAttribute("data-presence"), "error")
   button("Review run").click()
@@ -400,6 +393,8 @@ try {
   button("Review runs").click()
   await Promise.resolve()
   const panel = root.querySelector(".routines-instructions")
+  assert.match(panel.textContent, /No saved goal is available/)
+  assert.doesNotMatch(panel.textContent, /A different run's result/)
   assert.equal(document.activeElement, panel)
   assert.match(panel.getAttribute("aria-label"), /Review/)
   assert.match(panel.textContent, /No result summary has been recorded/)
@@ -437,12 +432,13 @@ try {
   })
   emit({ type: "routineState", agents: [agent] })
   assert.match(panel.textContent, /interrupted start is closed/)
+  const snapshotCount = sent.filter((msg) => msg.type === "routineSnapshot").length
   emit({
     type: "routineState",
     agents: [{ ...agent, execution: { state: "recovery", sessionID: "recovered-session", runID: "recovered" } }],
   })
   assert.match(root.textContent, /Original <script>/)
-  assert.equal(sent.filter((msg) => msg.type === "routineSnapshot").length, 1)
+  assert.equal(sent.filter((msg) => msg.type === "routineSnapshot").length, snapshotCount)
   assert.equal(document.activeElement, panel)
   assert.equal(root.querySelector('pre[aria-label="Original instructions"]').tabIndex, 0)
   const saved = root.querySelector(".routines-instructions select")
@@ -595,8 +591,6 @@ try {
     }
     emit({ type: "routineState", agents: [active] })
     emit({ type: "routineRuns", agentID: "routine", runs: [occ] })
-    assert.match(root.textContent, /Pausing stops later starts/)
-    assert.match(root.textContent, /The current run continues until it settles/)
     const starts = sent.filter((msg) => msg.type === "routineRun" || msg.type === "routineStop").length
     button("Edit schedule").click()
     assert.match(root.textContent, /Existing runs continue/)
@@ -625,7 +619,6 @@ try {
     emit({ type: "routineScheduleUpdated", requestID: change.requestID, agentID: "routine" })
     emit({ type: "routineState", agents: [{ ...active, enabled: false }] })
     emit({ type: "routineRuns", agentID: "routine", runs: [occ] })
-    assert.match(root.textContent, /The current run continues until it settles/)
     button("Edit schedule").click()
     assert.match(root.textContent, /Existing runs continue/)
     assert.match(root.textContent, /This worker stays paused/)
@@ -742,7 +735,7 @@ try {
   }
   const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }
   emit({ type: "routineState", agents: [legacy] })
-  assert.match(root.textContent, /Automatic runs need timezone review/)
+  assert.match(root.textContent, /Timezone needs review/)
   button("Edit schedule").click()
   assert.match(root.textContent, /Automatic runs are held until/)
   const zone = [...root.querySelectorAll("label")]

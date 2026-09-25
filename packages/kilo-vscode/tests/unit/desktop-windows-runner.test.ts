@@ -1,7 +1,66 @@
 import { describe, expect, it } from "bun:test"
-import { runner } from "../../src/services/computer-use/desktop-windows"
+import { WindowsDesktopDriver, runner } from "../../src/services/computer-use/desktop-windows"
 
 describe.skipIf(process.platform !== "win32")("persistent Windows desktop runner", () => {
+  it("releases only unmatched native input in an accepted SendInput prefix", async () => {
+    let script = ""
+    const driver = new WindowsDesktopDriver({
+      run: async (value) => {
+        script = value
+        return ""
+      },
+      cancel: () => undefined,
+    })
+    await driver.perform(
+      { windowID: "0x1", observationID: "test", sensitive: false, operation: "key", key: "A" },
+      { windowID: "0x1", location: "test" },
+    )
+    const source = script.match(/Add-Type -TypeDefinition @'\r?\n([\s\S]*?)\r?\n'@/)?.[1]
+    expect(source).toBeTruthy()
+    const host = runner()
+    const probe = String.raw`
+public static class RayaInputProbe {
+  private static RayaDesktopNative.Input Mouse(uint flags) {
+    return new RayaDesktopNative.Input {
+      Type = 0,
+      Value = new RayaDesktopNative.InputUnion {
+        Mouse = new RayaDesktopNative.MouseInput { Flags = flags }
+      }
+    };
+  }
+  private static RayaDesktopNative.Input Key(ushort key, bool up) {
+    return new RayaDesktopNative.Input {
+      Type = 1,
+      Value = new RayaDesktopNative.InputUnion {
+        Keyboard = new RayaDesktopNative.KeyboardInput { VirtualKey = key, Flags = up ? 2u : 0u }
+      }
+    };
+  }
+  public static string Run() {
+    var mouse = new[] { Mouse(0xC001), Mouse(2), Mouse(4), Mouse(2), Mouse(4) };
+    var keys = new[] { Key(0x11, false), Key(0x41, false), Key(0x41, true), Key(0x11, true) };
+    return String.Join(",", new[] {
+      RayaDesktopNative.UnmatchedMouseDown(mouse, 0, 2, 4).ToString(),
+      RayaDesktopNative.UnmatchedMouseDown(mouse, 2, 2, 4).ToString(),
+      RayaDesktopNative.UnmatchedMouseDown(mouse, 3, 2, 4).ToString(),
+      RayaDesktopNative.UnmatchedMouseDown(mouse, 4, 2, 4).ToString(),
+      RayaDesktopNative.HeldKeys(keys, 0).Length.ToString(),
+      String.Join(":", RayaDesktopNative.HeldKeys(keys, 2)),
+      String.Join(":", RayaDesktopNative.HeldKeys(keys, 3)),
+      RayaDesktopNative.HeldKeys(keys, 4).Length.ToString()
+    });
+  }
+}
+`
+    try {
+      expect(await host.run(`Add-Type -TypeDefinition @'\n${source}\n${probe}\n'@\n[RayaInputProbe]::Run()`)).toBe(
+        "False,True,False,True,0,65:17,17,0",
+      )
+    } finally {
+      host.cancel()
+    }
+  })
+
   it("reuses one host and recovers after cancellation", async () => {
     const host = runner()
     const first = await host.run("[string]$PID")
@@ -23,14 +82,10 @@ describe.skipIf(process.platform !== "win32")("persistent Windows desktop runner
     host.cancel()
   })
 
-  it(
-    "terminates an oversized response and starts a fresh bounded host",
-    async () => {
-      const host = runner()
-      await expect(host.run("[string]::new('a', 24 * 1024 * 1024)")).rejects.toThrow(/bounded output limit/i)
-      expect(await host.run("'recovered'")).toBe("recovered")
-      host.cancel()
-    },
-    15_000,
-  )
+  it("terminates an oversized response and starts a fresh bounded host", async () => {
+    const host = runner()
+    await expect(host.run("[string]::new('a', 24 * 1024 * 1024)")).rejects.toThrow(/bounded output limit/i)
+    expect(await host.run("'recovered'")).toBe("recovered")
+    host.cancel()
+  }, 15_000)
 })

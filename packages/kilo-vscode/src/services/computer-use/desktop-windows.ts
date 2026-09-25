@@ -286,12 +286,13 @@ public static class RayaDesktopNative {
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { X = endX, Y = endY, Flags = 0xC001 } } },
       new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } }
     };
-    if (SendInput(4, inputs, Marshal.SizeOf(typeof(Input))) == 4) {
+    var accepted = SendInput(4, inputs, Marshal.SizeOf(typeof(Input)));
+    if (accepted == 4) {
       Point point;
       if (GetCursorPos(out point) && point.X == expectedEndX && point.Y == expectedEndY) return;
       throw new InvalidOperationException("Windows did not finish the drag at the exact desktop point");
     }
-    Mouse(up, 0);
+    if (UnmatchedMouseDown(inputs, accepted, down, up)) Mouse(up, 0);
     throw new InvalidOperationException("Windows refused complete desktop drag input");
   }
 
@@ -322,6 +323,15 @@ public static class RayaDesktopNative {
     }
   }
 
+  public static bool UnmatchedMouseDown(Input[] inputs, uint accepted, uint down, uint up) {
+    var held = false;
+    for (var position = 0; position < accepted && position < inputs.Length; position++) {
+      if (inputs[position].Value.Mouse.Flags == down) held = true;
+      if (inputs[position].Value.Mouse.Flags == up) held = false;
+    }
+    return held;
+  }
+
   public static void Click(int x, int y, int expectedX, int expectedY, uint down, uint up, bool twice) {
     ValidatePoint(expectedX, expectedY);
     ValidateTarget(expectedX, expectedY);
@@ -336,12 +346,13 @@ public static class RayaDesktopNative {
       inputs.Add(new Input { Type = 0, Value = new InputUnion { Mouse = new MouseInput { Flags = up } } });
     }
     var batch = inputs.ToArray();
-    if (SendInput((uint)batch.Length, batch, Marshal.SizeOf(typeof(Input))) == (uint)batch.Length) {
+    var accepted = SendInput((uint)batch.Length, batch, Marshal.SizeOf(typeof(Input)));
+    if (accepted == (uint)batch.Length) {
       Point point;
       if (GetCursorPos(out point) && point.X == expectedX && point.Y == expectedY) return;
       throw new InvalidOperationException("Windows did not click the exact desktop point");
     }
-    Mouse(up, 0);
+    if (UnmatchedMouseDown(batch, accepted, down, up)) Mouse(up, 0);
     throw new InvalidOperationException("Windows refused complete desktop click input");
   }
 
@@ -369,10 +380,25 @@ public static class RayaDesktopNative {
         Value = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = modifiers[position], Flags = 2u } }
       };
     }
-    if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) == (uint)inputs.Length) return;
-    Release(key);
-    for (var position = modifiers.Length - 1; position >= 0; position--) Release(modifiers[position]);
+    var accepted = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input)));
+    if (accepted == (uint)inputs.Length) return;
+    foreach (var held in HeldKeys(inputs, accepted)) Release(held);
     throw new InvalidOperationException("Windows refused complete desktop key input");
+  }
+
+  public static ushort[] HeldKeys(Input[] inputs, uint accepted) {
+    var held = new List<ushort>();
+    for (var position = 0; position < accepted; position++) {
+      var input = inputs[position].Value.Keyboard;
+      if ((input.Flags & 2u) == 0) {
+        held.Add(input.VirtualKey);
+        continue;
+      }
+      var match = held.LastIndexOf(input.VirtualKey);
+      if (match >= 0) held.RemoveAt(match);
+    }
+    held.Reverse();
+    return held.ToArray();
   }
 
   private static bool Release(ushort key) {

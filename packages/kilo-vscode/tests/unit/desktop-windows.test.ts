@@ -854,7 +854,7 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::SetCursorPos($x, $y)")
   })
 
-  it("batches complete key chords and recovers every release after partial dispatch", async () => {
+  it("batches key chords and limits partial recovery to accepted downs", async () => {
     const test = harness([""])
     const driver = new WindowsDesktopDriver(test.runner)
     await driver.perform(
@@ -870,8 +870,7 @@ describe("Windows native desktop driver", () => {
     )
 
     expect(test.scripts[0]).toContain("new Input[(modifiers.Length * 2) + 2]")
-    expect(test.scripts[0]).toContain("Release(key)")
-    expect(test.scripts[0]).toContain("Release(modifiers[position])")
+    expect(test.scripts[0]).toContain("foreach (var held in HeldKeys(inputs, accepted)) Release(held)")
     expect(test.scripts[0]).toContain("[RayaDesktopNative]::Chord([uint16]$key, [uint16[]]$held)")
     expect(test.scripts[0]).toContain(
       "public static void Chord(ushort key, ushort[] modifiers) {\n    ValidateIdleInput();",

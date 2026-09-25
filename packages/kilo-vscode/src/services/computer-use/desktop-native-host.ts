@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process"
+import { createHash, randomUUID } from "node:crypto"
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
+import { join } from "node:path"
 import { NativeFrameParser, type NativeFrame, type NativeUnchanged } from "./desktop-native-frame"
 
 export class NativeCaptureHost {
@@ -13,13 +16,19 @@ export class NativeCaptureHost {
     private readonly failed: (error: Error) => void,
     private readonly args: string[] = [],
     private readonly renewed?: (frame: NativeUnchanged) => void,
+    private readonly dir?: string,
   ) {}
 
   start(): void {
     if (this.process) return
     const generation = ++this.generation
     const parser = new NativeFrameParser()
-    const child = spawn(this.binary, this.args, { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+    const receipt = this.dir ? this.path() : undefined
+    const child = spawn(this.binary, this.args, {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+      ...(receipt ? { env: { ...process.env, RAYA_NATIVE_FAULT_RECEIPT: receipt } } : {}),
+    })
     this.parser = parser
     this.process = child
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -49,7 +58,12 @@ export class NativeCaptureHost {
     })
     child.on("error", (error) => this.fail(error, generation))
     child.on("close", (code) => {
+      const fault = receipt ? this.receipt(receipt) : undefined
       if (generation !== this.generation) return
+      if (fault) {
+        this.fail(new Error(`Native desktop capture fault receipt (${fault})`), generation)
+        return
+      }
       try {
         parser.finish()
         const status = code === null ? "unknown" : `0x${(code >>> 0).toString(16).toUpperCase().padStart(8, "0")}`
@@ -58,6 +72,46 @@ export class NativeCaptureHost {
         this.fail(error, generation)
       }
     })
+  }
+
+  private path(): string {
+    const dir = this.dir!
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const saved = readdirSync(dir)
+      .filter((name) => /^capture-[a-f0-9]{16}-[a-f0-9-]{36}\.txt$/.test(name))
+      .map((name) => ({ name, time: statSync(join(dir, name)).mtimeMs }))
+      .sort((a, b) => b.time - a.time)
+    for (const item of saved.slice(3)) {
+      try {
+        unlinkSync(join(dir, item.name))
+      } catch (error) {
+        console.error("[Raya] Old native desktop fault receipt could not be removed", error)
+      }
+    }
+    const hash = createHash("sha256").update(readFileSync(this.binary)).digest("hex").slice(0, 16)
+    return join(dir, `capture-${hash}-${randomUUID()}.txt`)
+  }
+
+  private receipt(path: string): string | undefined {
+    try {
+      if (!existsSync(path)) return
+      const size = statSync(path).size
+      if (!size) {
+        unlinkSync(path)
+        return
+      }
+      if (size > 64) {
+        unlinkSync(path)
+        return "invalid bounded receipt"
+      }
+      const value = readFileSync(path, "ascii")
+      if (/^[0-9A-F]{8}:(?:main\+0x[0-9A-F]{16}|external\+0x0)\n$/.test(value)) return value.trim()
+      unlinkSync(path)
+      return "invalid bounded receipt"
+    } catch (error) {
+      console.error("[Raya] Native desktop fault receipt could not be read", error)
+      return "receipt unavailable"
+    }
   }
 
   latest(maxAgeMs = 125, after = 0): NativeFrame | undefined {

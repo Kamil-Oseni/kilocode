@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { NativeCaptureHost } from "../../src/services/computer-use/desktop-native-host"
 
 function encode(header: Record<string, unknown>, image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])) {
@@ -122,6 +125,43 @@ describe("native desktop capture host", () => {
     expect(host.latest()).toBeUndefined()
     await Bun.sleep(20)
     expect(errors).toHaveLength(1)
+  })
+
+  it("recovers a bounded local fault receipt when the native pipe closes first", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "raya-fault-host-"))
+    const errors: Error[] = []
+    const script =
+      "require('node:fs').writeFileSync(process.env.RAYA_NATIVE_FAULT_RECEIPT, 'C0000005:main+0x0000000000001234\\n'); process.exit(1)"
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script], undefined, dir)
+    try {
+      host.start()
+      await until(() => errors.length === 1)
+      expect(errors[0]?.message).toContain("fault receipt (C0000005:main+0x0000000000001234)")
+      expect(host.latest()).toBeUndefined()
+      const files = readdirSync(dir)
+      expect(files).toHaveLength(1)
+      expect(readFileSync(join(dir, files[0]!), "ascii")).toBe("C0000005:main+0x0000000000001234\n")
+    } finally {
+      host.stop()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects and removes an oversized local fault receipt", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "raya-fault-host-"))
+    const errors: Error[] = []
+    const script =
+      "require('node:fs').writeFileSync(process.env.RAYA_NATIVE_FAULT_RECEIPT, 'X'.repeat(65)); process.exit(1)"
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script], undefined, dir)
+    try {
+      host.start()
+      await until(() => errors.length === 1)
+      expect(errors[0]?.message).toContain("invalid bounded receipt")
+      expect(readdirSync(dir)).toHaveLength(0)
+    } finally {
+      host.stop()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it("delivers only newer frames to one waiter and cancels a pending wait on Stop", async () => {

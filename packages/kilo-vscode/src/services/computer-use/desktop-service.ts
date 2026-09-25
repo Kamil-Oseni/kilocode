@@ -29,7 +29,13 @@ export class DesktopAutomationService implements vscode.Disposable {
       process.env.RAYA_NATIVE_CAPTURE_CANDIDATE === "1"
         ? join(context.extensionPath, "bin", "raya-desktop-capture.exe")
         : undefined
-    this.driver = new WindowsDesktopDriver(undefined, undefined, binary)
+    this.driver = new WindowsDesktopDriver(
+      undefined,
+      undefined,
+      binary,
+      [],
+      binary ? join(context.globalStorageUri.fsPath, "desktop-capture-faults") : undefined,
+    )
     this.session = new DesktopSession(this.driver)
     this.panel = new DesktopPanel(this.session, this.lease, () => this.ready())
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)

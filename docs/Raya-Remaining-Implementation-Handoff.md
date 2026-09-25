@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 20:23 America/Toronto - native fault evidence fallback
+
+The opt-in DXGI capture host now supplies a unique private per-run receipt path under Raya's extension global storage. The native exception filter writes a bounded fault code and `main` relative offset, or `external+0x0`, before attempting the existing stdout packet. The host checks the receipt after child exit and reports it if the pipe supplied no fault; empty, malformed and oversized receipts are cleaned, with three older matching files retained. The filename includes the executable SHA-256 prefix to correlate a future receipt with its matching PDB. A controlled newly compiled `--fault-test` and the pipe-loss/oversize host tests pass. Next commit, push and install; then obtain a *real* installed-host recurrence or trace, match its binary/PDB, and investigate the indicated native path. This is diagnostic coverage, not a fix for the user's unknown memory-read crash. The existing dialog was left untouched. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-24 20:05 America/Toronto - installed emergency-listener checkpoint
 
 `a5e7bcc8e0` is pushed and installed as `eden.raya@7.4.23-snapshot+a5e7bcc8e0.kamil-oseni.1790294609352`; the 446-file rollback VSIX SHA-256 is `94FDEA555CF956F9B89BFA7AC0DB15272D6BB52D6E2C84FA1FB69FBE45602321`. The push hook, low-memory snapshot build and real Windows PowerShell listener startup passed. Next validate an installed active grant with immediate physical Pause, manual takeover, Resume, backend disconnect, and prolonged use; then address held-input recovery and the native capture crash with a real receipt. The existing reported capture error dialog remains untouched. No complete installed-host autonomy benchmark exists; keep `FUT-CU-01` In progress.

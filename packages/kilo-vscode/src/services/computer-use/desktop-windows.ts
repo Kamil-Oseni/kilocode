@@ -1237,6 +1237,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
     private readonly background?: Runner,
     private readonly binary?: string,
     private readonly args: string[] = [],
+    private readonly receiptDir?: string,
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
@@ -1314,6 +1315,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
         (result) => {
           this.worker?.renew(result.base, result)
         },
+        this.receiptDir,
       )
       let sequence = 0
       this.worker = new DesktopCaptureWorker(
@@ -1342,7 +1344,14 @@ export class WindowsDesktopDriver implements DesktopDriver {
         () => host.stop(),
         failed,
       )
-      host.start()
+      try {
+        host.start()
+      } catch (error) {
+        this.worker.stop()
+        this.worker = undefined
+        failed(error)
+        return
+      }
       this.worker.start()
       return
     }

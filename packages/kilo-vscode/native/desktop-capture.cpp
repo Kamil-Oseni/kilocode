@@ -29,11 +29,65 @@ static constexpr UINT kMetadataBytes = 1'024 * 1'024;
 static constexpr UINT kOutputs = 8;
 static volatile LONG stopped = 0;
 static volatile LONG faulting = 0;
+static HANDLE receipt = INVALID_HANDLE_VALUE;
+static wchar_t receiptPath[MAX_PATH]{};
+static uintptr_t imageBase = 0;
+static uintptr_t imageLimit = 0;
+
+static void hex(char* text, size_t& length, uint64_t value, unsigned digits) {
+  static constexpr char symbols[] = "0123456789ABCDEF";
+  for (unsigned shift = digits * 4; shift; shift -= 4)
+    text[length++] = symbols[(value >> (shift - 4)) & 15];
+}
+
+static void initreceipt() {
+  const HMODULE module = GetModuleHandleW(nullptr);
+  if (!module) throw std::runtime_error("capture module is unavailable");
+  imageBase = reinterpret_cast<uintptr_t>(module);
+  const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+  if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0)
+    throw std::runtime_error("capture module header is invalid");
+  const auto* image = reinterpret_cast<const IMAGE_NT_HEADERS*>(imageBase + dos->e_lfanew);
+  if (image->Signature != IMAGE_NT_SIGNATURE || !image->OptionalHeader.SizeOfImage)
+    throw std::runtime_error("capture image bounds are invalid");
+  imageLimit = imageBase + image->OptionalHeader.SizeOfImage;
+  const DWORD count = GetEnvironmentVariableW(L"RAYA_NATIVE_FAULT_RECEIPT", receiptPath, MAX_PATH);
+  if (!count) return;
+  if (count >= MAX_PATH) throw std::runtime_error("capture receipt path is too long");
+  receipt = CreateFileW(receiptPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW,
+                        FILE_ATTRIBUTE_HIDDEN, nullptr);
+  if (receipt == INVALID_HANDLE_VALUE) throw std::runtime_error("capture receipt could not be opened");
+}
+
+static void clearreceipt() {
+  if (receipt == INVALID_HANDLE_VALUE) return;
+  CloseHandle(receipt);
+  receipt = INVALID_HANDLE_VALUE;
+  DeleteFileW(receiptPath);
+}
 
 static LONG WINAPI fault(EXCEPTION_POINTERS* info) {
   if (InterlockedCompareExchange(&faulting, 1, 0) || !info || !info->ExceptionRecord)
     return EXCEPTION_EXECUTE_HANDLER;
   const auto address = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
+  if (receipt != INVALID_HANDLE_VALUE) {
+    char line[64]{};
+    size_t length = 0;
+    hex(line, length, info->ExceptionRecord->ExceptionCode, 8);
+    line[length++] = ':';
+    if (imageBase && address >= imageBase && address < imageLimit) {
+      const char label[] = "main+0x";
+      for (size_t index = 0; index < sizeof(label) - 1; ++index) line[length++] = label[index];
+      hex(line, length, address - imageBase, 16);
+    } else {
+      const char label[] = "external+0x0";
+      for (size_t index = 0; index < sizeof(label) - 1; ++index) line[length++] = label[index];
+    }
+    line[length++] = '\n';
+    DWORD written = 0;
+    WriteFile(receipt, line, DWORD(length), &written, nullptr);
+    FlushFileBuffers(receipt);
+  }
   MEMORY_BASIC_INFORMATION memory{};
   const auto found = VirtualQuery(info->ExceptionRecord->ExceptionAddress, &memory, sizeof(memory));
   const auto base = found ? reinterpret_cast<uintptr_t>(memory.AllocationBase) : 0;
@@ -774,6 +828,7 @@ int wmain(int argc, wchar_t** argv) {
     return 1;
   }
   try {
+    initreceipt();
     if (argc == 2 && std::wstring(argv[1]) == L"--fault-test") {
       RaiseException(EXCEPTION_ACCESS_VIOLATION, 0, 0, nullptr);
       return 3;
@@ -921,15 +976,18 @@ int wmain(int argc, wchar_t** argv) {
         std::vector<unsigned char> image(kImageBytes);
         if (encode(imaging.Get(), 2, 2, 8, pixels, image) < 30) throw Failure("capture_failed", "self-test PNG is too short");
       }
+      clearreceipt();
       CoUninitialize();
       return 0;
     }
     if (argc != 1) throw Failure("invalid_argument", "unsupported capture argument");
     run(pipe);
+    clearreceipt();
     CoUninitialize();
     return 0;
   } catch (const Failure& error) {
     terminal(pipe, error.code);
+    clearreceipt();
     CoUninitialize();
     return 1;
   } catch (const std::exception& error) {
@@ -937,6 +995,7 @@ int wmain(int argc, wchar_t** argv) {
     if (std::string(error.what()) != "stdout pipe closed") {
       terminal(pipe, "capture_failed");
     }
+    clearreceipt();
     CoUninitialize();
     return 1;
   }

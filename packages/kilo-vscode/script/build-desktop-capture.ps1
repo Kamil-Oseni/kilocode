@@ -26,6 +26,20 @@ try {
   if (-not (Test-Path -LiteralPath $symbol)) { throw 'Desktop capture host symbols were not produced' }
   & $Output --self-test
   if ($LASTEXITCODE -ne 0) { throw "Desktop capture host self-test failed with exit code $LASTEXITCODE" }
+  $fault = Join-Path $env:TEMP ('raya-capture-build-fault-{0}.txt' -f [guid]::NewGuid().ToString('N'))
+  $prior = [Environment]::GetEnvironmentVariable('RAYA_NATIVE_FAULT_RECEIPT', 'Process')
+  try {
+    $env:RAYA_NATIVE_FAULT_RECEIPT = $fault
+    & $Output --fault-test > $null
+    $value = if (Test-Path -LiteralPath $fault) { [IO.File]::ReadAllText($fault) } else { '' }
+    if ($LASTEXITCODE -ne -1073741819 -or $value -notmatch '^C0000005:(main\+0x[0-9A-F]{16}|external\+0x0)\n$') {
+      throw 'Desktop capture host fault receipt self-test failed'
+    }
+  } finally {
+    if ($null -eq $prior) { Remove-Item Env:RAYA_NATIVE_FAULT_RECEIPT -ErrorAction SilentlyContinue }
+    else { $env:RAYA_NATIVE_FAULT_RECEIPT = $prior }
+    Remove-Item -LiteralPath $fault -Force -ErrorAction SilentlyContinue
+  }
   $ready = $true
   Write-Output $Output
 }

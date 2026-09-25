@@ -287,7 +287,10 @@ int main(int argc, char** argv) {
     uint32_t length = 0;
     bool eof = false;
     if (!read(input, &length, sizeof(length), eof)) return eof ? 0 : 4;
-    if (!length || length > kHeader) return 5;
+    if (!length || length > kHeader) {
+      std::fprintf(stderr, "invalid native input frame length %u\n", length);
+      return 5;
+    }
     std::string header(length, '\0');
     if (!read(input, header.data(), length, eof)) return 6;
     uint32_t payload = 0;

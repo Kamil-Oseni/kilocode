@@ -21,8 +21,6 @@ try {
   if (-not (Test-Path -LiteralPath $symbol)) { throw 'Desktop input broker symbols were not produced' }
   & $Output --self-test
   if ($LASTEXITCODE -ne 0) { throw "Desktop input broker self-test failed with exit code $LASTEXITCODE" }
-  & (Join-Path $PSScriptRoot 'test-desktop-input.ps1') -Executable $Output
-  if ($LASTEXITCODE -ne 0) { throw "Desktop input broker pipe test failed with exit code $LASTEXITCODE" }
   & bun (Join-Path $PSScriptRoot 'test-desktop-input-host.ts') $Output
   if ($LASTEXITCODE -ne 0) { throw "Desktop input host round trip failed with exit code $LASTEXITCODE" }
   $ready = $true

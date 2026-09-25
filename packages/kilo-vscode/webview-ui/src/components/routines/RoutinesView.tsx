@@ -778,6 +778,8 @@ interface RoutinesViewProps {
   onBack?: () => void
   onOpenSession?: (id: string) => void
   onAskRaya?: (text: string) => void
+  onSubmitPlan?: (text: string) => void
+  canSubmitPlan?: boolean
   workspace?: string
   focus?: { nonce: string; organizationID?: string; agentID?: string }
   onFocusConsumed?: () => void
@@ -1783,7 +1785,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const detailLabel = createMemo(() => (chosen() && currentOrganization() ? currentOrganization()!.name : "Routines"))
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
-  const ask = (text: string) => props.onAskRaya?.(text)
+  const ask = (text: string) => {
+    if (props.canSubmitPlan && props.onSubmitPlan) return props.onSubmitPlan(text)
+    props.onAskRaya?.(text)
+  }
   const begin = () => {
     const text = idea().trim()
     if (!text) return
@@ -2221,9 +2226,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     onInput={(event) => setIdea(event.currentTarget.value)}
                   />
                   <div class="routines-start-actions">
-                    <span>Routine, team, schedule, and access can be refined in the conversation.</span>
                     <Button type="submit" disabled={!idea().trim()}>
-                      Continue with Raya
+                      {props.canSubmitPlan ? "Ask Raya to plan" : "Continue in chat"}
                     </Button>
                   </div>
                 </form>

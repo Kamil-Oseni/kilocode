@@ -234,14 +234,7 @@ describe("Raya Chief routing", () => {
       update_organization: { id: "organization" },
       assign_organization_work: { id: "assign" },
     }
-    expect(
-      Object.keys(
-        RayaChief.tools(routines, {
-          [RayaChief.requestKey]:
-            "Create a small organization for testing persistence. Ask me the required setup questions one at a time before creating anything.",
-        }),
-      ),
-    ).toEqual([
+    const expected = [
       ...workflow,
       "ask_options",
       "schedule_task",
@@ -250,11 +243,37 @@ describe("Raya Chief routing", () => {
       "update_routine",
       "update_organization",
       "assign_organization_work",
+    ]
+    expect(
+      Object.keys(
+        RayaChief.tools(routines, {
+          [RayaChief.requestKey]:
+            "Create a small organization for testing persistence. Ask me the required setup questions one at a time before creating anything.",
+        }),
+      ),
+    ).toEqual(expected)
+    for (const request of [
+      "Create routines for the household",
+      "Create organizations for my businesses",
+      "Set up a team of specialist workers for research",
+      "Build a team to handle my website business",
     ])
+      expect(Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: request }))).toEqual(expected)
+    expect(
+      Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: "Build a team dashboard for my workers" })),
+    ).toEqual([...workflow, "ask_options"])
     expect(RayaChief.prompt(agents)).toContain("use the available Routines tools yourself")
     expect(RayaChief.prompt(agents)).toContain("chief_plan")
     expect(RayaChief.prompt(agents)).toContain("background:true")
     expect(RayaChief.routine("Have an accounting agent send me a report every Friday")).toBe(true)
+    expect(RayaChief.routine("Create routines for the household")).toBe(true)
+    expect(RayaChief.routine("Create organizations for my businesses")).toBe(true)
+    expect(RayaChief.routine("Set up a team of specialist workers for research")).toBe(true)
+    expect(RayaChief.routine("Build a team to handle my website business")).toBe(true)
+    expect(RayaChief.routine("Give these agents a team with clear roles")).toBe(true)
+    expect(RayaChief.routine("Build a team dashboard for my workers")).toBe(false)
+    expect(RayaChief.routine("Create a team page for our website")).toBe(false)
+    expect(RayaChief.routine("Build a team dashboard for my business")).toBe(false)
     expect(RayaChief.routine("Fix this authentication bug")).toBe(false)
     // raya_change end
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" })).toBe("route")

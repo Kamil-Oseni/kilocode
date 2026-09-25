@@ -7,7 +7,8 @@ import { SessionContext } from "../src/context/session"
 import { VSCodeProvider } from "../src/context/vscode"
 
 const session = { agents: () => [] }
-const target = new URLSearchParams(location.search).get("target")
+const params = new URLSearchParams(location.search)
+const target = params.get("target")
 const focus =
   target === "organization"
     ? { nonce: "preview-organization", organizationID: "org_11111111111111111111111111111111" }
@@ -29,6 +30,8 @@ export const RoutinesPreview: Component = () =>
                     workspace: "C:/Projects/preview",
                     focus,
                     onAskRaya: (text: string) => document.documentElement.setAttribute("data-routines-request", text),
+                    onSubmitPlan: (text: string) => document.documentElement.setAttribute("data-routines-sent", text),
+                    canSubmitPlan: params.get("mode") !== "offline",
                   })
                 },
               })

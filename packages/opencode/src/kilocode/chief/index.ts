@@ -51,14 +51,22 @@ export namespace RayaChief {
 
   export function routine(request: string | undefined) {
     if (!request) return false
-    if (/\b(routine|organization|organisation)\b/i.test(request)) return true
+    if (/\b(routines?|organi[sz]ations?)\b/i.test(request)) return true
+    if (
+      /\b(?:create|build|start|set up|organize|assemble)\s+(?:(?:a|an|new|small|specialist|my)\s+){0,3}teams?\b(?!\s+(?:page|dashboard|view|component|screen)\b)/i.test(
+        request,
+      )
+    )
+      return true
     if (/\b(recurring|standing)\s+(agent|worker|task|job)s?\b/i.test(request)) return true
     if (
       /\b(agent|worker|task|job|report|remind)\w*\b/i.test(request) &&
       /\b(daily|weekly|monthly|hourly|every)\b/i.test(request)
     )
       return true
-    return /\bteam\b.*\bagents?\b|\bagents?\b.*\bteam\b/i.test(request)
+    return /\bteams?\s+(?:of|with)\s+(?:(?:\w+)\s+){0,3}(?:agents?|workers?|specialists?)\b|\b(?:agents?|workers?|specialists?)\s+(?:(?:\w+)\s+){0,2}teams?\b/i.test(
+      request,
+    )
   }
 
   export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {

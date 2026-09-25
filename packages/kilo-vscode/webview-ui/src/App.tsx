@@ -359,7 +359,7 @@ const AppContent: Component = () => {
     )
   }
 
-  const planTodo = (text: string) => {
+  const sendFromWorkspace = (text: string) => {
     if (!server.isConnected() || session.cloudPreviewId()) {
       askRaya(text)
       return
@@ -521,6 +521,8 @@ const AppContent: Component = () => {
                   setCurrentView("newTask")
                 }}
                 onAskRaya={askRaya}
+                onSubmitPlan={sendFromWorkspace}
+                canSubmitPlan={server.isConnected() && !session.cloudPreviewId()}
               />
             </Match>
             <Match when={currentView() === "todo"}>
@@ -529,7 +531,7 @@ const AppContent: Component = () => {
                 onFocusConsumed={() => setTodoTarget()}
                 onEditProposal={editTodoProposal}
                 onAskRaya={askRaya}
-                onSubmitPlan={planTodo}
+                onSubmitPlan={sendFromWorkspace}
                 canSubmitPlan={server.isConnected() && !session.cloudPreviewId()}
                 onBack={() => setCurrentView("newTask")}
               />

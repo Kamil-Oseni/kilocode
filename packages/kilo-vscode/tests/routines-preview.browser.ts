@@ -1,15 +1,30 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
-test("Routines overview opens teams and briefs Raya to build one", async ({ page }) => {
+test("Routines overview sends a team request and opens teams", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=dark-routines")
   await expect(page.getByRole("region", { name: "Routines overview" })).toBeVisible()
   await expect(page.locator(".routines-organization[data-routine-organization]")).toHaveCount(2)
+  await page.screenshot({ path: info.outputPath("overview.png"), fullPage: true })
   await page.getByRole("region", { name: "Routines overview" }).getByRole("button", { name: "Plan a team" }).click()
-  await expect(page.locator("html")).toHaveAttribute("data-routines-request", /delegation rules/)
+  await expect(page.locator("html")).toHaveAttribute("data-routines-sent", /delegation rules/)
+  await expect(page.locator("html")).not.toHaveAttribute("data-routines-request", /delegation rules/)
   await page.locator(".routines-organization[data-routine-organization]").first().click()
   await expect(page.locator(".routines-organization-overview")).toBeVisible()
+})
+
+test("Routines plans a worker from the input and leaves a draft when offline", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=dark-routines")
+  await page.getByLabel("What should Raya handle?").fill("Review my accounts every Friday")
+  await page.getByRole("button", { name: "Ask Raya to plan" }).click()
+  await expect(page.locator("html")).toHaveAttribute("data-routines-sent", /Review my accounts every Friday/)
+
+  await page.goto("/?state=dark-routines&mode=offline")
+  await page.getByRole("region", { name: "Routines overview" }).getByRole("button", { name: "Plan a worker" }).click()
+  await expect(page.locator("html")).toHaveAttribute("data-routines-request", /specialist worker/)
+  await expect(page.locator("html")).not.toHaveAttribute("data-routines-sent", /specialist worker/)
 })
 
 test("representative routine workload stays responsive and recovers", async ({ context, page }) => {

@@ -575,7 +575,7 @@ function Get-RayaControls($window) {
 }
 `
 
-function semanticOnly(target: { windowID: string; location: string }) {
+function semanticOnly(target: { windowID: string; location: string; identity?: string }) {
   const input = payload(target)
   return `${setup}
 ${semanticSetup}
@@ -583,6 +583,9 @@ $target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}"
 $window = Get-RayaWindow
 if ($window.WindowID -ne $target.windowID -or $window.Location -ne $target.location) {
   throw "Foreground window changed before semantic observation"
+}
+if ($target.identity -and [RayaDesktopNative]::Identity($window.Handle) -ne $target.identity) {
+  throw "Desktop process identity changed before semantic observation"
 }
 $timer = [Diagnostics.Stopwatch]::StartNew()
 try {
@@ -606,9 +609,14 @@ $after = Get-RayaWindow
 if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
   throw "Foreground window changed while correlating semantic observations"
 }
+$identity = if ($target.identity) { [RayaDesktopNative]::Identity($after.Handle) } else { $null }
+if ($target.identity -and $identity -ne $target.identity) {
+  throw "Desktop process identity changed while correlating semantic observations"
+}
 [pscustomobject]@{
   windowID = $window.WindowID
   location = $window.Location
+  identity = $identity
   semantics = $semantics
   semanticsMs = $timer.Elapsed.TotalMilliseconds
 } | ConvertTo-Json -Depth 8 -Compress
@@ -1225,11 +1233,20 @@ function semanticBounds(location: string, result: DesktopSemantics) {
   return rect
 }
 
-function semanticResult(input: Record<string, unknown>, target: { windowID: string; location: string }) {
+function semanticResult(
+  input: Record<string, unknown>,
+  target: { windowID: string; location: string; identity?: string },
+) {
   if (input.windowID !== target.windowID || input.location !== target.location)
     throw new Error("Foreground window changed during semantic observation")
   if (input.mime !== undefined || input.data !== undefined)
     throw new Error("Semantic-only desktop observation unexpectedly contains pixels")
+  if (target.identity !== undefined) {
+    if (typeof input.identity !== "string" || !/^[A-F0-9]{64}$/.test(input.identity))
+      throw new Error("Windows desktop semantic process identity is invalid")
+    if (input.identity !== target.identity)
+      throw new Error("Desktop process identity changed during semantic observation")
+  }
   const result = semantics(input.semantics)
   if (!result) throw new Error("Windows UI Automation observation is missing")
   const rect = semanticBounds(target.location, result)
@@ -1251,7 +1268,13 @@ function semanticResult(input: Record<string, unknown>, target: { windowID: stri
     input.semanticsMs > 120_000
   )
     throw new Error("Windows desktop semantic timing is invalid")
-  return { windowID: target.windowID, location: target.location, semantics: result, semanticsMs: input.semanticsMs }
+  return {
+    windowID: target.windowID,
+    location: target.location,
+    ...(target.identity ? { identity: input.identity as string } : {}),
+    semantics: result,
+    semanticsMs: input.semanticsMs,
+  }
 }
 
 export class WindowsDesktopDriver implements DesktopDriver {
@@ -1397,19 +1420,19 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   private async correlateAfter(host: NativeCaptureHost, target: DesktopDispatchTarget, sequence: number) {
-    const result = await this.observeSemantics({ windowID: target.windowID, location: target.location! })
-    const identity = await this.identity(target.windowID)
-    const current = await this.current()
+    const result = await this.observeSemantics({
+      windowID: target.windowID,
+      location: target.location!,
+      identity: target.identity,
+    })
     const latest = host.latest(Infinity)
     try {
       if (
         host !== this.host ||
-        current.windowID !== target.windowID ||
-        current.location !== target.location ||
         latest?.sequence !== sequence ||
         latest.windowID !== target.windowID ||
         latest.location !== target.location ||
-        identity !== target.identity
+        result.identity !== target.identity
       )
         throw new Error("Native post-action scene changed while correlating accessibility controls")
     } finally {
@@ -1422,9 +1445,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
     return options?.fresh ? undefined : this.worker?.latest()
   }
 
-  async observeSemantics(target: { windowID: string; location: string }) {
+  async observeSemantics(target: { windowID: string; location: string; identity?: string }) {
     if (!/^0x[0-9A-F]+$/.test(target.windowID) || !target.location || target.location.length > 4096)
       throw new Error("Semantic-only desktop target identity is invalid")
+    if (target.identity !== undefined && !/^[A-F0-9]{64}$/.test(target.identity))
+      throw new Error("Semantic-only desktop process identity is invalid")
     const output = object(await this.runner.run(semanticOnly(target)))
     return semanticResult(output, target)
   }

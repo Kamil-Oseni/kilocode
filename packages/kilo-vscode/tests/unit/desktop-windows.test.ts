@@ -67,7 +67,7 @@ describe("Windows native desktop driver", () => {
             preparationMs: 0,
           })
         if (value.includes("Foreground window changed before semantic observation"))
-          return JSON.stringify({ ...target, semantics, semanticsMs: 1 })
+          return JSON.stringify({ ...target, identity, semantics, semanticsMs: 1 })
         if (value.includes("[RayaDesktopNative]::Identity($value)")) return JSON.stringify({ identity })
         return JSON.stringify(target)
       },
@@ -90,6 +90,10 @@ describe("Windows native desktop driver", () => {
       expect(result.timing.acquisitionMs).toBe(1)
       expect(result.timing.preparationMs).toBeLessThan(result.timing.totalMs)
       expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(prior)
+      expect(
+        calls.filter((value) => value.includes("Foreground window changed before semantic observation")),
+      ).toHaveLength(1)
+      expect(calls.filter((value) => value.includes("[RayaDesktopNative]::Identity($value)"))).toHaveLength(0)
       expect(errors).toHaveLength(0)
     } finally {
       driver.stopCapture()
@@ -323,6 +327,30 @@ describe("Windows native desktop driver", () => {
     await expect(driver.observeSemantics(target)).rejects.toThrow(/UI Automation control identity is incomplete/i)
     await expect(driver.observeSemantics(target)).rejects.toThrow(/unexpectedly contains pixels/i)
     await expect(driver.observeSemantics(target)).rejects.toThrow(/semantic timing is invalid/i)
+  })
+
+  it("checks native process identity within the same bounded semantic observation", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:10,20,1280,720" }
+    const identity = "A".repeat(64)
+    const semantics = {
+      source: "windows_ui_automation",
+      status: "unavailable",
+      viewport: { x: 10, y: 20, width: 1280, height: 720 },
+      controls: [],
+      truncated: false,
+    }
+    const test = harness([
+      JSON.stringify({ ...target, identity: "B".repeat(64), semanticsMs: 1, semantics }),
+      JSON.stringify({ ...target, semanticsMs: 1, semantics }),
+    ])
+    const driver = new WindowsDesktopDriver(test.runner)
+
+    await expect(driver.observeSemantics({ ...target, identity })).rejects.toThrow(/process identity changed/i)
+    await expect(driver.observeSemantics({ ...target, identity })).rejects.toThrow(/process identity is invalid/i)
+    expect(test.scripts).toHaveLength(2)
+    expect(test.scripts[0]).toContain("Desktop process identity changed before semantic observation")
+    expect(test.scripts[0]).toContain("Desktop process identity changed while correlating semantic observations")
+    expect(test.scripts[0]).not.toContain("CopyFromScreen")
   })
 
   it("refuses semantic bounds that differ from or fall outside the target", async () => {

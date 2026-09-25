@@ -338,3 +338,431 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-row[data-curre
     border-color: CanvasText;
   }
 }
+
+/* The team workspace follows the same quiet hierarchy as Raya's chat. */
+.routines-view {
+  --routine-line: #272728;
+  --routine-card: #252526;
+  --routine-muted: #aaaab0;
+}
+
+.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list) {
+  scrollbar-width: thin;
+  scrollbar-color: #4b4b50 transparent;
+}
+
+.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list)::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #4b4b50;
+  background-clip: padding-box;
+}
+
+.routines-view .routines-inbox {
+  grid-template-columns: minmax(240px, 288px) minmax(0, 1fr);
+}
+
+.routines-view .routines-people,
+.routines-view .routines-thread {
+  border-radius: 0;
+  background: var(--surface-base, var(--vscode-editor-background));
+}
+
+.routines-view .routines-people {
+  border: 0;
+  border-right: 1px solid var(--routine-line);
+  padding: 0;
+}
+
+.routines-view .routines-toolbar {
+  gap: 14px;
+  padding: 18px 14px 14px;
+  border-bottom: 1px solid var(--routine-line);
+}
+
+.routines-view .routines-roster-actions {
+  min-height: 34px;
+}
+
+html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong {
+  font: 400 24px/1.1 var(--raya-font-display);
+}
+
+.routines-view .routines-organizations {
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.routines-view .routines-organization {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--routine-line);
+  border-radius: 10px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.routines-view .routines-organization[aria-current="page"] {
+  border-color: #6d6d73;
+  background: #303033;
+}
+
+.routines-view .routines-roster-search input {
+  min-height: 38px;
+  border: 1px solid var(--routine-line);
+  border-radius: 10px;
+  background: #252526;
+}
+
+.routines-view .routines-roster-more {
+  border-top: 1px solid var(--routine-line);
+  padding-top: 11px;
+}
+
+.routines-view .routines-roster-more > summary,
+.routines-view .routines-organization-details > summary,
+.routines-view .routines-organization-disclosure > summary,
+.routines-view .routines-organization-member-settings > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--routine-muted);
+  font: 500 12px/1.4 var(--font-body);
+}
+
+.routines-view
+  :is(
+    .routines-roster-more,
+    .routines-organization-details,
+    .routines-organization-disclosure,
+    .routines-organization-member-settings
+  )
+  > summary::-webkit-details-marker {
+  display: none;
+}
+
+.routines-view
+  :is(
+    .routines-roster-more,
+    .routines-organization-details,
+    .routines-organization-disclosure,
+    .routines-organization-member-settings
+  )
+  > summary::before {
+  content: "\203A";
+  display: inline-block;
+  width: 10px;
+  color: var(--routine-muted);
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 160ms ease-out;
+}
+
+.routines-view
+  :is(
+    .routines-roster-more,
+    .routines-organization-details,
+    .routines-organization-disclosure,
+    .routines-organization-member-settings
+  )[open]
+  > summary::before {
+  transform: rotate(90deg);
+}
+
+.routines-view .routines-roster-more[open] {
+  gap: 10px;
+}
+
+.routines-view .routines-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
+.routines-view .routines-filters [data-component="button"] {
+  min-width: 0;
+  padding-inline: 5px;
+  font-size: 11px;
+  white-space: normal;
+}
+
+.routines-view .routines-roster-more .routines-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  border-top: 1px solid var(--routine-line);
+  padding-top: 8px;
+}
+
+.routines-view .routines-secondary [data-component="button"] {
+  justify-content: flex-start;
+  min-height: 34px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.routines-view .routines-secondary [data-component="button"]:hover {
+  background: #303033;
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-view .routines-thread {
+  border: 0;
+}
+
+.routines-view .routines-thread-head {
+  min-height: 72px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--routine-line);
+}
+
+html[data-theme="kilo-vscode"] .routines-view .routines-thread-identity h3 {
+  font: 400 clamp(22px, 2.4vw, 29px) / 1.08 var(--raya-font-display);
+}
+
+.routines-view .routines-organization-overview .routines-thread-body,
+.routines-view .routines-organization-editor .routines-thread-body {
+  max-width: 760px;
+  gap: 24px;
+  padding: 26px clamp(18px, 3vw, 34px) 40px;
+}
+
+.routines-view .routines-organization-purpose {
+  display: block;
+  max-width: 62ch;
+  overflow: visible;
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-line-clamp: unset;
+}
+
+.routines-view .routines-organization-overview .routines-thread-body > h3,
+.routines-view .routines-organization-section h4 {
+  margin: 0;
+  color: var(--routine-muted);
+  font: 600 11px/1.4 var(--font-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.routines-view .routines-organization-members {
+  gap: 6px;
+}
+
+.routines-view .routines-organization-members li {
+  border: 0;
+}
+
+.routines-view .routines-organization-members button {
+  min-height: 64px;
+  border: 1px solid var(--routine-line);
+  border-radius: 11px;
+  background: var(--routine-card);
+  padding: 12px 14px;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.routines-view .routines-organization-members button:hover {
+  border-color: #58585d;
+  background: #303033;
+}
+
+.routines-view .routines-organization-work {
+  gap: 14px;
+  padding-top: 22px;
+  border-top: 1px solid var(--routine-line);
+}
+
+html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h3 {
+  font: 400 21px/1.15 var(--raya-font-display);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.routines-view .routines-organization-work-head p {
+  margin-top: 5px;
+  color: var(--routine-muted);
+  font-size: 12px;
+}
+
+.routines-view .routines-organization-work-list {
+  display: grid;
+  gap: 8px;
+}
+
+.routines-view .routines-organization-work-list > li {
+  border: 1px solid var(--routine-line);
+  border-radius: 11px;
+  background: var(--routine-card);
+  padding: 15px 16px;
+}
+
+.routines-view .routines-organization-work-list > li + li {
+  margin-top: 0;
+}
+
+.routines-view .routines-organization-work-objective {
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.routines-view .routines-organization-work-meta {
+  color: var(--routine-muted);
+  font-size: 11px;
+}
+
+.routines-view .routines-organization-work-route button {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.routines-view .routines-organization-work-route button:hover {
+  text-decoration: underline;
+}
+
+.routines-view .routines-organization-details,
+.routines-view .routines-organization-disclosure,
+.routines-view .routines-organization-section {
+  border-top: 1px solid var(--routine-line);
+  padding-top: 16px;
+}
+
+.routines-view .routines-organization-form {
+  gap: 22px;
+}
+
+.routines-view .routines-field {
+  gap: 8px;
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: 12px;
+}
+
+.routines-view .routines-field :is(input, select, textarea) {
+  min-height: 40px;
+  border: 1px solid #3b3b3e;
+  border-radius: 10px;
+  background-color: var(--routine-card);
+  padding: 10px 12px;
+  color: var(--text-base, var(--vscode-foreground));
+  font: 13px/1.45 var(--font-body);
+}
+
+.routines-view .routines-field select {
+  appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23aaaab0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.routines-view .routines-field :is(input, select, textarea):focus-visible {
+  border-color: #77777d;
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-focusBorder, #8d8d94) 35%, transparent);
+}
+
+.routines-view .routines-organization-edit-members li {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  border: 1px solid var(--routine-line);
+  border-radius: 11px;
+  background: var(--routine-card);
+  padding: 14px;
+}
+
+.routines-view .routines-organization-edit-members li + li {
+  margin-top: 8px;
+}
+
+.routines-view .routines-organization-member-settings[open] {
+  border-top: 1px solid var(--routine-line);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.routines-view .routines-organization-member-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.routines-view .routines-organization-member-fields > [data-component="button"] {
+  justify-self: start;
+}
+
+.routines-view .routines-organization-archive {
+  margin-top: 10px;
+}
+
+.routines-view .routines-organization-danger {
+  align-items: center;
+}
+
+.routines-view .routines-organization-head-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 800px) {
+  .routines-view .routines-inbox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routines-view .routines-people {
+    border-right: 0;
+    border-bottom: 1px solid var(--routine-line);
+    max-height: 250px;
+  }
+
+  .routines-view .routines-thread-head {
+    padding-inline: 18px;
+  }
+
+  .routines-view .routines-organization-member-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view {
+  --routine-line: #dcdcdf;
+  --routine-card: #f3f3f4;
+  --routine-muted: #595960;
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view .routines-organization[aria-current="page"],
+body:is(.vscode-light, .pv-theme--light) .routines-view .routines-organization-members button:hover,
+body:is(.vscode-light, .pv-theme--light) .routines-view .routines-secondary [data-component="button"]:hover {
+  background: #e7e7e9;
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view .routines-field :is(input, select, textarea) {
+  border-color: #d0d0d4;
+}
+
+@media (forced-colors: active) {
+  .routines-view .routines-field :is(input, select, textarea),
+  .routines-view .routines-organization-members button,
+  .routines-view .routines-organization-edit-members li {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}

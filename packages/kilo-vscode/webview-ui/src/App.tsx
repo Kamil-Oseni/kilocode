@@ -364,12 +364,11 @@ const AppContent: Component = () => {
       askRaya(text)
       return
     }
+    const model = session.selected(session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID())
+    const pending = tabs?.add()
+    if (!tabs) session.clearCurrentSession()
     setCurrentView("newTask")
-    const origin = session.currentSessionID()
-    const pending = origin ? undefined : (tabs?.pending() ?? session.draftSessionID())
-    const id = origin ?? pending
-    const model = session.selected(id)
-    session.sendMessage(text, model?.providerID, model?.modelID, undefined, pending)
+    session.sendMessage(text, model?.providerID, model?.modelID, undefined, pending, undefined, undefined, null)
   }
 
   const cycleAgent = (direction: 1 | -1) => {

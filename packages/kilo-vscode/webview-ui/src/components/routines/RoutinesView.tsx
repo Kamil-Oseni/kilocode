@@ -204,7 +204,7 @@ function OrganizationEditor(props: {
     <section class="routines-thread routines-organization-editor" aria-labelledby={`edit-${props.item.id}`}>
       <div class="routines-thread-head">
         <div class="routines-thread-identity">
-          <h3 id={`edit-${props.item.id}`}>Organization settings</h3>
+          <h3 id={`edit-${props.item.id}`}>Team settings</h3>
           <span>{props.item.name}</span>
         </div>
         <Button variant="ghost" size="small" disabled={props.saving} onClick={props.onClose}>
@@ -238,7 +238,7 @@ function OrganizationEditor(props: {
           <input value={name()} maxlength={120} onInput={(event) => setName(event.currentTarget.value)} />
         </label>
         <label class="routines-field">
-          Purpose
+          What this team does
           <textarea
             value={purpose()}
             maxlength={2000}
@@ -248,10 +248,10 @@ function OrganizationEditor(props: {
           />
         </label>
         <details class="routines-organization-disclosure">
-          <summary>Policy and spending</summary>
+          <summary>Guidelines and budget</summary>
           <div class="routines-organization-disclosure-body">
             <label class="routines-field">
-              Operating policy
+              Team guidelines
               <textarea
                 value={policy()}
                 maxlength={12000}
@@ -261,11 +261,11 @@ function OrganizationEditor(props: {
                 onInput={(event) => setPolicy(event.currentTarget.value)}
               />
               <span id={`policy-help-${props.item.id}`} class="routines-hint">
-                Applies to this team's work. It cannot grant tools, folders, spending access, or delegation authority.
+                Shared instructions for this team. Access and permissions are set separately.
               </span>
             </label>
             <label class="routines-field">
-              Shared model budget ($)
+              Team budget ($)
               <input
                 value={budget()}
                 inputmode="numeric"
@@ -276,7 +276,7 @@ function OrganizationEditor(props: {
                 onInput={(event) => setBudget(event.currentTarget.value)}
               />
               <span id={`budget-help-${props.item.id}`} class="routines-hint">
-                Caps committed model cost across this team. Leave blank for no limit.
+                Optional limit for this team's model use.
               </span>
             </label>
           </div>
@@ -286,7 +286,7 @@ function OrganizationEditor(props: {
           <div class="routines-organization-section-head">
             <div>
               <h4 id={`team-${props.item.id}`}>Team</h4>
-              <p>Open a worker only when you need to change their role or reporting line.</p>
+              <p>Choose who belongs here and how they work together.</p>
             </div>
           </div>
           <ol class="routines-organization-edit-members">
@@ -328,7 +328,7 @@ function OrganizationEditor(props: {
                         />
                       </label>
                       <label class="routines-field">
-                        Reports to
+                        Team lead
                         <select
                           value={member.supervisorID ?? ""}
                           onChange={(event) =>
@@ -372,12 +372,12 @@ function OrganizationEditor(props: {
         </section>
 
         <details class="routines-organization-disclosure">
-          <summary>Who can assign work</summary>
+          <summary>Work handoffs</summary>
           <section class="routines-organization-section" aria-labelledby={`authority-${props.item.id}`}>
             <div class="routines-organization-section-head">
               <div>
-                <h4 id={`authority-${props.item.id}`}>Delegation permissions</h4>
-                <p>Choose each direction explicitly. A checked worker can assign work to that recipient.</p>
+                <h4 id={`authority-${props.item.id}`}>Who can hand off work</h4>
+                <p>Choose which teammates can pass work to each other.</p>
               </div>
             </div>
             <div class="routines-authority">
@@ -406,17 +406,17 @@ function OrganizationEditor(props: {
         </details>
 
         <details class="routines-organization-disclosure routines-organization-archive">
-          <summary>Archive organization</summary>
+          <summary>Remove team</summary>
           <section
             class="routines-organization-section routines-organization-danger"
             aria-labelledby={`archive-${props.item.id}`}
           >
             <div>
-              <h4 id={`archive-${props.item.id}`}>Archive {props.item.name}</h4>
-              <p>Workers, conversations, reports, and organization history stay saved.</p>
+              <h4 id={`archive-${props.item.id}`}>Remove {props.item.name} from Routines</h4>
+              <p>The team leaves your active list. Its workers, chats, and reports stay saved.</p>
             </div>
             <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
-              Archive
+              Remove team
             </Button>
           </section>
         </details>
@@ -1053,15 +1053,15 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     })
   }
 
-  const archiveOrganization = () => {
-    const item = editingOrganization()
+  const archiveOrganization = (target?: Organization) => {
+    const item = target ?? editingOrganization()
     if (!item || organizationRequest()) return
     dialog.show(() => (
-      <Dialog title={`Archive ${item.name}?`} fit>
+      <Dialog title={`Remove ${item.name}?`} fit>
         <div class="dialog-confirm-body">
           <span>
-            The organization leaves the active list. Its workers, conversations, reports, and organization history stay
-            saved. Scheduled workers keep their current schedules until you pause or remove them separately.
+            This team leaves your active list. Its workers, chats, reports, and history stay saved. Scheduled workers
+            keep running until you pause or remove them separately.
           </span>
           <div class="dialog-confirm-actions">
             <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
@@ -1083,7 +1083,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 dialog.close()
               }}
             >
-              Archive organization
+              Remove team
             </Button>
           </div>
         </div>
@@ -2129,7 +2129,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   setOrganizationNotice("")
                 }}
                 onSave={saveOrganization}
-                onArchive={archiveOrganization}
+                onArchive={() => archiveOrganization()}
                 onProvision={saveProvisioning}
               />
             </Show>
@@ -2144,7 +2144,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       <h3 id={`organization-${item.id}`} tabIndex={-1}>
                         {item.name}
                       </h3>
-                      <span>{item.members.length} workers</span>
+                      <span>
+                        {item.members.length} {item.members.length === 1 ? "worker" : "workers"}
+                      </span>
                     </div>
                     <div class="routines-organization-head-actions">
                       <Button
@@ -2159,6 +2161,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       </Button>
                       <Button variant="ghost" size="small" onClick={() => editOrganization(item)}>
                         Settings
+                      </Button>
+                      <Button variant="ghost" size="small" onClick={() => archiveOrganization(item)}>
+                        Remove team
                       </Button>
                     </div>
                   </div>

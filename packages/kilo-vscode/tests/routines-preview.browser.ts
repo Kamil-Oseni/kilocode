@@ -12,6 +12,7 @@ test("Routines overview sends a team request and opens teams", async ({ page }, 
   await expect(page.locator("html")).not.toHaveAttribute("data-routines-request", /delegation rules/)
   await page.locator(".routines-organization[data-routine-organization]").first().click()
   await expect(page.locator(".routines-organization-overview")).toBeVisible()
+  await page.screenshot({ path: info.outputPath("team.png"), fullPage: true })
 })
 
 test("Routines plans a worker from the input and leaves a draft when offline", async ({ page }) => {
@@ -672,7 +673,7 @@ test("one-worker organization explains tracked work and opens its worker chat", 
   await page.getByRole("button", { name: "Finance 1" }).click()
   const work = page.locator(".routines-organization-work")
   await work.getByRole("button", { name: "Assign work" }).click()
-  const assignment = page.getByRole("dialog", { name: "Assign work in Finance" })
+  const assignment = page.getByRole("dialog", { name: "Give Finance work" })
   await expect(assignment).toContainText("Books is the only active worker.")
   await expect(assignment).toContainText("add another worker and choose a delegation direction")
   await expect(assignment.getByRole("button", { name: "Close", exact: true }).last()).toBeFocused()
@@ -680,7 +681,7 @@ test("one-worker organization explains tracked work and opens its worker chat", 
   await expect(assignment.locator(".routines-assignment")).toHaveCSS("padding-bottom", "16px")
   await assignment.getByRole("button", { name: "Open worker chat" }).click()
   await expect(assignment).toBeHidden()
-  await expect(page.getByRole("heading", { name: "Books" })).toBeVisible()
+  await expect(page.locator(".routines-thread-identity strong", { hasText: "Books" })).toBeVisible()
 })
 
 test("organization work filters loaded and earlier activity", async ({ page }, info) => {
@@ -736,20 +737,24 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
+  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Remove team", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText("Scheduled workers")
+  await page.getByRole("button", { name: "Keep organization" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("heading", { name: "Team" })).toBeVisible()
-  await expect(page.getByLabel("Operating policy")).toBeHidden()
-  await expect(page.getByLabel("Shared model budget ($)")).toBeHidden()
-  await page.getByText("Policy and spending", { exact: true }).click()
-  await expect(page.getByLabel("Operating policy")).toHaveValue(
+  await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible()
+  await expect(page.getByLabel("Team guidelines")).toBeHidden()
+  await expect(page.getByLabel("Team budget ($)")).toBeHidden()
+  await page.getByText("Guidelines and budget", { exact: true }).click()
+  await expect(page.getByLabel("Team guidelines")).toHaveValue(
     "Do not contact a prospect until the proposed website has passed design and legal review.",
   )
-  await expect(page.getByLabel("Operating policy")).toHaveAccessibleDescription(
-    "Applies to this team's work. It cannot grant tools, folders, spending access, or delegation authority.",
+  await expect(page.getByLabel("Team guidelines")).toHaveAccessibleDescription(
+    "Shared instructions for this team. Access and permissions are set separately.",
   )
-  await expect(page.getByLabel("Shared model budget ($)")).toHaveValue("100")
-  await expect(page.getByLabel("Shared model budget ($)")).toHaveAccessibleDescription(
-    "Caps committed model cost across this team. Leave blank for no limit.",
+  await expect(page.getByLabel("Team budget ($)")).toHaveValue("100")
+  await expect(page.getByLabel("Team budget ($)")).toHaveAccessibleDescription(
+    "Optional limit for this team's model use.",
   )
   const counsel = page.locator(".routines-organization-edit-members > li").filter({
     has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
@@ -760,21 +765,19 @@ test("routines organization editor separates reporting, delegation, and archive"
   await counsel.getByText("Can create workers", { exact: true }).first().click()
   await expect(authority).not.toBeChecked()
   await expect(counsel.getByText("Changed by you", { exact: false })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeHidden()
-  await page.getByText("Who can assign work", { exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeVisible()
-  await expect(
-    page.getByText("Choose each direction explicitly. A checked worker can assign work to that recipient."),
-  ).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
+  await page.getByText("Work handoffs", { exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
+  await expect(page.getByText("Choose which teammates can pass work to each other.")).toBeVisible()
   const lead = page.getByRole("group", { name: "Counsel can assign work to" })
   await expect(lead.getByRole("checkbox", { name: "Books" })).toBeChecked()
   await lead.getByText("Books", { exact: true }).click()
   await expect(lead.getByRole("checkbox", { name: "Books" })).not.toBeChecked()
   await page.getByLabel("Name").fill("Website Studio")
   await page
-    .getByLabel("Operating policy")
+    .getByLabel("Team guidelines")
     .fill("Only contact prospects after design review, legal review, and an approved outreach brief.")
-  await page.getByLabel("Shared model budget ($)").fill("250")
+  await page.getByLabel("Team budget ($)").fill("250")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
   await page.getByText("Organization details", { exact: true }).click()
@@ -785,14 +788,12 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByText(/\$249\.58 available/)).toBeVisible()
 
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeHidden()
-  await page.getByText("Archive organization", { exact: true }).click()
-  await page.getByRole("button", { name: "Archive", exact: true }).click()
-  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
-    "Scheduled workers keep their current schedules",
-  )
+  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeHidden()
+  await page.locator(".routines-organization-archive > summary").click()
+  await page.getByRole("button", { name: "Remove team", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText("Scheduled workers")
   await page.getByRole("button", { name: "Keep organization" }).click()
-  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toBeHidden()
+  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toBeHidden()
   const result = await new AxeBuilder({ page })
     .include(".routines-view")
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
@@ -808,25 +809,25 @@ test("narrow organization editor reveals one settings group at a time", async ({
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
 
-  await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible()
-  await expect(page.getByLabel("Operating policy")).toBeHidden()
-  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeHidden()
-  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeHidden()
+  await expect(page.getByRole("heading", { name: "Team settings" })).toBeVisible()
+  await expect(page.getByLabel("Team guidelines")).toBeHidden()
+  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeHidden()
 
-  await page.getByText("Policy and spending", { exact: true }).click()
-  await expect(page.getByLabel("Operating policy")).toBeVisible()
-  await page.getByText("Policy and spending", { exact: true }).click()
+  await page.getByText("Guidelines and budget", { exact: true }).click()
+  await expect(page.getByLabel("Team guidelines")).toBeVisible()
+  await page.getByText("Guidelines and budget", { exact: true }).click()
   const counsel = page.locator(".routines-organization-edit-members > li").filter({
     has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
   })
   await counsel.getByText("Worker settings", { exact: true }).click()
   await expect(counsel.getByLabel("Role")).toBeVisible()
   await counsel.getByText("Worker settings", { exact: true }).click()
-  await page.getByText("Who can assign work", { exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeVisible()
-  await page.getByText("Who can assign work", { exact: true }).click()
-  await page.getByText("Archive organization", { exact: true }).click()
-  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeVisible()
+  await page.getByText("Work handoffs", { exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
+  await page.getByText("Work handoffs", { exact: true }).click()
+  await page.locator(".routines-organization-archive > summary").click()
+  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeVisible()
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   const result = await new AxeBuilder({ page })

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 - installed Todo subtask snapshot handoff
+
+`b65075bd9f` is pushed and installed as `eden.raya@7.4.23-snapshot+b65075bd9f.kamil-oseni.1790336292805`. The rollback package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.1706b72160da2237361dd6f617fd52b9864d4eb82979dfc5600211123dcffaa2.vsix`, 545,209,509 bytes, SHA-256 `1706B72160DA2237361DD6F617FD52B9864D4EB82979DFC5600211123DCFFAA2`. Reload the open host and exercise a real provider-created Todo plan, then complete/reopen a child and restart the backend. Verify the saved state and that stale or unknown clicks do not replay. The installed-host flow, custom timer duration entry, live reminder, and organization delegation remain unverified. The user-owned images, documents and `debug.log` were not included in the implementation commit.
+
 ## ChatGPT 2026-09-25 07:15 America/Toronto - Todo step and design follow-up
 
 The source now exposes revision-safe complete/reopen actions for individual Todo subtasks through the HTTP API, generated SDK, extension bridge and checkboxes. After installation, create a reviewed parent plan with multiple subtasks in a real Raya chat, apply it, complete and reopen a child, restart the backend, and verify the exact saved progress and reminder behavior. A changed parent or child revision must refresh without replaying the click. The current Todo planning field deliberately opens a prepared chat draft for the user to send; the live model selection and proposal quality have not been proved by the browser fixture. The visual correction removes decorative gradients, nested/tinted chrome and duplicate Routines team cards per `docs/designer.md`. Check actual installed narrow and wide views after reload, especially the larger timer, filtered empty state, Routines navigation and chat. Custom timer entry and a live real-minute reminder remain open.

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 05:18 America/Toronto - language verification handoff
+
+One fresh `auto`/DeepSeek English request returned an English final answer after Chief routed it to a generalist. The temporary verification session was deleted. Re-test the longer English two-specialist workflow in the installed host; the one-sentence check does not prove language consistency across child reports and synthesis. The other live checks below remain.
+
 ## ChatGPT 2026-09-25 05:11 America/Toronto - installed Ask/chat polish handoff
 
 `54fe9c29f3` is pushed and installed as `eden.raya@7.4.23-snapshot+54fe9c29f3.kamil-oseni.1790327245989`; focused checks, push hook, and low-memory package gates pass. The retained 545,087,158-byte VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.9138b79aea2d529ed1b12bd585a1f9cae94062e0c869ef46f79d1ca7b25d8952.vsix`, SHA-256 `9138B79AEA2D529ED1B12BD585A1F9CAE94062E0C869EF46F79D1CA7B25D8952`. Reload the open VS Code host, then run the live Ask, History, timestamp, English-output, and two-specialist checks described below. Installation alone does not prove activation or provider behavior. Keep `FUT-AGENT-01/02` and `FUT-CU-01` In progress.

@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-25 05:18 America/Toronto - real-provider English check
+
+A fresh `auto` run with `deepseek-byok/deepseek-chat` received the English request “Explain in one sentence how a copy button helps in chat.” Chief routed it to a generalist; the visible final answer was one English sentence. The temporary verification chat `ses_f282748a0ffe3zplJ425LUicm4` was deleted through the supported session command after the run. This proves one real-provider English path with the installed source, not language adherence across the longer saved specialist workflow that previously produced Chinese. That workflow still needs a fresh installed-host check.
+
 ## ChatGPT 2026-09-25 05:11 America/Toronto - Ask/chat polish snapshot installed
 
 Commit `54fe9c29f3` is pushed to `origin/main`. Six focused Chromium Ask/History/time cases, 30 Ask unit tests, 12 Chief tests, extension and CLI typechecks, extension lint/Knip, kilo-ui typecheck, annotation guard, and the push hook pass. The low-memory snapshot build passed SDK/CLI smoke checks, extension production validation, native capture and input self-tests, input-host round trip, and packaging. VS Code lists `eden.raya@7.4.23-snapshot+54fe9c29f3.kamil-oseni.1790327245989`. The retained 545,087,158-byte rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.9138b79aea2d529ed1b12bd585a1f9cae94062e0c869ef46f79d1ca7b25d8952.vsix`, SHA-256 `9138B79AEA2D529ED1B12BD585A1F9CAE94062E0C869EF46F79D1CA7B25D8952`. Installation does not prove the open host reloaded. Real backend Ask submission, fresh English provider output, and the two-specialist workflow still need installed-host verification; keep `FUT-AGENT-01/02` and `FUT-CU-01` In progress.

@@ -895,13 +895,11 @@ export namespace RayaTaskRunner {
         yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
         if (strict || !item.sessionID || !input.halt) continue
         const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
-        const halted = open(worker.dir, input.halt(item.sessionID))
-        if (strict) yield* halted
-        else
-          yield* halted.pipe(
-            Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))),
-          )
+        yield* open(worker.dir, input.halt(item.sessionID)).pipe(
+          Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))),
+        )
       }
+      if (strict) return record
       const seen = new Set<string>()
       for (const item of listed) {
         if (seen.has(item.recipientID)) continue

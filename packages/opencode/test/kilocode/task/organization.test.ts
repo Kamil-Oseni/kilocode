@@ -620,6 +620,94 @@ test("failed session cancellation retains live delegation through archive retry"
   )
 })
 
+test("organization stop does not launch another recipient's queued work", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const sessions = {
+        create: () => Effect.die("archive launched unrelated work"),
+        get: () => Effect.die("unexpected session"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const chief = yield* runner.tasks.create({ name: "Chief", objective: "Lead", schedule: { kind: "manual" } })
+      const member = yield* runner.tasks.create({ name: "Member", objective: "Work", schedule: { kind: "manual" } })
+      const outside = yield* runner.tasks.create({
+        name: "Outside",
+        objective: "Other work",
+        schedule: { kind: "manual" },
+      })
+      const sender = yield* runner.tasks.create({
+        name: "Independent",
+        objective: "Assign",
+        schedule: { kind: "manual" },
+      })
+      const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
+      const item = yield* organizations.create({
+        name: "Team",
+        members: [
+          { agentID: chief.id, role: "Chief" },
+          { agentID: member.id, role: "Member" },
+        ],
+        delegations: [{ senderID: chief.id, recipientID: member.id }],
+      })
+      const now = Date.now()
+      yield* database.db
+        .insert(Delegation)
+        .values([
+          {
+            id: "rdl_archive_root",
+            source: "archive_root",
+            sender_id: chief.id,
+            recipient_id: member.id,
+            organization_id: item.id,
+            organization_name: item.name,
+            organization_revision: item.revision,
+            objective: "Review",
+            depth: 1,
+            state: "accepted",
+            time_created: now,
+            time_updated: now,
+          },
+          {
+            id: "rdl_archive_child",
+            source: "archive_child",
+            sender_id: member.id,
+            recipient_id: outside.id,
+            parent_id: "rdl_archive_root",
+            objective: "Help review",
+            depth: 2,
+            state: "queued",
+            time_created: now + 1,
+            time_updated: now + 1,
+          },
+          {
+            id: "rdl_unrelated_queued",
+            source: "unrelated_queued",
+            sender_id: sender.id,
+            recipient_id: outside.id,
+            objective: "Unrelated work",
+            depth: 1,
+            state: "queued",
+            time_created: now + 2,
+            time_updated: now + 2,
+          },
+        ])
+        .run()
+      expect((yield* organizations.archive(item.id, { expectedRevision: 1 })).archived).toBe(true)
+      expect(
+        (yield* database.db.select().from(Delegation).where(eq(Delegation.id, "rdl_archive_child")).get())?.state,
+      ).toBe("cancelled")
+      expect(
+        (yield* database.db.select().from(Delegation).where(eq(Delegation.id, "rdl_unrelated_queued")).get())?.state,
+      ).toBe("queued")
+      expect(yield* runner.tasks.runsFor(outside.id)).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("routine usage names every durable evidence domain without mutating it", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

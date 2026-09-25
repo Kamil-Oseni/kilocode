@@ -200,7 +200,7 @@ try {
   assert.equal(status("running", true, false), "Running")
   assert.ok(root.querySelector(".routines-main-header"))
   assert.ok(root.querySelector(".routines-roster-search"))
-  const options = [...root.querySelectorAll("summary")].find((item) => item.textContent.trim() === "View options")
+  const options = [...root.querySelectorAll("summary")].find((item) => item.textContent.trim() === "More options")
   options.click()
   button("Report settings").click()
   await new Promise((resolve) => setImmediate(resolve))

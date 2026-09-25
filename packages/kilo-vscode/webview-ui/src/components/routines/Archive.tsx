@@ -177,13 +177,10 @@ export function Archive(props: { onOpenSession?: (id: string) => void }) {
         }
       }}
     >
-      <summary>Removed routines</summary>
-      <p class="routines-hint">
-        Review retained definitions, conversations and runs. Removed routines do not launch new work or accept
-        follow-ups. Earlier removals may not have an archive record.
-      </p>
+      <summary>Past workers</summary>
+      <p class="routines-hint">Their chats and work are saved here. They no longer run or receive new work.</p>
       <Button size="small" variant="ghost" disabled={loading()} onClick={() => load()}>
-        Refresh archive
+        Refresh
       </Button>
       <Show when={next()}>
         <Button size="small" variant="ghost" disabled={loading()} onClick={() => load(undefined, next())}>
@@ -191,7 +188,7 @@ export function Archive(props: { onOpenSession?: (id: string) => void }) {
         </Button>
       </Show>
       <Show when={loaded() && !archive().length}>
-        <p role="status">No removed routines have been archived.</p>
+        <p role="status">No past workers yet.</p>
       </Show>
       <Show when={archive().length > 0}>
         <label for={`${id}-select`}>Removed routine</label>

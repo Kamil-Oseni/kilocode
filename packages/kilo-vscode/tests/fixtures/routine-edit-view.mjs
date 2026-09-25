@@ -922,12 +922,12 @@ try {
     assert.equal(picker.options.length, 3)
     assert.equal(picker.value, "archived")
     assert.doesNotMatch(archive.textContent, /Load more removed routines/)
-    button("Refresh archive").click()
+    button("Refresh").click()
     const refresh = sent.findLast((msg) => msg.type === "routineArchive")
     emit({ type: "routineArchive", requestID: refresh.requestID, archive: [] })
-    assert.match(archive.textContent, /No removed routines have been archived/)
+    assert.match(archive.textContent, /No past workers yet/)
     assert.doesNotMatch(archive.textContent, /Saved result/)
-    button("Refresh archive").click()
+    button("Refresh").click()
     const cancelled = sent.findLast((msg) => msg.type === "routineArchive")
     archive.open = false
     archive.dispatchEvent(new window.Event("toggle"))
@@ -948,7 +948,7 @@ try {
     const renewed = sent.findLast((msg) => msg.type === "routineArchive")
     assert.notEqual(renewed.requestID, expired.requestID)
     emit({ type: "routineArchive", requestID: renewed.requestID, archive: [] })
-    assert.match(archive.textContent, /No removed routines have been archived/)
+    assert.match(archive.textContent, /No past workers yet/)
     assert.doesNotMatch(archive.textContent, /archive request took too long/)
   }
   {

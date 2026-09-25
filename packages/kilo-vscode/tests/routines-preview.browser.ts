@@ -133,9 +133,12 @@ for (const theme of ["light", "dark"]) {
       const books = page.locator('.routines-identity[data-routine-worker="routine"]')
       await expect(books).toBeVisible()
       await expect(page.getByRole("button", { name: "Website Builders 3", exact: true })).toBeVisible()
+      await expect(page.getByRole("group", { name: "Worker filters" })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Needs attention" })).toBeVisible()
+      await expect(page.getByText("Their chats and work are saved here.", { exact: false })).toBeHidden()
       await expect(page.locator('.routines-unread[aria-label="1 unread"]').first()).toBeVisible()
       await expect(page.locator(".routines-row [data-component='checkbox']")).toHaveCount(0)
-      await page.getByText("View options", { exact: true }).click()
+      await page.getByText("More options", { exact: true }).click()
       await page.getByRole("button", { name: "Manage workers" }).click()
       await expect(page.locator(".routines-row [data-component='checkbox']").first()).toBeVisible()
       await page.getByRole("button", { name: "Done" }).click()
@@ -342,7 +345,7 @@ for (const width of [320, 900]) {
   test(`organization changes clear selections from another team at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/?state=light-routines")
-    await page.getByText("View options", { exact: true }).click()
+    await page.getByText("More options", { exact: true }).click()
     await page.getByRole("button", { name: "Manage workers" }).click()
 
     const counsel = page.locator(".routines-row").filter({

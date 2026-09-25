@@ -346,25 +346,27 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-row[data-curre
   --routine-muted: #aaaab0;
 }
 
-.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list) {
+.routines-view * {
   scrollbar-width: thin;
-  scrollbar-color: #4b4b50 transparent;
+  scrollbar-color: #45454a transparent;
 }
 
-.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list)::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+.routines-view *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list)::-webkit-scrollbar-track {
+.routines-view *::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.routines-view :is(.routines-people, .routines-thread-body, .routines-thread, .routines-list)::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
+.routines-view *::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: #4b4b50;
-  background-clip: padding-box;
+  background: #45454a;
+}
+
+.routines-view *::-webkit-scrollbar-thumb:hover {
+  background: #69696f;
 }
 
 .routines-view .routines-inbox {
@@ -424,9 +426,14 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
   background: #252526;
 }
 
+.routines-view .routines-view-options {
+  display: grid;
+  gap: 8px;
+}
+
 .routines-view .routines-roster-more {
   border-top: 1px solid var(--routine-line);
-  padding-top: 11px;
+  padding-top: 6px;
 }
 
 .routines-view .routines-roster-more > summary,
@@ -493,9 +500,10 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 
 .routines-view .routines-filters [data-component="button"] {
   min-width: 0;
-  padding-inline: 5px;
+  min-height: 32px;
+  padding-inline: 6px;
   font-size: 11px;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .routines-view .routines-roster-more .routines-secondary {
@@ -570,19 +578,22 @@ html[data-theme="kilo-vscode"] .routines-view .routines-thread-identity h3 {
 }
 
 .routines-view .routines-organization-members button {
-  min-height: 64px;
-  border: 1px solid var(--routine-line);
-  border-radius: 11px;
-  background: var(--routine-card);
-  padding: 12px 14px;
+  min-height: 58px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 10px 12px;
   transition:
     background-color 150ms ease-out,
     border-color 150ms ease-out;
 }
 
 .routines-view .routines-organization-members button:hover {
-  border-color: #58585d;
-  background: #303033;
+  background: #2b2b2d;
+}
+
+.routines-view .routines-organization-members li + li {
+  border-top: 1px solid var(--routine-line);
 }
 
 .routines-view .routines-organization-work {
@@ -609,10 +620,11 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 }
 
 .routines-view .routines-organization-work-list > li {
-  border: 1px solid var(--routine-line);
-  border-radius: 11px;
-  background: var(--routine-card);
-  padding: 15px 16px;
+  border: 0;
+  border-top: 1px solid var(--routine-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 0;
 }
 
 .routines-view .routines-organization-work-list > li + li {
@@ -745,6 +757,18 @@ body:is(.vscode-light, .pv-theme--light) .routines-view {
   --routine-line: #dcdcdf;
   --routine-card: #f3f3f4;
   --routine-muted: #595960;
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view * {
+  scrollbar-color: #b4b4ba transparent;
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view *::-webkit-scrollbar-thumb {
+  background: #b4b4ba;
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view .routines-organization-members button:hover {
+  background: #ececee;
 }
 
 body:is(.vscode-light, .pv-theme--light) .routines-view .routines-organization[aria-current="page"],

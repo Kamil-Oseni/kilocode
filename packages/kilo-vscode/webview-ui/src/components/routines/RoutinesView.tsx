@@ -2000,9 +2000,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       onInput={(event) => setQuery(event.currentTarget.value)}
                     />
                   </label>
-                  <details class="routines-roster-more">
-                    <summary>View options</summary>
-                    <div class="routines-filters" role="group" aria-label="Inbox filters">
+                  <div class="routines-view-options">
+                    <div class="routines-filters" role="group" aria-label="Worker filters">
                       <Button size="small" variant={tone(attention() === "all")} onClick={() => setAttention("all")}>
                         All
                       </Button>
@@ -2021,21 +2020,24 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         Needs attention
                       </Button>
                     </div>
-                    <div class="routines-secondary">
-                      <Show when={!organization()}>
-                        <Button variant="ghost" size="small" onClick={reports}>
-                          Report settings
+                    <details class="routines-roster-more">
+                      <summary>More options</summary>
+                      <div class="routines-secondary">
+                        <Show when={!organization()}>
+                          <Button variant="ghost" size="small" onClick={reports}>
+                            Report settings
+                          </Button>
+                        </Show>
+                        <Button variant="ghost" size="small" onClick={() => setManage(true)}>
+                          Manage workers
                         </Button>
-                      </Show>
-                      <Button variant="ghost" size="small" onClick={() => setManage(true)}>
-                        Manage workers
-                      </Button>
-                      <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
-                        Refresh
-                      </Button>
-                      <Archive onOpenSession={props.onOpenSession} />
-                    </div>
-                  </details>
+                        <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
+                          Refresh
+                        </Button>
+                        <Archive onOpenSession={props.onOpenSession} />
+                      </div>
+                    </details>
+                  </div>
                 </div>
               </Show>
               <ul class="routines-list">

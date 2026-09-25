@@ -27,6 +27,7 @@ import * as Permission from "@/permission"
 import { MessageID, SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
+import { Question } from "@/question"
 import type * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -40,6 +41,16 @@ const it = testEffect(
     AppNodeBuilder.build(CrossSpawnSpawner.node),
     AppNodeBuilder.build(FSUtil.node),
     AppNodeBuilder.build(Git.node),
+    Layer.succeed(
+      Question.Service,
+      Question.Service.of({
+        ask: (input) => Effect.succeed(input.questions.map(() => ["raya-option:confirm"])),
+        reply: () => Effect.void,
+        reject: () => Effect.void,
+        list: () => Effect.succeed([]),
+        dismissAll: () => Effect.void,
+      }),
+    ),
   ),
 )
 
@@ -174,6 +185,33 @@ it.live(
             },
           ],
         }
+        const declined = yield* (yield* routineManagementTools({ database, storage, sessions }).create).init().pipe(
+          Effect.flatMap((tool) =>
+            tool.execute(params, {
+              ...context("declined-company"),
+              messageID: MessageID.make("msg_routine_declined"),
+            }),
+          ),
+          Effect.provideService(
+            Question.Service,
+            Question.Service.of({
+              ask: (input) => {
+                expect(input.questions[0]?.question).toContain("Website Builders")
+                expect(input.questions[0]?.question).toContain("delegates to design")
+                return Effect.succeed([["raya-option:cancel"]])
+              },
+              reply: () => Effect.void,
+              reject: () => Effect.void,
+              list: () => Effect.succeed([]),
+              dismissAll: () => Effect.void,
+            }),
+          ),
+        )
+        expect(declined.title).toBe("Organization creation cancelled")
+        expect(yield* RayaTask.make({ storage, database }).list()).toEqual([])
+        expect(
+          (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
+        ).toEqual([])
         const broken = routineManagementTools({ database, storage: unreliable, sessions })
         const create = yield* (yield* broken.create).init()
         const first = yield* create.execute(params, context("create-company")).pipe(Effect.exit)
@@ -1258,9 +1296,7 @@ it.live(
         const tools = routineManagementTools({ database, storage, sessions })
         const assign = yield* (yield* tools.assignOrganizationWork).init()
         expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("primary"))).toBe(true)
-        expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("subagent"))).toBe(
-          false,
-        )
+        expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("subagent"))).toBe(false)
         const result = yield* assign.execute(
           {
             organizationID: organization.id,

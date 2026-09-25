@@ -492,7 +492,7 @@ export namespace RayaTaskRunner {
                     undefined,
                     note ? undefined : item.output?.criteria,
                     opts?.budget ?? (item.budget ? { modelCost: item.budget } : undefined),
-                    opts?.follow ? "reply" : undefined,
+                    opts?.follow || opts?.delegationID ? "reply" : undefined,
                   )
                   const run: RayaTask.Run = {
                     id: owner.id,
@@ -1394,9 +1394,18 @@ export namespace RayaTaskRunner {
       })
       yield* Effect.acquireRelease(
         input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
+          if (event.properties.reason === "superseded") return
           const sid = event.properties.sessionID
           bridge.fork(
-            runner.settle(sid).pipe(
+            Effect.gen(function* () {
+              const goals = RayaGoal.make({ storage: input.storage, sessions: input.sessions })
+              for (const delay of [0, 25, 50, 100, 200, 400]) {
+                const goal = yield* goals.get(sid)
+                if (!goal || goal.completion !== "reply" || goal.status !== "active") break
+                yield* Effect.sleep(Duration.millis(delay))
+              }
+              yield* runner.settle(sid)
+            }).pipe(
               Effect.catchCause((cause) =>
                 Cause.hasInterrupts(cause)
                   ? Effect.failCause(cause)

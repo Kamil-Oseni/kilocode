@@ -538,21 +538,14 @@ export namespace RayaTask {
     worktree?: string,
   ) {
     if (brief(agent)) {
-      const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
-      const reads = [
-        "read",
-        "glob",
-        "grep",
-        "list",
-        "skill",
-        "question",
-        "todoread",
-        "todowrite",
-        "get_goal",
-        "update_goal",
-        "update_goal_plan",
-        "inspect_team",
-      ]
+      const cfg: Record<string, "allow" | "deny"> = {
+        "*": "deny",
+        question: "allow",
+        get_goal: "allow",
+        update_goal: "allow",
+        update_goal_plan: "allow",
+      }
+      const reads = ["read", "glob", "grep", "list", "skill", "question", "todoread", "todowrite", "inspect_team"]
       const selected =
         agent.tools !== undefined
           ? Permission.fromConfig(Object.fromEntries(agent.tools.map((tool) => [tool, "allow" as const])))
@@ -565,7 +558,13 @@ export namespace RayaTask {
       return restrict(agent.dir, agent.paths, worktree, Permission.fromConfig(cfg))
     }
     if (agent.tools !== undefined) {
-      const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
+      const cfg: Record<string, "allow" | "deny"> = {
+        "*": "deny",
+        question: "allow",
+        get_goal: "allow",
+        update_goal: "allow",
+        update_goal_plan: "allow",
+      }
       for (const tool of agent.tools) cfg[tool] = "allow"
       if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))
         cfg.create_subordinate = "allow"

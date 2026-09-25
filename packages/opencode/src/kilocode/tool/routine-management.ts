@@ -24,6 +24,7 @@ import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
 import { workflow } from "./workflow-request"
+import { confirm } from "./routine-confirmation"
 import * as Artifact from "@/kilocode/goal/artifact"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
@@ -674,6 +675,22 @@ export function routineManagementTools(input: {
               ),
           run: (plan) =>
             Effect.gen(function* () {
+              const summary = [
+                `Create organization ${params.name}?`,
+                `Purpose: ${params.purpose}`,
+                `Policy: ${params.policy ?? "none"}; shared budget: ${params.budget === undefined ? "no saved limit" : `$${params.budget}`}`,
+                ...params.workers.map((item) =>
+                  item.kind === "existing"
+                    ? `${item.key}: existing worker ${item.agentID}; role ${item.role}; supervisor ${item.supervisorKey ?? "none"}; delegates to ${item.delegatesTo?.join(", ") || "none"}`
+                    : `${item.key}: ${item.name}, ${item.role}; job ${item.objective}; schedule ${item.when ?? item.cron}${item.timezone ? ` (${item.timezone})` : ""}; access ${item.access}; tools ${item.tools.join(", ") || "questions only"}; capabilities ${item.capabilities.join(", ") || "none"}; budget ${item.budget === undefined ? "no saved limit" : `$${item.budget}`}; output ${item.output.description}; criteria ${item.output.criteria.map((criterion) => `${criterion.id}: ${criterion.description}`).join("; ")}; supervisor ${item.supervisorKey ?? "none"}; delegates to ${item.delegatesTo?.join(", ") || "none"}; may create workers ${item.canCreateWorkers === true ? "yes" : "no"}`,
+                ),
+              ].join("\n")
+              if (!(yield* confirm(input.storage, ctx, "create_organization", plan, summary)))
+                return {
+                  title: "Organization creation cancelled",
+                  output: "No organization or standing worker was created.",
+                  metadata: { requestStatus: "cancelled" },
+                }
               yield* ctx.ask({ permission: "schedule_task", patterns, always: patterns, metadata: params })
               for (const worker of plan.workers) {
                 if (worker.kind === "existing") {
@@ -1049,22 +1066,30 @@ export function routineManagementTools(input: {
       parameters: AssignOrganizationWork,
       execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          if (!ctx.callID) return yield* Effect.fail(new Error("Organization work assignment requires a stable tool call."))
+          if (!ctx.callID)
+            return yield* Effect.fail(new Error("Organization work assignment requires a stable tool call."))
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)
-            return yield* Effect.fail(new Error("This organization changed. Inspect Routines again before assigning work."))
+            return yield* Effect.fail(
+              new Error("This organization changed. Inspect Routines again before assigning work."),
+            )
           const sender = yield* tasks.get(params.senderID)
           const recipient = yield* tasks.get(params.recipientID)
           if (!sender.enabled) return yield* Effect.fail(new Error(`${sender.name} is paused and cannot assign work.`))
-          if (!recipient.enabled) return yield* Effect.fail(new Error(`${recipient.name} is paused and cannot receive work.`))
+          if (!recipient.enabled)
+            return yield* Effect.fail(new Error(`${recipient.name} is paused and cannot receive work.`))
           if (!organization.members.some((item) => item.agentID === sender.id))
             return yield* Effect.fail(new Error("The assigning worker is not a member of this organization."))
           if (!organization.members.some((item) => item.agentID === recipient.id))
             return yield* Effect.fail(new Error("The responsible worker is not a member of this organization."))
-          if (!organization.delegations.some((item) => item.senderID === sender.id && item.recipientID === recipient.id))
+          if (
+            !organization.delegations.some((item) => item.senderID === sender.id && item.recipientID === recipient.id)
+          )
             return yield* Effect.fail(
-              new Error(`${sender.name} is not authorized to assign work to ${recipient.name}. Ask before changing the organization.`),
+              new Error(
+                `${sender.name} is not authorized to assign work to ${recipient.name}. Ask before changing the organization.`,
+              ),
             )
           const source = `organization-chat:${digest(
             JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, organization.id]),

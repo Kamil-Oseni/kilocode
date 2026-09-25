@@ -11,8 +11,10 @@ import type * as Tool from "@/tool/tool"
 import { Git } from "@/git"
 import { Truncate } from "@/tool/truncate"
 import { Storage } from "@/storage/storage"
+import { Question } from "@/question"
 import { SessionID, MessageID } from "@/session/schema"
 import { english, scheduleTaskTool } from "@/kilocode/tool/schedule-task"
+import { confirm } from "@/kilocode/tool/routine-confirmation"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
@@ -66,6 +68,16 @@ const it = testEffect(
     AppNodeBuilder.build(CrossSpawnSpawner.node),
     AppNodeBuilder.build(FSUtil.node),
     AppNodeBuilder.build(Git.node),
+    Layer.succeed(
+      Question.Service,
+      Question.Service.of({
+        ask: (input) => Effect.succeed(input.questions.map(() => ["raya-option:confirm"])),
+        reply: () => Effect.void,
+        reject: () => Effect.void,
+        list: () => Effect.succeed([]),
+        dismissAll: () => Effect.void,
+      }),
+    ),
   ),
 )
 
@@ -109,6 +121,7 @@ it.live(
         const ctx: Tool.Context = {
           sessionID: SessionID.make("ses_schedule_permission"),
           messageID: MessageID.make("msg_schedule_permission"),
+          callID: "permission-review",
           agent: "build",
           abort: AbortSignal.any([]),
           messages: [],
@@ -130,7 +143,9 @@ it.live(
           { ...assignment("Editing"), access: "full" as const },
           { ...assignment("Records"), capabilities: ["money"] },
         ]) {
-          const result = yield* tool.execute({ ...params, runNow: true }, ctx).pipe(Effect.exit)
+          const result = yield* tool
+            .execute({ ...params, runNow: true }, { ...ctx, callID: params.name })
+            .pipe(Effect.exit)
           expect(Exit.isFailure(result)).toBe(true)
           expect(yield* RayaTask.make(input).list()).toEqual([])
           expect(yield* input.storage.list(["raya", "agent-claims"])).toEqual([])
@@ -184,6 +199,115 @@ it.live(
   30_000,
 )
 it.live(
+  "standing workers require an exact in-chat confirmation even when tool permission allows them",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const input = {
+          storage: yield* Storage.Service,
+          database: yield* Database.Service,
+          sessions: {
+            create: () => Effect.die("must not start"),
+            get: () => Effect.die("must not read session"),
+            messages: () => Effect.succeed([]),
+            children: () => Effect.succeed([]),
+          },
+        }
+        const tool = yield* (yield* scheduleTaskTool(input)).init()
+        const ctx: Tool.Context = {
+          sessionID: SessionID.make("ses_schedule_confirm"),
+          messageID: MessageID.make("msg_schedule_confirm"),
+          callID: "exact-worker",
+          agent: "build",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const params = assignment("Review first", "Summarize a harmless local note")
+        const question = (answer: "confirm" | "cancel") =>
+          Question.Service.of({
+            ask: (input) => {
+              expect(input.questions[0]?.question).toContain("Review first")
+              expect(input.questions[0]?.question).toContain("questions only")
+              return Effect.succeed([[`raya-option:${answer}`]])
+            },
+            reply: () => Effect.void,
+            reject: () => Effect.void,
+            list: () => Effect.succeed([]),
+            dismissAll: () => Effect.void,
+          })
+        const denied = yield* tool
+          .execute(params, ctx)
+          .pipe(Effect.provideService(Question.Service, question("cancel")))
+        expect(denied.title).toBe("Routine creation cancelled")
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        const repeated = yield* tool
+          .execute(params, { ...ctx, callID: "same-user-retry" })
+          .pipe(
+            Effect.provideService(
+              Question.Service,
+              Question.Service.of({ ...question("confirm"), ask: () => Effect.die("denial must not ask again") }),
+            ),
+          )
+        expect(repeated.title).toBe("Routine creation cancelled")
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        const missing = yield* tool
+          .execute(params, { ...ctx, callID: undefined })
+          .pipe(Effect.provideService(Question.Service, question("confirm")))
+        expect(missing.title).toBe("Routine request needs review")
+        expect(missing.output).toContain("stable tool call")
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        const next = { ...ctx, messageID: MessageID.make("msg_schedule_confirm_next"), callID: "new-user-request" }
+        const approved = yield* tool
+          .execute(params, next)
+          .pipe(Effect.provideService(Question.Service, question("confirm")))
+        expect(approved.title).toBe("Agent assigned")
+        expect((yield* RayaTask.make(input).list()).map((item) => item.name)).toEqual([params.name])
+        const replay = yield* tool.execute(params, next).pipe(
+          Effect.provideService(
+            Question.Service,
+            Question.Service.of({
+              ...question("confirm"),
+              ask: () => Effect.die("approved plan must not ask again"),
+            }),
+          ),
+        )
+        expect(replay).toEqual(approved)
+        expect(yield* RayaTask.make(input).list()).toHaveLength(1)
+        const delay = { ...assignment("Short delay"), when: "in 2 minutes" }
+        const delayed = { ...ctx, messageID: MessageID.make("msg_schedule_delay"), callID: "relative-delay" }
+        const firstDelay = yield* tool.execute(delay, delayed)
+        expect(firstDelay.title).toBe("Agent assigned")
+        yield* Effect.sleep("20 millis")
+        const changed = yield* tool.execute(delay, delayed)
+        expect(changed).toEqual(JSON.parse(JSON.stringify(firstDelay)))
+        expect(yield* RayaTask.make(input).list()).toHaveLength(2)
+        const review = { ...ctx, messageID: MessageID.make("msg_schedule_drift"), callID: "drift-before-save" }
+        expect(
+          yield* confirm(input.storage, review, "schedule_task", { schedule: { kind: "once", at: 100 } }, "Run once?"),
+        ).toBe(true)
+        const shifted = yield* confirm(
+          input.storage,
+          review,
+          "schedule_task",
+          { schedule: { kind: "once", at: 101 } },
+          "Run once?",
+        ).pipe(Effect.exit)
+        expect(Exit.isFailure(shifted)).toBe(true)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
   "actual schedule tool rejects invalid input without saving or starting a routine",
   () =>
     provideTmpdirInstance((directory) =>
@@ -203,6 +327,7 @@ it.live(
         const ctx = {
           sessionID: SessionID.make("ses_schedule"),
           messageID: MessageID.make("msg_schedule"),
+          callID: "validation",
           agent: "build",
           abort: AbortSignal.any([]),
           messages: [],
@@ -242,7 +367,7 @@ it.live(
         }
         const accepted = yield* tool.execute(
           { ...assignment("Monday"), when: "every Monday at 9am", timezone: "America/Toronto" },
-          ctx,
+          { ...ctx, callID: "monday" },
         )
         expect(accepted.title).toBe("Agent assigned")
         const saved = (yield* RayaTask.make(input).list())[0]
@@ -265,7 +390,7 @@ it.live(
             access: "full",
             tools: ["read", "browser_*"],
           },
-          ctx,
+          { ...ctx, callID: "utc" },
         )
         expect(explicit.metadata).toMatchObject({ schedule: { kind: "cron", expr: "0 9 * * 1", tz: "UTC" } })
         expect(explicit.metadata).toMatchObject({ access: "full" })
@@ -280,7 +405,10 @@ it.live(
         const rejected = yield* tool.execute({ ...assignment("Delay"), when: "in 2 minutes", timezone: "UTC" }, ctx)
         expect(rejected.title).toBe("Agent not created")
         expect(yield* RayaTask.make(input).list()).toHaveLength(2)
-        const uncertain = yield* tool.execute({ ...assignment("Interrupted", "Original work"), runNow: true }, ctx)
+        const uncertain = yield* tool.execute(
+          { ...assignment("Interrupted", "Original work"), runNow: true },
+          { ...ctx, callID: "interrupted" },
+        )
         expect(uncertain.title).toBe("Routine saved; startup needs review")
         expect(uncertain.output).toContain("do not create a replacement")
         expect(uncertain.metadata).toMatchObject({ view: "routines", startup: "review" })

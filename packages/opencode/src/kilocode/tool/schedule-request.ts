@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
-import type { Storage } from "@/storage/storage"
+import { Storage } from "@/storage/storage"
 import type * as Tool from "@/tool/tool"
 
 const Result = Schema.Struct({
@@ -35,6 +35,34 @@ function canonical(value: unknown): unknown {
         .map(([key, value]) => [key, canonical(value)]),
     )
   return value
+}
+
+/** Read a completed effect before asking again when a relative schedule has moved with the clock. */
+export function settled(
+  storage: Storage.Interface,
+  ctx: Pick<Tool.Context, "sessionID" | "messageID" | "callID">,
+  params: object,
+) {
+  if (!ctx.callID) return Effect.succeed(undefined)
+  const key = ["raya", "agent-requests", hash(JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID]))]
+  const signature = hash(JSON.stringify(canonical(params)))
+  return Effect.gen(function* () {
+    const raw = yield* storage.read(key).pipe(
+      Effect.catchIf(
+        (err) => Storage.NotFoundError.isInstance(err),
+        () => Effect.succeed(undefined),
+      ),
+      Effect.orDie,
+    )
+    if (raw === undefined) return undefined
+    const saved = yield* Schema.decodeUnknownEffect(Record)(raw).pipe(Effect.orElseSucceed(() => undefined))
+    if (saved?.signature === signature && saved.result) return saved.result
+    return {
+      title: routine.title,
+      output: saved && saved.signature !== signature ? routine.changed : routine.pending,
+      metadata: { requestStatus: "unresolved" },
+    }
+  })
 }
 
 /** A pending receipt is uncertain; it never grants permission to repeat creation. */

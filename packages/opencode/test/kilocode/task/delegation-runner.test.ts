@@ -129,6 +129,7 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
       expect(saved?.objective).toContain("unchanged")
       expect(saved?.objective).toContain("Maximum model cost: $25")
       expect((yield* RayaGoal.make({ storage, sessions }).get(first.sessionID!))?.budget).toEqual({ modelCost: 25 })
+      expect((yield* RayaGoal.make({ storage, sessions }).get(first.sessionID!))?.completion).toBe("reply")
       expect((yield* runner.tasks.get(chief.id)).objective).toBe("Coordinate Friday close.")
       expect((yield* runner.tasks.get(books.id)).objective).toBe("Reconcile receipts.")
       expect(

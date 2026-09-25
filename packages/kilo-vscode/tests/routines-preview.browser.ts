@@ -740,23 +740,25 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
-  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeVisible()
-  await page.getByRole("button", { name: "Remove team", exact: true }).click()
-  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText("Scheduled workers")
+  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText(
+    "Archive is available once its workers are stopped",
+  )
   await page.getByRole("button", { name: "Keep organization" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible()
-  await expect(page.getByLabel("Team guidelines")).toBeHidden()
-  await expect(page.getByLabel("Team budget ($)")).toBeHidden()
-  await page.getByText("Guidelines and budget", { exact: true }).click()
-  await expect(page.getByLabel("Team guidelines")).toHaveValue(
+  await expect(page.getByLabel("Instructions for the team")).toBeHidden()
+  await expect(page.getByLabel("Spending limit ($)")).toBeHidden()
+  await page.getByText("How this team works", { exact: true }).click()
+  await expect(page.getByLabel("Instructions for the team")).toHaveValue(
     "Do not contact a prospect until the proposed website has passed design and legal review.",
   )
-  await expect(page.getByLabel("Team guidelines")).toHaveAccessibleDescription(
+  await expect(page.getByLabel("Instructions for the team")).toHaveAccessibleDescription(
     "Shared instructions for this team. Access and permissions are set separately.",
   )
-  await expect(page.getByLabel("Team budget ($)")).toHaveValue("100")
-  await expect(page.getByLabel("Team budget ($)")).toHaveAccessibleDescription(
+  await expect(page.getByLabel("Spending limit ($)")).toHaveValue("100")
+  await expect(page.getByLabel("Spending limit ($)")).toHaveAccessibleDescription(
     "Optional limit for this team's model use.",
   )
   const counsel = page.locator(".routines-organization-edit-members > li").filter({
@@ -769,7 +771,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(authority).not.toBeChecked()
   await expect(counsel.getByText("Changed by you", { exact: false })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
-  await page.getByText("Work handoffs", { exact: true }).click()
+  await page.getByText("Who can assign work", { exact: true }).click()
   await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
   await expect(page.getByText("Choose which teammates can pass work to each other.")).toBeVisible()
   const lead = page.getByRole("group", { name: "Counsel can assign work to" })
@@ -778,11 +780,11 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(lead.getByRole("checkbox", { name: "Books" })).not.toBeChecked()
   await page.getByLabel("Name").fill("Website Studio")
   await page
-    .getByLabel("Team guidelines")
+    .getByLabel("Instructions for the team")
     .fill("Only contact prospects after design review, legal review, and an approved outreach brief.")
-  await page.getByLabel("Team budget ($)").fill("250")
+  await page.getByLabel("Spending limit ($)").fill("250")
   await page.getByRole("button", { name: "Save", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
+  await expect(page.getByRole("heading", { name: "Organization settings" })).toBeHidden()
   await page.getByText("Organization details", { exact: true }).click()
   await expect(
     page.getByText("Only contact prospects after design review, legal review, and an approved outreach brief."),
@@ -791,10 +793,12 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByText(/\$249\.58 available/)).toBeVisible()
 
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeHidden()
   await page.locator(".routines-organization-archive > summary").click()
-  await page.getByRole("button", { name: "Remove team", exact: true }).click()
-  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText("Scheduled workers")
+  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText(
+    "Archive is available once its workers are stopped",
+  )
   await page.getByRole("button", { name: "Keep organization" }).click()
   await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toBeHidden()
   const result = await new AxeBuilder({ page })
@@ -812,25 +816,25 @@ test("narrow organization editor reveals one settings group at a time", async ({
   await page.getByRole("button", { name: "Website Builders 3" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
 
-  await expect(page.getByRole("heading", { name: "Team settings" })).toBeVisible()
-  await expect(page.getByLabel("Team guidelines")).toBeHidden()
+  await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible()
+  await expect(page.getByLabel("Instructions for the team")).toBeHidden()
   await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
-  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeHidden()
 
-  await page.getByText("Guidelines and budget", { exact: true }).click()
-  await expect(page.getByLabel("Team guidelines")).toBeVisible()
-  await page.getByText("Guidelines and budget", { exact: true }).click()
+  await page.getByText("How this team works", { exact: true }).click()
+  await expect(page.getByLabel("Instructions for the team")).toBeVisible()
+  await page.getByText("How this team works", { exact: true }).click()
   const counsel = page.locator(".routines-organization-edit-members > li").filter({
     has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
   })
   await counsel.getByText("Worker settings", { exact: true }).click()
   await expect(counsel.getByLabel("Role")).toBeVisible()
   await counsel.getByText("Worker settings", { exact: true }).click()
-  await page.getByText("Work handoffs", { exact: true }).click()
+  await page.getByText("Who can assign work", { exact: true }).click()
   await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
-  await page.getByText("Work handoffs", { exact: true }).click()
+  await page.getByText("Who can assign work", { exact: true }).click()
   await page.locator(".routines-organization-archive > summary").click()
-  await expect(page.getByRole("button", { name: "Remove team", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeVisible()
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   const result = await new AxeBuilder({ page })
@@ -1004,7 +1008,7 @@ test("organization revision conflict stays in the editor with recovery guidance"
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await expect(page.getByRole("alert")).toContainText("This organization changed after you opened it.")
   await expect(page.getByRole("alert")).toContainText("Review the refreshed team before saving again.")
-  await expect(page.getByRole("heading", { name: "Edit organization" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible()
 })
 
 test("light routines empty state", async ({ page }, info) => {

@@ -790,3 +790,142 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-field :is(inpu
     color: CanvasText;
   }
 }
+
+/* Organization surfaces share the same soft cards and quiet controls as chat. */
+.routines-view * {
+  scrollbar-width: thin;
+  scrollbar-color: #38383b transparent;
+}
+
+.routines-view *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.routines-view *::-webkit-scrollbar-thumb {
+  background: #38383b;
+}
+
+.routines-view .routines-organization-overview .routines-thread-body,
+.routines-view .routines-organization-editor .routines-thread-body {
+  max-width: 900px;
+  gap: 18px;
+  padding-top: 20px;
+}
+
+.routines-view .routines-organization-purpose {
+  max-width: none;
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--routine-line);
+  border-radius: 16px;
+  background: var(--routine-card);
+  line-height: 1.65;
+}
+
+.routines-view .routines-organization-members,
+.routines-view .routines-organization-edit-members {
+  display: grid;
+  gap: 8px;
+}
+
+.routines-view .routines-organization-members li,
+.routines-view .routines-organization-edit-members li {
+  border: 1px solid var(--routine-line);
+  border-radius: 14px;
+  background: var(--routine-card);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.routines-view .routines-organization-members li + li,
+.routines-view .routines-organization-edit-members li + li {
+  margin-top: 0;
+  border-top: 1px solid var(--routine-line);
+}
+
+.routines-view .routines-organization-members li:hover,
+.routines-view .routines-organization-edit-members li:hover {
+  border-color: #55555b;
+}
+
+.routines-view .routines-organization-members button {
+  min-height: 68px;
+  padding: 13px 17px;
+  border-radius: 14px;
+}
+
+.routines-view .routines-organization-members button:hover {
+  background: #303033;
+}
+
+.routines-view .routines-organization-details,
+.routines-view .routines-organization-disclosure {
+  flex: 0 0 auto;
+  border: 1px solid var(--routine-line);
+  border-radius: 14px;
+  background: var(--routine-card);
+  padding: 0;
+  overflow: hidden;
+}
+
+.routines-view .routines-organization-details > summary,
+.routines-view .routines-organization-disclosure > summary {
+  min-height: 48px;
+  padding: 11px 16px;
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.routines-view .routines-organization-details[open] > summary,
+.routines-view .routines-organization-disclosure[open] > summary {
+  border-bottom: 1px solid var(--routine-line);
+}
+
+.routines-view .routines-organization-disclosure-body,
+.routines-view .routines-organization-disclosure > .routines-organization-section {
+  padding: 16px;
+}
+
+.routines-view .routines-organization-section {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.routines-view .routines-organization-member-settings > summary {
+  min-height: 34px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.routines-view .routines-organization-head-actions [data-component="button"] {
+  min-height: 34px;
+  border-radius: 9px;
+}
+
+.routines-view .routines-field :is(input, select, textarea) {
+  border-color: var(--routine-line);
+  border-radius: 11px;
+  background-color: #1e1e20;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.routines-view .routines-field :is(input, select, textarea):hover {
+  border-color: #55555b;
+}
+
+body:is(.vscode-light, .pv-theme--light) .routines-view .routines-field :is(input, select, textarea) {
+  background-color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routines-view .routines-organization-members li,
+  .routines-view .routines-organization-edit-members li,
+  .routines-view .routines-field :is(input, select, textarea) {
+    transition: none;
+  }
+}

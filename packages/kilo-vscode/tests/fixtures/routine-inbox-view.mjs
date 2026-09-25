@@ -232,7 +232,7 @@ try {
   )
   button("Settings").click()
   await new Promise((resolve) => setImmediate(resolve))
-  assert.match(root.querySelector(".routines-organization-editor h3").textContent, /Team settings/)
+  assert.match(root.querySelector(".routines-organization-editor h3").textContent, /Organization settings/)
   assert.doesNotMatch(root.querySelector(".routines-organization-editor").textContent, /Revision \d+/)
   const settings = [...root.querySelectorAll(".routines-organization-disclosure")]
   assert.equal(settings.length, 3)

@@ -204,7 +204,7 @@ function OrganizationEditor(props: {
     <section class="routines-thread routines-organization-editor" aria-labelledby={`edit-${props.item.id}`}>
       <div class="routines-thread-head">
         <div class="routines-thread-identity">
-          <h3 id={`edit-${props.item.id}`}>Team settings</h3>
+          <h3 id={`edit-${props.item.id}`}>Organization settings</h3>
           <span>{props.item.name}</span>
         </div>
         <Button variant="ghost" size="small" disabled={props.saving} onClick={props.onClose}>
@@ -238,7 +238,7 @@ function OrganizationEditor(props: {
           <input value={name()} maxlength={120} onInput={(event) => setName(event.currentTarget.value)} />
         </label>
         <label class="routines-field">
-          What this team does
+          Purpose
           <textarea
             value={purpose()}
             maxlength={2000}
@@ -248,10 +248,10 @@ function OrganizationEditor(props: {
           />
         </label>
         <details class="routines-organization-disclosure">
-          <summary>Guidelines and budget</summary>
+          <summary>How this team works</summary>
           <div class="routines-organization-disclosure-body">
             <label class="routines-field">
-              Team guidelines
+              Instructions for the team
               <textarea
                 value={policy()}
                 maxlength={12000}
@@ -265,7 +265,7 @@ function OrganizationEditor(props: {
               </span>
             </label>
             <label class="routines-field">
-              Team budget ($)
+              Spending limit ($)
               <input
                 value={budget()}
                 inputmode="numeric"
@@ -372,7 +372,7 @@ function OrganizationEditor(props: {
         </section>
 
         <details class="routines-organization-disclosure">
-          <summary>Work handoffs</summary>
+          <summary>Who can assign work</summary>
           <section class="routines-organization-section" aria-labelledby={`authority-${props.item.id}`}>
             <div class="routines-organization-section-head">
               <div>
@@ -406,17 +406,17 @@ function OrganizationEditor(props: {
         </details>
 
         <details class="routines-organization-disclosure routines-organization-archive">
-          <summary>Remove team</summary>
+          <summary>Remove organization</summary>
           <section
             class="routines-organization-section routines-organization-danger"
             aria-labelledby={`archive-${props.item.id}`}
           >
             <div>
               <h4 id={`archive-${props.item.id}`}>Remove {props.item.name} from Routines</h4>
-              <p>The team leaves your active list. Its workers, chats, and reports stay saved.</p>
+              <p>Stop all workers before archiving. Their chats, work and reports stay saved.</p>
             </div>
             <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
-              Remove team
+              Remove organization
             </Button>
           </section>
         </details>
@@ -1060,8 +1060,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       <Dialog title={`Remove ${item.name}?`} fit>
         <div class="dialog-confirm-body">
           <span>
-            This team leaves your active list. Its workers, chats, reports, and history stay saved. Scheduled workers
-            keep running until you pause or remove them separately.
+            This organization leaves your active list. Archive is available once its workers are stopped. Their chats,
+            work and reports stay saved.
           </span>
           <div class="dialog-confirm-actions">
             <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
@@ -1083,7 +1083,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 dialog.close()
               }}
             >
-              Remove team
+              Remove organization
             </Button>
           </div>
         </div>
@@ -2165,7 +2165,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         Settings
                       </Button>
                       <Button variant="ghost" size="small" onClick={() => archiveOrganization(item)}>
-                        Remove team
+                        Remove organization
                       </Button>
                     </div>
                   </div>

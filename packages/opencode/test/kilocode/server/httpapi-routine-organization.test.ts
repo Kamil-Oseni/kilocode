@@ -200,6 +200,21 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
   expect(secondPage.items).toHaveLength(1)
   expect(new Set([...firstPage.items, ...secondPage.items].map((item) => item.id)).size).toBe(2)
 
+  const blocked = await app.request(route, {
+    method: "DELETE",
+    headers,
+    body: JSON.stringify({ expectedRevision: 2 }),
+  })
+  expect(blocked.status).toBe(409)
+  expect(
+    (
+      await app.request(`/kilocode/agent/${chief.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ enabled: false }),
+      })
+    ).status,
+  ).toBe(200)
   const archived = await app.request(route, {
     method: "DELETE",
     headers,

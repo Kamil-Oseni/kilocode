@@ -8,11 +8,13 @@ import {
   RayaRoutineOrganizationRevisionTable as RevisionRow,
   RayaRoutineOrganizationTable as OrganizationRow,
   RayaRoutineDelegationTable as WorkRow,
+  RayaRoutineOccurrenceTable as OccurrenceRow,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import type { Storage } from "@/storage/storage"
 import { commitment, direct, standing } from "./commitment"
 import { cost as coordinatorCost } from "./coordinator"
 import { mutate } from "./mutation"
+import type { RayaTask } from "."
 
 const MAX = 50
 const EDGES = 500
@@ -227,7 +229,8 @@ function decoded(
 }
 
 type Workers = {
-  get(id: string): Effect.Effect<unknown, { readonly _tag: "RayaTask.NotFoundError" }>
+  get(id: string): Effect.Effect<Pick<RayaTask.Agent, "enabled">, { readonly _tag: "RayaTask.NotFoundError" }>
+  runsFor?(id: string): Effect.Effect<readonly RayaTask.Run[]>
 }
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
 
@@ -571,6 +574,55 @@ export namespace RayaTaskOrganization {
                 .all()
                 .pipe(Effect.orDie)
               const prior = decoded(row, stored, storedEdges)
+              if (!workers.runsFor)
+                return yield* new Conflict({
+                  message: "Worker run history is unavailable. Cannot safely archive this organization.",
+                })
+              for (const member of prior.members) {
+                const worker = yield* workers
+                  .get(member.agentID)
+                  .pipe(
+                    Effect.catchTag("RayaTask.NotFoundError", () =>
+                      Effect.fail(
+                        new Conflict({ message: "An organization worker is missing. Review it before archiving." }),
+                      ),
+                    ),
+                  )
+                if (worker.enabled)
+                  return yield* new Conflict({ message: "Pause every organization worker before archiving." })
+                if (
+                  (yield* workers.runsFor(member.agentID)).some(
+                    (run) =>
+                      run.status === "running" || (run.status === "blocked" && run.blockedReason === "waiting on you"),
+                  )
+                )
+                  return yield* new Conflict({ message: "Resolve every organization worker run before archiving." })
+              }
+              const ids = prior.members.map((member) => member.agentID)
+              const occurrence = yield* tx
+                .select({ id: OccurrenceRow.id })
+                .from(OccurrenceRow)
+                .where(and(inArray(OccurrenceRow.agent_id, ids), inArray(OccurrenceRow.state, ["starting", "linked"])))
+                .limit(1)
+                .get()
+                .pipe(Effect.orDie)
+              if (occurrence) return yield* new Conflict({ message: "Resolve active scheduled work before archiving." })
+              const work = yield* tx
+                .select({ id: WorkRow.id })
+                .from(WorkRow)
+                .where(
+                  and(
+                    eq(WorkRow.organization_id, id),
+                    inArray(WorkRow.state, ["queued", "accepted", "running", "needs_input"]),
+                  ),
+                )
+                .limit(1)
+                .get()
+                .pipe(Effect.orDie)
+              if (work)
+                return yield* new Conflict({
+                  message: "Resolve outstanding organization delegations before archiving.",
+                })
               const now = Date.now()
               const next: Organization = {
                 ...prior,

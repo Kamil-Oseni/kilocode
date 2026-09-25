@@ -165,6 +165,21 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       expect((yield* restarted.get(created.id)).policy).toBeUndefined()
       expect((yield* restarted.get(created.id)).budget).toBeUndefined()
 
+      expect(Exit.isFailure(yield* organizations.archive(created.id, { expectedRevision: 2 }).pipe(Effect.exit))).toBe(
+        true,
+      )
+      for (const member of updated.members) yield* tasks.update(member.agentID, { enabled: false })
+      const run = yield* tasks.record({
+        id: "run_archive_guard",
+        agentID: chief.id,
+        sessionID: SessionID.make("ses_archive_guard"),
+        at: Date.now(),
+        status: "running",
+      })
+      expect(Exit.isFailure(yield* organizations.archive(created.id, { expectedRevision: 2 }).pipe(Effect.exit))).toBe(
+        true,
+      )
+      yield* tasks.transition(run, { ...run, status: "error", blockedReason: "Stopped." })
       const archived = yield* organizations.archive(created.id, { expectedRevision: 2 })
       expect(archived).toMatchObject({ archived: true, revision: 3 })
       expect((yield* organizations.list()).items).toEqual([])
@@ -383,6 +398,7 @@ test("organization usage retains removed and archived membership history", async
       })
       expect((yield* organizations.memberships(former.id)).items).toEqual([])
       expect(yield* organizations.used(former.id)).toEqual({ used: true, complete: true })
+      yield* tasks.update(owner.id, { enabled: false })
       yield* organizations.archive(organization.id, { expectedRevision: 2 })
       expect(yield* organizations.used(owner.id)).toEqual({ used: true, complete: true })
       yield* database.db

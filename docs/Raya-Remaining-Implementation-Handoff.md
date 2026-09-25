@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 23:16 America/Toronto - installed Routines scope and desktop fallback checkpoint
+
+Commit `03132dd74e` is pushed and the low-memory snapshot installed as `eden.raya@7.4.23-snapshot+03132dd74e.kamil-oseni.1790306065572`; the VS Code extension list returned that version. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.d79df67efa4f5c0fe39dae5633207bec255e9f5d1de158de0e1cd5f439b08ae9.vsix`, 448 files, 544,912,624 bytes, SHA-256 `D79DF67EFA4F5C0FE39DAE5633207BEC255E9F5D1DE158DE0E1CD5F439B08AE9`. Packaging and the normal push hook passed. Confirm the Routines team-switch selection behavior in an active installed VS Code host; installation alone does not prove its reload. Next continue the broader Routines design and obtain interactive installed action-to-frame p50/p95, physical Pause/takeover, changed-window, disconnect/restart and prolonged-use evidence before verifying `FUT-CU-01`. Keep the native input broker dormant until held-input ownership and asynchronous cancellation settlement are proven. Leave the user's capture error dialog untouched.
+
 ## ChatGPT 2026-09-24 23:13 America/Toronto - Routines selection isolation checkpoint
 
 Manage workers no longer carries selected IDs across organization switches, which previously let Remove target a worker hidden by the new team filter. Focused Chromium tests at 320px and 900px prove the selection count resets and Remove disappears after changing teams. Extension/webview typechecks, full lint, knip and desktop fallback driver tests pass. Commit/push/install remain; confirm the interaction in an installed VS Code host later. The separate desktop fallback exact-target recheck remains opt-in, and physical Autonomous Desktop Mode acceptance is still open. Leave the user's capture error dialog untouched.

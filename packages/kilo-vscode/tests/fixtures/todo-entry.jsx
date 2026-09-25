@@ -61,6 +61,9 @@ const initialItems =
           dueAt: new Date("2030-04-05T14:30:00").getTime(),
           reminderAt: state === "epoch" ? 0 : new Date("2030-04-05T13:30:00").getTime(),
           done: false,
+          subtasks: state.startsWith("subtask")
+            ? [{ id: "subtodo-one", title: "Check the release notes", done: false, revision: 1 }]
+            : undefined,
           revision: 1,
           createdAt: 10,
           updatedAt: 30,
@@ -340,6 +343,39 @@ window.acquireVsCodeApi = () => ({
       }
       saveItems(items.map((row) => (row.id === item.id ? item : row)))
       emit({ type: "personalTodoResult", requestID: message.requestID, operation: "update", item })
+      return
+    }
+    if (message.type === "personalTodoSubtask") {
+      const current = items.find((item) => item.id === message.todoID)
+      const child = current?.subtasks?.find((item) => item.id === message.subtaskID)
+      if (!current || !child) return
+      const done = state === "subtask-stale" ? true : message.done
+      const item = {
+        ...current,
+        revision: current.revision + 1,
+        subtasks: current.subtasks.map((entry) =>
+          entry.id === child.id ? { ...entry, done, revision: entry.revision + 1 } : entry,
+        ),
+      }
+      saveItems(items.map((entry) => (entry.id === item.id ? item : entry)))
+      if (state === "subtask-stale") {
+        emit({
+          type: "personalTodoResult",
+          requestID: message.requestID,
+          operation: "subtask",
+          todoID: item.id,
+          subtaskID: child.id,
+          error: {
+            kind: "stale",
+            message: "This step changed elsewhere.",
+            expected: message.subtaskRevision,
+            actual: child.revision + 1,
+            latest: item,
+          },
+        })
+        return
+      }
+      emit({ type: "personalTodoResult", requestID: message.requestID, operation: "subtask", item })
       return
     }
     if (message.type === "personalTodoDelete") {

@@ -24,7 +24,7 @@ html [data-component="personal-todo"] {
 
 [data-component="personal-todo"] .todo-kicker {
   display: block;
-  color: var(--raya-primary);
+  color: #b8b8ba;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -49,16 +49,24 @@ html [data-component="personal-todo"] {
   margin-top: 3px;
 }
 
-[data-slot="todo-overview"],
 [data-component="personal-todo"] [data-slot="focus-timer"],
 [data-slot="todo-assistant"],
 [data-component="personal-todo"] [data-slot="personal-todo-compose"],
-[data-component="personal-todo"] [data-slot="todo-proposals"] {
+[data-component="personal-todo"] [data-slot="todo-proposals"],
+[data-slot="todo-overview"] {
   min-width: 0;
   padding: 20px;
+}
+[data-component="personal-todo"] [data-slot="focus-timer"] {
   border: 1px solid #303032;
-  border-radius: 20px;
+  border-radius: 16px;
   background: #252526;
+}
+[data-slot="todo-overview"],
+[data-slot="todo-assistant"],
+[data-component="personal-todo"] [data-slot="personal-todo-compose"],
+[data-component="personal-todo"] [data-slot="todo-proposals"] {
+  border-top: 1px solid #303032;
 }
 
 [data-slot="todo-overview-heading"] p,
@@ -81,28 +89,26 @@ html [data-component="personal-todo"] {
   align-content: space-between;
   min-height: 82px;
   padding: 13px;
-  border: 1px solid transparent;
-  border-radius: 15px;
-  background: #1e1e1f;
+  border: 1px solid #3b3b3d;
+  border-radius: 12px;
+  background: transparent;
   color: var(--text-base, var(--vscode-foreground));
   text-align: left;
   cursor: pointer;
   transition:
     border-color 150ms ease,
-    background 150ms ease,
-    transform 150ms ease;
+    background 150ms ease;
 }
 
 [data-slot="todo-overview-grid"] button:hover {
-  transform: translateY(-2px);
   background: #303032;
 }
 [data-slot="todo-overview-grid"] button[data-active="true"] {
   border-color: var(--raya-primary);
-  background: color-mix(in srgb, var(--raya-primary) 10%, #1e1e1f);
+  background: #303032;
 }
 [data-slot="todo-overview-grid"] button > span {
-  color: var(--raya-primary);
+  color: #b8b8ba;
   font-size: 20px;
   line-height: 1;
 }
@@ -121,7 +127,6 @@ html [data-component="personal-todo"] {
   justify-items: center;
   align-content: space-between;
   gap: 12px;
-  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--raya-primary) 13%, #252526), #252526 70%);
 }
 
 [data-component="personal-todo"] [data-slot="focus-timer-copy"] {
@@ -135,7 +140,7 @@ html [data-component="personal-todo"] {
 [data-slot="focus-timer-dial"] {
   display: grid;
   place-items: center;
-  width: clamp(188px, 25vw, 260px);
+  width: clamp(220px, 40vw, 320px);
   aspect-ratio: 1;
   border-radius: 50%;
   background: repeating-conic-gradient(from 0deg, var(--raya-primary) 0deg 1.5deg, transparent 1.5deg 7.5deg);
@@ -162,7 +167,7 @@ html [data-component="personal-todo"] {
   width: calc(100% - 24px);
   height: calc(100% - 24px);
   border-radius: 50%;
-  background: #292a31;
+  background: #252526;
   text-align: center;
 }
 
@@ -263,7 +268,7 @@ html [data-component="personal-todo"] {
 }
 [data-slot="todo-priority"] {
   width: fit-content;
-  color: var(--raya-primary);
+  color: #b8b8ba;
   font-size: 11px;
 }
 [data-slot="todo-subtasks"] {
@@ -275,7 +280,7 @@ html [data-component="personal-todo"] {
   color: #c4c4c6;
   font-size: 12px;
 }
-[data-slot="todo-subtasks"] span[data-done="true"] {
+[data-slot="todo-subtasks"] [data-done="true"] [data-slot="checkbox-checkbox-label"] {
   color: #858589;
   text-decoration: line-through;
 }
@@ -306,24 +311,33 @@ html [data-component="personal-todo"] {
   }
 }
 
-body.vscode-light [data-slot="todo-overview"],
 body.vscode-light [data-component="personal-todo"] [data-slot="focus-timer"],
-body.vscode-light [data-slot="todo-assistant"],
-body.vscode-light [data-component="personal-todo"] [data-slot="personal-todo-compose"],
-body.vscode-light [data-component="personal-todo"] [data-slot="todo-proposals"],
 body.vscode-light [data-component="personal-todo"] [data-slot="personal-todo-item"] {
   border-color: #dedee0;
   background: #f5f5f6;
   color: #202022;
 }
 
-body.vscode-light [data-slot="todo-overview-grid"] button,
 body.vscode-light [data-slot="todo-assistant"] form {
   background: #e9e9eb;
   color: #252527;
 }
 body.vscode-light [data-slot="todo-overview-grid"] button[data-active="true"] {
-  background: #e2e7f5;
+  background: #e9e9eb;
+}
+body.vscode-light [data-slot="todo-overview-grid"] button {
+  border-color: #c7c7cc;
+  color: #252527;
+}
+body.vscode-light [data-slot="todo-overview-grid"] button > span,
+body.vscode-light [data-slot="todo-priority"] {
+  color: #53545a;
+}
+body.vscode-light [data-slot="todo-overview"],
+body.vscode-light [data-slot="todo-assistant"],
+body.vscode-light [data-component="personal-todo"] [data-slot="personal-todo-compose"],
+body.vscode-light [data-component="personal-todo"] [data-slot="todo-proposals"] {
+  border-color: #dedee0;
 }
 body.vscode-light [data-slot="todo-overview-grid"] button small,
 body.vscode-light [data-slot="todo-overview-heading"] p,
@@ -332,7 +346,9 @@ body.vscode-light [data-slot="focus-timer-state"],
 body.vscode-light [data-slot="todo-list-heading"] > span {
   color: #53545a;
 }
-body.vscode-light [data-component="personal-todo"] .todo-kicker,
+body.vscode-light [data-component="personal-todo"] .todo-kicker {
+  color: #53545a;
+}
 body.vscode-light [data-slot="todo-expand"] {
   color: #455b97;
 }

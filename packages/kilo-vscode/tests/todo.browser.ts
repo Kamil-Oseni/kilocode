@@ -62,9 +62,29 @@ test("Todo planning sends the user's goal through Raya and filters priorities", 
   await expect(page.getByText("Confirm the release owner", { exact: true })).toBeVisible()
   await page.locator('[data-slot="todo-overview-grid"] button').filter({ hasText: "All tasks" }).click()
   await page.getByRole("textbox", { name: "Ask Raya to plan a todo" }).fill("I want to learn violin")
-  await page.getByRole("button", { name: "Ask Raya", exact: true }).click()
+  await page.getByRole("button", { name: "Continue in chat", exact: true }).click()
   await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /I want to learn violin/)
   await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /reviewable proposal before saving/)
+})
+
+test("subtasks save independently and stale steps refresh without replay", async ({ page }) => {
+  await page.goto("/?state=subtasks")
+  const step = page.getByRole("checkbox", { name: "Check the release notes" })
+  await expect(step).not.toBeChecked()
+  await page.getByText("Check the release notes", { exact: true }).click()
+  await expect(step).toBeChecked()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message) => message.type === "personalTodoSubtask")).toHaveLength(1)
+  await page.reload()
+  await expect(page.getByRole("checkbox", { name: "Check the release notes" })).toBeChecked()
+
+  await page.evaluate(() => localStorage.removeItem("raya-todo-fixture-items"))
+  await page.goto("/?state=subtask-stale")
+  await page.getByText("Check the release notes", { exact: true }).click()
+  await expect(page.getByRole("checkbox", { name: "Check the release notes" })).toBeChecked()
+  await expect(page.getByRole("alert")).toContainText("This step changed elsewhere.")
+  const before = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(before.filter((message) => message.type === "personalTodoSubtask")).toHaveLength(1)
 })
 
 test("applies and rejects exact Todo proposals from the keyboard", async ({ page }) => {

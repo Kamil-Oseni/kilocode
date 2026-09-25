@@ -5,10 +5,10 @@ test("Routines overview opens teams and briefs Raya to build one", async ({ page
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=dark-routines")
   await expect(page.getByRole("region", { name: "Routines overview" })).toBeVisible()
-  await expect(page.locator(".routines-team-cards button")).toHaveCount(2)
-  await page.getByRole("region", { name: "Routines overview" }).getByRole("button", { name: "Build a team" }).click()
+  await expect(page.locator(".routines-organization[data-routine-organization]")).toHaveCount(2)
+  await page.getByRole("region", { name: "Routines overview" }).getByRole("button", { name: "Plan a team" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-routines-request", /delegation rules/)
-  await page.locator(".routines-team-cards button").first().click()
+  await page.locator(".routines-organization[data-routine-organization]").first().click()
   await expect(page.locator(".routines-organization-overview")).toBeVisible()
 })
 

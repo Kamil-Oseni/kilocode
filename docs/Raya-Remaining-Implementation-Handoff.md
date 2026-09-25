@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 07:15 America/Toronto - Todo step and design follow-up
+
+The source now exposes revision-safe complete/reopen actions for individual Todo subtasks through the HTTP API, generated SDK, extension bridge and checkboxes. After installation, create a reviewed parent plan with multiple subtasks in a real Raya chat, apply it, complete and reopen a child, restart the backend, and verify the exact saved progress and reminder behavior. A changed parent or child revision must refresh without replaying the click. The current Todo planning field deliberately opens a prepared chat draft for the user to send; the live model selection and proposal quality have not been proved by the browser fixture. The visual correction removes decorative gradients, nested/tinted chrome and duplicate Routines team cards per `docs/designer.md`. Check actual installed narrow and wide views after reload, especially the larger timer, filtered empty state, Routines navigation and chat. Custom timer entry and a live real-minute reminder remain open.
+
 ## ChatGPT 2026-09-25 - installed Todo, Routines and History handoff
 
 `0a613107dd` is pushed and installed as `eden.raya@7.4.23-snapshot+0a613107dd.kamil-oseni.1790332471526`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.dbed32eeb9614f8ce7c33c06360b5cba9842d38fb3d3e25af5556713ee96e9a8.vsix`, 545,204,129 bytes, SHA-256 `DBED32EEB9614F8CE7C33C06360B5CBA9842D38FB3D3E25AF5556713EE96E9A8`. Reload the open VS Code host before checking the redesigned Todo timer/planning/task cards, Routines workforce/team views, and local/cloud History at narrow and wide widths. Then run the live Todo proposal and organization/delegation workflows described below; installation alone proves neither. The user-owned image and document files and `debug.log` were not included in this commit.

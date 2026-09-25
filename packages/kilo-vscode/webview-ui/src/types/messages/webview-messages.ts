@@ -2029,6 +2029,16 @@ export interface PersonalTodoDeleteMessage {
   revision: number
 }
 
+export interface PersonalTodoSubtaskMessage {
+  type: "personalTodoSubtask"
+  requestID: string
+  todoID: string
+  subtaskID: string
+  revision: number
+  subtaskRevision: number
+  done: boolean
+}
+
 export interface PersonalTodoProposalListMessage {
   type: "personalTodoProposalList"
   requestID: string
@@ -2074,6 +2084,7 @@ export type WebviewMessage =
   | PersonalTodoCreateMessage
   | PersonalTodoUpdateMessage
   | PersonalTodoDeleteMessage
+  | PersonalTodoSubtaskMessage
   | PersonalTodoProposalListMessage
   | PersonalTodoProposalGetMessage
   | PersonalTodoProposalMutationMessage

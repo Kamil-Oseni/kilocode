@@ -12,6 +12,7 @@ import { TodoProposalCard, type TodoProposal, type TodoProposalIssue } from "./T
 type Intent =
   | { operation: "create"; title: string; reminderAt?: number }
   | { operation: "update"; todoID: string; changes: Changes }
+  | { operation: "subtask"; todoID: string; subtaskID: string; done: boolean }
   | { operation: "delete"; todoID: string }
 
 type Changes = {
@@ -31,6 +32,9 @@ type ProposalIntent =
   | { operation: "get"; proposalID: string; digest: string }
   | { operation: "apply" | "reject"; proposalID: string; digest: string }
 type ProposalFocus = { nonce: string; id: string; digest: string }
+
+const recoverable = (intent: Intent | { operation: "list" }) =>
+  intent.operation !== "list" && intent.operation !== "subtask"
 
 const durations = [
   { label: "15 minutes", value: 15 * 60_000 },
@@ -150,6 +154,24 @@ export const TodoView: Component<{
         revision: item.revision,
         ...intent.changes,
       })
+    if (intent.operation === "subtask" && item) {
+      const child = item.subtasks?.find((entry) => entry.id === intent.subtaskID)
+      if (!child) {
+        requests.delete(requestID)
+        settle(intent)
+        setNotice({ kind: "error", message: "That step has changed. Refresh the task before trying again." })
+        return
+      }
+      vscode.postMessage({
+        type: "personalTodoSubtask",
+        requestID,
+        todoID: item.id,
+        subtaskID: child.id,
+        revision: item.revision,
+        subtaskRevision: child.revision,
+        done: intent.done,
+      })
+    }
     if (intent.operation === "delete" && item)
       vscode.postMessage({ type: "personalTodoDelete", requestID, todoID: item.id, revision: item.revision })
   }
@@ -329,7 +351,7 @@ export const TodoView: Component<{
           ? `${message.error.message} Saved version ${message.error.actual} replaced version ${message.error.expected}.`
           : message.error.message
       setNotice({ kind: message.error.kind, message: detail })
-      setRecovery(intent.operation === "list" ? undefined : intent)
+      setRecovery(recoverable(intent) ? intent : undefined)
       return
     }
     setNotice()
@@ -399,6 +421,8 @@ export const TodoView: Component<{
       return true
     }),
   )
+  const filteredEmpty = createMemo(() => !loading() && items().length > 0 && visible().length === 0)
+  const hasItems = createMemo(() => !loading() && items().length > 0)
   const ask = (text: string) => props.onAskRaya?.(text)
   const plan = (text: string) => {
     const value = text.trim()
@@ -594,7 +618,7 @@ export const TodoView: Component<{
           <div data-slot="focus-timer-notice" data-kind={current().kind} role="alert">
             <span>{current().message}</span>
             <Button variant="ghost" size="small" onClick={timerRetry}>
-              {current().kind === "stale" ? "Review and retry" : "Try again"}
+              {current().kind === "stale" ? "Review and refresh" : recovery() ? "Try again" : "Refresh"}
             </Button>
           </div>
         )}
@@ -670,7 +694,7 @@ export const TodoView: Component<{
         <div>
           <h1 id="personal-todo-title">Todo</h1>
           <p>
-            A calmer way to make progress · <span>{remaining()} open</span>
+            <span>{remaining()} open</span>
           </p>
         </div>
       </header>
@@ -685,11 +709,11 @@ export const TodoView: Component<{
           <For
             each={
               [
-                { id: "all", label: "All tasks", count: () => items().length, glyph: "◫" },
-                { id: "today", label: "Today", count: today, glyph: "▣" },
-                { id: "important", label: "Important", count: important, glyph: "✦" },
-                { id: "scheduled", label: "Scheduled", count: scheduled, glyph: "◷" },
-                { id: "done", label: "Completed", count: done, glyph: "✓" },
+                { id: "all", label: "All tasks", count: () => items().length },
+                { id: "today", label: "Today", count: today },
+                { id: "important", label: "Important", count: important },
+                { id: "scheduled", label: "Scheduled", count: scheduled },
+                { id: "done", label: "Completed", count: done },
               ] as const
             }
           >
@@ -700,7 +724,6 @@ export const TodoView: Component<{
                 aria-pressed={filter() === view.id}
                 onClick={() => setFilter(view.id)}
               >
-                <span aria-hidden="true">{view.glyph}</span>
                 <strong>{view.count()}</strong>
                 <small>{view.label}</small>
               </button>
@@ -733,18 +756,18 @@ export const TodoView: Component<{
             placeholder="I want to learn how to play the violin…"
           />
           <Button type="submit" disabled={!askDraft().trim() || !props.onAskRaya}>
-            Ask Raya
+            Continue in chat
           </Button>
         </form>
         <div data-slot="todo-assistant-prompts">
           <button type="button" onClick={() => plan("I want to learn how to play the violin")}>
-            Plan a new goal
+            Plan a goal
           </button>
           <button type="button" onClick={() => plan("Help me prioritize my open todos for today")}>
             Help me prioritize
           </button>
           <button type="button" onClick={() => plan("Suggest useful reminders for my upcoming todos")}>
-            Set smart reminders
+            Ask about reminders
           </button>
         </div>
       </section>
@@ -867,13 +890,19 @@ export const TodoView: Component<{
 
       <Show when={!loading() && items().length === 0 && !notice()}>
         <section data-slot="personal-todo-empty">
-          <span aria-hidden="true">✓</span>
           <h2>Nothing waiting</h2>
           <p>Add one clear next step above.</p>
         </section>
       </Show>
 
-      <Show when={!loading() && items().length > 0}>
+      <Show when={filteredEmpty()}>
+        <section data-slot="personal-todo-empty">
+          <h2>No tasks here</h2>
+          <p>Choose another view to see your tasks.</p>
+        </section>
+      </Show>
+
+      <Show when={hasItems()}>
         <div data-slot="todo-list-heading">
           <div>
             <span class="todo-kicker">Your tasks</span>
@@ -935,9 +964,17 @@ export const TodoView: Component<{
                           <div data-slot="todo-subtasks">
                             <For each={item.subtasks}>
                               {(child) => (
-                                <span data-done={child.done}>
-                                  {child.done ? "✓" : "○"} {child.title}
-                                </span>
+                                <div data-done={child.done}>
+                                  <Checkbox
+                                    checked={child.done}
+                                    disabled={pending()[item.id] === true}
+                                    onChange={(done) =>
+                                      send({ operation: "subtask", todoID: item.id, subtaskID: child.id, done })
+                                    }
+                                  >
+                                    {child.title}
+                                  </Checkbox>
+                                </div>
                               )}
                             </For>
                           </div>

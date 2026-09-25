@@ -7182,6 +7182,17 @@ export type PersonalTodoProposalStaleRevisionError = {
   }
 }
 
+export type PersonalTodoSubtaskStaleRevisionError = {
+  name: "PersonalTodoSubtaskStaleRevisionError"
+  data: {
+    id: string
+    subtaskID: string
+    expected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    actual: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    message: string
+  }
+}
+
 export type FocusTimerStaleRevisionError = {
   name: "FocusTimerStaleRevisionError"
   data: {
@@ -30595,6 +30606,176 @@ export type RayaPersonalTodoUpdateResponses = {
 }
 
 export type RayaPersonalTodoUpdateResponse = RayaPersonalTodoUpdateResponses[keyof RayaPersonalTodoUpdateResponses]
+
+export type RayaPersonalTodoCompleteSubtaskData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    subtaskRevision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    todoID: string
+    subtaskID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/{todoID}/subtasks/{subtaskID}/complete"
+}
+
+export type RayaPersonalTodoCompleteSubtaskErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError | PersonalTodoSubtaskStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError | PersonalTodoSubtaskStaleRevisionError
+}
+
+export type RayaPersonalTodoCompleteSubtaskError =
+  RayaPersonalTodoCompleteSubtaskErrors[keyof RayaPersonalTodoCompleteSubtaskErrors]
+
+export type RayaPersonalTodoCompleteSubtaskResponses = {
+  /**
+   * Completed personal todo subtask
+   */
+  200: {
+    version: 1 | 2
+    id: string
+    title: string
+    detail?: string
+    status: "open" | "completed"
+    done: boolean
+    priority?: "low" | "medium" | "high" | "urgent"
+    estimateMinutes?: number
+    dueAt?: number
+    reminderAt?: number
+    reminderRevision?: number
+    links?: Array<{
+      kind: "chat" | "routine" | "goal" | "session"
+      id: string
+    }>
+    subtasks?: Array<{
+      version: 1
+      id: string
+      title: string
+      notes?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }>
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+  }
+}
+
+export type RayaPersonalTodoCompleteSubtaskResponse =
+  RayaPersonalTodoCompleteSubtaskResponses[keyof RayaPersonalTodoCompleteSubtaskResponses]
+
+export type RayaPersonalTodoReopenSubtaskData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    subtaskRevision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    todoID: string
+    subtaskID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/{todoID}/subtasks/{subtaskID}/reopen"
+}
+
+export type RayaPersonalTodoReopenSubtaskErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError | PersonalTodoSubtaskStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError | PersonalTodoSubtaskStaleRevisionError
+}
+
+export type RayaPersonalTodoReopenSubtaskError =
+  RayaPersonalTodoReopenSubtaskErrors[keyof RayaPersonalTodoReopenSubtaskErrors]
+
+export type RayaPersonalTodoReopenSubtaskResponses = {
+  /**
+   * Reopened personal todo subtask
+   */
+  200: {
+    version: 1 | 2
+    id: string
+    title: string
+    detail?: string
+    status: "open" | "completed"
+    done: boolean
+    priority?: "low" | "medium" | "high" | "urgent"
+    estimateMinutes?: number
+    dueAt?: number
+    reminderAt?: number
+    reminderRevision?: number
+    links?: Array<{
+      kind: "chat" | "routine" | "goal" | "session"
+      id: string
+    }>
+    subtasks?: Array<{
+      version: 1
+      id: string
+      title: string
+      notes?: string
+      status: "open" | "completed"
+      done: boolean
+      priority?: "low" | "medium" | "high" | "urgent"
+      estimateMinutes?: number
+      dueAt?: number
+      reminderAt?: number
+      reminderRevision?: number
+      links?: Array<{
+        kind: "chat" | "routine" | "goal" | "session"
+        id: string
+      }>
+      createdAt: number
+      updatedAt: number
+      completedAt?: number
+      revision: number
+    }>
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+  }
+}
+
+export type RayaPersonalTodoReopenSubtaskResponse =
+  RayaPersonalTodoReopenSubtaskResponses[keyof RayaPersonalTodoReopenSubtaskResponses]
 
 export type RayaFocusTimerGetData = {
   body?: never

@@ -198,4 +198,100 @@ describe("personal todo extension bridge", () => {
     for (const message of messages)
       expect(message).toMatchObject({ error: { kind: "error", message: "This todo request was incomplete." } })
   })
+
+  it("completes a subtask with both saved revisions and returns the updated parent", async () => {
+    const calls: unknown[] = []
+    const saved = {
+      ...item,
+      revision: 4,
+      subtasks: [{ id: "subtodo_1", title: "First step", revision: 2, done: true }],
+    }
+    const messages: unknown[] = []
+    await handlePersonalTodoMessage({
+      client: client({
+        completeSubtask: async (input: unknown) => {
+          calls.push(input)
+          return { data: saved, response: { status: 200 } }
+        },
+      }),
+      directory: "C:/work",
+      message: {
+        type: "personalTodoSubtask",
+        requestID: "child",
+        todoID: item.id,
+        subtaskID: "subtodo_1",
+        revision: 3,
+        subtaskRevision: 1,
+        done: true,
+      },
+      post: (message) => messages.push(message),
+    })
+    expect(calls).toEqual([
+      { directory: "C:/work", todoID: item.id, subtaskID: "subtodo_1", revision: 3, subtaskRevision: 1 },
+    ])
+    expect(messages).toEqual([{ type: "personalTodoResult", requestID: "child", operation: "subtask", item: saved }])
+  })
+
+  it("does not dispatch a malformed subtask revision and refreshes a child conflict", async () => {
+    const calls: unknown[] = []
+    const messages: unknown[] = []
+    const latest = {
+      ...item,
+      revision: 5,
+      subtasks: [{ id: "subtodo_1", title: "First step", revision: 3, done: true }],
+    }
+    const api = client({
+      reopenSubtask: async (input: unknown) => {
+        calls.push(input)
+        return {
+          error: {
+            name: "PersonalTodoSubtaskStaleRevisionError",
+            data: { id: item.id, subtaskID: "subtodo_1", expected: 1, actual: 3, message: "Step changed elsewhere." },
+          },
+          response: { status: 409 },
+        }
+      },
+      get: async () => ({ data: latest, response: { status: 200 } }),
+    })
+    for (const [requestID, revision] of [
+      ["zero", 0],
+      ["fraction", 1.5],
+    ] as const)
+      await handlePersonalTodoMessage({
+        client: api,
+        directory: "C:/work",
+        message: {
+          type: "personalTodoSubtask",
+          requestID,
+          todoID: item.id,
+          subtaskID: "subtodo_1",
+          revision: 3,
+          subtaskRevision: revision,
+          done: false,
+        },
+        post: (message) => messages.push(message),
+      })
+    await handlePersonalTodoMessage({
+      client: api,
+      directory: "C:/work",
+      message: {
+        type: "personalTodoSubtask",
+        requestID: "stale-child",
+        todoID: item.id,
+        subtaskID: "subtodo_1",
+        revision: 3,
+        subtaskRevision: 1,
+        done: false,
+      },
+      post: (message) => messages.push(message),
+    })
+    expect(calls).toHaveLength(1)
+    expect(messages.slice(0, 2)).toMatchObject([{ error: { kind: "error" } }, { error: { kind: "error" } }])
+    expect(messages[2]).toMatchObject({
+      operation: "subtask",
+      todoID: item.id,
+      subtaskID: "subtodo_1",
+      error: { kind: "stale", expected: 1, actual: 3, latest },
+    })
+  })
 })

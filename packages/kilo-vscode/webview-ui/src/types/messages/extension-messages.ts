@@ -1941,10 +1941,11 @@ export type AdminResultMessage = import("../../../../src/shared/admin").AdminRes
 export interface PersonalTodoResultMessage {
   type: "personalTodoResult"
   requestID: string
-  operation: "list" | "create" | "update" | "delete"
+  operation: "list" | "create" | "update" | "delete" | "subtask"
   items?: PersonalTodoItem[]
   item?: PersonalTodoItem
   todoID?: string
+  subtaskID?: string
   removed?: true
   error?: {
     kind: "offline" | "stale" | "error"

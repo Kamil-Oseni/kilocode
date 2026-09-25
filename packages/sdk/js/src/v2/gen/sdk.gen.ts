@@ -577,6 +577,8 @@ import type {
   RayaPersonalTodoAcknowledgeReminderResponses,
   RayaPersonalTodoApplyProposalErrors,
   RayaPersonalTodoApplyProposalResponses,
+  RayaPersonalTodoCompleteSubtaskErrors,
+  RayaPersonalTodoCompleteSubtaskResponses,
   RayaPersonalTodoCreateErrors,
   RayaPersonalTodoCreateResponses,
   RayaPersonalTodoDeleteErrors,
@@ -593,6 +595,8 @@ import type {
   RayaPersonalTodoRejectProposalResponses,
   RayaPersonalTodoRemindersErrors,
   RayaPersonalTodoRemindersResponses,
+  RayaPersonalTodoReopenSubtaskErrors,
+  RayaPersonalTodoReopenSubtaskResponses,
   RayaPersonalTodoUpdateErrors,
   RayaPersonalTodoUpdateResponses,
   RemoteDisableErrors,
@@ -14212,6 +14216,100 @@ export class PersonalTodo extends HeyApiClient {
       ThrowOnError
     >({
       url: "/raya/personal-todos/{todoID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Complete a personal todo subtask
+   *
+   * Complete a subtask only when both the parent and subtask revisions match exactly.
+   */
+  public completeSubtask<ThrowOnError extends boolean = false>(
+    parameters: {
+      todoID: string
+      subtaskID: string
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      subtaskRevision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "todoID" },
+            { in: "path", key: "subtaskID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "subtaskRevision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoCompleteSubtaskResponses,
+      RayaPersonalTodoCompleteSubtaskErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/{todoID}/subtasks/{subtaskID}/complete",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reopen a personal todo subtask
+   *
+   * Reopen a subtask only when both the parent and subtask revisions match exactly.
+   */
+  public reopenSubtask<ThrowOnError extends boolean = false>(
+    parameters: {
+      todoID: string
+      subtaskID: string
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      subtaskRevision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "todoID" },
+            { in: "path", key: "subtaskID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "subtaskRevision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoReopenSubtaskResponses,
+      RayaPersonalTodoReopenSubtaskErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/{todoID}/subtasks/{subtaskID}/reopen",
       ...options,
       ...params,
       headers: {

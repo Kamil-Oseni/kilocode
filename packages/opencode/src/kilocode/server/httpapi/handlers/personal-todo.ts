@@ -15,6 +15,8 @@ import {
 import {
   PersonalTodoProposalStaleRevisionError,
   PersonalTodoStaleRevisionError,
+  PersonalTodoSubtaskStaleRevisionError,
+  PersonalTodoSubtaskPayload,
   PersonalTodoUpdatePayload,
 } from "../groups/personal-todo"
 
@@ -35,6 +37,48 @@ function api<A, R>(
           data: {
             id: err.id,
             operation: err.operation,
+            expected: err.expected,
+            actual: err.actual,
+            message: err.message,
+          },
+        }),
+      ),
+    ),
+  )
+}
+
+function subtask<A, R>(
+  self: Effect.Effect<
+    A,
+    PersonalTodo.InputError | PersonalTodo.StaleRevisionError | PersonalTodo.SubtaskStaleRevisionError,
+    R
+  >,
+) {
+  return self.pipe(
+    Effect.catchTag("PersonalTodoInputError", (err) =>
+      Effect.fail(new InvalidRequestError({ message: err.message, kind: "personal-todo", field: err.field })),
+    ),
+    Effect.catchTag("PersonalTodoStaleRevisionError", (err) =>
+      Effect.fail(
+        new PersonalTodoStaleRevisionError({
+          name: "PersonalTodoStaleRevisionError",
+          data: {
+            id: err.id,
+            operation: err.operation,
+            expected: err.expected,
+            actual: err.actual,
+            message: err.message,
+          },
+        }),
+      ),
+    ),
+    Effect.catchTag("PersonalTodoSubtaskStaleRevisionError", (err) =>
+      Effect.fail(
+        new PersonalTodoSubtaskStaleRevisionError({
+          name: "PersonalTodoSubtaskStaleRevisionError",
+          data: {
+            id: err.id,
+            subtaskID: err.subtaskID,
             expected: err.expected,
             actual: err.actual,
             message: err.message,
@@ -187,6 +231,24 @@ export const personalTodoHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-
         (ctx: { params: { todoID: string }; payload: typeof PersonalTodoUpdatePayload.Type }) =>
           api(todos.update(ctx.params.todoID, ctx.payload)).pipe(
             Effect.flatMap((item) => (item ? Effect.succeed(item) : Effect.fail(notFound("Personal todo not found.")))),
+          ),
+      )
+      .handle(
+        "personalTodoCompleteSubtask",
+        (ctx: { params: { todoID: string; subtaskID: string }; payload: typeof PersonalTodoSubtaskPayload.Type }) =>
+          subtask(todos.completeSubtask(ctx.params.todoID, { ...ctx.payload, subtaskID: ctx.params.subtaskID })).pipe(
+            Effect.flatMap((item) =>
+              item ? Effect.succeed(item) : Effect.fail(notFound("Personal todo subtask not found.")),
+            ),
+          ),
+      )
+      .handle(
+        "personalTodoReopenSubtask",
+        (ctx: { params: { todoID: string; subtaskID: string }; payload: typeof PersonalTodoSubtaskPayload.Type }) =>
+          subtask(todos.reopenSubtask(ctx.params.todoID, { ...ctx.payload, subtaskID: ctx.params.subtaskID })).pipe(
+            Effect.flatMap((item) =>
+              item ? Effect.succeed(item) : Effect.fail(notFound("Personal todo subtask not found.")),
+            ),
           ),
       )
       .handle("personalTodoDelete", (ctx) =>

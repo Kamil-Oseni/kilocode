@@ -22,6 +22,8 @@ const root = "/raya/personal-todos"
 export const PersonalTodoPaths = {
   list: root,
   item: `${root}/:todoID`,
+  completeSubtask: `${root}/:todoID/subtasks/:subtaskID/complete`,
+  reopenSubtask: `${root}/:todoID/subtasks/:subtaskID/reopen`,
   reminders: `${root}/reminders/claim`,
   acknowledge: `${root}/reminders/acknowledge`,
   proposals: `${root}/proposals`,
@@ -60,6 +62,11 @@ export const PersonalTodoUpdatePayload = Schema.Struct({
   reminderAt: Schema.optional(Schema.NullOr(Schema.Number)),
 })
 
+export const PersonalTodoSubtaskPayload = Schema.Struct({
+  revision: Schema.Number,
+  subtaskRevision: Schema.Number,
+})
+
 export const PersonalTodoReminderAckPayload = Schema.Struct({ deliveryID: Schema.String, claimID: Schema.String })
 
 export const PersonalTodoDeleteQuery = Schema.Struct({
@@ -75,6 +82,22 @@ export class PersonalTodoStaleRevisionError extends Schema.ErrorClass<PersonalTo
     data: Schema.Struct({
       id: Schema.String,
       operation: Schema.Literals(["update", "delete"]),
+      expected: Schema.Number,
+      actual: Schema.Number,
+      message: Schema.String,
+    }),
+  },
+  { httpApiStatus: 409 },
+) {}
+
+export class PersonalTodoSubtaskStaleRevisionError extends Schema.ErrorClass<PersonalTodoSubtaskStaleRevisionError>(
+  "PersonalTodoSubtaskStaleRevisionError",
+)(
+  {
+    name: Schema.Literal("PersonalTodoSubtaskStaleRevisionError"),
+    data: Schema.Struct({
+      id: Schema.String,
+      subtaskID: Schema.String,
       expected: Schema.Number,
       actual: Schema.Number,
       message: Schema.String,
@@ -100,6 +123,7 @@ export class PersonalTodoProposalStaleRevisionError extends Schema.ErrorClass<Pe
 ) {}
 
 const errors = [InvalidRequestError, ApiNotFoundError, ConflictError, PersonalTodoStaleRevisionError] as const
+const subtaskErrors = [...errors, PersonalTodoSubtaskStaleRevisionError] as const
 const proposalErrors = [
   InvalidRequestError,
   ApiNotFoundError,
@@ -222,6 +246,32 @@ export const PersonalTodoApi = HttpApi.make("raya-personal-todo").add(
           identifier: "raya.personalTodo.update",
           summary: "Update a personal todo",
           description: "Update the exact retained revision of a personal todo.",
+        }),
+      ),
+      HttpApiEndpoint.post("personalTodoCompleteSubtask", PersonalTodoPaths.completeSubtask, {
+        params: { todoID: Schema.String, subtaskID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: PersonalTodoSubtaskPayload,
+        success: described(PersonalTodo.Info, "Completed personal todo subtask"),
+        error: subtaskErrors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.completeSubtask",
+          summary: "Complete a personal todo subtask",
+          description: "Complete a subtask only when both the parent and subtask revisions match exactly.",
+        }),
+      ),
+      HttpApiEndpoint.post("personalTodoReopenSubtask", PersonalTodoPaths.reopenSubtask, {
+        params: { todoID: Schema.String, subtaskID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: PersonalTodoSubtaskPayload,
+        success: described(PersonalTodo.Info, "Reopened personal todo subtask"),
+        error: subtaskErrors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.reopenSubtask",
+          summary: "Reopen a personal todo subtask",
+          description: "Reopen a subtask only when both the parent and subtask revisions match exactly.",
         }),
       ),
       HttpApiEndpoint.delete("personalTodoDelete", PersonalTodoPaths.item, {

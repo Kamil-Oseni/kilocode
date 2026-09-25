@@ -754,12 +754,13 @@ export namespace PersonalTodo {
             return
           }
           const done = phase === "completed"
+          const { completedAt, ...base } = task
           const changed: Subtask = {
-            ...task,
+            ...base,
             status: phase,
             done,
             updatedAt: Math.max(at, task.updatedAt),
-            ...(done ? { completedAt: task.completedAt ?? Math.max(at, task.updatedAt) } : { completedAt: undefined }),
+            ...(done ? { completedAt: completedAt ?? Math.max(at, task.updatedAt) } : {}),
             revision: task.revision + 1,
           }
           const tasks = [...(prior.subtasks ?? [])]

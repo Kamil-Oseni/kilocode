@@ -1841,7 +1841,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       )
                     }
                   >
-                    Create a worker
+                    Plan a worker
                   </Button>
                   <Button
                     variant="ghost"
@@ -1851,7 +1851,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       )
                     }
                   >
-                    Build a team
+                    Plan a team
                   </Button>
                 </div>
               </div>
@@ -1870,32 +1870,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </div>
               </div>
             </section>
-            <Show when={organizations().length > 0}>
-              <section class="routines-team-grid" aria-label="Your teams">
-                <div class="routines-team-grid-head">
-                  <span>Your teams</span>
-                  <small>{organizations().length} organizations</small>
-                </div>
-                <div class="routines-team-cards">
-                  <For each={organizations()}>
-                    {(item) => (
-                      <button type="button" onClick={() => chooseOrganization(item.id)}>
-                        <span class="routines-team-mark" aria-hidden="true">
-                          ✦
-                        </span>
-                        <strong>{item.name}</strong>
-                        <small>
-                          {item.members.length} workers · {item.purpose || "Ready for work"}
-                        </small>
-                        <span class="routines-team-arrow" aria-hidden="true">
-                          →
-                        </span>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </section>
-            </Show>
           </Show>
           <div class="sr-only" role="status" aria-live="polite" aria-busy={refreshing()}>
             {freshness()}

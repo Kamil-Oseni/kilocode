@@ -15,6 +15,15 @@ type Message =
       reminderAt?: number | null
     }
   | { type: "personalTodoDelete"; requestID: string; todoID: string; revision: number }
+  | {
+      type: "personalTodoSubtask"
+      requestID: string
+      todoID: string
+      subtaskID: string
+      revision: number
+      subtaskRevision: number
+      done: boolean
+    }
 
 type Post = (message: unknown) => void
 type Result = { error?: unknown; response: { status: number } }
@@ -43,11 +52,22 @@ async function latest(client: KiloClient, directory: string, todoID: string) {
   )
 }
 
-function operation(type: Message["type"]): "list" | "create" | "update" | "delete" {
+function operation(type: Message["type"]): "list" | "create" | "update" | "delete" | "subtask" {
   if (type === "personalTodoList") return "list"
   if (type === "personalTodoCreate") return "create"
   if (type === "personalTodoUpdate") return "update"
+  if (type === "personalTodoSubtask") return "subtask"
   return "delete"
+}
+
+function handles(type: string) {
+  return (
+    type === "personalTodoList" ||
+    type === "personalTodoCreate" ||
+    type === "personalTodoUpdate" ||
+    type === "personalTodoSubtask" ||
+    type === "personalTodoDelete"
+  )
 }
 
 function update(message: Extract<Message, { type: "personalTodoUpdate" }>) {
@@ -101,6 +121,14 @@ function valid(message: Message) {
     )
   )
     return false
+  if (message.type === "personalTodoSubtask")
+    return (
+      typeof message.subtaskID === "string" &&
+      Boolean(message.subtaskID) &&
+      Number.isSafeInteger(message.subtaskRevision) &&
+      message.subtaskRevision > 0 &&
+      typeof message.done === "boolean"
+    )
   if (message.type === "personalTodoDelete") return true
   return update(message)
 }
@@ -109,22 +137,24 @@ async function failed(input: {
   client: KiloClient
   directory: string
   message: Exclude<Message, { type: "personalTodoList" | "personalTodoCreate" }>
-  operation: "update" | "delete"
+  operation: "update" | "delete" | "subtask"
   result: Result
   post: Post
 }) {
   const conflict = input.result.response.status === 409 ? stale(input.result.error) : undefined
-  if (conflict) {
+  const child = input.result.response.status === 409 ? subtaskStale(input.result.error) : undefined
+  if (conflict || child) {
     input.post({
       type: "personalTodoResult",
       requestID: input.message.requestID,
       operation: input.operation,
       todoID: input.message.todoID,
+      ...(input.message.type === "personalTodoSubtask" ? { subtaskID: input.message.subtaskID } : {}),
       error: {
         kind: "stale",
-        message: conflict.data.message,
-        expected: conflict.data.expected,
-        actual: conflict.data.actual,
+        message: (conflict ?? child)!.data.message,
+        expected: (conflict ?? child)!.data.expected,
+        actual: (conflict ?? child)!.data.actual,
         latest: await latest(input.client, input.directory, input.message.todoID),
       },
     })
@@ -139,19 +169,62 @@ async function failed(input: {
   })
 }
 
+function subtaskStale(value: unknown) {
+  if (!value || typeof value !== "object") return
+  const error = value as { name?: unknown; data?: { expected?: unknown; actual?: unknown; message?: unknown } }
+  if (error.name !== "PersonalTodoSubtaskStaleRevisionError" || !error.data) return
+  if (typeof error.data.expected !== "number" || typeof error.data.actual !== "number") return
+  if (typeof error.data.message !== "string") return
+  return error as { data: { expected: number; actual: number; message: string } }
+}
+
+async function saveSubtask(input: {
+  client: KiloClient
+  directory: string
+  message: Extract<Message, { type: "personalTodoSubtask" }>
+  post: Post
+}) {
+  const msg = input.message
+  const params = {
+    directory: input.directory,
+    todoID: msg.todoID,
+    subtaskID: msg.subtaskID,
+    revision: msg.revision,
+    subtaskRevision: msg.subtaskRevision,
+  }
+  try {
+    const result = msg.done
+      ? await input.client.raya.personalTodo.completeSubtask(params)
+      : await input.client.raya.personalTodo.reopenSubtask(params)
+    if (result.data) {
+      input.post({ type: "personalTodoResult", requestID: msg.requestID, operation: "subtask", item: result.data })
+      return true
+    }
+    await failed({ ...input, operation: "subtask", result })
+    return true
+  } catch {
+    input.post({
+      type: "personalTodoResult",
+      requestID: msg.requestID,
+      operation: "subtask",
+      todoID: msg.todoID,
+      subtaskID: msg.subtaskID,
+      error: {
+        kind: "offline",
+        message: "The connection ended before Raya confirmed this step. Refresh the task before trying again.",
+      },
+    })
+    return true
+  }
+}
+
 export async function handlePersonalTodoMessage(input: {
   client: KiloClient | null
   directory: string
   message: { type: string } & Record<string, unknown>
   post: Post
 }): Promise<boolean> {
-  if (
-    input.message.type !== "personalTodoList" &&
-    input.message.type !== "personalTodoCreate" &&
-    input.message.type !== "personalTodoUpdate" &&
-    input.message.type !== "personalTodoDelete"
-  )
-    return false
+  if (!handles(input.message.type)) return false
   const msg = input.message as Message
   if (!valid(msg)) {
     input.post({
@@ -171,6 +244,8 @@ export async function handlePersonalTodoMessage(input: {
     })
     return true
   }
+  if (msg.type === "personalTodoSubtask")
+    return saveSubtask({ client: input.client, directory: input.directory, message: msg, post: input.post })
   try {
     if (msg.type === "personalTodoList") {
       const result = await input.client.raya.personalTodo.list({ directory: input.directory })

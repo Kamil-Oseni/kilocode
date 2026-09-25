@@ -18,14 +18,20 @@ test("native capture is excluded by default and included only by the Windows bui
   writeFileSync(join(dir, "bin", ".cli-version"), "local")
   writeFileSync(join(dir, "bin", "raya-desktop-capture.exe"), "candidate")
   writeFileSync(join(dir, "bin", "raya-desktop-capture.pdb"), "symbols")
+  writeFileSync(join(dir, "bin", "raya-desktop-input.exe"), "broker")
+  writeFileSync(join(dir, "bin", "raya-desktop-input.pdb"), "broker symbols")
   writeFileSync(join(dir, "native", "desktop-capture.cpp"), "source")
   writeFileSync(join(dir, "dist", "extension.js"), "extension")
 
   const source = await Bun.file(join(root, ".vscodeignore")).text()
   const rule = "bin/raya-desktop-capture.exe"
   const symbol = "bin/raya-desktop-capture.pdb"
+  const broker = "bin/raya-desktop-input.exe"
+  const brokerSymbol = "bin/raya-desktop-input.pdb"
   expect(source.split(/\r?\n/)).toContain(rule)
   expect(source.split(/\r?\n/)).toContain(symbol)
+  expect(source.split(/\r?\n/)).toContain(broker)
+  expect(source.split(/\r?\n/)).toContain(brokerSymbol)
   const normal = join(dir, ".vscodeignore")
   const native = join(dir, "native.vscodeignore")
   writeFileSync(normal, source)
@@ -33,7 +39,9 @@ test("native capture is excluded by default and included only by the Windows bui
     native,
     source
       .replace(/^bin\/raya-desktop-capture\.exe$/m, `!${rule}`)
-      .replace(/^bin\/raya-desktop-capture\.pdb$/m, `!${symbol}`),
+      .replace(/^bin\/raya-desktop-capture\.pdb$/m, `!${symbol}`)
+      .replace(/^bin\/raya-desktop-input\.exe$/m, `!${broker}`)
+      .replace(/^bin\/raya-desktop-input\.pdb$/m, `!${brokerSymbol}`),
   )
 
   const files = await listFiles({ cwd: dir, packageManager: PackageManager.None, ignoreFile: normal })
@@ -41,12 +49,16 @@ test("native capture is excluded by default and included only by the Windows bui
   expect(files).toContain("dist/extension.js")
   expect(files).not.toContain(rule)
   expect(files).not.toContain(symbol)
+  expect(files).not.toContain(broker)
+  expect(files).not.toContain(brokerSymbol)
   expect(files).not.toContain("bin/.cli-version")
   expect(files).not.toContain("native/desktop-capture.cpp")
 
   const included = await listFiles({ cwd: dir, packageManager: PackageManager.None, ignoreFile: native })
   expect(included).toContain(rule)
   expect(included).toContain(symbol)
+  expect(included).toContain(broker)
+  expect(included).toContain(brokerSymbol)
   expect(included).not.toContain("bin/.cli-version")
   expect(included).not.toContain("native/desktop-capture.cpp")
 })

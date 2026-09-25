@@ -17,8 +17,11 @@ const isRelease = mode === "release"
 const root = join(import.meta.dir, "..")
 const capture = join(root, "bin", "raya-desktop-capture.exe")
 const symbols = join(root, "bin", "raya-desktop-capture.pdb")
+const input = join(root, "bin", "raya-desktop-input.exe")
+const inputSymbols = join(root, "bin", "raya-desktop-input.pdb")
 // Remove a prior candidate even if this build later fails or targets another platform.
 rmSync(capture, { force: true })
+rmSync(input, { force: true })
 const repair = await load(join(root, "..", ".."), process.argv[3] ?? process.env.RAYA_REPAIR_BUILD_INPUT)
 if ((mode === "repair") !== Boolean(repair))
   throw new Error("Repair packaging requires its captured build input and cannot install or release")
@@ -111,6 +114,12 @@ if (includeCapture) {
   )
   if (!existsSync(capture)) throw new Error("Native desktop capture build did not produce its executable")
   if (!existsSync(symbols)) throw new Error("Native desktop capture build did not produce matching symbols")
+  console.log("\nBuilding and self-testing native desktop input broker...")
+  await $`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${join(root, "script", "build-desktop-input.ps1")} -Output ${input}`.cwd(
+    root,
+  )
+  if (!existsSync(input)) throw new Error("Native desktop input build did not produce its executable")
+  if (!existsSync(inputSymbols)) throw new Error("Native desktop input build did not produce matching symbols")
 }
 
 console.log("\n📦 Packaging VSIX...")
@@ -140,7 +149,12 @@ const dir = includeCapture ? mkdtempSync(join(tmpdir(), "raya-vsix-ignore-")) : 
 try {
   const ignore = dir ? join(dir, ".vscodeignore") : undefined
   if (ignore) {
-    const rules = ["bin/raya-desktop-capture.exe", "bin/raya-desktop-capture.pdb"]
+    const rules = [
+      "bin/raya-desktop-capture.exe",
+      "bin/raya-desktop-capture.pdb",
+      "bin/raya-desktop-input.exe",
+      "bin/raya-desktop-input.pdb",
+    ]
     const source = readFileSync(join(root, ".vscodeignore"), "utf8")
     if (rules.some((rule) => !source.split(/\r?\n/).includes(rule)))
       throw new Error("Native capture default exclusion is missing")

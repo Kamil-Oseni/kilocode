@@ -132,6 +132,8 @@ test("a background completion cannot start overlapping work while its sibling ru
   ]
 
   expect(TaskRepeat.pending([user, started, notice], jobs, sessionID)).toBe(true)
+  expect(TaskRepeat.pending([user, started, notice], jobs, sessionID, "ses_running")).toBe(true)
+  expect(TaskRepeat.pending([user, started, notice], jobs, sessionID, "ses_finished")).toBe(false)
   expect(TaskRepeat.pending([user, started], jobs, sessionID)).toBe(false)
   expect(TaskRepeat.pending([user, started, notice], [{ ...jobs[0], status: "completed" }], sessionID)).toBe(false)
   expect(

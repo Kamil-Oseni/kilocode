@@ -42,6 +42,51 @@ export interface TranscriptErrorRow extends TranscriptMeta {
 
 export type TranscriptRow = TranscriptUserRow | TranscriptAssistantRow | TranscriptDiffRow | TranscriptErrorRow
 
+export interface TranscriptActivityRow {
+  type: "activity"
+  key: string
+  turn: string
+  rows: TranscriptAssistantRow[]
+}
+
+export type TranscriptViewRow = TranscriptRow | TranscriptActivityRow
+
+/** Archive the steps before a completed answer into one expandable row. */
+export function activityRows(rows: TranscriptRow[], source: TranscriptRow[]): TranscriptViewRow[] {
+  const view: TranscriptViewRow[] = []
+  const answers = new Map<string, string>()
+  for (const row of source) {
+    if (row.type !== "assistant") continue
+    if (row.parts.some((part) => part.type === "text" && !part.synthetic && part.text.trim())) {
+      answers.set(row.turn, row.key)
+    }
+  }
+  for (let i = 0; i < rows.length; ) {
+    const row = rows[i]!
+    if (row.type !== "assistant" || row.live || row.queued) {
+      view.push(row)
+      i += 1
+      continue
+    }
+    const run: TranscriptAssistantRow[] = []
+    while (i < rows.length && rows[i]?.type === "assistant" && rows[i]?.turn === row.turn) {
+      run.push(rows[i] as TranscriptAssistantRow)
+      i += 1
+    }
+    const answer = answers.get(row.turn)
+    const at = answer ? run.findIndex((item) => item.key === answer) : -1
+    const end = at < 0 ? run.length : at
+    const archived = run.slice(0, end)
+    if (answer && archived.length >= 2 && archived.some((item) => item.parts.some((part) => part.type === "tool"))) {
+      view.push({ type: "activity", key: `${row.turn}:activity:${archived[0]!.key}`, turn: row.turn, rows: archived })
+      view.push(...run.slice(end))
+      continue
+    }
+    view.push(...run)
+  }
+  return view
+}
+
 export interface TranscriptOptions {
   size?: number
   queued?: ReadonlySet<string>

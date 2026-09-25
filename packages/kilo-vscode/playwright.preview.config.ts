@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test"
 export default defineConfig({
   testDir: "./tests",
   testMatch: [
+    "activity.browser.ts",
     "context-provenance.browser.ts",
     "memory-preview.browser.ts",
     "message-time.browser.ts",

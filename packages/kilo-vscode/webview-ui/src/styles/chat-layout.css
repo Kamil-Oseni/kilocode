@@ -24,6 +24,15 @@
   --prompt-gutter: max(var(--prompt-min-gutter), 2cqi);
 }
 
+.chat-header-panel {
+  flex-shrink: 0;
+  border-bottom: 1px solid #272728;
+}
+
+.chat-header-panel [data-component="task-header"] {
+  border-bottom: 0;
+}
+
 /* ============================================
    Sidebar Top Bar
    ============================================ */
@@ -403,8 +412,54 @@
 .vscode-session-turn[data-section-break]::before {
   content: "";
   width: 100%;
-  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
-  margin: var(--raya-space-8) 0 var(--raya-space-6);
+  border-top: 1px solid #272728;
+  margin: 2px 0 0;
+}
+
+.vscode-session-turn[data-section-break] {
+  gap: var(--raya-space-8);
+}
+
+.transcript-activity {
+  padding-bottom: 4px;
+}
+
+.transcript-activity__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-8);
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font: 500 var(--kilo-font-size-12) var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.transcript-activity__trigger:hover,
+.transcript-activity__trigger:focus-visible {
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.transcript-activity__count {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.transcript-activity__chevron {
+  transition: transform var(--raya-duration-fast, 120ms) ease;
+}
+
+.transcript-activity__trigger[aria-expanded="true"] .transcript-activity__chevron {
+  transform: rotate(90deg);
+}
+
+.transcript-activity__body {
+  padding: var(--raya-space-8) 0 0 var(--raya-space-16);
+  border-left: 1px solid #272728;
 }
 
 .vscode-session-tool-note {

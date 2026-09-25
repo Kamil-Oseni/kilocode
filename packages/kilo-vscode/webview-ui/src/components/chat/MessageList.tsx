@@ -31,6 +31,7 @@ import { useI18n } from "@kilocode/kilo-ui/context/i18n"
 import { useProvider } from "../../context/provider"
 import { WelcomeEmptyState } from "./WelcomeEmptyState"
 import { TranscriptRowView } from "./TranscriptRow"
+import { TranscriptActivity } from "./TranscriptActivity"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
 import { RevertBanner } from "./RevertBanner"
 import { AccountSwitcher } from "../shared/AccountSwitcher"
@@ -61,12 +62,14 @@ import { activeQuestionTab, tr } from "./question-dock-utils"
 import { useData } from "@kilocode/kilo-ui/context/data"
 import { getDirectory as getRawDirectory, getFilename } from "@opencode-ai/core/util/path"
 import {
+  activityRows,
   partitionRows,
   retainTurn,
   transcriptRows,
   type TranscriptErrorRow,
   type TranscriptHold,
   type TranscriptRow,
+  type TranscriptViewRow,
 } from "../../context/transcript-rows"
 import { PromptRail } from "./PromptRail"
 import { ChiefNotesInbox } from "./ChiefNotesInbox"
@@ -979,6 +982,19 @@ export const MessageList: Component<MessageListProps> = (props) => {
   // Virtua continues to own completed history and stable live chunks, but not
   // the growing assistant suffix whose measurements would produce visible jumps.
   const partition = createMemo(() => partitionRows(rows(), direct()))
+  const display = createMemo(() => ({
+    virtual: search.active() ? partition().virtual : activityRows(partition().virtual, rows()),
+    direct: search.active() ? partition().direct : activityRows(partition().direct, rows()),
+  }))
+  const activityKeys = createMemo(
+    () =>
+      new Map(
+        [...display().virtual, ...display().direct].flatMap((row) =>
+          row.type === "activity" ? row.rows.map((item) => [item.key, row.key] as const) : [],
+        ),
+      ),
+  )
+  const [opened, setOpened] = createSignal<string>()
   const sections = createMemo(() => {
     const marked = new Set<string>()
     const list = rows()
@@ -991,9 +1007,9 @@ export const MessageList: Component<MessageListProps> = (props) => {
     }
     return marked
   })
-  const tail = createMemo(() => partition().direct.map((row) => row.key))
-  const lookup = createMemo(() => new Map(partition().direct.map((row) => [row.key, row])))
-  const keys = createMemo(() => partition().virtual.map((row) => row.key))
+  const tail = createMemo(() => display().direct.map((row) => row.key))
+  const lookup = createMemo(() => new Map(display().direct.map((row) => [row.key, row])))
+  const keys = createMemo(() => display().virtual.map((row) => row.key))
   const indexes = createMemo(() => new Map(keys().map((key, index) => [key, index])))
   const fingerprint = createMemo(() => rowFingerprint(keys()))
 
@@ -1004,7 +1020,9 @@ export const MessageList: Component<MessageListProps> = (props) => {
   // scrollIntoView. Pauses auto-follow first so the jump isn't snapped back.
   const jump = (key: string) => {
     autoScroll.pause()
-    const index = indexes().get(key)
+    const shown = activityKeys().get(key) ?? key
+    if (shown !== key) setOpened(shown)
+    const index = indexes().get(shown)
     if (index !== undefined) {
       const handle = virtualizer()
       if (handle) {
@@ -1013,18 +1031,18 @@ export const MessageList: Component<MessageListProps> = (props) => {
         return
       }
       const sid = session.currentSessionID()
-      if (sid) setPending({ sid, key })
+      if (sid) setPending({ sid, key: shown })
       return
     }
     const el = scrollEl()
-    const target = el?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(key)}"]`)
+    const target = el?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(shown)}"]`)
     if (target) {
       setPending(undefined)
       target.scrollIntoView({ block: "start" })
       return
     }
     const sid = session.currentSessionID()
-    if (sid) setPending({ sid, key })
+    if (sid) setPending({ sid, key: shown })
   }
 
   // Keep unresolved targets by stable row key. Virtual rows resolve once
@@ -1289,6 +1307,32 @@ export const MessageList: Component<MessageListProps> = (props) => {
 
   onCleanup(() => save(session.currentSessionID()))
 
+  const render = (row: TranscriptViewRow, index?: number): JSX.Element =>
+    row.type === "activity" ? (
+      <TranscriptActivity
+        row={row}
+        index={index}
+        force={opened() === row.key}
+        timing={timing().get(row.turn)}
+        markers={markers()}
+        highlight={highlight}
+        onForkMessage={props.onForkMessage}
+      />
+    ) : (
+      <TranscriptRowView
+        row={row}
+        section={sections().has(row.key)}
+        index={index}
+        timeline={markers().get(row.key)}
+        timing={timing().get(row.turn)}
+        onForkMessage={props.onForkMessage}
+        highlight={highlight}
+        activeSearch={activeKey() === row.key}
+        activeSearchPartID={activeKey() === row.key ? activeMatch()?.partId : undefined}
+        activeSearchPartFile={activeKey() === row.key ? activeMatch()?.partFile : undefined}
+      />
+    )
+
   return (
     <div class="message-list-container">
       <Show when={props.announce === false}>
@@ -1341,55 +1385,28 @@ export const MessageList: Component<MessageListProps> = (props) => {
                 {language.t("session.messages.loadEarlier")}
               </button>
             </Show>
-            <Show when={partition().virtual.length > 0 || partition().direct.length > 0}>
+            <Show when={display().virtual.length > 0 || display().direct.length > 0}>
               <div
                 class="message-list-turns"
                 data-loaded-messages={session.messages().length}
-                data-row-count={partition().virtual.length}
-                data-direct-count={partition().direct.length}
+                data-row-count={display().virtual.length}
+                data-direct-count={display().direct.length}
                 data-queued-count={partition().queued.length}
               >
-                <Show when={scrollEl() && partition().virtual.length > 0}>
+                <Show when={scrollEl() && display().virtual.length > 0}>
                   <Virtualizer
                     ref={setVirtualizer}
-                    data={partition().virtual}
+                    data={display().virtual}
                     scrollRef={scrollEl()}
                     shift={session.messageMutation() === "prepend"}
                     cache={measurement()}
                     bufferSize={520}
                     itemSize={260}
                   >
-                    {(row, index) => (
-                      <TranscriptRowView
-                        row={row}
-                        section={sections().has(row.key)}
-                        index={index()}
-                        timeline={markers().get(row.key)}
-                        timing={timing().get(row.turn)}
-                        onForkMessage={props.onForkMessage}
-                        highlight={highlight}
-                        activeSearch={activeKey() === row.key}
-                        activeSearchPartID={activeKey() === row.key ? activeMatch()?.partId : undefined}
-                        activeSearchPartFile={activeKey() === row.key ? activeMatch()?.partFile : undefined}
-                      />
-                    )}
+                    {(row, index) => render(row, index())}
                   </Virtualizer>
                 </Show>
-                <For each={tail()}>
-                  {(key) => (
-                    <TranscriptRowView
-                      row={lookup().get(key)!}
-                      section={sections().has(key)}
-                      timeline={markers().get(key)}
-                      timing={timing().get(lookup().get(key)!.turn)}
-                      onForkMessage={props.onForkMessage}
-                      highlight={highlight}
-                      activeSearch={activeKey() === key}
-                      activeSearchPartID={activeKey() === key ? activeMatch()?.partId : undefined}
-                      activeSearchPartFile={activeKey() === key ? activeMatch()?.partFile : undefined}
-                    />
-                  )}
-                </For>
+                <For each={tail()}>{(key) => render(lookup().get(key)!)}</For>
               </div>
             </Show>
             <Show when={revert()}>

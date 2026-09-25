@@ -2,6 +2,7 @@ import { createComponent, type Component, type JSX } from "solid-js"
 import { TaskHeader } from "../src/components/chat/TaskHeader"
 import { VscodeUserMessage } from "../src/components/chat/VscodeUserMessage"
 import { TranscriptRowView } from "../src/components/chat/TranscriptRow"
+import { TranscriptActivity } from "../src/components/chat/TranscriptActivity"
 import { registerVscodeToolOverrides } from "../src/components/chat/VscodeToolOverrides"
 import { SessionContext, useSession } from "../src/context/session"
 import { mockSessionValue } from "../src/stories/StoryProviders"
@@ -169,7 +170,13 @@ export const TopNavPreview: Component = () =>
   wrap(sid, () =>
     createComponent(Header, {
       get children() {
-        return createComponent(TaskHeader, {})
+        return (
+          <div class="chat-view">
+            <div class="chat-header-panel">
+              <TaskHeader />
+            </div>
+          </div>
+        )
       },
     }),
   )
@@ -185,6 +192,22 @@ export const ConversationPreview: Component = () =>
   wrap(sid, () => (
     <div class="chat-view">
       <TranscriptRowView row={userRow} timeline={messageInstant(user)} />
-      <TranscriptRowView row={assistantRow(turn)} />
+      <TranscriptActivity
+        row={{
+          type: "activity",
+          key: "activity-u1",
+          turn: uid,
+          rows: [
+            { ...assistantRow(thought), key: "activity-thought" },
+            {
+              ...assistantRow([done("p-read", "read", { filePath: "README.md" }, "Read README.md")]),
+              key: "activity-read",
+            },
+          ],
+        }}
+        timing={{ start: stamp - 9_000, end: stamp - 1_000, working: false }}
+        markers={new Map()}
+      />
+      <TranscriptRowView row={assistantRow(turn)} section />
     </div>
   ))

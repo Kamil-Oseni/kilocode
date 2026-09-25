@@ -75,6 +75,14 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(false)
   })
 
+  it("marks an explicit parallel review for a saved Chief plan", () => {
+    const request =
+      "Review two independent things in parallel using read-only specialists: inspect chat timestamps and composer styles."
+    expect(RayaChief.route({ request, agents })).toMatchObject({ role: "researcher", needs_plan: true })
+    expect(RayaChief.route({ request: "Inspect chat timestamps", agents }).needs_plan).toBe(false)
+    expect(RayaChief.prompt(agents)).toContain("do not call chief_inspect, chief_review, or chief_synthesize")
+  })
+
   it("answers only self-contained conversational turns without a child", () => {
     expect(RayaChief.direct("Hi! ")).toBe(true)
     expect(RayaChief.direct("What does idempotency mean? ")).toBe(true)

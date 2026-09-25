@@ -34,7 +34,12 @@ function rejected(messages: SessionV1.WithParts[], id: string) {
 
 export namespace TaskRepeat {
   /** A background completion must not start overlapping work while a sibling from the same request is still running. */
-  export function pending(messages: SessionV1.WithParts[], jobs: BackgroundJob.Info[], sessionID: string) {
+  export function pending(
+    messages: SessionV1.WithParts[],
+    jobs: BackgroundJob.Info[],
+    sessionID: string,
+    target?: string,
+  ) {
     const latest = messages.findLastIndex((row) => row.info.role === "user")
     if (latest < 0) return false
     const notice = messages[latest]
@@ -48,6 +53,7 @@ export namespace TaskRepeat {
       (job) =>
         job.type === "task" &&
         job.status === "running" &&
+        (!target || job.id === target) &&
         job.origins?.some((origin) => {
           if (origin?.sessionID !== sessionID) return false
           const at = messages.findIndex((row) => row.info.id === origin.messageID)

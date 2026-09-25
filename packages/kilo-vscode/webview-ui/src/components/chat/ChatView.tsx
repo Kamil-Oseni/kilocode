@@ -553,10 +553,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         <Show when={isSidebar() && !props.readonly && tabs && showTabStrip(tabs.ids())}>
           <SessionTabStrip />
         </Show>
-        <TaskHeader readonly={props.readonly} />
-        <Show when={!props.readonly}>
-          <GoalBanner /> {/* raya_change - Milestone A persistent goal UI */}
-        </Show>
+        <div class="chat-header-panel">
+          <TaskHeader readonly={props.readonly} />
+          <Show when={!props.readonly}>
+            <GoalBanner /> {/* raya_change - Milestone A persistent goal UI */}
+          </Show>
+        </div>
         <div class="chat-messages-wrapper">
           <div class="chat-messages">
             <MessageList

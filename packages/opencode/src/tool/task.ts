@@ -208,11 +208,11 @@ export const TaskTool = Tool.define(
       if (
         ctx.agent === "auto" &&
         !branch &&
-        !params.task_id &&
         TaskRepeat.pending(
           yield* sessions.messages({ sessionID: ctx.sessionID }),
           yield* background.list(),
           ctx.sessionID,
+          params.task_id,
         )
       )
         return yield* Effect.fail(

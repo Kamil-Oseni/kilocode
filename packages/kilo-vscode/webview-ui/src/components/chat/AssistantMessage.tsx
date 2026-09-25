@@ -219,6 +219,10 @@ function notice(part: SDKPart) {
   // Older provider streams could persist DSML markup as assistant text.
   if (part.type === "text" && /^\s*<[\s｜|]*DSML[\s｜|]*calls\s*>/i.test(part.text))
     return "A tool request could not be displayed. Raya continued in the next step."
+  if (part.type === "tool" && part.tool === "chief_inspect" && part.state.status === "error") {
+    if (part.state.error.includes("Unknown tool: chief_inspect"))
+      return "Plan inspection was unavailable in this run. Raya continued from the specialist reports."
+  }
   if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "error") return
   const error = part.state.error
   if (

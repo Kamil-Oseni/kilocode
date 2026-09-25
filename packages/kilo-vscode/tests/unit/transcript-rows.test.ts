@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { messageTurns } from "../../webview-ui/src/context/session-queue"
-import { partitionRows, retainTurn, transcriptRows } from "../../webview-ui/src/context/transcript-rows"
+import { activityRows, partitionRows, retainTurn, transcriptRows } from "../../webview-ui/src/context/transcript-rows"
 import type { Message, Part } from "../../webview-ui/src/types/messages"
 
 const base = {
@@ -19,6 +19,37 @@ const assistant = (id: string, parentID: string, opts: Partial<Message> = {}): M
 })
 const part = (id: string, messageID: string): Part => ({ id, messageID, type: "text", text: id })
 const lookup = (values: Record<string, Part[]>) => (id: string) => values[id] ?? []
+
+describe("activityRows", () => {
+  it("archives completed tool history before the final reply, including a virtualized prefix", () => {
+    const u1 = user("u1")
+    const a1 = assistant("a1", "u1")
+    const a2 = assistant("a2", "u1")
+    const a3 = assistant("a3", "u1")
+    const tool = (id: string, messageID: string): Part =>
+      ({ id, messageID, type: "tool", tool: "task", state: { status: "completed" } }) as Part
+    const rows = transcriptRows(
+      messageTurns([u1, a1, a2, a3]),
+      lookup({ a1: [tool("t1", "a1")], a2: [tool("t2", "a2")], a3: [part("answer", "a3")] }),
+    )
+    const view = activityRows(rows.slice(0, -1), rows)
+
+    expect(view.map((row) => row.type)).toEqual(["user", "activity"])
+    expect(view[1]).toMatchObject({ rows: [{ message: a1 }, { message: a2 }] })
+    expect(activityRows(rows, rows).map((row) => row.type)).toEqual(["user", "activity", "assistant"])
+    expect(activityRows(rows.slice(0, -1), rows.slice(0, -1)).map((row) => row.type)).toEqual([
+      "user",
+      "assistant",
+      "assistant",
+    ])
+    const live = transcriptRows(
+      messageTurns([u1, a1, a2, a3]),
+      lookup({ a1: [tool("t1", "a1")], a2: [tool("t2", "a2")], a3: [part("answer", "a3")] }),
+      { live: new Set(["u1"]) },
+    )
+    expect(activityRows(live, live).some((row) => row.type === "activity")).toBe(false)
+  })
+})
 
 describe("transcriptRows", () => {
   it("preserves turn order across user, bounded assistant, diff, and error rows", () => {

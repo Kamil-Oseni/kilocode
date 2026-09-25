@@ -117,6 +117,8 @@ export interface DesktopDriver {
   windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
   identity?(windowID: string): Promise<string | undefined>
+  postAction?: boolean
+  observeAfter?(target: DesktopDispatchTarget): Promise<DesktopFrame>
   focus(target: DesktopWindow): Promise<void>
   perform(action: DesktopAction, target: DesktopDispatchTarget): Promise<void>
   cancel?(): void
@@ -156,8 +158,8 @@ export class DesktopSession {
     return scene
   }
 
-  private async capture(fresh = false): Promise<DesktopFrame> {
-    const frame = await this.driver.observe(fresh ? { fresh: true } : undefined)
+  private async capture(fresh = false, after?: DesktopDispatchTarget, armed = false): Promise<DesktopFrame> {
+    const frame = await this.acquire(fresh, after, armed)
     if (
       !Number.isInteger(frame.width) ||
       frame.width <= 0 ||
@@ -188,6 +190,11 @@ export class DesktopSession {
     )
       throw new Error("Desktop observation timing is invalid")
     return frame
+  }
+
+  private acquire(fresh: boolean, after?: DesktopDispatchTarget, armed = false): Promise<DesktopFrame> {
+    if (after && armed && this.driver.observeAfter) return this.driver.observeAfter(after)
+    return this.driver.observe(fresh ? { fresh: true } : undefined)
   }
 
   async windows(): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
@@ -337,31 +344,36 @@ export class DesktopSession {
               const reason = mismatch(action, before.semantics)
               if (reason) throw new Error(reason)
               const identity = await authorize?.(planned)
+              const armed = this.driver.postAction === true && !!this.driver.observeAfter
+              const process = identity ?? (armed ? await this.driver.identity?.(action.windowID) : undefined)
               const token = this.observations.begin(before.observation.id, before.observation.target, revision)
               this.frames.delete(before.observation.id)
               this.semantics.delete(before.observation.id)
               this.observations.invalidate("desktop", current.windowID, token.id)
-              if (this.state.control === "manual" || revision !== this.revision) {
+              if (this.current().control === "manual" || revision !== this.revision) {
                 this.observations.cancel(token)
                 throw new Error("Desktop sequence cancelled for manual takeover; no action was dispatched")
               }
               onDispatch?.()
-              await this.driver
-                .perform(action, {
-                  ...current,
-                  ...(identity ? { identity } : {}),
-                  scene: before.observation.sequence,
-                  observedAt: before.observation.observedAt,
-                  validUntil: Math.min(before.observation.validUntil, before.observation.observedAt + 10_000),
-                })
-                .catch((error: unknown) => {
-                  this.observations.cancel(token)
-                  const detail = error instanceof Error ? error.message : String(error)
-                  throw new DesktopOutcomeError(action.operation, detail)
-                })
+              const target = {
+                ...current,
+                ...(process ? { identity: process } : {}),
+                scene: before.observation.sequence,
+                observedAt: before.observation.observedAt,
+                validUntil: Math.min(before.observation.validUntil, before.observation.observedAt + 10_000),
+              }
+              await this.driver.perform(action, target).catch((error: unknown) => {
+                this.observations.cancel(token)
+                const detail = error instanceof Error ? error.message : String(error)
+                throw new DesktopOutcomeError(action.operation, detail)
+              })
               effects += 1
+              if (this.current().control === "manual" || revision !== this.revision) {
+                this.observations.cancel(token)
+                throw new DesktopOutcomeError("sequence postcondition", "Desktop control stopped after native dispatch")
+              }
               // A cached pre-action frame cannot prove a local postcondition.
-              const frame = await this.capture(true).catch((error: unknown) => {
+              const frame = await this.capture(true, target, armed).catch((error: unknown) => {
                 this.observations.cancel(token)
                 const detail = error instanceof Error ? error.message : String(error)
                 throw new DesktopOutcomeError("sequence postcondition", detail)

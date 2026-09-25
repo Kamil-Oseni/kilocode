@@ -271,6 +271,7 @@ export class NativeCaptureHost {
 
   stop(): void {
     this.generation++
+    const generation = this.generation
     if (this.barrier) {
       clearTimeout(this.barrier.timer)
       this.barrier.reject(new Error("Native desktop capture stopped during post-action barrier"))
@@ -293,6 +294,7 @@ export class NativeCaptureHost {
       child.kill("SIGKILL")
     }, 500)
     const alarm = setTimeout(() => {
+      if (generation !== this.generation) return
       if (child.exitCode !== null || child.signalCode !== null) return
       this.failed(new Error("Native desktop capture did not exit after Stop"))
     }, 1_500)

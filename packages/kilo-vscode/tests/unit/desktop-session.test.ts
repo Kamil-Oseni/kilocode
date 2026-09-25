@@ -419,6 +419,123 @@ describe("native desktop session boundary", () => {
     expect(driver.fresh).toEqual([false, true, true])
   })
 
+  it("uses an opt-in post-action frame with the pre-dispatch process identity", async () => {
+    class Barrier extends Driver {
+      readonly postAction = true
+      readonly after: DesktopDispatchTarget[] = []
+
+      override async identity() {
+        return "A".repeat(64)
+      }
+
+      async observeAfter(target: DesktopDispatchTarget) {
+        this.after.push(target)
+        return { ...this.target, ...this.frame, data: "post-action" }
+      }
+    }
+    const driver = new Barrier()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    const result = await session.sequence({
+      observationID: initial.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: { operation: "pointer", action: "click", windowID: "window-1", sensitive: false, x: 0.5, y: 0.5 },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    })
+    expect(result).toMatchObject({ status: "completed", scene: { data: "post-action" } })
+    expect(driver.targets).toMatchObject([{ identity: "A".repeat(64), scene: initial.observation.sequence }])
+    expect(driver.after).toEqual(driver.targets)
+    expect(driver.fresh).toEqual([false])
+  })
+
+  it("does not advance the scene or repeat an effect when opt-in post-action proof fails", async () => {
+    class Barrier extends Driver {
+      postAction = true
+      checked = 0
+
+      override async identity() {
+        return "A".repeat(64)
+      }
+
+      override async perform(action: DesktopAction, target: DesktopDispatchTarget) {
+        await super.perform(action, target)
+        this.postAction = false
+      }
+
+      async observeAfter(): Promise<DesktopFrame> {
+        this.checked += 1
+        throw new Error("native target changed")
+      }
+    }
+    const driver = new Barrier()
+    const session = new DesktopSession(driver)
+    const initial = await session.observe()
+    const input = {
+      observationID: initial.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: { operation: "pointer", action: "click", windowID: "window-1", sensitive: false, x: 0.5, y: 0.5 },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop" as const,
+        },
+      ],
+    }
+    await expect(session.sequence(input)).rejects.toThrow(/postcondition may have taken effect.*not retried/i)
+    expect(driver.actions).toHaveLength(1)
+    expect(driver.checked).toBe(1)
+    expect(driver.fresh).toEqual([false])
+    await expect(session.sequence(input)).rejects.toThrow(/fresh observation/i)
+    expect(driver.actions).toHaveLength(1)
+  })
+
+  it("does not start post-action capture after manual takeover during native dispatch", async () => {
+    class Paused extends Driver {
+      readonly postAction = true
+      after = 0
+      pause: () => void = () => undefined
+
+      override async identity() {
+        return "A".repeat(64)
+      }
+
+      override async perform(action: DesktopAction, target: DesktopDispatchTarget) {
+        await super.perform(action, target)
+        this.pause()
+      }
+
+      async observeAfter(): Promise<DesktopFrame> {
+        this.after += 1
+        return { ...this.target, ...this.frame }
+      }
+    }
+    const driver = new Paused()
+    const session = new DesktopSession(driver)
+    driver.pause = () => session.takeControl()
+    const initial = await session.observe()
+    await expect(
+      session.sequence({
+        observationID: initial.observation.id,
+        maxDurationMs: 5_000,
+        steps: [
+          {
+            action: { operation: "pointer", action: "click", windowID: "window-1", sensitive: false, x: 0.5, y: 0.5 },
+            postconditions: [{ kind: "pixels", change: "changed" }],
+            recovery: "stop",
+          },
+        ],
+      }),
+    ).rejects.toThrow(/postcondition may have taken effect.*not retried/i)
+    expect(driver.actions).toHaveLength(1)
+    expect(driver.after).toBe(0)
+    expect(driver.fresh).toEqual([false])
+  })
+
   it("uses the guarded dispatch target without a second foreground lookup", async () => {
     class Guarded extends Driver {
       readonly guarded = true as const

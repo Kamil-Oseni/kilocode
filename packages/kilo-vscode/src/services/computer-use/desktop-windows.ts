@@ -1,9 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import {
   CAPTURE,
   type DesktopAction,
   type DesktopControl,
   type DesktopDriver,
+  type DesktopDispatchTarget,
   type DesktopFrame,
   type DesktopSemantics,
   type DesktopWindow,
@@ -1257,6 +1259,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
   private readonly runner: Runner
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined
+  private host: NativeCaptureHost | undefined
+
+  get postAction(): boolean {
+    return !!this.host
+  }
 
   constructor(
     input?: Runner,
@@ -1316,6 +1323,101 @@ export class WindowsDesktopDriver implements DesktopDriver {
     return next
   }
 
+  async observeAfter(target: DesktopDispatchTarget): Promise<DesktopFrame> {
+    const host = this.host
+    if (!host) throw new Error("Native post-action capture stopped after dispatch")
+    const fallback = async () => {
+      if (host !== this.host) throw new Error("Native post-action capture stopped before fallback")
+      const frame = await this.observe({ fresh: true })
+      if (frame.windowID !== target.windowID || frame.location !== target.location)
+        throw new Error("Desktop target changed during post-action capture")
+      if (target.identity && (await this.identity(target.windowID)) !== target.identity)
+        throw new Error("Desktop process identity changed during post-action capture")
+      const current = await this.current()
+      if (current.windowID !== target.windowID || current.location !== target.location)
+        throw new Error("Desktop target changed after post-action capture")
+      if (host !== this.host) throw new Error("Native post-action capture stopped during fallback")
+      return frame
+    }
+    if (!target.identity) return fallback()
+    if (!/^[0-9A-F]{64}$/.test(target.identity) || !target.location)
+      throw new Error("Native post-action target identity is invalid")
+    const source = host.latest(Infinity)
+    if (!source) return fallback()
+    try {
+      if (source.windowID !== target.windowID || source.location !== target.location)
+        throw new Error("Native post-action target changed before capture barrier")
+      const started = performance.now()
+      const pending = host.barrierAfter({
+        request: randomBytes(16).toString("hex"),
+        scene: target.scene,
+        source: source.sequence,
+        windowID: target.windowID,
+        location: target.location,
+        identity: target.identity,
+      })
+      const result = await pending
+      if (host !== this.host) {
+        if (result.status === "proven") result.frame.data.fill(0)
+        throw new Error("Native post-action capture stopped")
+      }
+      if (result.status === "unproven") {
+        if (result.reason === "no_present" || result.reason === "multiple_outputs") return fallback()
+        throw new Error(`Native post-action capture could not prove scene continuity: ${result.reason}`)
+      }
+      const frame = result.frame
+      try {
+        if (frame.windowID !== target.windowID || frame.location !== target.location)
+          throw new Error("Native post-action image changed target")
+        const result = await this.correlateAfter(host, target, frame.sequence)
+        const encoding = performance.now()
+        const data = frame.data.toString("base64")
+        const preparationMs = frame.preparationMs + performance.now() - encoding
+        return {
+          windowID: frame.windowID,
+          location: frame.location,
+          width: frame.width,
+          height: frame.height,
+          mime: frame.mime,
+          data,
+          semantics: result.semantics,
+          timing: {
+            acquisitionMs: frame.acquisitionMs,
+            preparationMs,
+            semanticsMs: result.semanticsMs,
+            totalMs: Math.max(performance.now() - started, preparationMs + frame.acquisitionMs, result.semanticsMs),
+          },
+        }
+      } finally {
+        frame.data.fill(0)
+      }
+    } finally {
+      source.data.fill(0)
+    }
+  }
+
+  private async correlateAfter(host: NativeCaptureHost, target: DesktopDispatchTarget, sequence: number) {
+    const result = await this.observeSemantics({ windowID: target.windowID, location: target.location! })
+    const identity = await this.identity(target.windowID)
+    const current = await this.current()
+    const latest = host.latest(Infinity)
+    try {
+      if (
+        host !== this.host ||
+        current.windowID !== target.windowID ||
+        current.location !== target.location ||
+        latest?.sequence !== sequence ||
+        latest.windowID !== target.windowID ||
+        latest.location !== target.location ||
+        identity !== target.identity
+      )
+        throw new Error("Native post-action scene changed while correlating accessibility controls")
+    } finally {
+      latest?.data.fill(0)
+    }
+    return result
+  }
+
   private warm(options?: { fresh?: boolean }): CapturedScene | undefined {
     return options?.fresh ? undefined : this.worker?.latest()
   }
@@ -1333,6 +1435,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const host = new NativeCaptureHost(
         this.binary,
         (error) => {
+          if (this.host === host) this.host = undefined
           this.worker?.stop()
           this.worker = undefined
           failed(error)
@@ -1372,6 +1475,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       )
       try {
         host.start()
+        this.host = host
       } catch (error) {
         this.worker.stop()
         this.worker = undefined
@@ -1408,6 +1512,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   stopCapture(): void {
+    this.host = undefined
     this.worker?.stop()
     this.worker = undefined
   }

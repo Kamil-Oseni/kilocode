@@ -71,8 +71,8 @@ describe("native desktop capture host", () => {
     host.start()
     await host.next()
     expect(await host.barrierAfter(request)).toMatchObject({ status: "unproven", reason: "no_present" })
-    expect(host.latest()?.sequence).toBe(1)
-    expect(host.latest()?.barrier).toBeUndefined()
+    expect(host.latest(Infinity)?.sequence).toBe(1)
+    expect(host.latest(Infinity)?.barrier).toBeUndefined()
     expect(errors).toHaveLength(0)
     host.stop()
   })
@@ -140,6 +140,27 @@ describe("native desktop capture host", () => {
     expect(host.latest()?.sequence).toBe(1)
     expect(errors).toHaveLength(0)
     host.stop()
+  })
+
+  it("does not report an old capture Stop timeout against a restarted host", async () => {
+    const errors: Error[] = []
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(encode(visual))])
+    host.start()
+    await host.next()
+    const old = (host as unknown as { process: { kill: (signal?: string) => boolean } }).process
+    const kill = old.kill.bind(old)
+    old.kill = () => true
+    try {
+      host.stop()
+      host.start()
+      expect((await host.next()).sequence).toBe(1)
+      await Bun.sleep(1_600)
+      expect(host.latest(Infinity)?.sequence).toBe(1)
+      expect(errors).toHaveLength(0)
+    } finally {
+      kill("SIGKILL")
+      host.stop()
+    }
   })
 
   it("keeps one bounded binary frame and clears it immediately on Stop", async () => {

@@ -20,6 +20,156 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("uses a request-matched native post-action image and correlates exact UI Automation", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const identity = "A".repeat(64)
+    const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
+    const next = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 2])
+    const header = {
+      v: 1,
+      type: "frame",
+      sequence: 1,
+      ...target,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    }
+    const script = `
+      const h=${JSON.stringify(header)};
+      const send=(meta,data)=>{const json=Buffer.from(JSON.stringify(meta));const packet=Buffer.alloc(8+json.length+data.length);packet.writeUInt32LE(json.length,0);json.copy(packet,4);packet.writeUInt32LE(data.length,4+json.length);data.copy(packet,8+json.length);process.stdout.write(packet)};
+      send(h,Buffer.from(${JSON.stringify(image.toString("base64"))},"base64"));
+      process.stdin.once("data",b=>send({...h,v:2,sequence:2,request:b.toString("ascii",52,84),scene:Number(b.readBigUInt64LE(8)),source:Number(b.readBigUInt64LE(16)),receiptQpc:"100",presentQpc:"101"},Buffer.from(${JSON.stringify(next.toString("base64"))},"base64")));
+      setInterval(()=>{},1000);
+    `
+    const semantics = {
+      source: "windows_ui_automation",
+      status: "available",
+      viewport: { x: 0, y: 0, width: 20, height: 10 },
+      controls: [],
+      truncated: false,
+    }
+    const calls: string[] = []
+    const runner = {
+      run: async (value: string) => {
+        calls.push(value)
+        if (value.includes("CopyFromScreen"))
+          return JSON.stringify({
+            ...target,
+            width: 20,
+            height: 10,
+            mime: "image/png",
+            data: "fallback",
+            semantics,
+            semanticsMs: 0,
+            acquisitionMs: 0,
+            preparationMs: 0,
+          })
+        if (value.includes("Foreground window changed before semantic observation"))
+          return JSON.stringify({ ...target, semantics, semanticsMs: 1 })
+        if (value.includes("[RayaDesktopNative]::Identity($value)")) return JSON.stringify({ identity })
+        return JSON.stringify(target)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(runner, undefined, process.execPath, ["-e", script])
+    const errors: unknown[] = []
+    driver.startCapture((error) => errors.push(error))
+    try {
+      let captured = ""
+      for (let index = 0; index < 100 && captured !== image.toString("base64"); index++) {
+        captured = (await driver.observe({ semantics: false })).data
+        await Bun.sleep(5)
+      }
+      expect(captured).toBe(image.toString("base64"))
+      const prior = calls.filter((value) => value.includes("CopyFromScreen")).length
+      const result = await driver.observeAfter({ ...target, identity, scene: 7, observedAt: 1, validUntil: 10_000 })
+      expect(result.data).toBe(next.toString("base64"))
+      expect(result.semantics).toMatchObject({ status: "available" })
+      expect(result.timing.acquisitionMs).toBe(1)
+      expect(result.timing.preparationMs).toBeLessThan(result.timing.totalMs)
+      expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(prior)
+      expect(errors).toHaveLength(0)
+    } finally {
+      driver.stopCapture()
+    }
+  })
+
+  it("falls back only for a bounded no-present refusal, and stops on a changed target", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const header = {
+      v: 1,
+      type: "frame",
+      sequence: 1,
+      ...target,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    }
+    const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
+    for (const reason of ["no_present", "target_changed"] as const) {
+      const script = `
+        const h=${JSON.stringify(header)};
+        const send=(meta,data)=>{const json=Buffer.from(JSON.stringify(meta));const packet=Buffer.alloc(8+json.length+data.length);packet.writeUInt32LE(json.length,0);json.copy(packet,4);packet.writeUInt32LE(data.length,4+json.length);data.copy(packet,8+json.length);process.stdout.write(packet)};
+        send(h,Buffer.from(${JSON.stringify(image.toString("base64"))},"base64"));
+        process.stdin.once("data",b=>send({v:2,type:"barrier",status:"unproven",reason:${JSON.stringify(reason)},request:b.toString("ascii",52,84),scene:Number(b.readBigUInt64LE(8)),source:Number(b.readBigUInt64LE(16)),receiptQpc:"100"},Buffer.alloc(0)));
+        setInterval(()=>{},1000);
+      `
+      const calls: string[] = []
+      const runner = {
+        run: async (value: string) => {
+          calls.push(value)
+          if (value.includes("CopyFromScreen"))
+            return JSON.stringify({
+              ...target,
+              width: 20,
+              height: 10,
+              mime: "image/png",
+              data: "fresh PowerShell pixels",
+              acquisitionMs: 0,
+              preparationMs: 0,
+            })
+          if (value.includes("[RayaDesktopNative]::Identity($value)"))
+            return JSON.stringify({ identity: "A".repeat(64) })
+          return JSON.stringify(target)
+        },
+        cancel: () => undefined,
+      }
+      const driver = new WindowsDesktopDriver(runner, undefined, process.execPath, ["-e", script])
+      const errors: unknown[] = []
+      driver.startCapture((error) => errors.push(error))
+      try {
+        let captured = ""
+        for (let index = 0; index < 100 && captured !== image.toString("base64"); index++) {
+          captured = (await driver.observe({ semantics: false })).data
+          await Bun.sleep(5)
+        }
+        expect(captured).toBe(image.toString("base64"))
+        const prior = calls.filter((value) => value.includes("CopyFromScreen")).length
+        const pending = driver.observeAfter({
+          ...target,
+          identity: "A".repeat(64),
+          scene: 7,
+          observedAt: 1,
+          validUntil: 10_000,
+        })
+        if (reason === "no_present") {
+          expect((await pending).data).toBe("fresh PowerShell pixels")
+          expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(prior + 1)
+        } else {
+          await expect(pending).rejects.toThrow(/target_changed/)
+          expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(prior)
+        }
+        expect(errors).toHaveLength(0)
+      } finally {
+        driver.stopCapture()
+      }
+    }
+  })
+
   it("joins a real binary child frame only for the exact foreground and stops its stream", async () => {
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
     const header = {

@@ -466,12 +466,15 @@ export const SessionProvider: ParentComponent = (props) => {
     imported: (message) => handleCloudSessionImported(message.cloudSessionId, message.session),
     failed: (message) => {
       clearIfOn(cloudPreviewId, () => setLoading(false), message.cloudSessionId)
+      if (!cloud.get(message.cloudSessionId)) {
+        clearIfOn(cloudPreviewId, () => setCloudPreviewId(null), message.cloudSessionId)
+        handleSessionDeleted(`cloud:${message.cloudSessionId}`)
+      }
       showToast({ variant: "error", title: language.t("session.cloud.import.failed"), description: message.error })
     },
   })
   const cloudContinuation = () => cloud.get(cloudPreviewId())
   const [hiddenErrors, setHiddenErrors] = createSignal<Set<string>>(new Set())
-
   const [worktreeStats, setWorktreeStats] = createSignal<ReviewCounts | undefined>()
   const [diffStats, setDiffStats] = createSignal<ReviewCounts | undefined>() // raya_change - session.diff counts
 
@@ -2097,7 +2100,6 @@ export const SessionProvider: ParentComponent = (props) => {
       setLoading(false)
     })
   }
-
   function handleCloudSessionImported(cloudSessionId: string, session: SessionInfo) {
     freshSessions.add(session.id)
     const cloudKey = `cloud:${cloudSessionId}`
@@ -2111,12 +2113,10 @@ export const SessionProvider: ParentComponent = (props) => {
         return next
       })
       setStore("sessions", session.id, session)
-
       const pendingAgent = pendingAgentSelection()
       if (pendingAgent && !store.agentSelections[session.id]) {
         setStore("agentSelections", session.id, pendingAgent)
       }
-
       // Carry over cloud messages so there's no loading flash
       setStore("messages", session.id, cloudMessages)
       rebuildToolParts(session.id, cloudMessages)

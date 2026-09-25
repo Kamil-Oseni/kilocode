@@ -76,3 +76,18 @@ test("a late admitted import updates its own continuation without replacing anot
   expect(cloud.get("first")).toMatchObject({ status: "imported", sessionID: "local" })
   expect(imported).toEqual(["first"])
 })
+
+test("a failed first preview is delivered once while a stale preview failure is ignored", () => {
+  const failed: string[] = []
+  const cloud = createCloudContinuation({
+    loaded() {},
+    imported() {},
+    failed: (message) => failed.push(message.error),
+  })
+  const stale = cloud.request("cloud")
+  const current = cloud.request("cloud")
+  cloud.receive({ type: "cloudSessionImportFailed", cloudSessionId: "cloud", requestID: stale, error: "stale" })
+  cloud.receive({ type: "cloudSessionImportFailed", cloudSessionId: "cloud", requestID: current, error: "current" })
+  expect(failed).toEqual(["current"])
+  expect(cloud.get("cloud")).toBeUndefined()
+})

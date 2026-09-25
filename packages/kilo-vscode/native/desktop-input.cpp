@@ -203,6 +203,11 @@ std::string json(const Reply& reply) {
     std::to_string(reply.accepted) + ",\"attempted\":" + std::to_string(reply.attempted) + "}";
 }
 
+std::string tagged(std::string source, uintptr_t instance) {
+  if (instance) source += ";instance:" + std::to_string(instance);
+  return source;
+}
+
 bool exact(const Frame& frame) {
   uintptr_t value = 0;
   if (!window(frame.window, value) || !value) return false;
@@ -238,8 +243,10 @@ bool exact(const Frame& frame) {
   std::string name(static_cast<size_t>(bytes), '\0');
   if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, cls, -1, name.data(), bytes, nullptr, nullptr)) return false;
   name.pop_back();
-  const std::string source = "pid:" + std::to_string(pid) + ";start:" +
-    std::to_string(ticks + 504911232000000000ULL) + ";class:" + name;
+  const auto instance = reinterpret_cast<uintptr_t>(
+    GetPropW(target, L"RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B"));
+  const std::string source = tagged("pid:" + std::to_string(pid) + ";start:" +
+    std::to_string(ticks + 504911232000000000ULL) + ";class:" + name, instance);
   HCRYPTPROV provider = 0;
   if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return false;
   HCRYPTHASH hash = 0;
@@ -556,6 +563,8 @@ void waiting(const Frame&) {
 }
 
 int selftest() {
+  const std::string base = "pid:7;start:123;class:Editor";
+  if (tagged(base, 0) != base || tagged(base, 1) == base || tagged(base, 1) == tagged(base, 2)) return 31;
   const std::string first = "11111111111111111111111111111111";
   const std::string second = "22222222222222222222222222222222";
   const std::string third = "33333333333333333333333333333333";

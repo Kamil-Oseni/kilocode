@@ -20,6 +20,33 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("binds only the foreground window to a verifiable incarnation", async () => {
+    const identity = "A".repeat(64)
+    const target = { windowID: "0x123", title: "Editor", identity }
+    const scripts: string[] = []
+    const driver = new WindowsDesktopDriver({
+      run: async (script) => {
+        scripts.push(script)
+        return JSON.stringify(target)
+      },
+      cancel: () => undefined,
+    })
+
+    expect(await driver.pinCurrent(target.windowID)).toEqual(target)
+    expect(scripts).toHaveLength(1)
+    expect(scripts[0]).toContain("PinForeground($window.Handle.ToInt64())")
+    expect(scripts[0]).toContain("Selected desktop window is no longer foreground")
+    expect(scripts[0]).toContain("Selected desktop window changed while binding its identity")
+    expect(scripts[0]).toContain("SetProp(handle, InstanceProperty, instance)")
+    expect(scripts[0]).toContain(";instance:")
+
+    const changed = new WindowsDesktopDriver({
+      run: async () => JSON.stringify({ ...target, windowID: "0x456" }),
+      cancel: () => undefined,
+    })
+    await expect(changed.pinCurrent(target.windowID)).rejects.toThrow(/binding is incomplete/i)
+  })
+
   it("uses a request-matched native post-action image and correlates exact UI Automation", async () => {
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
     const identity = "A".repeat(64)

@@ -117,6 +117,7 @@ export interface DesktopDriver {
   windows(): Promise<DesktopWindow[]>
   current(): Promise<{ windowID: string; location?: string }>
   identity?(windowID: string): Promise<string | undefined>
+  pinCurrent?(windowID: string): Promise<{ windowID: string; title: string; identity: string }>
   postAction?: boolean
   observeAfter?(target: DesktopDispatchTarget): Promise<DesktopFrame>
   focus(target: DesktopWindow): Promise<void>
@@ -212,6 +213,11 @@ export class DesktopSession {
       : (await this.driver.windows()).find((window) => window.windowID === windowID)?.identity
     if (actual === identity) return
     throw new Error("The selected desktop window was replaced; no control was sent")
+  }
+
+  async pinCurrent(windowID: string): Promise<{ windowID: string; title: string; identity: string }> {
+    if (!this.driver.pinCurrent) throw new Error("Selected-window binding is unavailable")
+    return this.driver.pinCurrent(windowID)
   }
 
   focus(windowID: string, observationID: string, onDispatch?: () => void, identity?: string): Promise<void> {

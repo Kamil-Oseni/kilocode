@@ -22,7 +22,11 @@ type Message =
       cooperativeInput: boolean
     }
 
-type Pending = { request: AuthorizationRequest; resolve: (result: Authorization) => void }
+type Pending = {
+  request: AuthorizationRequest
+  resolve: (result: Authorization) => void
+  target?: { windowID: string; title: string; identity: string }
+}
 
 export class DesktopPanel implements vscode.Disposable {
   static readonly viewType = "raya.DesktopPanel"
@@ -43,9 +47,13 @@ export class DesktopPanel implements vscode.Disposable {
     if (result.decision !== "ask") return result
     if (this.pending)
       return { operation: "authorize", decision: "deny", reason: "Another Computer Use grant review is active" }
+    const target =
+      request.surface === "desktop" && request.windowID
+        ? await this.session.pinCurrent(request.windowID).catch(() => undefined)
+        : undefined
     await this.show()
     return await new Promise<Authorization>((resolve) => {
-      this.pending = { request, resolve }
+      this.pending = { request, resolve, target }
       void this.sync()
     })
   }
@@ -140,16 +148,16 @@ export class DesktopPanel implements vscode.Disposable {
       return
     }
     try {
-      const windows = message.applications === "current" ? await this.session.windows() : undefined
-      const target = windows?.windows.find((window) => window.windowID === pending.request.windowID)
-      if (message.applications === "current" && !target?.identity)
-        throw new Error("The selected window no longer has a verifiable process identity")
+      const target = message.applications === "current" ? pending.target : undefined
+      if (message.applications === "current" && !target)
+        throw new Error("No exact window was available when this request began. Return to that window and try again.")
+      if (target) await this.session.verify(target.windowID, target.identity)
       await this.lease.grant({
         sessionID: pending.request.sessionID,
         level: message.level,
         duration: message.duration,
         applications: message.applications,
-        windowID: pending.request.windowID,
+        windowID: target?.windowID,
         identity: target?.identity,
         actions: message.actions,
         sensitive: message.sensitive,
@@ -198,7 +206,8 @@ export class DesktopPanel implements vscode.Disposable {
       pending: this.pending
         ? {
             action: this.pending.request.action,
-            currentApplicationAvailable: !!this.pending.request.windowID,
+            currentApplicationAvailable: !!this.pending.target,
+            currentApplicationTitle: this.pending.target?.title,
           }
         : undefined,
     })
@@ -277,7 +286,7 @@ export class DesktopPanel implements vscode.Disposable {
       </div></fieldset>
       <fieldset><legend>Where and for how long</legend><div class="choices">
         <label class="choice"><input type="radio" name="apps" value="all" checked><strong>All visible applications</strong><span>Work across the desktop for the selected duration.</span></label>
-        <label id="current-choice" class="choice"><input id="current-app" type="radio" name="apps" value="current"><strong>Current application only</strong><span>Available for a task-scoped grant.</span></label>
+        <label id="current-choice" class="choice"><input id="current-app" type="radio" name="apps" value="current"><strong>This window only</strong><span id="current-target">Available for this task.</span></label>
         <label class="choice"><input type="radio" name="duration" value="session" checked><strong>This task</strong><span>Ends with this Raya task or when you stop it.</span></label>
         <label class="choice"><input type="radio" name="duration" value="hour"><strong>One hour</strong><span>Expires automatically across Raya sessions.</span></label>
         <label class="choice"><input type="radio" name="duration" value="until_stopped"><strong>All sessions until I stop</strong><span>Saved locally and remains active across restarts.</span></label>
@@ -310,7 +319,7 @@ export class DesktopPanel implements vscode.Disposable {
     const drawPolicy = () => { byId("policy").innerHTML = Object.entries(categoryLabels).map(([category, label]) => '<label class="policy-row"><span>' + label + '</span><select data-category="' + category + '">' + Object.entries(ruleLabels).map(([value, name]) => '<option value="' + value + '">' + name + '</option>').join('') + '</select></label>').join(''); };
     const summarize = () => {
       const level = selected("level") || "assisted";
-      const apps = selected("apps") === "current" ? "the current application" : "all visible applications";
+      const apps = selected("apps") === "current" ? "this window" : "all visible applications";
       const duration = selected("duration") === "session" ? "this task" : selected("duration") === "hour" ? "one hour" : "all sessions until you stop";
       const sensitive = level === "assisted" ? "Sensitive actions always ask first; Deny still applies." : level === "observe" ? "Raya cannot click or type." : "Sensitive actions follow the policy below.";
       review.textContent = labels[level] + " in " + apps + " for " + duration + ". " + sensitive;
@@ -324,9 +333,9 @@ export class DesktopPanel implements vscode.Disposable {
       if (message.type === "loading") { status.textContent = "Capturing foreground window…"; activeError.hidden = true; }
       if (message.type === "frame") { frame.src = message.src; frame.style.display = "block"; empty.hidden = true; activeError.hidden = true; status.textContent = "Observed " + message.width + "×" + message.height + " at " + new Date(message.observedAt).toLocaleTimeString(); }
       if (message.type === "error") { const target = pending ? grantError : activeError; target.textContent = message.message; target.hidden = false; }
-      if (message.type === "lease") { const saved = message.lease; pending = !!message.pending; grant.hidden = !pending; active.hidden = pending || !saved; idle.hidden = pending || !!saved; refresh.hidden = pending || !saved; control.hidden = pending || !saved; stop.hidden = pending || !saved; byId("current-app").disabled = !message.pending?.currentApplicationAvailable; byId("current-choice").style.opacity = message.pending?.currentApplicationAvailable ? "1" : ".55";
+      if (message.type === "lease") { const saved = message.lease; pending = !!message.pending; grant.hidden = !pending; active.hidden = pending || !saved; idle.hidden = pending || !saved; refresh.hidden = pending || !saved; control.hidden = pending || !saved; stop.hidden = pending || !saved; byId("current-app").disabled = !message.pending?.currentApplicationAvailable; byId("current-choice").style.opacity = message.pending?.currentApplicationAvailable ? "1" : ".55"; byId("current-target").textContent = message.pending?.currentApplicationAvailable ? message.pending.currentApplicationTitle : "Bring the window forward, then ask Raya again.";
         if (pending) { drawActions(); summarize(); status.textContent = "Your approval is needed"; dot.className = "dot"; }
-        if (saved) { manual = saved.state === "paused"; dot.className = "dot " + (manual ? "paused" : "active"); status.textContent = manual ? "Paused" : labels[saved.level] + " active"; control.textContent = manual ? "Resume" : "Pause"; byId("active-title").textContent = manual ? "Raya is paused" : labels[saved.level] + " is active"; const until = saved.expiry.kind === "expires_at" ? " until " + new Date(saved.expiry.expiresAt).toLocaleTimeString() : " until you stop it"; byId("active-summary").textContent = (saved.applications === "all" ? "All visible applications" : "Current application") + until + "."; }
+        if (saved) { manual = saved.state === "paused"; dot.className = "dot " + (manual ? "paused" : "active"); status.textContent = manual ? "Paused" : labels[saved.level] + " active"; control.textContent = manual ? "Resume" : "Pause"; byId("active-title").textContent = manual ? "Raya is paused" : labels[saved.level] + " is active"; const until = saved.expiry.kind === "expires_at" ? " until " + new Date(saved.expiry.expiresAt).toLocaleTimeString() : " until you stop it"; byId("active-summary").textContent = (saved.applications === "all" ? "All visible applications" : "This window") + until + "."; }
         if (!saved && !pending) { status.textContent = "Off"; dot.className = "dot"; }
       }
       if (message.type === "state") { manual = message.control === "manual"; control.textContent = manual ? "Resume" : "Pause"; if (message.reason) status.textContent = message.reason; }

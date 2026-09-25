@@ -535,6 +535,11 @@ static uint64_t wide(const BYTE* data) {
   return uint64_t(word(data)) | uint64_t(word(data + 4)) << 32;
 }
 
+static std::string tagged(std::string source, uintptr_t instance) {
+  if (instance) source += ";instance:" + std::to_string(instance);
+  return source;
+}
+
 static std::string fingerprint(HWND window, DWORD pid) {
   wchar_t cls[512]{};
   if (!GetClassNameW(window, cls, 512)) return {};
@@ -550,8 +555,10 @@ static std::string fingerprint(HWND window, DWORD pid) {
   std::string name(size_t(bytes), '\0');
   if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, cls, -1, name.data(), bytes, nullptr, nullptr)) return {};
   name.pop_back();
-  const std::string source = "pid:" + std::to_string(pid) + ";start:" +
-    std::to_string(ticks + 504911232000000000ULL) + ";class:" + name;
+  const auto instance = reinterpret_cast<uintptr_t>(
+    GetPropW(window, L"RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B"));
+  const std::string source = tagged("pid:" + std::to_string(pid) + ";start:" +
+    std::to_string(ticks + 504911232000000000ULL) + ";class:" + name, instance);
   HCRYPTPROV provider = 0;
   if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return {};
   HCRYPTHASH hash = 0;
@@ -1005,6 +1012,9 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
       {
+        const std::string base = "pid:7;start:123;class:Editor";
+        if (tagged(base, 0) != base || tagged(base, 1) == base || tagged(base, 1) == tagged(base, 2))
+          throw Failure("capture_failed", "window instance fingerprint self-test failed");
         pointertest();
         RECT visible = intersect(RECT{-8, -8, 1928, 1088}, RECT{0, 0, 1920, 1080});
         if (visible.left != 0 || visible.top != 0 || visible.right != 1920 || visible.bottom != 1080)

@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
@@ -47,6 +48,7 @@ public sealed class RayaBoundedStream : MemoryStream {
 }
 
 public static class RayaDesktopNative {
+  private const string InstanceProperty = "RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B";
   public delegate bool EnumWindowsProc(IntPtr handle, IntPtr state);
 
   public sealed class WindowInfo {
@@ -102,6 +104,8 @@ public static class RayaDesktopNative {
   [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr state);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr handle);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr GetProp(IntPtr handle, string name);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool SetProp(IntPtr handle, string name, IntPtr value);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr handle);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr handle);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
@@ -174,6 +178,8 @@ public static class RayaDesktopNative {
       using (var owner = System.Diagnostics.Process.GetProcessById((int)process))
       using (var hash = System.Security.Cryptography.SHA256.Create()) {
         var source = String.Format("pid:{0};start:{1};class:{2}", process, owner.StartTime.ToUniversalTime().Ticks, kind.ToString());
+        var instance = GetProp(handle, InstanceProperty);
+        if (instance != IntPtr.Zero) source += ";instance:" + instance.ToInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
         identity = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(source))).Replace("-", "");
       }
     } catch (Exception error) {
@@ -209,6 +215,28 @@ public static class RayaDesktopNative {
   public static string Identity(long value) {
     var info = Describe(new IntPtr(value));
     return info == null ? null : info.Identity;
+  }
+
+  public static string PinForeground(long value) {
+    var handle = new IntPtr(value);
+    if (GetForegroundWindow() != handle) throw new InvalidOperationException("Selected desktop window is no longer foreground");
+    var before = Describe(handle);
+    if (before == null || before.Identity == null) throw new InvalidOperationException("Selected desktop window has no stable identity");
+    var instance = GetProp(handle, InstanceProperty);
+    if (instance == IntPtr.Zero) {
+      var bytes = new byte[8];
+      using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes);
+      var value64 = BitConverter.ToInt64(bytes, 0) & Int64.MaxValue;
+      if (value64 == 0) value64 = 1;
+      instance = new IntPtr(value64);
+      if (!SetProp(handle, InstanceProperty, instance) || GetProp(handle, InstanceProperty) != instance)
+        throw new InvalidOperationException("Windows refused to bind the selected window; choose all visible applications");
+    }
+    var after = Describe(handle);
+    if (after == null || after.WindowID != before.WindowID || after.Location != before.Location ||
+        after.ProcessID != before.ProcessID || after.Identity == null || GetForegroundWindow() != handle)
+      throw new InvalidOperationException("Selected desktop window changed while binding its identity");
+    return after.Identity;
   }
 
   public static void Focus(long value, string location, string identity, int x, int y, int width, int height, bool minimized, bool foreground) {
@@ -470,6 +498,7 @@ function Get-RayaWindow {
     Rect = $visible
     WindowID = ("0x{0:X}" -f $handle.ToInt64())
     Location = ("pid:{0};title:{1};bounds:{2},{3},{4},{5}" -f $processID, $title.ToString(), $visible.Left, $visible.Top, $width, $height)
+    Title = $title.ToString()
     Width = $width
     Height = $height
   }
@@ -811,6 +840,22 @@ if ($target.identity) {
   if ($identity -ne $target.identity) { throw "Desktop process identity changed after post-action capture" }
 }
 [pscustomobject]@{ windowID = $window.WindowID; location = $window.Location; identity = $identity } | ConvertTo-Json -Compress
+`
+}
+
+function pinCurrent(windowID: string) {
+  const input = payload({ windowID })
+  return `${setup}
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+$window = Get-RayaWindow
+if ($window.WindowID -ne $target.windowID) { throw "Selected desktop window is no longer foreground" }
+$identity = [RayaDesktopNative]::PinForeground($window.Handle.ToInt64())
+$after = Get-RayaWindow
+if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location -or
+    [RayaDesktopNative]::Identity($after.Handle.ToInt64()) -ne $identity) {
+  throw "Selected desktop window changed while binding its identity"
+}
+[pscustomobject]@{ windowID = $after.WindowID; title = $after.Title; identity = $identity } | ConvertTo-Json -Compress
 `
 }
 
@@ -1621,6 +1666,21 @@ export class WindowsDesktopDriver implements DesktopDriver {
     if (typeof result.identity !== "string" || !/^[A-F0-9]{64}$/.test(result.identity))
       throw new Error("Windows desktop process identity is invalid")
     return result.identity
+  }
+
+  async pinCurrent(windowID: string) {
+    if (!/^0x[0-9A-F]+$/.test(windowID)) throw new Error("Selected desktop window identity is invalid")
+    const result = object(await this.runner.run(pinCurrent(windowID)))
+    if (
+      result.windowID !== windowID ||
+      typeof result.title !== "string" ||
+      !result.title ||
+      result.title.length > 2048 ||
+      typeof result.identity !== "string" ||
+      !/^[A-F0-9]{64}$/.test(result.identity)
+    )
+      throw new Error("Selected desktop window binding is incomplete")
+    return { windowID, title: result.title, identity: result.identity }
   }
 
   async focus(target: DesktopWindow): Promise<void> {

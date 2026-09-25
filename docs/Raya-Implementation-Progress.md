@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-25 09:35 America/Toronto - natural Routines routing snapshot installed
+
+Commit `9dccf27b34` is pushed to `origin/main`. The low-memory production snapshot passed SDK generation, CLI smoke checks, extension and webview typechecks, lint, production bundling, native capture/input self-tests, input-host round trip and VSIX packaging. VS Code installed `eden.raya@7.4.23-snapshot+9dccf27b34.kamil-oseni.1790343151912`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.1c991a02e1ef6b8785983a8642f71c5fd40b136191a033cbe0a62c5d0ba2832b.vsix`, 545,222,997 bytes, SHA-256 `1C991A02E1EF6B8785983A8642F71C5FD40B136191A033CBE0A62C5D0BA2832B`. Installation does not prove the open host reloaded or that a natural standing-agent request succeeds through its UI; keep those checks open.
+
 ## ChatGPT 2026-09-25 09:27 America/Toronto - natural standing-agent requests
 
 The real-provider Routines review exposed a routing gap: Auto's Chief admitted explicit “organization” requests but not ordinary standing-agent requests such as “Create agents to help me learn violin.” The Routines tool gate now recognizes direct requests to create, add, hire or assign an agent/worker for an ongoing purpose. It still leaves agent dashboards/configuration and one-off code, audit or PR review requests on the ordinary path. Focused Chief routing tests pass 12 cases and 80 assertions; CLI typecheck passes and targeted lint has no errors. This extends tool availability only; the selected model's planning quality and installed-host behavior remain separate live checks.

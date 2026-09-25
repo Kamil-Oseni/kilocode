@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 09:35 America/Toronto - installed natural Routines routing
+
+`9dccf27b34` is pushed and installed as `eden.raya@7.4.23-snapshot+9dccf27b34.kamil-oseni.1790343151912`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.1c991a02e1ef6b8785983a8642f71c5fd40b136191a033cbe0a62c5d0ba2832b.vsix`, 545,222,997 bytes, SHA-256 `1C991A02E1EF6B8785983A8642F71C5FD40B136191A033CBE0A62C5D0BA2832B`. Reload the host before judging the installed natural-language Routines request. Then finish the multiworker/delegation, communication, permission denial and uncertain-outcome tests listed below.
+
 ## ChatGPT 2026-09-25 09:27 America/Toronto - natural Routines intent follow-up
 
 Auto's Chief now exposes direct Routines tools for requests such as “Create agents to help me learn violin” while excluding one-off agents assigned to PR review, bug fixes and UI/configuration work. Focused positive/adverse routing tests and CLI typecheck pass. After installation, repeat a natural standing-agent request in the main chat with the selected model and confirm it reaches Ask, review and the right native tool without manually adding “routine” or “organization.”

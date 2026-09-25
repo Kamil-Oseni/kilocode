@@ -20,9 +20,8 @@
   grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.8fr);
   gap: 18px;
   padding: clamp(18px, 3vw, 27px);
-  border: 1px solid #363638;
-  border-radius: 16px;
-  background: #252526;
+  border-bottom: 1px solid #272728;
+  background: transparent;
 }
 
 .routines-hero-copy > span {
@@ -78,6 +77,62 @@
   font-size: 11px;
 }
 
+.routines-team-directory {
+  display: grid;
+  gap: 9px;
+  padding: 0 clamp(18px, 3vw, 27px) 8px;
+}
+.routines-team-directory-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid #272728;
+  padding-bottom: 8px;
+}
+.routines-team-directory-head h3 {
+  margin: 0;
+  font: 400 21px var(--raya-font-display);
+}
+.routines-team-directory-head span,
+.routines-team-directory-count {
+  color: #aaa;
+  font-size: 11px;
+}
+.routines-team-directory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+.routines-team-directory-list button {
+  display: grid;
+  gap: 5px;
+  min-height: 85px;
+  padding: 12px;
+  border: 1px solid #39393b;
+  border-radius: 12px;
+  background: #252526;
+  color: var(--text-base, var(--vscode-foreground));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.routines-team-directory-list button:hover,
+.routines-team-directory-list button:focus-visible {
+  border-color: #656568;
+  background: #303032;
+}
+.routines-team-directory-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.routines-team-directory-purpose {
+  color: #b7b7ba;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
 .routines-view .routines-inbox {
   gap: 15px;
   grid-template-columns: minmax(230px, 310px) minmax(0, 1fr);
@@ -105,7 +160,9 @@
   font-weight: 400;
 }
 .routines-view .routines-organizations {
+  flex-wrap: wrap;
   gap: 6px;
+  overflow: visible;
   margin-bottom: 12px;
 }
 .routines-view .routines-organization {
@@ -237,6 +294,14 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-thread {
   background: #f6f6f7;
   border-color: #dedee0;
   color: #242428;
+}
+body:is(.vscode-light, .pv-theme--light) .routines-team-directory-list button {
+  background: #f6f6f7;
+  border-color: #dedee0;
+  color: #242428;
+}
+body:is(.vscode-light, .pv-theme--light) .routines-team-directory-purpose {
+  color: #55565c;
 }
 body:is(.vscode-light, .pv-theme--light) .routines-view .routines-organization,
 body:is(.vscode-light, .pv-theme--light) .routines-view .routines-roster-search,

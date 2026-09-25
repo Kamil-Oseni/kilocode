@@ -1875,6 +1875,27 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </div>
               </div>
             </section>
+            <Show when={organizations().length > 0}>
+              <section class="routines-team-directory" aria-label="Your teams">
+                <div class="routines-team-directory-head">
+                  <h3>Teams</h3>
+                  <span>{organizations().length} saved</span>
+                </div>
+                <div class="routines-team-directory-list">
+                  <For each={organizations()}>
+                    {(item) => (
+                      <button type="button" onClick={() => chooseOrganization(item.id)}>
+                        <span class="routines-team-directory-name">{item.name}</span>
+                        <span class="routines-team-directory-purpose">
+                          {item.purpose || `${item.members.length} workers`}
+                        </span>
+                        <span class="routines-team-directory-count">{item.members.length} workers</span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </section>
+            </Show>
           </Show>
           <div class="sr-only" role="status" aria-live="polite" aria-busy={refreshing()}>
             {freshness()}

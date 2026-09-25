@@ -75,17 +75,31 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
   return (
     <div class="history-view history-page">
       <div class="history-page__header">
-        <button type="button" aria-label="Back to chat" onClick={() => props.onBack?.()}>
-          <Icon name="arrow-left" size="small" />
-        </button>
-        <span>Chats</span>
         <button
           type="button"
-          aria-label={selecting() ? "Done selecting chats" : "Select chats"}
-          onClick={() => (selecting() ? clear() : setSelecting(true))}
+          aria-label={source() ? "Back to history" : "Back to chat"}
+          onClick={() => (source() ? setSource() : props.onBack?.())}
         >
-          {selecting() ? "Done" : "Select"}
+          <Icon name="arrow-left" size="small" />
         </button>
+        <span>
+          {source() === "cloud"
+            ? "Cloud chats"
+            : source() === "worktree"
+              ? "Worktree chats"
+              : source() === "local"
+                ? "Manage chats"
+                : "Chats"}
+        </span>
+        <Show when={source() !== "cloud"}>
+          <button
+            type="button"
+            aria-label={selecting() ? "Done selecting chats" : "Select chats"}
+            onClick={() => (selecting() ? clear() : setSelecting(true))}
+          >
+            {selecting() ? "Done" : "Select"}
+          </button>
+        </Show>
         <button
           type="button"
           aria-label="Import a chat"
@@ -95,10 +109,15 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
         </button>
       </div>
       <div class="history-page__body">
-        <Show when={selecting()}>
+        <Show when={selecting() && source() !== "cloud"}>
           <div class="history-page__selection" role="toolbar" aria-label="Selected chats">
             <span>{selected().size} selected</span>
-            <button type="button" onClick={() => setSelected(new Set(chats().map((item) => item.id)))}>
+            <button
+              type="button"
+              onClick={() =>
+                setSelected(new Set((source() === "worktree" ? worktree() : chats()).map((item) => item.id)))
+              }
+            >
               Select all
             </button>
             <button type="button" disabled={selected().size === 0} onClick={remove}>
@@ -106,37 +125,39 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
             </button>
           </div>
         </Show>
-        <For each={chats().slice(0, 3)}>
-          {(item) => (
-            <HistoryRow
-              item={item}
-              variant="home"
-              selecting={selecting()}
-              selected={selected().has(item.id)}
-              onToggle={() => toggle(item.id)}
-              onSelect={() => props.onSelectSession(item.id)}
-            />
-          )}
-        </For>
-        <button class="raya-home__all" onClick={() => setOpen(true)}>
-          View all ({chats().length})
-        </button>
-        <div class="history-page__category">
-          <button onClick={routines}>
-            Routines <Icon name="chevron-right" size="small" />
+        <Show when={!source()}>
+          <For each={chats().slice(0, 3)}>
+            {(item) => (
+              <HistoryRow
+                item={item}
+                variant="home"
+                selecting={selecting()}
+                selected={selected().has(item.id)}
+                onToggle={() => toggle(item.id)}
+                onSelect={() => props.onSelectSession(item.id)}
+              />
+            )}
+          </For>
+          <button class="raya-home__all" onClick={() => setOpen(true)}>
+            View all ({chats().length})
           </button>
-          <button onClick={() => setSource(source() === "local" ? undefined : "local")}>
-            Manage chats <Icon name="chevron-right" size="small" />
-          </button>
-          <button onClick={() => setSource(source() === "cloud" ? undefined : "cloud")}>
-            Cloud chats <Icon name="chevron-right" size="small" />
-          </button>
-          <Show when={props.worktreeSessionIds?.()}>
-            <button onClick={() => setSource(source() === "worktree" ? undefined : "worktree")}>
-              Worktree chats <Icon name="chevron-right" size="small" />
+          <div class="history-page__category">
+            <button onClick={routines}>
+              Routines <Icon name="chevron-right" size="small" />
             </button>
-          </Show>
-        </div>
+            <button onClick={() => setSource(source() === "local" ? undefined : "local")}>
+              Manage chats <Icon name="chevron-right" size="small" />
+            </button>
+            <button onClick={() => setSource(source() === "cloud" ? undefined : "cloud")}>
+              Cloud chats <Icon name="chevron-right" size="small" />
+            </button>
+            <Show when={props.worktreeSessionIds?.()}>
+              <button onClick={() => setSource(source() === "worktree" ? undefined : "worktree")}>
+                Worktree chats <Icon name="chevron-right" size="small" />
+              </button>
+            </Show>
+          </div>
+        </Show>
         <Show when={source() === "local"}>
           <HistoryPicker
             embedded

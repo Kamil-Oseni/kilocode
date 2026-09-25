@@ -106,6 +106,8 @@ export const TodoView: Component<{
   const [items, setItems] = createSignal<PersonalTodoItem[]>([])
   const [draft, setDraft] = createSignal("")
   const [askDraft, setAskDraft] = createSignal("")
+  const [reminderDraft, setReminderDraft] = createSignal("")
+  const [mode, setMode] = createSignal<"tasks" | "focus">("tasks")
   const [filter, setFilter] = createSignal<"all" | "today" | "important" | "scheduled" | "done">("all")
   const [reminder, setReminder] = createSignal("")
   const [loading, setLoading] = createSignal(true)
@@ -697,7 +699,7 @@ export const TodoView: Component<{
         <div data-slot="focus-timer-face">
           <span>{focusCopy()}</span>
           <output aria-label="Focus time remaining" aria-live="off">
-            {timerLoading() ? "--:--" : clock()}
+            {timerLoading() || !timer() ? "--:--" : clock()}
           </output>
           <span>{durationCopy()}</span>
         </div>
@@ -744,7 +746,7 @@ export const TodoView: Component<{
             Resume
           </Button>
         </Show>
-        <Show when={timer()?.state !== "idle"}>
+        <Show when={timer() && timer()?.state !== "idle"}>
           <Button
             variant="ghost"
             size="small"
@@ -759,7 +761,7 @@ export const TodoView: Component<{
   )
 
   return (
-    <main data-component="personal-todo" aria-labelledby="personal-todo-title">
+    <main data-component="personal-todo" data-mode={mode()} aria-labelledby="personal-todo-title">
       <header data-slot="personal-todo-header">
         <IconButton icon="arrow-left" variant="ghost" size="small" aria-label="Back to chat" onClick={props.onBack} />
         <div>
@@ -768,420 +770,463 @@ export const TodoView: Component<{
             <span>{remaining()} open</span>
           </p>
         </div>
+        <nav data-slot="todo-modes" aria-label="Todo workspace">
+          <button type="button" aria-current={mode() === "tasks" ? "page" : undefined} onClick={() => setMode("tasks")}>
+            Tasks
+          </button>
+          <button type="button" aria-current={mode() === "focus" ? "page" : undefined} onClick={() => setMode("focus")}>
+            Focus timer
+          </button>
+        </nav>
       </header>
 
-      <section data-slot="todo-overview" aria-label="Todo views">
-        <div data-slot="todo-overview-heading">
-          <span class="todo-kicker">Your day at a glance</span>
-          <h2>Where to begin</h2>
-          <p>Raya brings the timely and important work forward.</p>
-        </div>
-        <div data-slot="todo-overview-grid">
-          <For
-            each={
-              [
-                { id: "all", label: "All tasks", count: () => items().length },
-                { id: "today", label: "Today", count: today },
-                { id: "important", label: "Important", count: important },
-                { id: "scheduled", label: "Scheduled", count: scheduled },
-                { id: "done", label: "Completed", count: done },
-              ] as const
-            }
-          >
-            {(view) => (
-              <button
-                type="button"
-                data-active={filter() === view.id}
-                aria-pressed={filter() === view.id}
-                onClick={() => setFilter(view.id)}
-              >
-                <strong>{view.count()}</strong>
-                <small>{view.label}</small>
-              </button>
-            )}
-          </For>
-        </div>
-      </section>
+      <Show when={mode() === "tasks"}>
+        <section data-slot="todo-overview" aria-label="Todo views">
+          <div data-slot="todo-overview-heading">
+            <span class="todo-kicker">Your day at a glance</span>
+            <h2>Where to begin</h2>
+            <p>Raya brings the timely and important work forward.</p>
+          </div>
+          <div data-slot="todo-overview-grid">
+            <For
+              each={
+                [
+                  { id: "all", label: "All tasks", count: () => items().length },
+                  { id: "today", label: "Today", count: today },
+                  { id: "important", label: "Important", count: important },
+                  { id: "scheduled", label: "Scheduled", count: scheduled },
+                  { id: "done", label: "Completed", count: done },
+                ] as const
+              }
+            >
+              {(view) => (
+                <button
+                  type="button"
+                  data-active={filter() === view.id}
+                  aria-pressed={filter() === view.id}
+                  onClick={() => setFilter(view.id)}
+                >
+                  <strong>{view.count()}</strong>
+                  <small>{view.label}</small>
+                </button>
+              )}
+            </For>
+          </div>
+        </section>
 
-      {panel()}
-
-      <section data-slot="todo-assistant" aria-labelledby="todo-assistant-title">
-        <div>
-          <span class="todo-kicker">Plan with Raya</span>
-          <h2 id="todo-assistant-title">Tell Raya what you want to do</h2>
-          <p>She can turn a goal into a reviewed plan with next steps, priorities and reminders.</p>
-        </div>
         <form
+          data-slot="personal-todo-compose"
           onSubmit={(event) => {
             event.preventDefault()
-            plan(askDraft())
+            const title = draft().trim()
+            const stamp = reminder() ? new Date(reminder()).getTime() : undefined
+            if (title && (stamp === undefined || Number.isFinite(stamp)))
+              send({ operation: "create", title, reminderAt: stamp })
           }}
         >
-          <label class="sr-only" for="todo-assistant-input">
-            Ask Raya to plan a todo
-          </label>
-          <input
-            id="todo-assistant-input"
-            value={askDraft()}
-            onInput={(event) => setAskDraft(event.currentTarget.value)}
-            maxLength={1_400}
-            placeholder="I want to learn how to play the violin…"
+          <div data-slot="personal-todo-compose-heading">
+            <span class="todo-kicker">One clear next step</span>
+            <h2>Add a task</h2>
+          </div>
+          <TextField
+            value={draft()}
+            onChange={(title) => compose({ title })}
+            aria-label="New todo"
+            placeholder="What needs your attention?"
+            maxLength={500}
+            disabled={pending().create === true}
           />
-          <Button type="submit" disabled={!askDraft().trim() || !canPlan()}>
-            {props.canSubmitPlan && props.onSubmitPlan ? "Ask Raya to plan" : "Continue in chat"}
+          <TextField
+            label="Reminder date and time"
+            type="datetime-local"
+            value={reminder()}
+            onChange={(value) => compose({ reminder: value })}
+            disabled={pending().create === true}
+          />
+          <Button type="submit" size="small" disabled={!draft().trim() || pending().create === true}>
+            Add
           </Button>
         </form>
-        <div data-slot="todo-assistant-prompts">
-          <button type="button" onClick={() => plan("I want to learn how to play the violin")} disabled={!canPlan()}>
-            Plan a goal
-          </button>
-          <button
-            type="button"
-            onClick={() => plan("Help me prioritize my open todos for today")}
-            disabled={!canPlan()}
-          >
-            Help me prioritize
-          </button>
-          <button
-            type="button"
-            onClick={() => plan("Suggest useful reminders for my upcoming todos")}
-            disabled={!canPlan()}
-          >
-            Ask about reminders
-          </button>
-        </div>
-      </section>
 
-      <section data-slot="todo-proposals" aria-labelledby="todo-proposals-title">
-        <header data-slot="todo-proposals-header">
-          <div>
-            <h2 id="todo-proposals-title">For review</h2>
-            <p>{reviewCount()} waiting</p>
-          </div>
-          <Button
-            variant="ghost"
-            size="small"
-            disabled={proposalLoading()}
-            onClick={() => sendProposal({ operation: "list" })}
-          >
-            Refresh
-          </Button>
-        </header>
-
-        <Show when={proposalNotice()}>
-          {(notice) => (
-            <div data-slot="todo-proposals-notice" data-kind={notice().kind} role="alert">
-              <span>{notice().message}</span>
-              <Button variant="ghost" size="small" onClick={() => sendProposal({ operation: "list" })}>
-                Try again
+        <Show when={notice()}>
+          {(current) => (
+            <section data-slot="personal-todo-notice" data-kind={current().kind} role="alert">
+              <span>{current().message}</span>
+              <Button variant="ghost" size="small" onClick={retry}>
+                {current().kind === "stale" ? "Review and retry" : "Try again"}
               </Button>
-            </div>
+            </section>
           )}
         </Show>
 
-        <Show when={proposalLoading()}>
-          <div data-slot="todo-proposals-loading" role="status">
-            <Spinner /> <span>Checking plans…</span>
+        <Show when={loading()}>
+          <div data-slot="personal-todo-loading" role="status">
+            <Spinner /> <span>Loading your todos…</span>
           </div>
         </Show>
 
-        <Show when={!proposalLoading() && !proposalNotice() && visibleProposals().length === 0}>
-          <p data-slot="todo-proposals-empty">No plans are waiting for review.</p>
+        <Show when={!loading() && items().length === 0 && !notice()}>
+          <section data-slot="personal-todo-empty">
+            <h2>Nothing waiting</h2>
+            <p>Add one clear next step above.</p>
+          </section>
         </Show>
 
-        <Show when={!proposalLoading() && visibleProposals().length > 0}>
-          <ul data-slot="todo-proposals-list" aria-label="Todo plans for review">
-            <For each={visibleProposals()}>
-              {(item) => {
-                const id = () => item.proposal.id
-                const issue = () => proposalIssues()[id()]
-                const recovery = () => proposalRecovery()[id()]
-                return (
-                  <li data-proposal-id={id()}>
-                    <TodoProposalCard
-                      proposal={proposal(item)}
-                      state={item.state}
-                      busy={proposalBusy()[id()]}
-                      issue={issue()}
-                      decisionDisabled={issue() !== undefined}
-                      onApply={() => decideProposal(item, "apply")}
-                      onEdit={() => props.onEditProposal?.(id())}
-                      onReject={() => decideProposal(item, "reject")}
-                      onRetry={recovery() || item.state === "pending" ? () => retryProposal(item) : undefined}
-                    />
-                  </li>
-                )
-              }}
+        <Show when={filteredEmpty()}>
+          <section data-slot="personal-todo-empty">
+            <h2>No tasks here</h2>
+            <p>Choose another view to see your tasks.</p>
+          </section>
+        </Show>
+
+        <Show when={hasItems()}>
+          <div data-slot="todo-list-heading">
+            <div>
+              <span class="todo-kicker">Your tasks</span>
+              <h2>
+                {filter() === "all"
+                  ? "What’s next"
+                  : filter() === "done"
+                    ? "Completed"
+                    : filter() === "today"
+                      ? "Today"
+                      : filter() === "important"
+                        ? "Important"
+                        : "Scheduled"}
+              </h2>
+            </div>
+            <span>{visible().length} shown</span>
+          </div>
+          <ul data-slot="personal-todo-list" aria-label="Personal todos">
+            <For each={visible()}>
+              {(item) => (
+                <li data-slot="personal-todo-item" data-done={item.done}>
+                  <Checkbox
+                    hideLabel
+                    checked={item.done}
+                    disabled={pending()[item.id] === true}
+                    onChange={(done) => send({ operation: "update", todoID: item.id, changes: { done } })}
+                  >
+                    {item.done ? `Reopen ${item.title}` : `Complete ${item.title}`}
+                  </Checkbox>
+                  <Show
+                    when={editing()?.todoID === item.id ? editing() : undefined}
+                    fallback={
+                      <>
+                        <div data-slot="personal-todo-content">
+                          <span>{item.title}</span>
+                          <Show when={item.priority === "urgent" || item.priority === "high"}>
+                            <small data-slot="todo-priority">
+                              {item.priority === "urgent" ? "Urgent" : "Important"}
+                            </small>
+                          </Show>
+                          <Show when={item.detail}>
+                            <p>{item.detail}</p>
+                          </Show>
+                          <Show when={item.dueAt !== undefined}>
+                            <time
+                              dateTime={new Date(item.dueAt ?? 0).toISOString()}
+                              data-overdue={!item.done && (item.dueAt ?? 0) < Date.now()}
+                            >
+                              Due {due(item.dueAt ?? 0)}
+                            </time>
+                          </Show>
+                          <Show when={item.reminderAt !== undefined}>
+                            <time
+                              dateTime={new Date(item.reminderAt ?? 0).toISOString()}
+                              data-slot="personal-todo-reminder"
+                            >
+                              Reminder {due(item.reminderAt ?? 0)}
+                            </time>
+                          </Show>
+                          <Show when={item.subtasks?.length}>
+                            <div data-slot="todo-subtasks">
+                              <For each={item.subtasks}>
+                                {(child) => (
+                                  <div data-done={child.done}>
+                                    <Checkbox
+                                      checked={child.done}
+                                      disabled={pending()[item.id] === true}
+                                      onChange={(done) =>
+                                        send({ operation: "subtask", todoID: item.id, subtaskID: child.id, done })
+                                      }
+                                    >
+                                      {child.title}
+                                    </Checkbox>
+                                  </div>
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+                          <button
+                            type="button"
+                            data-slot="todo-expand"
+                            onClick={() => plan(`Expand this existing Todo into practical next steps: ${item.title}`)}
+                          >
+                            Ask Raya to expand
+                          </button>
+                        </div>
+                        <Show
+                          when={confirming() === item.id}
+                          fallback={
+                            <div data-slot="personal-todo-actions">
+                              <IconButton
+                                icon="edit"
+                                variant="ghost"
+                                size="small"
+                                aria-label={`Edit ${item.title}`}
+                                disabled={pending()[item.id] === true}
+                                onClick={() => begin(item)}
+                              />
+                              <IconButton
+                                icon="trash"
+                                variant="ghost"
+                                size="small"
+                                aria-label={`Delete ${item.title}`}
+                                disabled={pending()[item.id] === true}
+                                onClick={() => setConfirming(item.id)}
+                              />
+                            </div>
+                          }
+                        >
+                          <div
+                            data-slot="personal-todo-confirm"
+                            role="group"
+                            aria-label={`Confirm deleting ${item.title}`}
+                          >
+                            <Button intent="quiet" scale="compact" onClick={() => setConfirming()}>
+                              Cancel
+                            </Button>
+                            <Button
+                              intent="destructive"
+                              scale="compact"
+                              pending={pending()[item.id] === true}
+                              onClick={() => send({ operation: "delete", todoID: item.id })}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </Show>
+                      </>
+                    }
+                  >
+                    {(edit) => (
+                      <form
+                        data-slot="personal-todo-edit"
+                        aria-label={`Edit ${item.title}`}
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          save()
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Escape" || pending()[item.id]) return
+                          event.preventDefault()
+                          cancel()
+                        }}
+                      >
+                        <TextField
+                          label="Title"
+                          value={edit().title}
+                          onChange={(title) => change({ title })}
+                          maxLength={500}
+                          required
+                          autofocus
+                          disabled={pending()[item.id] === true}
+                          error={editError()}
+                        />
+                        <TextField
+                          label="Details"
+                          value={edit().detail}
+                          onChange={(detail) => change({ detail })}
+                          maxLength={10_000}
+                          multiline
+                          rows={3}
+                          placeholder="Add context or the next step"
+                          disabled={pending()[item.id] === true}
+                        />
+                        <TextField
+                          label="Due date and time"
+                          type="datetime-local"
+                          value={edit().due}
+                          onChange={(value) => change({ due: value })}
+                          disabled={pending()[item.id] === true}
+                        />
+                        <TextField
+                          label="Reminder date and time"
+                          type="datetime-local"
+                          value={edit().reminder}
+                          onChange={(value) => change({ reminder: value })}
+                          disabled={pending()[item.id] === true}
+                        />
+                        <div data-slot="personal-todo-edit-actions">
+                          <span>Escape cancels</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="small"
+                            disabled={pending()[item.id]}
+                            onClick={cancel}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" size="small" disabled={pending()[item.id] || !edit().title.trim()}>
+                            Save
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </Show>
+                </li>
+              )}
             </For>
           </ul>
         </Show>
-      </section>
-
-      <form
-        data-slot="personal-todo-compose"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const title = draft().trim()
-          const stamp = reminder() ? new Date(reminder()).getTime() : undefined
-          if (title && (stamp === undefined || Number.isFinite(stamp)))
-            send({ operation: "create", title, reminderAt: stamp })
-        }}
-      >
-        <div data-slot="personal-todo-compose-heading">
-          <span class="todo-kicker">One clear next step</span>
-          <h2>Add a task</h2>
-        </div>
-        <TextField
-          value={draft()}
-          onChange={(title) => compose({ title })}
-          aria-label="New todo"
-          placeholder="What needs your attention?"
-          maxLength={500}
-          disabled={pending().create === true}
-        />
-        <TextField
-          label="Reminder date and time"
-          type="datetime-local"
-          value={reminder()}
-          onChange={(value) => compose({ reminder: value })}
-          disabled={pending().create === true}
-        />
-        <Button type="submit" size="small" disabled={!draft().trim() || pending().create === true}>
-          Add
-        </Button>
-      </form>
-
-      <Show when={notice()}>
-        {(current) => (
-          <section data-slot="personal-todo-notice" data-kind={current().kind} role="alert">
-            <span>{current().message}</span>
-            <Button variant="ghost" size="small" onClick={retry}>
-              {current().kind === "stale" ? "Review and retry" : "Try again"}
-            </Button>
-          </section>
-        )}
-      </Show>
-
-      <Show when={loading()}>
-        <div data-slot="personal-todo-loading" role="status">
-          <Spinner /> <span>Loading your todos…</span>
-        </div>
-      </Show>
-
-      <Show when={!loading() && items().length === 0 && !notice()}>
-        <section data-slot="personal-todo-empty">
-          <h2>Nothing waiting</h2>
-          <p>Add one clear next step above.</p>
-        </section>
-      </Show>
-
-      <Show when={filteredEmpty()}>
-        <section data-slot="personal-todo-empty">
-          <h2>No tasks here</h2>
-          <p>Choose another view to see your tasks.</p>
-        </section>
-      </Show>
-
-      <Show when={hasItems()}>
-        <div data-slot="todo-list-heading">
+        <section data-slot="todo-assistant" aria-labelledby="todo-assistant-title">
           <div>
-            <span class="todo-kicker">Your tasks</span>
-            <h2>
-              {filter() === "all"
-                ? "What’s next"
-                : filter() === "done"
-                  ? "Completed"
-                  : filter() === "today"
-                    ? "Today"
-                    : filter() === "important"
-                      ? "Important"
-                      : "Scheduled"}
-            </h2>
+            <span class="todo-kicker">Plan with Raya</span>
+            <h2 id="todo-assistant-title">Tell Raya what you want to do</h2>
+            <p>She can turn a goal into a reviewed plan with next steps, priorities and reminders.</p>
           </div>
-          <span>{visible().length} shown</span>
-        </div>
-        <ul data-slot="personal-todo-list" aria-label="Personal todos">
-          <For each={visible()}>
-            {(item) => (
-              <li data-slot="personal-todo-item" data-done={item.done}>
-                <Checkbox
-                  hideLabel
-                  checked={item.done}
-                  disabled={pending()[item.id] === true}
-                  onChange={(done) => send({ operation: "update", todoID: item.id, changes: { done } })}
-                >
-                  {item.done ? `Reopen ${item.title}` : `Complete ${item.title}`}
-                </Checkbox>
-                <Show
-                  when={editing()?.todoID === item.id ? editing() : undefined}
-                  fallback={
-                    <>
-                      <div data-slot="personal-todo-content">
-                        <span>{item.title}</span>
-                        <Show when={item.priority === "urgent" || item.priority === "high"}>
-                          <small data-slot="todo-priority">{item.priority === "urgent" ? "Urgent" : "Important"}</small>
-                        </Show>
-                        <Show when={item.detail}>
-                          <p>{item.detail}</p>
-                        </Show>
-                        <Show when={item.dueAt !== undefined}>
-                          <time
-                            dateTime={new Date(item.dueAt ?? 0).toISOString()}
-                            data-overdue={!item.done && (item.dueAt ?? 0) < Date.now()}
-                          >
-                            Due {due(item.dueAt ?? 0)}
-                          </time>
-                        </Show>
-                        <Show when={item.reminderAt !== undefined}>
-                          <time
-                            dateTime={new Date(item.reminderAt ?? 0).toISOString()}
-                            data-slot="personal-todo-reminder"
-                          >
-                            Reminder {due(item.reminderAt ?? 0)}
-                          </time>
-                        </Show>
-                        <Show when={item.subtasks?.length}>
-                          <div data-slot="todo-subtasks">
-                            <For each={item.subtasks}>
-                              {(child) => (
-                                <div data-done={child.done}>
-                                  <Checkbox
-                                    checked={child.done}
-                                    disabled={pending()[item.id] === true}
-                                    onChange={(done) =>
-                                      send({ operation: "subtask", todoID: item.id, subtaskID: child.id, done })
-                                    }
-                                  >
-                                    {child.title}
-                                  </Checkbox>
-                                </div>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-                        <button
-                          type="button"
-                          data-slot="todo-expand"
-                          onClick={() => plan(`Expand this existing Todo into practical next steps: ${item.title}`)}
-                        >
-                          Ask Raya to expand
-                        </button>
-                      </div>
-                      <Show
-                        when={confirming() === item.id}
-                        fallback={
-                          <div data-slot="personal-todo-actions">
-                            <IconButton
-                              icon="edit"
-                              variant="ghost"
-                              size="small"
-                              aria-label={`Edit ${item.title}`}
-                              disabled={pending()[item.id] === true}
-                              onClick={() => begin(item)}
-                            />
-                            <IconButton
-                              icon="trash"
-                              variant="ghost"
-                              size="small"
-                              aria-label={`Delete ${item.title}`}
-                              disabled={pending()[item.id] === true}
-                              onClick={() => setConfirming(item.id)}
-                            />
-                          </div>
-                        }
-                      >
-                        <div
-                          data-slot="personal-todo-confirm"
-                          role="group"
-                          aria-label={`Confirm deleting ${item.title}`}
-                        >
-                          <Button intent="quiet" scale="compact" onClick={() => setConfirming()}>
-                            Cancel
-                          </Button>
-                          <Button
-                            intent="destructive"
-                            scale="compact"
-                            pending={pending()[item.id] === true}
-                            onClick={() => send({ operation: "delete", todoID: item.id })}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </Show>
-                    </>
-                  }
-                >
-                  {(edit) => (
-                    <form
-                      data-slot="personal-todo-edit"
-                      aria-label={`Edit ${item.title}`}
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        save()
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Escape" || pending()[item.id]) return
-                        event.preventDefault()
-                        cancel()
-                      }}
-                    >
-                      <TextField
-                        label="Title"
-                        value={edit().title}
-                        onChange={(title) => change({ title })}
-                        maxLength={500}
-                        required
-                        autofocus
-                        disabled={pending()[item.id] === true}
-                        error={editError()}
-                      />
-                      <TextField
-                        label="Details"
-                        value={edit().detail}
-                        onChange={(detail) => change({ detail })}
-                        maxLength={10_000}
-                        multiline
-                        rows={3}
-                        placeholder="Add context or the next step"
-                        disabled={pending()[item.id] === true}
-                      />
-                      <TextField
-                        label="Due date and time"
-                        type="datetime-local"
-                        value={edit().due}
-                        onChange={(value) => change({ due: value })}
-                        disabled={pending()[item.id] === true}
-                      />
-                      <TextField
-                        label="Reminder date and time"
-                        type="datetime-local"
-                        value={edit().reminder}
-                        onChange={(value) => change({ reminder: value })}
-                        disabled={pending()[item.id] === true}
-                      />
-                      <div data-slot="personal-todo-edit-actions">
-                        <span>Escape cancels</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="small"
-                          disabled={pending()[item.id]}
-                          onClick={cancel}
-                        >
-                          Cancel
-                        </Button>
-                        <Button type="submit" size="small" disabled={pending()[item.id] || !edit().title.trim()}>
-                          Save
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                </Show>
-              </li>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              plan(askDraft())
+            }}
+          >
+            <label class="sr-only" for="todo-assistant-input">
+              Ask Raya to plan a todo
+            </label>
+            <input
+              id="todo-assistant-input"
+              value={askDraft()}
+              onInput={(event) => setAskDraft(event.currentTarget.value)}
+              maxLength={1_400}
+              placeholder="I want to learn how to play the violin…"
+            />
+            <Button type="submit" disabled={!askDraft().trim() || !canPlan()}>
+              {props.canSubmitPlan && props.onSubmitPlan ? "Ask Raya to plan" : "Continue in chat"}
+            </Button>
+          </form>
+          <div data-slot="todo-assistant-prompts">
+            <button type="button" onClick={() => plan("I want to learn how to play the violin")} disabled={!canPlan()}>
+              Plan a goal
+            </button>
+            <button
+              type="button"
+              onClick={() => plan("Help me prioritize my open todos for today")}
+              disabled={!canPlan()}
+            >
+              Help me prioritize
+            </button>
+            <button
+              type="button"
+              onClick={() => plan("Suggest useful reminders for my upcoming todos")}
+              disabled={!canPlan()}
+            >
+              Ask about reminders
+            </button>
+          </div>
+        </section>
+
+        <section data-slot="todo-reminder-assistant" aria-labelledby="todo-reminder-title">
+          <div>
+            <span class="todo-kicker">Reminders</span>
+            <h2 id="todo-reminder-title">Say it naturally</h2>
+            <p>Tell Raya what to remember and when. Review the suggestion before it is saved.</p>
+          </div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              const text = reminderDraft().trim()
+              if (!text || !canPlan()) return
+              plan(
+                `Set a reminder from this request: ${text}. Interpret the time in my local timezone, confirm anything ambiguous, and show me the Todo proposal before saving.`,
+              )
+              setReminderDraft("")
+            }}
+          >
+            <label class="sr-only" for="todo-reminder-input">
+              Ask Raya for a reminder
+            </label>
+            <input
+              id="todo-reminder-input"
+              value={reminderDraft()}
+              onInput={(event) => setReminderDraft(event.currentTarget.value)}
+              maxLength={1_400}
+              placeholder="Remind me to practise violin tomorrow at 6"
+            />
+            <Button type="submit" disabled={!reminderDraft().trim() || !canPlan()}>
+              Ask Raya
+            </Button>
+          </form>
+        </section>
+
+        <section data-slot="todo-proposals" aria-labelledby="todo-proposals-title">
+          <header data-slot="todo-proposals-header">
+            <div>
+              <h2 id="todo-proposals-title">For review</h2>
+              <p>{reviewCount()} waiting</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="small"
+              disabled={proposalLoading()}
+              onClick={() => sendProposal({ operation: "list" })}
+            >
+              Refresh
+            </Button>
+          </header>
+
+          <Show when={proposalNotice()}>
+            {(notice) => (
+              <div data-slot="todo-proposals-notice" data-kind={notice().kind} role="alert">
+                <span>{notice().message}</span>
+                <Button variant="ghost" size="small" onClick={() => sendProposal({ operation: "list" })}>
+                  Try again
+                </Button>
+              </div>
             )}
-          </For>
-        </ul>
+          </Show>
+
+          <Show when={proposalLoading()}>
+            <div data-slot="todo-proposals-loading" role="status">
+              <Spinner /> <span>Checking plans…</span>
+            </div>
+          </Show>
+
+          <Show when={!proposalLoading() && !proposalNotice() && visibleProposals().length === 0}>
+            <p data-slot="todo-proposals-empty">No plans are waiting for review.</p>
+          </Show>
+
+          <Show when={!proposalLoading() && visibleProposals().length > 0}>
+            <ul data-slot="todo-proposals-list" aria-label="Todo plans for review">
+              <For each={visibleProposals()}>
+                {(item) => {
+                  const id = () => item.proposal.id
+                  const issue = () => proposalIssues()[id()]
+                  const recovery = () => proposalRecovery()[id()]
+                  return (
+                    <li data-proposal-id={id()}>
+                      <TodoProposalCard
+                        proposal={proposal(item)}
+                        state={item.state}
+                        busy={proposalBusy()[id()]}
+                        issue={issue()}
+                        decisionDisabled={issue() !== undefined}
+                        onApply={() => decideProposal(item, "apply")}
+                        onEdit={() => props.onEditProposal?.(id())}
+                        onReject={() => decideProposal(item, "reject")}
+                        onRetry={recovery() || item.state === "pending" ? () => retryProposal(item) : undefined}
+                      />
+                    </li>
+                  )
+                }}
+              </For>
+            </ul>
+          </Show>
+        </section>
       </Show>
+      <Show when={mode() === "focus"}>{panel()}</Show>
     </main>
   )
 }

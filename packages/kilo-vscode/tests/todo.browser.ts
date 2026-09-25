@@ -76,6 +76,26 @@ test("Todo planning leaves a draft for review when sending is unavailable", asyn
   await expect(page.locator("body")).not.toHaveAttribute("data-submitted-plan", /Learn violin/)
 })
 
+test("natural reminder request goes to Raya for review", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("textbox", { name: "Ask Raya for a reminder" }).fill("Practise violin tomorrow at 6")
+  await page.getByRole("button", { name: "Ask Raya", exact: true }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-submitted-plan", /Practise violin tomorrow at 6/)
+  await expect(page.locator("body")).toHaveAttribute("data-submitted-plan", /proposal before saving/)
+})
+
+test("focus has its own workspace and returns to tasks", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 800 })
+  await page.goto("/?timer=idle")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Focus timer" })).toBeVisible()
+  await expect(page.locator('[data-slot="personal-todo-list"]')).toHaveCount(0)
+  await page.screenshot({ path: info.outputPath("focus.png"), fullPage: true })
+  await page.getByRole("button", { name: "Tasks", exact: true }).click()
+  await expect(page.locator('[data-slot="personal-todo-list"]')).toBeVisible()
+  await audit(page)
+})
+
 test("subtasks save independently and stale steps refresh without replay", async ({ page }) => {
   await page.goto("/?state=subtasks")
   const step = page.getByRole("checkbox", { name: "Check the release notes" })
@@ -400,6 +420,7 @@ test("clears optional detail, due date, and reminder explicitly", async ({ page 
 for (const state of ["idle", "running", "paused", "completed"] as const) {
   test(`renders the authoritative ${state} focus timer state`, async ({ page }) => {
     await page.goto(`/?timer=${state}`)
+    await page.getByRole("button", { name: "Focus timer", exact: true }).click()
     await expect(page.getByRole("heading", { name: "Focus timer" })).toBeVisible()
     const labels = {
       idle: "Ready when you are",
@@ -415,14 +436,18 @@ for (const state of ["idle", "running", "paused", "completed"] as const) {
 
 test("recovers the timer after an offline authoritative read", async ({ page }) => {
   await page.goto("/?timer=offline")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   await expect(page.getByRole("alert")).toContainText("Raya is offline. The saved focus timer is unchanged.")
-  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(page.getByLabel("Focus time remaining")).toHaveText("--:--")
+  await expect(page.getByRole("button", { name: "Reset" })).toHaveCount(0)
+  await page.getByRole("button", { name: "Refresh" }).click()
   await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Pause" })).toBeEnabled()
 })
 
 test("reconciles a stale timer action and reloads the persisted backend state", async ({ page }) => {
   await page.goto("/?timer=stale")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   const pause = page.getByRole("button", { name: "Pause" })
   await pause.focus()
   await page.keyboard.press("Enter")
@@ -438,6 +463,7 @@ test("reconciles a stale timer action and reloads the persisted backend state", 
     { revision: 3 },
   ])
   await page.reload()
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   await expect(page.getByText("Paused", { exact: true })).toBeVisible()
   await expect(page.getByLabel("Focus time remaining")).toHaveText(/\d\d:\d\d/)
   await audit(page)
@@ -445,6 +471,7 @@ test("reconciles a stale timer action and reloads the persisted backend state", 
 
 test("starts, pauses, resumes and resets the timer from the keyboard", async ({ page }) => {
   await page.goto("/?timer=idle")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   const start = page.getByRole("button", { name: "Start focus" })
   await start.focus()
   await page.keyboard.press("Enter")
@@ -465,6 +492,7 @@ test("starts, pauses, resumes and resets the timer from the keyboard", async ({ 
 
 test("starts a custom hour-minute-second duration and restores it after reload", async ({ page }) => {
   await page.goto("/?timer=idle")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   await page.getByLabel("Focus hours").fill("1")
   await page.getByLabel("Focus minutes").fill("2")
   await page.getByLabel("Focus seconds").fill("3")
@@ -474,6 +502,7 @@ test("starts a custom hour-minute-second duration and restores it after reload",
   expect(sent.filter((message) => message.type === "focusTimerStart")).toMatchObject([{ durationMs: 3_723_000 }])
   await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
   await page.reload()
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   await expect(page.getByLabel("Focus time remaining")).toHaveText(/^1:0[12]:\d\d$/)
   await page.getByRole("button", { name: "Reset" }).click()
   await expect(page.getByLabel("Focus hours")).toHaveValue("1")
@@ -484,6 +513,7 @@ test("starts a custom hour-minute-second duration and restores it after reload",
 
 test("refuses an invalid custom duration before dispatch", async ({ page }) => {
   await page.goto("/?timer=idle")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   await page.getByLabel("Focus hours").fill("0")
   await page.getByLabel("Focus minutes").fill("0")
   await page.getByLabel("Focus seconds").fill("59")
@@ -498,6 +528,7 @@ test("refuses an invalid custom duration before dispatch", async ({ page }) => {
 
 test("keeps a pending timer action disabled", async ({ page }) => {
   await page.goto("/?timer=idle&holdTimer=true")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   const start = page.getByRole("button", { name: "Start focus" })
   await start.click()
   await expect(start).toBeDisabled()

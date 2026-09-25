@@ -12,6 +12,7 @@ html [data-component="personal-todo"] {
 
 [data-component="personal-todo"] > [data-slot="personal-todo-header"],
 [data-component="personal-todo"] > [data-slot="todo-assistant"],
+[data-component="personal-todo"] > [data-slot="todo-reminder-assistant"],
 [data-component="personal-todo"] > [data-slot="todo-proposals"],
 [data-component="personal-todo"] > [data-slot="personal-todo-compose"],
 [data-component="personal-todo"] > [data-slot="personal-todo-notice"],
@@ -48,9 +49,39 @@ html [data-component="personal-todo"] {
 [data-component="personal-todo"] [data-slot="personal-todo-header"] p {
   margin-top: 3px;
 }
+[data-slot="personal-todo-header"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+[data-slot="todo-modes"] {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 3px;
+  border: 1px solid #39393b;
+  border-radius: 12px;
+  background: #252526;
+}
+[data-slot="todo-modes"] button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #b8b8ba;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-slot="todo-modes"] button[aria-current="page"] {
+  background: #3a3a3c;
+  color: #f4f4f5;
+}
 
 [data-component="personal-todo"] [data-slot="focus-timer"],
 [data-slot="todo-assistant"],
+[data-slot="todo-reminder-assistant"],
 [data-component="personal-todo"] [data-slot="personal-todo-compose"],
 [data-component="personal-todo"] [data-slot="todo-proposals"],
 [data-slot="todo-overview"] {
@@ -64,13 +95,15 @@ html [data-component="personal-todo"] {
 }
 [data-slot="todo-overview"],
 [data-slot="todo-assistant"],
+[data-slot="todo-reminder-assistant"],
 [data-component="personal-todo"] [data-slot="personal-todo-compose"],
 [data-component="personal-todo"] [data-slot="todo-proposals"] {
   border-top: 1px solid #303032;
 }
 
 [data-slot="todo-overview-heading"] p,
-[data-slot="todo-assistant"] p {
+[data-slot="todo-assistant"] p,
+[data-slot="todo-reminder-assistant"] p {
   margin: 7px 0 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
   font-size: 13px;
@@ -78,9 +111,18 @@ html [data-component="personal-todo"] {
 
 [data-slot="todo-overview-grid"] {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-top: 20px;
+}
+[data-component="personal-todo"][data-mode="tasks"] > [data-slot="todo-overview"] {
+  grid-column: 1 / -1;
+}
+[data-component="personal-todo"][data-mode="tasks"] > [data-slot="todo-assistant"] {
+  grid-column: 1;
+}
+[data-component="personal-todo"][data-mode="tasks"] > [data-slot="todo-reminder-assistant"] {
+  grid-column: 2;
 }
 
 [data-slot="todo-overview-grid"] button {
@@ -253,11 +295,13 @@ html [data-component="personal-todo"] {
   min-width: 82px;
 }
 
-[data-slot="todo-assistant"] {
+[data-slot="todo-assistant"],
+[data-slot="todo-reminder-assistant"] {
   display: grid;
   gap: 16px;
 }
-[data-slot="todo-assistant"] form {
+[data-slot="todo-assistant"] form,
+[data-slot="todo-reminder-assistant"] form {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -266,7 +310,8 @@ html [data-component="personal-todo"] {
   border-radius: 15px;
   background: #1e1e1f;
 }
-[data-slot="todo-assistant"] input {
+[data-slot="todo-assistant"] input,
+[data-slot="todo-reminder-assistant"] input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -274,6 +319,19 @@ html [data-component="personal-todo"] {
   background: transparent;
   color: var(--text-base, var(--vscode-foreground));
   font: inherit;
+}
+[data-component="personal-todo"][data-mode="focus"] {
+  min-height: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+[data-component="personal-todo"][data-mode="focus"] > [data-slot="focus-timer"] {
+  grid-column: 1;
+  justify-self: center;
+  width: min(100%, 620px);
+  padding: clamp(20px, 4vw, 36px);
+}
+[data-component="personal-todo"][data-mode="focus"] [data-slot="focus-timer-dial"] {
+  width: clamp(220px, 48vw, 390px);
 }
 [data-slot="todo-assistant-prompts"] {
   display: flex;
@@ -361,7 +419,9 @@ html [data-component="personal-todo"] {
     grid-template-columns: minmax(0, 1fr);
   }
   [data-component="personal-todo"] > [data-slot="todo-overview"],
-  [data-component="personal-todo"] > [data-slot="focus-timer"] {
+  [data-component="personal-todo"] > [data-slot="focus-timer"],
+  [data-component="personal-todo"][data-mode="tasks"] > [data-slot="todo-assistant"],
+  [data-component="personal-todo"][data-mode="tasks"] > [data-slot="todo-reminder-assistant"] {
     grid-column: 1;
   }
   [data-slot="todo-overview-grid"] {
@@ -376,7 +436,8 @@ body.vscode-light [data-component="personal-todo"] [data-slot="personal-todo-ite
   color: #202022;
 }
 
-body.vscode-light [data-slot="todo-assistant"] form {
+body.vscode-light [data-slot="todo-assistant"] form,
+body.vscode-light [data-slot="todo-reminder-assistant"] form {
   background: #e9e9eb;
   color: #252527;
 }
@@ -436,8 +497,20 @@ body.vscode-light [data-slot="focus-duration-presets"] button[data-active="true"
   border-color: var(--raya-primary);
   color: #202022;
 }
-body.vscode-light [data-slot="todo-assistant"] input {
+body.vscode-light [data-slot="todo-assistant"] input,
+body.vscode-light [data-slot="todo-reminder-assistant"] input {
   color: #242428;
+}
+body.vscode-light [data-slot="todo-modes"] {
+  border-color: #c7c7cc;
+  background: #f2f2f3;
+}
+body.vscode-light [data-slot="todo-modes"] button {
+  color: #45454b;
+}
+body.vscode-light [data-slot="todo-modes"] button[aria-current="page"] {
+  background: #dedee1;
+  color: #202024;
 }
 body.vscode-light [data-slot="todo-assistant-prompts"] button {
   border-color: #c7c7cc;
@@ -448,16 +521,28 @@ body.vscode-light [data-slot="todo-subtasks"] {
 }
 
 @media (max-width: 420px) {
+  [data-slot="personal-todo-header"] {
+    flex-wrap: wrap;
+  }
+  [data-slot="todo-modes"] {
+    width: 100%;
+    margin-left: 0;
+  }
+  [data-slot="todo-modes"] button {
+    flex: 1;
+  }
   [data-slot="todo-overview-grid"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   [data-component="personal-todo"] [data-slot="personal-todo-compose"] {
     grid-template-columns: minmax(0, 1fr);
   }
-  [data-slot="todo-assistant"] form {
+  [data-slot="todo-assistant"] form,
+  [data-slot="todo-reminder-assistant"] form {
     flex-wrap: wrap;
   }
-  [data-slot="todo-assistant"] form [data-component="button"] {
+  [data-slot="todo-assistant"] form [data-component="button"],
+  [data-slot="todo-reminder-assistant"] form [data-component="button"] {
     width: 100%;
   }
 }

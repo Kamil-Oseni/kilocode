@@ -2,13 +2,96 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { createHash, randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
-import { NativeFrameParser, type NativeFrame, type NativeUnchanged } from "./desktop-native-frame"
+import {
+  NativeFrameParser,
+  type NativeBarrier,
+  type NativeFrame,
+  type NativePacket,
+  type NativeUnchanged,
+} from "./desktop-native-frame"
+
+type BarrierRequest = {
+  request: string
+  scene: number
+  source: number
+  windowID: string
+  location: string
+  identity: string
+}
+export type BarrierResult = { status: "proven"; frame: NativeFrame } | NativeBarrier
+
+function verify(value: BarrierRequest, frame: NativeFrame): void {
+  if (
+    !/^[0-9a-f]{32}$/.test(value.request) ||
+    !Number.isSafeInteger(value.scene) ||
+    value.scene < 1 ||
+    !Number.isSafeInteger(value.source) ||
+    value.source < 1 ||
+    value.source !== frame.sequence ||
+    value.windowID !== frame.windowID ||
+    value.location !== frame.location ||
+    !/^[0-9A-F]{64}$/.test(value.identity)
+  )
+    throw new Error("Native desktop barrier target or scene is invalid")
+}
+
+function target(value: BarrierRequest, frame: NativeFrame) {
+  verify(value, frame)
+  const match = /^pid:(\d+);title:[\s\S]*;bounds:(-?\d+),(-?\d+),(\d+),(\d+)$/.exec(value.location)
+  const handle = /^0x[0-9A-F]+$/.test(value.windowID) ? BigInt(value.windowID) : 0n
+  const pid = Number(match?.[1])
+  const left = Number(match?.[2])
+  const top = Number(match?.[3])
+  const width = Number(match?.[4])
+  const height = Number(match?.[5])
+  const right = left + width
+  const bottom = top + height
+  if (
+    !match ||
+    handle < 1n ||
+    handle > 0xffffffffffffffffn ||
+    !Number.isSafeInteger(pid) ||
+    pid < 1 ||
+    pid > 0xffffffff ||
+    width !== frame.width ||
+    height !== frame.height ||
+    ![left, top, right, bottom].every(
+      (number) => Number.isSafeInteger(number) && number >= -2147483648 && number <= 2147483647,
+    )
+  )
+    throw new Error("Native desktop barrier window bounds are invalid")
+  return { handle, pid, left, top, right, bottom }
+}
+
+function command(value: BarrierRequest, frame: NativeFrame): Buffer {
+  const bounds = target(value, frame)
+  const data = Buffer.alloc(148)
+  data.write("RCB2", 0, "ascii")
+  data.writeUInt32LE(data.length, 4)
+  data.writeBigUInt64LE(BigInt(value.scene), 8)
+  data.writeBigUInt64LE(BigInt(value.source), 16)
+  data.writeBigUInt64LE(bounds.handle, 24)
+  data.writeUInt32LE(bounds.pid, 32)
+  for (const [index, coord] of [bounds.left, bounds.top, bounds.right, bounds.bottom].entries())
+    data.writeInt32LE(coord, 36 + index * 4)
+  data.write(value.request, 52, 32, "ascii")
+  data.write(value.identity, 84, 64, "ascii")
+  return data
+}
 
 export class NativeCaptureHost {
   private process: ChildProcess | undefined
   private parser: NativeFrameParser | undefined
   private frame: (NativeFrame & { receivedAt: number }) | undefined
   private waiting: { after: number; resolve: (frame: NativeFrame) => void; reject: (error: Error) => void } | undefined
+  private barrier:
+    | {
+        request: BarrierRequest
+        resolve: (result: BarrierResult) => void
+        reject: (error: Error) => void
+        timer: ReturnType<typeof setTimeout>
+      }
+    | undefined
   private generation = 0
 
   constructor(
@@ -26,7 +109,7 @@ export class NativeCaptureHost {
     const receipt = this.dir ? this.path() : undefined
     const child = spawn(this.binary, this.args, {
       windowsHide: true,
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["pipe", "pipe", "ignore"],
       ...(receipt ? { env: { ...process.env, RAYA_NATIVE_FAULT_RECEIPT: receipt } } : {}),
     })
     this.parser = parser
@@ -34,24 +117,7 @@ export class NativeCaptureHost {
     child.stdout?.on("data", (chunk: Buffer) => {
       if (generation !== this.generation) return
       try {
-        for (const result of parser.push(chunk)) {
-          if (result.type === "error")
-            throw new Error(`Native desktop capture stopped: ${result.code}${result.fault ? ` (${result.fault})` : ""}`)
-          if (result.type === "unchanged") {
-            if (!this.frame || result.frame.base !== this.frame.sequence)
-              throw new Error("Native desktop continuity has no matching image")
-            this.frame.receivedAt = performance.now()
-            this.renewed?.(result.frame)
-            continue
-          }
-          this.frame?.data.fill(0)
-          this.frame = { ...result.frame, receivedAt: performance.now() }
-          if (this.waiting && result.frame.sequence > this.waiting.after) {
-            const waiting = this.waiting
-            this.waiting = undefined
-            waiting.resolve({ ...result.frame, data: Buffer.from(result.frame.data) })
-          }
-        }
+        for (const result of parser.push(chunk)) this.accept(result)
       } catch (error) {
         this.fail(error, generation)
       }
@@ -72,6 +138,59 @@ export class NativeCaptureHost {
         this.fail(error, generation)
       }
     })
+  }
+
+  private accept(result: NativePacket): void {
+    if (result.type === "error")
+      throw new Error(`Native desktop capture stopped: ${result.code}${result.fault ? ` (${result.fault})` : ""}`)
+    if (result.type === "barrier") {
+      const pending = this.barrier
+      if (
+        !pending ||
+        result.barrier.request !== pending.request.request ||
+        result.barrier.scene !== pending.request.scene ||
+        result.barrier.source !== pending.request.source
+      )
+        throw new Error("Native desktop barrier response has no matching request")
+      this.barrier = undefined
+      clearTimeout(pending.timer)
+      pending.resolve(result.barrier)
+      return
+    }
+    if (result.type === "unchanged") {
+      if (!this.frame || result.frame.base !== this.frame.sequence)
+        throw new Error("Native desktop continuity has no matching image")
+      this.frame.receivedAt = performance.now()
+      this.renewed?.(result.frame)
+      return
+    }
+    if (result.frame.barrier) this.confirm(result.frame)
+    this.frame?.data.fill(0)
+    this.frame = { ...result.frame, receivedAt: performance.now() }
+    if (this.waiting && result.frame.sequence > this.waiting.after) {
+      const waiting = this.waiting
+      this.waiting = undefined
+      waiting.resolve({ ...result.frame, data: Buffer.from(result.frame.data) })
+    }
+  }
+
+  private confirm(frame: NativeFrame): void {
+    const proof = frame.barrier!
+    const pending = this.barrier
+    if (
+      !pending ||
+      proof.request !== pending.request.request ||
+      proof.scene !== pending.request.scene ||
+      proof.source !== pending.request.source ||
+      frame.windowID !== pending.request.windowID ||
+      frame.location !== pending.request.location ||
+      !this.frame ||
+      this.frame.sequence !== pending.request.source
+    )
+      throw new Error("Native desktop post-action image has no matching target or request")
+    this.barrier = undefined
+    clearTimeout(pending.timer)
+    pending.resolve({ status: "proven", frame: { ...frame, data: Buffer.from(frame.data) } })
   }
 
   private path(): string {
@@ -130,8 +249,33 @@ export class NativeCaptureHost {
     })
   }
 
+  async barrierAfter(value: BarrierRequest): Promise<BarrierResult> {
+    const child = this.process
+    const frame = this.frame
+    if (!child?.stdin || !frame) return Promise.reject(new Error("Native desktop capture has no active image"))
+    if (this.barrier) return Promise.reject(new Error("Native desktop barrier already has a request"))
+    const data = command(value, frame)
+    const generation = this.generation
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => this.fail(new Error("Native desktop post-action barrier timed out"), generation),
+        1_500,
+      )
+      this.barrier = { request: value, resolve, reject, timer }
+      child.stdin!.write(data, (error) => {
+        data.fill(0)
+        if (error) this.fail(error, generation)
+      })
+    })
+  }
+
   stop(): void {
     this.generation++
+    if (this.barrier) {
+      clearTimeout(this.barrier.timer)
+      this.barrier.reject(new Error("Native desktop capture stopped during post-action barrier"))
+      this.barrier = undefined
+    }
     this.waiting?.reject(new Error("Native desktop capture stopped"))
     this.waiting = undefined
     this.parser?.clear()
@@ -142,6 +286,7 @@ export class NativeCaptureHost {
     this.process = undefined
     if (!child) return
     child.stdout?.destroy()
+    child.stdin?.destroy()
     child.kill()
     const retry = setTimeout(() => {
       if (child.exitCode !== null || child.signalCode !== null) return

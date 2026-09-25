@@ -15,15 +15,30 @@ export type NativeFrame = {
   acquisitionMs: number
   preparationMs: number
   data: Buffer
+  barrier?: NativeProof
+}
+
+export type NativeProof = {
+  request: string
+  scene: number
+  source: number
+  receiptQpc: string
+  presentQpc: string
+}
+
+export type NativeBarrier = Omit<NativeProof, "presentQpc"> & {
+  status: "unproven"
+  reason: "multiple_outputs" | "target_changed" | "source_changed" | "stale_scene" | "no_present" | "superseded"
 }
 
 export type NativeUnchanged = Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height"> & {
   base: number
 }
 
-type NativePacket =
+export type NativePacket =
   | { type: "frame"; frame: NativeFrame }
   | { type: "unchanged"; frame: NativeUnchanged }
+  | { type: "barrier"; barrier: NativeBarrier }
   | { type: "error"; code: string; fault?: string }
 
 function record(value: unknown): Record<string, unknown> {
@@ -79,42 +94,97 @@ function image(value: Record<string, unknown>, data: Buffer) {
   return { mime: value.mime as NativeFrame["mime"], data }
 }
 
-function packet(header: unknown, data: Buffer): NativePacket {
-  const value = record(header)
-  if (value.v !== 1) throw new Error("Native desktop protocol version is unsupported")
-  if (value.type === "error") {
-    if (data.length || typeof value.code !== "string" || !/^[a-z_]{1,64}$/.test(value.code))
-      throw new Error("Native desktop error packet is invalid")
-    if (value.code === "native_fault") {
-      if (typeof value.fault !== "string" || !/^[0-9A-F]{8}:[A-Za-z0-9_.-]{1,48}\+0x[0-9A-F]{1,16}$/.test(value.fault))
-        throw new Error("Native desktop fault receipt is invalid")
-      return { type: "error", code: value.code, fault: value.fault }
-    }
-    if (value.fault !== undefined) throw new Error("Native desktop fault receipt is unexpected")
-    return { type: "error", code: value.code }
+function receipt(value: Record<string, unknown>) {
+  if (typeof value.request !== "string" || !/^[0-9a-f]{32}$/.test(value.request))
+    throw new Error("Native desktop barrier request is invalid")
+  const scene = number(value.scene, "barrier scene", Number.MAX_SAFE_INTEGER)
+  const source = number(value.source, "barrier source", Number.MAX_SAFE_INTEGER)
+  if (!Number.isSafeInteger(scene) || scene < 1 || !Number.isSafeInteger(source) || source < 1)
+    throw new Error("Native desktop barrier scene or source is invalid")
+  if (typeof value.receiptQpc !== "string" || !/^[1-9]\d{0,18}$/.test(value.receiptQpc))
+    throw new Error("Native desktop barrier QPC receipt is invalid")
+  return { request: value.request, scene, source, receiptQpc: value.receiptQpc }
+}
+
+function refusal(value: Record<string, unknown>, data: Buffer): NativePacket {
+  if (
+    value.v !== 2 ||
+    data.length ||
+    value.status !== "unproven" ||
+    !["multiple_outputs", "target_changed", "source_changed", "stale_scene", "no_present", "superseded"].includes(
+      String(value.reason),
+    )
+  )
+    throw new Error("Native desktop barrier refusal is invalid")
+  return {
+    type: "barrier",
+    barrier: { ...receipt(value), status: "unproven", reason: value.reason as NativeBarrier["reason"] },
   }
-  if (value.type === "unchanged") {
-    if (data.length) throw new Error("Native desktop unchanged packet contains an image")
-    const frame = {
-      ...dimensions(value),
-      ...identity(value),
-      base: number(value.base, "base", Number.MAX_SAFE_INTEGER),
-    }
-    if (!Number.isSafeInteger(frame.base) || frame.base < 1 || frame.base >= frame.sequence)
-      throw new Error("Native desktop unchanged base is invalid")
-    return { type: "unchanged", frame }
+}
+
+function failure(value: Record<string, unknown>, data: Buffer): NativePacket {
+  if (value.v !== 1 || data.length || typeof value.code !== "string" || !/^[a-z_]{1,64}$/.test(value.code))
+    throw new Error("Native desktop error packet is invalid")
+  if (value.code === "native_fault") {
+    if (typeof value.fault !== "string" || !/^[0-9A-F]{8}:[A-Za-z0-9_.-]{1,48}\+0x[0-9A-F]{1,16}$/.test(value.fault))
+      throw new Error("Native desktop fault receipt is invalid")
+    return { type: "error", code: value.code, fault: value.fault }
   }
-  if (value.type !== "frame") throw new Error("Native desktop packet type is invalid")
+  if (value.fault !== undefined) throw new Error("Native desktop fault receipt is unexpected")
+  return { type: "error", code: value.code }
+}
+
+function unchanged(value: Record<string, unknown>, data: Buffer): NativePacket {
+  if (value.v !== 1) throw new Error("Native desktop unchanged protocol version is invalid")
+  if (data.length) throw new Error("Native desktop unchanged packet contains an image")
+  const frame = {
+    ...dimensions(value),
+    ...identity(value),
+    base: number(value.base, "base", Number.MAX_SAFE_INTEGER),
+  }
+  if (!Number.isSafeInteger(frame.base) || frame.base < 1 || frame.base >= frame.sequence)
+    throw new Error("Native desktop unchanged base is invalid")
+  return { type: "unchanged", frame }
+}
+
+function pixels(value: Record<string, unknown>, data: Buffer): NativePacket {
+  const proof =
+    value.v === 2
+      ? (() => {
+          const result = receipt(value)
+          if (
+            typeof value.presentQpc !== "string" ||
+            !/^[1-9]\d{0,18}$/.test(value.presentQpc) ||
+            BigInt(value.presentQpc) <= BigInt(result.receiptQpc) ||
+            result.source >= Number(value.sequence)
+          )
+            throw new Error("Native desktop post-action present is invalid")
+          return { ...result, presentQpc: value.presentQpc }
+        })()
+      : undefined
+  if (value.v === 1 && (value.request !== undefined || value.scene !== undefined || value.presentQpc !== undefined))
+    throw new Error("Native desktop unproven frame carried barrier metadata")
   return {
     type: "frame",
     frame: {
       ...dimensions(value),
       ...identity(value),
       ...image(value, data),
+      ...(proof ? { barrier: proof } : {}),
       acquisitionMs: number(value.acquisitionMs, "acquisition timing", 120_000),
       preparationMs: number(value.preparationMs, "preparation timing", 120_000),
     },
   }
+}
+
+function packet(header: unknown, data: Buffer): NativePacket {
+  const value = record(header)
+  if (value.v !== 1 && value.v !== 2) throw new Error("Native desktop protocol version is unsupported")
+  if (value.type === "barrier") return refusal(value, data)
+  if (value.type === "error") return failure(value, data)
+  if (value.type === "unchanged") return unchanged(value, data)
+  if (value.type === "frame") return pixels(value, data)
+  throw new Error("Native desktop packet type is invalid")
 }
 
 export class NativeFrameParser {
@@ -185,7 +255,7 @@ export class NativeFrameParser {
   }
 
   private accept(result: NativePacket): void {
-    if (result.type === "error") return
+    if (result.type === "error" || result.type === "barrier") return
     const frame = result.frame
     if (frame.sequence <= this.sequence) throw new Error("Native desktop frame sequence replayed")
     if (result.type === "unchanged") {

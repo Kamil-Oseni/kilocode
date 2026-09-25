@@ -34,7 +34,7 @@ const inspect = (states: [string, string, boolean][], request = "request"): Chie
 })
 
 describe("chiefActivity", () => {
-  it("shows distinct planned, working and report-ready states without treating a background start as completion", () => {
+  it("shows distinct planned, working, started and report-ready states without inventing liveness", () => {
     expect(chiefActivity(plan, [plan])?.branches.map((item) => item.state)).toEqual(["planned", "planned"])
     expect(chiefActivity(plan, [plan, task("docs", "running")])?.branches.map((item) => item.state)).toEqual([
       "working",
@@ -42,7 +42,7 @@ describe("chiefActivity", () => {
     ])
     expect(
       chiefActivity(plan, [plan, task("docs", "completed", '<task id="child" state="running">')])?.branches[0]?.state,
-    ).toBe("working")
+    ).toBe("started")
     expect(
       chiefActivity(plan, [plan, task("docs", "completed", '<task id="child" state="completed">')])?.branches[0]?.state,
     ).toBe("ready")
@@ -68,7 +68,7 @@ describe("chiefActivity", () => {
     ])
     expect(chiefActivity(plan, [plan, current, review])?.branches.map((item) => item.state)).toEqual([
       "reviewed",
-      "working",
+      "started",
     ])
     const tagged: ChiefPart = {
       ...review,
@@ -83,6 +83,35 @@ describe("chiefActivity", () => {
       state: { ...plan.state, metadata: { requestID: "next", goalCreatedAt: 2 } },
     }
     expect(chiefActivity(plan, [plan, current, next, review])?.branches[0]?.state).toBe("ready")
+  })
+
+  it("uses only a validated child and current session status to show active work", () => {
+    const parent = { ...plan, sessionID: "ses_parent" }
+    const start: ChiefPart = {
+      id: "start",
+      sessionID: "ses_parent",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { branch_id: "docs", background: true },
+        output: '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n',
+        metadata: {
+          parentSessionId: "ses_parent",
+          sessionId: "ses_child",
+          childMessageID: "msg_child",
+          selectedAgent: "researcher",
+          background: true,
+          requestID: "request",
+          goalCreatedAt: 1,
+        },
+      },
+    }
+    const parts = [parent, start]
+    expect(chiefActivity(parent, parts)?.branches[0]?.state).toBe("started")
+    expect(chiefActivity(parent, parts, { ses_child: { type: "busy" } })?.branches[0]?.state).toBe("working")
+    expect(chiefActivity(parent, parts, { ses_child: { type: "idle" } })?.branches[0]?.state).toBe("started")
+    const wrong = { ...start, state: { ...start.state, metadata: { ...start.state.metadata, requestID: "other" } } }
+    expect(chiefActivity(parent, [parent, wrong], { ses_child: { type: "busy" } })?.branches[0]?.state).toBe("started")
   })
 
   it("keeps unknown, cancelled and failed outcomes distinct and rejects missing plan evidence", () => {

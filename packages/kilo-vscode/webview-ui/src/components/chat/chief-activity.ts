@@ -1,3 +1,5 @@
+import type { SessionStatusInfo } from "../../types/messages"
+
 type State = { status: string; input?: Record<string, unknown>; output?: string; metadata?: Record<string, unknown> }
 
 export type ChiefPart = {
@@ -17,7 +19,7 @@ export type ChiefBranch = {
   access?: "read" | "edit"
   objective?: string
   report?: string
-  state: "planned" | "working" | "ready" | "pending" | "reviewed" | "failed" | "cancelled" | "unknown"
+  state: "planned" | "started" | "working" | "ready" | "pending" | "reviewed" | "failed" | "cancelled" | "unknown"
 }
 
 export type ChiefActivity = { branches: ChiefBranch[]; synthesized: boolean }
@@ -162,11 +164,16 @@ function editing(
   if ((reviewed || report.reviewed) && report.integration !== "integrated") return "pending" as const
 }
 
+function progress(task: ChiefPart | undefined, live: boolean) {
+  return live || task?.state.status === "running" ? ("working" as const) : ("started" as const)
+}
+
 function status(
   report: ReturnType<typeof inspect>[number] | undefined,
   task: ChiefPart | undefined,
   reviewed: boolean,
   access: ChiefBranch["access"],
+  live: boolean,
 ) {
   const state = report?.state
   const outcome = task?.state.output?.match(/<task\s+[^>]*state="(completed|error)"/)?.[1]
@@ -176,7 +183,7 @@ function status(
   if (edit) return edit
   if (reviewed || report?.reviewed) return "reviewed" as const
   if (state === "ready" || outcome === "completed") return "ready" as const
-  if (state === "working" || task) return "working" as const
+  if (state === "working" || task) return progress(task, live)
   return "planned" as const
 }
 
@@ -245,7 +252,11 @@ function receipts(plan: ChiefPart, branches: ChiefBranch[], later: readonly Chie
 }
 
 /** Project one saved Chief plan and later receipts into calm, truthful chat status. */
-export function chiefActivity(plan: ChiefPart, parts: readonly ChiefPart[]): ChiefActivity | undefined {
+export function chiefActivity(
+  plan: ChiefPart,
+  parts: readonly ChiefPart[],
+  statuses: Record<string, SessionStatusInfo> = {},
+): ChiefActivity | undefined {
   if (plan.tool !== "chief_plan" || plan.state.status !== "completed") return
   const branches = planned(plan.state.input?.proposals)
   if (!branches) return
@@ -266,7 +277,8 @@ export function chiefActivity(plan: ChiefPart, parts: readonly ChiefPart[]): Chi
     const task = tasks.at(-1)
     const launch = tasks.find((part) => started(plan, part, branches, [])?.length)
     const child = launch ? text(metadata(launch).sessionId) : undefined
-    const current = status(report, task, reviews.has(branch.id), branch.access)
+    const live = !!child && ["busy", "retry"].includes(statuses[child]?.type ?? "")
+    const current = status(report, task, reviews.has(branch.id), branch.access, live)
     return {
       ...branch,
       ...(child ? { child } : {}),

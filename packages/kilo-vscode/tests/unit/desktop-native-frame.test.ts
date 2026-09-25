@@ -36,6 +36,67 @@ function encode(header: Record<string, unknown>, image = png) {
 }
 
 describe("bounded native desktop frame protocol", () => {
+  const proof = {
+    request: "a".repeat(32),
+    scene: 7,
+    source: 1,
+    receiptQpc: "100",
+    presentQpc: "101",
+  }
+
+  it("accepts a request-identified v2 frame only with a later native present", () => {
+    const parser = new NativeFrameParser()
+    const result = parser.push(Buffer.concat([encode(target), encode({ ...target, v: 2, sequence: 2, ...proof })]))
+    expect(result[1]).toMatchObject({ type: "frame", frame: { sequence: 2, barrier: proof } })
+    expect(() =>
+      new NativeFrameParser().push(encode({ ...target, v: 2, sequence: 2, ...proof, presentQpc: "99" })),
+    ).toThrow(/post-action present/i)
+    expect(() => new NativeFrameParser().push(encode({ ...target, v: 2, sequence: 2, ...proof, source: 2 }))).toThrow(
+      /post-action present/i,
+    )
+    expect(() =>
+      new NativeFrameParser().push(encode({ ...target, v: 2, sequence: 2, ...proof, request: "wrong" })),
+    ).toThrow(/barrier request/i)
+    expect(() => new NativeFrameParser().push(encode({ ...target, sequence: 2, ...proof }))).toThrow(/unproven frame/i)
+  })
+
+  it("keeps an unproven v2 barrier separate from pixels and frame sequence", () => {
+    const parser = new NativeFrameParser()
+    const result = parser.push(
+      Buffer.concat([
+        encode(target),
+        encode({ v: 2, type: "barrier", status: "unproven", reason: "no_present", ...proof }, Buffer.alloc(0)),
+        encode({ ...target, sequence: 2 }),
+      ]),
+    )
+    expect(result.map((item) => item.type)).toEqual(["frame", "barrier", "frame"])
+    expect(() =>
+      new NativeFrameParser().push(
+        encode({
+          v: 2,
+          type: "barrier",
+          status: "unproven",
+          reason: "no_present",
+          ...proof,
+        }),
+      ),
+    ).toThrow(/barrier refusal/i)
+    expect(() =>
+      new NativeFrameParser().push(
+        encode(
+          {
+            v: 2,
+            type: "barrier",
+            status: "proven",
+            reason: "no_present",
+            ...proof,
+          },
+          Buffer.alloc(0),
+        ),
+      ),
+    ).toThrow(/barrier refusal/i)
+  })
+
   it("reads split and coalesced binary frames with a monotonic sequence", () => {
     const parser = new NativeFrameParser()
     const first = encode(target)

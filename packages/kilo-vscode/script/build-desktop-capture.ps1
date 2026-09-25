@@ -18,7 +18,7 @@ Remove-Item -LiteralPath $symbol -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $cache -Force -ErrorAction SilentlyContinue
 $ready = $false
 try {
-  $command = '"{0}" >nul && cl /nologo /std:c++20 /EHsc /O2 /Z7 /W4 /Zc:__cplusplus /Fo:"{1}" /Fe:"{2}" "{3}" d3d11.lib dxgi.lib windowscodecs.lib ole32.lib user32.lib /link /DEBUG:FULL /INCREMENTAL:NO /PDB:"{4}"' -f $vcvars, $object, $Output, $source, $symbol
+  $command = '"{0}" >nul && cl /nologo /std:c++20 /EHsc /O2 /Z7 /W4 /Zc:__cplusplus /Fo:"{1}" /Fe:"{2}" "{3}" d3d11.lib dxgi.lib windowscodecs.lib ole32.lib user32.lib advapi32.lib /link /DEBUG:FULL /INCREMENTAL:NO /PDB:"{4}"' -f $vcvars, $object, $Output, $source, $symbol
   & cmd.exe /s /c $command
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Output)) {
     throw "Desktop capture host compile failed with exit code $LASTEXITCODE"

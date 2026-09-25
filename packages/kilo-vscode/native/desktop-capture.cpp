@@ -4,14 +4,17 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <wincodec.h>
+#include <wincrypt.h>
 #include <wrl/client.h>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
 #include <iomanip>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -27,6 +30,8 @@ static constexpr UINT kPointerEdge = 1'024;
 static constexpr UINT kPointerBytes = 4 * 1'024 * 1'024;
 static constexpr UINT kMetadataBytes = 1'024 * 1'024;
 static constexpr UINT kOutputs = 8;
+static constexpr DWORD kBarrierBytes = 148;
+static constexpr auto kBarrierTimeout = std::chrono::milliseconds(750);
 static volatile LONG stopped = 0;
 static volatile LONG faulting = 0;
 static HANDLE receipt = INVALID_HANDLE_VALUE;
@@ -391,7 +396,10 @@ struct Target {
   UINT dpi;
   std::string id;
   std::string location;
+  std::string identity;
 };
+
+static std::string fingerprint(HWND window, DWORD pid);
 
 static bool equal(RECT first, RECT second) {
   return first.left == second.left && first.top == second.top &&
@@ -458,7 +466,7 @@ static void blit(BYTE* surface, UINT width, UINT height, RECT rect, RECT tile, c
                 pixels + size_t(row) * stride, size_t(span) * 4);
 }
 
-static Target target() {
+static Target target(bool bind = false) {
   HWND handle = GetForegroundWindow();
   if (!handle || !IsWindowVisible(handle)) throw Failure("no_foreground_window", "no visible foreground window");
   RECT rect{};
@@ -488,7 +496,7 @@ static Target target() {
   std::ostringstream location;
   location << "pid:" << pid << ";title:" << utf8(std::wstring(title, size_t(count))) << ";bounds:"
            << rect.left << ',' << rect.top << ',' << width << ',' << height;
-  return {handle, rect, desktop, dpi, id.str(), location.str()};
+  return {handle, rect, desktop, dpi, id.str(), location.str(), bind ? fingerprint(handle, pid) : ""};
 }
 
 static void same(const Target& original) {
@@ -496,6 +504,140 @@ static void same(const Target& original) {
   if (current.handle != original.handle || current.location != original.location ||
       !equal(current.desktop, original.desktop) || current.dpi != original.dpi)
     throw Failure("target_changed", "foreground target changed during capture");
+}
+
+struct Barrier {
+  std::string request;
+  uint64_t scene = 0;
+  uint64_t source = 0;
+  LONGLONG receipt = 0;
+  LONGLONG present = 0;
+  Clock::time_point started;
+  uint64_t handle = 0;
+  uint32_t pid = 0;
+  RECT rect{};
+  std::string identity;
+};
+
+static void unproven(HANDLE pipe, const Barrier& barrier, const char* reason) {
+  std::ostringstream header;
+  header << "{\"v\":2,\"type\":\"barrier\",\"status\":\"unproven\",\"reason\":\"" << reason
+         << "\",\"request\":" << quoted(barrier.request) << ",\"scene\":" << barrier.scene
+         << ",\"source\":" << barrier.source << ",\"receiptQpc\":\"" << barrier.receipt << "\"}";
+  packet(pipe, header.str(), nullptr, 0);
+}
+
+static uint32_t word(const BYTE* data) {
+  return uint32_t(data[0]) | uint32_t(data[1]) << 8 | uint32_t(data[2]) << 16 | uint32_t(data[3]) << 24;
+}
+
+static uint64_t wide(const BYTE* data) {
+  return uint64_t(word(data)) | uint64_t(word(data + 4)) << 32;
+}
+
+static std::string fingerprint(HWND window, DWORD pid) {
+  wchar_t cls[512]{};
+  if (!GetClassNameW(window, cls, 512)) return {};
+  const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (!process) return {};
+  FILETIME creation{}, exit{}, kernel{}, user{};
+  const bool times = GetProcessTimes(process, &creation, &exit, &kernel, &user) != 0;
+  CloseHandle(process);
+  if (!times) return {};
+  const uint64_t ticks = (uint64_t(creation.dwHighDateTime) << 32) | creation.dwLowDateTime;
+  const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, cls, -1, nullptr, 0, nullptr, nullptr);
+  if (bytes <= 1 || bytes > 2048) return {};
+  std::string name(size_t(bytes), '\0');
+  if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, cls, -1, name.data(), bytes, nullptr, nullptr)) return {};
+  name.pop_back();
+  const std::string source = "pid:" + std::to_string(pid) + ";start:" +
+    std::to_string(ticks + 504911232000000000ULL) + ";class:" + name;
+  HCRYPTPROV provider = 0;
+  if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return {};
+  HCRYPTHASH hash = 0;
+  const bool created = CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash) != 0;
+  std::array<BYTE, 32> digest{};
+  DWORD size = DWORD(digest.size());
+  const bool hashed = created && CryptHashData(hash, reinterpret_cast<const BYTE*>(source.data()), DWORD(source.size()), 0) &&
+    CryptGetHashParam(hash, HP_HASHVAL, digest.data(), &size, 0);
+  if (created) CryptDestroyHash(hash);
+  CryptReleaseContext(provider, 0);
+  if (!hashed || size != digest.size()) return {};
+  static constexpr char digits[] = "0123456789ABCDEF";
+  std::string value;
+  value.reserve(64);
+  for (BYTE byte : digest) {
+    value.push_back(digits[byte >> 4]);
+    value.push_back(digits[byte & 15]);
+  }
+  return value;
+}
+
+static bool exact(const Target& original, uint64_t handle, uint32_t pid, const RECT& rect,
+                  const std::string& identity) {
+  if (original.identity.empty() || original.identity != identity ||
+      handle != reinterpret_cast<uintptr_t>(original.handle) || !equal(rect, original.rect)) return false;
+  const HWND window = original.handle;
+  if (GetForegroundWindow() != window || !IsWindowVisible(window)) return false;
+  DWORD current = 0;
+  if (!GetWindowThreadProcessId(window, &current) || current != pid) return false;
+  return fingerprint(window, pid) == identity;
+}
+
+static std::optional<Barrier> receive(HANDLE input, const Target& original, uint64_t base, uint64_t& last,
+                                      HANDLE pipe, bool multi) {
+  DWORD available = 0;
+  if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) {
+    if (GetLastError() == ERROR_BROKEN_PIPE) return std::nullopt;
+    throw Failure("capture_failed", "capture control pipe unavailable");
+  }
+  if (available < kBarrierBytes) return std::nullopt;
+  BYTE data[kBarrierBytes]{};
+  DWORD received = 0;
+  if (!ReadFile(input, data, kBarrierBytes, &received, nullptr) || received != kBarrierBytes)
+    throw Failure("capture_failed", "capture barrier command incomplete");
+  if (std::memcmp(data, "RCB2", 4) || word(data + 4) != kBarrierBytes)
+    throw Failure("invalid_argument", "capture barrier version or length invalid");
+  const uint64_t scene = wide(data + 8);
+  const uint64_t source = wide(data + 16);
+  const uint64_t handle = wide(data + 24);
+  const uint32_t pid = word(data + 32);
+  const RECT rect{LONG(word(data + 36)), LONG(word(data + 40)), LONG(word(data + 44)), LONG(word(data + 48))};
+  const std::string request(reinterpret_cast<const char*>(data + 52), 32);
+  const std::string identity(reinterpret_cast<const char*>(data + 84), 64);
+  if (!scene || !source || !std::all_of(request.begin(), request.end(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }) || !std::all_of(identity.begin(), identity.end(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
+      })) throw Failure("invalid_argument", "capture barrier identity invalid");
+  LARGE_INTEGER tick{};
+  if (!QueryPerformanceCounter(&tick)) throw Failure("capture_failed", "QPC unavailable");
+  Barrier barrier{request, scene, source, tick.QuadPart, 0, Clock::now(), handle, pid, rect, identity};
+  if (scene <= last) {
+    unproven(pipe, barrier, "stale_scene");
+    return std::nullopt;
+  }
+  last = scene;
+  const bool matching = exact(original, handle, pid, rect, identity);
+  if (source != base) {
+    unproven(pipe, barrier, "source_changed");
+    return std::nullopt;
+  }
+  if (matching && !multi) return barrier;
+  unproven(pipe, barrier, matching ? "multiple_outputs" : "target_changed");
+  return std::nullopt;
+}
+
+static void samebarrier(const Target& original, const std::optional<Barrier>& barrier, HANDLE pipe) {
+  try {
+    same(original);
+    if (barrier && !exact(original, barrier->handle, barrier->pid, barrier->rect, barrier->identity))
+      throw Failure("target_changed", "post-action target identity changed");
+  }
+  catch (const Failure& error) {
+    if (barrier && error.code == "target_changed") unproven(pipe, *barrier, "target_changed");
+    throw;
+  }
 }
 
 struct Lease {
@@ -584,6 +726,10 @@ static bool presented(const DXGI_OUTDUPL_FRAME_INFO& info, bool ready) {
   return !ready || info.LastPresentTime.QuadPart || info.AccumulatedFrames || info.TotalMetadataBufferSize;
 }
 
+static bool later(const DXGI_OUTDUPL_FRAME_INFO& info, const std::optional<Barrier>& barrier) {
+  return barrier && !barrier->present && info.LastPresentTime.QuadPart > barrier->receipt && info.AccumulatedFrames;
+}
+
 static bool admit(bool next, bool owns, LONGLONG last, LONGLONG stamp) {
   if (!next && !owns) return false;
   if (next && !owns && last > stamp) return false;
@@ -610,7 +756,10 @@ static BOOL WINAPI control(DWORD signal) {
 }
 
 static void run(HANDLE pipe) {
-  auto original = target();
+  auto original = target(true);
+  const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+  if (!input || input == INVALID_HANDLE_VALUE || GetFileType(input) != FILE_TYPE_PIPE)
+    throw Failure("capture_failed", "capture control pipe is unavailable");
   ComPtr<IDXGIFactory1> factory;
   require(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(factory.GetAddressOf())), "CreateDXGIFactory1");
   std::vector<std::unique_ptr<Output>> outputs;
@@ -681,9 +830,15 @@ static void run(HANDLE pipe) {
   LONGLONG stamp = 0;
   uint64_t sequence = 0;
   uint64_t base = 0;
+  uint64_t scene = 0;
+  std::optional<Barrier> barrier;
   auto emitted = Clock::now();
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
-    same(original);
+    if (auto next = receive(input, original, base, scene, pipe, outputs.size() != 1)) {
+      if (barrier) unproven(pipe, *barrier, "superseded");
+      barrier = std::move(next);
+    }
+    samebarrier(original, barrier, pipe);
     auto begin = Clock::now();
     bool changed = false;
     for (auto& item : outputs) {
@@ -695,7 +850,7 @@ static void run(HANDLE pipe) {
       if (status == DXGI_ERROR_WAIT_TIMEOUT) continue;
       require(status, "AcquireNextFrame");
       Lease lease(item->duplicate.Get());
-      same(original);
+      samebarrier(original, barrier, pipe);
       stable(*item);
       const bool previous = touches(pointer, owner, original.rect);
       if (info.LastMouseUpdateTime.QuadPart) {
@@ -721,7 +876,8 @@ static void run(HANDLE pipe) {
       }
       if (pointer.visible && pointer.pixels.empty())
         throw Failure("unsupported_surface", "visible pointer has no captured shape");
-      const bool desktop = presented(info, item->ready) && affects(*item, info);
+      const bool fresh = later(info, barrier);
+      const bool desktop = fresh || (presented(info, item->ready) && affects(*item, info));
       if (desktop) {
         ComPtr<ID3D11Texture2D> source;
         require(resource.As(&source), "capture texture");
@@ -733,14 +889,22 @@ static void run(HANDLE pipe) {
           throw Failure("display_changed", "DXGI source dimensions changed before copy");
         item->context->CopySubresourceRegion(item->staging.Get(), 0, 0, 0, 0, source.Get(), 0, &item->box);
         item->ready = true;
+        if (fresh) barrier->present = info.LastPresentTime.QuadPart;
       }
       const bool moved = info.LastMouseUpdateTime.QuadPart || info.PointerShapeBufferSize;
       changed = changed || desktop || (moved &&
         (previous || touches(pointer, owner, original.rect)));
     }
     auto acquired = Clock::now();
-    same(original);
+    samebarrier(original, barrier, pipe);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
+    if (barrier && !barrier->present) {
+      if (Clock::now() - barrier->started >= kBarrierTimeout) {
+        unproven(pipe, *barrier, "no_present");
+        barrier.reset();
+      }
+      continue;
+    }
     if (!std::all_of(outputs.begin(), outputs.end(), [](const auto& item) { return item->ready; })) continue;
     if (!changed && base) {
       if (Clock::now() - emitted < std::chrono::milliseconds(50)) continue;
@@ -795,19 +959,25 @@ static void run(HANDLE pipe) {
       size = encode(imaging.Get(), width, height, width * 4, surface.data(), image);
     }
     auto prepared = Clock::now();
-    same(original);
+    samebarrier(original, barrier, pipe);
     for (const auto& item : outputs) stable(*item);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     std::ostringstream header;
     base = ++sequence;
     header << std::fixed << std::setprecision(3)
-           << "{\"v\":1,\"type\":\"frame\",\"sequence\":" << base
+           << "{\"v\":" << (barrier ? 2 : 1) << ",\"type\":\"frame\",\"sequence\":" << base
            << ",\"windowID\":" << quoted(original.id)
            << ",\"location\":" << quoted(original.location)
            << ",\"width\":" << width << ",\"height\":" << height
            << ",\"mime\":\"image/png\",\"acquisitionMs\":" << ms(begin, acquired)
-           << ",\"preparationMs\":" << ms(acquired, prepared) << '}';
+           << ",\"preparationMs\":" << ms(acquired, prepared);
+    if (barrier)
+      header << ",\"request\":" << quoted(barrier->request) << ",\"scene\":" << barrier->scene
+             << ",\"source\":" << barrier->source << ",\"receiptQpc\":\"" << barrier->receipt
+             << "\",\"presentQpc\":\"" << barrier->present << '"';
+    header << '}';
     packet(pipe, header.str(), image.data(), size);
+    barrier.reset();
     emitted = Clock::now();
   }
 }
@@ -890,6 +1060,27 @@ int wmain(int argc, wchar_t** argv) {
         info.TotalMetadataBufferSize = 0;
         info.AccumulatedFrames = 1;
         if (!presented(info, true)) throw Failure("capture_failed", "accumulated desktop frame was skipped");
+        const Barrier barrier{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 7, 1, 100, 0, Clock::now(), 1, 1,
+                              RECT{0, 0, 100, 100}, std::string(64, 'A')};
+        info.LastPresentTime.QuadPart = 99;
+        if (later(info, barrier)) throw Failure("capture_failed", "pre-action desktop present was admitted");
+        info.LastPresentTime.QuadPart = 100;
+        if (later(info, barrier)) throw Failure("capture_failed", "same-tick desktop present was admitted");
+        info.LastPresentTime.QuadPart = 101;
+        if (!later(info, barrier)) throw Failure("capture_failed", "post-action desktop present was missed");
+        info.AccumulatedFrames = 0;
+        if (later(info, barrier)) throw Failure("capture_failed", "pointer-only desktop event was admitted");
+        info.AccumulatedFrames = 1;
+        auto used = barrier;
+        used.present = 101;
+        if (later(info, used)) throw Failure("capture_failed", "duplicate post-action present was admitted");
+        BYTE command[kBarrierBytes]{};
+        std::memcpy(command, "RCB2", 4);
+        command[4] = BYTE(kBarrierBytes);
+        command[8] = 7;
+        command[16] = 1;
+        if (word(command + 4) != kBarrierBytes || wide(command + 8) != 7 || wide(command + 16) != 1)
+          throw Failure("capture_failed", "barrier wire header self-test failed");
         Output cropout;
         cropout.mode.ModeDesc.Width = 1920;
         cropout.mode.ModeDesc.Height = 1080;

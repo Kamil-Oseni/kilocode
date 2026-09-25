@@ -1,14 +1,17 @@
 import { Index, Show, createMemo, type Component } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
+import { getToolInfo } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
 import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { agentIcon } from "./task-tool-state"
 import { openSubagent } from "./open-subagent"
+import { backgroundAgentActivity } from "./background-agents"
 import { chiefActivity, type ChiefEvent, type ChiefPart } from "./chief-activity"
 
 const label = {
   planned: "Ready to start",
+  started: "Started",
   working: "Working",
   ready: "Report ready",
   pending: "Ready to apply",
@@ -24,7 +27,9 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
   const worktree = useWorktreeMode()
   const activity = createMemo(() => {
     const id = session.currentSessionID()
-    return id ? chiefActivity(props.plan, session.getSessionToolParts(id) as ChiefPart[]) : undefined
+    return id
+      ? chiefActivity(props.plan, session.getSessionToolParts(id) as ChiefPart[], session.allStatusMap())
+      : undefined
   })
   const summary = createMemo(() => {
     const current = activity()
@@ -35,6 +40,8 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
     if (attention) return `${attention} specialist${attention === 1 ? " needs" : "s need"} attention`
     const working = current.branches.filter((branch) => branch.state === "working").length
     if (working) return `${working} of ${current.branches.length} specialists working`
+    const started = current.branches.filter((branch) => branch.state === "started").length
+    if (started) return `${started} of ${current.branches.length} specialists started`
     const pending = current.branches.filter((branch) => branch.state === "pending").length
     if (pending) return `${pending} edit${pending === 1 ? "" : "s"} ready to apply`
     if (current.synthesized) return `${current.branches.length} specialist reports combined`
@@ -58,10 +65,8 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                       <Icon name={agentIcon(branch().specialist)} size="small" aria-hidden="true" />
                       <span class="chief-activity__identity">
                         <span class="chief-activity__name">{branch().name}</span>
-                        <Show when={branch().access}>
-                          <span class="chief-activity__access">
-                            {branch().access === "read" ? "Read only" : "Can edit"}
-                          </span>
+                        <Show when={branch().objective}>
+                          <span class="chief-activity__brief">{branch().objective}</span>
                         </Show>
                       </span>
                       <span class="chief-activity__status">
@@ -75,7 +80,26 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                     </summary>
                     <div class="chief-activity__content">
                       <Show when={branch().objective}>
-                        <span class="chief-activity__brief">{branch().objective}</span>
+                        <span class="chief-activity__objective">{branch().objective}</span>
+                      </Show>
+                      <Show when={branch().access}>
+                        <span class="chief-activity__access">
+                          {branch().access === "read" ? "Read only" : "Can edit"}
+                        </span>
+                      </Show>
+                      <Show when={branch().state === "working" ? branch().child : undefined}>
+                        {(child) => (
+                          <Show when={backgroundAgentActivity(session.getSessionToolParts(child()))}>
+                            {(part) => {
+                              const info = getToolInfo(part().tool, part().state.input)
+                              return (
+                                <span class="chief-activity__action">
+                                  {info.subtitle ? `${info.title}: ${info.subtitle}` : info.title}
+                                </span>
+                              )
+                            }}
+                          </Show>
+                        )}
                       </Show>
                       <Show
                         when={

@@ -25,6 +25,123 @@ async function until(check: () => boolean) {
 }
 
 describe("native desktop capture host", () => {
+  const visual = {
+    v: 1,
+    type: "frame",
+    sequence: 1,
+    windowID: "0x12AB",
+    location: "pid:42;title:Editor;bounds:0,0,100,80",
+    width: 100,
+    height: 80,
+    mime: "image/png",
+    acquisitionMs: 1,
+    preparationMs: 1,
+  }
+  const request = {
+    request: "a".repeat(32),
+    scene: 7,
+    source: 1,
+    windowID: visual.windowID,
+    location: visual.location,
+    identity: "A".repeat(64),
+  }
+
+  it("delivers only a matching post-action v2 image as barrier proof", async () => {
+    const errors: Error[] = []
+    const base = encode(visual).toString("base64")
+    const script = `const send=(h,i)=>{const j=Buffer.from(JSON.stringify(h));const p=Buffer.alloc(8+j.length+i.length);p.writeUInt32LE(j.length,0);j.copy(p,4);p.writeUInt32LE(i.length,4+j.length);i.copy(p,8+j.length);process.stdout.write(p)};process.stdout.write(Buffer.from(${JSON.stringify(base)},"base64"));let b=Buffer.alloc(0);process.stdin.on("data",c=>{b=Buffer.concat([b,c]);if(b.length<148)return;if(b.toString("ascii",0,4)!=="RCB2"||b.readUInt32LE(4)!==148||b.readBigUInt64LE(16)!==1n)return;const h=${JSON.stringify(visual)};h.v=2;h.sequence=2;h.request=b.toString("ascii",52,84);h.scene=Number(b.readBigUInt64LE(8));h.source=Number(b.readBigUInt64LE(16));h.receiptQpc="100";h.presentQpc="101";send(h,Buffer.from([137,80,78,71,13,10,26,10,2]))});setInterval(()=>{},1000)`
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script])
+    host.start()
+    await host.next()
+    const result = await host.barrierAfter(request)
+    expect(result.status).toBe("proven")
+    if (result.status === "proven") {
+      expect(result.frame.barrier).toMatchObject({ request: request.request, scene: 7, source: 1 })
+      expect(result.frame.data.at(-1)).toBe(2)
+    }
+    expect(errors).toHaveLength(0)
+    host.stop()
+  })
+
+  it("returns an unproven barrier without promoting cached pixels", async () => {
+    const errors: Error[] = []
+    const base = encode(visual).toString("base64")
+    const script = `const send=h=>{const j=Buffer.from(JSON.stringify(h));const p=Buffer.alloc(8+j.length);p.writeUInt32LE(j.length,0);j.copy(p,4);process.stdout.write(p)};process.stdout.write(Buffer.from(${JSON.stringify(base)},"base64"));process.stdin.once("data",b=>send({v:2,type:"barrier",status:"unproven",reason:"no_present",request:b.toString("ascii",52,84),scene:Number(b.readBigUInt64LE(8)),source:Number(b.readBigUInt64LE(16)),receiptQpc:"100"}));setInterval(()=>{},1000)`
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script])
+    host.start()
+    await host.next()
+    expect(await host.barrierAfter(request)).toMatchObject({ status: "unproven", reason: "no_present" })
+    expect(host.latest()?.sequence).toBe(1)
+    expect(host.latest()?.barrier).toBeUndefined()
+    expect(errors).toHaveLength(0)
+    host.stop()
+  })
+
+  it("rejects a request-matched proof if its target location changed", async () => {
+    const errors: Error[] = []
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(encode(visual))])
+    host.start()
+    const frame = await host.next()
+    const pending = host.barrierAfter(request)
+    expect(() =>
+      (host as unknown as { accept: (packet: unknown) => void }).accept({
+        type: "frame",
+        frame: {
+          ...frame,
+          sequence: 2,
+          location: "pid:43;title:Editor;bounds:0,0,100,80",
+          barrier: { request: request.request, scene: 7, source: 1, receiptQpc: "100", presentQpc: "101" },
+        },
+      }),
+    ).toThrow(/matching target/i)
+    host.stop()
+    await expect(pending).rejects.toThrow(/stopped/i)
+    expect(errors).toHaveLength(0)
+  })
+
+  it("rejects stale, retargeted, and interrupted barrier claims", async () => {
+    const errors: Error[] = []
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(encode(visual))])
+    host.start()
+    await host.next()
+    await expect(host.barrierAfter({ ...request, source: 2 })).rejects.toThrow(/target or scene/i)
+    await expect(host.barrierAfter({ ...request, location: "pid:99;title:Editor;bounds:0,0,100,80" })).rejects.toThrow(
+      /target or scene/i,
+    )
+    const pending = host.barrierAfter(request)
+    host.stop()
+    await expect(pending).rejects.toThrow(/stopped/i)
+    host.start()
+    expect((await host.next()).sequence).toBe(1)
+    expect(errors).toHaveLength(0)
+    host.stop()
+  })
+
+  it("ignores a delayed write failure from a stopped capture generation", async () => {
+    const errors: Error[] = []
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", child(encode(visual))])
+    host.start()
+    await host.next()
+    const childProcess = (
+      host as unknown as { process: { stdin: { write: (data: Buffer, callback: (error?: Error) => void) => boolean } } }
+    ).process
+    let complete: ((error?: Error) => void) | undefined
+    childProcess.stdin.write = (_data, callback) => {
+      complete = callback
+      return true
+    }
+    const pending = host.barrierAfter(request)
+    host.stop()
+    await expect(pending).rejects.toThrow(/stopped/i)
+    host.start()
+    expect((await host.next()).sequence).toBe(1)
+    complete?.(new Error("old pipe closed"))
+    await Bun.sleep(5)
+    expect(host.latest()?.sequence).toBe(1)
+    expect(errors).toHaveLength(0)
+    host.stop()
+  })
+
   it("keeps one bounded binary frame and clears it immediately on Stop", async () => {
     const errors: Error[] = []
     const header = {

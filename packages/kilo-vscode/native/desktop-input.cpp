@@ -405,7 +405,7 @@ public:
     if (seen.size() > kHistory) seen.erase(seen.begin());
     if (frame.type == "cancel") {
       cancelled.store(true, std::memory_order_release);
-      return reply("cancelled", "ok");
+      return reply("cancelled", active ? "in_flight" : "ok");
     }
     if (frame.type == "quiescent") {
       if (active && waiter) waiter(frame);
@@ -664,7 +664,7 @@ int selftest() {
   }
   Frame halt;
   if (parse(raw("cancel", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 2), halt) != Parse::valid ||
-      preempted.handle(halt).type != "cancelled") {
+      preempted.handle(halt).code != "in_flight") {
     { std::lock_guard<std::mutex> lock(test_mutex); test_released = true; }
     test_ready.notify_all();
     action.join();
@@ -728,7 +728,8 @@ int selftest() {
       dispatch.join();
       return false;
     }
-    const bool cancelled_reply = parsed && committed.handle(stop).type == "cancelled";
+    const Reply cancelled_reply = parsed ? committed.handle(stop) : Reply{};
+    const bool cancelled_ok = cancelled_reply.type == "cancelled" && cancelled_reply.code == "in_flight";
     Reply receipt_reply;
     std::atomic<bool> receipt_done = false;
     std::thread receipt_thread([&] {
@@ -745,7 +746,7 @@ int selftest() {
     test_ready.notify_all();
     dispatch.join();
     receipt_thread.join();
-    return cancelled_reply && waited && test_sent == 1 &&
+    return cancelled_ok && waited && test_sent == 1 &&
       (partial ? result.type == "unknown" && result.code == "partial" &&
                    result.accepted == 2 && result.attempted == 3 &&
                    receipt_reply.type == "unknown" && receipt_reply.code == "partial"

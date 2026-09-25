@@ -32,7 +32,7 @@ process.stdin.on("data",chunk=>{
     if(${JSON.stringify(mode)}==="silent" && item.type==="dispatch")return;
     const partial=${JSON.stringify(mode)}==="partial";
     const type=item.type==="hello"?"ready":item.type==="dispatch"?(partial?"unknown":"refused"):item.type==="cancel"?"cancelled":(partial?"unknown":"quiescent");
-    const code=item.type==="dispatch"?(partial?"partial":"unsupported"):item.type==="quiescent"&&partial?"partial":"ok";
+    const code=item.type==="dispatch"?(partial?"partial":"unsupported"):item.type==="quiescent"&&partial?"partial":item.type==="cancel"?"in_flight":"ok";
     const value={v:2,type,session:item.session,request:item.request,sequence:item.sequence,code,accepted:item.type==="dispatch"&&partial?1:0,attempted:item.type==="dispatch"&&partial?2:0};
     const body=Buffer.from(JSON.stringify(value));
     const packet=Buffer.alloc(body.length+8);

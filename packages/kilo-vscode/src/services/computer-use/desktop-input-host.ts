@@ -34,6 +34,7 @@ const codes = new Set([
   "unknown",
   "expired",
   "input_busy",
+  "in_flight",
 ])
 
 function frame(value: object, payload: Buffer = Buffer.alloc(0)): Buffer {
@@ -123,7 +124,7 @@ export class NativeInputHost {
     this.state = "blocked"
     this.stopping = (async () => {
       const cancelled = await this.send("cancel")
-      if (cancelled.type !== "cancelled" || cancelled.code !== "ok")
+      if (cancelled.type !== "cancelled" || !["ok", "in_flight"].includes(cancelled.code))
         throw new Error("Native input broker did not acknowledge cancellation")
       const settled = await this.send("quiescent")
       if (settled.type !== "quiescent" || settled.code !== "ok")

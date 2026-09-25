@@ -1,6 +1,6 @@
 import { Collapsible } from "@kilocode/kilo-ui/collapsible"
 import { Icon } from "@kilocode/kilo-ui/icon"
-import { createSignal, onCleanup, type Accessor, type ParentComponent } from "solid-js"
+import { createSignal, onCleanup, onMount, type Accessor, type ParentComponent } from "solid-js"
 import { useSession } from "../../context/session"
 import { useProvider } from "../../context/provider"
 import { useLanguage } from "../../context/language"
@@ -14,6 +14,7 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
   const provider = useProvider()
   const language = useLanguage()
   const [open, setOpen] = createSignal(false)
+  const [inline, setInline] = createSignal(false)
   const selection = () => session.selected(props.sessionID())
   const model = () => provider.findModel(selection())
   const mode = () => {
@@ -35,19 +36,40 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
   onCleanup(() => {
     for (const event of events) window.removeEventListener(event, reveal, true)
   })
+  let shell: HTMLDivElement | undefined
+  onMount(() => {
+    const container = shell?.closest(".prompt-input-container")
+    if (!container || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(([entry]) => {
+      const wide = entry.contentRect.width >= 600
+      setInline(wide)
+      if (wide) setOpen(false)
+    })
+    observer.observe(container)
+    onCleanup(() => observer.disconnect())
+  })
   let summary: HTMLButtonElement | undefined
   return (
     <div
+      ref={shell}
       class="composer-configuration-shell"
+      classList={{ "composer-configuration-shell--inline": inline() }}
       onKeyDown={(event) => {
-        if (event.key !== "Escape" || event.defaultPrevented) return
+        if (inline() || event.key !== "Escape" || event.defaultPrevented) return
         event.preventDefault()
         setOpen(false)
         summary?.focus()
       }}
     >
-      <Collapsible class="composer-configuration" variant="ghost" open={open()} onOpenChange={setOpen} forceMount>
-        <Collapsible.Trigger ref={summary}>
+      <Collapsible
+        class="composer-configuration"
+        classList={{ "composer-configuration--inline": inline() }}
+        variant="ghost"
+        open={open() || inline()}
+        onOpenChange={setOpen}
+        forceMount
+      >
+        <Collapsible.Trigger ref={summary} hidden={inline()}>
           <span class="composer-configuration-value">
             <span>
               {mode()} · {identity()}
@@ -60,7 +82,7 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
           </span>
           <Icon name="chevron-down" size="small" aria-hidden="true" />
         </Collapsible.Trigger>
-        <Collapsible.Content hidden={!open()} class="composer-configuration-body">
+        <Collapsible.Content hidden={!open() && !inline()} class="composer-configuration-body">
           <div class="composer-configuration-controls">{props.children}</div>
         </Collapsible.Content>
       </Collapsible>

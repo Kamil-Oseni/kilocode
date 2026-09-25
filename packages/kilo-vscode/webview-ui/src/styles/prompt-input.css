@@ -7,8 +7,7 @@
 }
 
 /* raya_change - editorial composer: a calm raised sheet with a hairline and a
-   generous radius, not a boxed VS Code input. Focus is a single quiet border
-   shift, no glow. */
+   generous radius, not a boxed VS Code input. */
 .prompt-input-container {
   position: relative;
   margin: var(--prompt-min-gutter);
@@ -16,15 +15,6 @@
   background-color: var(--surface-raised-base, var(--input-base, var(--vscode-input-background, #3c3c3c)));
   border: var(--raya-hairline) solid var(--border-base, var(--vscode-input-border, #3c3c3c));
   box-shadow: none;
-  transition: border-color var(--raya-duration-fast) var(--raya-ease-out);
-
-  /* raya_change - Eden focus: the neutral border quietly darkens, no colored
-     ring. A blue focus halo around the sheet (especially while a /goal pill is
-     in the field) read as slop, so focus never introduces an accent stroke. */
-  &:focus-within {
-    border-color: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 32%, transparent);
-    box-shadow: none;
-  }
 }
 
 .sr-only {
@@ -1135,7 +1125,7 @@
 }
 
 .composer-configuration-shell {
-  position: relative;
+  position: static;
   width: auto;
   max-width: min(38vw, 240px);
 }
@@ -1189,7 +1179,60 @@
 }
 
 .composer-configuration-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--raya-space-8);
+  align-items: center;
+}
+
+.composer-configuration-controls > * {
+  min-width: 0;
+}
+
+.prompt-input-hint-selectors .composer-configuration-controls [data-component="button"] {
+  border: var(--raya-hairline) solid transparent;
+  border-radius: var(--raya-radius-md);
+  box-shadow: none;
+}
+
+.prompt-input-hint-selectors .composer-configuration-controls [data-component="button"]:hover:not(:disabled),
+.prompt-input-hint-selectors .composer-configuration-controls [data-component="button"][data-expanded] {
+  border-color: transparent;
+}
+
+.composer-configuration-controls button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.composer-configuration-shell--inline {
+  max-width: none;
+}
+
+.composer-configuration--inline > [data-slot="collapsible-trigger"] {
+  display: none;
+}
+
+.composer-configuration--inline .composer-configuration-body {
+  position: static;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer-configuration--inline .composer-configuration-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--raya-space-4);
+}
+
+.composer-configuration--inline .model-selector-trigger-label {
+  max-width: 150px;
 }
 
 .prompt-input-hint-actions {

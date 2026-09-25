@@ -40,9 +40,7 @@
       fill: currentColor;
     }
 
-    /* Throughput badge sits to the right of the copy/feedback buttons,
-       beside them rather than beneath the message. */
-    [data-slot="assistant-throughput-inline"] {
+    [data-slot="assistant-meta-inline"] {
       margin-left: 6px;
       display: flex;
       align-items: center;
@@ -119,7 +117,6 @@
         color: var(--text-base);
       }
     }
-
   }
 
   [data-slot="message-part-title-filename"] {
@@ -155,7 +152,6 @@
     direction: rtl;
     text-align: left;
   }
-
 }
 
 /* Task tool child-session tool list (v1.0.25 style) */
@@ -765,7 +761,6 @@ html[data-theme="kilo-vscode"] [data-component="todos"] {
   }
 
   &[data-streaming] {
-
     /* Pulse the brain icon while streaming */
     [data-slot="reasoning-header"] [data-component="icon"] {
       animation: reasoning-pulse 2s ease-in-out infinite;

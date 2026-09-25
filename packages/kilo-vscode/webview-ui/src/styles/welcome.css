@@ -394,6 +394,8 @@
 
 .message-list-empty.raya-home {
   position: relative;
+  height: auto;
+  min-height: 100%;
   justify-content: flex-start;
   align-items: stretch;
   gap: 0;

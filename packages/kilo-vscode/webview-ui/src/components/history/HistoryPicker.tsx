@@ -1,5 +1,10 @@
 import { For, Show, createMemo, createSignal, type Component } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
+import { Button } from "@kilocode/kilo-ui/button"
+import { Dialog } from "@kilocode/kilo-ui/dialog"
+import { DropdownMenu } from "@kilocode/kilo-ui/dropdown-menu"
+import { useDialog } from "@kilocode/kilo-ui/context/dialog"
+import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { displayTitle } from "../../utils/session-title"
 import type { SessionInfo } from "../../types/messages"
@@ -20,6 +25,68 @@ export function shortTime(value: string, now = Date.now()) {
 
 export function ordered(items: SessionInfo[]) {
   return items.toSorted((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
+}
+
+export const HistoryRow: Component<{ item: SessionInfo; onSelect: () => void; variant?: "home" | "picker" }> = (
+  props,
+) => {
+  const session = useSession()
+  const dialog = useDialog()
+  const language = useLanguage()
+  const name = () => displayTitle(props.item.title, "Untitled chat")
+  const remove = () =>
+    dialog.show(() => (
+      <Dialog title={language.t("session.delete.title")} fit>
+        <div class="dialog-confirm-body">
+          <span>{language.t("session.delete.confirm", { name: name() })}</span>
+          <div class="dialog-confirm-actions">
+            <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
+              {language.t("common.cancel")}
+            </Button>
+            <Button
+              intent="destructive"
+              scale="large"
+              onClick={() => {
+                session.deleteSession(props.item.id)
+                dialog.close()
+              }}
+            >
+              {language.t("session.delete.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
+  return (
+    <div class="history-entry" role={props.variant === "picker" ? "listitem" : undefined}>
+      <button
+        type="button"
+        class={props.variant === "home" ? "raya-home__row" : "history-picker__row"}
+        classList={{ "history-picker__row--active": session.currentSessionID() === props.item.id }}
+        onClick={props.onSelect}
+      >
+        <span dir="auto">{name()}</span>
+        <span>{shortTime(props.item.updatedAt)}</span>
+      </button>
+      <DropdownMenu gutter={4} placement="bottom-end">
+        <DropdownMenu.Trigger class="history-entry__more" aria-label={`More options for ${name()}`}>
+          <span aria-hidden="true">•••</span>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item onSelect={() => session.exportSessionTranscript(props.item.id)}>
+              <Icon name="download" size="small" />
+              <DropdownMenu.ItemLabel>Export chat</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={remove}>
+              <Icon name="trash" size="small" />
+              <DropdownMenu.ItemLabel>Delete chat</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </div>
+  )
 }
 
 interface Props {
@@ -76,18 +143,7 @@ export const HistoryPicker: Component<Props> = (props) => {
           }
         >
           <For each={items()} fallback={<p class="history-picker__empty">No chats found</p>}>
-            {(item) => (
-              <button
-                type="button"
-                role="listitem"
-                class="history-picker__row"
-                classList={{ "history-picker__row--active": session.currentSessionID() === item.id }}
-                onClick={() => props.onSelect(item.id)}
-              >
-                <span dir="auto">{displayTitle(item.title, "Untitled chat")}</span>
-                <span>{shortTime(item.updatedAt)}</span>
-              </button>
-            )}
+            {(item) => <HistoryRow item={item} variant="picker" onSelect={() => props.onSelect(item.id)} />}
           </For>
         </Show>
       </div>

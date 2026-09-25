@@ -128,7 +128,9 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
               forceOpenFile={props.activeSearchPartFile}
               highlight={props.highlight}
             />
-            <MessageTime value={row().message} side="assistant" />
+            <Show when={!row().copy}>
+              <MessageTime value={row().message} side="assistant" />
+            </Show>
           </div>
         )}
       </Show>

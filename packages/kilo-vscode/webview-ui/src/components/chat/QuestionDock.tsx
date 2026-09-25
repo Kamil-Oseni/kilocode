@@ -503,7 +503,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                 type="button"
                 data-slot="question-skip"
                 disabled={store.sending}
-                onClick={last() ? submit : () => selectTab(store.tab + 1)}
+                onClick={() => {
+                  if (confirm() || (single() && last())) return submit()
+                  selectTab(store.tab + 1)
+                }}
               >
                 Skip
               </button>
@@ -511,9 +514,12 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                 type="button"
                 data-slot="question-next"
                 disabled={store.sending || (!confirm() && (store.answers[store.tab]?.length ?? 0) === 0)}
-                onClick={last() || confirm() ? submit : () => selectTab(store.tab + 1)}
+                onClick={() => {
+                  if (confirm() || (single() && last())) return submit()
+                  selectTab(store.tab + 1)
+                }}
               >
-                {last() || confirm() ? "Submit" : "Next"}
+                {confirm() || (single() && last()) ? "Submit" : last() ? "Review" : "Next"}
               </button>
             </div>
           </div>

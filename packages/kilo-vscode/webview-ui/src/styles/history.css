@@ -385,6 +385,53 @@ html[data-theme="kilo-vscode"] .history-tab-btn:focus-visible {
   color: #999;
   font-size: 12px;
 }
+
+.history-entry {
+  position: relative;
+  width: 100%;
+}
+
+.history-entry > .raya-home__row,
+.history-entry > .history-picker__row {
+  padding-right: 36px;
+}
+
+.history-entry__more {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 25px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #a8a8a8;
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.history-entry:hover .history-entry__more,
+.history-entry:focus-within .history-entry__more {
+  opacity: 1;
+}
+
+.history-entry__more:hover,
+.history-entry__more:focus-visible {
+  background: #454545;
+  color: #e0e0e0;
+}
+
+@media (hover: none) {
+  .history-entry__more {
+    opacity: 1;
+  }
+}
 .history-picker__empty {
   padding: 14px;
   color: #999;

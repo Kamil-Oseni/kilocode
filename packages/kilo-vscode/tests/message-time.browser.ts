@@ -22,6 +22,12 @@ for (const theme of ["light", "dark"]) {
 
       await page.goto(`/?state=${theme}-conversation`)
       await semantic(page, '[data-fixture] [data-component="message-time"]', 2)
+      const meta = page.locator('[data-slot="assistant-copy-wrapper"] [data-component="message-time"]')
+      await expect(meta).toHaveCount(1)
+      await expect(page.locator('[data-component="assistant-throughput"]')).toHaveCount(0)
+      const copy = await page.locator('[data-slot="assistant-copy-wrapper"] [data-component="icon-button"]').first().boundingBox()
+      const time = await meta.boundingBox()
+      expect(copy && time && Math.abs(copy.y - time.y) < 10).toBeTruthy()
       const user = page.locator('[data-fixture] [data-row="user"]')
       const footer = user.locator('[data-component="message-time"]')
       await expect(footer).toHaveCSS("opacity", "0")

@@ -1,8 +1,7 @@
 // raya_change - Raya primary webview branding
 import { type Component, For, Show, createSignal, onMount } from "solid-js"
 import { useSession } from "../../context/session"
-import { displayTitle } from "../../utils/session-title"
-import { HistoryPicker, ordered, shortTime } from "../history/HistoryPicker"
+import { HistoryPicker, HistoryRow, ordered } from "../history/HistoryPicker"
 
 interface WelcomeEmptyStateProps {
   onSelectSession?: (id: string) => void
@@ -31,12 +30,7 @@ export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
       <div class="raya-home__heading">Chats</div>
       <div class="raya-home__recent">
         <For each={chats().slice(0, 3)}>
-          {(item) => (
-            <button class="raya-home__row" onClick={() => props.onSelectSession?.(item.id)}>
-              <span dir="auto">{displayTitle(item.title, "Untitled chat")}</span>
-              <span>{shortTime(item.updatedAt)}</span>
-            </button>
-          )}
+          {(item) => <HistoryRow item={item} variant="home" onSelect={() => props.onSelectSession?.(item.id)} />}
         </For>
         <Show when={chats().length > 3}>
           <button class="raya-home__all" onClick={() => setOpen(true)}>

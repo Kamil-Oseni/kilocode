@@ -171,11 +171,6 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     vscode.postMessage({ type: "cancelBackgroundJob", jobID: agent.jobID, sessionID: id, requestID: pending })
   }
 
-  const background = () => {
-    const id = session.currentSessionID()
-    if (id) vscode.postMessage({ type: "backgroundSubagents", sessionID: id })
-  }
-
   const hideFinished = () => {
     const id = session.currentSessionID()
     if (!id) return
@@ -219,16 +214,6 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                 data-open={open() ? "" : undefined}
               />
             </button>
-          </Show>
-          <Show when={!props.readonly && foreground()}>
-            <Button
-              variant="ghost"
-              size="small"
-              aria-label={language.t("task.backgroundAgents.continueInBackground")}
-              onClick={background}
-            >
-              {language.t("task.backgroundAgents.continueInBackground")}
-            </Button>
           </Show>
           <Show when={!props.readonly && visible().some((agent) => agent.status !== "running")}>
             <Button

@@ -32,11 +32,9 @@ import { useLanguage } from "../../context/language"
 import { useServer } from "../../context/server"
 import { planDisplayPath } from "../../utils/plan-path"
 import { isRenderable, UPSTREAM_SUPPRESSED_TOOLS, PROMINENT_TOOLS } from "../../utils/transcript-parts"
-import { messageThroughput, formatTG } from "../../context/session-utils"
 import { color as timelineColor } from "../../utils/timeline/colors"
 import type { Part as TimelinePart } from "../../types/messages"
 import type { TimelineHighlight } from "../../utils/timeline/highlight"
-import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Button } from "@kilocode/kilo-ui/button"
 import { SuggestBar } from "./SuggestBar"
@@ -45,6 +43,7 @@ import { useVSCode } from "../../context/vscode"
 import { provenance } from "../../../../src/shared/memory-provenance"
 import { MemoryProvenance } from "./MemoryProvenance"
 import { ChiefActivity, ChiefReceipt } from "./ChiefActivity"
+import { MessageTime } from "./MessageTime"
 import { chiefActivity, chiefReceipt, type ChiefPart } from "./chief-activity"
 
 type PlanStep = { id: string; description: string; status?: string }
@@ -289,36 +288,6 @@ function BashToolCard(props: { part: ToolPart; defaultOpen: boolean; forceOpen?:
   )
 }
 
-/** Plain-text generation-speed value shown beside the copy/feedback buttons
- * on an assistant message.
- *
- * Renders as muted metadata — no icon, no background, no border — so it
- * reads as tertiary info rather than an interactive control. The
- * description on hover explains that the value is a weighted generation
- * rate across the turn's model-generation steps (output + reasoning
- * tokens over active generation time).
- *
- * Visibility is gated by the same `raya.showTokenThroughput`
- * toggle that previously controlled the multi-row badge. The metric only
- * renders when the message has at least one step-finish part carrying both
- * a token count and elapsed timing.
- */
-function ThroughputBadge(props: { metrics: { generation?: number } }) {
-  const language = useLanguage()
-  const speedText = createMemo(() => formatTG(props.metrics.generation, language.locale()))
-  const tooltip = createMemo(() => {
-    if (props.metrics.generation === undefined) {
-      return language.t("chat.throughput.tooltip.missing")
-    }
-    return language.t("chat.throughput.tooltip", { speed: speedText() })
-  })
-  return (
-    <Tooltip value={tooltip()} placement="top">
-      <span data-component="assistant-throughput">{speedText()}</span>
-    </Tooltip>
-  )
-}
-
 export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   const data = useData()
   const session = useSession()
@@ -329,11 +298,6 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   const open = createMemo(() => config().terminal_command_display !== "collapsed")
   const edit = createMemo(() => config().code_edit_display === "expanded")
   const mcp = createMemo(() => config().mcp_tool_display === "expanded")
-
-  // Throughput toggle lives on the shared DisplayProvider so every
-  // AssistantMessage renders against the same signal without posting its
-  // own requestThroughputSetting round-trip on mount.
-  const throughputVisible = createMemo(() => display.throughputVisible())
 
   const parts = createMemo(() => {
     const stored = props.parts ?? data.store.part?.[props.message.id]
@@ -347,20 +311,6 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
       // raya_change end
     })
   })
-  // Pull the weighted generation rate across the turn's step-finish parts
-  // (output + reasoning tokens over active generation duration) so the badge
-  // represents the turn as a whole rather than whichever step happened to
-  // finish most recently. We intentionally read from the full message parts
-  // in the data store rather than `props.parts` — the parent chunks
-  // messages into rows of ~8 parts, and step-finish may land in a row
-  // different from the one currently rendered.
-  const throughput = createMemo(() =>
-    messageThroughput(
-      (data.store.part?.[props.message.id] as TimelinePart[] | undefined) ??
-        (props.parts as TimelinePart[] | undefined) ??
-        ([] as TimelinePart[]),
-    ),
-  )
   // raya_change start - progressive disclosure. Consecutive "meta/read" tool
   // calls (get_goal, update_goal, read/grep/glob/list, etc.)
   // stacked as one-liners bloat the transcript, so a run of 2+ collapses into a
@@ -465,17 +415,9 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
         return h?.msgId === props.message.id && h?.partId === part.id
       })
 
-      // Throughput badge renders inside the copy/feedback action row of the
-      // text part that carries the copy button (the last text part of the
-      // message), pushed to the right of the buttons rather than below the
-      // message. Only built for that part so non-text parts skip the work.
-      const throughputEl = createMemo<JSX.Element | undefined>(() => {
-        if (!throughputVisible()) return undefined
-        const metrics = throughput()
-        if (!metrics) return undefined
-        if (part.id !== props.showAssistantCopyPartID) return undefined
-        return <ThroughputBadge metrics={metrics} />
-      })
+      const meta = createMemo<JSX.Element | undefined>(() =>
+        part.id === props.showAssistantCopyPartID ? <MessageTime value={props.message} side="assistant" /> : undefined,
+      )
 
       return (
         <Show
@@ -528,7 +470,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                                     forceOpenFile={forceOpen() ? props.forceOpenFile : undefined}
                                     reasoningAutoCollapse={display.reasoningAutoCollapse()}
                                     feedback={props.feedback}
-                                    throughput={throughputEl()}
+                                    meta={meta()}
                                     animate={
                                       part.type === "tool" &&
                                       ((part as unknown as ToolPart).state?.status === "pending" ||

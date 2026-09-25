@@ -3,10 +3,9 @@ import { Icon } from "@kilocode/kilo-ui/icon"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
-import { displayTitle } from "../../utils/session-title"
 import { KiloLogo } from "../chat/WelcomeEmptyState"
 import { CloudImportDialog } from "../chat/CloudImportDialog"
-import { HistoryPicker, ordered, shortTime } from "./HistoryPicker"
+import { HistoryPicker, HistoryRow, ordered } from "./HistoryPicker"
 import SessionList from "./SessionList"
 import CloudSessionList from "./CloudSessionList"
 
@@ -50,12 +49,7 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
       </div>
       <div class="history-page__body">
         <For each={chats().slice(0, 3)}>
-          {(item) => (
-            <button class="raya-home__row" onClick={() => props.onSelectSession(item.id)}>
-              <span dir="auto">{displayTitle(item.title, "Untitled chat")}</span>
-              <span>{shortTime(item.updatedAt)}</span>
-            </button>
-          )}
+          {(item) => <HistoryRow item={item} variant="home" onSelect={() => props.onSelectSession(item.id)} />}
         </For>
         <button class="raya-home__all" onClick={() => setOpen(true)}>
           View all ({chats().length})

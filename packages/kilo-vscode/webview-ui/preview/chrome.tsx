@@ -132,6 +132,7 @@ function assistantRow(parts: Part[]): TranscriptAssistantRow {
     message: assistant,
     parts,
     first: true,
+    copy: parts.filter((part) => part.type === "text").at(-1)?.id,
   }
 }
 

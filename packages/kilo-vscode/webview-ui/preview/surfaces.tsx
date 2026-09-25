@@ -71,9 +71,11 @@ export function wrap(sessionID: string, child: () => JSX.Element) {
 
 const Sessions: Component<{ children: JSX.Element }> = (props) => {
   const session = useSession()
+  const [items, setItems] = createSignal(listed)
   const value = {
     ...session,
-    sessions: () => listed,
+    sessions: items,
+    deleteSession: (id: string) => setItems((rows) => rows.filter((item) => item.id !== id)),
     loadSessions: () => {},
   }
   return createComponent(SessionContext.Provider, {
@@ -111,6 +113,20 @@ export const WelcomePreview: Component = () =>
 export const QuestionPreview: Component = () =>
   wrap("s1", () => (
     <VoiceProvider>
+      <QuestionReplies />
+    </VoiceProvider>
+  ))
+
+const QuestionReplies: Component = () => {
+  const session = useSession()
+  const value = {
+    ...session,
+    replyToQuestion: (id: string, answers: string[][]) => {
+      document.documentElement.dataset.previewQuestion = JSON.stringify({ id, answers })
+    },
+  }
+  return (
+    <SessionContext.Provider value={value as never}>
       <div
         class="chat-view"
         style={{ height: "100vh", display: "flex", "flex-direction": "column", "justify-content": "flex-end" }}
@@ -147,8 +163,9 @@ export const QuestionPreview: Component = () =>
           <PromptInput boxId="preview-question" />
         </div>
       </div>
-    </VoiceProvider>
-  ))
+    </SessionContext.Provider>
+  )
+}
 
 const CloudRecovery: Component = () => {
   const session = useSession()

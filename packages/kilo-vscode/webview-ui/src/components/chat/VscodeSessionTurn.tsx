@@ -173,7 +173,9 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
                       parts={row.parts}
                       showAssistantCopyPartID={showAssistantCopyPartID()}
                     />
-                    <MessageTime value={row.message as unknown as WebMessage} side="assistant" />
+                    <Show when={!showAssistantCopyPartID()}>
+                      <MessageTime value={row.message as unknown as WebMessage} side="assistant" />
+                    </Show>
                   </>
                 )}
               </For>

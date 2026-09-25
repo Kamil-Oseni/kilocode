@@ -82,6 +82,7 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.route({ request: "Inspect chat timestamps", agents }).needs_plan).toBe(false)
     expect(RayaChief.prompt(agents)).toContain("do not call chief_inspect, chief_review, or chief_synthesize")
     expect(RayaChief.prompt(agents)).toContain("do not expose internal session IDs, task IDs, branch IDs")
+    expect(RayaChief.prompt(agents)).toContain("An English request requires an English reply")
   })
 
   it("answers only self-contained conversational turns without a child", () => {

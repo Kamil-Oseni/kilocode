@@ -46,7 +46,7 @@ test("composer keeps a steady edge and shows configuration inline when it fits",
     await disclosure
       .getByRole("button", { name: "Auto", exact: true })
       .evaluate((node) => getComputedStyle(node).borderTopStyle),
-  ).toBe("solid")
+  ).toBe("dashed")
   await container.screenshot({ path: info.outputPath("wide-inline.png") })
   const before = await container.evaluate((node) => getComputedStyle(node).borderTopColor)
   await prompt.focus()
@@ -64,11 +64,11 @@ test("composer keeps a steady edge and shows configuration inline when it fits",
   expect(popover!.x).toBeGreaterThanOrEqual(0)
   expect(popover!.x + popover!.width).toBeLessThanOrEqual(320)
   await page.screenshot({ path: info.outputPath("narrow-popover.png"), fullPage: true })
-  expect(
-    await disclosure
-      .locator(".composer-configuration-controls")
-      .evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length),
-  ).toBe(2)
+  const tops = await disclosure.locator(".composer-configuration-controls").evaluate((node) => {
+    const items = [node.children[0], node.children[1], node.querySelector(".prompt-status-button")]
+    return items.map((item) => Math.round(item!.getBoundingClientRect().top))
+  })
+  expect(new Set(tops).size).toBe(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 

@@ -67,7 +67,9 @@ export namespace ChiefTaskBinding {
       const plan = record && ChiefBranches.matches(record, goal) ? record : undefined
       if (plan && request) throw new Error("Conflicting goal and request Chief plans")
       if (input.params.branch_id && !plan && !request)
-        throw new Error("No active Auto Chief branch plan matches this task")
+        throw new Error(
+          "No saved Auto Chief plan matches this branch ID. Call chief_plan first, or omit branch_id for an unplanned read-only task",
+        )
       if ((plan || request) && input.agent !== "auto") throw new Error("Only Auto Chief can run its planned branches")
       if ((plan || request) && RayaChief.phase(input.metadata) !== "task")
         throw new Error("Auto Chief branches can run only during the task phase")

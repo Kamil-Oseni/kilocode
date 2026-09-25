@@ -9,7 +9,6 @@ import { useSession } from "../../context/session"
 import { useServer } from "../../context/server"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
-import { useFeedback } from "../../context/feedback"
 import { AssistantMessage } from "./AssistantMessage"
 import { ErrorDisplay, type ErrorDisplayProps } from "./ErrorDisplay"
 import { MessageTime } from "./MessageTime"
@@ -21,6 +20,7 @@ interface TranscriptRowViewProps {
   index?: number
   timeline?: Date
   timing?: { start: number; end?: number; working: boolean }
+  section?: boolean
   onForkMessage?: (sessionId: string, messageId: string) => void
   /** Part behind the currently hovered/focused task-timeline bar, if any. */
   highlight?: () => TimelineHighlight | undefined
@@ -37,7 +37,6 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
   const server = useServer()
   const language = useLanguage()
   const vscode = useVSCode()
-  const feedback = useFeedback()
   const i18n = useI18n()
   const [now, setNow] = createSignal(Date.now())
 
@@ -69,6 +68,7 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
       data-row-key={props.row.key}
       data-row-index={props.index}
       data-turn={props.row.turn}
+      data-section-break={props.section ? "" : undefined}
       data-live={props.row.live ? "" : undefined}
       data-search-active={props.activeSearch ? "" : undefined}
     >
@@ -127,20 +127,6 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
               forceOpenPartID={props.activeSearchPartID}
               forceOpenFile={props.activeSearchPartFile}
               highlight={props.highlight}
-              feedback={{
-                enabled: feedback.telemetryEnabled(),
-                rating: feedback.getRating(row().message.id),
-                onRate: (next) =>
-                  feedback.rate({
-                    messageID: row().message.id,
-                    sessionID: row().message.sessionID,
-                    parentMessageID: row().message.parentID ?? "",
-                    providerID: row().message.providerID ?? row().message.model?.providerID ?? "",
-                    modelID: row().message.modelID ?? row().message.model?.modelID ?? "",
-                    variant: row().message.model?.variant,
-                    next,
-                  }),
-              }}
             />
             <MessageTime value={row().message} side="assistant" />
           </div>

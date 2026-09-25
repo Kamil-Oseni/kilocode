@@ -22,6 +22,13 @@ for (const theme of ["light", "dark"]) {
 
       await page.goto(`/?state=${theme}-conversation`)
       await semantic(page, '[data-fixture] [data-component="message-time"]', 2)
+      const user = page.locator('[data-fixture] [data-row="user"]')
+      const footer = user.locator('[data-component="message-time"]')
+      await expect(footer).toHaveCSS("opacity", "0")
+      await user.hover()
+      await expect(footer).toHaveCSS("opacity", "1")
+      await page.locator('[data-component="message-timeline"]').hover()
+      await expect(footer).toHaveCSS("opacity", "0")
       await semantic(page, '[data-fixture] [data-component="message-timeline"] time', 1)
       await expect(page.locator('[data-component="message-timeline"]')).toContainText("Today")
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)

@@ -8,7 +8,7 @@
  * State is not persisted — ratings reset on page reload / session switch.
  */
 
-import { createContext, useContext, createSignal, onCleanup } from "solid-js"
+import { createContext, createSignal, onCleanup } from "solid-js"
 import type { ParentComponent, Accessor } from "solid-js"
 import { useVSCode } from "./vscode"
 import type { ExtensionMessage } from "../types/messages"
@@ -62,10 +62,4 @@ export const FeedbackProvider: ParentComponent = (props) => {
   const value: FeedbackContextValue = { telemetryEnabled, getRating, rate }
 
   return <FeedbackContext.Provider value={value}>{props.children}</FeedbackContext.Provider>
-}
-
-export function useFeedback(): FeedbackContextValue {
-  const context = useContext(FeedbackContext)
-  if (!context) throw new Error("useFeedback must be used within a FeedbackProvider")
-  return context
 }

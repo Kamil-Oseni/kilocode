@@ -300,6 +300,14 @@ html[data-theme="kilo-vscode"] .chat-view [data-component="text-part"] [data-com
   line-height: 1.62;
 }
 
+/* Keep links and inline code in Raya's palette even when the host editor
+   provides an amber link or syntax color. Code blocks retain syntax colors. */
+html[data-theme="kilo-vscode"] .chat-view [data-component="markdown"] a,
+html[data-theme="kilo-vscode"] .chat-view [data-component="markdown"] :not(pre) > code,
+html[data-theme="kilo-vscode"] .chat-view [data-slot="user-message-text"] [data-highlight="file"] {
+  color: var(--raya-primary);
+}
+
 html[data-theme="kilo-vscode"] .chat-view [data-component="text-part"] [data-component="markdown"] :where(p, ul, ol) {
   margin-block: 0 var(--raya-space-12);
 }

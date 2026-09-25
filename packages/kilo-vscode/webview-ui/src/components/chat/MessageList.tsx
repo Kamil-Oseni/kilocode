@@ -979,6 +979,18 @@ export const MessageList: Component<MessageListProps> = (props) => {
   // Virtua continues to own completed history and stable live chunks, but not
   // the growing assistant suffix whose measurements would produce visible jumps.
   const partition = createMemo(() => partitionRows(rows(), direct()))
+  const sections = createMemo(() => {
+    const marked = new Set<string>()
+    const list = rows()
+    for (let i = 1; i < list.length; i += 1) {
+      const row = list[i]!
+      const prior = list[i - 1]!
+      if (row.type !== "assistant" || prior.type !== "assistant" || row.turn !== prior.turn) continue
+      if (row.parts[0]?.type !== "text" || !prior.parts.some((part) => part.type === "tool")) continue
+      marked.add(row.key)
+    }
+    return marked
+  })
   const tail = createMemo(() => partition().direct.map((row) => row.key))
   const lookup = createMemo(() => new Map(partition().direct.map((row) => [row.key, row])))
   const keys = createMemo(() => partition().virtual.map((row) => row.key))
@@ -1350,6 +1362,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
                     {(row, index) => (
                       <TranscriptRowView
                         row={row}
+                        section={sections().has(row.key)}
                         index={index()}
                         timeline={markers().get(row.key)}
                         timing={timing().get(row.turn)}
@@ -1366,6 +1379,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
                   {(key) => (
                     <TranscriptRowView
                       row={lookup().get(key)!}
+                      section={sections().has(key)}
                       timeline={markers().get(key)}
                       timing={timing().get(lookup().get(key)!.turn)}
                       onForkMessage={props.onForkMessage}
@@ -1385,6 +1399,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
               {(row) => (
                 <TranscriptRowView
                   row={row}
+                  section={sections().has(row.key)}
                   timeline={markers().get(row.key)}
                   timing={timing().get(row.turn)}
                   activeSearch={activeKey() === row.key}

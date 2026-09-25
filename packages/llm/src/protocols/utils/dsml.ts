@@ -17,13 +17,15 @@ export type Result = {
   readonly calls: ReadonlyArray<Call>
 }
 
-const names = ["tool_calls", "function_calls"] as const
+const names = ["tool_calls", "function_calls", "calls"] as const
 const bars = ["｜", "｜｜", "|", "||"] as const
-const opens = names.flatMap((name) => bars.map((bar) => `<${bar}DSML${bar}${name}>`))
-const close = /<\/[｜|]+DSML[｜|]+(?:tool_calls|function_calls)\s*>/
-const invoke = /<[｜|]+DSML[｜|]+invoke\s+name="([^"]+)"\s*>([\s\S]*?)<\/[｜|]+DSML[｜|]+invoke\s*>/g
+const opens = names.flatMap((name) =>
+  bars.flatMap((bar) => [`<${bar}DSML${bar}${name}>`, `<${bar}DSML${bar} ${name}>`]),
+)
+const close = /<\/[｜|]+DSML[｜|]+\s*(?:tool_calls|function_calls|calls)\s*>/
+const invoke = /<[｜|]+DSML[｜|]+\s*invoke\s+name="([^"]+)"\s*>([\s\S]*?)<\/[｜|]+DSML[｜|]+\s*invoke\s*>/g
 const parameter =
-  /<[｜|]+DSML[｜|]+parameter\s+name="([^"]+)"\s+string="(true|false)"\s*>([\s\S]*?)<\/[｜|]+DSML[｜|]+parameter\s*>/g
+  /<[｜|]+DSML[｜|]+\s*parameter\s+name="([^"]+)"\s+string="(true|false)"\s*>([\s\S]*?)<\/[｜|]+DSML[｜|]+\s*parameter\s*>/g
 
 const suffix = (text: string) => {
   const limit = Math.min(text.length, Math.max(...opens.map((item) => item.length)) - 1)
@@ -90,6 +92,7 @@ export function push(state: State, chunk: string): Result {
   }
 }
 
-export const flush = (state: State) => `${state.block ?? ""}${state.pending}`
+export const flush = (state: State) =>
+  state.block === undefined && !state.pending ? "" : "The provider returned an incomplete tool call."
 
 export * as Dsml from "./dsml"

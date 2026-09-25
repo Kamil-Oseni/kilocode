@@ -1,5 +1,6 @@
 // raya_change - refuse replacement children when an equivalent failed task is resumable
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import type { BackgroundJob } from "@/background/job"
 
 function fingerprint(input: Record<string, unknown>) {
   return JSON.stringify({
@@ -32,6 +33,36 @@ function rejected(messages: SessionV1.WithParts[], id: string) {
 }
 
 export namespace TaskRepeat {
+  /** A background completion must not start overlapping work while a sibling from the same request is still running. */
+  export function pending(messages: SessionV1.WithParts[], jobs: BackgroundJob.Info[], sessionID: string) {
+    const latest = messages.findLastIndex((row) => row.info.role === "user")
+    if (latest < 0) return false
+    const notice = messages[latest]
+    if (!notice?.parts.some((part) => part.type === "text" && part.synthetic && /^<task\s/.test(part.text)))
+      return false
+    const authored = messages
+      .slice(0, latest)
+      .findLast((row) => row.info.role === "user" && row.parts.some((part) => part.type === "text" && !part.synthetic))
+    if (!authored) return false
+    return jobs.some(
+      (job) =>
+        job.type === "task" &&
+        job.status === "running" &&
+        job.origins?.some((origin) => {
+          if (origin?.sessionID !== sessionID) return false
+          const at = messages.findIndex((row) => row.info.id === origin.messageID)
+          if (at < 0) return false
+          return (
+            messages
+              .slice(0, at)
+              .findLast(
+                (row) => row.info.role === "user" && row.parts.some((part) => part.type === "text" && !part.synthetic),
+              )?.info.id === authored.info.id
+          )
+        }),
+    )
+  }
+
   export function failed(
     messages: SessionV1.WithParts[],
     input: Record<string, unknown>,

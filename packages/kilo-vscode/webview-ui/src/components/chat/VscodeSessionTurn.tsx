@@ -27,7 +27,6 @@ import { useServer } from "../../context/server"
 import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
-import { useFeedback } from "../../context/feedback"
 import { visibleError } from "../../context/session-errors"
 import { coalesceToolRows } from "../../utils/transcript-parts"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
@@ -54,7 +53,6 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
   const session = useSession()
   const language = useLanguage()
   const vscode = useVSCode()
-  const feedback = useFeedback()
 
   const emptyParts: SDKPart[] = []
   const emptyDiffs: SnapshotFileDiff[] = []
@@ -174,20 +172,6 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
                       message={row.message}
                       parts={row.parts}
                       showAssistantCopyPartID={showAssistantCopyPartID()}
-                      feedback={{
-                        enabled: feedback.telemetryEnabled(),
-                        rating: feedback.getRating(row.message.id),
-                        onRate: (next) =>
-                          feedback.rate({
-                            messageID: row.message.id,
-                            sessionID: row.message.sessionID,
-                            parentMessageID: row.message.parentID,
-                            providerID: row.message.providerID,
-                            modelID: row.message.modelID,
-                            variant: (row.message as SDKAssistantMessage & { variant?: string }).variant,
-                            next,
-                          }),
-                      }}
                     />
                     <MessageTime value={row.message as unknown as WebMessage} side="assistant" />
                   </>

@@ -635,6 +635,44 @@ describe("OpenAI Chat route", () => {
       expect(response.events.some((event) => JSON.stringify(event).includes("DSML"))).toBe(false)
     }),
   )
+  it.effect("dispatches spaced DSML calls used by DeepSeek instead of rendering them", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ content: "One specialist has finished.\n<｜｜DSML｜｜ ca" }),
+        deltaChunk({
+          content:
+            'lls><｜｜DSML｜｜ invoke name="lookup"><｜｜DSML｜｜ parameter name="query" string="true">status</｜｜DSML｜｜ parameter>',
+        }),
+        deltaChunk({ content: "</｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>" }),
+        deltaChunk({}, "stop"),
+      )
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup status", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("One specialist has finished.\n")
+      expect(response.toolCalls).toMatchObject([{ name: "lookup", input: { query: "status" } }])
+      expect(response.events.some((event) => JSON.stringify(event).includes("DSML"))).toBe(false)
+    }),
+  )
+  it.effect("redacts incomplete DSML markup from assistant text", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ content: '<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name="lookup">' }),
+        deltaChunk({}, "stop"),
+      )
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup status", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("The provider returned an incomplete tool call.")
+      expect(response.toolCalls).toEqual([])
+    }),
+  )
   // kilocode_change end
 
   it.effect("does not finalize streamed tool calls without a finish reason", () =>

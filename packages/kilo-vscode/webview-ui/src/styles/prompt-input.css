@@ -1180,7 +1180,7 @@
 
 .composer-configuration-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   gap: var(--raya-space-8);
   align-items: center;
 }
@@ -1189,15 +1189,28 @@
   min-width: 0;
 }
 
-.prompt-input-hint-selectors .composer-configuration-controls [data-component="button"] {
-  border: var(--raya-hairline) solid transparent;
-  border-radius: var(--raya-radius-md);
-  box-shadow: none;
+.composer-configuration-controls > :first-child {
+  grid-column: 1;
+  grid-row: 1;
 }
 
-.prompt-input-hint-selectors .composer-configuration-controls [data-component="button"]:hover:not(:disabled),
-.prompt-input-hint-selectors .composer-configuration-controls [data-component="button"][data-expanded] {
-  border-color: transparent;
+.composer-configuration-controls > :nth-child(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.composer-configuration-controls > :has(.prompt-status-button) {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.composer-configuration-controls > :not(:first-child):not(:nth-child(2)):not(:has(.prompt-status-button)) {
+  grid-row: 2;
+}
+
+.composer-configuration-controls > :nth-child(2) [data-component="button"] {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .composer-configuration-controls button:focus-visible {

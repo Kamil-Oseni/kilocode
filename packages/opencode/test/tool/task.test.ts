@@ -238,8 +238,38 @@ describe("request-bound Chief plan prerequisite", () => {
           params: { access: "edit", subagent_type: "designer" },
         }).pipe(Effect.exit)
         expect(Exit.isFailure(binding)).toBe(true)
+        yield* storage.remove(["raya", "chief", "request-plan", chat.id, "active"])
+        const missing = yield* ChiefTaskBinding.load({
+          storage,
+          sessions,
+          branches: ChiefBranches.make(storage),
+          sessionID: chat.id,
+          agent: "auto",
+          metadata: (yield* sessions.get(chat.id)).metadata,
+          callID: "unplanned",
+          params: { branch_id: "invented", access: "read" },
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(missing)).toBe(true)
+        if (Exit.isFailure(missing)) expect(Cause.pretty(missing.cause)).toContain("Call chief_plan first")
         const tool = yield* TaskTool
         const def = yield* tool.init()
+        const advice = yield* def
+          .execute(
+            { description: "Unplanned research", branch_id: "invented", access: "read" },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "auto",
+              abort: new AbortController().signal,
+              extra: { promptOps: stubOps() },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(advice)).toBe(true)
+        if (Exit.isFailure(advice)) expect(Cause.pretty(advice.cause)).toContain("Call chief_plan first")
         const run = yield* def
           .execute(
             { description: "Unbound task", prompt: "Change files", subagent_type: "designer", access: "edit" },

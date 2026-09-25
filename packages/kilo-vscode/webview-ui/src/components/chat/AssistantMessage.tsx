@@ -215,6 +215,21 @@ type ToolStateProps = {
   status?: string
 }
 
+function notice(part: SDKPart) {
+  // Older provider streams could persist DSML markup as assistant text.
+  if (part.type === "text" && /^\s*<[\s｜|]*DSML[\s｜|]*calls\s*>/i.test(part.text))
+    return "A tool request could not be displayed. Raya continued in the next step."
+  if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "error") return
+  const error = part.state.error
+  if (
+    error.includes("No active Auto Chief branch plan matches this task") ||
+    error.includes("No saved Auto Chief plan matches this branch ID")
+  )
+    return "This specialist needs a saved Chief plan. No worker was started."
+  if (error.includes("Background specialist still running for this request"))
+    return "A specialist is still working on this request. Raya is waiting for its result."
+}
+
 function TodoToolCard(props: { part: ToolPart; forceOpen?: boolean }) {
   const render = ToolRegistry.render(props.part.tool)
   const state = () => props.part.state as ToolStateProps
@@ -402,6 +417,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   const ContentRow: Component<{ part: SDKPart }> = (rp) => {
     const part = rp.part
     {
+      const text = notice(part)
       // Upstream PART_MAPPING["tool"] returns null for todowrite/todoread,
       // so we detect them here and render via ToolRegistry directly.
       const isUpstreamSuppressed =
@@ -491,7 +507,11 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                             <Show
                               when={isUpstreamSuppressed}
                               fallback={
-                                chiefPlan() ? (
+                                text ? (
+                                  <div class="vscode-session-tool-note" role="note">
+                                    {text}
+                                  </div>
+                                ) : chiefPlan() ? (
                                   <ChiefActivity plan={chiefPlan()!} />
                                 ) : chiefEvents() !== undefined ? (
                                   <ChiefReceipt events={chiefEvents()!} />

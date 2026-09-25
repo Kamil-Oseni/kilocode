@@ -95,7 +95,8 @@ const BaseParameterFields = {
       'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" only for an active goal with authorized file changes. Auto tasks without saved authority default to read-only; other agents retain legacy behavior.',
   }),
   branch_id: Schema.optional(Schema.String).annotate({
-    description: "Exact branch ID from a saved Auto Chief plan. Required when the active goal has a branch plan.",
+    description:
+      "Use only an exact branch ID returned by a successful chief_plan call for this request. Never invent one from a task name. Omit this field entirely when no plan was saved; a read-only unplanned task does not need it.",
   }),
   // kilocode_change end
   // raya_change end
@@ -204,6 +205,21 @@ export const TaskTool = Tool.define(
       // kilocode_change start - reuse an equivalent failed child instead of spawning replacements
       const repeat = TaskRepeat.guard(ctx.messages, params)
       if (repeat) return yield* Effect.fail(new Error(repeat))
+      if (
+        ctx.agent === "auto" &&
+        !branch &&
+        !params.task_id &&
+        TaskRepeat.pending(
+          yield* sessions.messages({ sessionID: ctx.sessionID }),
+          yield* background.list(),
+          ctx.sessionID,
+        )
+      )
+        return yield* Effect.fail(
+          new Error(
+            "Background specialist still running for this request. Wait for its result; do not start overlapping work.",
+          ),
+        )
       // kilocode_change end
       if (resumed && resumed.parentID !== ctx.sessionID) {
         return yield* Effect.fail(

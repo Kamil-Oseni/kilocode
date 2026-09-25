@@ -399,6 +399,21 @@
   padding-bottom: 6px;
 }
 
+/* Separate a substantive reply from the tool activity that led to it. */
+.vscode-session-turn[data-section-break]::before {
+  content: "";
+  width: 100%;
+  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  margin: var(--raya-space-8) 0 var(--raya-space-6);
+}
+
+.vscode-session-tool-note {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  line-height: var(--line-height-normal);
+}
+
 .vscode-session-turn[data-row="assistant"]:has(> .vscode-session-turn-assistant:empty) {
   padding-bottom: 0;
 }
@@ -462,6 +477,42 @@
   font-variant-numeric: tabular-nums;
   line-height: var(--line-height-normal);
   white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--raya-duration-fast, 120ms) ease;
+}
+
+.vscode-session-turn-user:hover [data-component="message-time"],
+.vscode-session-turn-user:focus-within [data-component="message-time"],
+.vscode-session-turn-assistant:hover [data-component="message-time"],
+.vscode-session-turn-assistant:focus-within [data-component="message-time"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Keep message controls in the keyboard order while leaving the resting
+   transcript free of action icons and generation metrics. */
+.chat-view [data-slot="user-message-copy-wrapper"],
+.chat-view [data-slot="assistant-copy-wrapper"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--raya-duration-fast, 120ms) ease;
+}
+
+.chat-view [data-component="user-message"]:hover [data-slot="user-message-copy-wrapper"],
+.chat-view [data-component="user-message"]:focus-within [data-slot="user-message-copy-wrapper"],
+.chat-view [data-component="text-part"]:hover [data-slot="assistant-copy-wrapper"],
+.chat-view [data-component="text-part"]:focus-within [data-slot="assistant-copy-wrapper"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="message-time"],
+  .chat-view [data-slot="user-message-copy-wrapper"],
+  .chat-view [data-slot="assistant-copy-wrapper"] {
+    transition: none;
+  }
 }
 
 [data-component="message-time"][data-side="user"] {

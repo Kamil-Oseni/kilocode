@@ -25,7 +25,11 @@ export const RoutinesPreview: Component = () =>
             get children() {
               return createComponent(DialogProvider, {
                 get children() {
-                  return createComponent(RoutinesView, { workspace: "C:/Projects/preview", focus })
+                  return createComponent(RoutinesView, {
+                    workspace: "C:/Projects/preview",
+                    focus,
+                    onAskRaya: (text: string) => document.documentElement.setAttribute("data-routines-request", text),
+                  })
                 },
               })
             },

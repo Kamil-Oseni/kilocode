@@ -52,3 +52,17 @@ test("history starts with three chats and View all opens a scrollable, categoriz
   await picker.getByRole("button", { name: "Close history" }).click()
   await expect(picker).toHaveCount(0)
 })
+
+test("History manages and deletes multiple chats in the new layout", async ({ page }) => {
+  await page.setViewportSize({ width: 683, height: 800 })
+  await page.goto("/?state=dark-history")
+  await page.getByRole("button", { name: "Manage chats" }).click()
+  await expect(page.locator('.history-picker[data-embedded="true"]')).toBeVisible()
+  await page.getByRole("button", { name: "Select chats" }).click()
+  await page.locator('.history-picker[data-embedded="true"]').getByRole("checkbox").first().check()
+  await expect(page.getByRole("toolbar", { name: "Selected chats" })).toContainText("1 selected")
+  await page.getByRole("button", { name: "Delete selected" }).click()
+  await expect(page.getByRole("dialog", { name: "Delete selected chats?" })).toContainText("1 chats")
+  await page.getByRole("button", { name: "Delete chats" }).click()
+  await expect(page.getByRole("toolbar", { name: "Selected chats" })).toHaveCount(0)
+})

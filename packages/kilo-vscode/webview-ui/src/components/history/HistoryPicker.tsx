@@ -27,13 +27,20 @@ export function ordered(items: SessionInfo[]) {
   return items.toSorted((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
 }
 
-export const HistoryRow: Component<{ item: SessionInfo; onSelect: () => void; variant?: "home" | "picker" }> = (
-  props,
-) => {
+export const HistoryRow: Component<{
+  item: SessionInfo
+  onSelect: () => void
+  variant?: "home" | "picker"
+  selecting?: boolean
+  selected?: boolean
+  onToggle?: () => void
+}> = (props) => {
   const session = useSession()
   const dialog = useDialog()
   const language = useLanguage()
   const name = () => displayTitle(props.item.title, "Untitled chat")
+  const [renaming, setRenaming] = createSignal(false)
+  const [title, setTitle] = createSignal("")
   const remove = () =>
     dialog.show(() => (
       <Dialog title={language.t("session.delete.title")} fit>
@@ -59,21 +66,58 @@ export const HistoryRow: Component<{ item: SessionInfo; onSelect: () => void; va
     ))
   return (
     <div class="history-entry" role={props.variant === "picker" ? "listitem" : undefined}>
-      <button
-        type="button"
-        class={props.variant === "home" ? "raya-home__row" : "history-picker__row"}
-        classList={{ "history-picker__row--active": session.currentSessionID() === props.item.id }}
-        onClick={props.onSelect}
+      <Show when={props.selecting}>
+        <input type="checkbox" aria-label={`Select ${name()}`} checked={props.selected} onChange={props.onToggle} />
+      </Show>
+      <Show
+        when={renaming()}
+        fallback={
+          <button
+            type="button"
+            class={props.variant === "home" ? "raya-home__row" : "history-picker__row"}
+            classList={{ "history-picker__row--active": session.currentSessionID() === props.item.id }}
+            onClick={() => (props.selecting ? props.onToggle?.() : props.onSelect())}
+          >
+            <span dir="auto">{name()}</span>
+            <span>{shortTime(props.item.updatedAt)}</span>
+          </button>
+        }
       >
-        <span dir="auto">{name()}</span>
-        <span>{shortTime(props.item.updatedAt)}</span>
-      </button>
+        <form
+          class="history-entry__rename"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (title().trim()) session.renameSession(props.item.id, title().trim())
+            setRenaming(false)
+          }}
+        >
+          <input
+            aria-label={`Rename ${name()}`}
+            value={title()}
+            onInput={(event) => setTitle(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setRenaming(false)
+            }}
+            autofocus
+          />
+          <button type="submit">Save</button>
+        </form>
+      </Show>
       <DropdownMenu gutter={4} placement="bottom-end">
         <DropdownMenu.Trigger class="history-entry__more" aria-label={`More options for ${name()}`}>
           <span aria-hidden="true">•••</span>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content>
+          <DropdownMenu.Content class="history-entry__menu">
+            <DropdownMenu.Item
+              onSelect={() => {
+                setTitle(props.item.title ?? "")
+                setRenaming(true)
+              }}
+            >
+              <Icon name="edit" size="small" />
+              <DropdownMenu.ItemLabel>Rename chat</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
             <DropdownMenu.Item onSelect={() => session.exportSessionTranscript(props.item.id)}>
               <Icon name="download" size="small" />
               <DropdownMenu.ItemLabel>Export chat</DropdownMenu.ItemLabel>
@@ -91,8 +135,13 @@ export const HistoryRow: Component<{ item: SessionInfo; onSelect: () => void; va
 
 interface Props {
   onSelect: (id: string) => void
-  onClose: () => void
+  onClose?: () => void
   onRoutines?: () => void
+  embedded?: boolean
+  items?: SessionInfo[]
+  selecting?: boolean
+  selected?: ReadonlySet<string>
+  onToggle?: (id: string) => void
 }
 
 export const HistoryPicker: Component<Props> = (props) => {
@@ -100,7 +149,7 @@ export const HistoryPicker: Component<Props> = (props) => {
   const [query, setQuery] = createSignal("")
   const [kind, setKind] = createSignal("all")
   const items = createMemo(() =>
-    ordered(session.sessions()).filter((item) => {
+    ordered(props.items ?? session.sessions()).filter((item) => {
       if (kind() === "chats" && item.parentID) return false
       if (kind() === "specialists" && !item.parentID) return false
       return displayTitle(item.title, "Untitled chat").toLocaleLowerCase().includes(query().trim().toLocaleLowerCase())
@@ -108,7 +157,12 @@ export const HistoryPicker: Component<Props> = (props) => {
   )
 
   return (
-    <div class="history-picker" role="dialog" aria-label="All history">
+    <div
+      class="history-picker"
+      data-embedded={props.embedded}
+      role={props.embedded ? undefined : "dialog"}
+      aria-label="All history"
+    >
       <label class="history-picker__search">
         <Icon name="magnifying-glass" size="small" aria-hidden="true" />
         <input
@@ -118,7 +172,7 @@ export const HistoryPicker: Component<Props> = (props) => {
           value={query()}
           onInput={(event) => setQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape") props.onClose()
+            if (event.key === "Escape") props.onClose?.()
           }}
         />
       </label>
@@ -129,9 +183,11 @@ export const HistoryPicker: Component<Props> = (props) => {
           <option value="specialists">Specialists</option>
           <option value="routines">Routines</option>
         </select>
-        <button type="button" aria-label="Close history" onClick={props.onClose}>
-          <Icon name="close" size="small" />
-        </button>
+        <Show when={!props.embedded}>
+          <button type="button" aria-label="Close history" onClick={props.onClose}>
+            <Icon name="close" size="small" />
+          </button>
+        </Show>
       </div>
       <div class="history-picker__list" role="list">
         <Show
@@ -143,7 +199,16 @@ export const HistoryPicker: Component<Props> = (props) => {
           }
         >
           <For each={items()} fallback={<p class="history-picker__empty">No chats found</p>}>
-            {(item) => <HistoryRow item={item} variant="picker" onSelect={() => props.onSelect(item.id)} />}
+            {(item) => (
+              <HistoryRow
+                item={item}
+                variant="picker"
+                selecting={props.selecting}
+                selected={props.selected?.has(item.id)}
+                onToggle={() => props.onToggle?.(item.id)}
+                onSelect={() => props.onSelect(item.id)}
+              />
+            )}
           </For>
         </Show>
       </div>

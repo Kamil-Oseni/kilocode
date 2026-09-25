@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 - Todo, Routines and History redesign handoff
+
+The source now presents Todo as a prioritized card workspace with a visual timer and Raya planning entry, Routines as a workforce/team overview over the existing durable editors, and History as one consistent searchable surface for local/worktree/cloud chats. Local chats support inline rename, export, confirmed delete and confirmed multi-select deletion. Focused Todo, Routines, History and cloud stale-response checks pass, as do extension/webview typecheck and lint. Commit, push and installation are still pending at this checkpoint.
+
+After installing and reloading, inspect the exact rendered menu, Todo timer and task list, Routines overview/detail, and local/cloud History at narrow and wide widths. Then run live provider tasks: create a violin-learning parent Todo with sensible subtasks/reminders from main chat, accept its proposal, verify persistence after restart, and create a small worker organization that can delegate a job. The source preview only proves prompt handoff and existing editor wiring. Subtasks currently display but do not have individual completion controls; evaluate that interaction next. Preserve the existing sensitive-action policy and Routine receipts. Do not mark agent execution or Autonomous Desktop complete from this UI slice.
+
 ## ChatGPT 2026-09-25 05:18 America/Toronto - language verification handoff
 
 One fresh `auto`/DeepSeek English request returned an English final answer after Chief routed it to a generalist. The temporary verification session was deleted. Re-test the longer English two-specialist workflow in the installed host; the one-sentence check does not prove language consistency across child reports and synthesis. The other live checks below remain.

@@ -5,9 +5,8 @@
  * Header/back button/import button are owned by the parent HistoryView.
  */
 
-import { Component, Show, createSignal, createEffect, on, onMount, onCleanup } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, createEffect, on, onMount, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { List } from "@kilocode/kilo-ui/list"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { useVSCode } from "../../context/vscode"
@@ -64,6 +63,21 @@ const CloudSessionList: Component<CloudSessionListProps> = (props) => {
 
   const [state, setState] = createStore<{ sessions: DisplaySession[] }>({ sessions: [] })
   const [sessions, setSessions] = createSignal<DisplaySession[]>([])
+  const [query, setQuery] = createSignal("")
+  const [active, setActive] = createSignal<string>()
+  const visible = createMemo(() =>
+    sessions().filter((item) => item.title.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase())),
+  )
+  const groups = createMemo(() =>
+    DATE_GROUP_KEYS.map((key) => ({
+      key,
+      items: visible().filter((item) => dateGroupKey(item.updatedAt) === key),
+    })).filter((group) => group.items.length > 0),
+  )
+  createEffect(() => {
+    const items = visible()
+    if (!items.some((item) => item.id === active())) setActive(items[0]?.id)
+  })
   let panel: HTMLDivElement | undefined
   let frame: number | undefined
   function replace(items: DisplaySession[]) {
@@ -81,10 +95,10 @@ const CloudSessionList: Component<CloudSessionListProps> = (props) => {
     // never take focus back after the user moves to another control.
     frame = requestAnimationFrame(() => {
       if (!panel || (document.activeElement !== document.body && document.activeElement !== focused)) return
-      const row = [...panel.querySelectorAll<HTMLElement>('[data-slot="list-item"]')].find(
+      const row = [...panel.querySelectorAll<HTMLElement>(".history-cloud__row")].find(
         (item) => item.getAttribute("data-key") === key,
       )
-      const target = row ?? panel.querySelector<HTMLElement>('[data-slot="list-search"] input')
+      const target = row ?? panel.querySelector<HTMLElement>(".history-cloud__search input")
       target?.focus()
     })
   }
@@ -191,11 +205,47 @@ const CloudSessionList: Component<CloudSessionListProps> = (props) => {
     load(cursor)
   }
 
+  function searchKey(event: KeyboardEvent) {
+    const items = groups().flatMap((group) => group.items)
+    if (event.key === "Enter") {
+      const item = items.find((item) => item.id === active())
+      if (!item) return
+      event.preventDefault()
+      props.onSelectSession?.(item.id)
+      return
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+    event.preventDefault()
+    const index = items.findIndex((item) => item.id === active())
+    const next = event.key === "ArrowDown" ? Math.min(index + 1, items.length - 1) : Math.max(index - 1, 0)
+    setActive(items[next]?.id)
+    announce(items[next])
+  }
+
   return (
     <div ref={panel} class="cloud-session-list" aria-busy={loading()}>
-      <Button variant="ghost" size="small" disabled={loading() || !initialized()} onClick={() => load()}>
-        Refresh cloud history
-      </Button>
+      <div class="history-cloud__toolbar">
+        <label class="history-cloud__search" data-slot="list-search">
+          <span class="sr-only">Search cloud chats</span>
+          <input
+            type="search"
+            placeholder="Search cloud chats"
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={searchKey}
+          />
+        </label>
+        <Button variant="ghost" size="small" disabled={loading() || !initialized()} onClick={() => load()}>
+          Refresh cloud history
+        </Button>
+      </div>
+      <Show when={gitUrl() !== null}>
+        <label class="history-cloud__filter">
+          <Checkbox checked={repoOnly()} onChange={setRepoOnly}>
+            {language.t("session.cloud.repoOnly") ?? "Only this repository"}
+          </Checkbox>
+        </label>
+      </Show>
       <Show when={error()}>
         <div role="alert">
           <p>{error()}</p>
@@ -204,52 +254,40 @@ const CloudSessionList: Component<CloudSessionListProps> = (props) => {
           </Button>
         </div>
       </Show>
-      <List<DisplaySession>
-        preserveActive
-        items={sessions()}
-        key={(s) => s.id}
-        filterKeys={["title"]}
-        onMove={announce}
-        onSelect={(s) => {
-          if (s) props.onSelectSession?.(s.id)
-        }}
-        search={{
-          placeholder: language.t("session.search.placeholder"),
-          autofocus: true,
-          action:
-            gitUrl() !== null ? (
-              <div class="cloud-session-repo-filter">
-                <Checkbox checked={repoOnly()} onChange={setRepoOnly}>
-                  {language.t("session.cloud.repoOnly") ?? "Only this repository"}
-                </Checkbox>
-              </div>
-            ) : undefined,
-        }}
-        emptyMessage={
-          loading() ? (language.t("common.loading") ?? "Loading...") : (language.t("session.empty") ?? "No sessions")
-        }
-        groupBy={(s) => language.t(dateGroupKey(s.updatedAt))}
-        sortGroupsBy={(a, b) => {
-          const rank = Object.fromEntries(DATE_GROUP_KEYS.map((k, i) => [language.t(k), i]))
-          return (rank[a.category] ?? 99) - (rank[b.category] ?? 99)
-        }}
-      >
-        {(s) => (
-          <>
-            <span data-slot="list-item-title" class="history-task" dir="auto">
-              <span class="history-task-heading">
-                <span class="history-task-name">{s.title}</span>
-              </span>
-              <span class="history-task-meta">
-                <span>{repoOnly() ? repository(gitUrl()) : "Project shown in preview"}</span>
-                <span>Cloud preview</span>
-                <span>Import into the disclosed folder to resume</span>
-              </span>
-            </span>
-            <span data-slot="list-item-description">{formatRelativeDate(s.updatedAt)}</span>
-          </>
-        )}
-      </List>
+      <div class="history-cloud__list">
+        <For
+          each={groups()}
+          fallback={<p class="history-picker__empty">{loading() ? "Loading cloud chats…" : "No cloud chats found"}</p>}
+        >
+          {(group) => (
+            <section aria-label={language.t(group.key)}>
+              <h3>{language.t(group.key)}</h3>
+              <For each={group.items}>
+                {(item) => (
+                  <button
+                    type="button"
+                    class="history-cloud__row"
+                    data-slot="list-item"
+                    data-key={item.id}
+                    data-active={active() === item.id}
+                    onFocus={() => {
+                      setActive(item.id)
+                      announce(item)
+                    }}
+                    onClick={() => props.onSelectSession?.(item.id)}
+                  >
+                    <span class="history-cloud__name" dir="auto">
+                      {item.title}
+                    </span>
+                    <time>{formatRelativeDate(item.updatedAt)}</time>
+                    <small>{repoOnly() ? repository(gitUrl()) : "Cloud chat"} · Preview before importing</small>
+                  </button>
+                )}
+              </For>
+            </section>
+          )}
+        </For>
+      </div>
       <div data-slot="session-list-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {loading() ? "Loading cloud history..." : notice()}
       </div>

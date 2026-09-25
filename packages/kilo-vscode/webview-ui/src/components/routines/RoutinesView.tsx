@@ -1779,6 +1779,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   })
   const worker = createMemo(() => agents().find((item) => item.id === chosen()))
   const detail = createMemo(() => showing(screen(), !!chosen(), !!currentOrganization(), !!editingOrganization()))
+  const overview = createMemo(() => !chosen() && !currentOrganization() && !editingOrganization())
   const detailLabel = createMemo(() => (chosen() && currentOrganization() ? currentOrganization()!.name : "Routines"))
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
@@ -1823,6 +1824,79 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </p>
         </Show>
         <Show when={screen() === "roster"}>
+          <Show when={overview()}>
+            <section class="routines-hero" aria-label="Routines overview">
+              <div class="routines-hero-copy">
+                <span>Raya's workforce</span>
+                <h3>Give work a home.</h3>
+                <p>
+                  Set up a specialist for one standing job, or bring several workers together as a team. Raya helps
+                  shape the plan before anyone starts.
+                </p>
+                <div class="routines-hero-actions">
+                  <Button
+                    onClick={() =>
+                      ask(
+                        "Help me create a specialist worker for a standing job. Ask what outcome I want, suggest a sensible schedule and access, then show me a short review before saving.",
+                      )
+                    }
+                  >
+                    Create a worker
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      ask(
+                        "Help me create a small organization of specialist workers. Ask what the team should accomplish, propose clear roles and delegation rules, then show me a short review before saving.",
+                      )
+                    }
+                  >
+                    Build a team
+                  </Button>
+                </div>
+              </div>
+              <div class="routines-hero-stats" aria-label="Workforce status">
+                <div>
+                  <strong>{agents().length}</strong>
+                  <span>Workers</span>
+                </div>
+                <div>
+                  <strong>{organizations().length}</strong>
+                  <span>Teams</span>
+                </div>
+                <div>
+                  <strong>{agents().filter((item) => item.enabled).length}</strong>
+                  <span>Active</span>
+                </div>
+              </div>
+            </section>
+            <Show when={organizations().length > 0}>
+              <section class="routines-team-grid" aria-label="Your teams">
+                <div class="routines-team-grid-head">
+                  <span>Your teams</span>
+                  <small>{organizations().length} organizations</small>
+                </div>
+                <div class="routines-team-cards">
+                  <For each={organizations()}>
+                    {(item) => (
+                      <button type="button" onClick={() => chooseOrganization(item.id)}>
+                        <span class="routines-team-mark" aria-hidden="true">
+                          ✦
+                        </span>
+                        <strong>{item.name}</strong>
+                        <small>
+                          {item.members.length} workers · {item.purpose || "Ready for work"}
+                        </small>
+                        <span class="routines-team-arrow" aria-hidden="true">
+                          →
+                        </span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </section>
+            </Show>
+          </Show>
           <div class="sr-only" role="status" aria-live="polite" aria-busy={refreshing()}>
             {freshness()}
           </div>

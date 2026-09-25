@@ -1,12 +1,13 @@
 import { For, Show, createMemo, createSignal, onMount, type Accessor, type Component } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
+import { Button } from "@kilocode/kilo-ui/button"
+import { Dialog } from "@kilocode/kilo-ui/dialog"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
 import { KiloLogo } from "../chat/WelcomeEmptyState"
 import { CloudImportDialog } from "../chat/CloudImportDialog"
 import { HistoryPicker, HistoryRow, ordered } from "./HistoryPicker"
-import SessionList from "./SessionList"
 import CloudSessionList from "./CloudSessionList"
 
 interface HistoryViewProps {
@@ -21,8 +22,47 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
   const dialog = useDialog()
   const [open, setOpen] = createSignal(false)
   const [source, setSource] = createSignal<"local" | "cloud" | "worktree">()
+  const [selecting, setSelecting] = createSignal(false)
+  const [selected, setSelected] = createSignal<ReadonlySet<string>>(new Set())
   const chats = createMemo(() => ordered(session.sessions()).filter((item) => !item.parentID))
+  const worktree = createMemo(() => session.sessions().filter((item) => props.worktreeSessionIds?.()?.has(item.id)))
   onMount(session.loadSessions)
+
+  const toggle = (id: string) =>
+    setSelected((value) => {
+      const next = new Set(value)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const clear = () => {
+    setSelected(new Set<string>())
+    setSelecting(false)
+  }
+  const remove = () =>
+    dialog.show(() => (
+      <Dialog title="Delete selected chats?" fit>
+        <div class="dialog-confirm-body">
+          <span>{selected().size} chats will be deleted. This cannot be undone.</span>
+          <div class="dialog-confirm-actions">
+            <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
+              Cancel
+            </Button>
+            <Button
+              intent="destructive"
+              scale="large"
+              onClick={() => {
+                for (const id of selected()) session.deleteSession(id)
+                clear()
+                dialog.close()
+              }}
+            >
+              Delete chats
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
 
   const cloud = (id: string) => {
     tabs?.previewCloud(id)
@@ -41,6 +81,13 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
         <span>Chats</span>
         <button
           type="button"
+          aria-label={selecting() ? "Done selecting chats" : "Select chats"}
+          onClick={() => (selecting() ? clear() : setSelecting(true))}
+        >
+          {selecting() ? "Done" : "Select"}
+        </button>
+        <button
+          type="button"
           aria-label="Import a chat"
           onClick={() => dialog.show(() => <CloudImportDialog onImport={cloud} />)}
         >
@@ -48,8 +95,28 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
         </button>
       </div>
       <div class="history-page__body">
+        <Show when={selecting()}>
+          <div class="history-page__selection" role="toolbar" aria-label="Selected chats">
+            <span>{selected().size} selected</span>
+            <button type="button" onClick={() => setSelected(new Set(chats().map((item) => item.id)))}>
+              Select all
+            </button>
+            <button type="button" disabled={selected().size === 0} onClick={remove}>
+              Delete selected
+            </button>
+          </div>
+        </Show>
         <For each={chats().slice(0, 3)}>
-          {(item) => <HistoryRow item={item} variant="home" onSelect={() => props.onSelectSession(item.id)} />}
+          {(item) => (
+            <HistoryRow
+              item={item}
+              variant="home"
+              selecting={selecting()}
+              selected={selected().has(item.id)}
+              onToggle={() => toggle(item.id)}
+              onSelect={() => props.onSelectSession(item.id)}
+            />
+          )}
         </For>
         <button class="raya-home__all" onClick={() => setOpen(true)}>
           View all ({chats().length})
@@ -71,15 +138,26 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
           </Show>
         </div>
         <Show when={source() === "local"}>
-          <SessionList onSelectSession={props.onSelectSession} />
+          <HistoryPicker
+            embedded
+            items={chats()}
+            selecting={selecting()}
+            selected={selected()}
+            onToggle={toggle}
+            onSelect={props.onSelectSession}
+          />
         </Show>
         <Show when={source() === "cloud"}>
           <CloudSessionList onSelectSession={cloud} />
         </Show>
         <Show when={source() === "worktree"}>
-          <SessionList
-            onSelectSession={props.onSelectSession}
-            sessionIds={() => props.worktreeSessionIds?.() ?? new Set()}
+          <HistoryPicker
+            embedded
+            items={worktree()}
+            selecting={selecting()}
+            selected={selected()}
+            onToggle={toggle}
+            onSelect={props.onSelectSession}
           />
         </Show>
         <Show when={!source()}>
@@ -97,6 +175,9 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
                 props.onSelectSession(id)
               }}
               onClose={() => setOpen(false)}
+              selecting={selecting()}
+              selected={selected()}
+              onToggle={toggle}
               onRoutines={() => {
                 setOpen(false)
                 routines()

@@ -1,0 +1,382 @@
+/* Raya's Todo workspace uses the same quiet cards, typography and hairlines as chat. */
+html [data-component="personal-todo"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.82fr);
+  align-content: start;
+  gap: 18px;
+  width: 100%;
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: clamp(16px, 3vw, 32px);
+}
+
+[data-component="personal-todo"] > [data-slot="personal-todo-header"],
+[data-component="personal-todo"] > [data-slot="todo-assistant"],
+[data-component="personal-todo"] > [data-slot="todo-proposals"],
+[data-component="personal-todo"] > [data-slot="personal-todo-compose"],
+[data-component="personal-todo"] > [data-slot="personal-todo-notice"],
+[data-component="personal-todo"] > [data-slot="personal-todo-loading"],
+[data-component="personal-todo"] > [data-slot="personal-todo-empty"],
+[data-component="personal-todo"] > [data-slot="todo-list-heading"],
+[data-component="personal-todo"] > [data-slot="personal-todo-list"] {
+  grid-column: 1 / -1;
+}
+
+[data-component="personal-todo"] .todo-kicker {
+  display: block;
+  color: var(--raya-primary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[data-component="personal-todo"] h2 {
+  margin: 3px 0 0;
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--raya-font-display);
+  font-weight: 400;
+  font-size: 24px;
+}
+[data-component="personal-todo"] [data-slot="personal-todo-header"] {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #272728;
+}
+[data-component="personal-todo"] [data-slot="personal-todo-header"] h1 {
+  font-size: 34px;
+}
+[data-component="personal-todo"] [data-slot="personal-todo-header"] p {
+  margin-top: 3px;
+}
+
+[data-slot="todo-overview"],
+[data-component="personal-todo"] [data-slot="focus-timer"],
+[data-slot="todo-assistant"],
+[data-component="personal-todo"] [data-slot="personal-todo-compose"],
+[data-component="personal-todo"] [data-slot="todo-proposals"] {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #303032;
+  border-radius: 20px;
+  background: #252526;
+}
+
+[data-slot="todo-overview-heading"] p,
+[data-slot="todo-assistant"] p {
+  margin: 7px 0 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: 13px;
+}
+
+[data-slot="todo-overview-grid"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+[data-slot="todo-overview-grid"] button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-content: space-between;
+  min-height: 82px;
+  padding: 13px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  background: #1e1e1f;
+  color: var(--text-base, var(--vscode-foreground));
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+[data-slot="todo-overview-grid"] button:hover {
+  transform: translateY(-2px);
+  background: #303032;
+}
+[data-slot="todo-overview-grid"] button[data-active="true"] {
+  border-color: var(--raya-primary);
+  background: color-mix(in srgb, var(--raya-primary) 10%, #1e1e1f);
+}
+[data-slot="todo-overview-grid"] button > span {
+  color: var(--raya-primary);
+  font-size: 20px;
+  line-height: 1;
+}
+[data-slot="todo-overview-grid"] button strong {
+  font-size: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+[data-slot="todo-overview-grid"] button small {
+  grid-column: 1 / -1;
+  color: #b8b8ba;
+  font-size: 12px;
+}
+
+[data-component="personal-todo"] [data-slot="focus-timer"] {
+  justify-items: center;
+  align-content: space-between;
+  gap: 12px;
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--raya-primary) 13%, #252526), #252526 70%);
+}
+
+[data-component="personal-todo"] [data-slot="focus-timer-copy"] {
+  width: 100%;
+  align-items: flex-start;
+}
+[data-slot="focus-timer-state"] {
+  color: #bababe;
+  font-size: 12px;
+}
+[data-slot="focus-timer-dial"] {
+  display: grid;
+  place-items: center;
+  width: clamp(188px, 25vw, 260px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, var(--raya-primary) 0deg 1.5deg, transparent 1.5deg 7.5deg);
+  position: relative;
+  margin: 4px auto;
+}
+
+[data-slot="focus-timer-dial"]::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: conic-gradient(var(--raya-primary) var(--focus-progress), #34343b 0);
+}
+
+[data-slot="focus-timer-face"] {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  border-radius: 50%;
+  background: #292a31;
+  text-align: center;
+}
+
+[data-slot="focus-timer-face"] span {
+  color: #c2c2c7;
+  font-size: 11px;
+}
+[data-slot="focus-timer-face"] output {
+  color: #f3f2f6;
+  font-family: var(--raya-font-body);
+  font-size: clamp(38px, 5vw, 58px);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.055em;
+}
+[data-slot="focus-timer-fields"] {
+  width: 100%;
+}
+[data-slot="focus-timer-actions"] {
+  justify-content: center;
+  width: 100%;
+}
+[data-slot="focus-timer-actions"] [data-component="button"] {
+  border-radius: 999px;
+  min-width: 82px;
+}
+
+[data-slot="todo-assistant"] {
+  display: grid;
+  gap: 16px;
+}
+[data-slot="todo-assistant"] form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid #3b3b3d;
+  border-radius: 15px;
+  background: #1e1e1f;
+}
+[data-slot="todo-assistant"] input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-base, var(--vscode-foreground));
+  font: inherit;
+}
+[data-slot="todo-assistant-prompts"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+[data-slot="todo-assistant-prompts"] button {
+  padding: 7px 10px;
+  border: 1px solid #424244;
+  border-radius: 999px;
+  background: transparent;
+  color: #c9c9ca;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+[data-slot="todo-assistant-prompts"] button:hover {
+  background: #343436;
+  color: #fff;
+}
+
+[data-component="personal-todo"] [data-slot="personal-todo-compose"] {
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 0.5fr) auto;
+  align-items: end;
+}
+[data-slot="personal-todo-compose-heading"] {
+  grid-column: 1 / -1;
+}
+[data-slot="todo-list-heading"] {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  padding: 4px 2px;
+  border-bottom: 1px solid #272728;
+}
+[data-slot="todo-list-heading"] > span {
+  color: #aaa;
+  font-size: 12px;
+}
+[data-component="personal-todo"] [data-slot="personal-todo-list"] {
+  gap: 9px;
+}
+[data-component="personal-todo"] [data-slot="personal-todo-item"] {
+  align-items: start;
+  min-height: 62px;
+  padding: 14px 16px;
+  border: 1px solid #303032;
+  border-radius: 16px;
+  background: #252526;
+}
+[data-slot="todo-priority"] {
+  width: fit-content;
+  color: var(--raya-primary);
+  font-size: 11px;
+}
+[data-slot="todo-subtasks"] {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 1px solid #454548;
+  color: #c4c4c6;
+  font-size: 12px;
+}
+[data-slot="todo-subtasks"] span[data-done="true"] {
+  color: #858589;
+  text-decoration: line-through;
+}
+[data-slot="todo-expand"] {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--raya-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+[data-slot="todo-expand"]:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  html [data-component="personal-todo"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-component="personal-todo"] > [data-slot="todo-overview"],
+  [data-component="personal-todo"] > [data-slot="focus-timer"] {
+    grid-column: 1;
+  }
+  [data-slot="todo-overview-grid"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+body.vscode-light [data-slot="todo-overview"],
+body.vscode-light [data-component="personal-todo"] [data-slot="focus-timer"],
+body.vscode-light [data-slot="todo-assistant"],
+body.vscode-light [data-component="personal-todo"] [data-slot="personal-todo-compose"],
+body.vscode-light [data-component="personal-todo"] [data-slot="todo-proposals"],
+body.vscode-light [data-component="personal-todo"] [data-slot="personal-todo-item"] {
+  border-color: #dedee0;
+  background: #f5f5f6;
+  color: #202022;
+}
+
+body.vscode-light [data-slot="todo-overview-grid"] button,
+body.vscode-light [data-slot="todo-assistant"] form {
+  background: #e9e9eb;
+  color: #252527;
+}
+body.vscode-light [data-slot="todo-overview-grid"] button[data-active="true"] {
+  background: #e2e7f5;
+}
+body.vscode-light [data-slot="todo-overview-grid"] button small,
+body.vscode-light [data-slot="todo-overview-heading"] p,
+body.vscode-light [data-slot="todo-assistant"] p,
+body.vscode-light [data-slot="focus-timer-state"],
+body.vscode-light [data-slot="todo-list-heading"] > span {
+  color: #53545a;
+}
+body.vscode-light [data-component="personal-todo"] .todo-kicker,
+body.vscode-light [data-slot="todo-expand"] {
+  color: #455b97;
+}
+body.vscode-light [data-slot="focus-timer-face"] {
+  background: #e7e8ed;
+}
+body.vscode-light [data-slot="focus-timer-face"] output {
+  color: #20202a;
+}
+body.vscode-light [data-slot="focus-timer-face"] span {
+  color: #4b4d55;
+}
+body.vscode-light [data-slot="todo-assistant"] input {
+  color: #242428;
+}
+body.vscode-light [data-slot="todo-assistant-prompts"] button {
+  border-color: #c7c7cc;
+  color: #3c3c43;
+}
+body.vscode-light [data-slot="todo-subtasks"] {
+  color: #525259;
+}
+
+@media (max-width: 420px) {
+  [data-slot="todo-overview-grid"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  [data-component="personal-todo"] [data-slot="personal-todo-compose"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-slot="todo-assistant"] form {
+    flex-wrap: wrap;
+  }
+  [data-slot="todo-assistant"] form [data-component="button"] {
+    width: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-slot="todo-overview-grid"] button,
+  [data-slot="focus-timer-face"],
+  [data-slot="todo-assistant"] {
+    background: Canvas;
+    border: 1px solid CanvasText;
+    color: CanvasText;
+  }
+}

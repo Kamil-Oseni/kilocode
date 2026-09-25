@@ -1,6 +1,17 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("Routines overview opens teams and briefs Raya to build one", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=dark-routines")
+  await expect(page.getByRole("region", { name: "Routines overview" })).toBeVisible()
+  await expect(page.locator(".routines-team-cards button")).toHaveCount(2)
+  await page.getByRole("region", { name: "Routines overview" }).getByRole("button", { name: "Build a team" }).click()
+  await expect(page.locator("html")).toHaveAttribute("data-routines-request", /delegation rules/)
+  await page.locator(".routines-team-cards button").first().click()
+  await expect(page.locator(".routines-organization-overview")).toBeVisible()
+})
+
 test("representative routine workload stays responsive and recovers", async ({ context, page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   const devtools = await context.newCDPSession(page)
@@ -105,7 +116,7 @@ for (const theme of ["light", "dark"]) {
       await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
       const books = page.locator('.routines-identity[data-routine-worker="routine"]')
       await expect(books).toBeVisible()
-      await expect(page.getByRole("button", { name: "Website Builders 3" })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Website Builders 3", exact: true })).toBeVisible()
       await expect(page.locator('.routines-unread[aria-label="1 unread"]').first()).toBeVisible()
       await expect(page.locator(".routines-row [data-component='checkbox']")).toHaveCount(0)
       await page.getByText("View options", { exact: true }).click()

@@ -397,6 +397,7 @@ render(
         }
         onFocusConsumed={() => {}}
         onEditProposal={(id) => document.body.setAttribute("data-edited-proposal", id)}
+        onAskRaya={(text) => document.body.setAttribute("data-asked-raya", text)}
         onBack={() => {}}
       />
       <output data-messages hidden>

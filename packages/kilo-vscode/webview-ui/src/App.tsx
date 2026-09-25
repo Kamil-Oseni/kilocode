@@ -515,6 +515,7 @@ const AppContent: Component = () => {
                 focus={todoTarget()}
                 onFocusConsumed={() => setTodoTarget()}
                 onEditProposal={editTodoProposal}
+                onAskRaya={askRaya}
                 onBack={() => setCurrentView("newTask")}
               />
             </Match>

@@ -40,7 +40,17 @@ const durations = [
 ]
 
 const order = (items: PersonalTodoItem[]) =>
-  [...items].sort((a, b) => Number(a.done) - Number(b.done) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))
+  [...items].sort((a, b) => {
+    const rank = { urgent: 4, high: 3, medium: 2, low: 1 }
+    const score = (item: PersonalTodoItem) =>
+      (item.dueAt && item.dueAt < Date.now() ? 8 : 0) + (item.priority ? rank[item.priority] : 0)
+    return (
+      Number(a.done) - Number(b.done) ||
+      score(b) - score(a) ||
+      (a.dueAt ?? Infinity) - (b.dueAt ?? Infinity) ||
+      b.updatedAt - a.updatedAt
+    )
+  })
 
 const local = (value?: number) => {
   if (value === undefined) return ""
@@ -78,10 +88,13 @@ export const TodoView: Component<{
   focus?: ProposalFocus
   onFocusConsumed?: () => void
   onEditProposal?: (id: string) => void
+  onAskRaya?: (text: string) => void
 }> = (props) => {
   const vscode = useVSCode()
   const [items, setItems] = createSignal<PersonalTodoItem[]>([])
   const [draft, setDraft] = createSignal("")
+  const [askDraft, setAskDraft] = createSignal("")
+  const [filter, setFilter] = createSignal<"all" | "today" | "important" | "scheduled" | "done">("all")
   const [reminder, setReminder] = createSignal("")
   const [loading, setLoading] = createSignal(true)
   const [notice, setNotice] = createSignal<Notice>()
@@ -369,6 +382,32 @@ export const TodoView: Component<{
   })
 
   const remaining = createMemo(() => items().filter((item) => !item.done).length)
+  const today = createMemo(
+    () => items().filter((item) => !item.done && item.dueAt && item.dueAt < new Date().setHours(24, 0, 0, 0)).length,
+  )
+  const important = createMemo(
+    () => items().filter((item) => !item.done && (item.priority === "urgent" || item.priority === "high")).length,
+  )
+  const scheduled = createMemo(() => items().filter((item) => !item.done && item.dueAt).length)
+  const done = createMemo(() => items().filter((item) => item.done).length)
+  const visible = createMemo(() =>
+    order(items()).filter((item) => {
+      if (filter() === "today") return !item.done && !!item.dueAt && item.dueAt < new Date().setHours(24, 0, 0, 0)
+      if (filter() === "important") return !item.done && (item.priority === "urgent" || item.priority === "high")
+      if (filter() === "scheduled") return !item.done && !!item.dueAt
+      if (filter() === "done") return item.done
+      return true
+    }),
+  )
+  const ask = (text: string) => props.onAskRaya?.(text)
+  const plan = (text: string) => {
+    const value = text.trim()
+    if (!value) return
+    ask(
+      `Help me with my Todo: ${value}\n\nUse Raya's native personal Todo tools. If this is a larger goal, propose one clear parent todo with practical subtasks, priorities and reminders where useful. Show me the reviewable proposal before saving. Ask only for a decision that changes the outcome; do not ask for IDs, files, schemas or implementation details.`,
+    )
+    setAskDraft("")
+  }
   const reviewCount = createMemo(
     () => proposals().filter((item) => item.state === "open" || item.state === "pending").length,
   )
@@ -506,6 +545,9 @@ export const TodoView: Component<{
       .toString()
       .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`
   })
+  const progress = createMemo(() =>
+    Math.max(0, Math.min(100, (1 - remainingMs() / (timer()?.durationMs || duration().value)) * 100)),
+  )
   const timerLabel = createMemo(() => {
     const state = timer()?.state
     if (state === "running") return "Focusing"
@@ -513,6 +555,10 @@ export const TodoView: Component<{
     if (state === "completed") return "Focus complete"
     return "Ready when you are"
   })
+  const focusCopy = createMemo(() => (timer()?.state === "running" ? "Stay with it" : "Your next focus session"))
+  const durationCopy = createMemo(
+    () => `${Math.round((timer()?.durationMs || duration().value) / 60_000)} minute session`,
+  )
   const todoOptions = createMemo(() => [
     { id: "", label: "No linked todo" },
     ...items()
@@ -524,12 +570,19 @@ export const TodoView: Component<{
     <section data-slot="focus-timer" data-state={timer()?.state ?? "loading"} aria-labelledby="focus-timer-title">
       <div data-slot="focus-timer-copy">
         <div>
+          <span class="todo-kicker">Make room for focus</span>
           <h2 id="focus-timer-title">Focus timer</h2>
-          <p>{timerLoading() ? "Checking your saved timer…" : timerLabel()}</p>
         </div>
-        <output aria-label="Focus time remaining" aria-live="off">
-          {timerLoading() ? "--:--" : clock()}
-        </output>
+        <span data-slot="focus-timer-state">{timerLoading() ? "Checking your timer…" : timerLabel()}</span>
+      </div>
+      <div data-slot="focus-timer-dial" style={{ "--focus-progress": `${progress()}%` }}>
+        <div data-slot="focus-timer-face">
+          <span>{focusCopy()}</span>
+          <output aria-label="Focus time remaining" aria-live="off">
+            {timerLoading() ? "--:--" : clock()}
+          </output>
+          <span>{durationCopy()}</span>
+        </div>
       </div>
       <Show when={timer()?.todoID}>
         <p data-slot="focus-timer-link">
@@ -616,11 +669,85 @@ export const TodoView: Component<{
         <IconButton icon="arrow-left" variant="ghost" size="small" aria-label="Back to chat" onClick={props.onBack} />
         <div>
           <h1 id="personal-todo-title">Todo</h1>
-          <p>{remaining()} open</p>
+          <p>
+            A calmer way to make progress · <span>{remaining()} open</span>
+          </p>
         </div>
       </header>
 
+      <section data-slot="todo-overview" aria-label="Todo views">
+        <div data-slot="todo-overview-heading">
+          <span class="todo-kicker">Your day at a glance</span>
+          <h2>Where to begin</h2>
+          <p>Raya brings the timely and important work forward.</p>
+        </div>
+        <div data-slot="todo-overview-grid">
+          <For
+            each={
+              [
+                { id: "all", label: "All tasks", count: () => items().length, glyph: "◫" },
+                { id: "today", label: "Today", count: today, glyph: "▣" },
+                { id: "important", label: "Important", count: important, glyph: "✦" },
+                { id: "scheduled", label: "Scheduled", count: scheduled, glyph: "◷" },
+                { id: "done", label: "Completed", count: done, glyph: "✓" },
+              ] as const
+            }
+          >
+            {(view) => (
+              <button
+                type="button"
+                data-active={filter() === view.id}
+                aria-pressed={filter() === view.id}
+                onClick={() => setFilter(view.id)}
+              >
+                <span aria-hidden="true">{view.glyph}</span>
+                <strong>{view.count()}</strong>
+                <small>{view.label}</small>
+              </button>
+            )}
+          </For>
+        </div>
+      </section>
+
       {panel()}
+
+      <section data-slot="todo-assistant" aria-labelledby="todo-assistant-title">
+        <div>
+          <span class="todo-kicker">Plan with Raya</span>
+          <h2 id="todo-assistant-title">Tell Raya what you want to do</h2>
+          <p>She can turn a goal into a reviewed plan with next steps, priorities and reminders.</p>
+        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            plan(askDraft())
+          }}
+        >
+          <label class="sr-only" for="todo-assistant-input">
+            Ask Raya to plan a todo
+          </label>
+          <input
+            id="todo-assistant-input"
+            value={askDraft()}
+            onInput={(event) => setAskDraft(event.currentTarget.value)}
+            placeholder="I want to learn how to play the violin…"
+          />
+          <Button type="submit" disabled={!askDraft().trim() || !props.onAskRaya}>
+            Ask Raya
+          </Button>
+        </form>
+        <div data-slot="todo-assistant-prompts">
+          <button type="button" onClick={() => plan("I want to learn how to play the violin")}>
+            Plan a new goal
+          </button>
+          <button type="button" onClick={() => plan("Help me prioritize my open todos for today")}>
+            Help me prioritize
+          </button>
+          <button type="button" onClick={() => plan("Suggest useful reminders for my upcoming todos")}>
+            Set smart reminders
+          </button>
+        </div>
+      </section>
 
       <section data-slot="todo-proposals" aria-labelledby="todo-proposals-title">
         <header data-slot="todo-proposals-header">
@@ -697,6 +824,10 @@ export const TodoView: Component<{
             send({ operation: "create", title, reminderAt: stamp })
         }}
       >
+        <div data-slot="personal-todo-compose-heading">
+          <span class="todo-kicker">One clear next step</span>
+          <h2>Add a task</h2>
+        </div>
         <TextField
           value={draft()}
           onChange={(title) => compose({ title })}
@@ -743,8 +874,25 @@ export const TodoView: Component<{
       </Show>
 
       <Show when={!loading() && items().length > 0}>
+        <div data-slot="todo-list-heading">
+          <div>
+            <span class="todo-kicker">Your tasks</span>
+            <h2>
+              {filter() === "all"
+                ? "What’s next"
+                : filter() === "done"
+                  ? "Completed"
+                  : filter() === "today"
+                    ? "Today"
+                    : filter() === "important"
+                      ? "Important"
+                      : "Scheduled"}
+            </h2>
+          </div>
+          <span>{visible().length} shown</span>
+        </div>
         <ul data-slot="personal-todo-list" aria-label="Personal todos">
-          <For each={items()}>
+          <For each={visible()}>
             {(item) => (
               <li data-slot="personal-todo-item" data-done={item.done}>
                 <Checkbox
@@ -761,6 +909,9 @@ export const TodoView: Component<{
                     <>
                       <div data-slot="personal-todo-content">
                         <span>{item.title}</span>
+                        <Show when={item.priority === "urgent" || item.priority === "high"}>
+                          <small data-slot="todo-priority">{item.priority === "urgent" ? "Urgent" : "Important"}</small>
+                        </Show>
                         <Show when={item.detail}>
                           <p>{item.detail}</p>
                         </Show>
@@ -780,6 +931,24 @@ export const TodoView: Component<{
                             Reminder {due(item.reminderAt ?? 0)}
                           </time>
                         </Show>
+                        <Show when={item.subtasks?.length}>
+                          <div data-slot="todo-subtasks">
+                            <For each={item.subtasks}>
+                              {(child) => (
+                                <span data-done={child.done}>
+                                  {child.done ? "✓" : "○"} {child.title}
+                                </span>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                        <button
+                          type="button"
+                          data-slot="todo-expand"
+                          onClick={() => plan(`Expand this existing Todo into practical next steps: ${item.title}`)}
+                        >
+                          Ask Raya to expand
+                        </button>
                       </div>
                       <Show
                         when={confirming() === item.id}

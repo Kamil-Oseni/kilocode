@@ -55,6 +55,18 @@ for (const theme of ["light", "dark", "contrast"])
     })
   }
 
+test("Todo planning sends the user's goal through Raya and filters priorities", async ({ page }) => {
+  await page.goto("/")
+  await page.locator('[data-slot="todo-overview-grid"] button').filter({ hasText: "Completed" }).click()
+  await expect(page.locator('[data-slot="personal-todo-item"]')).toHaveCount(1)
+  await expect(page.getByText("Confirm the release owner", { exact: true })).toBeVisible()
+  await page.locator('[data-slot="todo-overview-grid"] button').filter({ hasText: "All tasks" }).click()
+  await page.getByRole("textbox", { name: "Ask Raya to plan a todo" }).fill("I want to learn violin")
+  await page.getByRole("button", { name: "Ask Raya", exact: true }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /I want to learn violin/)
+  await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /reviewable proposal before saving/)
+})
+
 test("applies and rejects exact Todo proposals from the keyboard", async ({ page }) => {
   await page.goto("/?proposal=open")
   const apply = page.getByRole("button", { name: "Apply" })

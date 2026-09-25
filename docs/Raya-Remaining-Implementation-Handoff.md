@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 02:45 America/Toronto - final installed chat/Chief handoff
+
+`f29583b4b6` is pushed and installed as `eden.raya@7.4.23-snapshot+f29583b4b6.kamil-oseni.1790318513762`; the push hook and low-memory SDK/CLI/extension/native/package gates passed. The retained 545,021,986-byte rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.59178ca0f9713261ffd50f2cba0ace88c15d879935315982a2c9a24440793c7b.vsix`, SHA-256 `59178CA0F9713261FFD50F2CBA0ACE88C15D879935315982A2C9A24440793C7B`. This supersedes the earlier installed snapshot note. Reload the host, inspect `Parallel review of chat activity and composer styles` for the grey header/answer dividers and expandable completed activity, then create a new two-read-only-specialist request. Confirm a successful saved plan before branch IDs, no plan-only tool without a plan, no nudge to a running sibling, no internal IDs in visible progress, named child Back navigation, and concise synthesis of both actual reports. Then restart and inspect persistence. Keep `FUT-AGENT-01/02` and `FUT-CU-01` In progress; leave the reported capture dialog untouched.
+
 ## ChatGPT 2026-09-25 02:42 America/Toronto - visible Chief status follow-up
 
 The historical parallel-review chat also leaked child session IDs and delegation internals in main-agent prose. Chief guidance now asks for one short named-specialist status update and a final answer without internal IDs or tool-call narration. The 12-case prompt/routing test and CLI typecheck pass; commit/push and snapshot installation remain at this checkpoint. After installation, verify with a fresh real-provider two-specialist run; a prompt assertion alone does not prove the model's visible output. Retain the historical saved data and keep `FUT-AGENT-01/02` In progress.

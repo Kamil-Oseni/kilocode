@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 09:09 America/Toronto - real-provider Routines probe follow-up
+
+A fresh `auto`/DeepSeek organization request reached `ask_options` and asked for the user's violin level and goal before any creation call. The temporary probe chat was deleted. Continue in the installed host with a test answer, then inspect the plain-language review and permission decision, create and inspect the saved organization and worker IDs, verify worker communication, and restart both backend and extension. The CLI's noninteractive Ask call waited silently, so use the installed Ask card for the next complete flow; do not count this partial probe as saved organization acceptance.
+
 ## ChatGPT 2026-09-25 08:52 America/Toronto - installed Routines planning handoff
 
 `cde6c2e566` is pushed and installed as `eden.raya@7.4.23-snapshot+cde6c2e566.kamil-oseni.1790340556589`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.f7d9a5369fa3e0dea44ba8362a42f87de675d6791af10a6030c1aafc0bb322fb.vsix`, 545,222,485 bytes, SHA-256 `F7D9A5369FA3E0DEA44BA8362A42F87DE675D6791AF10A6030C1AAFC0BB322FB`. Reload the open VS Code host, then run the real selected-model worker and organization flow in both main chat and Routines as described below. Confirm permission review, receipts, organization communication and restart durability before treating `FUT-RCHAT-01` as Verified. The installed package and browser fixture alone do not prove those outcomes.

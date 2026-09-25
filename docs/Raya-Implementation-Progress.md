@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-25 09:09 America/Toronto - real-provider Routines clarification probe
+
+The local main-branch CLI sent a fresh English organization request through `auto` with configured `deepseek-byok/deepseek-chat`: create agents to help learn violin, ask necessary questions, and do not create until answered. Chief routed it to a generalist and the real provider called `ask_options` with “What is your current violin level and main goal?” and four relevant level/goal choices. The saved session contained only the route and the running Ask call; it showed no `create_organization` or `schedule_task` call. The headless CLI printed no further event while Ask awaited an answer, so the probe was stopped and its temporary session deleted. This proves one clarification-before-creation path, not organization creation, permission review, saved IDs, agent communication or restart durability. `FUT-RCHAT-01` remains In progress.
+
 ## ChatGPT 2026-09-25 08:52 America/Toronto - Routines planning snapshot installed
 
 Product commit `cde6c2e566` is pushed to `origin/main`; the push hook passed cross-package and JetBrains typechecks. The low-memory production snapshot passed SDK preparation, extension and webview typechecks, lint, production bundling, native desktop capture/input self-tests, input-host round trip and VSIX packaging. VS Code installed `eden.raya@7.4.23-snapshot+cde6c2e566.kamil-oseni.1790340556589`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.f7d9a5369fa3e0dea44ba8362a42f87de675d6791af10a6030c1aafc0bb322fb.vsix`, 545,222,485 bytes, SHA-256 `F7D9A5369FA3E0DEA44BA8362A42F87DE675D6791AF10A6030C1AAFC0BB322FB`. Installation does not prove the open host reloaded or that a real provider created the intended organization; those acceptance checks remain open.

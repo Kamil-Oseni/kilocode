@@ -434,6 +434,8 @@ render(
         onFocusConsumed={() => {}}
         onEditProposal={(id) => document.body.setAttribute("data-edited-proposal", id)}
         onAskRaya={(text) => document.body.setAttribute("data-asked-raya", text)}
+        onSubmitPlan={(text) => document.body.setAttribute("data-submitted-plan", text)}
+        canSubmitPlan={state !== "plan-offline"}
         onBack={() => {}}
       />
       <output data-messages hidden>

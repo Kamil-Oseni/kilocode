@@ -43,6 +43,12 @@ const durations = [
   { label: "1 hour", value: 60 * 60_000 },
 ]
 
+const parts = (ms: number) => ({
+  hours: String(Math.floor(ms / 3_600_000)),
+  minutes: String(Math.floor((ms % 3_600_000) / 60_000)),
+  seconds: String(Math.floor((ms % 60_000) / 1_000)),
+})
+
 const order = (items: PersonalTodoItem[]) =>
   [...items].sort((a, b) => {
     const rank = { urgent: 4, high: 3, medium: 2, low: 1 }
@@ -93,6 +99,8 @@ export const TodoView: Component<{
   onFocusConsumed?: () => void
   onEditProposal?: (id: string) => void
   onAskRaya?: (text: string) => void
+  onSubmitPlan?: (text: string) => void
+  canSubmitPlan?: boolean
 }> = (props) => {
   const vscode = useVSCode()
   const [items, setItems] = createSignal<PersonalTodoItem[]>([])
@@ -112,7 +120,7 @@ export const TodoView: Component<{
   const [timerPending, setTimerPending] = createSignal(false)
   const [timerNotice, setTimerNotice] = createSignal<Notice>()
   const [timerRecovery, setTimerRecovery] = createSignal<TimerIntent>()
-  const [duration, setDuration] = createSignal(durations[1])
+  const [length, setLength] = createSignal(parts(durations[1].value))
   const [todo, setTodo] = createSignal<string>()
   const [now, setNow] = createSignal(Date.now())
   const [checkpoint, setCheckpoint] = createSignal<number>()
@@ -330,8 +338,7 @@ export const TodoView: Component<{
     if (message.timer) {
       setTimer(message.timer)
       setNow(Date.now())
-      const option = durations.find((item) => item.value === message.timer?.durationMs)
-      if (option) setDuration(option)
+      if (message.timer.durationMs) setLength(parts(message.timer.durationMs))
       setTodo(message.timer.todoID)
     }
     setTimerNotice()
@@ -424,12 +431,13 @@ export const TodoView: Component<{
   const filteredEmpty = createMemo(() => !loading() && items().length > 0 && visible().length === 0)
   const hasItems = createMemo(() => !loading() && items().length > 0)
   const ask = (text: string) => props.onAskRaya?.(text)
+  const canPlan = () => !!(props.canSubmitPlan && props.onSubmitPlan) || !!props.onAskRaya
   const plan = (text: string) => {
     const value = text.trim()
-    if (!value) return
-    ask(
-      `Help me with my Todo: ${value}\n\nUse Raya's native personal Todo tools. If this is a larger goal, propose one clear parent todo with practical subtasks, priorities and reminders where useful. Show me the reviewable proposal before saving. Ask only for a decision that changes the outcome; do not ask for IDs, files, schemas or implementation details.`,
-    )
+    if (!value || !canPlan()) return
+    const prompt = `Help me with my Todo: ${value}\n\nUse Raya's native personal Todo tools. If this is a larger goal, propose one clear parent todo with practical subtasks, priorities and reminders where useful. Show me the reviewable proposal before saving. Ask only for a decision that changes the outcome; do not ask for IDs, files, schemas or implementation details.`
+    if (props.canSubmitPlan && props.onSubmitPlan) props.onSubmitPlan(prompt)
+    else ask(prompt)
     setAskDraft("")
   }
   const reviewCount = createMemo(
@@ -563,15 +571,31 @@ export const TodoView: Component<{
     setCheckpoint(saved.revision)
     sendTimer({ operation: "get" })
   })
-  const clock = createMemo(() => {
-    const seconds = Math.ceil(remainingMs() / 1_000)
-    return `${Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`
+  const duration = createMemo(() => {
+    const value = length()
+    if (![value.hours, value.minutes, value.seconds].every((item) => /^\d{1,2}$/.test(item))) return
+    const hours = Number(value.hours)
+    const minutes = Number(value.minutes)
+    const seconds = Number(value.seconds)
+    if (hours > 23 || minutes > 59 || seconds > 59) return
+    const ms = hours * 3_600_000 + minutes * 60_000 + seconds * 1_000
+    return ms >= 60_000 ? ms : undefined
   })
-  const progress = createMemo(() =>
-    Math.max(0, Math.min(100, (1 - remainingMs() / (timer()?.durationMs || duration().value)) * 100)),
-  )
+  const shown = createMemo(() => {
+    if (timer()?.state === "completed") return 0
+    if (timer()?.state === "idle") return duration() ?? timer()?.durationMs ?? durations[1].value
+    return remainingMs()
+  })
+  const clock = createMemo(() => {
+    const seconds = Math.ceil(shown() / 1_000)
+    const minutes = Math.floor(seconds / 60)
+    const tail = `${(minutes % 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`
+    return minutes >= 60 ? `${Math.floor(minutes / 60)}:${tail}` : tail
+  })
+  const progress = createMemo(() => {
+    const total = timer()?.state === "idle" ? duration() : timer()?.durationMs
+    return Math.max(0, Math.min(100, (1 - shown() / (total || durations[1].value)) * 100))
+  })
   const timerLabel = createMemo(() => {
     const state = timer()?.state
     if (state === "running") return "Focusing"
@@ -580,9 +604,16 @@ export const TodoView: Component<{
     return "Ready when you are"
   })
   const focusCopy = createMemo(() => (timer()?.state === "running" ? "Stay with it" : "Your next focus session"))
-  const durationCopy = createMemo(
-    () => `${Math.round((timer()?.durationMs || duration().value) / 60_000)} minute session`,
-  )
+  const durationCopy = createMemo(() => {
+    const ms = timer()?.state === "idle" ? duration() : timer()?.durationMs
+    const seconds = Math.floor((ms || durations[1].value) / 1_000)
+    const hours = Math.floor(seconds / 3_600)
+    const minutes = Math.floor((seconds % 3_600) / 60)
+    const tail = seconds % 60
+    return [hours ? `${hours} hr` : "", minutes ? `${minutes} min` : "", tail ? `${tail} sec` : ""]
+      .filter(Boolean)
+      .join(" ")
+  })
   const todoOptions = createMemo(() => [
     { id: "", label: "No linked todo" },
     ...items()
@@ -590,6 +621,69 @@ export const TodoView: Component<{
       .map((item) => ({ id: item.id, label: item.title })),
   ])
   const todoOption = createMemo(() => todoOptions().find((item) => item.id === (todo() ?? "")) ?? todoOptions()[0])
+  const durationFields = () => (
+    <div data-slot="focus-duration">
+      <span>Duration</span>
+      <div data-slot="focus-duration-inputs" role="group" aria-label="Focus duration">
+        <For each={["hours", "minutes", "seconds"] as const}>
+          {(part) => (
+            <label>
+              <span>{part === "hours" ? "Hours" : part === "minutes" ? "Minutes" : "Seconds"}</span>
+              <input
+                type="number"
+                min="0"
+                max={part === "hours" ? "23" : "59"}
+                step="1"
+                inputMode="numeric"
+                value={length()[part]}
+                onInput={(event) => setLength((value) => ({ ...value, [part]: event.currentTarget.value }))}
+                disabled={timerPending()}
+                aria-label={`Focus ${part}`}
+              />
+            </label>
+          )}
+        </For>
+      </div>
+      <div data-slot="focus-duration-presets" aria-label="Focus duration presets">
+        <For each={durations}>
+          {(item) => (
+            <button
+              type="button"
+              data-active={duration() === item.value}
+              onClick={() => setLength(parts(item.value))}
+              disabled={timerPending()}
+            >
+              {item.label}
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={!duration()}>
+        <span data-slot="focus-duration-error" role="alert">
+          Choose a duration from 1 minute to 23 hours 59 minutes 59 seconds.
+        </span>
+      </Show>
+    </div>
+  )
+  const timerWarning = () => (
+    <Show when={timerNotice()}>
+      {(current) => (
+        <div data-slot="focus-timer-notice" data-kind={current().kind} role="alert">
+          <span>{current().message}</span>
+          <Button variant="ghost" size="small" onClick={timerRetry}>
+            {current().kind === "stale" ? "Review and retry" : timerRecovery() ? "Try again" : "Refresh"}
+          </Button>
+        </div>
+      )}
+    </Show>
+  )
+  const linkedTodo = () => (
+    <Show when={timer()?.todoID}>
+      <p data-slot="focus-timer-link">
+        {timer()?.todoExists === false ? "Linked todo is no longer available" : `Linked to ${todoOption().label}`}
+      </p>
+    </Show>
+  )
   const panel = () => (
     <section data-slot="focus-timer" data-state={timer()?.state ?? "loading"} aria-labelledby="focus-timer-title">
       <div data-slot="focus-timer-copy">
@@ -608,37 +702,11 @@ export const TodoView: Component<{
           <span>{durationCopy()}</span>
         </div>
       </div>
-      <Show when={timer()?.todoID}>
-        <p data-slot="focus-timer-link">
-          {timer()?.todoExists === false ? "Linked todo is no longer available" : `Linked to ${todoOption().label}`}
-        </p>
-      </Show>
-      <Show when={timerNotice()}>
-        {(current) => (
-          <div data-slot="focus-timer-notice" data-kind={current().kind} role="alert">
-            <span>{current().message}</span>
-            <Button variant="ghost" size="small" onClick={timerRetry}>
-              {current().kind === "stale" ? "Review and refresh" : recovery() ? "Try again" : "Refresh"}
-            </Button>
-          </div>
-        )}
-      </Show>
+      {linkedTodo()}
+      {timerWarning()}
       <Show when={!timerLoading() && (timer()?.state === "idle" || timer()?.state === "completed")}>
         <div data-slot="focus-timer-fields">
-          <label>
-            <span>Duration</span>
-            <Select
-              options={durations}
-              current={duration()}
-              value={(item) => String(item.value)}
-              label={(item) => item.label}
-              onSelect={(item) => {
-                if (item) setDuration(item)
-              }}
-              aria-label="Focus duration"
-              disabled={timerPending()}
-            />
-          </label>
+          {durationFields()}
           <label>
             <span>Work on</span>
             <Select
@@ -657,8 +725,11 @@ export const TodoView: Component<{
         <Show when={timer()?.state === "idle" || timer()?.state === "completed"}>
           <Button
             size="small"
-            disabled={timerLoading() || timerPending() || !timer()}
-            onClick={() => sendTimer({ operation: "start", durationMs: duration().value, todoID: todo() })}
+            disabled={timerLoading() || timerPending() || !timer() || !duration()}
+            onClick={() => {
+              const ms = duration()
+              if (ms) sendTimer({ operation: "start", durationMs: ms, todoID: todo() })
+            }}
           >
             Start focus
           </Button>
@@ -753,20 +824,29 @@ export const TodoView: Component<{
             id="todo-assistant-input"
             value={askDraft()}
             onInput={(event) => setAskDraft(event.currentTarget.value)}
+            maxLength={1_400}
             placeholder="I want to learn how to play the violin…"
           />
-          <Button type="submit" disabled={!askDraft().trim() || !props.onAskRaya}>
-            Continue in chat
+          <Button type="submit" disabled={!askDraft().trim() || !canPlan()}>
+            {props.canSubmitPlan && props.onSubmitPlan ? "Ask Raya to plan" : "Continue in chat"}
           </Button>
         </form>
         <div data-slot="todo-assistant-prompts">
-          <button type="button" onClick={() => plan("I want to learn how to play the violin")}>
+          <button type="button" onClick={() => plan("I want to learn how to play the violin")} disabled={!canPlan()}>
             Plan a goal
           </button>
-          <button type="button" onClick={() => plan("Help me prioritize my open todos for today")}>
+          <button
+            type="button"
+            onClick={() => plan("Help me prioritize my open todos for today")}
+            disabled={!canPlan()}
+          >
             Help me prioritize
           </button>
-          <button type="button" onClick={() => plan("Suggest useful reminders for my upcoming todos")}>
+          <button
+            type="button"
+            onClick={() => plan("Suggest useful reminders for my upcoming todos")}
+            disabled={!canPlan()}
+          >
             Ask about reminders
           </button>
         </div>

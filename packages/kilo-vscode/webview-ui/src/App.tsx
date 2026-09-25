@@ -359,6 +359,19 @@ const AppContent: Component = () => {
     )
   }
 
+  const planTodo = (text: string) => {
+    if (!server.isConnected() || session.cloudPreviewId()) {
+      askRaya(text)
+      return
+    }
+    setCurrentView("newTask")
+    const origin = session.currentSessionID()
+    const pending = origin ? undefined : (tabs?.pending() ?? session.draftSessionID())
+    const id = origin ?? pending
+    const model = session.selected(id)
+    session.sendMessage(text, model?.providerID, model?.modelID, undefined, pending)
+  }
+
   const cycleAgent = (direction: 1 | -1) => {
     const id = session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID()
     cycle({
@@ -516,6 +529,8 @@ const AppContent: Component = () => {
                 onFocusConsumed={() => setTodoTarget()}
                 onEditProposal={editTodoProposal}
                 onAskRaya={askRaya}
+                onSubmitPlan={planTodo}
+                canSubmitPlan={server.isConnected() && !session.cloudPreviewId()}
                 onBack={() => setCurrentView("newTask")}
               />
             </Match>

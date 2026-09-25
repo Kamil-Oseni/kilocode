@@ -55,16 +55,25 @@ for (const theme of ["light", "dark", "contrast"])
     })
   }
 
-test("Todo planning sends the user's goal through Raya and filters priorities", async ({ page }) => {
+test("Todo planning submits the user's goal through Raya and filters priorities", async ({ page }) => {
   await page.goto("/")
   await page.locator('[data-slot="todo-overview-grid"] button').filter({ hasText: "Completed" }).click()
   await expect(page.locator('[data-slot="personal-todo-item"]')).toHaveCount(1)
   await expect(page.getByText("Confirm the release owner", { exact: true })).toBeVisible()
   await page.locator('[data-slot="todo-overview-grid"] button').filter({ hasText: "All tasks" }).click()
   await page.getByRole("textbox", { name: "Ask Raya to plan a todo" }).fill("I want to learn violin")
+  await page.getByRole("button", { name: "Ask Raya to plan", exact: true }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-submitted-plan", /I want to learn violin/)
+  await expect(page.locator("body")).toHaveAttribute("data-submitted-plan", /reviewable proposal before saving/)
+  await expect(page.locator("body")).not.toHaveAttribute("data-asked-raya", /I want to learn violin/)
+})
+
+test("Todo planning leaves a draft for review when sending is unavailable", async ({ page }) => {
+  await page.goto("/?state=plan-offline")
+  await page.getByRole("textbox", { name: "Ask Raya to plan a todo" }).fill("  Learn violin  ")
   await page.getByRole("button", { name: "Continue in chat", exact: true }).click()
-  await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /I want to learn violin/)
-  await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /reviewable proposal before saving/)
+  await expect(page.locator("body")).toHaveAttribute("data-asked-raya", /Help me with my Todo: Learn violin/)
+  await expect(page.locator("body")).not.toHaveAttribute("data-submitted-plan", /Learn violin/)
 })
 
 test("subtasks save independently and stale steps refresh without replay", async ({ page }) => {
@@ -452,6 +461,39 @@ test("starts, pauses, resumes and resets the timer from the keyboard", async ({ 
   await reset.focus()
   await page.keyboard.press("Enter")
   await expect(page.getByText("Ready when you are", { exact: true })).toBeVisible()
+})
+
+test("starts a custom hour-minute-second duration and restores it after reload", async ({ page }) => {
+  await page.goto("/?timer=idle")
+  await page.getByLabel("Focus hours").fill("1")
+  await page.getByLabel("Focus minutes").fill("2")
+  await page.getByLabel("Focus seconds").fill("3")
+  await expect(page.getByLabel("Focus time remaining")).toHaveText("1:02:03")
+  await page.getByRole("button", { name: "Start focus" }).click()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message) => message.type === "focusTimerStart")).toMatchObject([{ durationMs: 3_723_000 }])
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel("Focus time remaining")).toHaveText(/^1:0[12]:\d\d$/)
+  await page.getByRole("button", { name: "Reset" }).click()
+  await expect(page.getByLabel("Focus hours")).toHaveValue("1")
+  await expect(page.getByLabel("Focus minutes")).toHaveValue("2")
+  await expect(page.getByLabel("Focus seconds")).toHaveValue("3")
+  await audit(page)
+})
+
+test("refuses an invalid custom duration before dispatch", async ({ page }) => {
+  await page.goto("/?timer=idle")
+  await page.getByLabel("Focus hours").fill("0")
+  await page.getByLabel("Focus minutes").fill("0")
+  await page.getByLabel("Focus seconds").fill("59")
+  await expect(page.getByRole("button", { name: "Start focus" })).toBeDisabled()
+  await expect(page.getByRole("alert")).toContainText("Choose a duration from 1 minute")
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.some((message) => message.type === "focusTimerStart")).toBe(false)
+  await page.getByRole("button", { name: "15 minutes" }).click()
+  await expect(page.getByLabel("Focus time remaining")).toHaveText("15:00")
+  await expect(page.getByRole("button", { name: "Start focus" })).toBeEnabled()
 })
 
 test("keeps a pending timer action disabled", async ({ page }) => {

@@ -186,6 +186,64 @@ html [data-component="personal-todo"] {
 [data-slot="focus-timer-fields"] {
   width: 100%;
 }
+[data-slot="focus-duration"] {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 9px;
+}
+[data-slot="focus-duration"] > span,
+[data-slot="focus-duration-inputs"] label > span {
+  color: #b8b8ba;
+  font-size: 11px;
+}
+[data-slot="focus-duration-inputs"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+[data-slot="focus-duration-inputs"] label {
+  display: grid;
+  gap: 4px;
+}
+[data-slot="focus-duration-inputs"] input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #454548;
+  border-radius: 8px;
+  background: #1e1e1f;
+  color: var(--text-base, var(--vscode-foreground));
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+[data-slot="focus-duration-inputs"] input:focus-visible,
+[data-slot="focus-duration-presets"] button:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, var(--raya-primary));
+  outline-offset: 2px;
+}
+[data-slot="focus-duration-presets"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+[data-slot="focus-duration-presets"] button {
+  padding: 6px 9px;
+  border: 1px solid #454548;
+  border-radius: 999px;
+  background: transparent;
+  color: #c4c4c6;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+[data-slot="focus-duration-presets"] button[data-active="true"] {
+  border-color: var(--raya-primary);
+  color: var(--text-base, var(--vscode-foreground));
+}
+[data-slot="focus-duration-error"] {
+  color: var(--vscode-errorForeground, #e06c75);
+}
 [data-slot="focus-timer-actions"] {
   justify-content: center;
   width: 100%;
@@ -360,6 +418,23 @@ body.vscode-light [data-slot="focus-timer-face"] output {
 }
 body.vscode-light [data-slot="focus-timer-face"] span {
   color: #4b4d55;
+}
+body.vscode-light [data-slot="focus-duration-inputs"] input {
+  border-color: #c7c7cc;
+  background: #fff;
+  color: #202022;
+}
+body.vscode-light [data-slot="focus-duration"] > span,
+body.vscode-light [data-slot="focus-duration-inputs"] label > span {
+  color: #53545a;
+}
+body.vscode-light [data-slot="focus-duration-presets"] button {
+  border-color: #c7c7cc;
+  color: #3c3c43;
+}
+body.vscode-light [data-slot="focus-duration-presets"] button[data-active="true"] {
+  border-color: var(--raya-primary);
+  color: #202022;
 }
 body.vscode-light [data-slot="todo-assistant"] input {
   color: #242428;

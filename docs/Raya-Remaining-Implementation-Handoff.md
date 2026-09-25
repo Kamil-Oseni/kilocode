@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 08:05 America/Toronto - Todo planning and custom timer follow-up
+
+The next Todo slice connects the planning field and quick prompts to `session.sendMessage` with the current model and pending draft scope when the local server is connected; offline and cloud-preview states prepare a draft for review. The focus timer now accepts exact hours, minutes and seconds within the existing backend's one-minute minimum and sub-24-hour UI range. Source checks and focused browser/Axe cases pass. Build and install a production snapshot, reload the open host, then request a violin-learning plan through Todo with a real provider. Confirm that Raya creates a reviewable proposal, apply it, complete and reopen a child, and verify persistence across backend restart. Run a short real timer and reminder through completion. If the model cannot reliably propose or the chat scope is wrong, correct the live path before calling `FUT-TODO-01` Verified. Continue the Routines organization/delegation and Autonomous Desktop Mode release gates separately.
+
 ## ChatGPT 2026-09-25 - installed Todo subtask snapshot handoff
 
 `b65075bd9f` is pushed and installed as `eden.raya@7.4.23-snapshot+b65075bd9f.kamil-oseni.1790336292805`. The rollback package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.1706b72160da2237361dd6f617fd52b9864d4eb82979dfc5600211123dcffaa2.vsix`, 545,209,509 bytes, SHA-256 `1706B72160DA2237361DD6F617FD52B9864D4EB82979DFC5600211123DCFFAA2`. Reload the open host and exercise a real provider-created Todo plan, then complete/reopen a child and restart the backend. Verify the saved state and that stale or unknown clicks do not replay. The installed-host flow, custom timer duration entry, live reminder, and organization delegation remain unverified. The user-owned images, documents and `debug.log` were not included in the implementation commit.

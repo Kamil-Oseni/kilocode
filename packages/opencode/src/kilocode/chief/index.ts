@@ -60,6 +60,12 @@ export namespace RayaChief {
       return true
     if (/\b(recurring|standing)\s+(agent|worker|task|job)s?\b/i.test(request)) return true
     if (
+      /\b(?:create|make|set up|add|hire|assign|give me|i want|i need)\s+(?:(?:[\w-]+)\s+){0,4}(?:agents?|workers?)\s+(?:to|who|that|for)\b(?!\s+(?:review|inspect|audit|fix|debug|code|implement|test)\b)/i.test(
+        request,
+      )
+    )
+      return true
+    if (
       /\b(agent|worker|task|job|report|remind)\w*\b/i.test(request) &&
       /\b(daily|weekly|monthly|hourly|every)\b/i.test(request)
     )

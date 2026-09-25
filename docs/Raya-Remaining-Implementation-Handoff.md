@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-25 09:27 America/Toronto - natural Routines intent follow-up
+
+Auto's Chief now exposes direct Routines tools for requests such as “Create agents to help me learn violin” while excluding one-off agents assigned to PR review, bug fixes and UI/configuration work. Focused positive/adverse routing tests and CLI typecheck pass. After installation, repeat a natural standing-agent request in the main chat with the selected model and confirm it reaches Ask, review and the right native tool without manually adding “routine” or “organization.”
+
+## ChatGPT 2026-09-25 09:24 America/Toronto - organization creation and restart follow-up
+
+A real `auto`/DeepSeek main-chat run created one temporary manual worker organization after an Ask review, corrected a refused manual-timezone input, inspected the single saved organization and worker IDs, and proved both IDs survived a backend restart through the organization API and active agent roster. The test organization was archived, its idle worker removed, and the temporary chat deleted. No separate pending `schedule_task` permission was observed because the primary agent currently allows it; do not call this a native permission-review pass. Next, verify the installed Ask card and Routines page with a real request, then create a multiworker organization with explicit directional delegation, exercise worker-to-worker communication, restart the extension/backend, and test denial and uncertain response without duplicate effects. Check natural standing-agent phrasing as well as explicit “organization” language. Keep `FUT-RCHAT-01` In progress.
+
 ## ChatGPT 2026-09-25 09:09 America/Toronto - real-provider Routines probe follow-up
 
 A fresh `auto`/DeepSeek organization request reached `ask_options` and asked for the user's violin level and goal before any creation call. The temporary probe chat was deleted. Continue in the installed host with a test answer, then inspect the plain-language review and permission decision, create and inspect the saved organization and worker IDs, verify worker communication, and restart both backend and extension. The CLI's noninteractive Ask call waited silently, so use the installed Ask card for the next complete flow; do not count this partial probe as saved organization acceptance.

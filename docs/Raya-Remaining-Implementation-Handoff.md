@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 20:05 America/Toronto - installed emergency-listener checkpoint
+
+`a5e7bcc8e0` is pushed and installed as `eden.raya@7.4.23-snapshot+a5e7bcc8e0.kamil-oseni.1790294609352`; the 446-file rollback VSIX SHA-256 is `94FDEA555CF956F9B89BFA7AC0DB15272D6BB52D6E2C84FA1FB69FBE45602321`. The push hook, low-memory snapshot build and real Windows PowerShell listener startup passed. Next validate an installed active grant with immediate physical Pause, manual takeover, Resume, backend disconnect, and prolonged use; then address held-input recovery and the native capture crash with a real receipt. The existing reported capture error dialog remains untouched. No complete installed-host autonomy benchmark exists; keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-24 20:01 America/Toronto - emergency listener readiness handoff
 
 The desktop grant now waits for a native `ready` signal after global hotkey/hook registration and the takeover grace, and dispatch/capture refuse to start before that signal. A real Windows helper startup initially failed because Windows PowerShell's .NET lacks `Environment.TickCount64`; replacing it with `Stopwatch` and avoiding an unsupported C# null-conditional operator made the real startup check pass. Focused source tests, extension/webview typechecks, lint and formatting pass. Commit, push and install the snapshot, then validate actual physical Pause, manual takeover, grant/resume, backend loss and prolonged use. The helper's readiness does not solve potential held-input release after a killed dispatch host, and the native capture memory-read dialog remains untouched without a crash receipt. Keep `FUT-CU-01` In progress; do not claim the installed benchmark is complete.

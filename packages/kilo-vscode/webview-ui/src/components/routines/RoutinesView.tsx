@@ -406,20 +406,20 @@ function OrganizationEditor(props: {
         </details>
 
         <details class="routines-organization-disclosure routines-organization-archive">
-          <summary>Remove organization</summary>
+          <summary>Archive organization</summary>
           <section
             class="routines-organization-section routines-organization-danger"
             aria-labelledby={`archive-${props.item.id}`}
           >
             <div>
-              <h4 id={`archive-${props.item.id}`}>Remove {props.item.name} from Routines</h4>
+              <h4 id={`archive-${props.item.id}`}>Archive {props.item.name}</h4>
               <p>
                 Raya stops every worker and disables its schedules. They will not restart on their own. Chats, work and
                 reports stay saved.
               </p>
             </div>
             <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
-              Remove organization
+              Archive organization
             </Button>
           </section>
         </details>
@@ -1065,11 +1065,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     const item = target ?? editingOrganization()
     if (!item || organizationRequest()) return
     dialog.show(() => (
-      <Dialog title={`Remove ${item.name}?`} fit>
+      <Dialog title={`Archive ${item.name}?`} fit>
         <div class="dialog-confirm-body">
           <span>
-            Raya will stop every worker and disable its schedules before removing this organization from your active
-            list. They will not restart on their own. Chats, work and reports stay saved.
+            Raya will stop every worker and disable its schedules before archiving this organization. Its workers will
+            not restart on their own. The organization leaves your active list; chats, work and reports stay saved.
           </span>
           <div class="dialog-confirm-actions">
             <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
@@ -1091,7 +1091,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 dialog.close()
               }}
             >
-              Remove organization
+              Archive organization
             </Button>
           </div>
         </div>
@@ -2181,7 +2181,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         {organizationRequest()?.action === "archive" &&
                         organizationRequest()?.organizationID === item.id
                           ? "Stopping workers…"
-                          : "Remove organization"}
+                          : "Archive organization"}
                       </Button>
                     </div>
                   </div>

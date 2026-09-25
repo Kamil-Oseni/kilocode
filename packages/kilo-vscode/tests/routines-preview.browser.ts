@@ -740,10 +740,10 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
-  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeVisible()
-  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
-  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText(
-    "Raya will stop every worker and schedule",
+  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Archive organization", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
+    "Raya will stop every worker and disable its schedules",
   )
   await page.getByRole("button", { name: "Keep organization" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
@@ -793,14 +793,14 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByText(/\$249\.58 available/)).toBeVisible()
 
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeHidden()
   await page.locator(".routines-organization-archive > summary").click()
-  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
-  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText(
-    "Raya will stop every worker and schedule",
+  await page.getByRole("button", { name: "Archive organization", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
+    "Raya will stop every worker and disable its schedules",
   )
   await page.getByRole("button", { name: "Keep organization" }).click()
-  await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toBeHidden()
+  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toBeHidden()
   const result = await new AxeBuilder({ page })
     .include(".routines-view")
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
@@ -814,10 +814,10 @@ test("archive from organization overview returns to the roster after its receipt
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
-  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
+  await page.getByRole("button", { name: "Archive organization", exact: true }).click()
   await page
-    .getByRole("dialog", { name: "Remove Website Builders?" })
-    .getByRole("button", { name: "Remove organization" })
+    .getByRole("dialog", { name: "Archive Website Builders?" })
+    .getByRole("button", { name: "Archive organization" })
     .click()
   await expect(page.locator(".routines-organization-overview")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Website Builders 3" })).toBeVisible()
@@ -827,13 +827,13 @@ test("archive refusal stays visible in the organization overview", async ({ page
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines&scene=archive-worker-active")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
-  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
+  await page.getByRole("button", { name: "Archive organization", exact: true }).click()
   await page
-    .getByRole("dialog", { name: "Remove Website Builders?" })
-    .getByRole("button", { name: "Remove organization" })
+    .getByRole("dialog", { name: "Archive Website Builders?" })
+    .getByRole("button", { name: "Archive organization" })
     .click()
   await expect(page.locator(".routines-organization-overview").getByRole("alert")).toContainText(
-    "Raya could not finish removing this organization",
+    "Raya could not finish archiving this organization",
   )
   await expect(page.locator(".routines-organization-overview")).toBeVisible()
 })
@@ -847,7 +847,7 @@ test("narrow organization editor reveals one settings group at a time", async ({
   await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible()
   await expect(page.getByLabel("Instructions for the team")).toBeHidden()
   await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
-  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeHidden()
 
   await page.getByText("How this team works", { exact: true }).click()
   await expect(page.getByLabel("Instructions for the team")).toBeVisible()
@@ -862,7 +862,7 @@ test("narrow organization editor reveals one settings group at a time", async ({
   await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
   await page.getByText("Who can assign work", { exact: true }).click()
   await page.locator(".routines-organization-archive > summary").click()
-  await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeVisible()
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   const result = await new AxeBuilder({ page })

@@ -819,7 +819,7 @@ async function retire(ctx: Ctx) {
       type: "routineOrganizationArchived",
       requestID: msg.requestID,
       organizationID: msg.organizationID,
-      error: "Raya could not finish removing this organization. It remains in your active list.",
+      error: "Raya could not finish archiving this organization. It remains in your active list. Review its workers before retrying.",
       recovery: { kind: "conflict", next: "Refresh its workers and retry. Resolve any interrupted start first." },
     })
     return

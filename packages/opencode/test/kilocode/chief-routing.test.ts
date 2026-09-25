@@ -81,6 +81,7 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.route({ request, agents })).toMatchObject({ role: "researcher", needs_plan: true })
     expect(RayaChief.route({ request: "Inspect chat timestamps", agents }).needs_plan).toBe(false)
     expect(RayaChief.prompt(agents)).toContain("do not call chief_inspect, chief_review, or chief_synthesize")
+    expect(RayaChief.prompt(agents)).toContain("do not expose internal session IDs, task IDs, branch IDs")
   })
 
   it("answers only self-contained conversational turns without a child", () => {

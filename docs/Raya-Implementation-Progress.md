@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-25 02:42 America/Toronto - Chief progress text follow-up
+
+The same saved parallel-review session also included raw child session IDs and an overlong delegation explanation in the main agent's visible progress text. Chief guidance now uses specialist names and the remaining work in one brief status update, and keeps session/task/branch IDs and tool syntax out of user-facing progress and final synthesis. The focused Chief routing/prompt suite passes 12 cases; CLI typecheck, formatting and diff checks pass. This is a provider-behavior guard, not evidence that a fresh real-provider run follows it. Commit/push and an updated snapshot remain before installed review; the previously installed `1f899f487e` snapshot does not include this follow-up.
+
 ## ChatGPT 2026-09-25 02:37 America/Toronto - chat activity snapshot installed
 
 Commit `1f899f487e` is pushed to `origin/main`; its push hook passed 29 non-JetBrains package typechecks and the JetBrains typecheck. The low-memory production build passed SDK generation, CLI smoke tests, extension/webview typechecks, lint, native capture and input self-tests, the native input-host round trip, and packaging. VS Code lists `eden.raya@7.4.23-snapshot+1f899f487e.kamil-oseni.1790317978234`. The retained 448-file, 545,021,474-byte rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.befbd2d3da97973059734570b0efa4e1d49af394f095fe66458e929724d54b43.vsix`, SHA-256 `BEFBD2D3DA97973059734570B0EFA4E1D49AF394F095FE66458E929724D54B43`. Installation does not prove the open VS Code window reloaded or the real provider now follows the corrected two-specialist plan. Next reload and inspect the installed historical chat, then run a fresh two-specialist request to verify saved planning, sibling waiting, and final synthesis. Keep `FUT-AGENT-01/02` and `FUT-CU-01` In progress.

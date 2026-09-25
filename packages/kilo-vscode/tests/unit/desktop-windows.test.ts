@@ -100,7 +100,7 @@ describe("Windows native desktop driver", () => {
     }
   })
 
-  it("falls back only for a bounded no-present refusal, and stops on a changed target", async () => {
+  it("falls back only for a bounded no-present refusal, and stops on a changed target or process", async () => {
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
     const header = {
       v: 1,
@@ -114,7 +114,11 @@ describe("Windows native desktop driver", () => {
       preparationMs: 1,
     }
     const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
-    for (const reason of ["no_present", "target_changed"] as const) {
+    for (const [reason, changed] of [
+      ["no_present", false],
+      ["no_present", true],
+      ["target_changed", false],
+    ] as const) {
       const script = `
         const h=${JSON.stringify(header)};
         const send=(meta,data)=>{const json=Buffer.from(JSON.stringify(meta));const packet=Buffer.alloc(8+json.length+data.length);packet.writeUInt32LE(json.length,0);json.copy(packet,4);packet.writeUInt32LE(data.length,4+json.length);data.copy(packet,8+json.length);process.stdout.write(packet)};
@@ -138,6 +142,8 @@ describe("Windows native desktop driver", () => {
             })
           if (value.includes("[RayaDesktopNative]::Identity($value)"))
             return JSON.stringify({ identity: "A".repeat(64) })
+          if (value.includes("Desktop target changed after post-action capture"))
+            return JSON.stringify({ ...target, identity: (changed ? "B" : "A").repeat(64) })
           return JSON.stringify(target)
         },
         cancel: () => undefined,
@@ -160,8 +166,15 @@ describe("Windows native desktop driver", () => {
           observedAt: 1,
           validUntil: 10_000,
         })
-        if (reason === "no_present") {
+        if (reason === "no_present" && !changed) {
           expect((await pending).data).toBe("fresh PowerShell pixels")
+          expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(prior + 1)
+          expect(
+            calls.filter((value) => value.includes("Desktop target changed after post-action capture")),
+          ).toHaveLength(1)
+          expect(calls.filter((value) => value.includes("[RayaDesktopNative]::Identity($value)"))).toHaveLength(0)
+        } else if (changed) {
+          await expect(pending).rejects.toThrow(/target changed after post-action capture/i)
           expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(prior + 1)
         } else {
           await expect(pending).rejects.toThrow(/target_changed/)

@@ -797,6 +797,23 @@ $value = [Convert]::ToInt64(([string]$target.windowID).Substring(2), 16)
 `
 }
 
+function currentExact(target: { windowID: string; location: string; identity?: string }) {
+  const input = payload(target)
+  return `${setup}
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+$window = Get-RayaWindow
+if ($window.WindowID -ne $target.windowID -or $window.Location -ne $target.location) {
+  throw "Desktop target changed after post-action capture"
+}
+$identity = $null
+if ($target.identity) {
+  $identity = [RayaDesktopNative]::Identity($window.Handle)
+  if ($identity -ne $target.identity) { throw "Desktop process identity changed after post-action capture" }
+}
+[pscustomobject]@{ windowID = $window.WindowID; location = $window.Location; identity = $identity } | ConvertTo-Json -Compress
+`
+}
+
 function focus(target: DesktopWindow) {
   const input = payload(target)
   return `${setup}
@@ -1354,11 +1371,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const frame = await this.observe({ fresh: true })
       if (frame.windowID !== target.windowID || frame.location !== target.location)
         throw new Error("Desktop target changed during post-action capture")
-      if (target.identity && (await this.identity(target.windowID)) !== target.identity)
-        throw new Error("Desktop process identity changed during post-action capture")
-      const current = await this.current()
-      if (current.windowID !== target.windowID || current.location !== target.location)
-        throw new Error("Desktop target changed after post-action capture")
+      await this.verifyCurrent(target)
       if (host !== this.host) throw new Error("Native post-action capture stopped during fallback")
       return frame
     }
@@ -1439,6 +1452,24 @@ export class WindowsDesktopDriver implements DesktopDriver {
       latest?.data.fill(0)
     }
     return result
+  }
+
+  private async verifyCurrent(target: DesktopDispatchTarget): Promise<void> {
+    if (!/^0x[0-9A-F]+$/.test(target.windowID) || !target.location || target.location.length > 4096)
+      throw new Error("Post-action desktop target identity is invalid")
+    if (target.identity !== undefined && !/^[A-F0-9]{64}$/.test(target.identity))
+      throw new Error("Post-action desktop process identity is invalid")
+    const result = object(
+      await this.runner.run(
+        currentExact({ windowID: target.windowID, location: target.location, identity: target.identity }),
+      ),
+    )
+    if (
+      result.windowID !== target.windowID ||
+      result.location !== target.location ||
+      (target.identity && result.identity !== target.identity)
+    )
+      throw new Error("Desktop target changed after post-action capture")
   }
 
   private warm(options?: { fresh?: boolean }): CapturedScene | undefined {

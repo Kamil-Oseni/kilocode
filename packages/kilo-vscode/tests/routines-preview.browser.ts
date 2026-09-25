@@ -311,6 +311,26 @@ for (const width of [320, 900]) {
   })
 }
 
+for (const width of [320, 900]) {
+  test(`organization changes clear selections from another team at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-routines")
+    await page.getByText("View options", { exact: true }).click()
+    await page.getByRole("button", { name: "Manage workers" }).click()
+
+    const counsel = page.locator(".routines-row").filter({
+      has: page.locator('.routines-identity[data-routine-worker="legal"]'),
+    })
+    await counsel.locator('[data-component="checkbox"]').click()
+    await expect(page.locator(".routines-selection-count")).toHaveText("1")
+    await page.getByRole("button", { name: "Finance 1" }).click()
+
+    await expect(page.locator('.routines-identity[data-routine-worker="legal"]')).toHaveCount(0)
+    await expect(page.locator(".routines-selection-count")).toHaveText("Select workers")
+    await expect(page.getByRole("button", { name: "Remove", exact: true })).toHaveCount(0)
+  })
+}
+
 test("wide routines organization filters and opens worker DMs", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")

@@ -962,6 +962,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const chooseOrganization = (organizationID?: string) => {
     choose()
+    setPicked({})
     setEditingOrganization()
     setOrganization(organizationID)
     rememberOrganization(organizationID)

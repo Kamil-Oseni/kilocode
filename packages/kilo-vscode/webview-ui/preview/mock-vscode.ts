@@ -685,6 +685,25 @@ const initial = (message: WebviewMessage) => {
   return true
 }
 
+const archive = (message: Extract<WebviewMessage, { type: "routineOrganizationArchive" }>) => {
+  if (scene === "archive-worker-active") {
+    emit({
+      type: "routineOrganizationArchived",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      error: "Raya could not finish removing this organization. It remains in your active list.",
+      recovery: { kind: "conflict", next: "Refresh its workers and retry. Resolve any interrupted start first." },
+    })
+    return
+  }
+  emit({
+    type: "routineOrganizationArchived",
+    requestID: message.requestID,
+    organizationID: message.organizationID,
+    revision: message.expectedRevision + 1,
+  })
+}
+
 const respond = (message: WebviewMessage) => {
   if (message.type === "requestProjectUsage") {
     emit({
@@ -1016,12 +1035,7 @@ const respond = (message: WebviewMessage) => {
     return
   }
   if (message.type === "routineOrganizationArchive") {
-    emit({
-      type: "routineOrganizationArchived",
-      requestID: message.requestID,
-      organizationID: message.organizationID,
-      revision: message.expectedRevision + 1,
-    })
+    archive(message)
   }
 }
 

@@ -142,6 +142,8 @@ export const RayaRoutineOrganizationTable = sqliteTable(
     budget: integer(),
     revision: integer().notNull(),
     archived_at: integer(),
+    stopping_at: integer(),
+    stopped_at: integer(),
     time_created: integer().notNull(),
     time_updated: integer().notNull(),
   },

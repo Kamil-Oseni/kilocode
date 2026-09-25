@@ -243,10 +243,10 @@ export namespace RayaTaskQueue {
           ),
         )
         .run()
-    const discard = (agentID: string) =>
+    const discard = (agentID: string, reason = "Routine removed from the roster.") =>
       db
         .update(Occurrence)
-        .set({ state: "skipped", reason: "Routine removed from the roster.", time_updated: Date.now() })
+        .set({ state: "skipped", reason, time_updated: Date.now() })
         .where(and(eq(Occurrence.agent_id, agentID), eq(Occurrence.state, "queued")))
         .run()
     return {

@@ -56,7 +56,9 @@ export namespace KilocodeBootstrap {
       const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // raya_change - Milestone A durable goal storage
       const config = yield* Config.Service // raya_change - Milestone I
       const database = yield* Database.Service
-      const routines = storage ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database }) : undefined
+      const routines = storage
+        ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database, halt: (id) => runs.cancel(id) })
+        : undefined
       const attention = storage
         ? yield* InstanceState.make((ctx) =>
             RayaGoalContinuation.subscribeAttention({

@@ -33,6 +33,7 @@ import { poll } from "./poll"
 import { InstanceState } from "@/effect/instance-state"
 import type { Database } from "@opencode-ai/core/database/database"
 import { scheduler } from "./scheduler"
+import { RayaTaskQueue } from "./queue"
 import { reconcile as recovery } from "./reconcile"
 import { RayaTaskSnapshot } from "./snapshot"
 import { RayaTaskOrganization } from "./organization"
@@ -170,6 +171,8 @@ export namespace RayaTaskRunner {
     resume: (sessionID: SessionID) => Effect.Effect<void>
     delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
+    stopMembers: (id: string, members: readonly string[]) => Effect.Effect<void, unknown>
+    recoverStops: () => Effect.Effect<void, unknown>
     settle: (sessionID: SessionID) => Effect.Effect<void>
     resolve: (
       id: string,
@@ -341,6 +344,8 @@ export namespace RayaTaskRunner {
     })
 
     const check = Effect.fn("RayaTaskRunner.check")(function* (id: string, trigger?: Trigger, follow?: boolean) {
+      if (organizations && (yield* organizations.stopped(id)))
+        return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
       const item = follow ? yield* tasks.get(id) : yield* tasks.launchable(id)
       if (follow && item.access === undefined)
         return yield* new RayaTask.GuardError({
@@ -415,6 +420,10 @@ export namespace RayaTaskRunner {
               (admitted, owner) =>
                 Effect.gen(function* () {
                   const item = admitted.selected.item
+                  if (organizations && (yield* organizations.stopped(item.id)))
+                    return yield* new RayaTask.GuardError({
+                      message: "This worker's organization is stopping or archived.",
+                    })
                   if (admitted.selected.trigger.kind === "timer") {
                     if (!schedule)
                       return yield* new RayaTask.GuardError({
@@ -601,6 +610,8 @@ export namespace RayaTaskRunner {
       question: string,
       opts?: { defer?: boolean; bind?: { source: string; sessionID: SessionID } },
     ) {
+      if (organizations && (yield* organizations.stopped(id)))
+        return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
       const item = yield* tasks.get(id)
       if (item.access === undefined)
         return yield* new RayaTask.GuardError({
@@ -847,7 +858,7 @@ export namespace RayaTaskRunner {
       return yield* errands.get(admitted.record.id)
     })
 
-    const abort = Effect.fn("RayaTaskRunner.stopErrand")(function* (id: string) {
+    const abort = Effect.fn("RayaTaskRunner.stopErrand")(function* (id: string, strict = false) {
       if (!errands)
         return yield* new RayaTask.GuardError({
           kind: "unavailable",
@@ -855,6 +866,16 @@ export namespace RayaTaskRunner {
         })
       const row = yield* errands.get(id)
       const kids = yield* errands.descendants(id)
+      if (strict) {
+        if (!input.halt)
+          return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
+        for (const item of [row, ...kids]) {
+          if (!item.sessionID || item.state === "completed" || item.state === "failed" || item.state === "cancelled")
+            continue
+          const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
+          yield* open(worker.dir, input.halt(item.sessionID))
+        }
+      }
       const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
       const record = yield* errands.stop(row.id, recipient, "Stopped by the user.", yield* spent(row))
       yield* sync(record)
@@ -872,10 +893,14 @@ export namespace RayaTaskRunner {
       for (const item of listed) {
         if (item.state === "completed" || item.state === "failed") continue
         yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
-        if (!item.sessionID || !input.halt) continue
-        yield* input
-          .halt(item.sessionID)
-          .pipe(Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))))
+        if (strict || !item.sessionID || !input.halt) continue
+        const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
+        const halted = open(worker.dir, input.halt(item.sessionID))
+        if (strict) yield* halted
+        else
+          yield* halted.pipe(
+            Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))),
+          )
       }
       const seen = new Set<string>()
       for (const item of listed) {
@@ -889,6 +914,59 @@ export namespace RayaTaskRunner {
         )
       }
       return record
+    })
+
+    const stopMembers = Effect.fn("RayaTaskRunner.stopMembers")(function* (_id: string, members: readonly string[]) {
+      if (!input.halt || !input.database || !errands || !schedule)
+        return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
+      const queue = RayaTaskQueue.make(input.database)
+      const seen = new Set<string>()
+      for (const id of members) {
+        const worker = yield* tasks.get(id)
+        if (worker.enabled) yield* tasks.update(id, { enabled: false })
+      }
+      for (const id of members) {
+        for (const row of yield* errands.held(id)) {
+          if (seen.has(row.id)) continue
+          seen.add(row.id)
+          yield* abort(row.id, true)
+        }
+      }
+      for (const id of members) {
+        const worker = yield* tasks.get(id)
+        for (const run of yield* tasks.runsFor(id)) {
+          if (!RayaTask.pending(run)) continue
+          yield* open(worker.dir, input.halt(run.sessionID))
+          const next = {
+            ...run,
+            status: "error" as const,
+            blockedReason: "Stopped because the organization was archived.",
+          }
+          yield* tasks.transition(run, next)
+          yield* schedule.settle(next)
+          if (reservations) {
+            const rows = yield* input.sessions.messages({ sessionID: run.sessionID })
+            const cost = rows.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
+            yield* reservations.settle(run.id, run.sessionID, cost).pipe(Effect.orDie)
+          }
+        }
+        yield* queue.discard(id, "Stopped because the organization was archived.").pipe(Effect.orDie)
+        if ((yield* schedule.active(id)).length || (yield* inspect(input.storage, id)))
+          return yield* new RayaTask.GuardError({
+            message: "A worker start is still in progress. Retry organization archive.",
+          })
+      }
+      for (const id of members)
+        if ((yield* errands.held(id)).length)
+          return yield* new RayaTask.GuardError({
+            message: "A worker still has outstanding delegated work. Retry organization archive.",
+          })
+    })
+
+    const recoverStops = Effect.fn("RayaTaskRunner.recoverStops")(function* () {
+      if (!input.database || !input.halt) return
+      const pending = RayaTaskOrganization.make(input.database, { ...tasks, stop: stopMembers }, input.storage)
+      for (const row of yield* pending.pending()) yield* pending.archive(row.id, { expectedRevision: row.revision })
     })
 
     const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (run: RayaTask.Run) {
@@ -1162,6 +1240,7 @@ export namespace RayaTaskRunner {
     const revive = Effect.fn("RayaTaskRunner.revive")(function* () {
       const items = yield* tasks.list()
       for (const item of items) {
+        if (organizations && (yield* organizations.stopped(item.id))) continue
         yield* reconcile(item.id)
         const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
         if (stranded?.sessionID && inbox) {
@@ -1230,6 +1309,7 @@ export namespace RayaTaskRunner {
             items,
             (item) =>
               Effect.gen(function* () {
+                if (organizations && (yield* organizations.stopped(item.id))) return undefined
                 yield* tasks.enforce(item.id)
                 yield* reconcile(item.id)
                 if (schedule) {
@@ -1326,6 +1406,8 @@ export namespace RayaTaskRunner {
       resume,
       delegate: delegate as Runner["delegate"],
       stop: abort as Runner["stop"],
+      stopMembers: stopMembers as Runner["stopMembers"],
+      recoverStops,
       settle: settle as Runner["settle"],
       resolve: resolve as Runner["resolve"],
       park: park as Runner["park"],
@@ -1347,6 +1429,7 @@ export namespace RayaTaskRunner {
     bus: Pick<Bus.Interface, "subscribeCallback">
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
+    halt?: (sessionID: SessionID) => Effect.Effect<void>
     contact?: { clock?: () => number; interval?: Duration.Input; batch?: number }
   }) {
     const runner = make(input)
@@ -1478,6 +1561,13 @@ export namespace RayaTaskRunner {
         }),
         (listener) => Effect.sync(() => GlobalBus.off("event", listener)),
       )
+      yield* runner
+        .recoverStops()
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => log.error("organization stop recovery failed", { err: Cause.squash(cause) })),
+          ),
+        )
       yield* runner
         .revive()
         .pipe(

@@ -812,8 +812,18 @@ async function retire(ctx: Ctx) {
     throw new Error("Reload the organization before archiving it.")
   const result = await ctx.kilo.organization.archive(
     { directory: ctx.dir, organizationID: msg.organizationID, expectedRevision: revision(msg) },
-    { throwOnError: true },
+    { throwOnError: false },
   )
+  if (result.response.status === 409) {
+    ctx.post({
+      type: "routineOrganizationArchived",
+      requestID: msg.requestID,
+      organizationID: msg.organizationID,
+      error: "Raya could not finish removing this organization. It remains in your active list.",
+      recovery: { kind: "conflict", next: "Refresh its workers and retry. Resolve any interrupted start first." },
+    })
+    return
+  }
   if (!organization(result.data, true) || result.data.id !== msg.organizationID)
     throw new Error("The archived organization response could not be verified. Refresh before trying again.")
   ctx.post({

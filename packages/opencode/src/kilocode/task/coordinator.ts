@@ -64,12 +64,21 @@ export function make(database: Database.Interface) {
             if (message.data.role !== "assistant")
               return yield* new Conflict({ message: "Only an assistant message can own coordinator cost." })
             const organization = yield* tx
-              .select({ revision: Organization.revision, archived: Organization.archived_at })
+              .select({
+                revision: Organization.revision,
+                archived: Organization.archived_at,
+                stopping: Organization.stopping_at,
+              })
               .from(Organization)
               .where(eq(Organization.id, input.organizationID))
               .get()
               .pipe(Effect.orDie)
-            if (!organization || organization.archived !== null || organization.revision !== input.organizationRevision)
+            if (
+              !organization ||
+              organization.archived !== null ||
+              organization.stopping !== null ||
+              organization.revision !== input.organizationRevision
+            )
               return yield* new Conflict({
                 message: "The organization changed before coordinator cost was attributed.",
               })

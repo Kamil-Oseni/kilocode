@@ -121,7 +121,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       halt: (sessionID) => runState.cancel(sessionID),
     })
     const inbox = RayaTaskInbox.make(database)
-    const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
+    const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
     const info = RayaTaskInfo.make(database)
     const errands = RayaTaskDelegation.make(database)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints

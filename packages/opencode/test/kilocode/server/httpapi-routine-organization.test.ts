@@ -200,27 +200,25 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
   expect(secondPage.items).toHaveLength(1)
   expect(new Set([...firstPage.items, ...secondPage.items].map((item) => item.id)).size).toBe(2)
 
-  const blocked = await app.request(route, {
-    method: "DELETE",
-    headers,
-    body: JSON.stringify({ expectedRevision: 2 }),
-  })
-  expect(blocked.status).toBe(409)
   expect(
     (
-      await app.request(`/kilocode/agent/${chief.id}`, {
-        method: "PATCH",
+      await app.request(route, {
+        method: "DELETE",
         headers,
-        body: JSON.stringify({ enabled: false }),
+        body: JSON.stringify({ expectedRevision: 1 }),
       })
     ).status,
-  ).toBe(200)
+  ).toBe(409)
   const archived = await app.request(route, {
     method: "DELETE",
     headers,
     body: JSON.stringify({ expectedRevision: 2 }),
   })
   expect(archived.status).toBe(200)
+  const paused = Schema.decodeUnknownSync(Schema.toCodecJson(Schema.Array(RayaTask.Agent)))(
+    await (await app.request("/kilocode/agent", { headers })).json(),
+  )
+  expect(paused.find((item) => item.id === chief.id)?.enabled).toBe(false)
   expect(Schema.decodeUnknownSync(Schema.toCodecJson(Organization))(await archived.json())).toMatchObject({
     archived: true,
     revision: 3,

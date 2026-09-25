@@ -52,6 +52,7 @@ export function make(database: Database.Interface) {
             if (
               !organization ||
               organization.archived_at !== null ||
+              organization.stopping_at !== null ||
               organization.revision !== input.organizationRevision
             )
               return yield* new Conflict({

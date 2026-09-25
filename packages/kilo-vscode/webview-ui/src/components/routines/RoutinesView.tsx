@@ -413,7 +413,7 @@ function OrganizationEditor(props: {
           >
             <div>
               <h4 id={`archive-${props.item.id}`}>Remove {props.item.name} from Routines</h4>
-              <p>Stop all workers before archiving. Their chats, work and reports stay saved.</p>
+              <p>Raya stops its workers and schedules. Their chats, work and reports stay saved.</p>
             </div>
             <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
               Remove organization
@@ -796,7 +796,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [organizationError, setOrganizationError] = createSignal("")
   const [organizationsLoaded, setOrganizationsLoaded] = createSignal(false)
   const [editingOrganization, setEditingOrganization] = createSignal<Organization>()
-  const [organizationRequest, setOrganizationRequest] = createSignal<{ id: string; action: "update" | "archive" }>()
+  const [organizationRequest, setOrganizationRequest] = createSignal<{
+    id: string
+    action: "update" | "archive"
+    organizationID: string
+  }>()
   const [authorityRequest, setAuthorityRequest] = createSignal<{ id: string; agentID: string }>()
   const provisioning = createMemo(() => authorityRequest()?.agentID)
   const locking = () => !!organizationRequest() || !!authorityRequest()
@@ -966,6 +970,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     choose()
     setPicked({})
     setEditingOrganization()
+    setOrganizationNotice("")
     setOrganization(organizationID)
     rememberOrganization(organizationID)
   }
@@ -1029,7 +1034,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (!item || organizationRequest()) return
     const id = crypto.randomUUID()
     setOrganizationNotice("")
-    setOrganizationRequest({ id, action: "update" })
+    setOrganizationRequest({ id, action: "update", organizationID: item.id })
     vscode.postMessage({
       type: "routineOrganizationUpdate",
       requestID: id,
@@ -1060,8 +1065,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       <Dialog title={`Remove ${item.name}?`} fit>
         <div class="dialog-confirm-body">
           <span>
-            This organization leaves your active list. Archive is available once its workers are stopped. Their chats,
-            work and reports stay saved.
+            Raya will stop every worker and schedule, then remove this organization from your active list. Chats, work
+            and reports stay saved.
           </span>
           <div class="dialog-confirm-actions">
             <Button intent="secondary" scale="large" onClick={() => dialog.close()} autofocus>
@@ -1073,7 +1078,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               onClick={() => {
                 const id = crypto.randomUUID()
                 setOrganizationNotice("")
-                setOrganizationRequest({ id, action: "archive" })
+                setOrganizationRequest({ id, action: "archive", organizationID: item.id })
                 vscode.postMessage({
                   type: "routineOrganizationArchive",
                   requestID: id,
@@ -1345,12 +1350,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     msg: Extract<ExtensionMessage, { type: "routineOrganizationUpdated" | "routineOrganizationArchived" }>,
   ) => {
     const request = organizationRequest()
-    const item = editingOrganization()
-    if (!request || msg.requestID !== request.id || !item || msg.organizationID !== item.id) return
+    if (!request || msg.requestID !== request.id || msg.organizationID !== request.organizationID) return
     if (request.action === "update" && msg.type !== "routineOrganizationUpdated") return
     if (request.action === "archive" && msg.type !== "routineOrganizationArchived") return
     setOrganizationRequest()
     if (msg.error) {
+      if (request.action === "archive" && organization() !== msg.organizationID) chooseOrganization(msg.organizationID)
       setOrganizationNotice(routineFailure(msg.error, msg.recovery))
       load()
       return
@@ -1364,7 +1369,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     }
     if (msg.type === "routineOrganizationArchived") {
       setEditingOrganization()
-      chooseOrganization()
+      if (organization() === msg.organizationID) chooseOrganization()
       load()
     }
   }
@@ -2164,12 +2169,25 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       <Button variant="ghost" size="small" onClick={() => editOrganization(item)}>
                         Settings
                       </Button>
-                      <Button variant="ghost" size="small" onClick={() => archiveOrganization(item)}>
-                        Remove organization
+                      <Button
+                        variant="ghost"
+                        size="small"
+                        disabled={locking()}
+                        onClick={() => archiveOrganization(item)}
+                      >
+                        {organizationRequest()?.action === "archive" &&
+                        organizationRequest()?.organizationID === item.id
+                          ? "Stopping workers…"
+                          : "Remove organization"}
                       </Button>
                     </div>
                   </div>
                   <div class="routines-thread-body">
+                    <Show when={organizationNotice()}>
+                      <p class="routines-error" role="alert">
+                        {organizationNotice()}
+                      </p>
+                    </Show>
                     <Show when={item.purpose || item.policy}>
                       <p class="routines-organization-purpose">{item.purpose || item.policy}</p>
                     </Show>

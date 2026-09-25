@@ -171,37 +171,6 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
-        CREATE TABLE \`raya_routine_organization_reservation\` (
-          \`run_id\` text PRIMARY KEY,
-          \`agent_id\` text NOT NULL,
-          \`organization_id\` text NOT NULL,
-          \`organization_revision\` integer NOT NULL,
-          \`session_id\` text,
-          \`budget\` real NOT NULL,
-          \`cost\` real,
-          \`state\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`fk_raya_routine_organization_reservation_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      // kilocode_change end
-      // kilocode_change start
-      yield* tx.run(`
-        CREATE TABLE \`raya_routine_organization_coordinator\` (
-          \`message_id\` text PRIMARY KEY,
-          \`session_id\` text NOT NULL,
-          \`organization_id\` text,
-          \`organization_revision\` integer,
-          \`state\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`fk_raya_routine_organization_coordinator_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      // kilocode_change end
-      // kilocode_change start
-      yield* tx.run(`
         CREATE TABLE \`raya_routine_message\` (
           \`id\` text PRIMARY KEY,
           \`agent_id\` text NOT NULL,
@@ -240,6 +209,20 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_routine_organization_coordinator\` (
+          \`message_id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`organization_id\` text,
+          \`organization_revision\` integer,
+          \`state\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_raya_routine_organization_coordinator_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_routine_organization_delegation\` (
           \`organization_id\` text NOT NULL,
           \`sender_id\` text NOT NULL,
@@ -269,6 +252,23 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_routine_organization_reservation\` (
+          \`run_id\` text PRIMARY KEY,
+          \`agent_id\` text NOT NULL,
+          \`organization_id\` text NOT NULL,
+          \`organization_revision\` integer NOT NULL,
+          \`session_id\` text,
+          \`budget\` real NOT NULL,
+          \`cost\` real,
+          \`state\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_raya_routine_organization_reservation_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_routine_organization_revision\` (
           \`organization_id\` text NOT NULL,
           \`revision\` integer NOT NULL,
@@ -289,6 +289,8 @@ export default {
           \`budget\` integer,
           \`revision\` integer NOT NULL,
           \`archived_at\` integer,
+          \`stopping_at\` integer,
+          \`stopped_at\` integer,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
         );
@@ -578,21 +580,6 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(
-        `CREATE INDEX \`raya_routine_organization_reservation_ledger\` ON \`raya_routine_organization_reservation\` (\`organization_id\`,\`state\`);`,
-      )
-      // kilocode_change end
-      // kilocode_change start
-      yield* tx.run(
-        `CREATE UNIQUE INDEX \`raya_routine_organization_reservation_session\` ON \`raya_routine_organization_reservation\` (\`session_id\`);`,
-      )
-      // kilocode_change end
-      // kilocode_change start
-      yield* tx.run(
-        `CREATE INDEX \`raya_routine_organization_coordinator_ledger\` ON \`raya_routine_organization_coordinator\` (\`organization_id\`,\`state\`);`,
-      )
-      // kilocode_change end
-      // kilocode_change start
-      yield* tx.run(
         `CREATE UNIQUE INDEX \`raya_routine_message_source\` ON \`raya_routine_message\` (\`agent_id\`,\`source\`);`,
       )
       // kilocode_change end
@@ -618,6 +605,11 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(
+        `CREATE INDEX \`raya_routine_organization_coordinator_ledger\` ON \`raya_routine_organization_coordinator\` (\`organization_id\`,\`state\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
         `CREATE UNIQUE INDEX \`raya_routine_organization_delegation_position\` ON \`raya_routine_organization_delegation\` (\`organization_id\`,\`position\`);`,
       )
       // kilocode_change end
@@ -639,6 +631,16 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_organization_member_supervisor\` ON \`raya_routine_organization_member\` (\`organization_id\`,\`supervisor_id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_organization_reservation_ledger\` ON \`raya_routine_organization_reservation\` (\`organization_id\`,\`state\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_organization_reservation_session\` ON \`raya_routine_organization_reservation\` (\`session_id\`);`,
       )
       // kilocode_change end
       // kilocode_change start

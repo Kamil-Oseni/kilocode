@@ -743,7 +743,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByRole("button", { name: "Remove organization", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Remove organization", exact: true }).click()
   await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText(
-    "Archive is available once its workers are stopped",
+    "Raya will stop every worker and schedule",
   )
   await page.getByRole("button", { name: "Keep organization" }).click()
   await page.getByRole("button", { name: "Settings" }).click()
@@ -797,7 +797,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.locator(".routines-organization-archive > summary").click()
   await page.getByRole("button", { name: "Remove organization", exact: true }).click()
   await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toContainText(
-    "Archive is available once its workers are stopped",
+    "Raya will stop every worker and schedule",
   )
   await page.getByRole("button", { name: "Keep organization" }).click()
   await expect(page.getByRole("dialog", { name: "Remove Website Builders?" })).toBeHidden()
@@ -808,6 +808,34 @@ test("routines organization editor separates reporting, delegation, and archive"
   expect(result.violations).toEqual([])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath("organization-editor.png"), fullPage: true })
+})
+
+test("archive from organization overview returns to the roster after its receipt", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Website Builders 3" }).click()
+  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Remove Website Builders?" })
+    .getByRole("button", { name: "Remove organization" })
+    .click()
+  await expect(page.locator(".routines-organization-overview")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Website Builders 3" })).toBeVisible()
+})
+
+test("archive refusal stays visible in the organization overview", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines&scene=archive-worker-active")
+  await page.getByRole("button", { name: "Website Builders 3" }).click()
+  await page.getByRole("button", { name: "Remove organization", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Remove Website Builders?" })
+    .getByRole("button", { name: "Remove organization" })
+    .click()
+  await expect(page.locator(".routines-organization-overview").getByRole("alert")).toContainText(
+    "Raya could not finish removing this organization",
+  )
+  await expect(page.locator(".routines-organization-overview")).toBeVisible()
 })
 
 test("narrow organization editor reveals one settings group at a time", async ({ page }, info) => {

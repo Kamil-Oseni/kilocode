@@ -231,6 +231,7 @@ function decoded(
 type Workers = {
   get(id: string): Effect.Effect<Pick<RayaTask.Agent, "enabled">, { readonly _tag: "RayaTask.NotFoundError" }>
   runsFor?(id: string): Effect.Effect<readonly RayaTask.Run[]>
+  stop?(id: string, members: readonly string[]): Effect.Effect<void, unknown>
 }
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
 
@@ -411,7 +412,7 @@ export namespace RayaTaskOrganization {
                 .get()
                 .pipe(Effect.orDie)
               if (!row) return yield* new NotFound({ message: "Organization not found." })
-              if (row.archived_at !== null)
+              if (row.archived_at !== null || row.stopping_at !== null)
                 return yield* new Conflict({ message: "Archived organizations cannot be edited." })
               if (row.revision !== value.expectedRevision)
                 return yield* new Conflict({ message: "This organization changed. Reload it before editing." })
@@ -542,116 +543,178 @@ export namespace RayaTaskOrganization {
       const value = yield* Schema.decodeUnknownEffect(Archive)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Provide the organization revision being archived." })),
       )
-      return yield* db
-        .transaction(
-          (tx) =>
-            Effect.gen(function* () {
-              const row = yield* tx
-                .select()
-                .from(OrganizationRow)
-                .where(eq(OrganizationRow.id, id))
-                .get()
-                .pipe(Effect.orDie)
-              if (!row) return yield* new NotFound({ message: "Organization not found." })
-              if (row.revision !== value.expectedRevision)
-                return yield* new Conflict({ message: "This organization changed. Reload it before archiving." })
-              if (row.archived_at !== null)
-                return yield* new Conflict({ message: "This organization is already archived." })
-              if (row.revision === Number.MAX_SAFE_INTEGER)
-                return yield* new Conflict({ message: "This organization reached its revision limit." })
-              const stored = yield* tx
-                .select()
-                .from(MemberRow)
-                .where(eq(MemberRow.organization_id, row.id))
-                .orderBy(asc(MemberRow.position))
-                .all()
-                .pipe(Effect.orDie)
-              const storedEdges = yield* tx
-                .select()
-                .from(DelegationRow)
-                .where(eq(DelegationRow.organization_id, row.id))
-                .orderBy(asc(DelegationRow.position))
-                .all()
-                .pipe(Effect.orDie)
-              const prior = decoded(row, stored, storedEdges)
-              if (!workers.runsFor)
-                return yield* new Conflict({
-                  message: "Worker run history is unavailable. Cannot safely archive this organization.",
-                })
-              for (const member of prior.members) {
-                const worker = yield* workers
-                  .get(member.agentID)
-                  .pipe(
-                    Effect.catchTag("RayaTask.NotFoundError", () =>
-                      Effect.fail(
-                        new Conflict({ message: "An organization worker is missing. Review it before archiving." }),
+      if (workers.stop) {
+        const members = yield* mutate(
+          storage,
+          db
+            .transaction(
+              (tx) =>
+                Effect.gen(function* () {
+                  const row = yield* tx
+                    .select()
+                    .from(OrganizationRow)
+                    .where(eq(OrganizationRow.id, id))
+                    .get()
+                    .pipe(Effect.orDie)
+                  if (!row) return yield* new NotFound({ message: "Organization not found." })
+                  if (row.revision !== value.expectedRevision || row.archived_at !== null)
+                    return yield* new Conflict({ message: "This organization changed. Reload it before archiving." })
+                  if (row.stopping_at === null)
+                    yield* tx
+                      .update(OrganizationRow)
+                      .set({ stopping_at: Date.now() })
+                      .where(eq(OrganizationRow.id, id))
+                      .run()
+                      .pipe(Effect.orDie)
+                  return yield* tx
+                    .select({ id: MemberRow.agent_id })
+                    .from(MemberRow)
+                    .where(eq(MemberRow.organization_id, id))
+                    .all()
+                    .pipe(Effect.orDie)
+                }),
+              { behavior: "immediate" },
+            )
+            .pipe(Effect.catchTag("SqlError", Effect.die)),
+          "Organization",
+        )
+        yield* workers
+          .stop(
+            id,
+            members.map((member) => member.id),
+          )
+          .pipe(
+            Effect.catchCause(() =>
+              Effect.fail(
+                new Conflict({ message: "Organization workers could not all be stopped. Retry the archive." }),
+              ),
+            ),
+          )
+      }
+      return yield* mutate(
+        storage,
+        db
+          .transaction(
+            (tx) =>
+              Effect.gen(function* () {
+                const row = yield* tx
+                  .select()
+                  .from(OrganizationRow)
+                  .where(eq(OrganizationRow.id, id))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (!row) return yield* new NotFound({ message: "Organization not found." })
+                if (row.revision !== value.expectedRevision)
+                  return yield* new Conflict({ message: "This organization changed. Reload it before archiving." })
+                if (row.archived_at !== null)
+                  return yield* new Conflict({ message: "This organization is already archived." })
+                if (row.revision === Number.MAX_SAFE_INTEGER)
+                  return yield* new Conflict({ message: "This organization reached its revision limit." })
+                const stored = yield* tx
+                  .select()
+                  .from(MemberRow)
+                  .where(eq(MemberRow.organization_id, row.id))
+                  .orderBy(asc(MemberRow.position))
+                  .all()
+                  .pipe(Effect.orDie)
+                const storedEdges = yield* tx
+                  .select()
+                  .from(DelegationRow)
+                  .where(eq(DelegationRow.organization_id, row.id))
+                  .orderBy(asc(DelegationRow.position))
+                  .all()
+                  .pipe(Effect.orDie)
+                const prior = decoded(row, stored, storedEdges)
+                if (!workers.runsFor)
+                  return yield* new Conflict({
+                    message: "Worker run history is unavailable. Cannot safely archive this organization.",
+                  })
+                for (const member of prior.members) {
+                  const worker = yield* workers
+                    .get(member.agentID)
+                    .pipe(
+                      Effect.catchTag("RayaTask.NotFoundError", () =>
+                        Effect.fail(
+                          new Conflict({ message: "An organization worker is missing. Review it before archiving." }),
+                        ),
                       ),
+                    )
+                  if (worker.enabled)
+                    return yield* new Conflict({ message: "Pause every organization worker before archiving." })
+                  if (
+                    (yield* workers.runsFor(member.agentID)).some(
+                      (run) =>
+                        run.status === "running" ||
+                        (run.status === "blocked" && run.blockedReason === "waiting on you"),
+                    )
+                  )
+                    return yield* new Conflict({ message: "Resolve every organization worker run before archiving." })
+                }
+                const ids = prior.members.map((member) => member.agentID)
+                const occurrence = yield* tx
+                  .select({ id: OccurrenceRow.id })
+                  .from(OccurrenceRow)
+                  .where(
+                    and(inArray(OccurrenceRow.agent_id, ids), inArray(OccurrenceRow.state, ["starting", "linked"])),
+                  )
+                  .limit(1)
+                  .get()
+                  .pipe(Effect.orDie)
+                if (occurrence)
+                  return yield* new Conflict({ message: "Resolve active scheduled work before archiving." })
+                const work = yield* tx
+                  .select({ id: WorkRow.id })
+                  .from(WorkRow)
+                  .where(
+                    and(
+                      eq(WorkRow.organization_id, id),
+                      inArray(WorkRow.state, ["queued", "accepted", "running", "needs_input"]),
                     ),
                   )
-                if (worker.enabled)
-                  return yield* new Conflict({ message: "Pause every organization worker before archiving." })
-                if (
-                  (yield* workers.runsFor(member.agentID)).some(
-                    (run) =>
-                      run.status === "running" || (run.status === "blocked" && run.blockedReason === "waiting on you"),
-                  )
-                )
-                  return yield* new Conflict({ message: "Resolve every organization worker run before archiving." })
-              }
-              const ids = prior.members.map((member) => member.agentID)
-              const occurrence = yield* tx
-                .select({ id: OccurrenceRow.id })
-                .from(OccurrenceRow)
-                .where(and(inArray(OccurrenceRow.agent_id, ids), inArray(OccurrenceRow.state, ["starting", "linked"])))
-                .limit(1)
-                .get()
-                .pipe(Effect.orDie)
-              if (occurrence) return yield* new Conflict({ message: "Resolve active scheduled work before archiving." })
-              const work = yield* tx
-                .select({ id: WorkRow.id })
-                .from(WorkRow)
-                .where(
-                  and(
-                    eq(WorkRow.organization_id, id),
-                    inArray(WorkRow.state, ["queued", "accepted", "running", "needs_input"]),
-                  ),
-                )
-                .limit(1)
-                .get()
-                .pipe(Effect.orDie)
-              if (work)
-                return yield* new Conflict({
-                  message: "Resolve outstanding organization delegations before archiving.",
-                })
-              const now = Date.now()
-              const next: Organization = {
-                ...prior,
-                revision: row.revision + 1,
-                archived: true,
-                archivedAt: now,
-                updatedAt: now,
-              }
-              yield* tx
-                .update(OrganizationRow)
-                .set({ revision: next.revision, archived_at: now, time_updated: now })
-                .where(and(eq(OrganizationRow.id, id), eq(OrganizationRow.revision, value.expectedRevision)))
-                .run()
-                .pipe(Effect.orDie)
-              yield* tx
-                .insert(RevisionRow)
-                .values({
-                  organization_id: id,
-                  revision: next.revision,
-                  definition: JSON.stringify(next),
-                  time_created: now,
-                })
-                .run()
-                .pipe(Effect.orDie)
-              return next
-            }),
-          { behavior: "immediate" },
-        )
-        .pipe(Effect.catchTag("SqlError", Effect.die))
+                  .limit(1)
+                  .get()
+                  .pipe(Effect.orDie)
+                if (work)
+                  return yield* new Conflict({
+                    message: "Resolve outstanding organization delegations before archiving.",
+                  })
+                const now = Date.now()
+                const next: Organization = {
+                  ...prior,
+                  revision: row.revision + 1,
+                  archived: true,
+                  archivedAt: now,
+                  updatedAt: now,
+                }
+                yield* tx
+                  .update(OrganizationRow)
+                  .set({
+                    revision: next.revision,
+                    archived_at: now,
+                    stopping_at: row.stopping_at ?? now,
+                    stopped_at: now,
+                    time_updated: now,
+                  })
+                  .where(and(eq(OrganizationRow.id, id), eq(OrganizationRow.revision, value.expectedRevision)))
+                  .run()
+                  .pipe(Effect.orDie)
+                yield* tx
+                  .insert(RevisionRow)
+                  .values({
+                    organization_id: id,
+                    revision: next.revision,
+                    definition: JSON.stringify(next),
+                    time_created: now,
+                  })
+                  .run()
+                  .pipe(Effect.orDie)
+                return next
+              }),
+            { behavior: "immediate" },
+          )
+          .pipe(Effect.catchTag("SqlError", Effect.die)),
+        "Organization",
+      )
     })
 
     const list = Effect.fn("RayaTaskOrganization.list")(function* (query: Query = {}) {
@@ -733,6 +796,31 @@ export namespace RayaTaskOrganization {
       return (row?.count ?? 0) > 0
     })
 
+    const stopped = Effect.fn("RayaTaskOrganization.stopped")(function* (agentID: string) {
+      const row = yield* db
+        .select({ id: MemberRow.organization_id })
+        .from(MemberRow)
+        .innerJoin(OrganizationRow, eq(OrganizationRow.id, MemberRow.organization_id))
+        .where(
+          and(
+            eq(MemberRow.agent_id, agentID),
+            or(isNotNull(OrganizationRow.stopping_at), isNotNull(OrganizationRow.archived_at)),
+          ),
+        )
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      return Boolean(row)
+    })
+
+    const pending = () =>
+      db
+        .select({ id: OrganizationRow.id, revision: OrganizationRow.revision })
+        .from(OrganizationRow)
+        .where(and(isNotNull(OrganizationRow.stopping_at), isNull(OrganizationRow.archived_at)))
+        .all()
+        .pipe(Effect.orDie)
+
     const used = Effect.fn("RayaTaskOrganization.used")(function* (agentID: string) {
       if (!Schema.is(AgentID)(agentID)) return yield* new Invalid({ message: "The worker ID is invalid." })
       const current = yield* db
@@ -772,6 +860,7 @@ export namespace RayaTaskOrganization {
           and(
             eq(OrganizationRow.id, id),
             isNull(OrganizationRow.archived_at),
+            isNull(OrganizationRow.stopping_at),
             inArray(MemberRow.agent_id, [...agents]),
           ),
         )
@@ -786,7 +875,13 @@ export namespace RayaTaskOrganization {
         .select({ id: MemberRow.organization_id })
         .from(MemberRow)
         .innerJoin(OrganizationRow, eq(OrganizationRow.id, MemberRow.organization_id))
-        .where(and(eq(MemberRow.agent_id, senderID), isNull(OrganizationRow.archived_at)))
+        .where(
+          and(
+            eq(MemberRow.agent_id, senderID),
+            isNull(OrganizationRow.archived_at),
+            isNull(OrganizationRow.stopping_at),
+          ),
+        )
         .all()
         .pipe(Effect.orDie)
       const ids = rows.map((row) => row.id)
@@ -808,6 +903,8 @@ export namespace RayaTaskOrganization {
     }) {
       const item = yield* get(input.id)
       if (item.archived) return yield* new Invalid({ message: "This organization is archived." })
+      if ((yield* stopped(input.senderID)) || (yield* stopped(input.recipientID)))
+        return yield* new Invalid({ message: "An organization worker is stopped." })
       if (input.revision !== undefined && item.revision !== input.revision)
         return yield* new Conflict({ message: "This organization changed. Reload it before delegating work." })
       const ids = new Set(item.members.map((member) => member.agentID))
@@ -831,7 +928,9 @@ export namespace RayaTaskOrganization {
       create: (input: Create) => mutate(storage, create(input), "Organization"),
       provision: (input: Create, id: string) => mutate(storage, create(input, id, true), "Organization"),
       update: (...args: Parameters<typeof update>) => mutate(storage, update(...args), "Organization"),
-      archive: (...args: Parameters<typeof archive>) => mutate(storage, archive(...args), "Organization"),
+      archive,
+      stopped,
+      pending,
       hasActive,
       used,
       contains,

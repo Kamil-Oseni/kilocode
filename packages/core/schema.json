@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "9f6a3cc0-abfc-4913-8af0-8a682155b0e6",
+  "id": "de452715-06c5-4e79-a00c-26affa2c032f",
   "prevIds": [
-    "e8b62b07-7e85-463d-9b70-37958f220a25"
+    "9f6a3cc0-abfc-4913-8af0-8a682155b0e6"
   ],
   "ddl": [
     {
@@ -59,11 +59,19 @@
       "entityType": "tables"
     },
     {
+      "name": "raya_routine_organization_coordinator",
+      "entityType": "tables"
+    },
+    {
       "name": "raya_routine_organization_delegation",
       "entityType": "tables"
     },
     {
       "name": "raya_routine_organization_member",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_organization_reservation",
       "entityType": "tables"
     },
     {
@@ -1368,6 +1376,76 @@
     },
     {
       "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_revision",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -1498,6 +1576,106 @@
     },
     {
       "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "run_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_revision",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "budget",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cost",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -1603,6 +1781,26 @@
       "default": null,
       "generated": null,
       "name": "archived_at",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stopping_at",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stopped_at",
       "entityType": "columns",
       "table": "raya_routine_organization"
     },
@@ -3057,6 +3255,21 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_raya_routine_organization_coordinator_organization_id_raya_routine_organization_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "columns": [
+        "organization_id"
+      ],
+      "tableTo": "raya_routine_organization",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_raya_routine_organization_delegation_organization_id_raya_routine_organization_id_fk",
       "entityType": "fks",
       "table": "raya_routine_organization_delegation"
@@ -3075,6 +3288,21 @@
       "name": "fk_raya_routine_organization_member_organization_id_raya_routine_organization_id_fk",
       "entityType": "fks",
       "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        "organization_id"
+      ],
+      "tableTo": "raya_routine_organization",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_organization_reservation_organization_id_raya_routine_organization_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_organization_reservation"
     },
     {
       "columns": [
@@ -3463,6 +3691,24 @@
       "nameExplicit": false,
       "name": "raya_routine_occurrence_pk",
       "table": "raya_routine_occurrence",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "message_id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_organization_coordinator_pk",
+      "table": "raya_routine_organization_coordinator",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "run_id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_organization_reservation_pk",
+      "table": "raya_routine_organization_reservation",
       "entityType": "pks"
     },
     {
@@ -3964,6 +4210,24 @@
           "isExpression": false
         },
         {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_coordinator_ledger",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_coordinator"
+    },
+    {
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
           "value": "position",
           "isExpression": false
         }
@@ -4046,6 +4310,38 @@
       "name": "raya_routine_organization_member_supervisor",
       "entityType": "indexes",
       "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_reservation_ledger",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_reservation"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_reservation_session",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_reservation"
     },
     {
       "columns": [

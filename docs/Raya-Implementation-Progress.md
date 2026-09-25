@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-25 - Todo planning and timer snapshot installed
+
+Product commit `65ace00404` is pushed to `origin/main`; the normal push hook passed cross-package and JetBrains typechecks. The low-memory production snapshot passed extension and webview typechecks, lint, production bundling, native capture/input self-tests, input-host round trip and VSIX packaging. VS Code installed `eden.raya@7.4.23-snapshot+65ace00404.kamil-oseni.1790338089475`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.d51c1a6b10390030929b1a648e58d41900ac8195fefd09b86cede284b74f0dae.vsix`, 545,222,409 bytes, SHA-256 `D51C1A6B10390030929B1A648E58D41900AC8195FEFD09B86CEDE284B74F0DAE`. The combined six-case Todo browser run and focused stale-timer recovery case pass. Installation does not prove the open VS Code host reloaded or that a real provider created an appropriate plan; retain those installed-host checks.
+
 ## ChatGPT 2026-09-25 08:05 America/Toronto - direct Todo planning and exact focus duration
 
 **Status: source and focused browser checks pass; production snapshot and live provider flow remain.** The Todo planning field and quick prompts now submit an outcome-level request to the selected model in the active local chat when the server is connected. The request still asks Raya to create a reviewable native Todo proposal before saving. If the server is offline or a cloud preview is open, the same action prepares a chat draft instead of claiming the request was sent. Two browser cases cover the connected send versus offline draft behavior; the real provider's proposal quality and application are not inferred from that fixture.

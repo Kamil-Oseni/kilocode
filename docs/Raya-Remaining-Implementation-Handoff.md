@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-24 20:01 America/Toronto - emergency listener readiness handoff
+
+The desktop grant now waits for a native `ready` signal after global hotkey/hook registration and the takeover grace, and dispatch/capture refuse to start before that signal. A real Windows helper startup initially failed because Windows PowerShell's .NET lacks `Environment.TickCount64`; replacing it with `Stopwatch` and avoiding an unsupported C# null-conditional operator made the real startup check pass. Focused source tests, extension/webview typechecks, lint and formatting pass. Commit, push and install the snapshot, then validate actual physical Pause, manual takeover, grant/resume, backend loss and prolonged use. The helper's readiness does not solve potential held-input release after a killed dispatch host, and the native capture memory-read dialog remains untouched without a crash receipt. Keep `FUT-CU-01` In progress; do not claim the installed benchmark is complete.
+
 ## ChatGPT 2026-09-24 19:49 America/Toronto - installed manual-worker status checkpoint
 
 `b63fd0a5c5` is pushed and installed as `eden.raya@7.4.23-snapshot+b63fd0a5c5.kamil-oseni.1790293668178`; the retained 446-file rollback VSIX SHA-256 is `C862F78D096FEF1E917691517677F31E4F7A9A5E6B359769DF00B4E730DF4F2E`. The manual worker Ready label is source/DOM verified, not yet observed in the live VS Code view. Next check a manual worker, timed worker and paused worker there after a normal reload, then continue the Routines flow and installed Computer Use recovery/latency work. The native capture dialog remains untouched and its cause is unproven. `FUT-CU-01` stays In progress.

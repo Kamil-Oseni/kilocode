@@ -35,6 +35,7 @@ export class DesktopPanel implements vscode.Disposable {
   constructor(
     private readonly session: DesktopSession,
     private readonly lease: ComputerUseLeaseStore,
+    private readonly ready: () => Promise<boolean>,
   ) {}
 
   async authorize(request: AuthorizationRequest): Promise<Authorization> {
@@ -122,6 +123,10 @@ export class DesktopPanel implements vscode.Disposable {
     }
     if (message.type === "resume") {
       await this.lease.resume()
+      if (!(await this.ready())) {
+        await this.lease.pause()
+        throw new Error("The global Pause Raya shortcut is not ready")
+      }
       this.session.resume()
     }
     if (!["refresh", "resume"].includes(message.type)) return
@@ -150,6 +155,11 @@ export class DesktopPanel implements vscode.Disposable {
         sensitive: message.sensitive,
         cooperativeInput: message.cooperativeInput,
       })
+      if (!(await this.ready())) {
+        await this.lease.pause()
+        this.decline("The global Pause Raya shortcut is not ready")
+        return
+      }
       const result = this.lease.authorize(pending.request)
       this.pending = undefined
       pending.resolve(result)

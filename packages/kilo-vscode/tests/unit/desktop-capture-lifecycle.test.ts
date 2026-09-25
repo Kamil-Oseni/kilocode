@@ -13,7 +13,8 @@ describe("continuous desktop capture lifecycle", () => {
       scope: "all" | "selected"
       control: "agent" | "manual"
       connection: string
-    } = { lease: undefined, scope: "all", control: "manual", connection: "connected" }
+      ready: boolean
+    } = { lease: undefined, scope: "all", control: "manual", connection: "connected", ready: false }
     let starts = 0
     let stops = 0
     const capture = new DesktopCaptureLifecycle(
@@ -52,12 +53,16 @@ describe("continuous desktop capture lifecycle", () => {
         },
       },
       () => undefined,
+      () => state.ready,
     )
     state.lease = "active"
     for (const listener of listeners.lease) listener()
     expect(starts).toBe(0)
     state.control = "agent"
     for (const listener of listeners.session) listener()
+    expect(starts).toBe(0)
+    state.ready = true
+    capture.refresh()
     expect(starts).toBe(1)
     state.control = "manual"
     for (const listener of listeners.session) listener()

@@ -32,7 +32,7 @@ function harness() {
 }
 
 describe("Windows global Pause Raya shortcut", () => {
-  it("registers Ctrl+Alt+Shift+Escape and emits every complete pause line", () => {
+  it("waits for registered hooks and takeover grace before accepting control", async () => {
     const test = harness()
     const state = { pauses: 0, manuals: 0, losses: 0 }
     const hotkey = new WindowsPauseHotkey(
@@ -59,17 +59,25 @@ describe("Windows global Pause Raya shortcut", () => {
     expect(test.state.script).toContain("SetWindowsHookEx(14")
     expect(test.state.script).toContain("(input.Flags & 0x12) == 0")
     expect(test.state.script).toContain("(input.Flags & 0x3) == 0")
-    expect(test.state.script).toContain("Environment.TickCount64 + 750")
+    expect(test.state.script).toContain("Stopwatch.GetTimestamp() + System.Diagnostics.Stopwatch.Frequency * 3 / 4")
+    expect(test.state.script).toContain('Console.Out.WriteLine("ready")')
     expect(test.state.script).toContain("UnhookWindowsHookEx")
     expect(test.state.script).toContain("UnregisterHotKey")
+    expect(hotkey.isReady).toBe(false)
+    test.listeners.data?.("rea")
+    expect(hotkey.isReady).toBe(false)
+    test.listeners.data?.("dy\n")
+    expect(await hotkey.ready()).toBe(true)
+    expect(hotkey.isReady).toBe(true)
     test.listeners.data?.("pau")
     test.listeners.data?.("se\r\nmanual\npause\nnoise\n")
     expect(state).toEqual({ pauses: 2, manuals: 1, losses: 0 })
     hotkey.dispose()
+    expect(hotkey.isReady).toBe(false)
     expect(test.state.killed).toBe(1)
   })
 
-  it("fails closed once on host loss and ignores disposal exit", () => {
+  it("fails closed once on host loss and ignores disposal exit", async () => {
     const test = harness()
     const state = { losses: 0 }
     const hotkey = new WindowsPauseHotkey(
@@ -81,10 +89,26 @@ describe("Windows global Pause Raya shortcut", () => {
       test.launch,
     )
     test.listeners.error?.(new Error("driver lost"))
+    expect(await hotkey.ready()).toBe(false)
+    expect(hotkey.isReady).toBe(false)
     test.listeners.exit?.(1, null)
     expect(state.losses).toBe(1)
     hotkey.dispose()
     test.listeners.exit?.(null, "SIGTERM")
     expect(state.losses).toBe(1)
+  })
+
+  it("does not leave an interrupted startup pending", async () => {
+    const test = harness()
+    const hotkey = new WindowsPauseHotkey(
+      () => {},
+      () => {},
+      () => {},
+      test.launch,
+    )
+    hotkey.dispose()
+    expect(await hotkey.ready()).toBe(false)
+    test.listeners.data?.("ready\n")
+    expect(hotkey.isReady).toBe(false)
   })
 })

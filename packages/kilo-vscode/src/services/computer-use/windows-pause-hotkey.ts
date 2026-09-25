@@ -39,12 +39,20 @@ public static class RayaPauseHotkey {
 
   private static readonly HookProc KeyboardCallback = Keyboard;
   private static readonly HookProc MouseCallback = Mouse;
+  private static Timer readiness;
   private static int signalled;
   private static long armed;
 
   public static IntPtr InstallKeyboard() { return SetWindowsHookEx(13, KeyboardCallback, IntPtr.Zero, 0); }
   public static IntPtr InstallMouse() { return SetWindowsHookEx(14, MouseCallback, IntPtr.Zero, 0); }
-  public static void Arm() { armed = Environment.TickCount64 + 750; }
+  public static void Arm() {
+    armed = System.Diagnostics.Stopwatch.GetTimestamp() + System.Diagnostics.Stopwatch.Frequency * 3 / 4;
+    readiness = new Timer(_ => {
+      Console.Out.WriteLine("ready");
+      Console.Out.Flush();
+    }, null, 750, Timeout.Infinite);
+  }
+  public static void Disarm() { if (readiness != null) readiness.Dispose(); }
 
   private static IntPtr Keyboard(int code, IntPtr message, IntPtr data) {
     if (code >= 0) {
@@ -63,7 +71,7 @@ public static class RayaPauseHotkey {
   }
 
   private static void Manual() {
-    if (Environment.TickCount64 < armed || Interlocked.Exchange(ref signalled, 1) != 0) return;
+    if (System.Diagnostics.Stopwatch.GetTimestamp() < armed || Interlocked.Exchange(ref signalled, 1) != 0) return;
     Console.Out.WriteLine("manual");
     Console.Out.Flush();
   }
@@ -94,6 +102,7 @@ try {
     }
   }
 } finally {
+  [RayaPauseHotkey]::Disarm()
   [void][RayaPauseHotkey]::UnhookWindowsHookEx($mouse)
   [void][RayaPauseHotkey]::UnhookWindowsHookEx($keyboard)
   [void][RayaPauseHotkey]::UnregisterHotKey([IntPtr]::Zero, $id)
@@ -109,10 +118,21 @@ function launch(source: string): Host {
   child.stdin.end(source, "utf8")
   child.stdout.setEncoding("utf8")
   child.stderr.setEncoding("utf8")
+  const state: { stderr: string; error?: (error: Error) => void } = { stderr: "" }
+  child.stderr.on("data", (value: string) => {
+    state.stderr = (state.stderr + value).slice(-4_000)
+  })
   return {
     data: (listener) => child.stdout.on("data", listener),
-    error: (listener) => child.once("error", listener),
-    exit: (listener) => child.once("exit", listener),
+    error: (listener) => {
+      state.error = listener
+      child.once("error", listener)
+    },
+    exit: (listener) =>
+      child.once("exit", (code, signal) => {
+        if (code && state.stderr) state.error?.(new Error(state.stderr))
+        listener(code, signal)
+      }),
     kill: () => {
       child.kill()
     },
@@ -121,9 +141,13 @@ function launch(source: string): Host {
 
 export class WindowsPauseHotkey {
   private readonly host: Host
+  private readonly started: Promise<boolean>
+  private settle!: (ready: boolean) => void
+  private readonly timer: ReturnType<typeof setTimeout>
   private buffer = ""
   private disposed = false
   private failed = false
+  private armed = false
 
   constructor(
     private readonly pause: () => void | Promise<void>,
@@ -131,15 +155,29 @@ export class WindowsPauseHotkey {
     private readonly loss: () => void | Promise<void>,
     start: Launch = launch,
   ) {
+    this.started = new Promise((resolve) => {
+      this.settle = resolve
+    })
+    this.timer = setTimeout(() => this.fail("startup timed out"), 5_000)
     this.host = start(script)
     this.host.data((value) => this.read(value))
     this.host.error((error) => this.fail(error.message))
     this.host.exit((code, signal) => this.fail(`exit ${code ?? signal ?? "unknown"}`))
   }
 
+  get isReady(): boolean {
+    return this.armed && !this.disposed && !this.failed
+  }
+
+  ready(): Promise<boolean> {
+    return this.started
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    clearTimeout(this.timer)
+    this.settle(false)
     this.buffer = ""
     this.host.kill()
   }
@@ -150,6 +188,11 @@ export class WindowsPauseHotkey {
     const lines = this.buffer.split(/\r?\n/)
     this.buffer = lines.pop() ?? ""
     for (const line of lines) {
+      if (line.trim() === "ready" && !this.failed) {
+        this.armed = true
+        clearTimeout(this.timer)
+        this.settle(true)
+      }
       if (line.trim() === "pause") void this.pause()
       if (line.trim() === "manual") void this.manual()
     }
@@ -158,6 +201,8 @@ export class WindowsPauseHotkey {
   private fail(detail: string): void {
     if (this.disposed || this.failed) return
     this.failed = true
+    clearTimeout(this.timer)
+    this.settle(false)
     console.error(`[Raya] Global Pause listener stopped: ${detail}`)
     void this.loss()
   }

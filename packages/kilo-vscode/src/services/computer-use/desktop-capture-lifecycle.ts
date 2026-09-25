@@ -36,6 +36,7 @@ export class DesktopCaptureLifecycle {
     private readonly driver: Driver,
     connection: Connection,
     private readonly failed: (error: unknown) => void,
+    private readonly ready: () => boolean = () => true,
   ) {
     this.connected = connection.getConnectionState() === "connected"
     this.off = [
@@ -54,10 +55,15 @@ export class DesktopCaptureLifecycle {
     this.driver.stopCapture()
   }
 
+  refresh(): void {
+    this.sync()
+  }
+
   private sync(): void {
     const lease = this.lease.current()
     if (
       this.connected &&
+      this.ready() &&
       lease?.state === "active" &&
       lease.applications.kind === "all" &&
       lease.monitors.kind === "all" &&

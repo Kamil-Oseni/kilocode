@@ -31,7 +31,7 @@ export class DesktopAutomationService implements vscode.Disposable {
         : undefined
     this.driver = new WindowsDesktopDriver(undefined, undefined, binary)
     this.session = new DesktopSession(this.driver)
-    this.panel = new DesktopPanel(this.session, this.lease)
+    this.panel = new DesktopPanel(this.session, this.lease, () => this.ready())
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
     this.indicator.name = "Raya desktop control"
     this.indicator.command = "raya.openComputerUse"
@@ -54,6 +54,7 @@ export class DesktopAutomationService implements vscode.Disposable {
           },
           () => this.pause("Raya desktop control paused because the global input listener stopped."),
         )
+        void this.hotkey.ready().then(() => this.capture?.refresh())
       }
       const label = lease.level === "observe" ? "Observe" : lease.level === "assisted" ? "Assisted" : "Autonomous"
       this.indicator!.text = lease.state === "paused" ? "$(debug-pause) Raya paused" : `$(remote) Raya ${label}`
@@ -117,14 +118,24 @@ export class DesktopAutomationService implements vscode.Disposable {
         )
       },
       context.globalState,
-      async (request) => this.panel!.authorize(request),
-      (request) => this.lease!.authorize(request),
+      async (request) => this.authorize(request),
+      (request) =>
+        this.hotkey?.isReady
+          ? this.lease!.authorize(request)
+          : { operation: "authorize", decision: "deny", reason: "The global Pause Raya shortcut is not ready" },
     )
-    this.capture = new DesktopCaptureLifecycle(this.lease, this.session, this.driver, connection, () => {
-      void this.pause("Raya desktop control paused because continuous capture stopped unexpectedly.").catch((error) =>
-        console.error("[Raya] Failed to persist desktop pause after capture loss", error),
-      )
-    })
+    this.capture = new DesktopCaptureLifecycle(
+      this.lease,
+      this.session,
+      this.driver,
+      connection,
+      () => {
+        void this.pause("Raya desktop control paused because continuous capture stopped unexpectedly.").catch((error) =>
+          console.error("[Raya] Failed to persist desktop pause after capture loss", error),
+        )
+      },
+      () => !!this.hotkey?.isReady,
+    )
     this.offConnection = connection.onStateChange((state) => {
       if (state === "disconnected" || state === "error")
         void this.pause("Raya desktop control paused because the backend disconnected.").catch((error) =>
@@ -140,7 +151,16 @@ export class DesktopAutomationService implements vscode.Disposable {
 
   async authorize(request: AuthorizationRequest): Promise<Authorization> {
     if (!this.panel) return { operation: "authorize", decision: "deny", reason: "Desktop control requires Windows" }
-    return this.panel.authorize(request)
+    const result = await this.panel.authorize(request)
+    if (result.decision !== "allow") return result
+    if (await this.ready()) return result
+    return { operation: "authorize", decision: "deny", reason: "The global Pause Raya shortcut is not ready" }
+  }
+
+  private async ready(): Promise<boolean> {
+    const hotkey = this.hotkey
+    if (!hotkey || !(await hotkey.ready())) return false
+    return this.hotkey === hotkey && !!hotkey.isReady && this.lease?.current()?.state === "active"
   }
 
   async pause(reason = "Raya desktop control paused from the keyboard."): Promise<void> {

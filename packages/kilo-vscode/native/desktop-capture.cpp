@@ -794,6 +794,8 @@ static bool affects(Output& item, const DXGI_OUTDUPL_FRAME_INFO& info) {
     std::memcpy(&move, item.metadata.data() + offset, sizeof(move));
     if (intersects(move, item)) return true;
   }
+  // Never pass a one-past-end output pointer to a driver, even with zero capacity.
+  if (used == size) return true;
   UINT dirty = 0;
   status = item.duplicate->GetFrameDirtyRects(size - used,
     reinterpret_cast<RECT*>(item.metadata.data() + used), &dirty);

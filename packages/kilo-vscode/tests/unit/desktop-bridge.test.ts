@@ -8,6 +8,7 @@ import {
 } from "../../src/services/computer-use/desktop-bridge"
 import { DesktopSession, type DesktopDriver } from "../../src/services/computer-use/desktop-session"
 import { ComputerUseLeaseStore, type SensitivePolicy } from "../../src/services/computer-use/lease-store"
+import { firstChanged } from "../../src/services/computer-use/desktop-cadence"
 import type { ConnectionState } from "../../src/services/cli-backend/connection-service"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 
@@ -42,6 +43,7 @@ function setup(
     listed?: string[]
     listedIdentity?: string | (() => string)
     onCapture?: () => void
+    limitFrames?: number
   } = {},
 ) {
   const replies: unknown[] = []
@@ -153,9 +155,13 @@ function setup(
       if (signal.aborted) throw new Error("Desktop viewing was stopped")
       const count = request.operation === "watch" ? request.frameCount : 1
       const frames = []
-      for (const _index of Array.from({ length: count }, (_, index) => index)) {
+      let previous: Awaited<ReturnType<DesktopSession["observe"]>> | undefined
+      for (const _index of Array.from({ length: Math.min(count, input.limitFrames ?? count) }, (_, index) => index)) {
         observed += 1
-        frames.push(await session.observe())
+        const frame = await session.observe()
+        frames.push(frame)
+        if (request.operation === "watch" && firstChanged(previous, frame, _index, request.mode)) break
+        previous = frame
       }
       return frames
     },
@@ -1074,6 +1080,46 @@ describe("desktop observation bridge", () => {
     expect(frames[1].baseObservationID).toBe((frames[0].observation as { id: string }).id)
     expect(frames[2]).toMatchObject({ data: "changed" })
     expect(frames[2]).not.toHaveProperty("baseObservationID")
+    test.bridge.dispose()
+  })
+
+  it("returns the first changed scene early only with the explicit versioned watch mode", async () => {
+    const test = setup({ pixels: ["same", "same", "changed", "later"] })
+    const watch: DesktopRequest = {
+      id: "desktop_watch_first_change",
+      sessionID: "ses_desktop",
+      operation: "watch",
+      frameCount: 4,
+      intervalMs: 500,
+      mode: "first_change_v2",
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: watch } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(3)
+    expect(test.rejects).toEqual([])
+    const result = (test.replies[0] as { result: { frames: Array<Record<string, unknown>> } }).result
+    expect(result.frames.map((frame) => frame.change)).toEqual(["keyframe", "unchanged", "keyframe"])
+    expect(result.frames[2]).toMatchObject({ data: "changed" })
+    test.bridge.dispose()
+  })
+
+  it("refuses an incomplete change-triggered watch with no changed scene", async () => {
+    const test = setup({ pixels: ["same", "same"], limitFrames: 2 })
+    const watch: DesktopRequest = {
+      id: "desktop_watch_false_change",
+      sessionID: "ses_desktop",
+      operation: "watch",
+      frameCount: 4,
+      intervalMs: 500,
+      mode: "first_change_v2",
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: watch } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(2)
+    expect(test.replies).toEqual([])
+    expect(test.rejects).toMatchObject([{ requestID: watch.id }])
     test.bridge.dispose()
   })
 

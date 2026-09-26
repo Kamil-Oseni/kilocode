@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { bounded, changed, DesktopCadence, limit, WATCH } from "../../src/services/computer-use/desktop-cadence"
+import {
+  bounded,
+  changed,
+  DesktopCadence,
+  firstChanged,
+  limit,
+  WATCH,
+} from "../../src/services/computer-use/desktop-cadence"
 
 describe("adaptive desktop capture cadence", () => {
   it("samples changed scenes quickly and backs off only while pixels stay stable", () => {
@@ -37,6 +44,11 @@ describe("adaptive desktop capture cadence", () => {
     expect(changed(frame, { ...frame })).toBe(false)
     expect(changed(frame, { ...frame, data: "changed" })).toBe(true)
     expect(changed(frame, { ...frame, location: "pid:2;title:Editor" })).toBe(true)
+    expect(firstChanged(undefined, frame, 0, "first_change_v2")).toBe(false)
+    expect(firstChanged(frame, { ...frame }, 1, "first_change_v2")).toBe(false)
+    expect(firstChanged(frame, { ...frame, data: "changed" }, 1)).toBe(false)
+    expect(firstChanged(frame, { ...frame, data: "changed" }, 1, "first_change_v2")).toBe(true)
+    expect(firstChanged(frame, { ...frame, location: "pid:2;title:Editor" }, 1, "first_change_v2")).toBe(true)
   })
 
   it("cancels a capture at its hard deadline and clears completed timers", async () => {

@@ -58,6 +58,7 @@ function setup(foreground: string) {
   const state = { identity: "A".repeat(64) }
   const target = { windowID: foreground, title: "Editor", identity: state.identity }
   const session = {
+    windows: async () => ({ windows: [], observation: {} }),
     pinCurrent: async (windowID: string) => {
       if (windowID !== foreground) throw new Error("Selected desktop window is no longer foreground")
       return target
@@ -99,6 +100,88 @@ function setup(foreground: string) {
   return { panel, grants, saved, grant, state }
 }
 
+function selectedSetup() {
+  receive = undefined
+  opened = 0
+  posts.length = 0
+  const grants: GrantInput[] = []
+  const windows = [
+    { windowID: "0x111", title: "Editor", location: "editor", identity: "A".repeat(64) },
+    { windowID: "0x222", title: "Browser", location: "browser", identity: "B".repeat(64) },
+  ]
+  const state: { replaceAfterPin: boolean; holdPin?: Promise<void>; holdGrant?: Promise<void>; stops: number } = {
+    replaceAfterPin: false,
+    stops: 0,
+  }
+  const session = {
+    pinCurrent: async (id: string) => {
+      if (id !== "0x111") throw new Error("Requested window is not foreground")
+      return { windowID: id, title: "Editor", identity: windows[0]!.identity }
+    },
+    windows: async () => ({
+      windows: windows.map((window, index) => ({
+        ...window,
+        processID: index + 1,
+        x: index * 400,
+        y: 0,
+        width: 400,
+        height: 400,
+        minimized: false,
+        foreground: index === 0,
+      })),
+      observation: {},
+    }),
+    pinWindow: async (target: { windowID: string; location: string; identity: string }) => {
+      await state.holdPin
+      const window = windows.find((item) => item.windowID === target.windowID)
+      if (!window || window.location !== target.location || window.identity !== target.identity)
+        throw new Error("Selected window changed")
+      window.identity = target.windowID === "0x111" ? "C".repeat(64) : "D".repeat(64)
+      if (target.windowID === "0x222" && state.replaceAfterPin) windows[0]!.identity = "E".repeat(64)
+      return { ...window }
+    },
+    verifyWindows: async (targets: { windowID: string; location: string; identity: string }[]) => {
+      if (
+        targets.some((target) => {
+          const window = windows.find((item) => item.windowID === target.windowID)
+          return !window || window.location !== target.location || window.identity !== target.identity
+        })
+      )
+        throw new Error("A selected window changed")
+    },
+    onState: () => () => undefined,
+    takeControl: () => undefined,
+  }
+  const lease = {
+    review: () => ({ operation: "authorize", decision: "ask", reason: "Review grant" }),
+    grant: async (input: GrantInput) => {
+      await state.holdGrant
+      grants.push(input)
+    },
+    stop: async () => {
+      state.stops++
+    },
+    authorize: () => ({ operation: "authorize", decision: "allow", reason: "Granted", grantID: "grant_test" }),
+    onChange: () => () => undefined,
+    current: () => undefined,
+    savedPolicy: () => undefined,
+  }
+  const panel = new DesktopPanel(session as never, lease as never, async () => true)
+  const grant = (ids: string[], duration: "session" | "until_stopped" = "session") =>
+    receive?.({
+      type: "grant",
+      level: "autonomous",
+      duration,
+      applications: "selected",
+      windows: ids,
+      actions: ["observe", "pointer", "window"],
+      sensitive: policy("ask"),
+      rememberPolicy: false,
+      cooperativeInput: false,
+    })
+  return { panel, grants, windows, grant, state }
+}
+
 const policy = (rule: SensitivePolicy[keyof SensitivePolicy]): SensitivePolicy => ({
   communications: rule,
   financial: rule,
@@ -124,6 +207,7 @@ function active(level: "assisted" | "autonomous", rule: SensitivePolicy[keyof Se
   }
   const lease = new ComputerUseLeaseStore(storage, () => 100)
   const session = {
+    windows: async () => ({ windows: [], observation: {} }),
     pinCurrent: async () => {
       pins++
       return undefined
@@ -146,6 +230,113 @@ function active(level: "assisted" | "autonomous", rule: SensitivePolicy[keyof Se
 }
 
 describe("selected desktop grant review", () => {
+  it("binds exactly the reviewed windows and rechecks every identity before granting", async () => {
+    const test = selectedSetup()
+    const done = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    expect(posts).toContainEqual(
+      expect.objectContaining({
+        type: "lease",
+        pending: expect.objectContaining({
+          windows: [
+            { windowID: "0x111", title: "Editor" },
+            { windowID: "0x222", title: "Browser" },
+          ],
+        }),
+      }),
+    )
+    expect(JSON.stringify(posts)).not.toContain("A".repeat(64))
+    expect(JSON.stringify(posts)).not.toContain("B".repeat(64))
+    test.grant(["0x111", "0x222"])
+    expect((await done).decision).toBe("allow")
+    expect(test.grants).toEqual([
+      expect.objectContaining({
+        applications: "selected",
+        duration: "session",
+        windows: [
+          { windowID: "0x111", identity: "C".repeat(64) },
+          { windowID: "0x222", identity: "D".repeat(64) },
+        ],
+      }),
+    ])
+  })
+
+  it("refuses forged, missing-request and durable selected-window grants", async () => {
+    for (const [ids, duration] of [
+      [["0x111", "0x333"], "session"],
+      [["0x222"], "session"],
+      [["0x111", "0x222"], "until_stopped"],
+    ] as const) {
+      const test = selectedSetup()
+      const done = test.panel.authorize(request("0x111"))
+      await Bun.sleep(0)
+      test.grant([...ids], duration)
+      await Bun.sleep(0)
+      expect(test.grants).toHaveLength(0)
+      receive?.({ type: "decline" })
+      expect((await done).decision).toBe("deny")
+    }
+  })
+
+  it("refuses a changed background window at the grant click", async () => {
+    const test = selectedSetup()
+    const done = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    test.windows[1]!.identity = "E".repeat(64)
+    test.grant(["0x111", "0x222"])
+    await Bun.sleep(0)
+    expect(test.grants).toHaveLength(0)
+    expect(posts).toContainEqual(expect.objectContaining({ type: "error" }))
+    receive?.({ type: "decline" })
+    expect((await done).decision).toBe("deny")
+  })
+
+  it("refuses a window replaced while another selected window is being bound", async () => {
+    const test = selectedSetup()
+    const done = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    test.state.replaceAfterPin = true
+    test.grant(["0x111", "0x222"])
+    await Bun.sleep(0)
+    expect(test.grants).toHaveLength(0)
+    receive?.({ type: "decline" })
+    expect((await done).decision).toBe("deny")
+  })
+
+  it("does not save a selected grant after the review is declined during binding", async () => {
+    const test = selectedSetup()
+    const done = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    let release: () => void = () => undefined
+    test.state.holdPin = new Promise((resolve) => {
+      release = resolve
+    })
+    test.grant(["0x111", "0x222"])
+    await Bun.sleep(0)
+    receive?.({ type: "decline" })
+    release()
+    expect((await done).decision).toBe("deny")
+    await Bun.sleep(0)
+    expect(test.grants).toHaveLength(0)
+  })
+
+  it("revokes a grant whose storage write finishes after Stop", async () => {
+    const test = selectedSetup()
+    const done = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    let release: () => void = () => undefined
+    test.state.holdGrant = new Promise((resolve) => {
+      release = resolve
+    })
+    test.grant(["0x111", "0x222"])
+    await Bun.sleep(0)
+    receive?.({ type: "stop" })
+    release()
+    expect((await done).decision).toBe("deny")
+    await Bun.sleep(0)
+    expect(test.grants).toHaveLength(1)
+    expect(test.state.stops).toBeGreaterThanOrEqual(2)
+  })
   it("saves reusable sensitive choices only when explicitly selected in grant review", async () => {
     const test = setup("0x111")
     const first = test.panel.authorize(request("0x111"))
@@ -159,6 +350,7 @@ describe("selected desktop grant review", () => {
     sensitive.communications = "allow_always"
     test.grant(true, sensitive)
     await second
+    await Bun.sleep(0)
     expect(test.saved).toEqual([sensitive])
   })
 

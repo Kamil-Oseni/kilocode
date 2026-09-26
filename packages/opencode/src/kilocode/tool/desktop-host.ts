@@ -252,6 +252,10 @@ const WatchParams = Schema.Struct({
   interval_ms: WatchInterval.annotate({
     description: "Maximum idle delay from 50 through 1000 milliseconds; changed scenes sample every 50 milliseconds.",
   }),
+  first_change: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Return after the first changed scene following a baseline frame instead of collecting the full watch.",
+  }),
 }).check(
   Schema.makeFilter((input) =>
     input.frames * 500 + (input.frames - 1) * input.interval_ms <= 10_000
@@ -266,7 +270,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
     const desktop = yield* Desktop.Service
     return {
       description:
-        "Adaptively sample 2–16 foreground Windows frames for live visual processing. Changed scenes sample every 50 milliseconds while stable scenes back off to the requested idle interval; the local watch must fit ten seconds. Changed keyframes are available for the immediate model step and are not retained in the saved tool result. A non-autonomous watch shows one cancellable capture indicator. This tool sends no desktop input.",
+        "Adaptively sample 2–16 foreground Windows frames for live visual processing. Set first_change to return after the first changed scene instead of waiting for all frames. Changed scenes sample every 50 milliseconds while stable scenes back off to the requested idle interval; the local watch must fit ten seconds. Changed keyframes are available for the immediate model step and are not retained in the saved tool result. A non-autonomous watch shows one cancellable capture indicator. This tool sends no desktop input.",
       parameters: WatchParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -287,6 +291,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
               sessionID: ctx.sessionID,
               frameCount: params.frames,
               intervalMs: params.interval_ms,
+              ...(params.first_change ? { mode: "first_change_v2" as const } : {}),
               authorization,
               ...(params.target ? { target: params.target } : {}),
             },

@@ -7,7 +7,7 @@ import { DesktopBridge } from "./desktop-bridge"
 import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 import { WindowsPauseHotkey } from "./windows-pause-hotkey"
-import { bounded, changed, DesktopCadence, limit, WATCH } from "./desktop-cadence"
+import { bounded, changed, DesktopCadence, firstChanged, limit, WATCH } from "./desktop-cadence"
 import { DesktopCaptureLifecycle } from "./desktop-capture-lifecycle"
 
 export class DesktopAutomationService implements vscode.Disposable {
@@ -134,6 +134,7 @@ export class DesktopAutomationService implements vscode.Disposable {
                   : await capture
               frames.push(frame)
               progress?.report({ increment: 100 / count, message: `Frame ${index + 1} of ${count}` })
+              if (request.operation === "watch" && firstChanged(previous, frame, index, request.mode)) break
               if (index + 1 < count)
                 await wait(
                   Math.min(cadence!.next(changed(previous, frame)), Math.max(0, deadline - performance.now())),

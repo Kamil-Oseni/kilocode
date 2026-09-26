@@ -69,6 +69,37 @@ class Driver implements DesktopDriver {
 }
 
 describe("native desktop session boundary", () => {
+  it("rechecks every pinned selected window after the final binding", async () => {
+    const driver = Object.assign(new Driver(), {
+      pinWindow: async (target: { windowID: string; location: string; identity: string }) => {
+        const window = driver.list.find((item) => item.windowID === target.windowID)
+        if (!window || window.location !== target.location || window.identity !== target.identity)
+          throw new Error("Selected window changed")
+        window.identity = target.windowID === "window-1" ? "C".repeat(64) : "D".repeat(64)
+        return { windowID: window.windowID, location: window.location, title: window.title, identity: window.identity }
+      },
+    })
+    driver.list[0]!.identity = "A".repeat(64)
+    driver.list.push({
+      ...driver.list[0]!,
+      windowID: "window-2",
+      location: "Browser",
+      title: "Browser",
+      identity: "B".repeat(64),
+      foreground: false,
+    })
+    const session = new DesktopSession(driver)
+    const first = await session.pinWindow({
+      windowID: "window-1",
+      location: driver.list[0]!.location,
+      identity: "A".repeat(64),
+    })
+    const second = await session.pinWindow({ windowID: "window-2", location: "Browser", identity: "B".repeat(64) })
+    await session.verifyWindows([first, second])
+    driver.list[0]!.identity = "E".repeat(64)
+    await expect(session.verifyWindows([first, second])).rejects.toThrow(/window changed before the grant/i)
+  })
+
   it("focuses one exact window from a fresh single-use catalog", async () => {
     const driver = new Driver()
     const session = new DesktopSession(driver)

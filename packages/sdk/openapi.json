@@ -69322,6 +69322,10 @@
                 "type": "integer",
                 "minimum": 50,
                 "maximum": 1000
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["first_change_v2"]
               }
             },
             "required": ["id", "sessionID", "operation", "frameCount", "intervalMs"],

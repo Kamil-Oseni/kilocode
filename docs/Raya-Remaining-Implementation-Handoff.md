@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-26 15:40 America/Toronto - selected-window and first-change source slice
+
+The current source adds task-scoped exact-window selection to the Desktop grant panel, grant-click binding and a Stop/Decline race guard. It also adds opt-in `first_change_v2` observation, a conservative native dirty-rectangle capacity guard and a release-ineligible redacted task-audit delta helper. Focused extension, CLI and native checks pass; see the dated progress entry for counts and limits. The open Raya host has not been proven to load this source, and no installed-host 17-task or latency result exists. Next: push and install the source-matched snapshot, reload the interactive host, identify the active package/backend, then test selected windows, changed-scene latency and independent receipt/final-state scoring. Keep `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-26 15:20 America/Toronto - installed audit snapshot, open host still older
 
 `39764ebcef` is pushed and installed as `7.4.23-snapshot+39764ebcef.kamil-oseni.1790450202218`; retained VSIX SHA-256 is `c713f0ddc28041e3a66d23ed3fd34e870a79b9b9d25d9108b731002107b0d362`. The low-memory build/package/native self-tests passed. Both live `kilo.exe serve` processes still run the older `+4dc086be2b` extension binary, so no loaded-host acceptance was gained by installation. The next action is a normal interactive Raya/VS Code reload, exact package/backend inspection, and then visible archive/Todo/chat plus the independently scored Desktop trials. All 17 Desktop scenario IDs have preliminary exercises, but zero installed-host eligible results; `FUT-CU-01` remains In progress.

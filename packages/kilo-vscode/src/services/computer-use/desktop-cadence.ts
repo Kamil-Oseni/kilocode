@@ -27,6 +27,15 @@ export function changed(previous: Visual | undefined, frame: Visual): boolean {
   )
 }
 
+export function firstChanged(
+  previous: Visual | undefined,
+  frame: Visual,
+  index: number,
+  mode?: "first_change_v2",
+): boolean {
+  return mode === "first_change_v2" && index > 0 && changed(previous, frame)
+}
+
 export function limit<T>(work: Promise<T>, ms: number, expire: () => void | Promise<void>): Promise<T> {
   return new Promise((resolve, reject) => {
     let settled = false

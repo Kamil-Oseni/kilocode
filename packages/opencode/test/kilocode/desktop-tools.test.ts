@@ -817,6 +817,8 @@ it.instance(
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 1, intervalMs: 500 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 3, intervalMs: 49 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 16, intervalMs: 50 })).toBe(true)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 16, intervalMs: 50, mode: "first_change_v2" })).toBe(true)
+      expect(Schema.is(WatchRequest)({ ...watch, frameCount: 16, intervalMs: 50, mode: "unknown" })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 16, intervalMs: 1_000 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 8, intervalMs: 1_000 })).toBe(false)
       expect(Schema.is(WatchRequest)({ ...watch, frameCount: 17, intervalMs: 50 })).toBe(false)
@@ -918,6 +920,12 @@ it.instance(
       expect(calls.filter((input) => input.operation === "authorize").every((input) => input.sensitive === false)).toBe(
         true,
       )
+      yield* DesktopWatchTool.pipe(
+        Effect.provideService(Desktop.Service, host),
+        Effect.flatMap(Tool.init),
+        Effect.flatMap((tool) => tool.execute({ frames: 3, interval_ms: 500, first_change: true }, ctx)),
+      )
+      expect(effects().at(-1)).toMatchObject({ operation: "watch", mode: "first_change_v2" })
     }),
   { git: true },
 )

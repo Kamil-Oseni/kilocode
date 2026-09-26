@@ -104,6 +104,7 @@ export const WatchRequest = Schema.Struct({
   target: Schema.optional(SelectedWindowTarget),
   frameCount: WatchCount,
   intervalMs: WatchInterval,
+  mode: Schema.optional(Schema.Literal("first_change_v2")),
 }).check(
   Schema.makeFilter((input) =>
     input.frameCount * 500 + (input.frameCount - 1) * input.intervalMs <= 10_000

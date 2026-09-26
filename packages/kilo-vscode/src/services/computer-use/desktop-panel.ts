@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import { randomUUID } from "node:crypto"
-import { DesktopSession, type DesktopState } from "./desktop-session"
+import { DesktopSession, type DesktopState, type DesktopWindow } from "./desktop-session"
 import {
   ComputerUseLeaseStore,
   type Authorization,
@@ -16,7 +16,8 @@ type Message =
       type: "grant"
       level: ControlLevel
       duration: "session" | "hour" | "until_stopped"
-      applications: "all" | "current"
+      applications: "all" | "current" | "selected"
+      windows?: string[]
       actions: LeaseAction[]
       sensitive: SensitivePolicy
       rememberPolicy: boolean
@@ -27,6 +28,7 @@ type Pending = {
   request: AuthorizationRequest
   resolve: (result: Authorization) => void
   target?: { windowID: string; title: string; identity: string }
+  windows: DesktopWindow[]
 }
 
 export class DesktopPanel implements vscode.Disposable {
@@ -36,6 +38,7 @@ export class DesktopPanel implements vscode.Disposable {
   private off: (() => void) | undefined
   private offLease: (() => void) | undefined
   private pending: Pending | undefined
+  private granting: object | undefined
 
   constructor(
     private readonly session: DesktopSession,
@@ -54,15 +57,19 @@ export class DesktopPanel implements vscode.Disposable {
       this.lease.authorize({ ...request, sensitive: false }).decision === "allow"
     )
       return result
-    if (this.pending)
+    if (this.pending || this.granting)
       return { operation: "authorize", decision: "deny", reason: "Another Computer Use grant review is active" }
     const target =
       request.surface === "desktop" && request.windowID
         ? await this.session.pinCurrent(request.windowID).catch(() => undefined)
         : undefined
+    const windows = await this.session.windows().then(
+      (result) => result.windows.filter((window) => !!window.identity),
+      () => [],
+    )
     await this.show()
     return await new Promise<Authorization>((resolve) => {
-      this.pending = { request, resolve, target }
+      this.pending = { request, resolve, target, windows }
       void this.sync()
     })
   }
@@ -161,31 +168,43 @@ export class DesktopPanel implements vscode.Disposable {
       await this.panel?.webview.postMessage({ type: "error", message: "Start a Raya desktop task first." })
       return
     }
+    if (this.granting) return
+    const turn = {}
+    this.granting = turn
     try {
-      const target = message.applications === "current" ? pending.target : undefined
-      if (message.applications === "current" && !target)
-        throw new Error("No exact window was available when this request began. Return to that window and try again.")
-      if (message.applications === "current" && message.duration !== "session")
-        throw new Error("This exact window can only be authorized for the current task.")
-      if (target) await this.session.verify(target.windowID, target.identity)
+      const scope = await this.scope(pending, message)
+      if (this.pending !== pending) return
       await this.lease.grant({
         sessionID: pending.request.sessionID,
         level: message.level,
         duration: message.duration,
         applications: message.applications,
-        windowID: target?.windowID,
-        identity: target?.identity,
+        windowID: scope.target?.windowID,
+        identity: scope.target?.identity,
+        windows: scope.windows,
         actions: message.actions,
         sensitive: message.sensitive,
         cooperativeInput: message.cooperativeInput,
       })
-      if (!(await this.ready())) {
+      if (this.pending !== pending) {
+        this.session.takeControl("Desktop grant review ended before control began.")
+        await this.lease.stop()
+        return
+      }
+      const ready = await this.ready()
+      if (this.pending !== pending) {
+        this.session.takeControl("Desktop grant review ended before control began.")
+        await this.lease.stop()
+        return
+      }
+      if (!ready) {
         await this.lease.pause()
         this.decline("The global Pause Raya shortcut is not ready")
         return
       }
       const result = this.lease.authorize(pending.request)
       this.pending = undefined
+      if (this.granting === turn) this.granting = undefined
       pending.resolve(result)
       if (message.rememberPolicy === true) {
         await this.lease.savePolicy(message.sensitive).catch(async (error) => {
@@ -201,7 +220,51 @@ export class DesktopPanel implements vscode.Disposable {
         type: "error",
         message: error instanceof Error ? error.message : String(error),
       })
+    } finally {
+      if (this.granting === turn) this.granting = undefined
     }
+  }
+
+  private async scope(pending: Pending, message: Extract<Message, { type: "grant" }>) {
+    const target = message.applications === "current" ? pending.target : undefined
+    if (message.applications === "current" && !target)
+      throw new Error("No exact window was available when this request began. Return to that window and try again.")
+    if (message.applications === "current" && message.duration !== "session")
+      throw new Error("This exact window can only be authorized for the current task.")
+    if (target) await this.session.verify(target.windowID, target.identity)
+    const windows = message.applications === "selected" ? await this.selected(pending, message) : undefined
+    return { target, windows }
+  }
+
+  private async selected(pending: Pending, message: Extract<Message, { type: "grant" }>) {
+    if (message.duration !== "session") throw new Error("Selected windows can only be authorized for this task.")
+    const ids = message.windows
+    if (
+      !Array.isArray(ids) ||
+      ids.length < 1 ||
+      ids.length > 64 ||
+      ids.some((id) => typeof id !== "string") ||
+      new Set(ids).size !== ids.length
+    )
+      throw new Error("Choose at least one distinct window before continuing.")
+    if (pending.request.surface === "desktop" && pending.request.windowID && !ids.includes(pending.request.windowID))
+      throw new Error("Include the window Raya requested in the selected grant.")
+    const targets = ids.map((id) => pending.windows.find((window) => window.windowID === id))
+    if (targets.some((window) => !window?.identity))
+      throw new Error("A selected window was not in the reviewed list. Ask Raya to try again.")
+    const bound = []
+    for (const window of targets) {
+      const item = window!
+      const next = await this.session.pinWindow({
+        windowID: item.windowID,
+        location: item.location,
+        identity: item.identity!,
+      })
+      if (next.title !== item.title) throw new Error("A selected window changed before the grant; no control was sent")
+      bound.push(next)
+    }
+    await this.session.verifyWindows(bound)
+    return bound.map((window) => ({ windowID: window.windowID, identity: window.identity }))
   }
 
   private decline(reason: string): void {
@@ -233,6 +296,7 @@ export class DesktopPanel implements vscode.Disposable {
             action: this.pending.request.action,
             currentApplicationAvailable: !!this.pending.target,
             currentApplicationTitle: this.pending.target?.title,
+            windows: this.pending.windows.map((window) => ({ windowID: window.windowID, title: window.title })),
           }
         : undefined,
     })
@@ -288,6 +352,9 @@ export class DesktopPanel implements vscode.Disposable {
     .muted { color: var(--vscode-descriptionForeground); } fieldset { margin: 0; padding: 0; border: 0; } legend { margin-bottom: 8px; font-weight: 600; }
     .choices { display: grid; gap: 8px; } .choice { display: grid; grid-template-columns: 20px 1fr; gap: 2px 10px; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-editorWidget-background); cursor: pointer; }
     .choice:hover { border-color: var(--vscode-focusBorder); } .choice:has(input:disabled) { opacity: .55; cursor: not-allowed; } .choice input { grid-row: 1 / span 2; margin: 3px 0 0; } .choice span { color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .window-list { display: grid; gap: 8px; max-height: 176px; overflow: auto; padding: 2px 4px 2px 30px; scrollbar-color: var(--vscode-scrollbarSlider-background) transparent; scrollbar-width: thin; }
+    .window-list .check { min-height: 28px; } .window-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    [hidden] { display: none !important; }
     details { border-top: 1px solid var(--vscode-panel-border); padding-top: 12px; } summary { cursor: pointer; font-weight: 500; } .options { display: grid; gap: 10px; padding-top: 12px; }
     .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .check { display: flex; align-items: center; gap: 7px; } .policy { display: grid; gap: 8px; } .policy-row { display: grid; grid-template-columns: 1fr minmax(150px, auto); gap: 12px; align-items: center; } select { min-height: 30px; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 4px; padding: 2px 6px; }
     .review, .active-card { padding: 14px; border-radius: 8px; background: var(--vscode-textBlockQuote-background); } .active-card { display: grid; gap: 8px; border: 1px solid var(--vscode-panel-border); }
@@ -313,6 +380,8 @@ export class DesktopPanel implements vscode.Disposable {
       <fieldset><legend>Where and for how long</legend><div class="choices">
         <label class="choice"><input type="radio" name="apps" value="all" checked><strong>All visible applications</strong><span>Work across the desktop for the selected duration.</span></label>
         <label id="current-choice" class="choice"><input id="current-app" type="radio" name="apps" value="current"><strong>This exact window</strong><span id="current-target">Available for this task only.</span></label>
+        <label id="selected-choice" class="choice"><input id="selected-app" type="radio" name="apps" value="selected"><strong>Selected windows</strong><span>Choose the windows Raya can use for this task.</span></label>
+        <div id="selected-options" class="window-list" role="group" aria-label="Windows Raya can use" hidden></div>
         <label class="choice"><input type="radio" name="duration" value="session" checked><strong>This task</strong><span>Ends with this Raya task or when you stop it.</span></label>
         <label class="choice"><input type="radio" name="duration" value="hour"><strong>One hour</strong><span>Expires automatically across Raya sessions. Requires all applications.</span></label>
         <label class="choice"><input type="radio" name="duration" value="until_stopped"><strong>All sessions until I stop</strong><span>Saved locally and remains active across restarts. Requires all applications.</span></label>
@@ -340,32 +409,34 @@ export class DesktopPanel implements vscode.Disposable {
     const ruleLabels = { ask: "Ask before", allow_session: "Allow this session", allow_always: "Allow every time", deny: "Deny" };
     const selected = (name) => document.querySelector('input[name="' + name + '"]:checked')?.value;
     const chosen = () => [...document.querySelectorAll('#checks input:checked')].map((input) => input.value);
+    const selectedWindows = () => [...document.querySelectorAll('#selected-options input:checked')].map((input) => input.value);
     const policy = () => Object.fromEntries([...document.querySelectorAll('#policy select')].map((input) => [input.dataset.category, input.value]));
     const send = (type) => vscode.postMessage({ type });
     const drawActions = () => { const level = selected("level") || "assisted"; byId("checks").innerHTML = Object.entries(actionLabels).map(([value, label]) => '<label class="check"><input type="checkbox" value="' + value + '" ' + (defaults[level].includes(value) ? 'checked' : '') + '>' + label + '</label>').join(''); };
     const drawPolicy = () => { byId("policy").innerHTML = Object.entries(categoryLabels).map(([category, label]) => '<label class="policy-row"><span>' + label + '</span><select data-category="' + category + '">' + Object.entries(ruleLabels).map(([value, name]) => '<option value="' + value + '">' + name + '</option>').join('') + '</select></label>').join(''); };
+    const drawWindows = (windows) => { const list = byId("selected-options"); list.replaceChildren(); for (const window of windows) { const row = document.createElement("label"), input = document.createElement("input"), name = document.createElement("span"); row.className = "check"; input.type = "checkbox"; input.value = window.windowID; name.textContent = window.title; row.append(input, name); list.append(row); } list.querySelectorAll("input").forEach((input) => input.addEventListener("change", summarize)); };
     const applyPolicy = () => { if (!savedPolicy) return; document.querySelectorAll('#policy select').forEach((input) => { if (Object.hasOwn(savedPolicy, input.dataset.category)) input.value = savedPolicy[input.dataset.category]; }); summarize(); };
     const summarize = () => {
       const level = selected("level") || "assisted";
-      const apps = selected("apps") === "current" ? "this exact window" + (targetTitle ? " (" + targetTitle + ")" : "") : "all visible applications";
+      const apps = selected("apps") === "current" ? "this exact window" + (targetTitle ? " (" + targetTitle + ")" : "") : selected("apps") === "selected" ? selectedWindows().length + " selected windows" : "all visible applications";
       const duration = selected("duration") === "session" ? "this task" : selected("duration") === "hour" ? "one hour" : "all sessions until you stop";
       const sensitive = level === "assisted" ? "Sensitive actions always ask first; Deny still applies." : level === "observe" ? "Raya cannot click or type." : "Sensitive actions follow the policy below.";
       review.textContent = labels[level] + " in " + apps + " for " + duration + ". " + sensitive;
     };
     document.querySelectorAll('input[name="level"]').forEach((input) => input.addEventListener("change", () => { drawActions(); summarize(); }));
-    const scopeDuration = () => { const exact = selected("apps") === "current"; if (exact) document.querySelector('input[name="duration"][value="session"]').checked = true; document.querySelectorAll('input[name="duration"]').forEach((input) => { if (input.value !== "session") input.disabled = exact; }); summarize(); };
+    const scopeDuration = () => { const scoped = selected("apps") !== "all"; if (scoped) document.querySelector('input[name="duration"][value="session"]').checked = true; document.querySelectorAll('input[name="duration"]').forEach((input) => { if (input.value !== "session") input.disabled = scoped; }); byId("selected-options").hidden = selected("apps") !== "selected"; summarize(); };
     document.querySelectorAll('input[name="apps"]').forEach((input) => input.addEventListener("change", scopeDuration));
     document.querySelectorAll('input[name="duration"]').forEach((input) => input.addEventListener("change", summarize));
     refresh.addEventListener("click", () => send("refresh")); control.addEventListener("click", () => send(manual ? "resume" : "takeover")); stop.addEventListener("click", () => send("stop")); byId("decline").addEventListener("click", () => send("decline"));
     byId("use-policy").addEventListener("click", applyPolicy); byId("clear-policy").addEventListener("click", () => send("clearPolicy")); byId("clear-policy-settings").addEventListener("click", () => send("clearPolicy"));
-    byId("grant-button").addEventListener("click", () => vscode.postMessage({ type: "grant", level: selected("level"), duration: selected("duration"), applications: selected("apps"), actions: chosen(), sensitive: policy(), rememberPolicy: byId("remember-policy").checked, cooperativeInput: byId("cooperative").checked }));
+    byId("grant-button").addEventListener("click", () => vscode.postMessage({ type: "grant", level: selected("level"), duration: selected("duration"), applications: selected("apps"), windows: selectedWindows(), actions: chosen(), sensitive: policy(), rememberPolicy: byId("remember-policy").checked, cooperativeInput: byId("cooperative").checked }));
     window.addEventListener("message", (event) => { const message = event.data;
       if (message.type === "loading") { status.textContent = "Capturing foreground window…"; activeError.hidden = true; }
       if (message.type === "frame") { frame.src = message.src; frame.style.display = "block"; empty.hidden = true; activeError.hidden = true; status.textContent = "Observed " + message.width + "×" + message.height + " at " + new Date(message.observedAt).toLocaleTimeString(); }
       if (message.type === "error") { const target = pending ? grantError : activeError; target.textContent = message.message; target.hidden = false; }
-      if (message.type === "lease") { const saved = message.lease; savedPolicy = message.savedPolicy; byId("saved-policy").hidden = !savedPolicy; const fresh = !pending && !!message.pending; pending = !!message.pending; targetTitle = message.pending?.currentApplicationAvailable ? message.pending.currentApplicationTitle : undefined; byId("policy-settings").hidden = pending || !savedPolicy; grant.hidden = !pending; active.hidden = pending || !saved; idle.hidden = pending || !saved; refresh.hidden = pending || !saved; control.hidden = pending || !saved; stop.hidden = pending || !saved; byId("current-app").disabled = !message.pending?.currentApplicationAvailable; byId("current-choice").style.opacity = message.pending?.currentApplicationAvailable ? "1" : ".55"; byId("current-target").textContent = message.pending?.currentApplicationAvailable ? message.pending.currentApplicationTitle + " · this task only" : "Bring the window forward, then ask Raya again.";
-        if (pending) { if (fresh) { document.querySelector('input[name="level"][value="assisted"]').checked = true; document.querySelector('input[name="apps"][value="all"]').checked = true; document.querySelector('input[name="duration"][value="session"]').checked = true; byId("cooperative").checked = false; drawActions(); drawPolicy(); byId("remember-policy").checked = false; } scopeDuration(); status.textContent = "Your approval is needed"; dot.className = "dot"; }
-        if (saved) { manual = saved.state === "paused"; dot.className = "dot " + (manual ? "paused" : "active"); status.textContent = manual ? "Paused" : labels[saved.level] + " active"; control.textContent = manual ? "Resume" : "Pause"; byId("active-title").textContent = manual ? "Raya is paused" : labels[saved.level] + " is active"; const until = saved.expiry.kind === "expires_at" ? " until " + new Date(saved.expiry.expiresAt).toLocaleTimeString() : " until you stop it"; byId("active-summary").textContent = (saved.applications === "all" ? "All visible applications" : "This exact window") + until + "."; }
+      if (message.type === "lease") { const saved = message.lease; savedPolicy = message.savedPolicy; byId("saved-policy").hidden = !savedPolicy; const fresh = !pending && !!message.pending; pending = !!message.pending; targetTitle = message.pending?.currentApplicationAvailable ? message.pending.currentApplicationTitle : undefined; byId("policy-settings").hidden = pending || !savedPolicy; grant.hidden = !pending; active.hidden = pending || !saved; idle.hidden = pending || !saved; refresh.hidden = pending || !saved; control.hidden = pending || !saved; stop.hidden = pending || !saved; byId("current-app").disabled = !message.pending?.currentApplicationAvailable; byId("selected-app").disabled = !message.pending?.windows?.length; byId("current-choice").style.opacity = message.pending?.currentApplicationAvailable ? "1" : ".55"; byId("selected-choice").style.opacity = message.pending?.windows?.length ? "1" : ".55"; byId("current-target").textContent = message.pending?.currentApplicationAvailable ? message.pending.currentApplicationTitle + " · this task only" : "Bring the window forward, then ask Raya again.";
+        if (pending) { if (fresh) { document.querySelector('input[name="level"][value="assisted"]').checked = true; document.querySelector('input[name="apps"][value="all"]').checked = true; document.querySelector('input[name="duration"][value="session"]').checked = true; byId("cooperative").checked = false; drawActions(); drawPolicy(); drawWindows(message.pending.windows || []); byId("remember-policy").checked = false; } scopeDuration(); status.textContent = "Your approval is needed"; dot.className = "dot"; }
+        if (saved) { manual = saved.state === "paused"; dot.className = "dot " + (manual ? "paused" : "active"); status.textContent = manual ? "Paused" : labels[saved.level] + " active"; control.textContent = manual ? "Resume" : "Pause"; byId("active-title").textContent = manual ? "Raya is paused" : labels[saved.level] + " is active"; const until = saved.expiry.kind === "expires_at" ? " until " + new Date(saved.expiry.expiresAt).toLocaleTimeString() : " until you stop it"; byId("active-summary").textContent = (saved.applications === "all" ? "All visible applications" : saved.applications === "selected" ? "Selected windows" : "This exact window") + until + "."; }
         if (!saved && !pending) { status.textContent = "Off"; dot.className = "dot"; }
       }
       if (message.type === "state") { manual = message.control === "manual"; control.textContent = manual ? "Resume" : "Pause"; if (message.reason) status.textContent = message.reason; }

@@ -96,6 +96,13 @@ function changes(frames: Frame[]) {
   })
 }
 
+function completeWatch(request: Extract<DesktopRequest, { operation: "watch" }>, frames: Frame[]): boolean {
+  if (frames.length < 2 || frames.length > request.frameCount) return false
+  if (request.mode !== "first_change_v2") return frames.length === request.frameCount
+  if (frames.length === request.frameCount) return true
+  return changes(frames).at(-1)?.change === "keyframe"
+}
+
 export interface DesktopReceiptStore {
   get<T>(key: string): T | undefined
   update(key: string, value: unknown): Thenable<void>
@@ -350,7 +357,7 @@ export class DesktopBridge {
     if (window) await this.foreground(window, identity)
     if (request.operation === "watch") {
       const last = frames.at(-1)
-      if (frames.length !== request.frameCount || !last)
+      if (!last || !completeWatch(request, frames))
         throw new Error("Desktop watch returned an incomplete frame sequence")
       return {
         operation: "watch",

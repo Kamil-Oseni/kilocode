@@ -77,7 +77,47 @@ export class DesktopAutomationService implements vscode.Disposable {
         const interval = request.operation === "watch" ? request.intervalMs : 0
         if (request.operation === "watch" && !bounded(count, interval))
           throw new Error("Desktop watch exceeds the ten-second local capture budget")
-        return await vscode.window.withProgress(
+        const capture = async (
+          progress?: vscode.Progress<{ increment?: number; message?: string }>,
+          token?: vscode.CancellationToken,
+        ) => {
+          const state = { cancelled: false }
+          const stop = token?.onCancellationRequested(() => {
+            state.cancelled = true
+            this.session!.takeControl("You stopped live desktop viewing.")
+          })
+          try {
+            const frames = []
+            const cadence = request.operation === "watch" ? new DesktopCadence(interval) : undefined
+            const deadline = performance.now() + WATCH.budget
+            let previous: Awaited<ReturnType<DesktopSession["observe"]>> | undefined
+            for (const index of Array.from({ length: count }, (_, value) => value)) {
+              if (state.cancelled || signal.aborted) throw new Error("Desktop viewing was stopped")
+              const capture = this.session!.observe()
+              const frame =
+                request.operation === "watch"
+                  ? await limit(capture, deadline - performance.now(), () =>
+                      this.pause("Raya desktop control paused because a bounded watch exceeded ten seconds."),
+                    )
+                  : await capture
+              frames.push(frame)
+              progress?.report({ increment: 100 / count, message: `Frame ${index + 1} of ${count}` })
+              if (index + 1 < count)
+                await wait(
+                  Math.min(cadence!.next(changed(previous, frame)), Math.max(0, deadline - performance.now())),
+                  signal,
+                  state,
+                )
+              previous = frame
+            }
+            return frames
+          } finally {
+            stop?.dispose()
+          }
+        }
+        const lease = this.lease?.current()
+        if (lease?.state === "active" && lease.level === "autonomous") return capture()
+        return vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
             title:
@@ -86,41 +126,7 @@ export class DesktopAutomationService implements vscode.Disposable {
                 : "Raya is looking at the foreground window",
             cancellable: true,
           },
-          async (progress, token) => {
-            const state = { cancelled: false }
-            const stop = token.onCancellationRequested(() => {
-              state.cancelled = true
-              this.session!.takeControl("You stopped live desktop viewing.")
-            })
-            try {
-              const frames = []
-              const cadence = request.operation === "watch" ? new DesktopCadence(interval) : undefined
-              const deadline = performance.now() + WATCH.budget
-              let previous: Awaited<ReturnType<DesktopSession["observe"]>> | undefined
-              for (const index of Array.from({ length: count }, (_, value) => value)) {
-                if (state.cancelled || signal.aborted) throw new Error("Desktop viewing was stopped")
-                const capture = this.session!.observe()
-                const frame =
-                  request.operation === "watch"
-                    ? await limit(capture, deadline - performance.now(), () =>
-                        this.pause("Raya desktop control paused because a bounded watch exceeded ten seconds."),
-                      )
-                    : await capture
-                frames.push(frame)
-                progress.report({ increment: 100 / count, message: `Frame ${index + 1} of ${count}` })
-                if (index + 1 < count)
-                  await wait(
-                    Math.min(cadence!.next(changed(previous, frame)), Math.max(0, deadline - performance.now())),
-                    signal,
-                    state,
-                  )
-                previous = frame
-              }
-              return frames
-            } finally {
-              stop.dispose()
-            }
-          },
+          capture,
         )
       },
       context.globalState,

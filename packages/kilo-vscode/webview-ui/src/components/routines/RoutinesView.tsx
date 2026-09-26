@@ -1995,28 +1995,30 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     </Show>
                   </div>
                   <nav class="routines-organizations" aria-label="Organizations">
-                    <button
-                      type="button"
-                      class="routines-organization"
-                      aria-current={page(!organization() && !archiveOpen())}
-                      onClick={() => chooseOrganization()}
-                    >
-                      All workers
-                    </button>
-                    <For each={organizations()}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          class="routines-organization"
-                          data-routine-organization={item.id}
-                          aria-current={page(organization() === item.id)}
-                          onClick={() => chooseOrganization(item.id)}
-                        >
-                          <span>{item.name}</span>
-                          <span>{item.members.length}</span>
-                        </button>
-                      )}
-                    </For>
+                    <div class="routines-organization-choices">
+                      <button
+                        type="button"
+                        class="routines-organization"
+                        aria-current={page(!organization() && !archiveOpen())}
+                        onClick={() => chooseOrganization()}
+                      >
+                        All workers
+                      </button>
+                      <For each={organizations()}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            class="routines-organization"
+                            data-routine-organization={item.id}
+                            aria-current={page(organization() === item.id)}
+                            onClick={() => chooseOrganization(item.id)}
+                          >
+                            <span>{item.name}</span>
+                            <span>{item.members.length}</span>
+                          </button>
+                        )}
+                      </For>
+                    </div>
                     <button
                       type="button"
                       class="routines-organization routines-organization-archive-link"

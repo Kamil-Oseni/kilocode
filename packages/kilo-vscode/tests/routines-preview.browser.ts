@@ -826,6 +826,30 @@ for (const width of [320, 900]) {
   })
 }
 
+test("workers sidebar keeps archive and options keyboard reachable at 320px", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines")
+  const nav = page.getByRole("navigation", { name: "Organizations" })
+  const archive = nav.getByRole("button", { name: "Open archive directory" })
+  await page.screenshot({ path: info.outputPath("workers-sidebar-320.png"), fullPage: true })
+  await archive.focus()
+  await expect(archive).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(archive).toHaveAttribute("aria-current", "page")
+  await page.getByRole("button", { name: "All workers" }).click()
+  const options = page.locator(".routines-roster-more > summary")
+  await options.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("button", { name: "Manage workers" })).toBeVisible()
+  const past = page.locator(".routines-archive > summary")
+  await past.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Their chats and work are saved here.", { exact: false })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const rail = await page.locator(".routines-people").evaluate((node) => getComputedStyle(node).scrollbarWidth)
+  expect(rail).toBe("thin")
+})
+
 test("archive receipt removes the active team and keeps worker conversation reachable", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")

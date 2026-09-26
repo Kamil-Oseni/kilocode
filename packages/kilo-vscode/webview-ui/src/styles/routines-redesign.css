@@ -489,8 +489,8 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-row[data-curre
 }
 
 .routines-view .routines-toolbar {
-  gap: 14px;
-  padding: 18px 14px 14px;
+  gap: 12px;
+  padding: 20px 14px 14px;
   border-bottom: 1px solid var(--routine-line);
 }
 
@@ -503,9 +503,22 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 }
 
 .routines-view .routines-organizations {
-  gap: 6px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
   margin: 0;
   padding: 0;
+  overflow: visible;
+}
+
+.routines-view .routines-organization-choices {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  padding-bottom: 3px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #55555a transparent;
 }
 
 .routines-view .routines-organization {
@@ -523,13 +536,38 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 }
 
 .routines-view .routines-organization-archive-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-color: transparent;
+  background: var(--routine-card);
   color: var(--text-weak, var(--vscode-descriptionForeground));
 }
 
+.routines-view .routines-organization-archive-link::before {
+  content: "";
+  flex: 0 0 12px;
+  width: 12px;
+  height: 9px;
+  border: 1px solid currentColor;
+  border-top-width: 3px;
+  border-radius: 2px;
+}
+
+.routines-view .routines-organization-archive-link:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 10%, var(--routine-card));
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-view .routines-organization-archive-link[aria-current="page"] {
+  border-color: #6d6d73;
+}
+
 .routines-view .routines-organization-archive-link > span:last-child {
+  margin-left: auto;
   min-width: 1.3em;
   color: var(--text-base, var(--vscode-foreground));
   text-align: right;
@@ -549,7 +587,26 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 
 .routines-view .routines-roster-more {
   border-top: 1px solid var(--routine-line);
-  padding-top: 6px;
+  padding-top: 8px;
+}
+
+.routines-view .routines-roster-more > summary {
+  min-height: 34px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.routines-view .routines-roster-more > summary:hover,
+.routines-view .routines-roster-more[open] > summary {
+  background: var(--routine-card);
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-view .routines-roster-more > summary:focus-visible,
+.routines-view .routines-archive > summary:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, Highlight);
+  outline-offset: 2px;
 }
 
 .routines-view .routines-roster-more > summary,
@@ -624,10 +681,9 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 
 .routines-view .routines-roster-more .routines-secondary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  border-top: 1px solid var(--routine-line);
-  padding-top: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  padding: 8px 0 0;
 }
 
 .routines-view .routines-secondary [data-component="button"] {
@@ -641,6 +697,32 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 .routines-view .routines-secondary [data-component="button"]:hover {
   background: #303033;
   color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-view .routines-secondary .routines-archive {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.routines-view .routines-secondary .routines-archive > summary {
+  min-height: 34px;
+  padding: 8px 0;
+  color: var(--routine-muted);
+  cursor: pointer;
+}
+
+.routines-view .routines-secondary .routines-archive > select {
+  appearance: none;
+  min-height: 38px;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid var(--routine-line);
+  border-radius: 10px;
+  background-color: var(--routine-card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23aaaab0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  color: var(--text-base, var(--vscode-foreground));
+  font: 500 12px/1.4 var(--font-body);
 }
 
 .routines-view .routines-thread {

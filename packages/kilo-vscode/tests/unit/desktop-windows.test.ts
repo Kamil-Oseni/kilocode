@@ -105,6 +105,7 @@ describe("Windows native desktop driver", () => {
     const image = (target: typeof chosen, data: string) =>
       JSON.stringify({
         ...target,
+        identity,
         width: 20,
         height: 10,
         mime: "image/png",
@@ -126,12 +127,13 @@ describe("Windows native desktop driver", () => {
       },
       cancel: () => undefined,
     }
+    const scripts: string[] = []
     const background = {
-      run: async () => {
+      run: async (script: string) => {
+        scripts.push(script)
         samples++
         if (samples === 1) return image(chosen, "first")
-        if (samples === 2) return image(other, "private")
-        if (samples === 3) return image(chosen, "reused")
+        if (samples === 2 || samples === 3 || samples === 5) return JSON.stringify({ discard: true })
         if (samples === 4) return image(chosen, "returned")
         return new Promise<string>(() => undefined)
       },
@@ -144,6 +146,9 @@ describe("Windows native desktop driver", () => {
     try {
       for (let index = 0; index < 100 && latest()?.frame.data !== "first"; index++) await Bun.sleep(2)
       expect(latest()?.frame.data).toBe("first")
+      expect(scripts[0]).toContain("$after.Location -ne $window.Location -or $identity -ne $target.identity")
+      expect(scripts[0]).toContain("[RayaDesktopNative]::Identity($window.Handle) -ne $target.identity")
+      expect(scripts[0]).toContain(Buffer.from(JSON.stringify({ windowID: chosen.windowID, identity }), "utf8").toString("base64"))
       expect(errors).toHaveLength(0)
       state.window = other
       for (let index = 0; index < 100 && samples < 2; index++) await Bun.sleep(2)
@@ -165,10 +170,48 @@ describe("Windows native desktop driver", () => {
       expect((await driver.observe({ semantics: false })).data).toBe("returned")
       expect(direct).toBe(2)
       expect(errors).toHaveLength(0)
+      state.window = { ...chosen, location: "pid:5;title:Editor;bounds:1,0,20,10" }
+      for (let index = 0; index < 600 && samples < 5; index++) await Bun.sleep(2)
+      expect(samples).toBeGreaterThanOrEqual(5)
+      expect(latest()).toBeUndefined()
     } finally {
       driver.stopCapture()
     }
   }, 15_000)
+
+  it("refuses forged selected pixels and malformed change markers before publishing a frame", async () => {
+    const target = { windowID: "0x123", identity: "A".repeat(64) }
+    const visual = {
+      windowID: target.windowID,
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      data: "private pixels",
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    for (const output of [
+      { ...visual, identity: "B".repeat(64) },
+      { ...visual, identity: target.identity, discard: true },
+      { ...visual, identity: target.identity, discard: false },
+    ]) {
+      let commands = 0
+      let cancelled = 0
+      const errors: unknown[] = []
+      const driver = new WindowsDesktopDriver(
+        { run: async () => { commands++; return JSON.stringify(visual) }, cancel: () => undefined },
+        { run: async () => JSON.stringify(output), cancel: () => { cancelled++ } },
+      )
+      driver.startCapture((error) => errors.push(error), target)
+      for (let index = 0; index < 100 && !cancelled && !errors.length; index++) await Bun.sleep(2)
+      expect((Reflect.get(driver, "worker") as DesktopCaptureWorker | undefined)?.latest()).toBeUndefined()
+      expect(commands).toBe(0)
+      expect(cancelled).toBeGreaterThan(0)
+      expect(errors).toHaveLength(output.discard === undefined ? 0 : 1)
+      driver.stopCapture()
+    }
+  })
 
   it("binds only the foreground window to a verifiable incarnation", async () => {
     const identity = "A".repeat(64)
@@ -195,6 +238,70 @@ describe("Windows native desktop driver", () => {
       cancel: () => undefined,
     })
     await expect(changed.pinCurrent(target.windowID)).rejects.toThrow(/binding is incomplete/i)
+  })
+
+  it("pins an exact background window with an instance token and checks its listed location", async () => {
+    const target = { windowID: "0x123", location: "pid:5;class:Editor;title:Draft", identity: "A".repeat(64) }
+    const result = { ...target, title: "Draft", identity: "B".repeat(64) }
+    const scripts: string[] = []
+    const driver = new WindowsDesktopDriver({
+      run: async (script) => {
+        scripts.push(script)
+        return JSON.stringify(result)
+      },
+      cancel: () => undefined,
+    })
+    expect(await driver.pinWindow(target)).toEqual(result)
+    expect(scripts).toHaveLength(1)
+    expect(scripts[0]).toContain("PinWindow($value, [string]$target.location, [string]$target.identity)")
+    expect(scripts[0]).toContain("before.Identity != identity")
+    expect(scripts[0]).toContain("before.Location != location")
+    expect(scripts[0]).toContain("SetProp(handle, InstanceProperty, instance)")
+    expect(scripts[0]).toContain("GetProp(handle, InstanceProperty) != instance")
+    expect(scripts[0]).toContain("after.ProcessID != before.ProcessID")
+  })
+
+  it("refuses a reused window or property binding failure without returning identity", async () => {
+    const target = { windowID: "0x123", location: "pid:5;class:Editor;title:Draft", identity: "A".repeat(64) }
+    const reused = new WindowsDesktopDriver({
+      run: async () => JSON.stringify({ ...target, windowID: "0x456", title: "Draft" }),
+      cancel: () => undefined,
+    })
+    await expect(reused.pinWindow(target)).rejects.toThrow(/binding is incomplete/i)
+    const denied = new WindowsDesktopDriver({
+      run: async () => {
+        throw new Error("Windows refused to bind the selected window")
+      },
+      cancel: () => undefined,
+    })
+    await expect(denied.pinWindow(target)).rejects.toThrow(/Windows refused to bind/)
+  })
+
+  it("compiles the native window binder on Windows", async () => {
+    if (process.platform !== "win32") return
+    const target = { windowID: "0x123", location: "pid:5;class:Editor;title:Draft", identity: "A".repeat(64) }
+    let script = ""
+    const driver = new WindowsDesktopDriver({
+      run: async (value) => {
+        script = value
+        return JSON.stringify({ ...target, title: "Draft" })
+      },
+      cancel: () => undefined,
+    })
+    await driver.pinWindow(target)
+    const source = script.slice(0, script.indexOf("$target ="))
+      .replace("[RayaDesktopNative]::EnableDpiAwareness()", "") +
+      '[Console]::WriteLine("RayaDesktopNative compiled")'
+    const result = Bun.spawnSync([
+      "powershell.exe",
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "-",
+    ], { stdin: Buffer.from(source, "utf8") })
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toContain("RayaDesktopNative compiled")
   })
 
   it("uses a request-matched native post-action image and correlates exact UI Automation", async () => {

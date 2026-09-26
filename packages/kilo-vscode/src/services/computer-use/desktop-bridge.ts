@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type {
   DesktopFailure,
   DesktopRequest,
@@ -20,6 +20,7 @@ export interface DesktopConnection {
 }
 
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure; delivered?: boolean }
+type Journal = { version: 2; epoch: string; revision: number; lastAckAt: number | null; items: unknown[] }
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
 type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
@@ -88,6 +89,10 @@ export class DesktopBridge {
   private readonly offEvent: () => void
   private readonly offState: () => void
   private writes = Promise.resolve()
+  private epoch: string = randomUUID()
+  private committed: Journal | undefined
+  private pendingAck: number | undefined
+  private journalFault = false
   private revision = 0
   private connected = false
   private disposed = false
@@ -150,6 +155,16 @@ export class DesktopBridge {
     const fingerprint = createHash("sha256")
       .update(JSON.stringify([directory, request]))
       .digest("hex")
+    if (this.journalFault && actions.has(request.operation)) {
+      await this.deliver(request.id, directory, {
+        fingerprint,
+        failure: {
+          code: "invalid_request",
+          message: "Desktop receipt journal is invalid; native input is paused until the journal is repaired.",
+        },
+      })
+      return
+    }
     const prior = this.receipts.get(request.id)
     if (prior && prior.fingerprint !== fingerprint) {
       await this.deliver(request.id, directory, {
@@ -608,6 +623,8 @@ export class DesktopBridge {
       if (!stored || stored.fingerprint !== receipt.fingerprint) return
       this.scrub(receipt)
       stored.delivered = true
+      if (persistable(stored.result) || persistableFailure(stored.failure))
+        this.pendingAck = Math.max(this.pendingAck ?? 0, Date.now())
       await this.retain(stored).catch((error) =>
         console.error("[Raya] Desktop receipt acknowledgement persistence failed; stale receipt remains safe", error),
       )
@@ -631,8 +648,10 @@ export class DesktopBridge {
 
   private compact(): void {
     if (this.receipts.size < 256) return
+    const pending = new Set(this.committed?.items.map((item) => restored(item)?.[0]))
     for (const [id, receipt] of this.receipts) {
       if (!receipt.delivered) continue
+      if (this.store && (!this.committed || pending.has(id))) continue
       this.receipts.delete(id)
       if (this.receipts.size < 256) return
     }
@@ -640,33 +659,59 @@ export class DesktopBridge {
 
   private restore(): void {
     const saved = this.store?.get<unknown>(journal)
-    if (!saved || typeof saved !== "object") return
-    const value = saved as { version?: unknown; items?: unknown }
-    if (value.version !== 1 || !Array.isArray(value.items) || value.items.length > 256) return
+    if (saved === undefined) return
+    if (!validSaved(saved)) {
+      this.journalFault = true
+      return
+    }
+    const value = saved
+    if (value.version === 2) this.epoch = value.epoch as string
     let migrated = false
+    const seen = new Set<string>()
     for (const item of value.items) {
       const entry = restored(item)
-      if (!entry) continue
+      if (!entry || seen.has(entry[0])) {
+        this.receipts.clear()
+        this.journalFault = true
+        return
+      }
+      seen.add(entry[0])
       if (entry[1].result?.operation === "sequence") {
         this.scrub(entry[1])
         migrated = true
       }
       this.receipts.set(entry[0], entry[1])
     }
-    if (migrated) {
-      const receipt = this.receipts.values().next().value
-      if (receipt)
-        void this.retain(receipt).catch((error) =>
-          console.error("[Raya] Desktop frame receipt migration failed", error),
-        )
-    }
+    if (value.version === 2 && !migrated) this.committed = structuredClone(value as Journal)
+    if (value.version === 1 || migrated)
+      void this.persistJournal().catch((error) =>
+        console.error("[Raya] Desktop receipt journal migration failed", error),
+      )
   }
 
   private retain(receipt: Receipt): Promise<void> {
     if (!this.store || (!persistable(receipt.result) && !persistableFailure(receipt.failure))) return Promise.resolve()
+    return this.persistJournal()
+  }
+
+  /** Last durable snapshot only; never reports speculative or unacknowledged metadata. */
+  journalSummary() {
+    const saved = this.committed
+    if (!saved) return null
+    const counts = { confirmed: 0, unknown: 0 }
+    for (const item of saved.items) {
+      const entry = restored(item)
+      if (entry?.[1].result) counts.confirmed += 1
+      if (entry?.[1].failure) counts.unknown += 1
+    }
+    return { epoch: saved.epoch, revision: saved.revision, lastAckAt: saved.lastAckAt, pendingNative: counts }
+  }
+
+  private persistJournal(): Promise<void> {
+    if (!this.store) return Promise.resolve()
     this.writes = this.writes
       .catch(() => undefined)
-      .then(() => {
+      .then(async () => {
         const items = [...this.receipts.entries()]
           .filter(
             (entry) => !entry[1].delivered && (persistable(entry[1].result) || persistableFailure(entry[1].failure)),
@@ -688,7 +733,18 @@ export class DesktopBridge {
                 : { failure: value.failure }),
           }))
           .slice(-256)
-        return Promise.resolve(this.store!.update(journal, { version: 1, items }))
+        const ack = this.pendingAck
+        const saved: Journal = {
+          version: 2,
+          epoch: this.committed?.epoch ?? this.epoch,
+          revision: (this.committed?.revision ?? 0) + 1,
+          lastAckAt:
+            ack === undefined ? (this.committed?.lastAckAt ?? null) : Math.max(this.committed?.lastAckAt ?? 0, ack),
+          items,
+        }
+        await Promise.resolve(this.store!.update(journal, saved))
+        this.committed = saved
+        if (this.pendingAck === ack) this.pendingAck = undefined
       })
     return this.writes
   }
@@ -822,6 +878,39 @@ function persistableFailure(
     typeof receipt.observationID === "string" &&
     target?.surface === "desktop" &&
     typeof target.windowID === "string"
+  )
+}
+
+function validSaved(value: unknown): value is {
+  version: 1 | 2
+  items: unknown[]
+  epoch?: unknown
+  revision?: unknown
+  lastAckAt?: unknown
+} {
+  if (!value || typeof value !== "object") return false
+  const saved = value as { version?: unknown; items?: unknown; epoch?: unknown; revision?: unknown; lastAckAt?: unknown }
+  if (!Array.isArray(saved.items) || saved.items.length > 256) return false
+  if (saved.version === 1) return true
+  return validJournal(saved)
+}
+
+function validJournal(value: {
+  version?: unknown
+  items?: unknown
+  epoch?: unknown
+  revision?: unknown
+  lastAckAt?: unknown
+}): value is Journal {
+  return (
+    value.version === 2 &&
+    Array.isArray(value.items) &&
+    value.items.length <= 256 &&
+    typeof value.epoch === "string" &&
+    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value.epoch) &&
+    Number.isSafeInteger(value.revision) &&
+    (value.revision as number) >= 1 &&
+    (value.lastAckAt === null || (Number.isSafeInteger(value.lastAckAt) && (value.lastAckAt as number) > 0))
   )
 }
 

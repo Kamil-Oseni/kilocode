@@ -239,6 +239,30 @@ public static class RayaDesktopNative {
     return after.Identity;
   }
 
+  public static WindowInfo PinWindow(long value, string location, string identity) {
+    var handle = new IntPtr(value);
+    var before = Describe(handle);
+    if (before == null || before.WindowID != String.Format("0x{0:X}", value) ||
+        before.Location != location || before.Identity == null || before.Identity != identity)
+      throw new InvalidOperationException("Selected desktop window changed before binding its identity");
+    var instance = GetProp(handle, InstanceProperty);
+    if (instance == IntPtr.Zero) {
+      var bytes = new byte[8];
+      using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes);
+      var value64 = BitConverter.ToInt64(bytes, 0) & Int64.MaxValue;
+      if (value64 == 0) value64 = 1;
+      instance = new IntPtr(value64);
+      if (!SetProp(handle, InstanceProperty, instance) || GetProp(handle, InstanceProperty) != instance)
+        throw new InvalidOperationException("Windows refused to bind the selected window");
+    }
+    var after = Describe(handle);
+    if (after == null || after.WindowID != before.WindowID || after.Location != before.Location ||
+        after.ProcessID != before.ProcessID || after.Identity == null ||
+        GetProp(handle, InstanceProperty) != instance)
+      throw new InvalidOperationException("Selected desktop window changed while binding its identity");
+    return after;
+  }
+
   public static void Focus(long value, string location, string identity, int x, int y, int width, int height, bool minimized, bool foreground) {
     var handle = new IntPtr(value);
     var info = Describe(handle);
@@ -792,6 +816,42 @@ try {
 
 const pixels = observe.replace("$collectSemantics = $true", "$collectSemantics = $false")
 
+function selectedPixels(target: { windowID: string; identity: string }) {
+  const input = payload(target)
+  const first = pixels.replace(
+      "$window = Get-RayaWindow\n$scale =",
+      `$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+$window = Get-RayaWindow
+if ($window.WindowID -ne $target.windowID -or [RayaDesktopNative]::Identity($window.Handle) -ne $target.identity) {
+  $global:RayaCaptureCache = $null
+  [pscustomobject]@{ discard = $true } | ConvertTo-Json -Compress
+  return
+}
+$scale =`,
+    )
+  if (first === pixels) throw new Error("Selected desktop capture cannot bind its foreground precondition")
+  const second = first.replace(
+      `  $after = Get-RayaWindow
+  if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
+    throw "Foreground window changed while correlating visual and semantic observations"
+  }`,
+      `  $after = Get-RayaWindow
+  $identity = [RayaDesktopNative]::Identity($after.Handle)
+  if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location -or $identity -ne $target.identity) {
+    $global:RayaCaptureCache = $null
+    [pscustomobject]@{ discard = $true } | ConvertTo-Json -Compress
+    return
+  }`,
+    )
+  if (second === first) throw new Error("Selected desktop capture cannot bind its foreground postcondition")
+  const script = second.replace(
+    "    windowID = $window.WindowID\n    location = $window.Location",
+    "    windowID = $window.WindowID\n    location = $window.Location\n    identity = $identity",
+  )
+  if (script === second) throw new Error("Selected desktop capture cannot report verified identity")
+  return script
+}
+
 const current = `${setup}
 $window = Get-RayaWindow
 [pscustomobject]@{ windowID = $window.WindowID; location = $window.Location } | ConvertTo-Json -Compress
@@ -869,6 +929,19 @@ if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Locatio
   throw "Selected desktop window changed while binding its identity"
 }
 [pscustomobject]@{ windowID = $after.WindowID; title = $after.Title; identity = $identity } | ConvertTo-Json -Compress
+`
+}
+
+function pinWindow(target: { windowID: string; location: string; identity: string }) {
+  const input = payload(target)
+  return `${setup}
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+if ([string]$target.windowID -notmatch '^0x[0-9A-F]+$' -or
+    [string]$target.identity -notmatch '^[A-F0-9]{64}$' -or
+    [string]::IsNullOrEmpty([string]$target.location)) { throw "Selected desktop window binding is invalid" }
+$value = [Convert]::ToInt64(([string]$target.windowID).Substring(2), 16)
+$window = [RayaDesktopNative]::PinWindow($value, [string]$target.location, [string]$target.identity)
+[pscustomobject]@{ windowID = $window.WindowID; title = $window.Title; location = $window.Location; identity = $window.Identity } | ConvertTo-Json -Compress
 `
 }
 
@@ -1691,6 +1764,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       return
     }
     const source = this.background ?? runner()
+    const script = target ? selectedPixels(target) : pixels
     let prior: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
     const discard = () => {
       prior = undefined
@@ -1700,18 +1774,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
     this.worker = new DesktopCaptureWorker(
       async () => {
         const started = performance.now()
-        const result = object(await source.run(pixels))
-        if (target && result.windowID !== target.windowID) return discard()
+        const result = object(await source.run(script))
+        if (target && result.discard === true && Object.keys(result).length === 1) return discard()
+        if (result.discard !== undefined) throw new Error("Selected desktop capture refusal is invalid")
+        if (target && (result.windowID !== target.windowID || result.identity !== target.identity)) return discard()
         const next = frame(result, performance.now() - started, prior)
-        if (target) {
-          const current = await this.current()
-          if (
-            current.windowID !== target.windowID ||
-            current.location !== next.location ||
-            (await this.identity(target.windowID)) !== target.identity
-          )
-            return discard()
-        }
         prior = {
           windowID: next.windowID,
           location: next.location,
@@ -1813,6 +1880,28 @@ export class WindowsDesktopDriver implements DesktopDriver {
     )
       throw new Error("Selected desktop window binding is incomplete")
     return { windowID, title: result.title, identity: result.identity }
+  }
+
+  async pinWindow(target: { windowID: string; location: string; identity: string }) {
+    if (
+      !/^0x[0-9A-F]+$/.test(target.windowID) ||
+      !/^[A-F0-9]{64}$/.test(target.identity) ||
+      !target.location ||
+      target.location.length > 4096
+    )
+      throw new Error("Selected desktop window binding is invalid")
+    const result = object(await this.runner.run(pinWindow(target)))
+    if (
+      result.windowID !== target.windowID ||
+      result.location !== target.location ||
+      typeof result.title !== "string" ||
+      !result.title ||
+      result.title.length > 2048 ||
+      typeof result.identity !== "string" ||
+      !/^[A-F0-9]{64}$/.test(result.identity)
+    )
+      throw new Error("Selected desktop window binding is incomplete")
+    return { windowID: target.windowID, title: result.title, location: target.location, identity: result.identity }
   }
 
   async focus(target: DesktopWindow): Promise<void> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { DesktopRequest, KiloClient } from "@kilocode/sdk/v2/client"
 import {
   DesktopBridge,
@@ -1208,7 +1208,7 @@ describe("desktop observation bridge", () => {
     expect(first.actions).toHaveLength(1)
     expect(JSON.stringify(store.read())).not.toContain("cG5n")
     expect(store.read()).toMatchObject({
-      version: 1,
+      version: 2,
       items: [{ id: click.id, result: { operation: "click", receipt: { outcome: "confirmed" } } }],
     })
     first.bridge.dispose()
@@ -1228,7 +1228,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toEqual({ version: 1, items: [] })
+    expect(store.read()).toMatchObject({ version: 2, items: [] })
     second.bridge.dispose()
   })
 
@@ -1317,7 +1317,7 @@ describe("desktop observation bridge", () => {
       }),
     ])
     expect(store.read()).toMatchObject({
-      version: 1,
+      version: 2,
       items: [{ id: click.id, failure: { receipt: { requestID: click.id, outcome: "unknown" } } }],
     })
 
@@ -1357,7 +1357,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toEqual({ version: 1, items: [] })
+    expect(store.read()).toMatchObject({ version: 2, items: [] })
     second.bridge.dispose()
   })
 
@@ -1406,7 +1406,7 @@ describe("desktop observation bridge", () => {
         requestID: click.id,
         error: expect.objectContaining({
           code: "invalid_request",
-          message: expect.stringContaining("prior outcome is unknown"),
+          message: expect.stringContaining("journal is invalid"),
         }),
       }),
     ])
@@ -1694,7 +1694,7 @@ describe("desktop observation bridge", () => {
         error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
       }),
     ])
-    expect(store.read()).toEqual({ version: 1, items: [] })
+    expect(store.read()).toMatchObject({ version: 2, items: [] })
     second.bridge.dispose()
 
     const fingerprint = createHash("sha256")
@@ -1850,5 +1850,179 @@ describe("desktop observation bridge", () => {
       }),
     )
     test.bridge.dispose()
+  })
+
+  async function native(test: ReturnType<typeof setup>, id: string) {
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const click: DesktopRequest = {
+      id,
+      sessionID: "ses_desktop",
+      operation: "click",
+      windowID: observed.result.observation.target.windowID,
+      observationID: observed.result.observation.id,
+      sensitive: false,
+      action: "click",
+      button: "left",
+      x: 0.5,
+      y: 0.25,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    return click
+  }
+
+  it("keeps v2 epoch and pending counts across restart, then atomically records native acknowledgement", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    const click = await native(first, "journal_v2_restart")
+    const pending = first.bridge.journalSummary()
+    expect(first.actions).toHaveLength(1)
+    expect(pending).toMatchObject({ revision: 1, lastAckAt: null, pendingNative: { confirmed: 1, unknown: 0 } })
+    expect(JSON.stringify(first.bridge.journalSummary())).not.toContain(click.id)
+    first.bridge.dispose()
+
+    const second = setup({ store, pending: [click] })
+    expect(second.bridge.journalSummary()).toEqual(pending)
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.replies).toHaveLength(1)
+    const ack = second.bridge.journalSummary()
+    expect(ack).toMatchObject({
+      epoch: pending?.epoch,
+      revision: 2,
+      pendingNative: { confirmed: 0, unknown: 0 },
+    })
+    expect(ack?.lastAckAt).toBeGreaterThan(0)
+    second.bridge.dispose()
+    const third = setup({ store })
+    expect(third.bridge.journalSummary()).toEqual(ack)
+    third.bridge.dispose()
+  })
+
+  it("migrates v1 unknown receipts without replay or inventing a historical acknowledgement", async () => {
+    const store = memory()
+    const first = setup({ store, rejectFail: true, actionError: new Error("partial native input") })
+    const click = await native(first, "journal_v1_unknown")
+    const saved = store.read() as { items: unknown[] }
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", { version: 1, items: saved.items })
+    first.bridge.dispose()
+
+    const second = setup({ store, pending: [click] })
+    await Bun.sleep(20)
+    expect(second.bridge.journalSummary()).toMatchObject({
+      revision: 1,
+      lastAckAt: null,
+      pendingNative: { confirmed: 0, unknown: 1 },
+    })
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.rejects).toHaveLength(1)
+    expect(second.bridge.journalSummary()).toMatchObject({ pendingNative: { confirmed: 0, unknown: 0 } })
+    expect(second.bridge.journalSummary()?.lastAckAt).toBeGreaterThan(0)
+    second.bridge.dispose()
+  })
+
+  it("keeps the last durable pending receipt when acknowledgement persistence fails", async () => {
+    let saved: unknown
+    let fail = false
+    const store = {
+      get: <T>() => saved as T | undefined,
+      update: async (_key: string, value: unknown) => {
+        if (fail) throw new Error("storage unavailable")
+        saved = structuredClone(value)
+      },
+    }
+    const first = setup({ store, fail: true })
+    const click = await native(first, "journal_ack_failure")
+    const pending = first.bridge.journalSummary()
+    first.bridge.dispose()
+    fail = true
+
+    const second = setup({ store, pending: [click] })
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.bridge.journalSummary()).toEqual(pending)
+    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(2)
+    expect((saved as { items: Array<{ id: string }> }).items[0].id).toBe(click.id)
+    for (const listener of second.events)
+      listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.bridge.journalSummary()).toEqual(pending)
+    second.bridge.dispose()
+    fail = false
+
+    const third = setup({ store, pending: [click] })
+    for (const listener of third.states) listener("connected")
+    await Bun.sleep(20)
+    expect(third.actions).toEqual([])
+    expect(third.bridge.journalSummary()).toMatchObject({
+      epoch: pending?.epoch,
+      pendingNative: { confirmed: 0, unknown: 0 },
+    })
+    expect(third.bridge.journalSummary()?.lastAckAt).toBeGreaterThan(0)
+    third.bridge.dispose()
+  })
+
+  it("refuses native dispatch when v2 journal metadata is malformed or oversized", async () => {
+    for (const saved of [
+      { version: 2, epoch: "forged", revision: 1, lastAckAt: null, items: [] },
+      { version: 2, epoch: randomUUID(), revision: 1, lastAckAt: null, items: Array(257).fill({}) },
+    ]) {
+      const test = setup({ store: memory(saved) })
+      expect(test.bridge.journalSummary()).toBeNull()
+      const click: DesktopRequest = {
+        id: "corrupt_journal_click",
+        sessionID: "ses_desktop",
+        operation: "click",
+        windowID: "window_1",
+        observationID: "stale",
+        sensitive: false,
+        action: "click",
+        button: "left",
+        x: 0.5,
+        y: 0.25,
+      }
+      for (const listener of test.events)
+        listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
+      await Bun.sleep(20)
+      expect(test.actions).toEqual([])
+      expect(test.rejects).toContainEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({ message: expect.stringContaining("journal is invalid") }),
+        }),
+      )
+      test.bridge.dispose()
+    }
+  })
+
+  it("refuses a duplicate saved native receipt instead of replaying it", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    const click = await native(first, "journal_duplicate")
+    const saved = store.read() as { version: 2; epoch: string; revision: number; lastAckAt: null; items: unknown[] }
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", {
+      ...saved,
+      items: [saved.items[0], saved.items[0]],
+    })
+    first.bridge.dispose()
+    const second = setup({ store, pending: [click] })
+    expect(second.bridge.journalSummary()).toBeNull()
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.rejects).toContainEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: expect.stringContaining("journal is invalid") }),
+      }),
+    )
+    second.bridge.dispose()
   })
 })

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenario": "selected-window continuous visual capture",
+  "source": "PowerShell/GDI",
+  "releaseGateEligible": false,
+  "environment": "unmeasured fixture; run on a reloaded interactive installed host",
+  "baseline": {
+    "hostCommandsPerFrame": 3,
+    "captureP50Ms": null,
+    "captureP95Ms": null,
+    "cpuPercent": null,
+    "peakWorkingSetBytes": null
+  },
+  "targetBound": {
+    "hostCommandsPerFrame": 1,
+    "captureP50Ms": null,
+    "captureP95Ms": null,
+    "cpuPercent": null,
+    "peakWorkingSetBytes": null
+  }
+}

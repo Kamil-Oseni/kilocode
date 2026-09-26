@@ -12,6 +12,7 @@ import { KiloSessionPrompt } from "@/kilocode/session/prompt" // kilocode_change
 import { SKILL_SHELL_DISABLED, SKILL_SHELL_UNTRUSTED } from "@/kilocode/skills/display" // kilocode_change
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order" // kilocode_change
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue" // kilocode_change
+import * as DesktopFrames from "@/kilocode/desktop/frame-context" // kilocode_change - one-step private desktop pixels
 import { KiloSession } from "@/kilocode/session" // kilocode_change
 import { SessionTranscript } from "@/kilocode/session/transcript" // kilocode_change
 import { KiloCostPropagation } from "@/kilocode/session/cost-propagation" // kilocode_change
@@ -1850,9 +1851,12 @@ export const layer = Layer.effect(
             instruction.system().pipe(Effect.orDie),
             sys.mcp(agent, session.permission),
           ])
-          let modelMsgs = yield* MessageV2.toModelMessagesEffect(msgs, model).pipe(
+          // kilocode_change start - inject only fresh in-memory desktop frames into this model request
+          const frames = DesktopFrames.take(sessionID, lastUser.id)
+          let modelMsgs = yield* MessageV2.toModelMessagesEffect(DesktopFrames.inject(msgs, frames), model).pipe(
             Effect.provideService(Database.Service, database),
           )
+          // kilocode_change end
           const size = Buffer.byteLength(JSON.stringify(modelMsgs))
           if (size > REQUEST_PRUNE_BYTES) {
             yield* compaction.prune({ sessionID, reason: "payload-limit" })
@@ -1864,9 +1868,11 @@ export const layer = Layer.effect(
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
             KiloSessionPrompt.injectEditorContext({ msgs, lastUser, sessionID, cache: envCache })
             msgs = KiloSessionPrompt.maybeStripHistoricalMedia(msgs)
-            modelMsgs = yield* MessageV2.toModelMessagesEffect(msgs, model).pipe(
+            // kilocode_change start - reinject the same ephemeral frame only if payload pruning reloads history
+            modelMsgs = yield* MessageV2.toModelMessagesEffect(DesktopFrames.inject(msgs, frames), model).pipe(
               Effect.provideService(Database.Service, database),
             )
+            // kilocode_change end
             const nextSize = Buffer.byteLength(JSON.stringify(modelMsgs))
             if (nextSize > REQUEST_PRUNE_BYTES)
               yield* Effect.logWarning("payload still large after pruning", { "session.id": sessionID, size: nextSize })

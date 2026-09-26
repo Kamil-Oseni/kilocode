@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import type { DesktopRequest, KiloClient } from "@kilocode/sdk/v2/client"
 import {
   DesktopBridge,
@@ -1436,6 +1437,94 @@ describe("desktop observation bridge", () => {
       },
     })
     test.bridge.dispose()
+  })
+
+  it("retains a no-replay receipt without the sequence frame after lost delivery and restart", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true, pixels: ["initial-frame", "private-final-frame"] })
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    const observed = first.replies[0] as { result: { observation: { id: string } } }
+    const input: DesktopRequest = {
+      id: "desktop_sequence_private_frame",
+      sessionID: "ses_desktop",
+      operation: "sequence",
+      windowID: "window_1",
+      observationID: observed.result.observation.id,
+      maxDurationMs: 5_000,
+      steps: [
+        {
+          action: {
+            operation: "key",
+            windowID: "window_1",
+            sensitive: false,
+            authorization: { kind: "grant", grantID: "grant_test" },
+            key: "Tab",
+            modifiers: [],
+          },
+          postconditions: [{ kind: "pixels", change: "changed" }],
+          recovery: "stop",
+        },
+      ],
+    }
+    for (const listener of first.events)
+      listener({ type: "kilocode.desktop.requested", properties: input } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(first.actions).toHaveLength(1)
+    expect(first.replies[1]).toMatchObject({
+      result: { operation: "sequence", status: "completed", data: "private-final-frame" },
+    })
+    expect(JSON.stringify(store.read())).not.toContain("private-final-frame")
+    expect(store.read()).toMatchObject({
+      items: [{ id: input.id, failure: { receipt: { outcome: "unknown" } } }],
+    })
+    first.bridge.dispose()
+
+    const second = setup({ store, pending: [input] })
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.replies).toEqual([])
+    expect(second.rejects).toEqual([
+      expect.objectContaining({
+        requestID: input.id,
+        error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
+      }),
+    ])
+    expect(store.read()).toEqual({ version: 1, items: [] })
+    second.bridge.dispose()
+
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(["C:\\workspace", input]))
+      .digest("hex")
+    let saved: unknown = {
+      version: 1,
+      items: [{ id: input.id, fingerprint, result: (first.replies[1] as { result: unknown }).result }],
+    }
+    let failures = 1
+    const legacy = {
+      get: <T>() => saved as T,
+      update: async (_key: string, value: unknown) => {
+        if (failures-- > 0) throw new Error("temporary storage failure")
+        saved = structuredClone(value)
+      },
+      read: () => saved,
+    }
+    const third = setup({ store: legacy, pending: [input] })
+    await Bun.sleep(20)
+    expect(JSON.stringify(legacy.read())).toContain("private-final-frame")
+    for (const listener of third.states) listener("connected")
+    await Bun.sleep(20)
+    expect(third.actions).toEqual([])
+    expect(third.rejects).toEqual([
+      expect.objectContaining({
+        requestID: input.id,
+        error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
+      }),
+    ])
+    expect(JSON.stringify(legacy.read())).not.toContain("private-final-frame")
+    third.bridge.dispose()
   })
 
   it("records an unknown receipt when the grant is revoked after a sequence effect", async () => {

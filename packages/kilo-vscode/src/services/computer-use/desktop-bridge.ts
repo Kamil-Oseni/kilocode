@@ -225,7 +225,12 @@ export class DesktopBridge {
       settled = true
       receipt.result = result
       receipt.failure = undefined
-      await this.retain(receipt).catch((error) =>
+      if (result.operation === "sequence") {
+        const safe = { ...receipt }
+        this.scrub(safe)
+        this.receipts.set(request.id, safe)
+      }
+      await this.retain(this.receipts.get(request.id)!).catch((error) =>
         console.error("[Raya] Desktop receipt persistence failed; backend delivery will still be attempted", error),
       )
       await this.deliver(request.id, directory, receipt)
@@ -575,16 +580,32 @@ export class DesktopBridge {
         ? await client.reply({ requestID, directory, result: receipt.result })
         : await client.reject({ requestID, directory, error: receipt.failure! })
       if (response.error || response.data !== true) {
+        this.scrub(receipt)
         console.error("[Raya] Desktop result delivery failed; retained receipt prevents replay")
         return
       }
-      if (this.receipts.get(requestID) !== receipt) return
-      receipt.delivered = true
-      await this.retain(receipt).catch((error) =>
+      const stored = this.receipts.get(requestID)
+      if (!stored || stored.fingerprint !== receipt.fingerprint) return
+      this.scrub(receipt)
+      stored.delivered = true
+      await this.retain(stored).catch((error) =>
         console.error("[Raya] Desktop receipt acknowledgement persistence failed; stale receipt remains safe", error),
       )
     } catch (error) {
+      this.scrub(receipt)
       console.error("[Raya] Desktop result delivery failed; retained receipt prevents replay", error)
+    }
+  }
+
+  private scrub(receipt: Receipt): void {
+    if (receipt.result?.operation !== "sequence") return
+    const proof = receipt.result.receipt
+    receipt.result = undefined
+    receipt.failure = {
+      code: "invalid_request",
+      message:
+        "The desktop sequence ran, but its final frame is not retained after delivery. It will not be replayed; observe the desktop before continuing.",
+      receipt: { ...proof, outcome: "unknown" },
     }
   }
 
@@ -602,27 +623,53 @@ export class DesktopBridge {
     if (!saved || typeof saved !== "object") return
     const value = saved as { version?: unknown; items?: unknown }
     if (value.version !== 1 || !Array.isArray(value.items) || value.items.length > 256) return
+    let migrated = false
     for (const item of value.items) {
       const entry = restored(item)
-      if (entry) this.receipts.set(entry[0], entry[1])
+      if (!entry) continue
+      if (entry[1].result?.operation === "sequence") {
+        this.scrub(entry[1])
+        migrated = true
+      }
+      this.receipts.set(entry[0], entry[1])
+    }
+    if (migrated) {
+      const receipt = this.receipts.values().next().value
+      if (receipt)
+        void this.retain(receipt).catch((error) =>
+          console.error("[Raya] Desktop frame receipt migration failed", error),
+        )
     }
   }
 
   private retain(receipt: Receipt): Promise<void> {
     if (!this.store || (!persistable(receipt.result) && !persistableFailure(receipt.failure))) return Promise.resolve()
-    this.writes = this.writes.then(() => {
-      const items = [...this.receipts.entries()]
-        .filter(
-          (entry) => !entry[1].delivered && (persistable(entry[1].result) || persistableFailure(entry[1].failure)),
-        )
-        .map(([key, value]) => ({
-          id: key,
-          fingerprint: value.fingerprint,
-          ...(persistable(value.result) ? { result: value.result } : { failure: value.failure }),
-        }))
-        .slice(-256)
-      return Promise.resolve(this.store!.update(journal, { version: 1, items }))
-    })
+    this.writes = this.writes
+      .catch(() => undefined)
+      .then(() => {
+        const items = [...this.receipts.entries()]
+          .filter(
+            (entry) => !entry[1].delivered && (persistable(entry[1].result) || persistableFailure(entry[1].failure)),
+          )
+          .map(([key, value]) => ({
+            id: key,
+            fingerprint: value.fingerprint,
+            ...(value.result?.operation === "sequence"
+              ? {
+                  failure: {
+                    code: "invalid_request" as const,
+                    message:
+                      "The desktop sequence ran, but its final frame is not retained after restart. It will not be replayed; observe the desktop before continuing.",
+                    receipt: { ...value.result.receipt, outcome: "unknown" as const },
+                  },
+                }
+              : persistable(value.result)
+                ? { result: value.result }
+                : { failure: value.failure }),
+          }))
+          .slice(-256)
+        return Promise.resolve(this.store!.update(journal, { version: 1, items }))
+      })
     return this.writes
   }
 

@@ -28,6 +28,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LLMEvent } from "@opencode-ai/llm"
+import * as DesktopFrames from "@/kilocode/desktop/frame-context" // kilocode_change - private desktop frame regression
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -195,6 +196,95 @@ const capped = testEffect(
       [SessionSummary.node, summary],
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true, outputTokenMax: 8_000 })],
     ],
+  ),
+)
+// kilocode_change end
+
+// kilocode_change start - desktop pixels are never persisted but reach only the immediate model step
+const desktopImage =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBhXY3ANrWoAAAOMAZVXSuBOAAAAAElFTkSuQmCC"
+const desktopLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () => {
+      const attachment = {
+        type: "file" as const,
+        id: PartID.ascending(),
+        sessionID: SessionID.make("ses_frame_fixture"),
+        messageID: MessageID.make("msg_frame_fixture"),
+        mime: "image/png",
+        filename: "desktop.png",
+        url: `data:image/png;base64,${desktopImage}`,
+      }
+      return Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-frame", name: "desktop_observe" }),
+        LLMEvent.toolInputEnd({ id: "call-frame", name: "desktop_observe" }),
+        LLMEvent.toolCall({ id: "call-frame", name: "desktop_observe", input: {}, providerExecuted: true }),
+        LLMEvent.toolResult({
+          id: "call-frame",
+          name: "desktop_observe",
+          result: {
+            type: "json",
+            value: {
+              title: "Desktop observation",
+              output: `receipt data:image/png;base64,${desktopImage}`,
+              metadata: { nested: `data:image/png;base64,${desktopImage}` },
+              attachments: [attachment],
+            },
+          },
+          providerExecuted: true,
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      )
+    },
+  }),
+)
+const itDesktop = testEffect(
+  LayerNode.compile(
+    LayerNode.group([root, LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })]),
+    [...replacements, [LLM.node, desktopLLM]],
+  ),
+)
+
+itDesktop.live("persists desktop receipt without pixels and delivers one ephemeral model step", () =>
+  provideTmpdirServer(
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "observe")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+        yield* handle.process({
+          user: parent,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "observe" }],
+          tools: {},
+        })
+        const parts = yield* MessageV2.parts(msg.id)
+        const part = parts.find((item) => item.type === "tool" && item.tool === "desktop_observe")
+        if (!part || part.type !== "tool" || part.state.status !== "completed")
+          return yield* Effect.fail(new Error("missing completed desktop observation"))
+        expect(part.state.attachments).toBeUndefined()
+        expect(JSON.stringify(part)).not.toContain("data:image/")
+        expect(part.state.output).not.toContain("[1 image omitted:")
+        const frames = DesktopFrames.take(chat.id, parent.id)
+        expect(frames.size).toBe(1)
+        const model = DesktopFrames.inject([{ info: msg, parts }], frames)
+        expect(JSON.stringify(model)).toContain(`data:image/png;base64,${desktopImage}`)
+        expect(JSON.stringify(yield* MessageV2.toModelMessagesEffect(model, mdl))).toContain(desktopImage)
+        const old = [{ info: msg, parts: model[0].parts.map((item) => ({ ...item })) }]
+        expect(JSON.stringify(yield* MessageV2.toModelMessagesEffect(old, mdl))).not.toContain(desktopImage)
+        expect(JSON.stringify(yield* MessageV2.parts(msg.id))).not.toContain("data:image/")
+        expect(DesktopFrames.take(chat.id, parent.id).size).toBe(0)
+      }),
+    { config: (url: string) => providerCfg(url) },
   ),
 )
 // kilocode_change end

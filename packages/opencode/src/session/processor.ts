@@ -27,6 +27,7 @@ import { PermissionProvenance } from "@/kilocode/permission/provenance" // kiloc
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import { KiloRoutedModel } from "@/kilocode/session/routed-model"
 import { KiloResponseMetadata } from "@/kilocode/session/response-metadata"
+import * as DesktopFrames from "@/kilocode/desktop/frame-context" // kilocode_change - deliver desktop pixels for one model step without persistence
 import { ProviderCooldown } from "@/kilocode/provider/cooldown"
 import { Suggestion } from "@/kilocode/suggestion"
 // kilocode_change end
@@ -272,16 +273,30 @@ const layer = Layer.effect(
         const prior = isRecord(match.part.state.metadata) ? match.part.state.metadata : undefined
         const metadata = PermissionProvenance.carryApproval(prior, output.metadata) ?? output.metadata
         // kilocode_change end
+        // kilocode_change start - desktop pixels are one-turn model context, never a persisted tool attachment
+        const desktop = match.part.tool.startsWith("desktop_")
+        const frames = desktop
+          ? DesktopFrames.store({
+              session: match.part.sessionID,
+              turn: ctx.assistantMessage.parentID,
+              call: match.part.callID,
+              attachments: output.attachments ?? [],
+            })
+          : undefined
+        const text = frames?.omitted
+          ? `${output.output}\n\n[${frames.omitted} desktop image${frames.omitted === 1 ? "" : "s"} omitted from the next model step to keep memory bounded.]`
+          : output.output
+        // kilocode_change end
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
             input: match.part.state.input,
-            output: output.output,
-            metadata, // kilocode_change - merged to keep approval
-            title: output.title,
+            output: desktop ? DesktopFrames.redact(text) : text, // kilocode_change - keep receipt text, no pixels
+            metadata: desktop ? (DesktopFrames.redactMetadata(metadata) as typeof metadata) : metadata, // kilocode_change
+            title: desktop ? DesktopFrames.redact(output.title) : output.title, // kilocode_change
             time: { start: match.part.state.time.start, end: Date.now() },
-            attachments: output.attachments,
+            attachments: desktop ? undefined : output.attachments, // kilocode_change - desktop frames remain ephemeral
           },
         })
         // kilocode_change start - accepted suggest review actions tag following LLM completion telemetry

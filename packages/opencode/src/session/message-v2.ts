@@ -41,6 +41,7 @@ import { CodexAuthExpiredError } from "@/kilocode/provider/codex-refresh" // kil
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order" // kilocode_change
 import * as TextStream from "@/kilocode/text-stream" // kilocode_change
 import { KiloModelHistory } from "@/kilocode/session/model-history" // kilocode_change - validate reconstructed provider history
+import * as DesktopFrames from "@/kilocode/desktop/frame-context" // kilocode_change - only in-memory desktop pixels reach the next model step
 import { Effect, Schema } from "effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
@@ -427,7 +428,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             // kilocode_change start — do not replay send_file delivery attachments to the model;
             // they are mobile delivery artifacts (up to 4 MiB base64), not model context.
             const attachments =
-              part.state.time.compacted || options?.stripMedia || part.tool === "send_file"
+              part.state.time.compacted ||
+              options?.stripMedia ||
+              part.tool === "send_file" ||
+              (part.tool.startsWith("desktop_") && !DesktopFrames.isInjected(part)) // kilocode_change - no historical pixel replay
                 ? []
                 : (part.state.attachments ?? [])
             // kilocode_change end

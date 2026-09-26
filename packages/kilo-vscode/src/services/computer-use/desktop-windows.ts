@@ -1564,6 +1564,10 @@ export class WindowsDesktopDriver implements DesktopDriver {
           this.worker?.renew(result.base, result)
         },
         this.receiptDir,
+        () => {
+          this.worker?.invalidate()
+          this.last = undefined
+        },
       )
       let sequence = 0
       this.worker = new DesktopCaptureWorker(

@@ -44,6 +44,64 @@ describe("bounded native desktop frame protocol", () => {
     presentQpc: "101",
   }
 
+  it("rebinding requires a new full image and keeps epochs and sequences monotonic", () => {
+    const parser = new NativeFrameParser()
+    const first = { ...target, v: 3, epoch: 1 }
+    const second = { ...target, v: 3, epoch: 2, sequence: 3, windowID: "0x34AB" }
+    const result = parser.push(
+      Buffer.concat([
+        encode(first),
+        encode({ v: 3, type: "reset", epoch: 2, reason: "target_changed" }, Buffer.alloc(0)),
+        encode(second),
+        encode({ ...unchanged, v: 3, epoch: 2, sequence: 4, base: 3, windowID: second.windowID }, Buffer.alloc(0)),
+      ]),
+    )
+    expect(result.map((item) => item.type)).toEqual(["frame", "reset", "frame", "unchanged"])
+    expect(result[2]).toMatchObject({ type: "frame", frame: { epoch: 2, sequence: 3, windowID: "0x34AB" } })
+  })
+
+  it("accepts strictly advancing resets before the first frame and before a replacement frame", () => {
+    const parser = new NativeFrameParser()
+    const result = parser.push(
+      Buffer.concat([
+        encode({ v: 3, type: "reset", epoch: 2, reason: "target_changed" }, Buffer.alloc(0)),
+        encode({ v: 3, type: "reset", epoch: 3, reason: "display_changed" }, Buffer.alloc(0)),
+        encode({ ...target, v: 3, epoch: 3 }),
+        encode({ v: 3, type: "reset", epoch: 4, reason: "target_changed" }, Buffer.alloc(0)),
+        encode({ v: 3, type: "reset", epoch: 5, reason: "target_changed" }, Buffer.alloc(0)),
+        encode({ ...target, v: 3, epoch: 5, sequence: 2 }),
+      ]),
+    )
+    expect(result.map((item) => item.type)).toEqual(["reset", "reset", "frame", "reset", "reset", "frame"])
+    expect(result[5]).toMatchObject({ type: "frame", frame: { epoch: 5, sequence: 2 } })
+  })
+
+  it("refuses old-epoch pixels, unchanged bases, skipped resets, and protocol downgrade", () => {
+    const first = { ...target, v: 3, epoch: 1 }
+    const reset = { v: 3, type: "reset", epoch: 2, reason: "display_changed" }
+    const parser = new NativeFrameParser()
+    parser.push(encode(first))
+    parser.push(encode(reset, Buffer.alloc(0)))
+    expect(() => parser.push(encode({ ...target, v: 3, sequence: 2, epoch: 1 }))).toThrow(/epoch changed/i)
+
+    const old = new NativeFrameParser()
+    old.push(encode(first))
+    old.push(encode(reset, Buffer.alloc(0)))
+    expect(() => old.push(encode({ ...unchanged, v: 3, epoch: 2, base: 1 }, Buffer.alloc(0)))).toThrow(/full frame/i)
+
+    const skipped = new NativeFrameParser()
+    skipped.push(encode(first))
+    expect(() => skipped.push(encode({ ...reset, epoch: 3 }, Buffer.alloc(0)))).toThrow(/reset epoch/i)
+
+    const downgrade = new NativeFrameParser()
+    downgrade.push(encode(first))
+    expect(() => downgrade.push(encode({ ...target, sequence: 2 }))).toThrow(/downgraded/i)
+
+    const retarget = new NativeFrameParser()
+    retarget.push(encode(first))
+    expect(() => retarget.push(encode({ ...first, sequence: 2, windowID: "0x34AB" }))).toThrow(/without reset/i)
+  })
+
   it("accepts a request-identified v2 frame only with a later native present", () => {
     const parser = new NativeFrameParser()
     const result = parser.push(Buffer.concat([encode(target), encode({ ...target, v: 2, sequence: 2, ...proof })]))
@@ -58,6 +116,20 @@ describe("bounded native desktop frame protocol", () => {
       new NativeFrameParser().push(encode({ ...target, v: 2, sequence: 2, ...proof, request: "wrong" })),
     ).toThrow(/barrier request/i)
     expect(() => new NativeFrameParser().push(encode({ ...target, sequence: 2, ...proof }))).toThrow(/unproven frame/i)
+  })
+
+  it("accepts v3 post-action proof only within its current epoch", () => {
+    const parser = new NativeFrameParser()
+    const result = parser.push(
+      Buffer.concat([
+        encode({ ...target, v: 3, epoch: 1 }),
+        encode({ ...target, v: 3, epoch: 1, sequence: 2, ...proof }),
+      ]),
+    )
+    expect(result[1]).toMatchObject({ type: "frame", frame: { epoch: 1, barrier: proof } })
+    expect(() =>
+      new NativeFrameParser().push(encode({ ...target, v: 3, epoch: 1, sequence: 2, ...proof, presentQpc: "99" })),
+    ).toThrow(/post-action present/i)
   })
 
   it("keeps an unproven v2 barrier separate from pixels and frame sequence", () => {

@@ -53,37 +53,74 @@ let report: (error: Error) => void = () => undefined
 const failed = new Promise<Error>((resolve) => {
   report = resolve
 })
-const host = new NativeCaptureHost(binary, report)
+const resets: Array<{ epoch: number; cleared: boolean }> = []
+const host = new NativeCaptureHost(binary, report, [], undefined, undefined, (reset) => {
+  resets.push({ epoch: reset.epoch, cleared: host.latest(Infinity) === undefined })
+})
+
+async function frame(after: number, title: string, epoch: number) {
+  const image = await Promise.race([
+    host.next(after),
+    Bun.sleep(8_000).then(() => {
+      throw new Error(`Native capture did not observe fixture ${title}`)
+    }),
+  ])
+  try {
+    if (!image.location.includes(`Raya capture fixture ${title}`))
+      throw new Error(`Native capture bound the wrong foreground: ${image.location}`)
+    if (image.epoch === undefined || image.epoch <= epoch)
+      throw new Error(`Native capture reused epoch ${image.epoch} after ${epoch}`)
+    return { sequence: image.sequence, epoch: image.epoch, location: image.location }
+  } finally {
+    image.data.fill(0)
+  }
+}
+
+async function command(value: string, expected: string) {
+  const before = resets.length
+  fixture.stdin?.write(`${value}\n`)
+  const result = await next()
+  if (result !== expected) throw new Error(`Foreground fixture ${value} failed: ${result}; ${stderr}`)
+  for (let attempt = 0; attempt < 1_600 && resets.length === before; attempt++) await Bun.sleep(5)
+  if (resets.length === before) throw new Error(`Native capture did not reset after ${value}`)
+}
+
 try {
   const ready = await next()
   if (ready !== "READY") throw new Error(`Foreground fixture could not take focus: ${ready}; ${stderr}`)
   host.start()
-  const frame = await Promise.race([
-    host.next(),
-    Bun.sleep(8_000).then(() => {
-      throw new Error("Native capture did not observe fixture A")
-    }),
-  ])
-  try {
-    if (!frame.location.includes("Raya capture fixture A"))
-      throw new Error(`Native capture bound the wrong foreground: ${frame.location}`)
-  } finally {
-    frame.data.fill(0)
-  }
-  fixture.stdin?.write("flash\n")
-  const flashed = await next()
-  if (flashed !== "FLASHED") throw new Error(`Foreground fixture could not switch A to B to A: ${flashed}; ${stderr}`)
-  const outcome = await Promise.race([failed, Bun.sleep(2_000).then(() => undefined)])
-  if (!outcome || !/target_changed/.test(outcome.message))
-    throw new Error(
-      `Native capture did not invalidate A after a fast A-B-A switch: ${outcome?.message ?? "no failure"}`,
-    )
+  const first = await frame(0, "A", 0)
+  const toB = performance.now()
+  await command("to-b", "B")
+  const second = await frame(first.sequence, "B", first.epoch)
+  const bMs = Number((performance.now() - toB).toFixed(2))
+  const toA = performance.now()
+  await command("to-a", "A")
+  const third = await frame(second.sequence, "A", second.epoch)
+  const aMs = Number((performance.now() - toA).toFixed(2))
+  const toFlash = performance.now()
+  await command("flash", "FLASHED")
+  const fourth = await frame(third.sequence, "A", third.epoch)
+  const flashMs = Number((performance.now() - toFlash).toFixed(2))
+  const toResize = performance.now()
+  await command("resize", "RESIZED")
+  const fifth = await frame(fourth.sequence, "A", fourth.epoch)
+  const resizeMs = Number((performance.now() - toResize).toFixed(2))
+  if (fifth.location === fourth.location) throw new Error("Native capture reused pre-resize bounds")
+  if (resets.length < 4 || resets.some((reset) => !reset.cleared))
+    throw new Error("Native capture did not clear cached pixels at every foreground reset")
+  const outcome = await Promise.race([failed, Bun.sleep(50).then(() => undefined)])
+  if (outcome) throw outcome
+  host.stop()
+  if (host.latest(Infinity) || host.pid()) throw new Error("Native capture retained pixels or process after Stop")
   console.log(
     JSON.stringify({
       format: "raya.native-foreground-continuity",
-      version: 1,
+      version: 2,
       status: "passed",
-      result: outcome.message,
+      epochs: [first.epoch, second.epoch, third.epoch, fourth.epoch, fifth.epoch],
+      resets: resets.length,
+      transitionToFrameMs: { b: bMs, a: aMs, flash: flashMs, resize: resizeMs },
     }),
   )
 } finally {

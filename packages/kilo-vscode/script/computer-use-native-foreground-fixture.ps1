@@ -36,6 +36,20 @@ public static class RayaForegroundFixture {
           try {
             first.BeginInvoke((Action)(() => {
               if (next == "quit") { first.Close(); return; }
+              if (next == "to-b") {
+                Console.WriteLine(Focus(second) ? "B" : "UNAVAILABLE");
+                return;
+              }
+              if (next == "to-a") {
+                Console.WriteLine(Focus(first) ? "A" : "UNAVAILABLE");
+                return;
+              }
+              if (next == "resize") {
+                first.Width += 80;
+                first.Height += 40;
+                Console.WriteLine("RESIZED");
+                return;
+              }
               if (next != "flash") return;
               var away = Focus(second);
               Thread.Sleep(5);

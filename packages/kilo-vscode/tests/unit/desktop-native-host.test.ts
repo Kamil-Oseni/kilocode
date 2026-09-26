@@ -46,6 +46,53 @@ describe("native desktop capture host", () => {
     identity: "A".repeat(64),
   }
 
+  it("clears old pixels on reset while a frame waiter continues to the new epoch", async () => {
+    const errors: Error[] = []
+    const resets: number[] = []
+    const first = encode({ ...visual, v: 3, epoch: 1 }).toString("base64")
+    const marker = encode({ v: 3, type: "reset", epoch: 2, reason: "target_changed" }, Buffer.alloc(0)).toString(
+      "base64",
+    )
+    const second = encode({ ...visual, v: 3, epoch: 2, sequence: 2, windowID: "0x34AB" }).toString("base64")
+    const script = `process.stdout.write(Buffer.from(${JSON.stringify(first)},"base64"));setTimeout(()=>process.stdout.write(Buffer.from(${JSON.stringify(marker)},"base64")),20);setTimeout(()=>process.stdout.write(Buffer.from(${JSON.stringify(second)},"base64")),120);setInterval(()=>{},1000)`
+    const host = new NativeCaptureHost(
+      process.execPath,
+      (error) => errors.push(error),
+      ["-e", script],
+      undefined,
+      undefined,
+      (reset) => resets.push(reset.epoch),
+    )
+    host.start()
+    expect((await host.next()).epoch).toBe(1)
+    const pending = host.next(1)
+    await until(() => resets.length === 1)
+    expect(host.latest(Infinity)).toBeUndefined()
+    expect((await pending).windowID).toBe("0x34AB")
+    expect(host.latest(Infinity)?.epoch).toBe(2)
+    expect(errors).toHaveLength(0)
+    host.stop()
+  })
+
+  it("rejects an outstanding post-action proof on reset without replaying it", async () => {
+    const errors: Error[] = []
+    const first = encode({ ...visual, v: 3, epoch: 1 }).toString("base64")
+    const marker = encode({ v: 3, type: "reset", epoch: 2, reason: "display_changed" }, Buffer.alloc(0)).toString(
+      "base64",
+    )
+    const script = `process.stdout.write(Buffer.from(${JSON.stringify(first)},"base64"));process.stdin.once("data",()=>process.stdout.write(Buffer.from(${JSON.stringify(marker)},"base64")));setInterval(()=>{},1000)`
+    const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script])
+    host.start()
+    await host.next()
+    const result = await host.barrierAfter(request).catch((error: Error) => error)
+    expect(errors).toHaveLength(0)
+    expect(result).toBeInstanceOf(Error)
+    expect((result as Error).message).toMatch(/display_changed/)
+    expect(host.latest(Infinity)).toBeUndefined()
+    expect(errors).toHaveLength(0)
+    host.stop()
+  })
+
   it("delivers only a matching post-action v2 image as barrier proof", async () => {
     const errors: Error[] = []
     const base = encode(visual).toString("base64")

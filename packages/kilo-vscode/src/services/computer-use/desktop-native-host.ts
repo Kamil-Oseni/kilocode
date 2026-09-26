@@ -7,6 +7,7 @@ import {
   type NativeBarrier,
   type NativeFrame,
   type NativePacket,
+  type NativeReset,
   type NativeUnchanged,
 } from "./desktop-native-frame"
 
@@ -100,6 +101,7 @@ export class NativeCaptureHost {
     private readonly args: string[] = [],
     private readonly renewed?: (frame: NativeUnchanged) => void,
     private readonly dir?: string,
+    private readonly reset?: (reset: NativeReset) => void,
   ) {}
 
   start(): void {
@@ -157,6 +159,18 @@ export class NativeCaptureHost {
       pending.resolve(result.barrier)
       return
     }
+    if (result.type === "reset") {
+      this.frame?.data.fill(0)
+      this.frame = undefined
+      if (this.barrier) {
+        const pending = this.barrier
+        this.barrier = undefined
+        clearTimeout(pending.timer)
+        pending.reject(new Error(`Native desktop post-action ${result.reset.reason} during capture reset`))
+      }
+      this.reset?.(result.reset)
+      return
+    }
     if (result.type === "unchanged") {
       if (!this.frame || result.frame.base !== this.frame.sequence)
         throw new Error("Native desktop continuity has no matching image")
@@ -185,6 +199,7 @@ export class NativeCaptureHost {
       frame.windowID !== pending.request.windowID ||
       frame.location !== pending.request.location ||
       !this.frame ||
+      frame.epoch !== this.frame.epoch ||
       this.frame.sequence !== pending.request.source
     )
       throw new Error("Native desktop post-action image has no matching target or request")

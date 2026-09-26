@@ -12,6 +12,7 @@ export class DesktopCaptureWorker {
   private generation = 0
   private sequence = 0
   private version = 0
+  private revision = 0
   private token: number | undefined
   private scene: CapturedScene | undefined
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -36,6 +37,7 @@ export class DesktopCaptureWorker {
     if (!this.running && !this.scene) return
     this.running = false
     this.generation += 1
+    this.revision += 1
     this.scene = undefined
     this.token = undefined
     if (this.timer) clearTimeout(this.timer)
@@ -43,6 +45,13 @@ export class DesktopCaptureWorker {
     this.wake?.()
     this.wake = undefined
     this.cancel()
+  }
+
+  invalidate(): void {
+    if (!this.running) return
+    this.revision += 1
+    this.scene = undefined
+    this.token = undefined
   }
 
   latest(maxAgeMs = 125): CapturedScene | undefined {
@@ -70,12 +79,14 @@ export class DesktopCaptureWorker {
 
   private async loop(generation: number, cadence: DesktopCadence): Promise<void> {
     while (this.running && generation === this.generation) {
+      const revision = this.revision
       const frame = await this.capture().catch((error: unknown) => {
         if (generation !== this.generation) return
         this.stop()
         this.failed(error)
       })
       if (!this.running || generation !== this.generation) return
+      if (revision !== this.revision) continue
       if (!frame) {
         this.scene = undefined
         this.token = undefined

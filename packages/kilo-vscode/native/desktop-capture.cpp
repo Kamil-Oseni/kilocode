@@ -823,10 +823,10 @@ static BOOL WINAPI control(DWORD signal) {
   return TRUE;
 }
 
-static void run(HANDLE pipe) {
-  ForegroundWatch watch;
+static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint64_t epoch,
+                  uint64_t& scene) {
   auto original = target(true);
-  const auto epoch = watch.value();
+  const auto foreground = watch.value();
   const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
   if (!input || input == INVALID_HANDLE_VALUE || GetFileType(input) != FILE_TYPE_PIPE)
     throw Failure("capture_failed", "capture control pipe is unavailable");
@@ -898,17 +898,17 @@ static void run(HANDLE pipe) {
   Pointer pointer;
   Output* owner = nullptr;
   LONGLONG stamp = 0;
-  uint64_t sequence = 0;
   uint64_t base = 0;
-  uint64_t scene = 0;
   std::optional<Barrier> barrier;
   auto emitted = Clock::now();
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
+    if (sequence >= 9'007'199'254'740'991ULL)
+      throw Failure("capture_failed", "native frame sequence reached its protocol limit");
     if (auto next = receive(input, original, base, scene, pipe, outputs.size() != 1)) {
       if (barrier) unproven(pipe, *barrier, "superseded");
       barrier = std::move(next);
     }
-    samebarrier(original, barrier, pipe, epoch);
+    samebarrier(original, barrier, pipe, foreground);
     auto begin = Clock::now();
     bool changed = false;
     for (auto& item : outputs) {
@@ -920,7 +920,7 @@ static void run(HANDLE pipe) {
       if (status == DXGI_ERROR_WAIT_TIMEOUT) continue;
       require(status, "AcquireNextFrame");
       Lease lease(item->duplicate.Get());
-      samebarrier(original, barrier, pipe, epoch);
+      samebarrier(original, barrier, pipe, foreground);
       stable(*item);
       const bool previous = touches(pointer, owner, original.rect);
       if (info.LastMouseUpdateTime.QuadPart) {
@@ -966,7 +966,7 @@ static void run(HANDLE pipe) {
         (previous || touches(pointer, owner, original.rect)));
     }
     auto acquired = Clock::now();
-    samebarrier(original, barrier, pipe, epoch);
+    samebarrier(original, barrier, pipe, foreground);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     if (barrier && !barrier->present) {
       if (Clock::now() - barrier->started >= kBarrierTimeout) {
@@ -980,7 +980,8 @@ static void run(HANDLE pipe) {
       if (Clock::now() - emitted < std::chrono::milliseconds(50)) continue;
       for (const auto& item : outputs) stable(*item);
       std::ostringstream header;
-      header << "{\"v\":1,\"type\":\"unchanged\",\"sequence\":" << ++sequence
+      header << "{\"v\":3,\"type\":\"unchanged\",\"epoch\":" << epoch
+             << ",\"sequence\":" << ++sequence
              << ",\"base\":" << base
              << ",\"windowID\":" << quoted(original.id)
              << ",\"location\":" << quoted(original.location)
@@ -1012,13 +1013,14 @@ static void run(HANDLE pipe) {
               original.rect.top - owner->desc.DesktopCoordinates.top);
     const DWORD size = encode(imaging.Get(), width, height, width * 4, surface.data(), image);
     auto prepared = Clock::now();
-    samebarrier(original, barrier, pipe, epoch);
+    samebarrier(original, barrier, pipe, foreground);
     for (const auto& item : outputs) stable(*item);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     std::ostringstream header;
     base = ++sequence;
     header << std::fixed << std::setprecision(3)
-           << "{\"v\":" << (barrier ? 2 : 1) << ",\"type\":\"frame\",\"sequence\":" << base
+           << "{\"v\":3,\"type\":\"frame\",\"epoch\":" << epoch
+           << ",\"sequence\":" << base
            << ",\"windowID\":" << quoted(original.id)
            << ",\"location\":" << quoted(original.location)
            << ",\"width\":" << width << ",\"height\":" << height
@@ -1032,6 +1034,43 @@ static void run(HANDLE pipe) {
     packet(pipe, header.str(), image.data(), size);
     barrier.reset();
     emitted = Clock::now();
+  }
+}
+
+static void run(HANDLE pipe) {
+  ForegroundWatch watch;
+  uint64_t sequence = 0;
+  uint64_t scene = 0;
+  uint64_t epoch = 1;
+  auto deadline = Clock::time_point{};
+  while (!InterlockedCompareExchange(&stopped, 0, 0)) {
+    const auto before = sequence;
+    try {
+      bound(pipe, watch, sequence, epoch, scene);
+      return;
+    } catch (const Failure& error) {
+      if (InterlockedCompareExchange(&stopped, 0, 0)) return;
+      const bool changed = error.code == "target_changed" || error.code == "display_changed" ||
+                           (error.code == "no_foreground_window" && sequence > before);
+      if (changed) {
+        if (epoch >= 9'007'199'254'740'991ULL)
+          throw Failure("capture_failed", "native target epoch reached its protocol limit");
+        ++epoch;
+        std::ostringstream header;
+        header << "{\"v\":3,\"type\":\"reset\",\"epoch\":" << epoch
+               << ",\"reason\":\"" << (error.code == "display_changed" ? "display_changed" : "target_changed")
+               << "\"}";
+        packet(pipe, header.str(), nullptr, 0);
+        deadline = Clock::now() + std::chrono::seconds(2);
+        Sleep(25);
+        continue;
+      }
+      if (error.code == "no_foreground_window" && epoch > 1 && Clock::now() < deadline) {
+        Sleep(25);
+        continue;
+      }
+      throw;
+    }
   }
 }
 

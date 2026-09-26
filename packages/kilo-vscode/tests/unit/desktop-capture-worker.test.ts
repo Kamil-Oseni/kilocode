@@ -113,6 +113,32 @@ describe("continuous desktop capture worker", () => {
     expect(worker.renew(7, visual)).toBe(false)
   })
 
+  it("invalidates an old scene and drops a frame resolving after rebind", async () => {
+    const pending: Array<(frame: DesktopFrame & { sourceSequence: number }) => void> = []
+    const worker = new DesktopCaptureWorker(
+      () => new Promise((resolve) => pending.push(resolve)),
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    worker.start()
+    await until(() => pending.length === 1)
+    pending[0]!({ ...frame("0x1", "old"), sourceSequence: 1 })
+    await until(() => worker.latest()?.frame.data === "old")
+    await until(() => pending.length === 2)
+    worker.invalidate()
+    expect(worker.latest()).toBeUndefined()
+    expect(worker.renew(1, frame("0x1", "old"))).toBe(false)
+    pending[1]!({ ...frame("0x1", "late"), sourceSequence: 2 })
+    await until(() => pending.length === 3)
+    expect(worker.latest()).toBeUndefined()
+    pending[2]!({ ...frame("0x2", "fresh"), sourceSequence: 3 })
+    await until(() => worker.latest()?.frame.data === "fresh")
+    expect(worker.latest()?.version).toBe(2)
+    worker.stop()
+  })
+
   it("discards a capture that resolves after Stop and accepts a new generation", async () => {
     const pending: Array<(frame: DesktopFrame) => void> = []
     const worker = new DesktopCaptureWorker(

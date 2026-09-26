@@ -70,8 +70,8 @@ try {
   failed = error instanceof Error && /outcome is unknown/.test(error.message)
 }
 const [lost] = await exited
-broken.close()
 if (!failed || lost !== 9) throw new Error(`Native input broker did not terminate after output loss (exit ${lost})`)
+if (broken.canClose) throw new Error("Native input broker treated output loss as a certain, closable outcome")
 const child = spawn(path, [], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] })
 child.stdin.end(Buffer.from([0x01, 0x10, 0x00, 0x00]))
 let timer: NodeJS.Timeout | undefined

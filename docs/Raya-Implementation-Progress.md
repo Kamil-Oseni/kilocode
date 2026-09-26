@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## Current verification gate — 2026-09-26
+
+The future-requirements register currently has two fully Verified rows: `FUT-SKILL-01` and `FUT-ADM-01`. The latest installed snapshot is `7.4.23-snapshot+8d1ba6e145`; its packaged CLI passes the archive stop/no-restart/recovery trial, but the open Raya window still runs backend `+4dc086be2b`. No new full row can be marked Verified from the present evidence. The shortest useful loaded-host pass is: reload Raya, confirm the exact package/backend, check Routines archive and chat draft/clock behavior, then exercise Todo with a real-minute reminder. Autonomous Desktop still requires its independent 17-task Windows benchmark and restart/recovery/resource matrix before `FUT-CU-01` can be Verified. The detailed dated evidence and per-row gaps are below.
+
 ## ChatGPT 2026-09-25 09:35 America/Toronto - natural Routines routing snapshot installed
 
 Commit `9dccf27b34` is pushed to `origin/main`. The low-memory production snapshot passed SDK generation, CLI smoke checks, extension and webview typechecks, lint, production bundling, native capture/input self-tests, input-host round trip and VSIX packaging. VS Code installed `eden.raya@7.4.23-snapshot+9dccf27b34.kamil-oseni.1790343151912`. The retained rollback VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.1c991a02e1ef6b8785983a8642f71c5fd40b136191a033cbe0a62c5d0ba2832b.vsix`, 545,222,997 bytes, SHA-256 `1C991A02E1EF6B8785983A8642F71C5FD40B136191A033CBE0A62C5D0BA2832B`. Installation does not prove the open host reloaded or that a natural standing-agent request succeeds through its UI; keep those checks open.

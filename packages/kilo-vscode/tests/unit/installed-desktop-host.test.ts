@@ -25,6 +25,10 @@ function input() {
     backend: () => "connected",
     process: () => process,
     lease: () => lease,
+    journal: () => ({
+      state: "durable" as const,
+      summary: { epoch: "epoch-test", revision: 3, lastAckAt: null, pendingNative: { confirmed: 1, unknown: 2 } },
+    }),
     observe: async () => frame,
   }
 }
@@ -34,9 +38,16 @@ describe("installed interactive host probe", () => {
     const report = await inspectInstalledHost(input())
     expect(report.status).toBe("observed")
     expect(report.releaseGateEligible).toBe(false)
-    expect(report.version).toBe(2)
+    expect(report.version).toBe(3)
     expect(report.actionReceipts).toBeNull()
-    expect(report.receiptEvidence).toBe("not_inspected")
+    expect(report.receiptEvidence).toBe("durable_summary")
+    expect(report.journal).toEqual({
+      status: "durable",
+      epoch: "epoch-test",
+      revision: 3,
+      lastAckAt: null,
+      pendingNative: { confirmed: 1, unknown: 2 },
+    })
     expect(report.taskFinalState).toBeNull()
     expect(report.backendProcess).toEqual(process)
     expect(report.lease).toEqual(lease)
@@ -177,5 +188,21 @@ describe("installed interactive host probe", () => {
     })
     expect(policy.status).toBe("unavailable")
     expect(captures).toBe(0)
+  })
+
+  test("does not invent empty receipts for absent, malformed, or migrating journals", async () => {
+    for (const state of ["absent", "malformed", "migrating_legacy", "unavailable"] as const) {
+      const report = await inspectInstalledHost({ ...input(), journal: () => ({ state, summary: null }) })
+      expect(report.journal).toEqual({ status: state })
+      expect(report.receiptEvidence).toBe("not_inspected")
+      expect(report.actionReceipts).toBeNull()
+      expect(JSON.stringify(report)).not.toContain("pendingNative")
+    }
+    const inconsistent = await inspectInstalledHost({
+      ...input(),
+      journal: () => ({ state: "durable", summary: null }),
+    })
+    expect(inconsistent.journal).toEqual({ status: "unavailable" })
+    expect(inconsistent.receiptEvidence).toBe("not_inspected")
   })
 })

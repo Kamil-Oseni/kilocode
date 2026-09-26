@@ -13,6 +13,15 @@ export type Probe = {
     scopeCount: number | null
     expiresAt: number | null
   } | null
+  journal: () => {
+    state: "durable" | "absent" | "migrating_legacy" | "malformed" | "unavailable"
+    summary: {
+      epoch: string
+      revision: number
+      lastAckAt: number | null
+      pendingNative: { confirmed: number; unknown: number }
+    } | null
+  }
   observe: () => Promise<{
     before: { windowID: string; location?: string; identity?: string }
     after: { windowID: string; location?: string; identity?: string }
@@ -65,13 +74,23 @@ function ready(input: Probe, process: ReturnType<Probe["process"]>) {
   return null
 }
 
+function journal(value: ReturnType<Probe["journal"]>) {
+  if (value.state === "durable" && value.summary) return { status: "durable" as const, ...value.summary }
+  return { status: value.state === "durable" ? ("unavailable" as const) : value.state }
+}
+
+function evidence(value: ReturnType<typeof journal>) {
+  return value.status === "durable" ? ("durable_summary" as const) : ("not_inspected" as const)
+}
+
 // Only host-local, non-pixel evidence is returned. A benchmark task needs separate action receipts and a final-state scorer.
 export async function inspectInstalledHost(input: Probe) {
   const process = input.process()
   const lease = input.lease()
+  const receipt = journal(input.journal())
   const base = {
     format: "raya.installed-desktop-host-probe" as const,
-    version: 2 as const,
+    version: 3 as const,
     observedAt: new Date().toISOString(),
     loadedVersion: input.loadedVersion,
     loadedCaptureSha256: input.loadedCaptureSha256 ?? null,
@@ -80,9 +99,10 @@ export async function inspectInstalledHost(input: Probe) {
     desktop: input.desktop,
     backendProcess: process,
     lease,
+    journal: receipt,
     releaseGateEligible: false as const,
     actionReceipts: null,
-    receiptEvidence: "not_inspected" as const,
+    receiptEvidence: evidence(receipt),
     taskFinalState: null,
   }
   if (!/^\d+\.\d+\.\d+-snapshot\+[^/\\]+$/.test(input.loadedVersion))

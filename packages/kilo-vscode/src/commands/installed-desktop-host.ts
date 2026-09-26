@@ -6,6 +6,7 @@ import { PackageVault } from "../services/package-vault"
 import { WindowsDesktopDriver } from "../services/computer-use/desktop-windows"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 import type { ComputerUseLeaseStore } from "../services/computer-use/lease-store"
+import type { DesktopAutomationService } from "../services/computer-use/desktop-service"
 import { inspectInstalledHost } from "./installed-desktop-host-core"
 import { desktopNames } from "./windows-desktop-name"
 
@@ -13,6 +14,7 @@ export function registerInstalledDesktopHost(
   context: vscode.ExtensionContext,
   connection: KiloConnectionService,
   lease: ComputerUseLeaseStore,
+  desktop: DesktopAutomationService,
 ) {
   return vscode.commands.registerCommand(
     "raya.inspectInstalledDesktopHost",
@@ -26,7 +28,7 @@ export function registerInstalledDesktopHost(
         new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
       ])
       const driver = process.platform === "win32" ? new WindowsDesktopDriver() : undefined
-      const desktop = await desktopNames().then(
+      const names = await desktopNames().then(
         (value) => value,
         () => ({}),
       )
@@ -44,10 +46,11 @@ export function registerInstalledDesktopHost(
         loadedCaptureSha256: capture,
         active: active ? { version: active.version, digest: active.artifact.digest } : undefined,
         expected,
-        desktop,
+        desktop: names,
         backend: () => (lost.value ? "disconnected" : connection.getConnectionState()),
         process: () => connection.currentProcessIdentity(),
         lease: () => lease.summary(),
+        journal: () => desktop.journalEvidence(),
         observe: async () => {
           if (!driver) throw new Error("Windows desktop is unavailable")
           const before = await driver.current()

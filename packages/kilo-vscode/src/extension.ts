@@ -99,8 +99,8 @@ export function activate(context: vscode.ExtensionContext) {
     )
   }
   const lease = control.lease
-  context.subscriptions.push(registerInstalledDesktopHost(context, connectionService, lease))
   const desktop = new DesktopAutomationService(connectionService, context, lease)
+  context.subscriptions.push(registerInstalledDesktopHost(context, connectionService, lease, desktop))
   const browserAutomationService = new BrowserAutomationService(
     connectionService,
     context,

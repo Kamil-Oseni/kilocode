@@ -201,6 +201,13 @@ function memory(seed?: unknown) {
 }
 
 describe("desktop observation bridge", () => {
+  it("distinguishes an absent durable journal without treating it as an empty receipt set", () => {
+    const test = setup({ store: memory() })
+    expect(test.bridge.journalState()).toBe("absent")
+    expect(test.bridge.journalSummary()).toBeNull()
+    test.bridge.dispose()
+  })
+
   async function selected() {
     const store = new ComputerUseLeaseStore(
       { get: <T>() => undefined as T | undefined, update: async () => {} },
@@ -1880,12 +1887,14 @@ describe("desktop observation bridge", () => {
     const first = setup({ store, fail: true })
     const click = await native(first, "journal_v2_restart")
     const pending = first.bridge.journalSummary()
+    expect(first.bridge.journalState()).toBe("durable")
     expect(first.actions).toHaveLength(1)
     expect(pending).toMatchObject({ revision: 1, lastAckAt: null, pendingNative: { confirmed: 1, unknown: 0 } })
     expect(JSON.stringify(first.bridge.journalSummary())).not.toContain(click.id)
     first.bridge.dispose()
 
     const second = setup({ store, pending: [click] })
+    expect(second.bridge.journalState()).toBe("durable")
     expect(second.bridge.journalSummary()).toEqual(pending)
     for (const listener of second.states) listener("connected")
     await Bun.sleep(20)
@@ -1913,7 +1922,9 @@ describe("desktop observation bridge", () => {
     first.bridge.dispose()
 
     const second = setup({ store, pending: [click] })
+    expect(second.bridge.journalState()).toBe("migrating_legacy")
     await Bun.sleep(20)
+    expect(second.bridge.journalState()).toBe("durable")
     expect(second.bridge.journalSummary()).toMatchObject({
       revision: 1,
       lastAckAt: null,
@@ -1977,6 +1988,7 @@ describe("desktop observation bridge", () => {
       { version: 2, epoch: randomUUID(), revision: 1, lastAckAt: null, items: Array(257).fill({}) },
     ]) {
       const test = setup({ store: memory(saved) })
+      expect(test.bridge.journalState()).toBe("malformed")
       expect(test.bridge.journalSummary()).toBeNull()
       const click: DesktopRequest = {
         id: "corrupt_journal_click",

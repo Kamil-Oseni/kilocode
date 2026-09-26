@@ -93,6 +93,8 @@ export class DesktopBridge {
   private committed: Journal | undefined
   private pendingAck: number | undefined
   private journalFault = false
+  private journalFound = false
+  private migration = false
   private revision = 0
   private connected = false
   private disposed = false
@@ -660,6 +662,7 @@ export class DesktopBridge {
   private restore(): void {
     const saved = this.store?.get<unknown>(journal)
     if (saved === undefined) return
+    this.journalFound = true
     if (!validSaved(saved)) {
       this.journalFault = true
       return
@@ -683,15 +686,26 @@ export class DesktopBridge {
       this.receipts.set(entry[0], entry[1])
     }
     if (value.version === 2 && !migrated) this.committed = structuredClone(value as Journal)
-    if (value.version === 1 || migrated)
+    if (value.version === 1 || migrated) {
+      this.migration = true
       void this.persistJournal().catch((error) =>
         console.error("[Raya] Desktop receipt journal migration failed", error),
       )
+    }
   }
 
   private retain(receipt: Receipt): Promise<void> {
     if (!this.store || (!persistable(receipt.result) && !persistableFailure(receipt.failure))) return Promise.resolve()
     return this.persistJournal()
+  }
+
+  /** Read-only journal availability; an in-flight migration has no durable v2 summary yet. */
+  journalState() {
+    if (!this.store) return "unavailable" as const
+    if (this.journalFault) return "malformed" as const
+    if (this.committed) return "durable" as const
+    if (this.migration) return "migrating_legacy" as const
+    return this.journalFound ? ("unavailable" as const) : ("absent" as const)
   }
 
   /** Last durable snapshot only; never reports speculative or unacknowledged metadata. */
@@ -744,6 +758,7 @@ export class DesktopBridge {
         }
         await Promise.resolve(this.store!.update(journal, saved))
         this.committed = saved
+        this.migration = false
         if (this.pendingAck === ack) this.pendingAck = undefined
       })
     return this.writes

@@ -161,6 +161,14 @@ export class DesktopAutomationService implements vscode.Disposable {
     await this.panel.show()
   }
 
+  /** Host-local diagnostics only; no backend request or desktop action. */
+  journalEvidence() {
+    return {
+      state: this.bridge?.journalState() ?? ("unavailable" as const),
+      summary: this.bridge?.journalSummary() ?? null,
+    }
+  }
+
   async authorize(request: AuthorizationRequest): Promise<Authorization> {
     if (!this.panel) return { operation: "authorize", decision: "deny", reason: "Desktop control requires Windows" }
     if (request.surface === "desktop" && !this.lease?.current() && this.lease?.authorize(request).decision === "ask") {

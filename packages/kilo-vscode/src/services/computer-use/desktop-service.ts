@@ -36,6 +36,38 @@ export class DesktopAutomationService implements vscode.Disposable {
       [],
       binary ? join(context.globalStorageUri.fsPath, "desktop-capture-faults") : undefined,
     )
+    context.subscriptions.push(
+      vscode.commands.registerCommand("raya.captureTiming", async () => {
+        const controller = new AbortController()
+        const timing = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Measuring active Raya desktop capture (up to 60 seconds)",
+            cancellable: true,
+          },
+          async (_, token) => {
+            const off = token.onCancellationRequested(() => controller.abort())
+            try {
+              return await this.captureTiming(controller.signal)
+            } finally {
+              off.dispose()
+            }
+          },
+        )
+        const result = controller.signal.aborted ? null : timing
+        const content = {
+          format: "raya.desktop-capture-timing",
+          version: 1,
+          status: controller.signal.aborted ? "cancelled" : result === null ? "unavailable" : "complete",
+          ...(result === null ? {} : { timing: result }),
+        }
+        const document = await vscode.workspace.openTextDocument({
+          language: "json",
+          content: JSON.stringify(content, null, 2) + "\n",
+        })
+        await vscode.window.showTextDocument(document, { preview: false })
+      }),
+    )
     this.session = new DesktopSession(this.driver)
     this.panel = new DesktopPanel(this.session, this.lease, () => this.ready())
     this.indicator = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
@@ -167,6 +199,11 @@ export class DesktopAutomationService implements vscode.Disposable {
       state: this.bridge?.journalState() ?? ("unavailable" as const),
       summary: this.bridge?.journalSummary() ?? null,
     }
+  }
+
+  /** Numeric timing from an existing local capture, or null when none is running. */
+  captureTiming(signal?: AbortSignal) {
+    return this.driver?.captureTiming(signal) ?? Promise.resolve(null)
   }
 
   async authorize(request: AuthorizationRequest): Promise<Authorization> {

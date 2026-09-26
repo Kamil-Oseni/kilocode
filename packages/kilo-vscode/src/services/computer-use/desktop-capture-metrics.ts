@@ -1,5 +1,6 @@
-// In-memory numeric capture measurements for a future installed-host diagnostic.
-// Callers must measure probe elapsed time themselves; DesktopFrame has no probeMs field.
+// In-memory numeric capture measurements from an active installed host.
+// A probe duration is optional because DesktopFrame does not measure one.
+import type { DesktopCaptureWorker } from "./desktop-capture-worker"
 const LIMIT = 240
 const WINDOW_MS = 60_000
 const MAX_MS = 120_000
@@ -9,7 +10,7 @@ type Sample = {
   interval?: number
   acquisition: number
   preparation: number
-  probe: number
+  probe?: number
 }
 
 export type CaptureTiming = {
@@ -17,7 +18,7 @@ export type CaptureTiming = {
   sampledAtMs: number
   acquisitionMs: number
   preparationMs: number
-  probeMs: number
+  probeMs?: number
 }
 
 function duration(value: number) {
@@ -58,7 +59,7 @@ export class DesktopCaptureMetrics {
       (interval !== undefined && !duration(interval)) ||
       !duration(input.acquisitionMs) ||
       !duration(input.preparationMs) ||
-      !duration(input.probeMs)
+      (input.probeMs !== undefined && !duration(input.probeMs))
     )
       throw new Error("Capture metrics contain invalid or out-of-order timing")
     if (input.sampledAtMs - this.startedAtMs > WINDOW_MS || this.samples.length >= LIMIT) {
@@ -70,7 +71,7 @@ export class DesktopCaptureMetrics {
       ...(interval === undefined ? {} : { interval }),
       acquisition: input.acquisitionMs,
       preparation: input.preparationMs,
-      probe: input.probeMs,
+      ...(input.probeMs === undefined ? {} : { probe: input.probeMs }),
     })
     this.previous = input.capturedAtMs
     return true
@@ -107,7 +108,7 @@ export class DesktopCaptureMetrics {
       ),
       acquisitionMs: percentile(this.samples.map((sample) => sample.acquisition)),
       preparationMs: percentile(this.samples.map((sample) => sample.preparation)),
-      probeMs: percentile(this.samples.map((sample) => sample.probe)),
+      probeMs: percentile(this.samples.flatMap((sample) => (sample.probe === undefined ? [] : [sample.probe]))),
     }
   }
 
@@ -119,4 +120,53 @@ export class DesktopCaptureMetrics {
     this.restarts = 0
     this.dropped = 0
   }
+}
+
+/** Observe only accepted captures from the already-running worker; never request a frame. */
+export function observeCapture(
+  worker: Pick<DesktopCaptureWorker, "onSample">,
+  signal?: AbortSignal,
+  windowMs = WINDOW_MS,
+) {
+  const metrics = new DesktopCaptureMetrics(performance.now())
+  let done = false
+  let resolve!: (value: ReturnType<DesktopCaptureMetrics["snapshot"]>) => void
+  const result = new Promise<ReturnType<DesktopCaptureMetrics["snapshot"]>>((ready) => {
+    resolve = ready
+  })
+  const off = worker.onSample((sample) => {
+    const now = performance.now()
+    try {
+      metrics.record({
+        capturedAtMs: sample.capturedAtMs,
+        sampledAtMs: now,
+        acquisitionMs: sample.acquisitionMs,
+        preparationMs: sample.preparationMs,
+      })
+    } catch {
+      metrics.failure(now)
+    }
+    if (metrics.snapshot()?.sampleCount === LIMIT) finish()
+  })
+  const timer = setTimeout(finish, Math.min(WINDOW_MS, Math.max(0, windowMs)))
+  const abort = () => cancel()
+  signal?.addEventListener("abort", abort, { once: true })
+  if (signal?.aborted) cancel()
+
+  function finish() {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    signal?.removeEventListener("abort", abort)
+    off()
+    resolve(metrics.snapshot())
+  }
+
+  function cancel() {
+    if (done) return
+    metrics.cancel()
+    finish()
+  }
+
+  return { result, cancel, snapshot: () => metrics.snapshot() }
 }

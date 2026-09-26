@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { DesktopCaptureMetrics, type CaptureTiming } from "../../src/services/computer-use/desktop-capture-metrics"
+import {
+  DesktopCaptureMetrics,
+  observeCapture,
+  type CaptureTiming,
+} from "../../src/services/computer-use/desktop-capture-metrics"
+import { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
 
 function sample(capturedAtMs: number, age: number, acquisitionMs = 5): CaptureTiming {
   return {
@@ -45,7 +50,7 @@ describe("desktop capture numeric metrics", () => {
     const metrics = new DesktopCaptureMetrics(100)
     expect(() => metrics.record(sample(99, 1))).toThrow("invalid or out-of-order")
     expect(() => metrics.record({ ...sample(100, 1), probeMs: Number.NaN })).toThrow("invalid or out-of-order")
-    expect(() => metrics.record({ ...sample(100, 1), probeMs: undefined } as unknown as CaptureTiming)).toThrow(
+    expect(() => metrics.record({ ...sample(100, 1), acquisitionMs: undefined } as unknown as CaptureTiming)).toThrow(
       "invalid or out-of-order",
     )
     expect(() => metrics.record(sample(100, -1))).toThrow("invalid or out-of-order")
@@ -80,5 +85,69 @@ describe("desktop capture numeric metrics", () => {
     expect(metrics.record(sample(130, 5))).toBe(false)
     expect(metrics.failure(130)).toBe(false)
     expect(metrics.restart(130)).toBe(false)
+  })
+
+  test("passively samples the real worker and cancels without returning frame content", async () => {
+    const secret = "PRIVATE_CAPTURE_CONTENT"
+    let calls = 0
+    const worker = new DesktopCaptureWorker(
+      async () => {
+        calls++
+        return {
+          windowID: "0x1",
+          location: secret,
+          width: 1,
+          height: 1,
+          mime: "image/png",
+          data: secret,
+          timing: { acquisitionMs: 3, preparationMs: 4, totalMs: 7 },
+        }
+      },
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    const controller = new AbortController()
+    const timing = observeCapture(worker, controller.signal)
+    worker.start()
+    for (let index = 0; index < 100 && !worker.latest(); index++) await Bun.sleep(2)
+    expect(worker.latest()).toBeDefined()
+    expect(calls).toBe(1)
+    expect(timing.snapshot()).toMatchObject({
+      sampleCount: 1,
+      acquisitionMs: { p50: 3, p95: 3 },
+      preparationMs: { p50: 4, p95: 4 },
+      probeMs: null,
+    })
+    expect(JSON.stringify(timing.snapshot())).not.toContain(secret)
+    controller.abort()
+    expect(await timing.result).toBeNull()
+    worker.stop()
+
+    const next = observeCapture(worker)
+    worker.start()
+    for (let index = 0; index < 100 && !worker.latest(); index++) await Bun.sleep(2)
+    next.cancel()
+    expect(await next.result).toBeNull()
+    worker.stop()
+  })
+
+  test("completes with empty numeric statistics when an active worker yields no frame", async () => {
+    const worker = new DesktopCaptureWorker(
+      async () => undefined,
+      () => undefined,
+      () => undefined,
+    )
+    worker.start()
+    const timing = observeCapture(worker, undefined, 5)
+    expect(await timing.result).toMatchObject({
+      sampleCount: 0,
+      frameAgeMs: null,
+      acquisitionMs: null,
+      preparationMs: null,
+      probeMs: null,
+    })
+    worker.stop()
   })
 })

@@ -11,6 +11,7 @@ import {
   type DesktopWindow,
 } from "./desktop-session"
 import { DesktopCaptureWorker, type CapturedScene } from "./desktop-capture-worker"
+import { observeCapture } from "./desktop-capture-metrics"
 import { NativeCaptureHost } from "./desktop-native-host"
 
 const native = String.raw`
@@ -1432,6 +1433,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   private preparing: Promise<void> | undefined
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined
+  private timing: ReturnType<typeof observeCapture> | undefined
   private host: NativeCaptureHost | undefined
   private scope: { windowID: string; identity: string } | undefined
 
@@ -1702,6 +1704,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
 
   startCapture(failed: (error: unknown) => void, target?: { windowID: string; identity: string }): void {
     if (this.worker) return
+    const fail = (error: unknown) => {
+      this.timing?.cancel()
+      this.timing = undefined
+      failed(error)
+    }
     this.scope = target
     if (this.binary && !target) {
       const host = new NativeCaptureHost(
@@ -1710,7 +1717,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
           if (this.host === host) this.host = undefined
           this.worker?.stop()
           this.worker = undefined
-          failed(error)
+          fail(error)
         },
         this.args,
         (result) => {
@@ -1749,7 +1756,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
           }
         },
         () => host.stop(),
-        failed,
+        fail,
       )
       try {
         host.start()
@@ -1757,7 +1764,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       } catch (error) {
         this.worker.stop()
         this.worker = undefined
-        failed(error)
+        fail(error)
         return
       }
       this.worker.start()
@@ -1793,12 +1800,25 @@ export class WindowsDesktopDriver implements DesktopDriver {
         prior = undefined
         source.cancel()
       },
-      failed,
+      fail,
     )
     this.worker.start()
   }
 
+  /** Sample the current capture passively; a diagnostic never starts or renews capture. */
+  async captureTiming(signal?: AbortSignal) {
+    if (!this.worker) return null
+    this.timing?.cancel()
+    const timing = observeCapture(this.worker, signal)
+    this.timing = timing
+    return timing.result.finally(() => {
+      if (this.timing === timing) this.timing = undefined
+    })
+  }
+
   stopCapture(): void {
+    this.timing?.cancel()
+    this.timing = undefined
     this.scope = undefined
     this.host = undefined
     this.worker?.stop()

@@ -21,6 +21,28 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("observes only an existing capture and cancels timing when capture stops", async () => {
+    let captures = 0
+    const background = {
+      run: async () => {
+        captures++
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(background, background)
+    expect(await driver.captureTiming()).toBeNull()
+    expect(captures).toBe(0)
+    driver.startCapture((error) => {
+      throw error
+    })
+    const pending = driver.captureTiming()
+    for (let index = 0; index < 100 && captures < 1; index++) await Bun.sleep(2)
+    expect(captures).toBe(1)
+    driver.stopCapture()
+    expect(await pending).toBeNull()
+  })
+
   it("refuses warm native pixels after same-handle replacement and falls back on an app switch", async () => {
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
     const identity = "A".repeat(64)

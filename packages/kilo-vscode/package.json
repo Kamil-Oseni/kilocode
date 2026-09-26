@@ -171,6 +171,11 @@
         "icon": "$(device-desktop)"
       },
       {
+        "command": "raya.captureTiming",
+        "title": "Measure Active Desktop Capture",
+        "category": "Raya"
+      },
+      {
         "command": "raya.inspectInstalledDesktopHost",
         "title": "Inspect Installed Desktop Host",
         "category": "Raya",

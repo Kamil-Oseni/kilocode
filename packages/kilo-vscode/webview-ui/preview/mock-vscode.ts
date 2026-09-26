@@ -142,6 +142,7 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
   time: index + 1,
 }))
 let stopped = false
+let websiteArchived = false
 const reports = new Map<string, { enabled: boolean; quiet?: { start: number; end: number; timezone: string } }>()
 
 function destination(message: Extract<WebviewMessage, { type: "routineContactDestination" }>) {
@@ -691,11 +692,13 @@ const archive = (message: Extract<WebviewMessage, { type: "routineOrganizationAr
       type: "routineOrganizationArchived",
       requestID: message.requestID,
       organizationID: message.organizationID,
-      error: "Raya could not finish archiving this organization. It remains in your active list. Review its workers before retrying.",
+      error:
+        "Raya could not finish archiving this organization. It remains in your active list. Review its workers before retrying.",
       recovery: { kind: "conflict", next: "Refresh its workers and retry. Resolve any interrupted start first." },
     })
     return
   }
+  websiteArchived = true
   emit({
     type: "routineOrganizationArchived",
     requestID: message.requestID,
@@ -820,7 +823,7 @@ const respond = (message: WebviewMessage) => {
           members: [{ agentID: books.id, role: "Accountant", position: 0 }],
           delegations: [],
         },
-      ],
+      ].filter((item) => item.id !== "org_11111111111111111111111111111111" || !websiteArchived),
     })
     if (scene === "followup-recovery") {
       emit({

@@ -843,6 +843,19 @@ if ($target.identity) {
 `
 }
 
+const currentIdentity = `${setup}
+$window = Get-RayaWindow
+[pscustomobject]@{
+  windowID = $window.WindowID
+  location = $window.Location
+  identity = [RayaDesktopNative]::Identity($window.Handle)
+} | ConvertTo-Json -Compress
+`
+
+function unbound(frame: { epoch?: number; identity?: string }) {
+  return frame.epoch !== undefined && !frame.identity
+}
+
 function pinCurrent(windowID: string) {
   const input = payload({ windowID })
   return `${setup}
@@ -1441,6 +1454,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
     const source = host.latest(Infinity)
     if (!source) return fallback()
     try {
+      if (unbound(source)) return fallback()
+      if (source.identity !== undefined && source.identity !== target.identity)
+        throw new Error("Native post-action process identity changed before capture barrier")
       if (source.windowID !== target.windowID || source.location !== target.location)
         throw new Error("Native post-action target changed before capture barrier")
       const started = performance.now()
@@ -1465,6 +1481,8 @@ export class WindowsDesktopDriver implements DesktopDriver {
       try {
         if (frame.windowID !== target.windowID || frame.location !== target.location)
           throw new Error("Native post-action image changed target")
+        if (frame.identity !== undefined && frame.identity !== target.identity)
+          throw new Error("Native post-action image changed process identity")
         const result = await this.correlateAfter(host, target, frame.sequence)
         const encoding = performance.now()
         const data = frame.data.toString("base64")
@@ -1505,6 +1523,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
         latest?.sequence !== sequence ||
         latest.windowID !== target.windowID ||
         latest.location !== target.location ||
+        (latest.identity !== undefined && latest.identity !== target.identity) ||
         result.identity !== target.identity
       )
         throw new Error("Native post-action scene changed while correlating accessibility controls")
@@ -1586,6 +1605,8 @@ export class WindowsDesktopDriver implements DesktopDriver {
             mime: result.mime,
             data,
             sourceSequence: result.sequence,
+            sourceEpoch: result.epoch,
+            sourceIdentity: result.identity,
             timing: {
               acquisitionMs: result.acquisitionMs,
               preparationMs,
@@ -1658,12 +1679,23 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   private async matches(scene: CapturedScene): Promise<boolean> {
-    const current = await this.current()
+    if (scene.sourceEpoch !== undefined && !scene.sourceIdentity) return false
+    const current = scene.sourceIdentity ? object(await this.runner.run(currentIdentity)) : await this.current()
+    const identity = "identity" in current ? current.identity : undefined
+    if (
+      typeof current.windowID !== "string" ||
+      typeof current.location !== "string" ||
+      (scene.sourceIdentity && identity !== null && (typeof identity !== "string" || !/^[A-F0-9]{64}$/.test(identity)))
+    )
+      throw new Error("Windows desktop current process identity is invalid")
     const latest = this.worker?.latest()
     return (
       latest?.version === scene.version &&
+      latest.sourceEpoch === scene.sourceEpoch &&
+      latest.sourceIdentity === scene.sourceIdentity &&
       current.windowID === scene.frame.windowID &&
-      current.location === scene.frame.location
+      current.location === scene.frame.location &&
+      (!scene.sourceIdentity || identity === scene.sourceIdentity)
     )
   }
 

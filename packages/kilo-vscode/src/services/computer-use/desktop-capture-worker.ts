@@ -3,9 +3,27 @@ import { CAPTURE, type DesktopFrame } from "./desktop-session"
 
 export type CapturedScene = {
   frame: DesktopFrame
+  sourceEpoch?: number
+  sourceIdentity?: string
   sequence: number
   version: number
   capturedAt: number
+}
+
+function valid(frame: DesktopFrame & { sourceSequence?: number; sourceEpoch?: number; sourceIdentity?: string }) {
+  return (
+    !!frame.windowID &&
+    !!frame.location &&
+    frame.width > 0 &&
+    frame.height > 0 &&
+    frame.width <= CAPTURE.edge &&
+    frame.height <= CAPTURE.edge &&
+    frame.width * frame.height <= CAPTURE.pixels &&
+    (frame.sourceSequence === undefined || (Number.isSafeInteger(frame.sourceSequence) && frame.sourceSequence > 0)) &&
+    (frame.sourceEpoch === undefined || (Number.isSafeInteger(frame.sourceEpoch) && frame.sourceEpoch > 0)) &&
+    (frame.sourceIdentity === undefined || /^[A-F0-9]{64}$/.test(frame.sourceIdentity)) &&
+    Buffer.byteLength(frame.data, "ascii") <= CAPTURE.data
+  )
 }
 
 export class DesktopCaptureWorker {
@@ -20,7 +38,9 @@ export class DesktopCaptureWorker {
   private running = false
 
   constructor(
-    private readonly capture: () => Promise<(DesktopFrame & { sourceSequence?: number }) | undefined>,
+    private readonly capture: () => Promise<
+      (DesktopFrame & { sourceSequence?: number; sourceEpoch?: number; sourceIdentity?: string }) | undefined
+    >,
     private readonly cancel: () => void,
     private readonly failed: (error: unknown) => void,
   ) {}
@@ -60,13 +80,21 @@ export class DesktopCaptureWorker {
     return this.scene
   }
 
-  renew(base: number, target: Pick<DesktopFrame, "windowID" | "location" | "width" | "height">): boolean {
+  renew(
+    base: number,
+    target: Pick<DesktopFrame, "windowID" | "location" | "width" | "height"> & {
+      epoch?: number
+      identity?: string
+    },
+  ): boolean {
     const scene = this.scene
     if (
       !this.running ||
       !scene ||
       !Number.isSafeInteger(base) ||
       this.token !== base ||
+      scene.sourceEpoch !== target.epoch ||
+      scene.sourceIdentity !== target.identity ||
       scene.frame.windowID !== target.windowID ||
       scene.frame.location !== target.location ||
       scene.frame.width !== target.width ||
@@ -98,28 +126,19 @@ export class DesktopCaptureWorker {
         this.timer = undefined
         continue
       }
-      if (
-        !frame.windowID ||
-        !frame.location ||
-        frame.width <= 0 ||
-        frame.height <= 0 ||
-        frame.width > CAPTURE.edge ||
-        frame.height > CAPTURE.edge ||
-        frame.width * frame.height > CAPTURE.pixels ||
-        (frame.sourceSequence !== undefined &&
-          (!Number.isSafeInteger(frame.sourceSequence) || frame.sourceSequence < 1)) ||
-        Buffer.byteLength(frame.data, "ascii") > CAPTURE.data
-      ) {
+      if (!valid(frame)) {
         this.stop()
         this.failed(new Error("Continuous desktop capture exceeded its scene or memory bounds"))
         return
       }
-      const { sourceSequence, ...visual } = frame
+      const { sourceSequence, sourceEpoch, sourceIdentity, ...visual } = frame
       const previous = this.scene?.frame
       const updated = changed(previous, visual)
       this.token = sourceSequence
       this.scene = {
         frame: visual,
+        sourceEpoch,
+        sourceIdentity,
         sequence: ++this.sequence,
         version: updated ? ++this.version : this.version,
         capturedAt: performance.now(),

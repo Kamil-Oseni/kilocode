@@ -70,7 +70,13 @@ async function frame(after: number, title: string, epoch: number) {
       throw new Error(`Native capture bound the wrong foreground: ${image.location}`)
     if (image.epoch === undefined || image.epoch <= epoch)
       throw new Error(`Native capture reused epoch ${image.epoch} after ${epoch}`)
-    return { sequence: image.sequence, epoch: image.epoch, location: image.location }
+    return {
+      sequence: image.sequence,
+      epoch: image.epoch,
+      windowID: image.windowID,
+      location: image.location,
+      identity: image.identity,
+    }
   } finally {
     image.data.fill(0)
   }
@@ -107,7 +113,15 @@ try {
   const fifth = await frame(fourth.sequence, "A", fourth.epoch)
   const resizeMs = Number((performance.now() - toResize).toFixed(2))
   if (fifth.location === fourth.location) throw new Error("Native capture reused pre-resize bounds")
-  if (resets.length < 4 || resets.some((reset) => !reset.cleared))
+  const toRetoken = performance.now()
+  await command("retoken", "RETOKENED")
+  const sixth = await frame(fifth.sequence, "A", fifth.epoch)
+  const retokenMs = Number((performance.now() - toRetoken).toFixed(2))
+  if (sixth.windowID !== fifth.windowID || sixth.location !== fifth.location)
+    throw new Error("Window changed while testing a same-target instance token")
+  if (!fifth.identity || !sixth.identity || fifth.identity === sixth.identity)
+    throw new Error("Native capture did not replace the same-window identity after its token changed")
+  if (resets.length < 5 || resets.some((reset) => !reset.cleared))
     throw new Error("Native capture did not clear cached pixels at every foreground reset")
   const outcome = await Promise.race([failed, Bun.sleep(50).then(() => undefined)])
   if (outcome) throw outcome
@@ -116,11 +130,11 @@ try {
   console.log(
     JSON.stringify({
       format: "raya.native-foreground-continuity",
-      version: 2,
+      version: 3,
       status: "passed",
-      epochs: [first.epoch, second.epoch, third.epoch, fourth.epoch, fifth.epoch],
+      epochs: [first.epoch, second.epoch, third.epoch, fourth.epoch, fifth.epoch, sixth.epoch],
       resets: resets.length,
-      transitionToFrameMs: { b: bMs, a: aMs, flash: flashMs, resize: resizeMs },
+      transitionToFrameMs: { b: bMs, a: aMs, flash: flashMs, resize: resizeMs, retoken: retokenMs },
     }),
   )
 } finally {

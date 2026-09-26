@@ -9,6 +9,9 @@ using System.Windows.Forms;
 public static class RayaForegroundFixture {
   [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr handle);
   [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool SetProp(IntPtr handle, string name, IntPtr value);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetProp(IntPtr handle, string name);
+  private const string InstanceProperty = "RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B";
   private static Form first;
   private static Form second;
 
@@ -48,6 +51,13 @@ public static class RayaForegroundFixture {
                 first.Width += 80;
                 first.Height += 40;
                 Console.WriteLine("RESIZED");
+                return;
+              }
+              if (next == "retoken") {
+                var token = new IntPtr(0x12345678);
+                Console.WriteLine(GetForegroundWindow() == first.Handle &&
+                  SetProp(first.Handle, InstanceProperty, token) &&
+                  GetProp(first.Handle, InstanceProperty) == token ? "RETOKENED" : "UNAVAILABLE");
                 return;
               }
               if (next != "flash") return;

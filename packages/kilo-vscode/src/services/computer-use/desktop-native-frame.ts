@@ -8,6 +8,7 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true })
 export type NativeFrame = {
   sequence: number
   epoch?: number
+  identity?: string
   windowID: string
   location: string
   width: number
@@ -35,6 +36,7 @@ export type NativeBarrier = Omit<NativeProof, "presentQpc"> & {
 export type NativeUnchanged = Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height"> & {
   base: number
   epoch?: number
+  identity?: string
 }
 
 export type NativeReset = { epoch: number; reason: "target_changed" | "display_changed" }
@@ -84,6 +86,13 @@ function identity(value: Record<string, unknown>) {
   )
     throw new Error("Native desktop location is invalid")
   return { windowID: value.windowID, location: value.location }
+}
+
+function fingerprint(value: Record<string, unknown>) {
+  if (value.v !== 3 || value.identity === undefined) return {}
+  if (typeof value.identity !== "string" || !/^[0-9A-F]{64}$/.test(value.identity))
+    throw new Error("Native desktop process identity is invalid")
+  return { identity: value.identity }
 }
 
 function image(value: Record<string, unknown>, data: Buffer) {
@@ -145,6 +154,7 @@ function unchanged(value: Record<string, unknown>, data: Buffer): NativePacket {
   const frame = {
     ...dimensions(value),
     ...identity(value),
+    ...fingerprint(value),
     base: number(value.base, "base", Number.MAX_SAFE_INTEGER),
     ...(value.v === 3 ? { epoch: generation(value) } : {}),
   }
@@ -185,6 +195,7 @@ function pixels(value: Record<string, unknown>, data: Buffer): NativePacket {
       ...dimensions(value),
       ...(value.v === 3 ? { epoch: generation(value) } : {}),
       ...identity(value),
+      ...fingerprint(value),
       ...image(value, data),
       ...(proof ? { barrier: proof } : {}),
       acquisitionMs: number(value.acquisitionMs, "acquisition timing", 120_000),
@@ -223,7 +234,7 @@ export class NativeFrameParser {
   private epoch = 0
   private modern = false
   private reset = false
-  private image?: Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height">
+  private image?: Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height" | "identity">
   private failed = false
 
   push(chunk: Buffer): NativePacket[] {
@@ -298,6 +309,8 @@ export class NativeFrameParser {
     const frame = result.frame
     this.acceptEpoch(frame.epoch)
     if (frame.sequence <= this.sequence) throw new Error("Native desktop frame sequence replayed")
+    if (this.modern && this.image && frame.identity !== this.image.identity)
+      throw new Error("Native desktop process identity changed without reset")
     if (this.modern && this.image && !this.match(frame)) throw new Error("Native desktop target changed without reset")
     if (result.type === "unchanged") {
       if (this.reset) throw new Error("Native desktop reset requires a full frame")
@@ -313,6 +326,7 @@ export class NativeFrameParser {
         location: frame.location,
         width: frame.width,
         height: frame.height,
+        identity: frame.identity,
       }
     if (result.type === "frame") this.reset = false
   }
@@ -337,14 +351,15 @@ export class NativeFrameParser {
     this.epoch = epoch
   }
 
-  private match(frame: Pick<NativeFrame, "windowID" | "location" | "width" | "height">): boolean {
+  private match(frame: Pick<NativeFrame, "windowID" | "location" | "width" | "height" | "identity">): boolean {
     const image = this.image
     return (
       !!image &&
       frame.windowID === image.windowID &&
       frame.location === image.location &&
       frame.width === image.width &&
-      frame.height === image.height
+      frame.height === image.height &&
+      frame.identity === image.identity
     )
   }
 

@@ -41,7 +41,7 @@ function click(sensitive: DesktopAction["sensitive"]): DesktopAction {
 }
 
 describe("desktop semantic sensitivity", () => {
-  it("requires the category inferred from the smallest accessible click target", () => {
+  it("requires the category inferred from an accessible click target", () => {
     const tree = semantics([
       control("Container", { x: 0, y: 50, width: 1000, height: 600 }),
       control("Send message", { x: 350, y: 220, width: 80, height: 40 }),
@@ -51,6 +51,21 @@ describe("desktop semantic sensitivity", () => {
       "Accessible desktop target semantics require sensitive_category=communications",
     )
     expect(mismatch(click("communications"), tree)).toBeUndefined()
+  })
+
+  it("does not let a neutral child hide a sensitive parent", () => {
+    const tree = semantics([
+      control("Delete permanently", { x: 300, y: 180, width: 200, height: 100 }),
+      control("Confirm", { x: 350, y: 220, width: 80, height: 40 }),
+    ])
+
+    expect(mismatch(click(false), tree)).toBe("Accessible desktop target semantics require sensitive_category=deletion")
+    expect(mismatch(click("deletion"), tree)).toBeUndefined()
+  })
+
+  it("refuses a control whose own label spans sensitive categories", () => {
+    const tree = semantics([control("Pay and send")])
+    expect(mismatch(click("financial"), tree)).toMatch(/multiple sensitive policy categories/i)
   })
 
   it("checks focused keyboard targets without inspecting typed text", () => {

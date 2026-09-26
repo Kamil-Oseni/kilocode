@@ -458,6 +458,7 @@ struct Target {
 };
 
 static std::string fingerprint(HWND window, DWORD pid);
+static std::string pinned(HWND window, DWORD pid);
 
 static bool equal(RECT first, RECT second) {
   return first.left == second.left && first.top == second.top &&
@@ -554,7 +555,7 @@ static Target target(bool bind = false) {
   std::ostringstream location;
   location << "pid:" << pid << ";title:" << utf8(std::wstring(title, size_t(count))) << ";bounds:"
            << rect.left << ',' << rect.top << ',' << width << ',' << height;
-  return {handle, rect, desktop, dpi, id.str(), location.str(), bind ? fingerprint(handle, pid) : ""};
+  return {handle, rect, desktop, dpi, id.str(), location.str(), bind ? pinned(handle, pid) : ""};
 }
 
 static void same(const Target& original, uint64_t epoch) {
@@ -564,6 +565,15 @@ static void same(const Target& original, uint64_t epoch) {
   if (current.handle != original.handle || current.location != original.location ||
       !equal(current.desktop, original.desktop) || current.dpi != original.dpi)
     throw Failure("target_changed", "foreground target changed during capture");
+}
+
+static void sameidentity(const Target& original) {
+  if (original.identity.empty()) return;
+  DWORD pid = 0;
+  if (GetForegroundWindow() != original.handle || !IsWindowVisible(original.handle) ||
+      !GetWindowThreadProcessId(original.handle, &pid) ||
+      fingerprint(original.handle, pid) != original.identity)
+    throw Failure("target_changed", "foreground window instance changed during capture");
 }
 
 struct Barrier {
@@ -638,6 +648,24 @@ static std::string fingerprint(HWND window, DWORD pid) {
     value.push_back(digits[byte & 15]);
   }
   return value;
+}
+
+static std::string pinned(HWND window, DWORD pid) {
+  static constexpr wchar_t property[] = L"RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B";
+  if (!GetPropW(window, property)) {
+    HCRYPTPROV provider = 0;
+    if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return {};
+    uintptr_t token = 0;
+    const bool random = CryptGenRandom(provider, DWORD(sizeof(token)), reinterpret_cast<BYTE*>(&token)) != 0;
+    CryptReleaseContext(provider, 0);
+    if (!random) return {};
+    token &= UINTPTR_MAX >> 1;
+    if (!token) token = 1;
+    if (!SetPropW(window, property, reinterpret_cast<HANDLE>(token)) ||
+        GetPropW(window, property) != reinterpret_cast<HANDLE>(token)) return {};
+  }
+  if (GetForegroundWindow() != window || !IsWindowVisible(window)) return {};
+  return fingerprint(window, pid);
 }
 
 static bool exact(const Target& original, uint64_t handle, uint32_t pid, const RECT& rect,
@@ -979,12 +1007,15 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
     if (!changed && base) {
       if (Clock::now() - emitted < std::chrono::milliseconds(50)) continue;
       for (const auto& item : outputs) stable(*item);
+      sameidentity(original);
       std::ostringstream header;
       header << "{\"v\":3,\"type\":\"unchanged\",\"epoch\":" << epoch
              << ",\"sequence\":" << ++sequence
              << ",\"base\":" << base
              << ",\"windowID\":" << quoted(original.id)
-             << ",\"location\":" << quoted(original.location)
+             << ",\"location\":" << quoted(original.location);
+      if (!original.identity.empty()) header << ",\"identity\":" << quoted(original.identity);
+      header
              << ",\"width\":" << width << ",\"height\":" << height << '}';
       packet(pipe, header.str(), nullptr, 0);
       emitted = Clock::now();
@@ -1016,13 +1047,16 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
     samebarrier(original, barrier, pipe, foreground);
     for (const auto& item : outputs) stable(*item);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
+    sameidentity(original);
     std::ostringstream header;
     base = ++sequence;
     header << std::fixed << std::setprecision(3)
            << "{\"v\":3,\"type\":\"frame\",\"epoch\":" << epoch
            << ",\"sequence\":" << base
            << ",\"windowID\":" << quoted(original.id)
-           << ",\"location\":" << quoted(original.location)
+           << ",\"location\":" << quoted(original.location);
+    if (!original.identity.empty()) header << ",\"identity\":" << quoted(original.identity);
+    header
            << ",\"width\":" << width << ",\"height\":" << height
            << ",\"mime\":\"image/png\",\"acquisitionMs\":" << ms(begin, acquired)
            << ",\"preparationMs\":" << ms(acquired, prepared);
@@ -1110,6 +1144,21 @@ int wmain(int argc, wchar_t** argv) {
         const std::string base = "pid:7;start:123;class:Editor";
         if (tagged(base, 0) != base || tagged(base, 1) == base || tagged(base, 1) == tagged(base, 2))
           throw Failure("capture_failed", "window instance fingerprint self-test failed");
+        Target bound{};
+        bound.handle = GetForegroundWindow();
+        DWORD pid = 0;
+        if (bound.handle && GetWindowThreadProcessId(bound.handle, &pid) && pid) {
+          bound.identity = fingerprint(bound.handle, pid);
+          if (!bound.identity.empty()) {
+            sameidentity(bound);
+            bound.identity[0] = bound.identity[0] == '0' ? '1' : '0';
+            bool changed = false;
+            try { sameidentity(bound); }
+            catch (const Failure& error) { changed = error.code == "target_changed"; }
+            if (!changed)
+              throw Failure("capture_failed", "changed window instance fingerprint was not refused");
+          }
+        }
         pointertest();
         RECT visible = intersect(RECT{-8, -8, 1928, 1088}, RECT{0, 0, 1920, 1080});
         if (visible.left != 0 || visible.top != 0 || visible.right != 1920 || visible.bottom != 1080)

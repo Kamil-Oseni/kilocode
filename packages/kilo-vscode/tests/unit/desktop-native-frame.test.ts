@@ -60,6 +60,37 @@ describe("bounded native desktop frame protocol", () => {
     expect(result[2]).toMatchObject({ type: "frame", frame: { epoch: 2, sequence: 3, windowID: "0x34AB" } })
   })
 
+  it("binds every v3 image and unchanged renewal to one process incarnation per epoch", () => {
+    const first = { ...target, v: 3, epoch: 1, identity: "A".repeat(64) }
+    const parser = new NativeFrameParser()
+    expect(parser.push(encode(first))[0]).toMatchObject({ type: "frame", frame: { identity: first.identity } })
+    expect(
+      parser.push(encode({ ...unchanged, v: 3, epoch: 1, identity: first.identity }, Buffer.alloc(0)))[0],
+    ).toMatchObject({ type: "unchanged", frame: { identity: first.identity } })
+    for (const header of [
+      { ...first, sequence: 2, identity: "B".repeat(64) },
+      { ...first, sequence: 2, identity: undefined },
+      { ...unchanged, v: 3, epoch: 1, identity: "B".repeat(64) },
+      { ...unchanged, v: 3, epoch: 1, identity: undefined },
+    ]) {
+      const other = new NativeFrameParser()
+      other.push(encode(first))
+      expect(() => other.push(encode(header, header.type === "unchanged" ? Buffer.alloc(0) : png))).toThrow(
+        /process identity changed without reset/i,
+      )
+    }
+    const rebound = new NativeFrameParser()
+    rebound.push(encode(first))
+    rebound.push(encode({ v: 3, type: "reset", epoch: 2, reason: "target_changed" }, Buffer.alloc(0)))
+    expect(rebound.push(encode({ ...first, epoch: 2, sequence: 2, identity: "B".repeat(64) }))[0]).toMatchObject({
+      type: "frame",
+      frame: { identity: "B".repeat(64) },
+    })
+    expect(() => new NativeFrameParser().push(encode({ ...first, identity: "a".repeat(64) }))).toThrow(
+      /process identity is invalid/i,
+    )
+  })
+
   it("accepts strictly advancing resets before the first frame and before a replacement frame", () => {
     const parser = new NativeFrameParser()
     const result = parser.push(

@@ -21,6 +21,80 @@ function harness(outputs: string[]) {
 }
 
 describe("Windows native desktop driver", () => {
+  it("refuses warm native pixels after same-handle replacement and falls back on an app switch", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+    const identity = "A".repeat(64)
+    const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
+    const header = {
+      v: 3,
+      type: "frame",
+      epoch: 1,
+      sequence: 1,
+      ...target,
+      identity,
+      width: 20,
+      height: 10,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    }
+    const json = Buffer.from(JSON.stringify(header))
+    const packet = Buffer.alloc(8 + json.length + image.length)
+    packet.writeUInt32LE(json.length, 0)
+    json.copy(packet, 4)
+    packet.writeUInt32LE(image.length, 4 + json.length)
+    image.copy(packet, 8 + json.length)
+    const script = `process.stdout.write(Buffer.from(${JSON.stringify(packet.toString("base64"))},"base64"));setInterval(()=>{},1000)`
+    for (const current of [
+      { ...target, identity },
+      { ...target, identity: "B".repeat(64) },
+      { windowID: "0x456", location: "pid:6;title:Browser;bounds:0,0,20,10", identity: "B".repeat(64) },
+    ]) {
+      const calls: string[] = []
+      const driver = new WindowsDesktopDriver(
+        {
+          run: async (value) => {
+            calls.push(value)
+            if (value.includes("[RayaDesktopNative]::Identity($window.Handle)")) return JSON.stringify(current)
+            if (value.includes("CopyFromScreen"))
+              return JSON.stringify({
+                windowID: current.windowID,
+                location: current.location,
+                width: 20,
+                height: 10,
+                mime: "image/png",
+                data: "fresh pixels",
+                acquisitionMs: 0,
+                preparationMs: 0,
+              })
+            return JSON.stringify(current)
+          },
+          cancel: () => undefined,
+        },
+        undefined,
+        process.execPath,
+        ["-e", script],
+      )
+      const errors: unknown[] = []
+      const latest = () => (Reflect.get(driver, "worker") as DesktopCaptureWorker | undefined)?.latest()
+      driver.startCapture((error) => errors.push(error))
+      try {
+        for (let index = 0; index < 100 && !latest(); index++) await Bun.sleep(2)
+        expect(latest()?.sourceIdentity).toBe(identity)
+        expect((await driver.observe({ semantics: false })).data).toBe(
+          current.identity === identity ? image.toString("base64") : "fresh pixels",
+        )
+        expect(calls.filter((value) => value.includes("[RayaDesktopNative]::Identity($window.Handle)"))).toHaveLength(1)
+        expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(
+          current.identity === identity ? 0 : 1,
+        )
+        expect(errors).toHaveLength(0)
+      } finally {
+        driver.stopCapture()
+      }
+    }
+  })
+
   it("retains only the selected window across foreground changes and rejects a reused identity", async () => {
     const identity = "A".repeat(64)
     const chosen = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }

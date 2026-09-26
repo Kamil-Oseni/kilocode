@@ -113,6 +113,23 @@ describe("continuous desktop capture worker", () => {
     expect(worker.renew(7, visual)).toBe(false)
   })
 
+  it("keeps native process identity internal and requires it on exact renewals", async () => {
+    const visual = frame("0x1", "pixels")
+    const worker = new DesktopCaptureWorker(
+      async () => ({ ...visual, sourceSequence: 7, sourceEpoch: 1, sourceIdentity: "A".repeat(64) }),
+      () => undefined,
+      () => undefined,
+    )
+    worker.start()
+    await until(() => !!worker.latest())
+    expect(worker.latest()?.sourceIdentity).toBe("A".repeat(64))
+    expect(worker.latest()?.frame).not.toHaveProperty("sourceIdentity")
+    expect(worker.renew(7, { ...visual, epoch: 1, identity: "B".repeat(64) })).toBe(false)
+    expect(worker.renew(7, { ...visual, epoch: 1 })).toBe(false)
+    expect(worker.renew(7, { ...visual, epoch: 1, identity: "A".repeat(64) })).toBe(true)
+    worker.stop()
+  })
+
   it("invalidates an old scene and drops a frame resolving after rebind", async () => {
     const pending: Array<(frame: DesktopFrame & { sourceSequence: number }) => void> = []
     const worker = new DesktopCaptureWorker(

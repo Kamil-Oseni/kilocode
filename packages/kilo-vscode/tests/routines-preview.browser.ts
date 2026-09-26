@@ -810,7 +810,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.screenshot({ path: info.outputPath("organization-editor.png"), fullPage: true })
 })
 
-test("archive from organization overview returns to the roster after its receipt", async ({ page }) => {
+test("archive receipt removes the active team and keeps worker conversation reachable", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")
   await page.getByRole("button", { name: "Website Builders 3" }).click()
@@ -820,7 +820,15 @@ test("archive from organization overview returns to the roster after its receipt
     .getByRole("button", { name: "Archive organization" })
     .click()
   await expect(page.locator(".routines-organization-overview")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "Website Builders 3" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Website Builders 3" })).toHaveCount(0)
+  await expect(page.locator(".routines-team-directory")).not.toContainText("Website Builders")
+  await expect(page.getByRole("button", { name: "Finance 1" })).toBeVisible()
+  await page.locator('.routines-identity[data-routine-worker="routine"]').click()
+  const thread = page.getByRole("region", { name: "Conversation with Books" })
+  await expect(thread).toBeVisible()
+  await expect(thread.getByText("Friday expenses increased in travel.", { exact: false })).toBeVisible()
+  await expect(thread.getByText("Friday expenses increased in travel.", { exact: false })).toHaveCount(1)
+  await expect(thread.getByRole("button", { name: "Open vendor-travel-ledger-q3-close-final.pdf" })).toBeVisible()
 })
 
 test("archive refusal stays visible in the organization overview", async ({ page }) => {
@@ -836,6 +844,8 @@ test("archive refusal stays visible in the organization overview", async ({ page
     "Raya could not finish archiving this organization",
   )
   await expect(page.locator(".routines-organization-overview")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Website Builders 3" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Stopping workers…" })).toHaveCount(0)
 })
 
 test("narrow organization editor reveals one settings group at a time", async ({ page }, info) => {

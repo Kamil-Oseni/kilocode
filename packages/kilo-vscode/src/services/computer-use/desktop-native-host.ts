@@ -21,6 +21,10 @@ type BarrierRequest = {
 }
 export type BarrierResult = { status: "proven"; frame: NativeFrame } | NativeBarrier
 
+function same(image: NativeFrame | undefined, frame: NativeUnchanged) {
+  return !!image && frame.base === image.sequence && frame.identity === image.identity
+}
+
 function verify(value: BarrierRequest, frame: NativeFrame): void {
   if (
     !/^[0-9a-f]{32}$/.test(value.request) ||
@@ -31,6 +35,7 @@ function verify(value: BarrierRequest, frame: NativeFrame): void {
     value.source !== frame.sequence ||
     value.windowID !== frame.windowID ||
     value.location !== frame.location ||
+    (frame.identity !== undefined && value.identity !== frame.identity) ||
     !/^[0-9A-F]{64}$/.test(value.identity)
   )
     throw new Error("Native desktop barrier target or scene is invalid")
@@ -172,9 +177,8 @@ export class NativeCaptureHost {
       return
     }
     if (result.type === "unchanged") {
-      if (!this.frame || result.frame.base !== this.frame.sequence)
-        throw new Error("Native desktop continuity has no matching image")
-      this.frame.receivedAt = performance.now()
+      if (!same(this.frame, result.frame)) throw new Error("Native desktop continuity has no matching image")
+      this.frame!.receivedAt = performance.now()
       this.renewed?.(result.frame)
       return
     }
@@ -198,6 +202,7 @@ export class NativeCaptureHost {
       proof.source !== pending.request.source ||
       frame.windowID !== pending.request.windowID ||
       frame.location !== pending.request.location ||
+      (frame.identity !== undefined && frame.identity !== pending.request.identity) ||
       !this.frame ||
       frame.epoch !== this.frame.epoch ||
       this.frame.sequence !== pending.request.source

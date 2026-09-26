@@ -2,11 +2,14 @@ import { describe, expect, it } from "bun:test"
 import {
   taskAuditDelta,
   taskEventDelta,
+  taskNativeDelta,
   validTaskEvidence,
+  validTaskNative,
   type TaskActionEvent,
   type TaskAuditEntry,
   type TaskAuditSnapshot,
   type TaskEvidenceSnapshot,
+  type TaskNativeSnapshot,
 } from "../../src/commands/installed-desktop-task-audit-core"
 
 const old: TaskAuditEntry = {
@@ -86,6 +89,132 @@ const refused: TaskActionEvent = {
   startedAt: 104,
   finishedAt: 105,
 }
+
+const dispatch = {
+  hash: "1".repeat(64),
+  sessionHash: session,
+  requestHash: native.hash,
+  sequence: 0,
+  phase: "settled" as const,
+  startedAt: 102,
+  finishedAt: 103,
+  outcome: "confirmed" as const,
+  code: "ok",
+  accepted: 1,
+  attempted: 1,
+}
+
+function broker(
+  revision: number,
+  events: TaskActionEvent[] = [prior],
+  rows: TaskNativeSnapshot["native"] = [],
+): TaskNativeSnapshot {
+  return {
+    epoch: "epoch-1",
+    revision,
+    audit: events.some((item) => item.hash === native.hash) ? [old, { ...next, outcome: "confirmed" }] : [old],
+    events,
+    sessionHash: session,
+    native: rows,
+    legacy: false,
+    nativeGeneration: 0,
+  }
+}
+
+describe("installed desktop native task delta", () => {
+  it("binds two settled broker dispatches to one confirmed event", () => {
+    const action = { ...native, outcome: "confirmed" as const }
+    const second = { ...dispatch, hash: "2".repeat(64), sequence: 1 }
+    const after = broker(5, [prior, action], [dispatch, second])
+    const result = taskNativeDelta(broker(4), after)
+    expect(result).toMatchObject({
+      status: "available",
+      version: 3,
+      native: [dispatch, second],
+      releaseGateEligible: false,
+    })
+  })
+
+  it("keeps a pre-dispatch refusal without inventing native input", () => {
+    expect(taskNativeDelta(broker(4), broker(5, [prior, refused])).status).toBe("available")
+  })
+
+  it("accepts new broker proof after migration without crediting legacy receipts", () => {
+    const before = { ...broker(4), legacy: true }
+    const action = { ...native, outcome: "confirmed" as const }
+    const after = { ...broker(5, [prior, action], [dispatch]), legacy: true }
+    expect(taskNativeDelta(before, after)).toMatchObject({
+      status: "available",
+      audit: [{ ...next, outcome: "confirmed" }],
+      native: [dispatch],
+      releaseGateEligible: false,
+    })
+    expect(taskNativeDelta(before, { ...after, native: [] }).status).toBe("unavailable")
+    expect(taskNativeDelta(before, { ...before, revision: 5 }).status).toBe("unavailable")
+  })
+
+  it("refuses absent, duplicate, foreign, or mismatched native dispatches", () => {
+    const action = { ...native, outcome: "confirmed" as const }
+    const after = broker(5, [prior, action], [dispatch])
+    expect(taskNativeDelta(broker(4), { ...after, native: [] }).status).toBe("unavailable")
+    expect(taskNativeDelta(broker(4), { ...after, native: [dispatch, dispatch] }).status).toBe("unavailable")
+    expect(
+      taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, sessionHash: "f".repeat(64) }] }).status,
+    ).toBe("unavailable")
+    expect(
+      taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, requestHash: "f".repeat(64) }] }).status,
+    ).toBe("unavailable")
+    expect(taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, phase: "reserved" }] }).status).toBe(
+      "unavailable",
+    )
+  })
+
+  it("refuses uncertain, incomplete, changed migration state, eviction, or altered prior evidence", () => {
+    const action = { ...native, outcome: "confirmed" as const }
+    const after = broker(5, [prior, action], [dispatch])
+    expect(taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, outcome: "unknown" }] }).status).toBe(
+      "unavailable",
+    )
+    expect(taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, accepted: 0 }] }).status).toBe("unavailable")
+    const { accepted: _accepted, attempted: _attempted, ...missing } = dispatch
+    expect(taskNativeDelta(broker(4), { ...after, native: [missing] }).status).toBe("unavailable")
+    expect(taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, accepted: 0, attempted: 0 }] }).status).toBe(
+      "unavailable",
+    )
+    expect(taskNativeDelta(broker(4), { ...after, legacy: true }).status).toBe("unavailable")
+    expect(taskNativeDelta(broker(4), { ...after, nativeGeneration: 1 }).status).toBe("unavailable")
+    expect(taskNativeDelta(broker(4, [prior], [dispatch]), after).status).toBe("unavailable")
+    expect(validTaskNative({ ...after, native: [{ ...dispatch, target: "private" }] })).toBe(false)
+    expect(taskNativeDelta(broker(4), { ...after, native: [{ ...dispatch, code: "partial" }] }).status).toBe(
+      "unavailable",
+    )
+    const { code: _code, ...withoutCode } = dispatch
+    expect(taskNativeDelta(broker(4), { ...after, native: [withoutCode] }).status).toBe("unavailable")
+  })
+
+  it("accepts a fresh task after old joined rows are evicted", () => {
+    const stale = { ...dispatch, hash: "3".repeat(64), requestHash: prior.hash, sessionHash: prior.sessionHash }
+    const before = { ...broker(4, [], [stale]), audit: [], nativeGeneration: 1 }
+    const action = { ...native, outcome: "confirmed" as const }
+    const after = {
+      ...broker(5, [action], [stale, dispatch]),
+      audit: [{ ...next, outcome: "confirmed" as const }],
+      nativeGeneration: 1,
+    }
+    expect(taskNativeDelta(before, after)).toMatchObject({ status: "available", native: [dispatch] })
+    expect(taskNativeDelta(before, { ...after, nativeGeneration: 2 }).status).toBe("unavailable")
+  })
+
+  it("permits a full settled ring at the start of a version 3 task", () => {
+    const audit = Array.from({ length: 256 }, (_, index) => ({
+      ...old,
+      hash: index.toString(16).padStart(64, "0"),
+    }))
+    const events = audit.map((item) => ({ ...item, sessionHash: session, phase: "post_dispatch" as const }))
+    expect(validTaskNative({ ...broker(4), audit, events })).toBe(true)
+    expect(validTaskEvidence({ epoch: "epoch-1", revision: 4, sessionHash: session, audit, events })).toBe(false)
+  })
+})
 
 function evidence(
   revision: number,

@@ -9,7 +9,7 @@ import type {
 } from "@kilocode/sdk/v2/client"
 import type { ConnectionState } from "../cli-backend/connection-service"
 import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
-import { DesktopOutcomeError, type DesktopSession } from "./desktop-session"
+import { DesktopOutcomeError, type DesktopNativeDispatch, type DesktopSession } from "./desktop-session"
 import type { DesktopPlannedAction } from "./desktop-sequence"
 
 export interface DesktopConnection {
@@ -36,8 +36,21 @@ type AuditEvent = {
   startedAt: number
   finishedAt: number
 }
+type NativeRow = {
+  hash: string
+  sessionHash: string
+  requestHash: string
+  sequence: number
+  phase: "reserved" | "settled"
+  startedAt: number
+  finishedAt?: number
+  outcome?: "confirmed" | "refused" | "cancelled" | "unknown"
+  code?: string
+  accepted?: number
+  attempted?: number
+}
 type Journal = {
-  version: 4
+  version: 5
   epoch: string
   revision: number
   lastAckAt: number | null
@@ -45,11 +58,15 @@ type Journal = {
   auditSalt: string
   audit: Audit[]
   events: AuditEvent[]
+  native: NativeRow[]
+  nativeGeneration: number
+  legacy: boolean
 }
 type LegacyJournal =
   | { version: 1; items: unknown[] }
   | { version: 2; epoch: string; revision: number; lastAckAt: number | null; items: unknown[] }
-  | (Omit<Journal, "events" | "version"> & { version: 3 })
+  | (Omit<Journal, "events" | "native" | "nativeGeneration" | "legacy" | "version"> & { version: 3 })
+  | (Omit<Journal, "native" | "nativeGeneration" | "legacy" | "version"> & { version: 4 })
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
 type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
@@ -63,6 +80,21 @@ type Authorization = Exclude<DesktopRequest, { operation: "authorize" | "sequenc
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
 const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll", "sequence"])
 const passive = new Set(["authorize", "observe", "watch", "windows"])
+
+function nativeHash(salt: string, identity: DesktopNativeDispatch["identity"]) {
+  if (
+    !identity.session ||
+    !identity.request ||
+    identity.session.length > 256 ||
+    identity.request.length > 256 ||
+    !Number.isSafeInteger(identity.sequence) ||
+    identity.sequence < 0
+  )
+    throw new Error("Native dispatch identity is invalid")
+  return createHash("sha256")
+    .update(`${salt}:${JSON.stringify([identity.session, identity.request, identity.sequence])}`)
+    .digest("hex")
+}
 
 function effect(request: DesktopRequest) {
   if (passive.has(request.operation)) return "observe" as const
@@ -129,10 +161,14 @@ export class DesktopBridge {
   private readonly offEvent: () => void
   private readonly offState: () => void
   private writes = Promise.resolve()
+  private rotation: Promise<void> | undefined
   private epoch: string = randomUUID()
   private auditSalt = randomBytes(16).toString("hex")
   private migratedAudit: Audit[] = []
   private readonly events = new Map<string, AuditEvent>()
+  private readonly native = new Map<string, NativeRow>()
+  private nativeGeneration = 0
+  private legacy = false
   private migratedRevision = 0
   private migratedAck: number | null = null
   private committed: Journal | undefined
@@ -198,6 +234,7 @@ export class DesktopBridge {
   }
 
   private async run(request: DesktopRequest, directory: string, recovered = false): Promise<void> {
+    if (this.rotation) await this.rotation.catch(() => undefined)
     if (this.disposed || this.active.has(request.id)) return
     const fingerprint = createHash("sha256")
       .update(JSON.stringify([directory, request]))
@@ -278,12 +315,18 @@ export class DesktopBridge {
     controller.signal.addEventListener("abort", onAbort, { once: true })
     this.active.set(request.id, controller)
     try {
-      const result = await this.dispatch(request, startedAt, controller.signal, () => {
-        if (controller.signal.aborted) throw new Error("Desktop action cancelled before native dispatch")
-        if (request.operation !== "authorize" && request.operation !== "sequence")
-          enforce(this.validate?.(authorization(request)), request.authorization)
-        dispatched = true
-      })
+      const result = await this.dispatch(
+        request,
+        startedAt,
+        controller.signal,
+        () => {
+          if (controller.signal.aborted) throw new Error("Desktop action cancelled before native dispatch")
+          if (request.operation !== "authorize" && request.operation !== "sequence")
+            enforce(this.validate?.(authorization(request)), request.authorization)
+          dispatched = true
+        },
+        (event) => this.nativeEvent(request, fingerprint, event),
+      )
       if (controller.signal.aborted) {
         await interrupted
         return
@@ -407,7 +450,62 @@ export class DesktopBridge {
       startedAt,
       finishedAt,
     })
-    if (this.events.size > 256) this.events.delete(this.events.keys().next().value!)
+    if (this.events.size > 256) {
+      this.events.delete(this.events.keys().next().value!)
+      this.nativeGeneration += 1
+    }
+  }
+
+  private async nativeEvent(request: DesktopRequest, fingerprint: string, event: DesktopNativeDispatch): Promise<void> {
+    if (!this.store || this.journalFault) throw new Error("Durable native dispatch evidence is unavailable")
+    const hash = nativeHash(this.auditSalt, event.identity)
+    const current = this.native.get(hash)
+    const sessionHash = createHash("sha256").update(`${this.auditSalt}:${request.sessionID}`).digest("hex")
+    const requestHash = createHash("sha256").update(`${this.auditSalt}:${fingerprint}`).digest("hex")
+    if (event.phase === "reserved") {
+      if (current) throw new Error("Native dispatch evidence identity conflict")
+      if (this.native.size >= 255) {
+        const settled = [...this.native].find((entry) => entry[1].phase === "settled")
+        if (!settled) throw new Error("Native dispatch evidence capacity reached")
+        this.native.delete(settled[0])
+        this.nativeGeneration += 1
+      }
+      this.native.set(hash, {
+        hash,
+        sessionHash,
+        requestHash,
+        sequence: event.identity.sequence,
+        phase: "reserved",
+        startedAt: Date.now(),
+      })
+    } else {
+      if (
+        !current ||
+        current.phase !== "reserved" ||
+        current.sessionHash !== sessionHash ||
+        current.requestHash !== requestHash
+      ) {
+        this.journalFault = true
+        throw new Error("Native dispatch settlement has no matching reservation")
+      }
+      if (!validNativeOutcome(event)) {
+        this.journalFault = true
+        throw new Error("Native dispatch outcome is invalid")
+      }
+      this.native.set(hash, {
+        ...current,
+        phase: "settled",
+        finishedAt: Date.now(),
+        outcome: event.outcome,
+        ...(event.code === undefined ? {} : { code: event.code }),
+        ...(event.accepted === undefined ? {} : { accepted: event.accepted }),
+        ...(event.attempted === undefined ? {} : { attempted: event.attempted }),
+      })
+    }
+    await this.persistJournal().catch((error: unknown) => {
+      this.journalFault = true
+      throw error
+    })
   }
 
   private dispatch(
@@ -415,19 +513,20 @@ export class DesktopBridge {
     startedAt: number,
     signal: AbortSignal,
     onDispatch: () => void,
+    onNative: (event: DesktopNativeDispatch) => Promise<void>,
   ): Promise<DesktopResult> {
     if (request.operation === "authorize")
       return (
         this.authorize?.(request) ??
         Promise.resolve({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" })
       )
-    if (request.operation === "sequence") return this.interact(request, startedAt, onDispatch)
+    if (request.operation === "sequence") return this.interact(request, startedAt, onDispatch, onNative)
     const decision = this.validate?.(authorization(request))
     enforce(decision, request.authorization)
     if (request.operation === "windows") return this.windows(request, startedAt, decision)
     if (request.operation === "observe" || request.operation === "watch")
       return this.observe(request, startedAt, signal, decision)
-    return this.interact(request, startedAt, onDispatch)
+    return this.interact(request, startedAt, onDispatch, onNative)
   }
 
   private async observe(
@@ -540,8 +639,13 @@ export class DesktopBridge {
     await this.verify(window, identity)
   }
 
-  private async interact(request: ActionRequest, startedAt: number, onDispatch: () => void): Promise<DesktopResult> {
-    if (request.operation === "sequence") return this.sequence(request, startedAt, onDispatch)
+  private async interact(
+    request: ActionRequest,
+    startedAt: number,
+    onDispatch: () => void,
+    onNative: (event: DesktopNativeDispatch) => Promise<void>,
+  ): Promise<DesktopResult> {
+    if (request.operation === "sequence") return this.sequence(request, startedAt, onDispatch, onNative)
     const receipt = {
       version: 1 as const,
       requestID: request.id,
@@ -573,6 +677,7 @@ export class DesktopBridge {
         },
         onDispatch,
         identity,
+        onNative,
       )
       return { operation: "move", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -591,6 +696,7 @@ export class DesktopBridge {
         },
         onDispatch,
         identity,
+        onNative,
       )
       return { operation: "drag", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -608,6 +714,7 @@ export class DesktopBridge {
         },
         onDispatch,
         identity,
+        onNative,
       )
       return { operation: "click", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -622,6 +729,7 @@ export class DesktopBridge {
         },
         onDispatch,
         identity,
+        onNative,
       )
       return { operation: "type", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -637,6 +745,7 @@ export class DesktopBridge {
         },
         onDispatch,
         identity,
+        onNative,
       )
       return { operation: "key", receipt: { ...receipt, finishedAt: Date.now() } }
     }
@@ -651,6 +760,7 @@ export class DesktopBridge {
       },
       onDispatch,
       identity,
+      onNative,
     )
     return { operation: "scroll", receipt: { ...receipt, finishedAt: Date.now() } }
   }
@@ -659,6 +769,7 @@ export class DesktopBridge {
     request: Extract<DesktopRequest, { operation: "sequence" }>,
     startedAt: number,
     onDispatch: () => void,
+    onNative: (event: DesktopNativeDispatch) => Promise<void>,
   ): Promise<DesktopResult> {
     const proofs = new Map<object, Authorization>(request.steps.map((step) => [step.action, step.action.authorization]))
     const result = await this.session.sequence(
@@ -677,6 +788,7 @@ export class DesktopBridge {
         return identity
       },
       onDispatch,
+      onNative,
     )
     const frame = result.scene
     const proof = request.steps[0]?.action.authorization
@@ -803,15 +915,27 @@ export class DesktopBridge {
       }
       this.receipts.set(entry[0], entry[1])
     }
-    if (value.version === 4 && !migrated) this.committed = structuredClone(value)
-    if (value.version === 3 || value.version === 4) this.migratedAudit = structuredClone(value.audit)
-    if (value.version === 4) for (const item of value.events) this.events.set(item.hash, { ...item })
-    if (value.version !== 4 || migrated) {
+    this.restoreEvidence(value)
+    if (value.version === 5 && !migrated) this.committed = structuredClone(value)
+    if (value.version !== 5 || migrated) {
       this.migration = true
       void this.persistJournal().catch((error) =>
         console.error("[Raya] Desktop receipt journal migration failed", error),
       )
     }
+  }
+
+  private restoreEvidence(value: Journal | LegacyJournal): void {
+    if (value.version === 3 || value.version === 4 || value.version === 5)
+      this.migratedAudit = structuredClone(value.audit)
+    if (value.version === 4 || value.version === 5)
+      for (const item of value.events) this.events.set(item.hash, { ...item })
+    if (value.version === 5) {
+      this.legacy = value.legacy
+      this.nativeGeneration = value.nativeGeneration
+      for (const item of value.native) this.native.set(item.hash, { ...item })
+    }
+    if (value.version !== 5) this.legacy = true
   }
 
   private restoreMetadata(value: Journal | LegacyJournal): void {
@@ -876,10 +1000,13 @@ export class DesktopBridge {
     if (!saved) return null
     return {
       format: "raya.desktop-action-events" as const,
-      version: 1 as const,
+      version: 2 as const,
       epoch: saved.epoch,
       revision: saved.revision,
       events: saved.events.map((item) => ({ ...item })),
+      native: saved.native.map((item) => ({ ...item })),
+      nativeGeneration: saved.nativeGeneration,
+      legacy: saved.legacy,
       releaseGateEligible: false as const,
     }
   }
@@ -929,8 +1056,7 @@ export class DesktopBridge {
       this.pendingAck !== undefined ||
       this.writes !== write ||
       this.committed !== saved ||
-      saved.audit.length >= 256 ||
-      saved.events.length >= 256
+      saved.native.some((item) => item.phase === "reserved")
     )
       return null
     return {
@@ -938,8 +1064,61 @@ export class DesktopBridge {
       revision: saved.revision,
       audit: saved.audit.map((item) => ({ ...item })),
       events: saved.events.map((item) => ({ ...item })),
+      native: saved.native.map((item) => ({ ...item })),
+      nativeGeneration: saved.nativeGeneration,
+      legacy: saved.legacy,
       sessionHash: createHash("sha256").update(`${saved.auditSalt}:${sessionID}`).digest("hex"),
     }
+  }
+
+  /** Rotate settled evidence before opening a task boundary, preserving no-replay receipts. */
+  async prepareTaskEvidence(sessionID: string) {
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(sessionID)) return null
+    if (!this.store || this.rotation || this.disposed || !this.connected || this.journalFault || this.migration)
+      return null
+    if (this.active.size || this.pendingAck !== undefined) return null
+    const write = this.writes
+    const pending = write.then(async () => {
+      const saved = this.committed
+      if (
+        !saved ||
+        this.disposed ||
+        !this.connected ||
+        this.journalFault ||
+        this.migration ||
+        this.active.size ||
+        this.pendingAck !== undefined
+      )
+        throw new Error("Desktop task evidence is unsettled")
+      if (!saved.audit.length && !saved.events.length && !saved.native.length) return
+      const next: Journal = {
+        ...saved,
+        revision: saved.revision + 1,
+        audit: [],
+        events: [],
+        native: [],
+        nativeGeneration: saved.nativeGeneration + 1,
+      }
+      await Promise.resolve(this.store!.update(journal, next)).catch((error: unknown) => {
+        this.journalFault = true
+        throw error
+      })
+      this.committed = next
+      this.nativeGeneration = next.nativeGeneration
+      this.migratedAudit = []
+      this.events.clear()
+      this.native.clear()
+    })
+    this.rotation = pending
+    this.writes = pending
+    try {
+      await pending
+    } catch {
+      return null
+    } finally {
+      if (this.rotation === pending) this.rotation = undefined
+    }
+    return this.settledJournalEvidence(sessionID)
   }
 
   private persistJournal(): Promise<void> {
@@ -971,13 +1150,10 @@ export class DesktopBridge {
         const ack = this.pendingAck
         const audit = new Map((this.committed?.audit ?? this.migratedAudit).map((item) => [item.hash, item]))
         for (const value of this.receipts.values()) {
-          const proof = persistable(value.result)
-            ? value.result.receipt
-            : persistableFailure(value.failure)
-              ? value.failure.receipt
-              : undefined
+          const proof = auditProof(value)
           if (!proof || (proof.effect !== "manage" && proof.effect !== "interact")) continue
           const hash = createHash("sha256").update(`${this.auditSalt}:${value.fingerprint}`).digest("hex")
+          if (this.nativeGeneration > 0 && !this.events.has(hash)) continue
           audit.set(hash, {
             hash,
             effect: proof.effect,
@@ -987,7 +1163,7 @@ export class DesktopBridge {
           })
         }
         const saved: Journal = {
-          version: 4,
+          version: 5,
           epoch: this.committed?.epoch ?? this.epoch,
           revision: this.committed ? this.committed.revision + 1 : Math.max(1, this.migratedRevision),
           lastAckAt:
@@ -998,8 +1174,12 @@ export class DesktopBridge {
           auditSalt: this.auditSalt,
           audit: [...audit.values()].slice(-256),
           events: [...this.events.values()].slice(-256),
+          native: [...this.native.values()],
+          nativeGeneration: this.nativeGeneration + Math.max(0, audit.size - 256),
+          legacy: this.legacy,
         }
         await Promise.resolve(this.store!.update(journal, saved))
+        this.nativeGeneration = saved.nativeGeneration
         this.committed = saved
         this.migratedAudit = []
         this.migration = false
@@ -1099,6 +1279,12 @@ function enforce(decision: AuthorizeResult | undefined, proof: Authorization): v
     throw new Error(`Desktop grant is no longer authorized: ${decision.reason}`)
 }
 
+function auditProof(value: Receipt) {
+  if (persistable(value.result)) return value.result.receipt
+  if (persistableFailure(value.failure)) return value.failure.receipt
+  return undefined
+}
+
 function persistable(value: unknown): value is ActionResult {
   if (!value || typeof value !== "object") return false
   const result = value as { operation?: unknown; receipt?: unknown }
@@ -1154,20 +1340,78 @@ function validSaved(value: unknown): value is Journal | LegacyJournal {
     auditSalt?: unknown
     audit?: unknown
     events?: unknown
+    native?: unknown
+    nativeGeneration?: unknown
+    legacy?: unknown
   }
   if (!Array.isArray(saved.items) || saved.items.length > 256) return false
   if (saved.version === 1) return true
   if (!validJournal(saved)) return false
   if (saved.version === 2) return true
   if (
-    (saved.version !== 3 && saved.version !== 4) ||
+    (saved.version !== 3 && saved.version !== 4 && saved.version !== 5) ||
     typeof saved.auditSalt !== "string" ||
     !/^[a-f0-9]{32}$/.test(saved.auditSalt)
   )
     return false
   if (!validRows(saved.audit, validAudit)) return false
   if (saved.version === 3) return true
-  return validRows(saved.events, validEvent)
+  if (!validRows(saved.events, validEvent)) return false
+  if (saved.version === 4) return true
+  return (
+    typeof saved.legacy === "boolean" &&
+    Number.isSafeInteger(saved.nativeGeneration) &&
+    (saved.nativeGeneration as number) >= 0 &&
+    validRows(saved.native, validNative)
+  )
+}
+
+function validNativeOutcome(value: { outcome?: unknown; code?: unknown; accepted?: unknown; attempted?: unknown }) {
+  if (typeof value.outcome !== "string" || !["confirmed", "refused", "cancelled", "unknown"].includes(value.outcome))
+    return false
+  if (value.code !== undefined && (typeof value.code !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(value.code)))
+    return false
+  if (value.accepted !== undefined && (!Number.isSafeInteger(value.accepted) || (value.accepted as number) < 0))
+    return false
+  if (value.attempted !== undefined && (!Number.isSafeInteger(value.attempted) || (value.attempted as number) < 0))
+    return false
+  if ((value.accepted === undefined) !== (value.attempted === undefined)) return false
+  if (
+    value.accepted !== undefined &&
+    value.attempted !== undefined &&
+    (value.accepted as number) > (value.attempted as number)
+  )
+    return false
+  return true
+}
+
+function validNative(value: unknown): value is NativeRow {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  const keys = Object.keys(item).sort().join(",")
+  if (item.phase === "reserved" && keys !== "hash,phase,requestHash,sequence,sessionHash,startedAt") return false
+  if (
+    item.phase === "settled" &&
+    ![
+      "finishedAt,hash,outcome,phase,requestHash,sequence,sessionHash,startedAt",
+      "code,finishedAt,hash,outcome,phase,requestHash,sequence,sessionHash,startedAt",
+      "accepted,attempted,finishedAt,hash,outcome,phase,requestHash,sequence,sessionHash,startedAt",
+      "accepted,attempted,code,finishedAt,hash,outcome,phase,requestHash,sequence,sessionHash,startedAt",
+    ].includes(keys)
+  )
+    return false
+  if (item.phase !== "reserved" && item.phase !== "settled") return false
+  if (
+    ![item.hash, item.sessionHash, item.requestHash].every(
+      (part) => typeof part === "string" && /^[a-f0-9]{64}$/.test(part),
+    )
+  )
+    return false
+  if (!Number.isSafeInteger(item.sequence) || (item.sequence as number) < 0) return false
+  if (!Number.isSafeInteger(item.startedAt) || (item.startedAt as number) <= 0) return false
+  if (item.phase === "reserved") return true
+  if (!validTimes(item.startedAt, item.finishedAt)) return false
+  return validNativeOutcome(item)
 }
 
 function validRows<T extends { hash: string }>(value: unknown, check: (item: unknown) => item is T): value is T[] {
@@ -1226,7 +1470,7 @@ function validJournal(value: {
   lastAckAt?: unknown
 }): boolean {
   return (
-    (value.version === 2 || value.version === 3 || value.version === 4) &&
+    (value.version === 2 || value.version === 3 || value.version === 4 || value.version === 5) &&
     Array.isArray(value.items) &&
     value.items.length <= 256 &&
     typeof value.epoch === "string" &&

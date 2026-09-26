@@ -7,13 +7,19 @@ import {
   type DesktopDriver,
   type DesktopDispatchTarget,
   type DesktopFrame,
+  type DesktopNativeDispatchHook,
   type DesktopSemantics,
   type DesktopWindow,
 } from "./desktop-session"
 import { DesktopCaptureWorker, type CapturedScene } from "./desktop-capture-worker"
 import { observeCapture } from "./desktop-capture-metrics"
 import { NativeCaptureHost } from "./desktop-native-host"
-import { NativeInputHost, NativeInputPreflightError } from "./desktop-input-host"
+import {
+  NativeInputDispatchError,
+  NativeInputHost,
+  NativeInputPreflightError,
+  type NativeInputDispatchIdentity,
+} from "./desktop-input-host"
 
 const native = String.raw`
 using System;
@@ -1965,7 +1971,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
     await this.runner.run(focus(target))
   }
 
-  async perform(action: DesktopAction, target: DesktopDispatchTarget): Promise<void> {
+  async perform(
+    action: DesktopAction,
+    target: DesktopDispatchTarget,
+    onNative?: DesktopNativeDispatchHook,
+  ): Promise<void> {
     if (this.nativeInput) {
       if ((action.operation !== "pointer" || action.action !== "move") && action.operation !== "scroll")
         throw new Error("Native desktop input trial only accepts pointer movement and scrolling")
@@ -1975,20 +1985,45 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const host = this.inputHost
       if (!host || this.inputCancelled || this.inputUnknown)
         throw new Error("Native desktop input is stopped or its prior outcome is unknown")
-      const reply = await host.dispatch(action, target).catch((error: unknown) => {
-        if (!(error instanceof NativeInputPreflightError)) this.inputUnknown = true
-        throw error
-      })
+      let binding: NativeInputDispatchIdentity | undefined
+      let reserved = false
+      const reply = await host
+        .dispatch(action, target, async (identity) => {
+          binding = identity
+          await onNative?.({ phase: "reserved", identity })
+          reserved = true
+        })
+        .catch(async (error: unknown) => {
+          if (error instanceof NativeInputDispatchError) {
+            this.inputUnknown = true
+            await onNative?.({ phase: "settled", identity: error.identity, outcome: "unknown" })
+          }
+          if (error instanceof NativeInputPreflightError && reserved && binding)
+            await onNative?.({ phase: "settled", identity: binding, outcome: "cancelled" })
+          if (!(error instanceof NativeInputPreflightError)) this.inputUnknown = true
+          throw error
+        })
+      const complete =
+        reply.type === "confirmed" && reply.code === "ok" && reply.attempted === expected && reply.accepted === expected
+      const refused = reply.type === "refused" && reply.accepted === 0
+      await Promise.resolve()
+        .then(() =>
+          onNative?.({
+            phase: "settled",
+            identity: { session: reply.session, request: reply.request, sequence: reply.sequence },
+            outcome: complete ? "confirmed" : refused ? "refused" : "unknown",
+            code: reply.code,
+            accepted: reply.accepted,
+            attempted: reply.attempted,
+          }),
+        )
+        .catch((error: unknown) => {
+          this.inputUnknown = true
+          throw error
+        })
       if (this.inputCancelled) throw new Error("Native desktop input was cancelled during dispatch")
-      if (
-        reply.type === "confirmed" &&
-        reply.code === "ok" &&
-        reply.attempted === expected &&
-        reply.accepted === expected
-      )
-        return
-      if (reply.type === "refused" && reply.accepted === 0)
-        throw new Error(`Native desktop input refused ${reply.code}`)
+      if (complete) return
+      if (refused) throw new Error(`Native desktop input refused ${reply.code}`)
       this.inputUnknown = true
       throw new Error("Native desktop input outcome is unknown; no action will be replayed")
     }

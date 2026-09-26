@@ -1,9 +1,12 @@
 import {
   taskAuditDelta,
   taskEventDelta,
+  taskNativeDelta,
   validTaskEvidence,
+  validTaskNative,
   type TaskAuditSnapshot,
   type TaskEvidenceSnapshot,
+  type TaskNativeSnapshot,
 } from "./installed-desktop-task-audit-core"
 
 export type TaskAuditIdentity = {
@@ -33,6 +36,16 @@ export type TaskEvidenceRun = {
   startedAt: number
   identity: TaskAuditIdentity
   evidence: TaskEvidenceSnapshot
+}
+
+export type TaskNativeRun = {
+  format: "raya.installed-desktop-task-boundary"
+  version: 3
+  runId: string
+  scenario: string
+  startedAt: number
+  identity: TaskAuditIdentity
+  evidence: TaskNativeSnapshot
 }
 
 const sha = /^[a-f\d]{64}$/i
@@ -116,17 +129,18 @@ export function beginTaskEvidence(
   runId: string,
   scenario: string,
   identity: TaskAuditIdentity,
-  evidence: TaskEvidenceSnapshot,
+  evidence: TaskEvidenceSnapshot | TaskNativeSnapshot,
 ) {
   if (!/^[\w-]{8,96}$/.test(runId) || !/^[\w-]{3,96}$/.test(scenario))
     return unavailable("The task identity is invalid")
   if (!valid(identity)) return unavailable("The loaded installed host, lease or input desktop is unavailable")
-  if (!validTaskEvidence(evidence)) return unavailable("No settled versioned action evidence is available")
+  const native = validTaskNative(evidence)
+  if (!native && !validTaskEvidence(evidence)) return unavailable("No settled versioned action evidence is available")
   return {
     status: "ready" as const,
     boundary: {
       format: "raya.installed-desktop-task-boundary" as const,
-      version: 2 as const,
+      version: native ? (3 as const) : (2 as const),
       runId,
       scenario,
       startedAt: Date.now(),
@@ -139,24 +153,27 @@ export function beginTaskEvidence(
 
 /** Legacy v1 markers remain readable but cannot masquerade as version 2 evidence. */
 export function endTaskEvidence(
-  run: TaskAuditRun | TaskEvidenceRun,
+  run: TaskAuditRun | TaskEvidenceRun | TaskNativeRun,
   runId: string,
   identity: TaskAuditIdentity,
-  evidence: TaskEvidenceSnapshot,
+  evidence: TaskEvidenceSnapshot | TaskNativeSnapshot,
 ) {
-  if (!run || run.format !== "raya.installed-desktop-task-boundary" || run.version !== 2)
+  if (!run || run.format !== "raya.installed-desktop-task-boundary" || (run.version !== 2 && run.version !== 3))
     return unavailable("The saved task boundary predates versioned action evidence")
   if (run.runId !== runId || !/^[\w-]{3,96}$/.test(run.scenario) || !Number.isSafeInteger(run.startedAt))
     return unavailable("The saved task boundary does not match this run")
   if (!valid(run.identity) || !valid(identity)) return unavailable("The installed host identity is unavailable")
   if (JSON.stringify(run.identity) !== JSON.stringify(identity))
     return unavailable("The installed host, backend, lease or input desktop changed during the task")
-  const delta = taskEventDelta(run.evidence, evidence)
+  const delta =
+    run.version === 3
+      ? taskNativeDelta(run.evidence, evidence as TaskNativeSnapshot)
+      : taskEventDelta(run.evidence, evidence as TaskEvidenceSnapshot)
   if (delta.status !== "available") return delta
   return {
     status: "available" as const,
     format: "raya.installed-desktop-task-boundary-result" as const,
-    version: 2 as const,
+    version: run.version,
     runId,
     scenario: run.scenario,
     startedAt: run.startedAt,

@@ -16,6 +16,20 @@ type Reply = {
   attempted: number
 }
 
+export type NativeInputDispatchIdentity = Pick<Reply, "session" | "request" | "sequence">
+
+export class NativeInputDispatchError extends Error {
+  readonly outcome = "unknown" as const
+
+  constructor(
+    message: string,
+    readonly identity: NativeInputDispatchIdentity,
+  ) {
+    super(message)
+    this.name = "NativeInputDispatchError"
+  }
+}
+
 export class NativeInputPreflightError extends Error {
   constructor(message: string) {
     super(message)
@@ -132,24 +146,39 @@ export class NativeInputHost {
     this.state = "ready"
   }
 
-  async dispatch(action: DesktopAction, value: DesktopDispatchTarget): Promise<Reply> {
+  async dispatch(
+    action: DesktopAction,
+    value: DesktopDispatchTarget,
+    prepared?: (identity: NativeInputDispatchIdentity) => void | PromiseLike<void>,
+  ): Promise<Reply> {
     if (this.state !== "ready") throw new NativeInputPreflightError("Native input broker is not ready")
-    if (this.pending.size) throw new NativeInputPreflightError("Native input broker already has a request in flight")
+    if (this.pending.size || this.dispatching)
+      throw new NativeInputPreflightError("Native input broker already has a request in flight")
+    let identity: NativeInputDispatchIdentity | undefined
     const pending = (() => {
       try {
         const detail = resolve(value)
         const effect = input(action)
         if (action.windowID.toLowerCase() !== value.windowID.toLowerCase())
           throw new Error("Native input action and target differ")
-        return this.send("dispatch", undefined, { ...detail, ...effect }, effect.payload)
+        return this.send("dispatch", undefined, { ...detail, ...effect }, effect.payload, (value) => {
+          identity = value
+          return prepared?.(value)
+        })
       } catch (error) {
         throw new NativeInputPreflightError(error instanceof Error ? error.message : String(error))
       }
     })()
     this.dispatching = pending
-    const reply = await pending.finally(() => {
-      if (this.dispatching === pending) this.dispatching = undefined
-    })
+    const reply = await pending
+      .catch((error: unknown) => {
+        if (error instanceof NativeInputPreflightError) throw error
+        if (!identity) throw error
+        throw new NativeInputDispatchError(error instanceof Error ? error.message : String(error), identity)
+      })
+      .finally(() => {
+        if (this.dispatching === pending) this.dispatching = undefined
+      })
     if (reply.type === "unknown" || reply.code === "partial") {
       this.uncertain = true
       this.state = "blocked"
@@ -177,7 +206,10 @@ export class NativeInputHost {
         throw new Error("Native input broker did not prove quiescence")
       this.quiescent = true
       const pending = this.dispatching
-      if (pending) await pending
+      if (pending)
+        await pending.catch((error: unknown) => {
+          if (!(error instanceof NativeInputPreflightError)) throw error
+        })
       if (this.uncertain || this.pending.size)
         throw new Error("Native input broker action outcome is unknown after quiescence")
     })()
@@ -193,7 +225,13 @@ export class NativeInputHost {
     this.buffer = Buffer.alloc(0)
   }
 
-  private send(kind: Kind, sequence?: number, detail?: Record<string, unknown>, payload?: Buffer) {
+  private send(
+    kind: Kind,
+    sequence?: number,
+    detail?: Record<string, unknown>,
+    payload?: Buffer,
+    prepared?: (identity: NativeInputDispatchIdentity) => void | PromiseLike<void>,
+  ) {
     const child = this.child
     if (!child || this.state === "closed") return Promise.reject(new Error("Native input broker is stopped"))
     const request = randomBytes(16).toString("hex")
@@ -211,21 +249,38 @@ export class NativeInputHost {
       ...(kind === "dispatch" ? this.fields(detail) : {}),
     }
     const packet = frame(header, payload)
-    return new Promise<Reply>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (kind === "dispatch") {
-          this.state = "blocked"
-          this.uncertain = true
-          reject(new Error("Native input broker response timed out; action outcome is unknown"))
-          return
-        }
-        this.fail(new Error("Native input broker response timed out"))
-      }, this.timeout)
-      this.pending.set(request, { kind, sequence: next, resolve, reject, timer })
-      child.stdin.write(packet, (error) => {
-        if (error) this.fail(error)
+    const transmit = () =>
+      new Promise<Reply>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          if (kind === "dispatch") {
+            this.state = "blocked"
+            this.uncertain = true
+            reject(new Error("Native input broker response timed out; action outcome is unknown"))
+            return
+          }
+          this.fail(new Error("Native input broker response timed out"))
+        }, this.timeout)
+        this.pending.set(request, { kind, sequence: next, resolve, reject, timer })
+        child.stdin.write(packet, (error) => {
+          if (error) this.fail(error)
+        })
       })
-    })
+    if (kind !== "dispatch" || !prepared) return transmit()
+    const ready = prepared({ session: this.session, request, sequence: next })
+    if (!ready || typeof ready !== "object" || typeof ready.then !== "function") {
+      if (this.state !== "ready" || this.child !== child)
+        return Promise.reject(new NativeInputPreflightError("Native input broker was cancelled before dispatch"))
+      return transmit()
+    }
+    return Promise.resolve(ready)
+      .catch((error: unknown) => {
+        throw new NativeInputPreflightError(error instanceof Error ? error.message : String(error))
+      })
+      .then(() => {
+        if (this.state !== "ready" || this.child !== child)
+          throw new NativeInputPreflightError("Native input broker was cancelled before dispatch")
+        return transmit()
+      })
   }
 
   private fields(detail?: Record<string, unknown>) {

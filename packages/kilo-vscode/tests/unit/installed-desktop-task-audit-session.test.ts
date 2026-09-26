@@ -77,6 +77,68 @@ describe("installed Desktop task audit boundary", () => {
     ).toBe("unavailable")
   })
 
+  test("opens version 3 for a settled native journal and preserves the run boundary", () => {
+    const broker = {
+      ...evidence,
+      native: [] as {
+        hash: string
+        sessionHash: string
+        requestHash: string
+        sequence: number
+        phase: "settled"
+        startedAt: number
+        finishedAt: number
+        outcome: "confirmed"
+        code: string
+        accepted: number
+        attempted: number
+      }[],
+      legacy: false,
+      nativeGeneration: 0,
+    }
+    const started = beginTaskEvidence("run-12345", "dialog-handling", identity, broker)
+    expect(started.status).toBe("ready")
+    if (started.status !== "ready") return
+    expect(started.boundary.version).toBe(3)
+    const row = {
+      hash: "f".repeat(64),
+      sessionHash,
+      requestHash: next.hash,
+      sequence: 0,
+      phase: "settled" as const,
+      startedAt: 12,
+      finishedAt: 13,
+      outcome: "confirmed" as const,
+      code: "ok",
+      accepted: 1,
+      attempted: 1,
+    }
+    const restored = JSON.parse(JSON.stringify(started.boundary)) as typeof started.boundary
+    const result = endTaskEvidence(restored, "run-12345", identity, {
+      ...broker,
+      revision: 5,
+      audit: [old, { ...next, outcome: "confirmed" }],
+      events: [{ ...event, outcome: "confirmed" }],
+      native: [row],
+    })
+    expect(result).toMatchObject({
+      status: "available",
+      version: 3,
+      evidence: { native: [row] },
+      releaseGateEligible: false,
+    })
+    expect(endTaskEvidence(restored, "other-run", identity, broker).status).toBe("unavailable")
+    expect(
+      endTaskEvidence(restored, "run-12345", { ...identity, backend: { ...identity.backend, pid: 42 } }, broker).status,
+    ).toBe("unavailable")
+    expect(beginTaskEvidence("run-12345", "dialog-handling", identity, { ...broker, legacy: true }).status).toBe(
+      "ready",
+    )
+    expect(
+      beginTaskEvidence("run-12345", "dialog-handling", identity, { ...broker, nativeTruncated: true }).status,
+    ).toBe("unavailable")
+  })
+
   test("does not upgrade a legacy task marker into version 2 evidence", () => {
     const oldRun = beginTaskAudit("run-12345", "dialog-handling", identity, before)
     if (oldRun.status !== "ready") throw new Error("Expected a legacy boundary")

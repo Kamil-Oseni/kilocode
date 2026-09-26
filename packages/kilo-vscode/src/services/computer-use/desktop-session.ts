@@ -110,6 +110,22 @@ export type DesktopDispatchTarget = {
   validUntil: number
 }
 
+export type DesktopNativeDispatch =
+  | {
+      phase: "reserved"
+      identity: { session: string; request: string; sequence: number }
+    }
+  | {
+      phase: "settled"
+      identity: { session: string; request: string; sequence: number }
+      outcome: "confirmed" | "refused" | "cancelled" | "unknown"
+      code?: string
+      accepted?: number
+      attempted?: number
+    }
+
+export type DesktopNativeDispatchHook = (event: DesktopNativeDispatch) => void | Promise<void>
+
 export interface DesktopDriver {
   // Only drivers that atomically verify the exact target before native input may set this.
   guarded?: true
@@ -127,7 +143,7 @@ export interface DesktopDriver {
   postAction?: boolean
   observeAfter?(target: DesktopDispatchTarget): Promise<DesktopFrame>
   focus(target: DesktopWindow): Promise<void>
-  perform(action: DesktopAction, target: DesktopDispatchTarget): Promise<void>
+  perform(action: DesktopAction, target: DesktopDispatchTarget, onNative?: DesktopNativeDispatchHook): Promise<void>
   cancel?(): void
 }
 
@@ -281,7 +297,12 @@ export class DesktopSession {
     return result
   }
 
-  execute(action: DesktopAction, onDispatch?: () => void, identity?: string): Promise<void> {
+  execute(
+    action: DesktopAction,
+    onDispatch?: () => void,
+    identity?: string,
+    onNative?: DesktopNativeDispatchHook,
+  ): Promise<void> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending another action"))
     const run = async () => {
@@ -314,13 +335,17 @@ export class DesktopSession {
       try {
         onDispatch?.()
         await this.driver
-          .perform(action, {
-            ...current,
-            ...(identity ? { identity } : {}),
-            scene: observed.sequence,
-            observedAt: observed.observedAt,
-            validUntil: Math.min(observed.validUntil, observed.observedAt + 10_000),
-          })
+          .perform(
+            action,
+            {
+              ...current,
+              ...(identity ? { identity } : {}),
+              scene: observed.sequence,
+              observedAt: observed.observedAt,
+              validUntil: Math.min(observed.validUntil, observed.observedAt + 10_000),
+            },
+            onNative,
+          )
           .catch((error: unknown) => {
             const detail = error instanceof Error ? error.message : String(error)
             throw new DesktopOutcomeError(action.operation, detail)
@@ -342,6 +367,7 @@ export class DesktopSession {
     input: Omit<DesktopSequenceInput, "scene"> & { observationID: string },
     authorize?: (action: DesktopPlannedAction) => string | void | Promise<string | void>,
     onDispatch?: () => void,
+    onNative?: DesktopNativeDispatchHook,
   ): Promise<DesktopSequenceResult> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending an action sequence"))
@@ -391,7 +417,7 @@ export class DesktopSession {
                 observedAt: before.observation.observedAt,
                 validUntil: Math.min(before.observation.validUntil, before.observation.observedAt + 10_000),
               }
-              await this.driver.perform(action, target).catch((error: unknown) => {
+              await this.driver.perform(action, target, onNative).catch((error: unknown) => {
                 this.observations.cancel(token)
                 const detail = error instanceof Error ? error.message : String(error)
                 throw new DesktopOutcomeError(action.operation, detail)

@@ -216,6 +216,11 @@ export class DesktopAutomationService implements vscode.Disposable {
     return this.bridge?.settledJournalEvidence(sessionID) ?? Promise.resolve(null)
   }
 
+  /** Open a fresh durable evidence window before an installed task starts. */
+  prepareTaskEvidence(sessionID: string) {
+    return this.bridge?.prepareTaskEvidence(sessionID) ?? Promise.resolve(null)
+  }
+
   /** Numeric timing from an existing local capture, or null when none is running. */
   captureTiming(signal?: AbortSignal) {
     return this.driver?.captureTiming(signal) ?? Promise.resolve(null)

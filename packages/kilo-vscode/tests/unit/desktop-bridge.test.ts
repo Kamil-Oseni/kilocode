@@ -45,6 +45,13 @@ function setup(
     listedIdentity?: string | (() => string)
     onCapture?: () => void
     limitFrames?: number
+    native?: {
+      outcome: "confirmed" | "refused" | "cancelled" | "unknown"
+      code?: string
+      accepted?: number
+      attempted?: number
+      reserved?: () => void
+    }
   } = {},
 ) {
   const replies: unknown[] = []
@@ -112,7 +119,24 @@ function setup(
     focus: async (target) => {
       focused.push(target.windowID)
     },
-    perform: async (action) => {
+    perform: async (action, _target, hook) => {
+      if (input.native && hook) {
+        const identity = {
+          session: "broker_private_session",
+          request: "broker_private_request",
+          sequence: actions.length + 1,
+        }
+        await hook({ phase: "reserved", identity })
+        input.native.reserved?.()
+        await hook({
+          phase: "settled",
+          identity,
+          outcome: input.native.outcome,
+          ...(input.native.code || input.native.outcome === "confirmed" ? { code: input.native.code ?? "ok" } : {}),
+          ...(input.native.accepted === undefined ? {} : { accepted: input.native.accepted }),
+          ...(input.native.attempted === undefined ? {} : { attempted: input.native.attempted }),
+        })
+      }
       actions.push(action)
       if (input.actionHold) await input.actionHold
       if (input.actionError) throw input.actionError
@@ -1292,7 +1316,7 @@ describe("desktop observation bridge", () => {
     expect(first.actions).toHaveLength(1)
     expect(JSON.stringify(store.read())).not.toContain("cG5n")
     expect(store.read()).toMatchObject({
-      version: 4,
+      version: 5,
       items: [{ id: click.id, result: { operation: "click", receipt: { outcome: "confirmed" } } }],
     })
     first.bridge.dispose()
@@ -1312,7 +1336,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 4, items: [] })
+    expect(store.read()).toMatchObject({ version: 5, items: [] })
     second.bridge.dispose()
   })
 
@@ -1402,7 +1426,7 @@ describe("desktop observation bridge", () => {
       }),
     ])
     expect(store.read()).toMatchObject({
-      version: 4,
+      version: 5,
       items: [{ id: click.id, failure: { receipt: { requestID: click.id, outcome: "unknown" } } }],
     })
     expect(first.bridge.journalAudit()?.entries).toMatchObject([{ effect: "interact", outcome: "unknown" }])
@@ -1444,7 +1468,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 4, items: [] })
+    expect(store.read()).toMatchObject({ version: 5, items: [] })
     second.bridge.dispose()
   })
 
@@ -1661,7 +1685,12 @@ describe("desktop observation bridge", () => {
   })
 
   it("executes a bounded sequence with final-frame and per-step evidence", async () => {
-    const test = setup({ dispatchDecision: "allow", pixels: ["start", "clicked", "typed"] })
+    const test = setup({
+      store: memory(),
+      dispatchDecision: "allow",
+      pixels: ["start", "clicked", "typed"],
+      native: { outcome: "confirmed" },
+    })
     for (const listener of test.events)
       listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
     await Bun.sleep(20)
@@ -1725,6 +1754,11 @@ describe("desktop observation bridge", () => {
         receipt: { effect: "interact", outcome: "confirmed" },
       },
     })
+    const rows = test.bridge.journalEvents()?.native
+    expect(rows).toHaveLength(2)
+    expect(rows?.map((row) => row.phase)).toEqual(["settled", "settled"])
+    expect(rows?.[0].requestHash).toBe(rows?.[1].requestHash)
+    expect(rows?.[0].hash).not.toBe(rows?.[1].hash)
     test.bridge.dispose()
   })
 
@@ -1781,7 +1815,7 @@ describe("desktop observation bridge", () => {
         error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 4, items: [] })
+    expect(store.read()).toMatchObject({ version: 5, items: [] })
     second.bridge.dispose()
 
     const fingerprint = createHash("sha256")
@@ -1965,6 +1999,121 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     return click
   }
+
+  it("persists a redacted native reservation before the driver continues and settles the same dispatch", async () => {
+    const store = memory()
+    const seen: unknown[] = []
+    const test = setup({
+      store,
+      native: {
+        outcome: "confirmed",
+        accepted: 2,
+        attempted: 2,
+        reserved: () => {
+          seen.push((store.read() as { native: unknown[] }).native)
+        },
+      },
+    })
+    const click = await native(test, "native_evidence_confirmed")
+    expect(seen).toMatchObject([[{ phase: "reserved" }]])
+    expect(test.actions).toHaveLength(1)
+    const saved = store.read() as { version: number; native: Array<Record<string, unknown>> }
+    expect(saved.version).toBe(5)
+    expect(saved.native).toMatchObject([{ phase: "settled", outcome: "confirmed", accepted: 2, attempted: 2 }])
+    expect(saved.native[0].hash).toMatch(/^[a-f0-9]{64}$/)
+    expect(saved.native[0].requestHash).toBe(test.bridge.journalEvents()?.events[0].hash)
+    expect(saved.native[0].sessionHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(JSON.stringify(saved.native)).not.toContain(click.id)
+    expect(JSON.stringify(saved.native)).not.toContain(click.sessionID)
+    expect(JSON.stringify(saved.native)).not.toContain("broker_private")
+    expect(test.bridge.journalEvents()?.releaseGateEligible).toBe(false)
+    test.bridge.dispose()
+  })
+
+  it("records an unknown native settlement and rejects unmatched or malformed dispatch evidence", async () => {
+    const store = memory()
+    const test = setup({ store, native: { outcome: "unknown", code: "pipe_lost" } })
+    await native(test, "native_evidence_unknown")
+    expect((store.read() as { native: Array<Record<string, unknown>> }).native).toMatchObject([
+      { phase: "settled", outcome: "unknown", code: "pipe_lost" },
+    ])
+    const identity = { session: "missing", request: "missing", sequence: 1 }
+    await expect(
+      test.bridge["nativeEvent"](request, "0".repeat(64), { phase: "settled", identity, outcome: "confirmed" }),
+    ).rejects.toThrow("matching reservation")
+    const saved = store.read() as { native: Array<Record<string, unknown>> }
+    test.bridge.dispose()
+    for (const row of [
+      { ...saved.native[0], request: "private" },
+      { ...saved.native[0], accepted: 3, attempted: 2 },
+      { ...saved.native[0], hash: "0".repeat(64), phase: "reserved", outcome: "unknown" },
+    ]) {
+      const next = setup({ store: memory({ ...saved, native: [row] }) })
+      expect(next.bridge.journalState()).toBe("malformed")
+      expect(next.bridge.journalEvents()).toBeNull()
+      next.bridge.dispose()
+    }
+  })
+
+  it("refuses native dispatch when its reservation cannot be durably written", async () => {
+    const data = memory()
+    const store: DesktopReceiptStore = {
+      get: data.get,
+      update: async (key, value) => {
+        const rows = (value as { native?: Array<{ phase: string }> }).native
+        if (rows?.some((row) => row.phase === "reserved")) throw new Error("storage unavailable")
+        await data.update(key, value)
+      },
+    }
+    const test = setup({ store, native: { outcome: "confirmed", accepted: 1, attempted: 1 } })
+    await native(test, "native_reservation_write_failed")
+    expect(test.actions).toEqual([])
+    expect(test.bridge.journalState()).toBe("malformed")
+    expect(test.bridge.journalEvents()).toBeNull()
+    test.bridge.dispose()
+  })
+
+  it("rotates a bounded dispatch ring before a fresh task", async () => {
+    const store = memory()
+    const first = setup({ store, native: { outcome: "confirmed" } })
+    await native(first, "native_ring_seed")
+    first.bridge.dispose()
+    const saved = store.read() as { native: Array<Record<string, unknown>> }
+    const nativeRows = Array.from({ length: 255 }, (_, index) => ({
+      ...saved.native[0],
+      hash: index.toString(16).padStart(64, "0"),
+    }))
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", { ...saved, native: nativeRows })
+    const second = setup({ store, native: { outcome: "confirmed" } })
+    for (const listener of second.states) listener("connected")
+    await native(second, "native_ring_next")
+    expect(second.actions).toHaveLength(1)
+    expect(second.bridge.journalEvents()).toMatchObject({ nativeGeneration: 1, releaseGateEligible: false })
+    expect(second.bridge.journalEvents()?.native).toHaveLength(255)
+    const before = await second.bridge.prepareTaskEvidence("ses_desktop")
+    expect(before).toMatchObject({ nativeGeneration: 2, audit: [], events: [], native: [] })
+    await native(second, "native_ring_fresh_task")
+    const after = await second.bridge.settledJournalEvidence("ses_desktop")
+    expect(after).toMatchObject({ nativeGeneration: 2, native: [{ phase: "settled", outcome: "confirmed" }] })
+    expect(after?.events).toHaveLength(1)
+    second.bridge.dispose()
+  })
+
+  it("migrates v4 event rows as legacy without inventing broker dispatch evidence", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    await native(first, "native_evidence_legacy")
+    const saved = store.read() as Record<string, unknown>
+    first.bridge.dispose()
+    const { native: _native, nativeGeneration: _generation, legacy: _legacy, ...old } = saved
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", { ...old, version: 4 })
+    const second = setup({ store })
+    expect(second.bridge.journalState()).toBe("migrating_legacy")
+    await Bun.sleep(20)
+    expect(second.bridge.journalState()).toBe("durable")
+    expect(second.bridge.journalEvents()).toMatchObject({ legacy: true, native: [], releaseGateEligible: false })
+    second.bridge.dispose()
+  })
 
   it("refuses an apparent action success when native dispatch never began", async () => {
     const test = setup({ store: memory() })
@@ -2172,7 +2321,7 @@ describe("desktop observation bridge", () => {
     test.bridge.dispose()
   })
 
-  it("refuses stale atomic evidence after a failed write or full event ring", async () => {
+  it("refuses stale atomic evidence after a failed write and records event-ring eviction", async () => {
     const data = memory()
     const state = { fail: false }
     const store: DesktopReceiptStore = {
@@ -2199,7 +2348,7 @@ describe("desktop observation bridge", () => {
       full.bridge["record"](seed, `task_evidence_${index}`, "pre_dispatch", "refused", 1, 2)
     await full.bridge["persistJournal"]()
     expect(full.bridge.journalEvents()?.events).toHaveLength(256)
-    expect(await full.bridge.settledJournalEvidence(seed.sessionID)).toBeNull()
+    expect(await full.bridge.settledJournalEvidence(seed.sessionID)).toMatchObject({ nativeGeneration: 1 })
     full.bridge.dispose()
   })
 
@@ -2378,7 +2527,7 @@ describe("desktop observation bridge", () => {
     expect(second.actions).toEqual([])
     expect(second.bridge.journalSummary()).toEqual(pending)
     expect(second.bridge.journalAudit()).toEqual(audit)
-    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(4)
+    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(5)
     expect((saved as { items: Array<{ id: string }> }).items[0].id).toBe(click.id)
     for (const listener of second.events)
       listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")

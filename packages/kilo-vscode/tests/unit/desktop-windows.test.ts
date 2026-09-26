@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { WindowsDesktopDriver } from "../../src/services/computer-use/desktop-windows"
+import type { DesktopNativeDispatch } from "../../src/services/computer-use/desktop-session"
 import type { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
 
 function harness(outputs: string[]) {
@@ -20,7 +21,7 @@ function harness(outputs: string[]) {
   }
 }
 
-function broker(mode: "confirmed" | "refused", delay = 0) {
+function broker(mode: "confirmed" | "refused" | "lost", delay = 0) {
   return `
 let buffer=Buffer.alloc(0);
 process.stdin.on("data",chunk=>{
@@ -30,6 +31,7 @@ process.stdin.on("data",chunk=>{
     if(buffer.length<size+8)return;
     const item=JSON.parse(buffer.subarray(4,size+4).toString("utf8"));
     buffer=buffer.subarray(size+8);
+    if(item.type==="dispatch"&&${JSON.stringify(mode)}==="lost"){process.exit(9);return;}
     const type=item.type==="hello"?"ready":item.type==="dispatch"?${JSON.stringify(mode)}:item.type==="cancel"?"cancelled":"quiescent";
     const code=item.type==="dispatch"?(${JSON.stringify(mode)}==="confirmed"?"ok":"bad_target"):"ok";
     const count=item.type==="dispatch"&&type==="confirmed"?1:0;
@@ -1455,6 +1457,7 @@ describe("Windows native desktop driver", () => {
 
   it("routes an opt-in movement through the native broker without a PowerShell action", async () => {
     const test = harness(["", ""])
+    const events: DesktopNativeDispatch[] = []
     const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
       binary: "node",
       args: ["-e", broker("confirmed")],
@@ -1479,7 +1482,11 @@ describe("Windows native desktop driver", () => {
         sensitive: false,
       },
       target,
+      (event) => events.push(event),
     )
+    expect(events.map((event) => event.phase)).toEqual(["reserved", "settled"])
+    expect(events[1]).toMatchObject({ outcome: "confirmed", code: "ok", accepted: 1, attempted: 1 })
+    expect(events[0].identity).toEqual(events[1].identity)
     expect(test.scripts).toEqual(["$null"])
     await expect(
       driver.perform(
@@ -1509,6 +1516,23 @@ describe("Windows native desktop driver", () => {
         { ...target, identity: undefined },
       ),
     ).rejects.toThrow(/requires observed window bounds and identity/)
+    await expect(
+      driver.perform(
+        {
+          operation: "pointer",
+          action: "move",
+          x: 0.25,
+          y: 0.25,
+          windowID: target.windowID,
+          observationID: "binding",
+          sensitive: false,
+        },
+        target,
+        () => {
+          throw new Error("durable binding unavailable")
+        },
+      ),
+    ).rejects.toThrow(/durable binding unavailable/)
     await driver.perform(
       {
         operation: "pointer",
@@ -1543,6 +1567,7 @@ describe("Windows native desktop driver", () => {
 
   it("does not fall back to PowerShell after a native refusal", async () => {
     const test = harness([""])
+    const events: DesktopNativeDispatch[] = []
     const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
       binary: "node",
       args: ["-e", broker("refused")],
@@ -1566,8 +1591,11 @@ describe("Windows native desktop driver", () => {
           sensitive: false,
         },
         target,
+        (event) => events.push(event),
       ),
     ).rejects.toThrow(/Native desktop input refused bad_target/)
+    expect(events.map((event) => event.phase)).toEqual(["reserved", "settled"])
+    expect(events[1]).toMatchObject({ outcome: "refused", code: "bad_target", accepted: 0, attempted: 0 })
     expect(test.scripts).toEqual(["$null"])
     driver.cancel()
     await (driver as unknown as { inputStop: Promise<void> }).inputStop
@@ -1593,6 +1621,7 @@ describe("Windows native desktop driver", () => {
 
   it("blocks an incomplete broker count instead of confirming a two-axis scroll", async () => {
     const test = harness([""])
+    const events: DesktopNativeDispatch[] = []
     const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
       binary: "node",
       args: ["-e", broker("confirmed")],
@@ -1613,11 +1642,44 @@ describe("Windows native desktop driver", () => {
       observationID: "obs",
       sensitive: false as const,
     }
-    await expect(driver.perform(scroll, target)).rejects.toThrow(/outcome is unknown/)
+    await expect(driver.perform(scroll, target, (event) => events.push(event))).rejects.toThrow(/outcome is unknown/)
+    expect(events[1]).toMatchObject({ phase: "settled", outcome: "unknown", accepted: 1, attempted: 1 })
     await expect(driver.perform(scroll, { ...target, scene: 2 })).rejects.toThrow(/unknown outcome/)
     expect(test.scripts).toEqual(["$null"])
     driver.cancel()
     await (driver as unknown as { inputStop: Promise<void> }).inputStop
+  })
+
+  it("retains broker identity after a lost response and never retries the native action", async () => {
+    const test = harness([""])
+    const events: DesktopNativeDispatch[] = []
+    const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
+      binary: "node",
+      args: ["-e", broker("lost")],
+    })
+    const target = {
+      windowID: "0x123",
+      identity: "A".repeat(64),
+      location: "pid:42;title:Editor;bounds:0,0,100,100",
+      scene: 1,
+      observedAt: Date.now(),
+      validUntil: Date.now() + 1000,
+    }
+    const move = {
+      operation: "pointer" as const,
+      action: "move" as const,
+      x: 0.5,
+      y: 0.5,
+      windowID: target.windowID,
+      observationID: "obs",
+      sensitive: false as const,
+    }
+    await expect(driver.perform(move, target, (event) => events.push(event))).rejects.toThrow(/outcome is unknown/)
+    expect(events.map((event) => event.phase)).toEqual(["reserved", "settled"])
+    expect(events[0].identity).toEqual(events[1].identity)
+    expect(events[1]).toMatchObject({ outcome: "unknown" })
+    await expect(driver.perform(move, { ...target, scene: 2 })).rejects.toThrow(/unknown outcome/)
+    expect(test.scripts).toEqual(["$null"])
   })
 
   it("rejects malformed native output", async () => {

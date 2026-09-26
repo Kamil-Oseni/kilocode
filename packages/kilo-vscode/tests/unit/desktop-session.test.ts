@@ -6,6 +6,7 @@ import {
   type DesktopDriver,
   type DesktopDispatchTarget,
   type DesktopFrame,
+  type DesktopNativeDispatchHook,
   type DesktopWindow,
 } from "../../src/services/computer-use/desktop-session"
 
@@ -58,7 +59,7 @@ class Driver implements DesktopDriver {
     this.focused.push(target.windowID)
   }
 
-  async perform(action: DesktopAction, target: DesktopDispatchTarget) {
+  async perform(action: DesktopAction, target: DesktopDispatchTarget, _onNative?: DesktopNativeDispatchHook) {
     this.actions.push(action)
     this.targets.push(target)
   }
@@ -160,6 +161,43 @@ describe("native desktop session boundary", () => {
       observedAt: frame.observation.observedAt,
       validUntil: frame.observation.observedAt + 10_000,
     })
+  })
+
+  it("awaits native binding before a driver effect and forwards its settlement", async () => {
+    const driver = new Driver()
+    const order: string[] = []
+    driver.perform = async (_action, _target, onNative) => {
+      await onNative?.({ phase: "reserved", identity: { session: "s", request: "r", sequence: 1 } })
+      order.push("effect")
+      await onNative?.({
+        phase: "settled",
+        identity: { session: "s", request: "r", sequence: 1 },
+        outcome: "confirmed",
+        code: "ok",
+        accepted: 1,
+        attempted: 1,
+      })
+    }
+    const session = new DesktopSession(driver)
+    const frame = await session.observe()
+    await session.execute(
+      {
+        operation: "pointer",
+        action: "move",
+        windowID: frame.windowID,
+        observationID: frame.observation.id,
+        sensitive: false,
+        x: 0.5,
+        y: 0.5,
+      },
+      undefined,
+      undefined,
+      async (event) => {
+        await Bun.sleep(1)
+        order.push(event.phase)
+      },
+    )
+    expect(order).toEqual(["reserved", "effect", "settled"])
   })
 
   it("consumes and refuses a misclassified accessible sensitive target before native dispatch", async () => {

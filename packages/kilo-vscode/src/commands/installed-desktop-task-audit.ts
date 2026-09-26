@@ -13,6 +13,7 @@ import {
   type TaskAuditIdentity,
   type TaskAuditRun,
   type TaskEvidenceRun,
+  type TaskNativeRun,
 } from "./installed-desktop-task-audit-session"
 
 const key = "raya.installedDesktopTaskAudit.v1"
@@ -70,7 +71,7 @@ export function registerInstalledDesktopTaskAudit(
       if (context.globalState.get(key)) return unavailable("Another installed Desktop task boundary is still open")
       const before = await identity()
       if (!before) return unavailable("A source-matched active Windows host and lease are required")
-      const evidence = await desktop.settledJournalEvidence(input?.sessionID ?? "")
+      const evidence = await desktop.prepareTaskEvidence(input?.sessionID ?? "")
       if (!evidence || JSON.stringify(before) !== JSON.stringify(await identity()))
         return unavailable("The host or durable action journal changed while opening the task boundary")
       const result = beginTaskEvidence(input?.runId ?? "", input?.scenario ?? "", before, evidence)
@@ -88,9 +89,10 @@ export function registerInstalledDesktopTaskAudit(
   const end = vscode.commands.registerCommand(
     "raya.endInstalledDesktopTaskAudit",
     async (input?: { runId: string; sessionID: string }) => {
-      const run = context.globalState.get<TaskAuditRun | TaskEvidenceRun>(key)
+      const run = context.globalState.get<TaskAuditRun | TaskEvidenceRun | TaskNativeRun>(key)
       if (!run) return unavailable("No installed Desktop task boundary is open")
-      if (run.version !== 2) return unavailable("The saved task boundary predates versioned action evidence")
+      if (run.version !== 2 && run.version !== 3)
+        return unavailable("The saved task boundary predates versioned action evidence")
       const after = await identity()
       if (!after) return unavailable("The installed Windows host or active lease is unavailable")
       const evidence = await desktop.settledJournalEvidence(input?.sessionID ?? "")

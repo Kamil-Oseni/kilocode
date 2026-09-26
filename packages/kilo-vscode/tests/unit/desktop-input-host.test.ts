@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test"
-import { NativeInputHost, NativeInputPreflightError } from "../../src/services/computer-use/desktop-input-host"
+import {
+  NativeInputDispatchError,
+  NativeInputHost,
+  NativeInputPreflightError,
+  type NativeInputDispatchIdentity,
+} from "../../src/services/computer-use/desktop-input-host"
 
 const action = {
   windowID: "0x123",
@@ -55,14 +60,18 @@ describe("native input broker host", () => {
   it("treats pre-send validation failures as typed and leaves the broker usable", async () => {
     const host = new NativeInputHost("node", ["-e", child("normal")])
     await host.start()
-    await expect(host.dispatch(action, { ...target, windowID: "0x124" })).rejects.toBeInstanceOf(
+    const prepared: NativeInputDispatchIdentity[] = []
+    await expect(
+      host.dispatch(action, { ...target, windowID: "0x124" }, (item) => prepared.push(item)),
+    ).rejects.toBeInstanceOf(NativeInputPreflightError)
+    await expect(host.dispatch({ ...action, x: 1.1 }, target, (item) => prepared.push(item))).rejects.toBeInstanceOf(
       NativeInputPreflightError,
     )
-    await expect(host.dispatch({ ...action, x: 1.1 }, target)).rejects.toBeInstanceOf(NativeInputPreflightError)
     const windowID = `0x${"1".repeat(4_096)}`
-    await expect(host.dispatch({ ...action, windowID }, { ...target, windowID })).rejects.toBeInstanceOf(
-      NativeInputPreflightError,
-    )
+    await expect(
+      host.dispatch({ ...action, windowID }, { ...target, windowID }, (item) => prepared.push(item)),
+    ).rejects.toBeInstanceOf(NativeInputPreflightError)
+    expect(prepared).toEqual([])
     expect(await host.dispatch(action, target)).toMatchObject({ type: "refused", code: "unsupported" })
     await host.cancel()
     host.close()
@@ -90,13 +99,81 @@ describe("native input broker host", () => {
   it("binds a session, refuses unimplemented dispatch, and acknowledges cancellation", async () => {
     const host = new NativeInputHost("node", ["-e", child("normal")])
     await host.start()
-    expect(await host.dispatch(action, target)).toMatchObject({
+    const prepared: NativeInputDispatchIdentity[] = []
+    const reply = await host.dispatch(action, target, (item) => prepared.push(item))
+    expect(reply).toMatchObject({
       type: "refused",
       code: "unsupported",
     })
+    expect(prepared).toEqual([{ session: reply.session, request: reply.request, sequence: reply.sequence }])
     await host.cancel()
     expect(host.canClose).toBe(true)
     await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
+    host.close()
+  })
+
+  it("waits for the host binding before writing and leaves a rejected binding unsent", async () => {
+    const host = new NativeInputHost("node", ["-e", child("normal")])
+    await host.start()
+    const prepared: NativeInputDispatchIdentity[] = []
+    const pending = host.dispatch(action, target, async (item) => {
+      prepared.push(item)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    })
+    expect(prepared).toHaveLength(1)
+    expect((host as unknown as { pending: Map<string, unknown> }).pending.size).toBe(0)
+    await expect(host.dispatch(action, target)).rejects.toBeInstanceOf(NativeInputPreflightError)
+    const reply = await pending
+    expect(reply.request).toBe(prepared[0].request)
+    const rejected = await host
+      .dispatch(action, { ...target, scene: 2 }, async () => {
+        throw new Error("journal unavailable")
+      })
+      .catch((value: unknown) => value)
+    expect(rejected).toBeInstanceOf(NativeInputPreflightError)
+    expect(rejected).not.toHaveProperty("identity")
+    expect((host as unknown as { pending: Map<string, unknown> }).pending.size).toBe(0)
+    expect(await host.dispatch(action, { ...target, scene: 3 })).toMatchObject({ type: "refused" })
+    await host.cancel()
+    host.close()
+  })
+
+  it("treats a cancelled async binding as a certain no-send", async () => {
+    const host = new NativeInputHost("node", ["-e", child("normal")])
+    await host.start()
+    const hold: { release?: () => void } = {}
+    const gate = new Promise<void>((resolve) => {
+      hold.release = resolve
+    })
+    const prepared: NativeInputDispatchIdentity[] = []
+    const pending = host.dispatch(action, target, (item) => {
+      prepared.push(item)
+      return gate
+    })
+    expect(prepared).toHaveLength(1)
+    expect((host as unknown as { pending: Map<string, unknown> }).pending.size).toBe(0)
+    const stopping = host.cancel()
+    hold.release?.()
+    const error = await pending.catch((value: unknown) => value)
+    expect(error).toBeInstanceOf(NativeInputPreflightError)
+    expect(error).not.toHaveProperty("identity")
+    await stopping
+    expect(host.canClose).toBe(true)
+    host.close()
+  })
+
+  it("awaits a thenable binding before sending", async () => {
+    const host = new NativeInputHost("node", ["-e", child("normal")])
+    await host.start()
+    const hold: { release?: () => void } = {}
+    const gate = new Promise<void>((resolve) => {
+      hold.release = resolve
+    })
+    const pending = host.dispatch(action, target, () => ({ then: gate.then.bind(gate) }))
+    expect((host as unknown as { pending: Map<string, unknown> }).pending.size).toBe(0)
+    hold.release?.()
+    expect(await pending).toMatchObject({ type: "refused", code: "unsupported" })
+    await host.cancel()
     host.close()
   })
 
@@ -136,11 +213,15 @@ describe("native input broker host", () => {
   it("reports unknown outcome on process loss without replay", async () => {
     const host = new NativeInputHost("node", ["-e", child("silent")])
     await host.start()
-    const pending = host.dispatch(action, target)
+    const prepared: NativeInputDispatchIdentity[] = []
+    const pending = host.dispatch(action, target, (item) => prepared.push(item))
     const broker = (host as unknown as { child: { emit: (event: string, code: number) => void } }).child
     stop(host)
     broker.emit("close", 12)
-    await expect(pending).rejects.toThrow(/outcome is unknown/i)
+    const error = await pending.catch((value: unknown) => value)
+    expect(error).toBeInstanceOf(NativeInputDispatchError)
+    expect(error).toMatchObject({ identity: prepared[0], outcome: "unknown" })
+    expect(error.message).toMatch(/outcome is unknown/i)
     await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
   })
 
@@ -176,11 +257,14 @@ describe("native input broker host", () => {
   it("does not finish cancellation before a confirmed in-flight receipt arrives", async () => {
     const host = new NativeInputHost("node", ["-e", child("delayed_confirm")])
     await host.start()
-    const pending = host.dispatch(action, target)
+    const prepared: NativeInputDispatchIdentity[] = []
+    const pending = host.dispatch(action, target, (item) => prepared.push(item))
     const stopping = host.cancel()
     await stopping
     expect(host.canClose).toBe(true)
-    expect(await pending).toMatchObject({ type: "confirmed", code: "ok", accepted: 1, attempted: 1 })
+    const reply = await pending
+    expect(reply).toMatchObject({ type: "confirmed", code: "ok", accepted: 1, attempted: 1 })
+    expect(prepared).toEqual([{ session: reply.session, request: reply.request, sequence: reply.sequence }])
     host.close()
   })
 
@@ -195,6 +279,19 @@ describe("native input broker host", () => {
     expect(host.canClose).toBe(false)
     await expect(host.dispatch(action, { ...target, scene: 3 })).rejects.toThrow(/not ready/i)
     expect(() => host.close()).toThrow(/cannot close/i)
+    stop(host)
+  })
+
+  it("retains the prepared identity when a dispatch response times out", async () => {
+    const host = new NativeInputHost("node", ["-e", child("silent")], 1_000)
+    await host.start()
+    const prepared: NativeInputDispatchIdentity[] = []
+    const error = await host.dispatch(action, target, (item) => prepared.push(item)).catch((value: unknown) => value)
+    expect(prepared).toHaveLength(1)
+    expect(error).toBeInstanceOf(NativeInputDispatchError)
+    expect(error).toMatchObject({ identity: prepared[0], outcome: "unknown" })
+    expect(error.message).toMatch(/timed out/i)
+    await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toBeInstanceOf(NativeInputPreflightError)
     stop(host)
   })
 })

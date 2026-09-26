@@ -426,6 +426,15 @@ const attachment = (message: WebviewMessage) => {
 }
 
 const activity = (message: Extract<WebviewMessage, { type: "routineOrganizationActivity" }>) => {
+  if (websiteArchived && scene === "archived-work-error") {
+    emit({
+      type: "routineOrganizationActivity",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      error: "Saved work could not be loaded.",
+    })
+    return true
+  }
   const buried = scene === "older-active"
   const rows: Work[] = buried
     ? [
@@ -446,7 +455,11 @@ const activity = (message: Extract<WebviewMessage, { type: "routineOrganizationA
           reason: undefined,
         },
       ]
-    : [...work(message.organizationID), older(message.organizationID)]
+    : [...work(message.organizationID), older(message.organizationID)].map((item) =>
+        websiteArchived && (item.state === "running" || item.state === "queued")
+          ? { ...item, state: scene === "archived-work-active" ? item.state : ("cancelled" as const) }
+          : item,
+      )
   const recordedCost = rows.reduce((total, item) => total + (item.cost ?? 0), 0)
   const committedCost = rows.reduce(
     (total, item) =>
@@ -460,13 +473,16 @@ const activity = (message: Extract<WebviewMessage, { type: "routineOrganizationA
     type: "routineOrganizationActivity",
     requestID: message.requestID,
     organizationID: message.organizationID,
-    items: buried
-      ? message.cursor === "older"
-        ? rows.slice(50)
-        : rows.slice(0, 50)
-      : message.cursor === "older"
-        ? [older(message.organizationID)]
-        : work(message.organizationID),
+    items:
+      websiteArchived && scene === "archived-work-mismatch"
+        ? [{ ...rows[0]!, organizationID: "org_22222222222222222222222222222222" }]
+        : buried
+          ? message.cursor === "older"
+            ? rows.slice(50)
+            : rows.slice(0, 50)
+          : message.cursor === "older"
+            ? [older(message.organizationID)]
+            : rows.slice(0, -1),
     summary: {
       total: rows.length,
       active: rows.filter(

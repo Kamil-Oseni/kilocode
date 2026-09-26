@@ -588,6 +588,10 @@ function flag(on: boolean) {
   return on ? "true" : undefined
 }
 
+function page(on: boolean) {
+  return on ? "page" : undefined
+}
+
 function overlay(reviewed: unknown, inspection: unknown) {
   return reviewed || inspection ? "true" : undefined
 }
@@ -797,6 +801,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [agents, setAgents] = createSignal<Agent[]>([])
   const [organizations, setOrganizations] = createSignal<Organization[]>([])
   const [organization, setOrganization] = createSignal<string>()
+  const [archiveOpen, setArchiveOpen] = createSignal(false)
+  const [archiveCount, setArchiveCount] = createSignal("…")
+  const [archiveVersion, setArchiveVersion] = createSignal(0)
   const [organizationError, setOrganizationError] = createSignal("")
   const [organizationsLoaded, setOrganizationsLoaded] = createSignal(false)
   const [editingOrganization, setEditingOrganization] = createSignal<Organization>()
@@ -972,6 +979,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const chooseOrganization = (organizationID?: string) => {
     choose()
+    setArchiveOpen(false)
     setPicked({})
     setEditingOrganization()
     setOrganizationNotice("")
@@ -1374,6 +1382,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (msg.type === "routineOrganizationArchived") {
       setEditingOrganization()
       if (organization() === msg.organizationID) chooseOrganization()
+      setArchiveVersion((version) => version + 1)
       load()
     }
   }
@@ -1905,8 +1914,15 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </div>
               </section>
             </Show>
-            <ArchivedOrganizations agents={agents()} />
           </Show>
+          <ArchivedOrganizations
+            agents={agents()}
+            open={archiveOpen()}
+            hidden={!overview()}
+            refresh={archiveVersion()}
+            onOpen={setArchiveOpen}
+            onCount={setArchiveCount}
+          />
           <div class="sr-only" role="status" aria-live="polite" aria-busy={refreshing()}>
             {freshness()}
           </div>
@@ -1923,7 +1939,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </Show>
           <div
             class="routines-inbox"
-            data-open={chosen() || currentOrganization() ? "true" : undefined}
+            data-open={flag(!!(chosen() || currentOrganization()))}
             data-review={overlay(reviewed(), inspection())}
           >
             <div class="routines-people">
@@ -1970,32 +1986,47 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       </Button>
                     </Show>
                   </div>
-                  <Show when={organizations().length > 0}>
-                    <nav class="routines-organizations" aria-label="Organizations">
-                      <button
-                        type="button"
-                        class="routines-organization"
-                        aria-current={!organization() ? "page" : undefined}
-                        onClick={() => chooseOrganization()}
-                      >
-                        All workers
-                      </button>
-                      <For each={organizations()}>
-                        {(item) => (
-                          <button
-                            type="button"
-                            class="routines-organization"
-                            data-routine-organization={item.id}
-                            aria-current={organization() === item.id ? "page" : undefined}
-                            onClick={() => chooseOrganization(item.id)}
-                          >
-                            <span>{item.name}</span>
-                            <span>{item.members.length}</span>
-                          </button>
-                        )}
-                      </For>
-                    </nav>
-                  </Show>
+                  <nav class="routines-organizations" aria-label="Organizations">
+                    <button
+                      type="button"
+                      class="routines-organization"
+                      aria-current={page(!organization() && !archiveOpen())}
+                      onClick={() => chooseOrganization()}
+                    >
+                      All workers
+                    </button>
+                    <For each={organizations()}>
+                      {(item) => (
+                        <button
+                          type="button"
+                          class="routines-organization"
+                          data-routine-organization={item.id}
+                          aria-current={page(organization() === item.id)}
+                          onClick={() => chooseOrganization(item.id)}
+                        >
+                          <span>{item.name}</span>
+                          <span>{item.members.length}</span>
+                        </button>
+                      )}
+                    </For>
+                    <button
+                      type="button"
+                      class="routines-organization routines-organization-archive-link"
+                      aria-label="Open archive directory"
+                      aria-current={page(archiveOpen() && overview())}
+                      aria-controls="routines-archived-teams"
+                      onClick={() => {
+                        chooseOrganization()
+                        setArchiveOpen(true)
+                        requestAnimationFrame(() =>
+                          document.getElementById("routines-archived-teams")?.scrollIntoView({ block: "nearest" }),
+                        )
+                      }}
+                    >
+                      <span>Archived teams</span>
+                      <span>{archiveCount()}</span>
+                    </button>
+                  </nav>
                   <Show when={organizationError()}>
                     <p class="routines-organization-error" role="status">
                       {organizationError()}

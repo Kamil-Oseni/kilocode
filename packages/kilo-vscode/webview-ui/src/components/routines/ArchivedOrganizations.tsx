@@ -1,18 +1,23 @@
-import { For, Show, createMemo, createSignal, onCleanup, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type Component } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import { routineFailure } from "../../utils/routine-recovery"
 import type { ExtensionMessage } from "../../types/messages"
 import { RetainedWorkerConversation } from "./RetainedWorkerConversation"
+import { ArchivedWork } from "./ArchivedWork"
 
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
 
 export const ArchivedOrganizations: Component<{
   agents: { id: string; name: string }[]
+  open: boolean
+  hidden: boolean
+  refresh: number
+  onOpen: (open: boolean) => void
+  onCount: (count: string) => void
 }> = (props) => {
   const vscode = useVSCode()
   const [items, setItems] = createSignal<Organization[]>([])
-  const [open, setOpen] = createSignal(false)
   const [next, setNext] = createSignal<string>()
   const [selected, setSelected] = createSignal<string>()
   const [member, setMember] = createSignal<string>()
@@ -35,24 +40,38 @@ export const ArchivedOrganizations: Component<{
   }
 
   const toggle = () => {
-    if (open()) {
-      clearTimeout(timer)
-      setOpen(false)
+    if (props.open) {
+      props.onOpen(false)
       setSelected()
       setMember()
-      setRequest()
       return
     }
-    setOpen(true)
-    setItems([])
-    setNext()
-    read()
+    props.onOpen(true)
+    if (!request() && items().length === 0 && !error()) read()
   }
+
+  onMount(() => read())
+  createEffect(
+    on(
+      () => props.refresh,
+      () => {
+        clearTimeout(timer)
+        setRequest()
+        setItems([])
+        setNext()
+        read()
+      },
+      { defer: true },
+    ),
+  )
+  createEffect(() => {
+    props.onCount(request() && items().length === 0 ? "…" : `${items().length}${next() ? "+" : ""}`)
+  })
 
   const unsubscribe = vscode.onMessage((msg: ExtensionMessage) => {
     if (msg.type === "workspaceDirectoryChanged") {
       clearTimeout(timer)
-      setOpen(false)
+      props.onOpen(false)
       setItems([])
       setNext()
       setSelected()
@@ -84,11 +103,16 @@ export const ArchivedOrganizations: Component<{
   })
 
   return (
-    <section class="routines-archived-directory" aria-label="Archived teams">
-      <Button variant="ghost" size="small" icon={open() ? "chevron-down" : "chevron-right"} onClick={toggle}>
+    <section
+      id="routines-archived-teams"
+      class="routines-archived-directory"
+      aria-label="Archived teams"
+      hidden={props.hidden}
+    >
+      <Button variant="ghost" size="small" icon={props.open ? "chevron-down" : "chevron-right"} onClick={toggle}>
         Archived teams
       </Button>
-      <Show when={open()}>
+      <Show when={props.open}>
         <div class="routines-archived-content">
           <p class="routines-archived-note">
             Their workers are stopped. Saved conversations and work remain available.
@@ -160,6 +184,7 @@ export const ArchivedOrganizations: Component<{
                     />
                   )}
                 </Show>
+                <ArchivedWork id={item.id} />
               </div>
             )}
           </Show>

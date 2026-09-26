@@ -47,7 +47,7 @@ function cost(value: unknown) {
   return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0)
 }
 
-function valid(value: unknown): value is Work {
+export function validWork(value: unknown): value is Work {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
   if (!person(row.sender) || !person(row.recipient)) return false
@@ -70,7 +70,7 @@ function valid(value: unknown): value is Work {
   )
 }
 
-function validSummary(value: unknown): value is Summary {
+export function validSummary(value: unknown): value is Summary {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
   return [
@@ -253,7 +253,7 @@ export const OrganizationActivity: Component<{
       setError("The organization totals could not be verified. Refresh and try again.")
       return
     }
-    const rows = (msg.items ?? []).filter(valid).filter((item) => item.organizationID === props.id)
+    const rows = (msg.items ?? []).filter(validWork).filter((item) => item.organizationID === props.id)
     if (!after) setItems(rows)
     else setItems((prior) => [...prior, ...rows.filter((row) => !prior.some((item) => item.id === row.id))])
     setNext(msg.next)

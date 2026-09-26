@@ -139,6 +139,10 @@
   padding: 0 clamp(18px, 3vw, 27px) 8px;
 }
 
+.routines-archived-directory[hidden] {
+  display: none;
+}
+
 .routines-archived-directory > [data-component="button"] {
   justify-self: start;
   color: var(--text-weak, var(--vscode-descriptionForeground));
@@ -516,6 +520,19 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
 .routines-view .routines-organization[aria-current="page"] {
   border-color: #6d6d73;
   background: #303033;
+}
+
+.routines-view .routines-organization-archive-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.routines-view .routines-organization-archive-link > span:last-child {
+  min-width: 1.3em;
+  color: var(--text-base, var(--vscode-foreground));
+  text-align: right;
 }
 
 .routines-view .routines-roster-search input {

@@ -73,23 +73,30 @@ export const Key = Schema.Union([
   Schema.String.check(Schema.isPattern(/^[A-Za-z0-9]$/)),
 ])
 export const Modifier = Schema.Literals(["alt", "control", "meta", "shift"])
+export const SelectedWindowTarget = Schema.Struct({
+  version: Schema.Literal(1),
+  windowID: Identity,
+})
 
 export const ObserveRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("observe"),
   authorization: Schema.optional(Authorization),
+  target: Schema.optional(SelectedWindowTarget),
 })
 
 export const WindowsRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("windows"),
   authorization: Schema.optional(Authorization),
+  target: Schema.optional(SelectedWindowTarget),
 })
 
 export const WatchRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("watch"),
   authorization: Schema.optional(Authorization),
+  target: Schema.optional(SelectedWindowTarget),
   frameCount: WatchCount,
   intervalMs: WatchInterval,
 }).check(
@@ -106,6 +113,7 @@ export const AuthorizeRequest = Schema.Struct({
   surface: Schema.Literal("desktop"),
   action: LeaseAction,
   windowID: Schema.optional(Identity),
+  target: Schema.optional(SelectedWindowTarget),
   sensitive: Sensitive,
   delegation: Schema.optional(Delegation),
   admission: Schema.optional(Schema.Literal("computer_child")),

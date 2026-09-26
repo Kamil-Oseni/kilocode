@@ -57,6 +57,9 @@ function changes(frames: Frame[]) {
       frame.width === base.width &&
       frame.height === base.height &&
       frame.mime === base.mime &&
+      frame.observation.target.surface === base.observation.target.surface &&
+      frame.observation.target.windowID === base.observation.target.windowID &&
+      frame.observation.target.location === base.observation.target.location &&
       frame.data === base.data
     ) {
       return {
@@ -298,11 +301,14 @@ export class DesktopBridge {
     signal: AbortSignal,
     decision?: AuthorizeResult,
   ): Promise<DesktopResult> {
-    const frames = await this.capture(request, signal)
     const window = decision?.windowID ?? request.authorization?.delegation?.windowID
+    const identity = decision?.identity ?? request.authorization?.delegation?.identity
+    this.target(request, window)
+    if (window) await this.foreground(window, identity)
+    const frames = await this.capture(request, signal)
     if (window && frames.some((frame) => frame.observation.target.windowID !== window))
       throw new Error("The selected desktop window changed during observation")
-    if (window) await this.verify(window, decision?.identity ?? request.authorization?.delegation?.identity)
+    if (window) await this.foreground(window, identity)
     if (request.operation === "watch") {
       const last = frames.at(-1)
       if (frames.length !== request.frameCount || !last)
@@ -351,9 +357,10 @@ export class DesktopBridge {
     startedAt: number,
     decision?: AuthorizeResult,
   ): Promise<DesktopResult> {
-    const result = await this.session.windows()
     const window = decision?.windowID ?? request.authorization?.delegation?.windowID
     const identity = decision?.identity ?? request.authorization?.delegation?.identity
+    this.target(request, window)
+    const result = await this.session.windows()
     if (window && !result.windows.some((item) => item.windowID === window && item.identity === identity))
       throw new Error("The selected desktop window is no longer available")
     return {
@@ -383,6 +390,19 @@ export class DesktopBridge {
         observationID: result.observation.id,
       },
     }
+  }
+
+  private target(request: CaptureRequest | WindowsRequest, window?: string): void {
+    if (request.target && request.target.windowID !== window)
+      throw new Error("The requested desktop target is outside the active selected-window grant")
+  }
+
+  private async foreground(window: string, identity?: string): Promise<void> {
+    if (!identity) throw new Error("Selected desktop observation needs a stable window identity")
+    const result = await this.session.windows()
+    if (!result.windows.some((item) => item.windowID === window && item.identity === identity && item.foreground))
+      throw new Error("The selected desktop window is no longer foreground or its identity changed")
+    await this.verify(window, identity)
   }
 
   private async interact(request: ActionRequest, startedAt: number, onDispatch: () => void): Promise<DesktopResult> {
@@ -710,11 +730,14 @@ function authorization(
     operation: "authorize",
     surface: "desktop",
     action,
-    ...("windowID" in request
-      ? { windowID: request.windowID }
-      : request.authorization?.delegation?.windowID
-        ? { windowID: request.authorization.delegation.windowID }
-        : {}),
+    ...("target" in request && request.target ? { target: request.target } : {}),
+    ...("target" in request && request.target
+      ? { windowID: request.target.windowID }
+      : "windowID" in request
+        ? { windowID: request.windowID }
+        : request.authorization?.delegation?.windowID
+          ? { windowID: request.authorization.delegation.windowID }
+          : {}),
     sensitive: "sensitive" in request ? request.sensitive : false,
     ...(request.authorization?.delegation ? { delegation: request.authorization.delegation } : {}),
   }

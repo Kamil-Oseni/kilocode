@@ -1170,6 +1170,10 @@ export type DesktopRequest =
       surface: "desktop"
       action: "observe" | "pointer" | "keyboard" | "scroll" | "window" | "launch" | "browser" | "files"
       windowID?: string
+      target?: {
+        version: 1
+        windowID: string
+      }
       sensitive:
         | boolean
         | "communications"
@@ -1216,6 +1220,10 @@ export type DesktopRequest =
               identity?: string
             }
           }
+      target?: {
+        version: 1
+        windowID: string
+      }
     }
   | {
       id: DesktopRequestId
@@ -1243,6 +1251,10 @@ export type DesktopRequest =
               identity?: string
             }
           }
+      target?: {
+        version: 1
+        windowID: string
+      }
     }
   | {
       id: DesktopRequestId
@@ -1270,6 +1282,10 @@ export type DesktopRequest =
               identity?: string
             }
           }
+      target?: {
+        version: 1
+        windowID: string
+      }
       frameCount: number
       intervalMs: number
     }

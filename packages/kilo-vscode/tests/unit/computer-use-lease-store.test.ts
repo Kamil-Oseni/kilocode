@@ -125,6 +125,12 @@ describe("Computer Use lease store", () => {
       identity: "identity_two",
     })
     expect(store.authorize(auth({ windowID: "window_other" })).decision).toBe("deny")
+    expect(
+      store.authorize(auth({ windowID: "window_one", target: { version: 1, windowID: "window_two" } })).decision,
+    ).toBe("deny")
+    expect(
+      store.authorize(auth({ windowID: "window_two", target: { version: 1, windowID: "window_two" } })),
+    ).toMatchObject({ decision: "allow", windowID: "window_two", identity: "identity_two" })
     expect(store.authorize(auth({ action: "observe", windowID: undefined })).decision).toBe("deny")
     expect(
       store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" })),

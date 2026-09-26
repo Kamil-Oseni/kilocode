@@ -68887,6 +68887,22 @@
                 "minLength": 1,
                 "maxLength": 200
               },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "windowID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["version", "windowID"],
+                "additionalProperties": false
+              },
               "sensitive": {
                 "anyOf": [
                   {
@@ -69042,6 +69058,22 @@
                     "additionalProperties": false
                   }
                 ]
+              },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "windowID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["version", "windowID"],
+                "additionalProperties": false
               }
             },
             "required": ["id", "sessionID", "operation"],
@@ -69145,6 +69177,22 @@
                     "additionalProperties": false
                   }
                 ]
+              },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "windowID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["version", "windowID"],
+                "additionalProperties": false
               }
             },
             "required": ["id", "sessionID", "operation"],
@@ -69248,6 +69296,22 @@
                     "additionalProperties": false
                   }
                 ]
+              },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "windowID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["version", "windowID"],
+                "additionalProperties": false
               },
               "frameCount": {
                 "type": "integer",

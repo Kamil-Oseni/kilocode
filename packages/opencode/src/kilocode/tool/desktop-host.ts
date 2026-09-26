@@ -6,7 +6,15 @@ import {
   type ActionClassification as Classification,
   type SensitiveCategory as SensitiveKind,
 } from "@/kilocode/computer-use/lease"
-import { Authorization, Key, Modifier, ScrollDelta, WatchCount, WatchInterval } from "@/kilocode/desktop/protocol"
+import {
+  Authorization,
+  Key,
+  Modifier,
+  ScrollDelta,
+  SelectedWindowTarget,
+  WatchCount,
+  WatchInterval,
+} from "@/kilocode/desktop/protocol"
 import { Delegation } from "@/kilocode/desktop/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
@@ -35,6 +43,7 @@ function approve(
   input: Parameters<Tool.Context["ask"]>[0] & {
     action: "observe" | "pointer" | "keyboard" | "scroll" | "window"
     windowID?: string
+    target?: Schema.Schema.Type<typeof SelectedWindowTarget>
     sensitive?: SensitiveKind | false
   },
 ) {
@@ -53,6 +62,7 @@ function approve(
         sensitive: input.sensitive ?? false,
         ...(delegation ? { delegation } : {}),
         ...(input.windowID ? { windowID: input.windowID } : {}),
+        ...(input.target ? { target: input.target } : {}),
       },
       ctx.abort,
     )
@@ -76,7 +86,12 @@ function approve(
   })
 }
 
-const Params = Schema.Struct({})
+const Params = Schema.Struct({
+  target: Schema.optional(SelectedWindowTarget).annotate({
+    description:
+      "Versioned exact window target for a selected-window grant. Use the opaque window ID from the grant or a fresh desktop_windows result; required when multiple windows are selected.",
+  }),
+})
 export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, Desktop.Service, "desktop_observe">(
   "desktop_observe",
   Effect.gen(function* () {
@@ -85,10 +100,12 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
       description:
         "Capture the current foreground Windows application as an image visible to the model. Use it to inspect the desktop before any future desktop action; it does not send input.",
       parameters: Params,
-      execute: (_params, ctx) =>
+      execute: (params, ctx) =>
         Effect.gen(function* () {
           const authorization = yield* approve(desktop, ctx, {
             action: "observe",
+            ...(params.target ? { windowID: params.target.windowID } : {}),
+            ...(params.target ? { target: params.target } : {}),
             permission: "desktop_observe",
             patterns: ["foreground-window"],
             always: [],
@@ -96,7 +113,12 @@ export const DesktopObserveTool = Tool.define<typeof Params, { mime: string }, D
           })
           const result = yield* run(
             desktop,
-            { operation: "observe", sessionID: ctx.sessionID, authorization },
+            {
+              operation: "observe",
+              sessionID: ctx.sessionID,
+              authorization,
+              ...(params.target ? { target: params.target } : {}),
+            },
             ctx.abort,
           )
           if (result.operation !== "observe")
@@ -135,10 +157,12 @@ export const DesktopWindowsTool = Tool.define<typeof Params, { count: number }, 
       description:
         "List up to 64 visible Windows application windows with opaque IDs, titles, process IDs, bounds, minimized state, and foreground state. The result includes a fresh single-use observation required by desktop_focus; it sends no input.",
       parameters: Params,
-      execute: (_params, ctx) =>
+      execute: (params, ctx) =>
         Effect.gen(function* () {
           const authorization = yield* approve(desktop, ctx, {
             action: "observe",
+            ...(params.target ? { windowID: params.target.windowID } : {}),
+            ...(params.target ? { target: params.target } : {}),
             permission: "desktop_windows",
             patterns: ["visible-windows"],
             always: [],
@@ -146,7 +170,12 @@ export const DesktopWindowsTool = Tool.define<typeof Params, { count: number }, 
           })
           const result = yield* run(
             desktop,
-            { operation: "windows", sessionID: ctx.sessionID, authorization },
+            {
+              operation: "windows",
+              sessionID: ctx.sessionID,
+              authorization,
+              ...(params.target ? { target: params.target } : {}),
+            },
             ctx.abort,
           )
           if (result.operation !== "windows")
@@ -215,6 +244,10 @@ export const DesktopFocusTool = Tool.define<typeof FocusParams, {}, Desktop.Serv
 )
 
 const WatchParams = Schema.Struct({
+  target: Schema.optional(SelectedWindowTarget).annotate({
+    description:
+      "Versioned exact window target for a selected-window grant; required when multiple windows are selected.",
+  }),
   frames: WatchCount.annotate({ description: "Maximum sampled frames, from 2 through 16." }),
   interval_ms: WatchInterval.annotate({
     description: "Maximum idle delay from 50 through 1000 milliseconds; changed scenes sample every 50 milliseconds.",
@@ -240,6 +273,8 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
           const pattern = `foreground-window:${params.frames}x${params.interval_ms}ms`
           const authorization = yield* approve(desktop, ctx, {
             action: "observe",
+            ...(params.target ? { windowID: params.target.windowID } : {}),
+            ...(params.target ? { target: params.target } : {}),
             permission: "desktop_watch",
             patterns: [pattern],
             always: [],
@@ -253,6 +288,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
               frameCount: params.frames,
               intervalMs: params.interval_ms,
               authorization,
+              ...(params.target ? { target: params.target } : {}),
             },
             ctx.abort,
           )

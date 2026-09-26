@@ -37,9 +37,11 @@ function setup(
     pixels?: string[]
     frameWindow?: string
     frameWindows?: string[]
+    frameLocations?: string[]
     currentWindow?: string
     listed?: string[]
     listedIdentity?: string | (() => string)
+    onCapture?: () => void
   } = {},
 ) {
   const replies: unknown[] = []
@@ -51,35 +53,38 @@ function setup(
   const states = new Set<(state: ConnectionState, error?: Error) => void>()
   let captured = 0
   const driver: DesktopDriver = {
-    observe: async () => ({
-      windowID: input.frameWindows?.[captured] ?? input.frameWindow ?? "window_1",
-      location: "process|title|bounds",
-      width: 20,
-      height: 10,
-      mime: "image/png",
-      data: input.pixels?.[captured++] ?? "cG5n",
-      semantics: {
-        source: "windows_ui_automation",
-        status: "available",
-        viewport: { x: 0, y: 0, width: 20, height: 10 },
-        controls: [
-          {
-            controlID: "42.7",
-            role: "Button",
-            name: "Save",
-            x: 4,
-            y: 5,
-            width: 10,
-            height: 6,
-            enabled: true,
-            focused: false,
-            actions: ["invoke"],
-          },
-        ],
-        truncated: false,
-      },
-      timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 3, totalMs: 20 },
-    }),
+    observe: async () => {
+      input.onCapture?.()
+      return {
+        windowID: input.frameWindows?.[captured] ?? input.frameWindow ?? "window_1",
+        location: input.frameLocations?.[captured] ?? "process|title|bounds",
+        width: 20,
+        height: 10,
+        mime: "image/png",
+        data: input.pixels?.[captured++] ?? "cG5n",
+        semantics: {
+          source: "windows_ui_automation",
+          status: "available",
+          viewport: { x: 0, y: 0, width: 20, height: 10 },
+          controls: [
+            {
+              controlID: "42.7",
+              role: "Button",
+              name: "Save",
+              x: 4,
+              y: 5,
+              width: 10,
+              height: 6,
+              enabled: true,
+              focused: false,
+              actions: ["invoke"],
+            },
+          ],
+          truncated: false,
+        },
+        timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 3, totalMs: 20 },
+      }
+    },
     windows: async () =>
       (input.listed ?? ["window_2"]).map((windowID) => ({
         windowID,
@@ -95,7 +100,7 @@ function setup(
         width: 1000,
         height: 700,
         minimized: false,
-        foreground: false,
+        foreground: windowID === (input.currentWindow ?? "window_2"),
       })),
     current: async () => ({ windowID: input.currentWindow ?? "window_1", location: "process|title|bounds" }),
     focus: async (target) => {
@@ -227,6 +232,175 @@ describe("desktop observation bridge", () => {
     })
     return { store, lease }
   }
+
+  async function multi() {
+    const store = new ComputerUseLeaseStore(
+      { get: <T>() => undefined as T | undefined, update: async () => {} },
+      () => 100,
+    )
+    const sensitive = Object.fromEntries(
+      [
+        "communications",
+        "financial",
+        "credentials",
+        "software",
+        "system",
+        "deletion",
+        "disclosure",
+        "legal",
+        "publishing",
+      ].map((category) => [category, "ask"]),
+    ) as SensitivePolicy
+    const lease = await store.grant({
+      sessionID: "ses_parent",
+      level: "autonomous",
+      duration: "session",
+      applications: "selected",
+      windows: [
+        { windowID: "window_1", identity: "identity_one" },
+        { windowID: "window_2", identity: "identity_two" },
+      ],
+      actions: ["observe"],
+      sensitive,
+      cooperativeInput: false,
+    })
+    return { store, lease }
+  }
+
+  it("refuses targetless and forged requests for a multi-window grant before capture", async () => {
+    const grant = await multi()
+    const test = setup({
+      listed: ["window_1", "window_2"],
+      listedIdentity: "identity_two",
+      frameWindow: "window_2",
+      validate: (request) => grant.store.authorize(request),
+    })
+    const base: DesktopRequest = {
+      id: "multi_missing",
+      sessionID: "ses_parent",
+      operation: "observe",
+      authorization: { kind: "grant", grantID: grant.lease.id },
+    }
+    const requests: DesktopRequest[] = [
+      base,
+      { id: "multi_list_missing", sessionID: "ses_parent", operation: "windows", authorization: base.authorization },
+      {
+        id: "multi_watch_missing",
+        sessionID: "ses_parent",
+        operation: "watch",
+        authorization: base.authorization,
+        frameCount: 2,
+        intervalMs: 50,
+      },
+      { ...base, id: "multi_forged", target: { version: 1, windowID: "window_other" } },
+      { ...base, id: "multi_wrong", target: { version: 1, windowID: "window_1" } },
+    ]
+    for (const item of requests) {
+      for (const listener of test.events)
+        listener({ type: "kilocode.desktop.requested", properties: item } as SSEPayload, "C:\\workspace")
+      await Bun.sleep(20)
+    }
+    expect(test.observed()).toBe(0)
+    expect(test.replies).toEqual([])
+    expect(test.rejects).toHaveLength(5)
+    test.bridge.dispose()
+  })
+
+  it("returns only the exact selected window and verifies identity after capture", async () => {
+    const grant = await multi()
+    let identity = "identity_two"
+    const test = setup({
+      listed: ["window_2", "window_other"],
+      listedIdentity: () => identity,
+      frameWindow: "window_2",
+      validate: (request) => grant.store.authorize(request),
+      onCapture: () => {
+        identity = "replacement"
+      },
+    })
+    const auth = { kind: "grant" as const, grantID: grant.lease.id }
+    const target = { version: 1 as const, windowID: "window_2" }
+    const list: DesktopRequest = {
+      id: "multi_list",
+      sessionID: "ses_parent",
+      operation: "windows",
+      authorization: auth,
+      target,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: list } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.replies).toContainEqual(
+      expect.objectContaining({
+        result: expect.objectContaining({ windows: [expect.objectContaining({ windowID: "window_2" })] }),
+      }),
+    )
+    const observe: DesktopRequest = {
+      id: "multi_changed",
+      sessionID: "ses_parent",
+      operation: "observe",
+      authorization: auth,
+      target,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(1)
+    expect(test.replies).toHaveLength(1)
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: observe.id }))
+    test.bridge.dispose()
+  })
+
+  it("captures a selected target only while it is foreground, including bounded watch", async () => {
+    const grant = await multi()
+    const target = { version: 1 as const, windowID: "window_2" }
+    const auth = { kind: "grant" as const, grantID: grant.lease.id }
+    const selected = setup({
+      listed: ["window_2"],
+      listedIdentity: "identity_two",
+      frameWindow: "window_2",
+      validate: (request) => grant.store.authorize(request),
+    })
+    const watch: DesktopRequest = {
+      id: "multi_watch",
+      sessionID: "ses_parent",
+      operation: "watch",
+      authorization: auth,
+      target,
+      frameCount: 2,
+      intervalMs: 50,
+    }
+    for (const listener of selected.events)
+      listener({ type: "kilocode.desktop.requested", properties: watch } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(selected.observed()).toBe(2)
+    expect(selected.replies).toContainEqual(
+      expect.objectContaining({ result: expect.objectContaining({ operation: "watch" }) }),
+    )
+    selected.bridge.dispose()
+
+    const background = setup({
+      listed: ["window_2"],
+      listedIdentity: "identity_two",
+      currentWindow: "window_1",
+      frameWindow: "window_2",
+      validate: (request) => grant.store.authorize(request),
+    })
+    const observe: DesktopRequest = {
+      id: "multi_background",
+      sessionID: "ses_parent",
+      operation: "observe",
+      authorization: auth,
+      target,
+    }
+    for (const listener of background.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(background.observed()).toBe(0)
+    expect(background.replies).toEqual([])
+    expect(background.rejects).toContainEqual(expect.objectContaining({ requestID: observe.id }))
+    background.bridge.dispose()
+  })
 
   it("refuses a reused parent window handle before frame delivery and input", async () => {
     const grant = await selected()
@@ -867,6 +1041,34 @@ describe("desktop observation bridge", () => {
     expect(frames[1].baseObservationID).toBe((frames[0].observation as { id: string }).id)
     expect(frames[2]).toMatchObject({ data: "changed" })
     expect(frames[2]).not.toHaveProperty("baseObservationID")
+    test.bridge.dispose()
+  })
+
+  it("starts a new keyframe when identical pixels move to another window or location", async () => {
+    const test = setup({
+      pixels: ["same", "same", "same", "same"],
+      frameWindows: ["window_1", "window_1", "window_2", "window_2"],
+      frameLocations: ["first", "first", "first", "second"],
+    })
+    const watch: DesktopRequest = {
+      id: "desktop_watch_target_changed",
+      sessionID: "ses_desktop",
+      operation: "watch",
+      frameCount: 4,
+      intervalMs: 500,
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: watch } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+
+    expect(test.rejects).toEqual([])
+    const frames = (test.replies[0] as { result: { frames: Array<Record<string, unknown>> } }).result.frames
+    expect(frames.map((frame) => frame.change)).toEqual(["keyframe", "unchanged", "keyframe", "keyframe"])
+    expect(frames[1].baseObservationID).toBe((frames[0].observation as { id: string }).id)
+    expect(frames[2]).toMatchObject({ data: "same" })
+    expect(frames[2]).not.toHaveProperty("baseObservationID")
+    expect(frames[3]).toMatchObject({ data: "same" })
+    expect(frames[3]).not.toHaveProperty("baseObservationID")
     test.bridge.dispose()
   })
 

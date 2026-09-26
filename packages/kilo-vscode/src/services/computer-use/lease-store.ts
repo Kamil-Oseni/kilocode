@@ -306,6 +306,8 @@ function scope(lease: ComputerUseLease, request: AuthorizationRequest): Authoriz
 function selectedScope(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
   if (lease.applications.kind !== "selected") return
   if (request.surface !== "desktop") return answer("deny", "Selected window grants apply only to this desktop window")
+  if (request.target && request.target.windowID !== request.windowID)
+    return answer("deny", "The selected desktop target differs from its authorization window")
   if ("admission" in request && request.admission === "computer_child") return
   const delegation = "delegation" in request ? request.delegation : undefined
   const window =
@@ -347,7 +349,8 @@ function invalidAdmission(request: AuthorizationRequest): boolean {
     request.surface !== "desktop" ||
     request.action !== "observe" ||
     request.sensitive ||
-    request.windowID
+    request.windowID ||
+    request.target
   )
 }
 

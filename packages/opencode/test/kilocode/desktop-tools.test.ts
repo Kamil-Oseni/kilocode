@@ -5,6 +5,7 @@ import { ObservationID } from "@/kilocode/computer-use/protocol"
 import {
   DragRequest,
   Key,
+  ObserveRequest,
   ScrollRequest,
   SequenceRequest,
   WatchRequest,
@@ -34,6 +35,29 @@ import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(AppNodeBuilder.build(Agent.node), AppNodeBuilder.build(Truncate.node)))
+
+test("desktop observation target contract rejects malformed versions and opaque IDs", () => {
+  const decode = Schema.decodeUnknownSync(ObserveRequest)
+  expect(() =>
+    decode({
+      id: "req_target",
+      sessionID: "ses_parent",
+      operation: "observe",
+      target: { version: 2, windowID: "window_selected" },
+    }),
+  ).toThrow()
+  expect(() =>
+    decode({ id: "req_target", sessionID: "ses_parent", operation: "observe", target: { version: 1, windowID: "" } }),
+  ).toThrow()
+  expect(
+    decode({
+      id: "req_target",
+      sessionID: "ses_parent",
+      operation: "observe",
+      target: { version: 1, windowID: "window_selected" },
+    }).target,
+  ).toEqual({ version: 1, windowID: "window_selected" })
+})
 
 it.instance("carries a validated child delegation from the model tool through both host requests", () =>
   Effect.gen(function* () {
@@ -116,6 +140,18 @@ it.instance("carries a validated child delegation from the model tool through bo
     expect(calls).toMatchObject([
       { operation: "authorize", delegation },
       { operation: "windows", authorization: { kind: "prompt", delegation } },
+    ])
+    calls.length = 0
+    yield* DesktopWindowsTool.pipe(
+      Effect.provideService(Desktop.Service, host),
+      Effect.flatMap(Tool.init),
+      Effect.flatMap((tool) =>
+        tool.execute({ target: { version: 1, windowID: "window_selected" } }, { ...ctx, ask: () => Effect.void }),
+      ),
+    )
+    expect(calls).toMatchObject([
+      { operation: "authorize", windowID: "window_selected", target: { version: 1, windowID: "window_selected" } },
+      { operation: "windows", target: { version: 1, windowID: "window_selected" } },
     ])
   }),
 )

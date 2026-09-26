@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-26 17:23 America/Toronto - version 2 evidence snapshot installed
+
+Pushed `73229d17ad` and installed `eden.raya@7.4.23-snapshot+73229d17ad.kamil-oseni.1790457622276`; rollback VSIX SHA-256 is `6ca9cfadcbebeee6cf95d42fa592d4a3073243ec88d672a84ed1a7f8c98dc5a3`. Extension/webview validation, production bundle, native self-tests, input-host round trip and packaging passed. Both open Raya backends still execute `+4dc086be2b`. Reload the intended VS Code window with **Developer: Reload Window**, then run **Raya: Inspect Installed Desktop Host** and independently verify the new managed backend PID/path and package digest. A different open VS Code window can reactivate the old global package-vault pointer, so recheck identity after any other-window activation. Only then run real version 2 task-boundary, changed-target, unknown/no-replay and restart trials; the 17-task release gate remains open.
+
 ## ChatGPT 2026-09-26 17:12 America/Toronto - settled version 2 task evidence
 
 The next source slice binds one installed Desktop task boundary to a settled v4 journal revision, redacted pre/post action events, matching native-effect receipts and a salted session hash. A pre-dispatch denial/cancellation needs no native receipt; every post-dispatch event requires one. Legacy v1 task markers remain explicit and ineligible. The in-memory event map is capped at 256. The combined 81 focused tests, extension typecheck/lint, Knip and formatting pass. This is not loaded-host or release-gate proof: the caller claims the session ID and no broker dispatch attestation or independent final-state scorer exists. Next: commit, push, install, reload the Raya VS Code window, run one source-matched real task boundary with restart/unknown/changed-target trials, then build the independent 17-task gate. Keep `FUT-CU-01` In progress.

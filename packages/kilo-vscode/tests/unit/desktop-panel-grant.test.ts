@@ -187,6 +187,32 @@ describe("selected desktop grant review", () => {
     expect((await done).decision).toBe("deny")
   })
 
+  it("rejects a forged durable grant for an exact window before saving it", async () => {
+    const test = setup("0x111")
+    const done = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    receive?.({
+      type: "grant",
+      level: "autonomous",
+      duration: "until_stopped",
+      applications: "current",
+      actions: ["observe", "pointer"],
+      sensitive: policy("ask"),
+      rememberPolicy: false,
+      cooperativeInput: false,
+    })
+    await Bun.sleep(0)
+    expect(test.grants).toHaveLength(0)
+    expect(posts).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: "This exact window can only be authorized for the current task.",
+      }),
+    )
+    receive?.({ type: "decline" })
+    expect((await done).decision).toBe("deny")
+  })
+
   it("shows and grants only the pinned foreground window", async () => {
     const test = setup("0x111")
     const done = test.panel.authorize(request("0x111"))

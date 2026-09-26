@@ -111,4 +111,54 @@ describe("Windows global Pause Raya shortcut", () => {
     test.listeners.data?.("ready\n")
     expect(hotkey.isReady).toBe(false)
   })
+
+  it("fails closed when takeover handling rejects without leaving an unhandled callback", async () => {
+    const test = harness()
+    const state = { manuals: 0, losses: 0 }
+    const hotkey = new WindowsPauseHotkey(
+      () => {},
+      async () => {
+        state.manuals += 1
+        throw new Error("pause persistence unavailable")
+      },
+      () => {
+        state.losses += 1
+      },
+      test.launch,
+    )
+
+    test.listeners.data?.("ready\nmanual\n")
+    expect(await hotkey.ready()).toBe(true)
+    await Promise.resolve()
+    expect(hotkey.isReady).toBe(false)
+    expect(state.manuals).toBe(1)
+    expect(state.losses).toBe(1)
+    test.listeners.data?.("manual\n")
+    expect(state.manuals).toBe(1)
+    expect(state.losses).toBe(1)
+    hotkey.dispose()
+  })
+
+  it("contains a synchronous shortcut failure and a rejected loss handler", async () => {
+    const test = harness()
+    const state = { losses: 0 }
+    const hotkey = new WindowsPauseHotkey(
+      () => {
+        throw new Error("shortcut handler failed")
+      },
+      () => {},
+      async () => {
+        state.losses += 1
+        throw new Error("pause persistence unavailable")
+      },
+      test.launch,
+    )
+
+    test.listeners.data?.("ready\npause\n")
+    expect(await hotkey.ready()).toBe(true)
+    expect(hotkey.isReady).toBe(false)
+    expect(state.losses).toBe(1)
+    await Promise.resolve()
+    hotkey.dispose()
+  })
 })

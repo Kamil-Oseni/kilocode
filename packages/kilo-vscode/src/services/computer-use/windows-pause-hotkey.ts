@@ -193,8 +193,17 @@ export class WindowsPauseHotkey {
         clearTimeout(this.timer)
         this.settle(true)
       }
-      if (line.trim() === "pause") void this.pause()
-      if (line.trim() === "manual") void this.manual()
+      if (line.trim() === "pause") this.signal(this.pause, "Pause shortcut")
+      if (line.trim() === "manual") this.signal(this.manual, "Manual takeover")
+    }
+  }
+
+  private signal(handler: () => void | Promise<void>, label: string): void {
+    if (this.disposed || this.failed) return
+    try {
+      void Promise.resolve(handler()).catch(() => this.fail(`${label} handler failed`))
+    } catch {
+      this.fail(`${label} handler failed`)
     }
   }
 
@@ -204,6 +213,10 @@ export class WindowsPauseHotkey {
     clearTimeout(this.timer)
     this.settle(false)
     console.error(`[Raya] Global Pause listener stopped: ${detail}`)
-    void this.loss()
+    try {
+      void Promise.resolve(this.loss()).catch(() => console.error("[Raya] Global Pause listener loss handler failed"))
+    } catch {
+      console.error("[Raya] Global Pause listener loss handler failed")
+    }
   }
 }

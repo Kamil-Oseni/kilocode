@@ -20,6 +20,31 @@ function harness(outputs: string[]) {
   }
 }
 
+function broker(mode: "confirmed" | "refused", delay = 0) {
+  return `
+let buffer=Buffer.alloc(0);
+process.stdin.on("data",chunk=>{
+  buffer=Buffer.concat([buffer,chunk]);
+  while(buffer.length>=8){
+    const size=buffer.readUInt32LE(0);
+    if(buffer.length<size+8)return;
+    const item=JSON.parse(buffer.subarray(4,size+4).toString("utf8"));
+    buffer=buffer.subarray(size+8);
+    const type=item.type==="hello"?"ready":item.type==="dispatch"?${JSON.stringify(mode)}:item.type==="cancel"?"cancelled":"quiescent";
+    const code=item.type==="dispatch"?(${JSON.stringify(mode)}==="confirmed"?"ok":"bad_target"):"ok";
+    const count=item.type==="dispatch"&&type==="confirmed"?1:0;
+    const value={v:2,type,session:item.session,request:item.request,sequence:item.sequence,code,accepted:count,attempted:count};
+    const body=Buffer.from(JSON.stringify(value));
+    const packet=Buffer.alloc(body.length+8);
+    packet.writeUInt32LE(body.length,0);
+    body.copy(packet,4);
+    if(item.type==="hello")setTimeout(()=>process.stdout.write(packet),${delay});
+    else process.stdout.write(packet);
+  }
+});
+`
+}
+
 describe("Windows native desktop driver", () => {
   it("observes only an existing capture and cancels timing when capture stops", async () => {
     let captures = 0
@@ -1426,6 +1451,173 @@ describe("Windows native desktop driver", () => {
     )
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse(0x0800, $data)")
     expect(test.scripts[0]).not.toContain("[RayaDesktopNative]::Mouse(0x1000, $data)")
+  })
+
+  it("routes an opt-in movement through the native broker without a PowerShell action", async () => {
+    const test = harness(["", ""])
+    const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
+      binary: "node",
+      args: ["-e", broker("confirmed")],
+    })
+    const target = {
+      windowID: "0x123",
+      identity: "A".repeat(64),
+      location: "pid:42;title:Editor;bounds:0,0,100,100",
+      scene: 1,
+      observedAt: Date.now(),
+      validUntil: Date.now() + 1000,
+    }
+    await driver.warmup()
+    await driver.perform(
+      {
+        operation: "pointer",
+        action: "move",
+        x: 0.5,
+        y: 0.5,
+        windowID: target.windowID,
+        observationID: "obs",
+        sensitive: false,
+      },
+      target,
+    )
+    expect(test.scripts).toEqual(["$null"])
+    await expect(
+      driver.perform(
+        {
+          operation: "pointer",
+          action: "click",
+          x: 0.5,
+          y: 0.5,
+          windowID: target.windowID,
+          observationID: "obs",
+          sensitive: false,
+        },
+        target,
+      ),
+    ).rejects.toThrow(/only accepts pointer movement and scrolling/)
+    await expect(
+      driver.perform(
+        {
+          operation: "pointer",
+          action: "move",
+          x: 0.25,
+          y: 0.25,
+          windowID: target.windowID,
+          observationID: "bad",
+          sensitive: false,
+        },
+        { ...target, identity: undefined },
+      ),
+    ).rejects.toThrow(/requires observed window bounds and identity/)
+    await driver.perform(
+      {
+        operation: "pointer",
+        action: "move",
+        x: 0.25,
+        y: 0.25,
+        windowID: target.windowID,
+        observationID: "valid",
+        sensitive: false,
+      },
+      { ...target, scene: 2 },
+    )
+    expect(test.scripts).toEqual(["$null"])
+    driver.cancel()
+    await (driver as unknown as { inputStop: Promise<void> }).inputStop
+    await driver.perform(
+      {
+        operation: "pointer",
+        action: "move",
+        x: 0.25,
+        y: 0.25,
+        windowID: target.windowID,
+        observationID: "next",
+        sensitive: false,
+      },
+      { ...target, scene: 2 },
+    )
+    expect(test.scripts).toEqual(["$null", "$null"])
+    driver.cancel()
+    await (driver as unknown as { inputStop: Promise<void> }).inputStop
+  })
+
+  it("does not fall back to PowerShell after a native refusal", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
+      binary: "node",
+      args: ["-e", broker("refused")],
+    })
+    const target = {
+      windowID: "0x123",
+      identity: "A".repeat(64),
+      location: "pid:42;title:Editor;bounds:0,0,100,100",
+      scene: 1,
+      observedAt: Date.now(),
+      validUntil: Date.now() + 1000,
+    }
+    await expect(
+      driver.perform(
+        {
+          operation: "scroll",
+          deltaX: 0,
+          deltaY: 120,
+          windowID: target.windowID,
+          observationID: "obs",
+          sensitive: false,
+        },
+        target,
+      ),
+    ).rejects.toThrow(/Native desktop input refused bad_target/)
+    expect(test.scripts).toEqual(["$null"])
+    driver.cancel()
+    await (driver as unknown as { inputStop: Promise<void> }).inputStop
+  })
+
+  it("seals broker startup immediately when control is cancelled", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
+      binary: "node",
+      args: ["-e", broker("confirmed", 150)],
+    })
+    const pending = driver.warmup()
+    for (let index = 0; index < 100; index++) {
+      if ((driver as unknown as { inputHost?: unknown }).inputHost) break
+      await Bun.sleep(2)
+    }
+    expect((driver as unknown as { inputHost?: unknown }).inputHost).toBeDefined()
+    driver.cancel()
+    await expect(pending).rejects.toThrow(/cancelled/)
+    await (driver as unknown as { inputStop: Promise<void> }).inputStop
+    expect(test.scripts).toEqual(["$null"])
+  })
+
+  it("blocks an incomplete broker count instead of confirming a two-axis scroll", async () => {
+    const test = harness([""])
+    const driver = new WindowsDesktopDriver(test.runner, undefined, undefined, [], undefined, undefined, {
+      binary: "node",
+      args: ["-e", broker("confirmed")],
+    })
+    const target = {
+      windowID: "0x123",
+      identity: "A".repeat(64),
+      location: "pid:42;title:Editor;bounds:0,0,100,100",
+      scene: 1,
+      observedAt: Date.now(),
+      validUntil: Date.now() + 1000,
+    }
+    const scroll = {
+      operation: "scroll" as const,
+      deltaX: 120,
+      deltaY: 120,
+      windowID: target.windowID,
+      observationID: "obs",
+      sensitive: false as const,
+    }
+    await expect(driver.perform(scroll, target)).rejects.toThrow(/outcome is unknown/)
+    await expect(driver.perform(scroll, { ...target, scene: 2 })).rejects.toThrow(/unknown outcome/)
+    expect(test.scripts).toEqual(["$null"])
+    driver.cancel()
+    await (driver as unknown as { inputStop: Promise<void> }).inputStop
   })
 
   it("rejects malformed native output", async () => {

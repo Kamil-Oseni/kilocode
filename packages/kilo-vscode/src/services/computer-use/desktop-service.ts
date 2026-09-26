@@ -35,6 +35,10 @@ export class DesktopAutomationService implements vscode.Disposable {
       binary,
       [],
       binary ? join(context.globalStorageUri.fsPath, "desktop-capture-faults") : undefined,
+      undefined,
+      process.env.RAYA_NATIVE_INPUT_TRIAL === "1"
+        ? { binary: join(context.extensionPath, "bin", "raya-desktop-input.exe") }
+        : undefined,
     )
     context.subscriptions.push(
       vscode.commands.registerCommand("raya.captureTiming", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { NativeInputHost } from "../../src/services/computer-use/desktop-input-host"
+import { NativeInputHost, NativeInputPreflightError } from "../../src/services/computer-use/desktop-input-host"
 
 const action = {
   windowID: "0x123",
@@ -19,7 +19,7 @@ const target = {
   validUntil: Date.now() + 1000,
 }
 
-function child(mode: "normal" | "silent" | "partial") {
+function child(mode: "normal" | "silent" | "partial" | "delayed" | "delayed_confirm" | "slow_hello") {
   return `
 let buffer=Buffer.alloc(0);
 process.stdin.on("data",chunk=>{
@@ -29,23 +29,64 @@ process.stdin.on("data",chunk=>{
     if(buffer.length<size+8)return;
     const item=JSON.parse(buffer.subarray(4,size+4).toString("utf8"));
     buffer=buffer.subarray(size+8);
-    if(${JSON.stringify(mode)}==="silent" && item.type==="dispatch")return;
+    if(${JSON.stringify(mode)}==="silent" && item.type==="dispatch")continue;
     const partial=${JSON.stringify(mode)}==="partial";
-    const type=item.type==="hello"?"ready":item.type==="dispatch"?(partial?"unknown":"refused"):item.type==="cancel"?"cancelled":(partial?"unknown":"quiescent");
-    const code=item.type==="dispatch"?(partial?"partial":"unsupported"):item.type==="quiescent"&&partial?"partial":item.type==="cancel"?"in_flight":"ok";
-    const value={v:2,type,session:item.session,request:item.request,sequence:item.sequence,code,accepted:item.type==="dispatch"&&partial?1:0,attempted:item.type==="dispatch"&&partial?2:0};
+    const confirmed=${JSON.stringify(mode)}==="delayed_confirm";
+    const type=item.type==="hello"?"ready":item.type==="dispatch"?(partial?"unknown":confirmed?"confirmed":"refused"):item.type==="cancel"?"cancelled":(partial?"unknown":"quiescent");
+    const code=item.type==="dispatch"?(partial?"partial":confirmed?"ok":"unsupported"):item.type==="quiescent"&&partial?"partial":item.type==="cancel"?"in_flight":"ok";
+    const value={v:2,type,session:item.session,request:item.request,sequence:item.sequence,code,accepted:item.type==="dispatch"&&(partial||confirmed)?1:0,attempted:item.type==="dispatch"?partial?2:confirmed?1:0:0};
     const body=Buffer.from(JSON.stringify(value));
     const packet=Buffer.alloc(body.length+8);
     packet.writeUInt32LE(body.length,0);
     body.copy(packet,4);
     packet.writeUInt32LE(0,body.length+4);
-    process.stdout.write(packet);
+    if(((${JSON.stringify(mode)}==="delayed"||${JSON.stringify(mode)}==="delayed_confirm") && item.type==="dispatch")||(${JSON.stringify(mode)}==="slow_hello" && item.type==="hello"))setTimeout(()=>process.stdout.write(packet),150);
+    else process.stdout.write(packet);
   }
 });
 `
 }
 
+function stop(host: NativeInputHost) {
+  ;(host as unknown as { child?: { kill: () => void } }).child?.kill()
+}
+
 describe("native input broker host", () => {
+  it("treats pre-send validation failures as typed and leaves the broker usable", async () => {
+    const host = new NativeInputHost("node", ["-e", child("normal")])
+    await host.start()
+    await expect(host.dispatch(action, { ...target, windowID: "0x124" })).rejects.toBeInstanceOf(
+      NativeInputPreflightError,
+    )
+    await expect(host.dispatch({ ...action, x: 1.1 }, target)).rejects.toBeInstanceOf(NativeInputPreflightError)
+    const windowID = `0x${"1".repeat(4_096)}`
+    await expect(host.dispatch({ ...action, windowID }, { ...target, windowID })).rejects.toBeInstanceOf(
+      NativeInputPreflightError,
+    )
+    expect(await host.dispatch(action, target)).toMatchObject({ type: "refused", code: "unsupported" })
+    await host.cancel()
+    host.close()
+  })
+
+  it("closes safely when cancelled before startup without launching a broker", async () => {
+    const host = new NativeInputHost("node", ["-e", child("normal")])
+    await host.cancel()
+    expect(host.canClose).toBe(true)
+    await expect(host.start()).rejects.toBeInstanceOf(NativeInputPreflightError)
+    host.close()
+  })
+
+  it("seals dispatch while startup hello is pending, then cancels the bound broker", async () => {
+    const host = new NativeInputHost("node", ["-e", child("slow_hello")])
+    const starting = host.start()
+    const stopping = host.cancel()
+    await expect(host.dispatch(action, target)).rejects.toBeInstanceOf(NativeInputPreflightError)
+    await expect(starting).rejects.toBeInstanceOf(NativeInputPreflightError)
+    await stopping
+    expect(host.canClose).toBe(true)
+    host.close()
+  })
+
   it("binds a session, refuses unimplemented dispatch, and acknowledges cancellation", async () => {
     const host = new NativeInputHost("node", ["-e", child("normal")])
     await host.start()
@@ -54,6 +95,7 @@ describe("native input broker host", () => {
       code: "unsupported",
     })
     await host.cancel()
+    expect(host.canClose).toBe(true)
     await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
     host.close()
   })
@@ -86,13 +128,18 @@ describe("native input broker host", () => {
     internals.read(packet)
     await expect(pending).rejects.toThrow(/stale reply/i)
     await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
+    expect(host.canClose).toBe(false)
+    expect(() => host.close()).toThrow(/cannot close/i)
+    stop(host)
   })
 
   it("reports unknown outcome on process loss without replay", async () => {
     const host = new NativeInputHost("node", ["-e", child("silent")])
     await host.start()
     const pending = host.dispatch(action, target)
-    ;(host as unknown as { child: { emit: (event: string, code: number) => void } }).child.emit("close", 12)
+    const broker = (host as unknown as { child: { emit: (event: string, code: number) => void } }).child
+    stop(host)
+    broker.emit("close", 12)
     await expect(pending).rejects.toThrow(/outcome is unknown/i)
     await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
   })
@@ -107,6 +154,47 @@ describe("native input broker host", () => {
       attempted: 2,
     })
     await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await expect(host.cancel()).rejects.toThrow(/quiescence/i)
+    expect(host.canClose).toBe(false)
+    expect(() => host.close()).toThrow(/cannot close/i)
+    stop(host)
+  })
+
+  it("seals input immediately on cancellation and waits for the original dispatch receipt", async () => {
+    const host = new NativeInputHost("node", ["-e", child("delayed")])
+    await host.start()
+    const pending = host.dispatch(action, target)
+    const stopping = host.cancel()
+    await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/not ready/i)
+    await stopping
+    expect(host.canClose).toBe(true)
+    expect(await pending).toMatchObject({ type: "refused", code: "unsupported" })
     host.close()
+  })
+
+  it("does not finish cancellation before a confirmed in-flight receipt arrives", async () => {
+    const host = new NativeInputHost("node", ["-e", child("delayed_confirm")])
+    await host.start()
+    const pending = host.dispatch(action, target)
+    const stopping = host.cancel()
+    await stopping
+    expect(host.canClose).toBe(true)
+    expect(await pending).toMatchObject({ type: "confirmed", code: "ok", accepted: 1, attempted: 1 })
+    host.close()
+  })
+
+  it("keeps a lost dispatch reply unknown even after cancellation and quiescence", async () => {
+    const host = new NativeInputHost("node", ["-e", child("silent")], 2_000)
+    await host.start()
+    const pending = host.dispatch(action, target)
+    await expect(host.dispatch(action, { ...target, scene: 2 })).rejects.toThrow(/in flight/i)
+    await expect(pending).rejects.toThrow(/outcome is unknown/i)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await expect(host.cancel()).rejects.toThrow(/outcome is unknown/i)
+    expect(host.canClose).toBe(false)
+    await expect(host.dispatch(action, { ...target, scene: 3 })).rejects.toThrow(/not ready/i)
+    expect(() => host.close()).toThrow(/cannot close/i)
+    stop(host)
   })
 })

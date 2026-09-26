@@ -13,6 +13,7 @@ import {
 import { DesktopCaptureWorker, type CapturedScene } from "./desktop-capture-worker"
 import { observeCapture } from "./desktop-capture-metrics"
 import { NativeCaptureHost } from "./desktop-native-host"
+import { NativeInputHost, NativeInputPreflightError } from "./desktop-input-host"
 
 const native = String.raw`
 using System;
@@ -1439,6 +1440,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
   private worker: DesktopCaptureWorker | undefined
   private timing: ReturnType<typeof observeCapture> | undefined
   private host: NativeCaptureHost | undefined
+  private inputHost: NativeInputHost | undefined
+  private inputStop: Promise<void> | undefined
+  private inputUnknown = false
+  private inputCancelled = false
+  private inputGeneration = 0
   private scope: { windowID: string; identity: string } | undefined
 
   get postAction(): boolean {
@@ -1452,6 +1458,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
     private readonly args: string[] = [],
     private readonly receiptDir?: string,
     probe?: Runner,
+    private readonly nativeInput?: { binary: string; args?: string[] },
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
@@ -1504,8 +1511,34 @@ export class WindowsDesktopDriver implements DesktopDriver {
 
   async warmup(): Promise<void> {
     if (this.preparing) return this.preparing
-    const pending = this.runner.run("$null").then((result) => {
+    if (this.nativeInput && this.inputUnknown)
+      throw new Error("Native desktop input has an unknown outcome; restart requires inspection")
+    if (this.nativeInput && this.inputHost && !this.inputCancelled && !this.inputUnknown) return
+    const pending = this.runner.run("$null").then(async (result) => {
       if (result !== "") throw new Error("Windows desktop host readiness response is invalid")
+      if (!this.nativeInput) return
+      if (this.inputUnknown) throw new Error("Native desktop input has an unknown outcome; restart requires inspection")
+      if (this.inputHost && !this.inputCancelled) return
+      if (this.inputStop) await this.inputStop
+      if (this.inputUnknown) throw new Error("Native desktop input could not prove quiescence")
+      if (this.inputHost) {
+        if (!this.inputHost.canClose) throw new Error("Native desktop input has not proved safe close")
+        this.inputHost.close()
+      }
+      const host = new NativeInputHost(this.nativeInput.binary, this.nativeInput.args)
+      const generation = this.inputGeneration
+      this.inputHost = host
+      await host.start().catch((error: unknown) => {
+        if (generation === this.inputGeneration) this.inputUnknown = true
+        throw error
+      })
+      if (generation !== this.inputGeneration) {
+        this.inputCancelled = true
+        if (!this.inputStop) this.stopInput(host)
+        throw new Error("Native desktop input startup was cancelled")
+      }
+      this.inputCancelled = false
+      this.inputStop = undefined
     })
     this.preparing = pending
     try {
@@ -1932,17 +1965,60 @@ export class WindowsDesktopDriver implements DesktopDriver {
     await this.runner.run(focus(target))
   }
 
-  async perform(
-    action: DesktopAction,
-    target: { windowID: string; location?: string; identity?: string },
-  ): Promise<void> {
+  async perform(action: DesktopAction, target: DesktopDispatchTarget): Promise<void> {
+    if (this.nativeInput) {
+      if ((action.operation !== "pointer" || action.action !== "move") && action.operation !== "scroll")
+        throw new Error("Native desktop input trial only accepts pointer movement and scrolling")
+      const expected = action.operation === "scroll" ? Number(action.deltaX !== 0) + Number(action.deltaY !== 0) : 1
+      if (!expected) throw new Error("Native desktop input trial requires a non-zero scroll")
+      await this.warmup()
+      const host = this.inputHost
+      if (!host || this.inputCancelled || this.inputUnknown)
+        throw new Error("Native desktop input is stopped or its prior outcome is unknown")
+      const reply = await host.dispatch(action, target).catch((error: unknown) => {
+        if (!(error instanceof NativeInputPreflightError)) this.inputUnknown = true
+        throw error
+      })
+      if (this.inputCancelled) throw new Error("Native desktop input was cancelled during dispatch")
+      if (
+        reply.type === "confirmed" &&
+        reply.code === "ok" &&
+        reply.attempted === expected &&
+        reply.accepted === expected
+      )
+        return
+      if (reply.type === "refused" && reply.accepted === 0)
+        throw new Error(`Native desktop input refused ${reply.code}`)
+      this.inputUnknown = true
+      throw new Error("Native desktop input outcome is unknown; no action will be replayed")
+    }
     await this.runner.run(perform(action, target))
   }
 
   cancel(): void {
+    this.inputGeneration += 1
+    this.inputCancelled = true
+    if (this.inputHost && !this.inputStop) this.stopInput(this.inputHost)
     this.stopCapture()
     this.cancelProbe()
     this.last = undefined
     this.runner.cancel()
+  }
+
+  private stopInput(host: NativeInputHost): void {
+    this.inputStop = host
+      .cancel()
+      .then(() => {
+        if (!host.canClose) {
+          this.inputUnknown = true
+          return
+        }
+        host.close()
+        if (this.inputHost === host) this.inputHost = undefined
+      })
+      .catch((error) => {
+        this.inputUnknown = true
+        console.error("[Raya] Native desktop input cancellation did not settle", error)
+      })
   }
 }

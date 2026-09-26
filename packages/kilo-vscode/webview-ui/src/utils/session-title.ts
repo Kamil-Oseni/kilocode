@@ -10,3 +10,20 @@ export function displayTitle(title: string | undefined | null, fallback: string)
   const trimmed = title?.trim()
   return trimmed && !DEFAULT_SESSION_TITLE.test(trimmed) ? trimmed : fallback
 }
+
+// The visible tab is authoritative while a fresh draft is being promoted. A
+// late session event must not lend its old title to another tab's header.
+export function tabSession<T extends { id: string }>(
+  active: string | undefined,
+  session: T | undefined,
+): T | undefined {
+  return !active || session?.id === active ? session : undefined
+}
+
+export function tabTitle(
+  active: string | undefined,
+  session: { id: string; title?: string | null } | undefined,
+  fallback: string,
+): string {
+  return displayTitle(tabSession(active, session)?.title, fallback)
+}

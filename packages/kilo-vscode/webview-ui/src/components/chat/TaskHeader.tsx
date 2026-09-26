@@ -19,7 +19,8 @@ import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { useSession } from "../../context/session"
 import { calcTokenUsage } from "../../context/session-utils"
 import { useLanguage } from "../../context/language"
-import { displayTitle } from "../../utils/session-title" // raya_change - mask default session titles
+import { tabSession, tabTitle } from "../../utils/session-title" // raya_change - bind the title to the visible tab
+import { useLocalTabs } from "../../context/local-tabs"
 import { useVSCode } from "../../context/vscode"
 import { TaskTimeline } from "./TaskTimeline"
 import { BackgroundAgents } from "./BackgroundAgents"
@@ -42,16 +43,25 @@ interface TaskHeaderProps {
 
 export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   const session = useSession()
+  const tabs = useLocalTabs()
   const language = useLanguage()
   const search = useTranscriptSearch()
+  const active = () => (props.readonly ? undefined : tabs?.active())
 
   // raya_change - mask the "New session - <ISO>" default so the header shows a clean label
   // until auto-title generation replaces it.
-  const title = createMemo(() => displayTitle(session.currentSession()?.title, language.t("command.session.new")))
-  const canRename = createMemo(() => !props.readonly && !!session.currentSession())
-  const hasMessages = createMemo(() => session.messages().length > 0)
+  const title = createMemo(() => tabTitle(active(), session.currentSession(), language.t("command.session.new")))
+  const visible = createMemo(() => tabSession(active(), session.currentSession()))
+  const canRename = createMemo(() => !props.readonly && !!visible())
+  const hasMessages = createMemo(() => (!session.currentSession() || !!visible()) && session.messages().length > 0)
   const busy = createMemo(() => session.status() === "busy")
-  const canCompact = createMemo(() => !busy() && session.visibleMessages().length > 0 && !!session.selected())
+  const canCompact = createMemo(
+    () =>
+      (!session.currentSession() || !!visible()) &&
+      !busy() &&
+      session.visibleMessages().length > 0 &&
+      !!session.selected(),
+  )
 
   const breakdown = () => session.costBreakdown()
 
@@ -185,7 +195,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
 
   const startRename = () => {
     if (props.readonly) return
-    const info = session.currentSession()
+    const info = visible()
     if (!info) return
     setRenaming({ id: info.id, title: info.title ?? "" })
   }

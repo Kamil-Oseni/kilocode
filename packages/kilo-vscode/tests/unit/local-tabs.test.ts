@@ -19,6 +19,7 @@ import {
   type LocalTabState,
 } from "../../webview-ui/src/utils/local-tabs"
 import { reorderTabs } from "../../webview-ui/src/utils/tab-order"
+import { tabSession, tabTitle } from "../../webview-ui/src/utils/session-title"
 
 const pending = (id = "sidebar-pending:1") => id
 const makePending =
@@ -62,6 +63,26 @@ const tracked = () =>
   )
 
 describe("local session tabs", () => {
+  it("keeps a new worker chat's title and identity separate from the previous chat", () => {
+    const old = { id: "old-chat", title: "An earlier conversation" }
+    const draft = "sidebar-pending:new-worker"
+    const next = addPendingTab(state([old.id], old.id), draft)
+
+    expect(next.active).toBe(draft)
+    expect(tabSession(next.active, old)).toBeUndefined()
+    expect(tabTitle(next.active, old, "New chat")).toBe("New chat")
+    expect(tabsForCreatedSession(next, "late-old-session", "sidebar-pending:old", undefined)).toBeUndefined()
+
+    const created = tabsForCreatedSession(next, "worker-chat", draft, undefined)!
+    expect(created).toEqual({ ids: [old.id, "worker-chat"], active: "worker-chat" })
+    expect(tabTitle(created.active, old, "New chat")).toBe("New chat")
+    expect(tabSession(created.active, old)).toBeUndefined()
+    expect(tabTitle(created.active, { id: "worker-chat", title: "Add worker to Acceptance Team" }, "New chat")).toBe(
+      "Add worker to Acceptance Team",
+    )
+    expect(tabTitle(old.id, old, "New chat")).toBe("An earlier conversation")
+  })
+
   it("opens explicitly activated sessions in the foreground", () => {
     expect(tabsForCreatedSession(state(["s1"], "s1"), "s2", undefined, true)).toEqual({
       ids: ["s1", "s2"],

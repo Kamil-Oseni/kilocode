@@ -2021,6 +2021,17 @@ describe("desktop observation bridge", () => {
     test.bridge.dispose()
   })
 
+  it("bounds redacted action events in memory throughout a long session", async () => {
+    const test = setup({ store: memory() })
+    const click = await native(test, "event_ring_seed")
+    for (let index = 0; index < 300; index++)
+      test.bridge["record"](click, `event_ring_${index}`, "pre_dispatch", "refused", 1, 2)
+    expect(test.bridge["events"].size).toBe(256)
+    expect(test.bridge["events"].has(test.bridge.journalEvents()!.events[0].hash)).toBe(false)
+    expect(test.bridge["events"].values().next().value?.outcome).toBe("refused")
+    test.bridge.dispose()
+  })
+
   it("records cancellation before native dispatch without relabeling it as an unknown native effect", async () => {
     const store = memory()
     const input: { store: DesktopReceiptStore; currentHold?: Promise<void> } = { store }
@@ -2111,6 +2122,103 @@ describe("desktop observation bridge", () => {
     const second = setup({ store })
     for (const listener of second.states) listener("connected")
     expect(await second.bridge.settledJournalAudit()).toEqual(before)
+    second.bridge.dispose()
+  })
+
+  it("reads atomic action evidence with only a salted session identity after restart", async () => {
+    const store = memory()
+    const first = setup({ store })
+    for (const listener of first.states) listener("connected")
+    const click = await native(first, "task_evidence_action")
+    const before = await first.bridge.settledJournalEvidence(click.sessionID)
+    expect(before).toMatchObject({
+      epoch: expect.any(String),
+      revision: expect.any(Number),
+      audit: [{ effect: "interact", outcome: "confirmed" }],
+      events: [{ effect: "interact", phase: "post_dispatch", outcome: "confirmed" }],
+    })
+    expect(before?.sessionHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(before?.sessionHash).toBe(
+      createHash("sha256")
+        .update(`${(store.read() as { auditSalt: string }).auditSalt}:${click.sessionID}`)
+        .digest("hex"),
+    )
+    expect(JSON.stringify(before)).not.toContain(click.sessionID)
+    expect(JSON.stringify(before)).not.toContain(click.windowID)
+    expect(JSON.stringify(before)).not.toContain(click.id)
+    expect(await first.bridge.settledJournalEvidence("")).toBeNull()
+    expect(await first.bridge.settledJournalEvidence("ses secret\nline")).toBeNull()
+    first.bridge.dispose()
+
+    const second = setup({ store })
+    for (const listener of second.states) listener("connected")
+    expect(await second.bridge.settledJournalEvidence(click.sessionID)).toEqual(before)
+    second.bridge.dispose()
+  })
+
+  it("refuses atomic evidence while native action or durable write is unsettled", async () => {
+    const store = memory()
+    const input: { store: DesktopReceiptStore; actionHold?: Promise<void> } = { store }
+    const test = setup(input)
+    for (const listener of test.states) listener("connected")
+    await native(test, "task_evidence_first")
+    const gate = Promise.withResolvers<void>()
+    input.actionHold = gate.promise
+    await native(test, "task_evidence_second")
+    expect(await test.bridge.settledJournalEvidence("ses_desktop")).toBeNull()
+    gate.resolve()
+    await Bun.sleep(20)
+    expect((await test.bridge.settledJournalEvidence("ses_desktop"))?.events).toHaveLength(2)
+    test.bridge.dispose()
+  })
+
+  it("refuses stale atomic evidence after a failed write or full event ring", async () => {
+    const data = memory()
+    const state = { fail: false }
+    const store: DesktopReceiptStore = {
+      get: data.get,
+      update: async (key, value) => {
+        if (state.fail) throw new Error("storage unavailable")
+        await data.update(key, value)
+      },
+    }
+    const test = setup({ store })
+    for (const listener of test.states) listener("connected")
+    const click = await native(test, "task_evidence_written")
+    expect((await test.bridge.settledJournalEvidence(click.sessionID))?.events).toHaveLength(1)
+    state.fail = true
+    await native(test, "task_evidence_failed")
+    expect(test.bridge.journalEvents()?.events).toHaveLength(1)
+    expect(await test.bridge.settledJournalEvidence(click.sessionID)).toBeNull()
+    test.bridge.dispose()
+
+    const full = setup({ store: memory() })
+    for (const listener of full.states) listener("connected")
+    const seed = await native(full, "task_evidence_ring")
+    for (let index = 0; index < 256; index++)
+      full.bridge["record"](seed, `task_evidence_${index}`, "pre_dispatch", "refused", 1, 2)
+    await full.bridge["persistJournal"]()
+    expect(full.bridge.journalEvents()?.events).toHaveLength(256)
+    expect(await full.bridge.settledJournalEvidence(seed.sessionID)).toBeNull()
+    full.bridge.dispose()
+  })
+
+  it("does not attribute migrated v3 audit entries to new action events", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    const click = await native(first, "task_evidence_legacy")
+    const saved = store.read() as { version: number; events?: unknown[] }
+    const legacy = { ...saved, version: 3 }
+    delete legacy.events
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", legacy)
+    first.bridge.dispose()
+    const second = setup({ store, pending: [click] })
+    expect(await second.bridge.settledJournalEvidence(click.sessionID)).toBeNull()
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    const evidence = await second.bridge.settledJournalEvidence(click.sessionID)
+    expect(evidence?.audit).toHaveLength(1)
+    expect(evidence?.events).toEqual([])
     second.bridge.dispose()
   })
 

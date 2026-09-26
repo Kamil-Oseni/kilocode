@@ -407,6 +407,7 @@ export class DesktopBridge {
       startedAt,
       finishedAt,
     })
+    if (this.events.size > 256) this.events.delete(this.events.keys().next().value!)
   }
 
   private dispatch(
@@ -907,6 +908,37 @@ export class DesktopBridge {
       epoch: saved.epoch,
       revision: saved.revision,
       entries: saved.audit.map((item) => ({ ...item })),
+    }
+  }
+
+  /** One settled v4 snapshot for host-only task evidence; caller identity is salted and never returned raw. */
+  async settledJournalEvidence(sessionID: string) {
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(sessionID)) return null
+    const write = this.writes
+    const saved = await write.then(
+      () => this.committed,
+      () => undefined,
+    )
+    if (
+      !saved ||
+      this.disposed ||
+      !this.connected ||
+      this.journalFault ||
+      this.migration ||
+      this.active.size ||
+      this.pendingAck !== undefined ||
+      this.writes !== write ||
+      this.committed !== saved ||
+      saved.audit.length >= 256 ||
+      saved.events.length >= 256
+    )
+      return null
+    return {
+      epoch: saved.epoch,
+      revision: saved.revision,
+      audit: saved.audit.map((item) => ({ ...item })),
+      events: saved.events.map((item) => ({ ...item })),
+      sessionHash: createHash("sha256").update(`${saved.auditSalt}:${sessionID}`).digest("hex"),
     }
   }
 

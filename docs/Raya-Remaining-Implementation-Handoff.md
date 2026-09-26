@@ -1,10 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-## ChatGPT 2026-09-26 17:30 America/Toronto - current installed snapshot, open host still old
+## ChatGPT 2026-09-26 17:12 America/Toronto - settled version 2 task evidence
+
+The next source slice binds one installed Desktop task boundary to a settled v4 journal revision, redacted pre/post action events, matching native-effect receipts and a salted session hash. A pre-dispatch denial/cancellation needs no native receipt; every post-dispatch event requires one. Legacy v1 task markers remain explicit and ineligible. The in-memory event map is capped at 256. The combined 81 focused tests, extension typecheck/lint, Knip and formatting pass. This is not loaded-host or release-gate proof: the caller claims the session ID and no broker dispatch attestation or independent final-state scorer exists. Next: commit, push, install, reload the Raya VS Code window, run one source-matched real task boundary with restart/unknown/changed-target trials, then build the independent 17-task gate. Keep `FUT-CU-01` In progress.
+
+## ChatGPT 2026-09-26 16:57 America/Toronto - current installed snapshot, open host still old
 
 The pushed `8d1ba6e145` snapshot is installed as `eden.raya@7.4.23-snapshot+8d1ba6e145.kamil-oseni.1790455840624` with rollback VSIX SHA-256 `7b0896fe5d9373f4c86121fd1264656a8fc1eb1d99dd83c9ac753bee2d1f6d88`. Build/package and native self-tests passed. The installed CLI archive harness passes the active-stop, one-shot/cron/event no-restart, retained history, unknown-start and stop-phase crash cases against this package. Two active user-window backends still run `+4dc086be2b`; the installed host has not reloaded. Next: reload Raya's VS Code window, verify loaded package/backend with the installed-host inspector, then do the visible Routines/chat/Todo and real Desktop changed-target/restart trials. Keep full `FUT-ORG-01`, `FUT-PERSIST-01`, `FUT-CU-01` and Todo/chat rows In progress.
 
-## ChatGPT 2026-09-26 17:02 America/Toronto - v4 journal and exact scroll target
+## ChatGPT 2026-09-26 16:49 America/Toronto - v4 journal and exact scroll target
 
 The bridge now persists redacted v4 action events that distinguish explicit pre-dispatch refusal/cancellation from post-dispatch confirmed/unknown effects. Legacy receipts migrate without fabricating new event evidence; 59 focused tests, extension typecheck and scoped lint pass. The production PowerShell scroll path now checks the live cursor against the exact granted target before input, and the packaged native broker applies matching pointer, drag, scroll and held-input checks. The 40-case Windows driver suite and broker self-test/round trip pass. These are source checks, not loaded-host proof; the new journal remains `releaseGateEligible:false`. Next: push and install the guarded driver, reload the Raya window, inspect package/backend identity, run real changed-target and restart/no-replay trials, then replace the release contract and score the full matrix. Keep `FUT-CU-01` In progress.
 

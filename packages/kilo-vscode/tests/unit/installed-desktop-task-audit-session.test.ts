@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   beginTaskAudit,
+  beginTaskEvidence,
   endTaskAudit,
+  endTaskEvidence,
   type TaskAuditIdentity,
 } from "../../src/commands/installed-desktop-task-audit-session"
 
@@ -30,8 +32,62 @@ const next = {
 }
 const before = { epoch: "epoch-1", revision: 4, entries: [old] }
 const after = { epoch: "epoch-1", revision: 5, entries: [old, next] }
+const sessionHash = "a".repeat(64)
+const evidence = { epoch: "epoch-1", revision: 4, sessionHash, audit: [old], events: [] }
+const event = {
+  hash: next.hash,
+  sessionHash,
+  effect: next.effect,
+  phase: "post_dispatch" as const,
+  outcome: next.outcome,
+  startedAt: next.startedAt,
+  finishedAt: next.finishedAt,
+}
 
 describe("installed Desktop task audit boundary", () => {
+  test("binds version 2 action evidence to the exact host and hashed session", () => {
+    const started = beginTaskEvidence("run-12345", "dialog-handling", identity, evidence)
+    expect(started.status).toBe("ready")
+    if (started.status !== "ready") return
+    const restored = JSON.parse(JSON.stringify(started.boundary)) as typeof started.boundary
+    const result = endTaskEvidence(restored, "run-12345", identity, {
+      ...evidence,
+      revision: 5,
+      audit: [old, next],
+      events: [event],
+    })
+    expect(result).toMatchObject({
+      status: "available",
+      version: 2,
+      evidence: { audit: [next], events: [event], releaseGateEligible: false },
+      releaseGateEligible: false,
+    })
+    expect(JSON.stringify(result)).not.toContain("ses_private")
+    expect(endTaskEvidence(restored, "other-run", identity, { ...evidence, revision: 5 }).status).toBe("unavailable")
+    expect(
+      endTaskEvidence(
+        restored,
+        "run-12345",
+        { ...identity, backend: { ...identity.backend, pid: 42 } },
+        {
+          ...evidence,
+          revision: 5,
+        },
+      ).status,
+    ).toBe("unavailable")
+  })
+
+  test("does not upgrade a legacy task marker into version 2 evidence", () => {
+    const oldRun = beginTaskAudit("run-12345", "dialog-handling", identity, before)
+    if (oldRun.status !== "ready") throw new Error("Expected a legacy boundary")
+    expect(endTaskEvidence(oldRun.boundary, "run-12345", identity, evidence)).toMatchObject({
+      status: "unavailable",
+      releaseGateEligible: false,
+    })
+    const privateEvidence = { ...evidence, sessionID: "ses_private" }
+    expect(beginTaskEvidence("run-12345", "dialog-handling", identity, privateEvidence).status).toBe("unavailable")
+  })
+
   test("binds a redacted durable delta to one run but never claims release eligibility", () => {
     const started = beginTaskAudit("run-12345", "dialog-handling", identity, before)
     expect(started.status).toBe("ready")

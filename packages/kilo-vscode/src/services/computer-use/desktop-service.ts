@@ -207,6 +207,11 @@ export class DesktopAutomationService implements vscode.Disposable {
     return this.bridge?.settledJournalAudit() ?? Promise.resolve(null)
   }
 
+  /** One settled durable journal revision for an installed task evaluator. */
+  settledJournalEvidence(sessionID: string) {
+    return this.bridge?.settledJournalEvidence(sessionID) ?? Promise.resolve(null)
+  }
+
   /** Numeric timing from an existing local capture, or null when none is running. */
   captureTiming(signal?: AbortSignal) {
     return this.driver?.captureTiming(signal) ?? Promise.resolve(null)

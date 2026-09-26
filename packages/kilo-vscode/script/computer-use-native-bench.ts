@@ -6,7 +6,7 @@ const binary = Bun.argv[2]
 const count = Number(Bun.argv[3] ?? 40)
 const timeout = Number(Bun.argv[4] ?? 30_000)
 if (!binary) throw new Error("Pass the compiled native capture host path")
-if (!Number.isInteger(count) || count < 1 || count > 1_000) throw new Error("Choose 1 to 1000 native frames")
+if (!Number.isInteger(count) || count < 1 || count > 1_000) throw new Error("Choose 1 to 1000 native observations")
 if (!Number.isInteger(timeout) || timeout < 1_000 || timeout > 300_000)
   throw new Error("Choose a 1,000 to 300,000 ms native capture timeout")
 
@@ -47,17 +47,23 @@ async function sample(pid: number, frame: number, at: number) {
 const acquired: number[] = []
 const prepared: number[] = []
 const observed: number[] = []
+const renewed: number[] = []
 const samples: Array<ReturnType<typeof sample>> = []
 let failure: Error | undefined
 let sequence = 0
 let gaps = 0
 const started = performance.now()
-const host = new NativeCaptureHost(binary, (error) => {
-  failure = error
-})
+const host = new NativeCaptureHost(
+  binary,
+  (error) => {
+    failure = error
+  },
+  [],
+  () => renewed.push(performance.now() - started),
+)
 try {
   host.start()
-  while (observed.length < count && performance.now() - started < timeout && !failure) {
+  while (observed.length + renewed.length < count && performance.now() - started < timeout && !failure) {
     const frame = host.latest(1_000, sequence)
     if (frame && frame.sequence > sequence) {
       if (sequence) gaps += Math.max(0, frame.sequence - sequence - 1)
@@ -79,34 +85,36 @@ try {
     JSON.stringify(
       {
         format: "raya.computer-use-native-benchmark",
-        version: 3,
+        version: 4,
         mode: "local-native-source-host",
         status: failure
           ? "unavailable"
-          : observed.length >= count
+          : observed.length + renewed.length >= count
             ? "complete"
-            : observed.length
+            : observed.length || renewed.length
               ? "partial"
-              : "no_frames",
+              : "no_observations",
         ...(failure ? { reason: failure.message } : {}),
-        requestedFrames: count,
+        requestedObservations: count,
         timeoutMs: timeout,
         frames: observed.length,
-        skippedSequences: gaps,
+        unchangedReceipts: renewed.length,
+        imageSequenceGapsIncludingUnchanged: gaps,
         timeToFirstFrameMs: observed.length ? Number(observed[0].toFixed(2)) : undefined,
+        timeToFirstUnchangedMs: renewed.length ? Number(renewed[0].toFixed(2)) : undefined,
         acquisitionMs: summary(acquired),
         preparationMs: summary(prepared),
         elapsedMs: elapsed,
         hostMemoryBytes: { rss: memory.rss, heapUsed: memory.heapUsed, external: memory.external },
         nativeMemorySamples: native,
         nativeMemoryStatus: native.length && native.every((item) => !("status" in item)) ? "complete" : "partial",
-        note: "No pixels are saved. Native memory samples are bounded point observations; this does not measure model or action-to-frame latency.",
+        note: "Unchanged receipts prove capture continuity but are not new image frames; image sequence gaps include those receipts. No pixels are saved. Native memory samples are bounded point observations; this does not measure model or action-to-frame latency.",
       },
       undefined,
       2,
     ),
   )
-  if (failure || observed.length < count) process.exitCode = 2
+  if (failure || observed.length + renewed.length < count) process.exitCode = 2
 } finally {
   host.stop()
 }

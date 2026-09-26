@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-26 15:20 America/Toronto - installed audit snapshot, open host still older
+
+`39764ebcef` is pushed and installed as `7.4.23-snapshot+39764ebcef.kamil-oseni.1790450202218`; retained VSIX SHA-256 is `c713f0ddc28041e3a66d23ed3fd34e870a79b9b9d25d9108b731002107b0d362`. The low-memory build/package/native self-tests passed. Both live `kilo.exe serve` processes still run the older `+4dc086be2b` extension binary, so no loaded-host acceptance was gained by installation. The next action is a normal interactive Raya/VS Code reload, exact package/backend inspection, and then visible archive/Todo/chat plus the independently scored Desktop trials. All 17 Desktop scenario IDs have preliminary exercises, but zero installed-host eligible results; `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-26 15:08 America/Toronto - verification checkpoint supersedes the 14:47 scenario count
 
 The installed CLI archive stop/no-restart/history subrequirement is verified and now visible in the `FUT-ORG-01` and `FUT-PERSIST-01` progress rows; neither full row is Verified. A v3 DesktopBridge journal retains a bounded, redacted native-action audit across restart, and all 17 release-scenario IDs now have preliminary local exercises, including an actual bridge/session unknown-outcome path with a simulated driver. All 17 remain **release-ineligible** until a matching loaded Windows host produces action evidence and independent final-state scores. The bridge audit is local durability evidence, not cryptographic host attestation. The active open host is still the older `+4dc086be2b` binary; its native Computer Use pipe is unavailable. Next: reload and identify the host, accept visible archive/Todo/chat workflows, then collect and score the 17-task Windows matrix and interruption/restart/resource trials. The latest source changes are documented at the end of `docs/Raya-Implementation-Progress.md`.

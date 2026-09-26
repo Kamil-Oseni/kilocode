@@ -7,7 +7,14 @@ import { Database as Sqlite } from "bun:sqlite"
 
 type Host = { url: string; child: Bun.Subprocess; stderr: Promise<string> }
 type Worker = { id: string; enabled: boolean }
-type Organization = { id: string; revision: number; archived: boolean }
+type Organization = {
+  id: string
+  revision: number
+  archived: boolean
+  members: Array<{ agentID: string }>
+}
+type Run = { id: string; status: string; sessionID?: string }
+type Page = { items: Organization[] }
 
 async function installed() {
   const home = process.env.USERPROFILE
@@ -160,6 +167,41 @@ async function stop(host: Host) {
   await host.stderr
 }
 
+async function retained(
+  host: Host,
+  password: string,
+  root: string,
+  organization: Organization,
+  manual: Worker,
+  scheduled: Worker,
+  run: Run,
+) {
+  const item = (await call(host, password, root, "GET", `/kilocode/organization/${organization.id}`)) as Organization
+  assert.equal(item.archived, true)
+  assert.deepEqual(
+    item.members.map((member) => member.agentID),
+    [manual.id, scheduled.id],
+  )
+  const active = (await call(host, password, root, "GET", "/kilocode/organization")) as Page
+  const history = (await call(host, password, root, "GET", "/kilocode/organization?archived=true")) as Page
+  assert.equal(
+    active.items.some((entry) => entry.id === organization.id),
+    false,
+  )
+  assert.equal(
+    history.items.some((entry) => entry.id === organization.id),
+    true,
+  )
+  const receipt = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Run[]
+  assert.equal(receipt[0]?.id, run.id)
+  assert.equal(receipt[0]?.status, "error")
+  assert.equal(receipt[0]?.sessionID, run.sessionID)
+  const response = await request(host, password, root, "GET", `/session/${run.sessionID}`)
+  assert.equal(response.status, 200, "The archived worker conversation was not retained")
+  const saved = (await response.json()) as { id?: string }
+  assert.equal(saved.id, run.sessionID)
+}
+
 async function main() {
   if (process.platform !== "win32") throw new Error("Installed archive acceptance targets the Windows snapshot")
   const app = await installed()
@@ -197,27 +239,23 @@ async function main() {
     })) as Organization
     await call(host, password, root, "POST", `/kilocode/agent/${manual.id}/run`)
     await wait(() => fake.count() > 0, "The manual worker did not reach the model fixture")
-    const before = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Array<{
-      status: string
-    }>
+    const before = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Run[]
     assert.equal(before[0]?.status, "running")
+    assert.ok(before[0]?.sessionID, "The running worker has no conversation to preserve")
     const archived = (await call(host, password, root, "DELETE", `/kilocode/organization/${organization.id}`, {
       expectedRevision: organization.revision,
     })) as Organization
     assert.equal(archived.archived, true)
-    const after = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Array<{
-      status: string
-    }>
+    const after = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Run[]
     assert.equal(after[0]?.status, "error")
+    assert.equal(after[0]?.id, before[0]?.id)
+    assert.equal(after[0]?.sessionID, before[0]?.sessionID)
     const roster = (await call(host, password, root, "GET", "/kilocode/agent")) as Worker[]
     assert.equal(roster.find((item) => item.id === manual.id)?.enabled, false)
     assert.equal(roster.find((item) => item.id === scheduled.id)?.enabled, false)
     await stop(host)
     host = await backend(app.exe, root, env)
-    assert.equal(
-      ((await call(host, password, root, "GET", `/kilocode/organization/${organization.id}`)) as Organization).archived,
-      true,
-    )
+    await retained(host, password, root, organization, manual, scheduled, before[0]!)
     await Bun.sleep(Math.max(0, due + 65_000 - Date.now()))
     assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${scheduled.id}/runs`), [])
     const blocked = await request(host, password, root, "POST", `/kilocode/agent/${scheduled.id}/run`)
@@ -327,7 +365,7 @@ async function main() {
     assert.equal((await request(host, password, root, "POST", `/kilocode/agent/${members[0]!.id}/run`)).status, 400)
     assert.equal(fake.count(), 2)
     console.log(
-      `Installed archive acceptance passed: ${app.version}, live run stopped, due schedule fenced, unknown start recovered, stop-phase crash recovered`,
+      `Installed archive acceptance passed: ${app.version}, live run stopped, due schedule fenced, membership and conversation retained, unknown start recovered, stop-phase crash recovered`,
     )
   } finally {
     if (host) await stop(host)

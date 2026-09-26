@@ -52,6 +52,7 @@ describe("native desktop capture host", () => {
     const script = `const send=(h,i)=>{const j=Buffer.from(JSON.stringify(h));const p=Buffer.alloc(8+j.length+i.length);p.writeUInt32LE(j.length,0);j.copy(p,4);p.writeUInt32LE(i.length,4+j.length);i.copy(p,8+j.length);process.stdout.write(p)};process.stdout.write(Buffer.from(${JSON.stringify(base)},"base64"));let b=Buffer.alloc(0);process.stdin.on("data",c=>{b=Buffer.concat([b,c]);if(b.length<148)return;if(b.toString("ascii",0,4)!=="RCB2"||b.readUInt32LE(4)!==148||b.readBigUInt64LE(16)!==1n)return;const h=${JSON.stringify(visual)};h.v=2;h.sequence=2;h.request=b.toString("ascii",52,84);h.scene=Number(b.readBigUInt64LE(8));h.source=Number(b.readBigUInt64LE(16));h.receiptQpc="100";h.presentQpc="101";send(h,Buffer.from([137,80,78,71,13,10,26,10,2]))});setInterval(()=>{},1000)`
     const host = new NativeCaptureHost(process.execPath, (error) => errors.push(error), ["-e", script])
     host.start()
+    expect(host.pid()).toBeGreaterThan(0)
     await host.next()
     const result = await host.barrierAfter(request)
     expect(result.status).toBe("proven")
@@ -61,6 +62,7 @@ describe("native desktop capture host", () => {
     }
     expect(errors).toHaveLength(0)
     host.stop()
+    expect(host.pid()).toBeUndefined()
   })
 
   it("returns an unproven barrier without promoting cached pixels", async () => {

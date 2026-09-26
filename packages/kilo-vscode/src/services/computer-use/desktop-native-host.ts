@@ -233,6 +233,10 @@ export class NativeCaptureHost {
     }
   }
 
+  pid(): number | undefined {
+    return this.process?.pid
+  }
+
   latest(maxAgeMs = 125, after = 0): NativeFrame | undefined {
     const frame = this.frame
     if (!this.process || !frame || frame.sequence <= after || performance.now() - frame.receivedAt > maxAgeMs) return

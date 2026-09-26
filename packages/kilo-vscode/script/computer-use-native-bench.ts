@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import { NativeCaptureHost } from "../src/services/computer-use/desktop-native-host"
 
 const binary = Bun.argv[2]
@@ -18,9 +20,34 @@ function summary(values: number[]) {
   return { p50: percentile(values, 0.5), p95: percentile(values, 0.95) }
 }
 
+const execute = promisify(execFile)
+
+async function sample(pid: number, frame: number, at: number) {
+  const cmd = `$p=Get-Process -Id ${pid} -ErrorAction Stop; [Console]::Out.Write("$($p.WorkingSet64),$($p.PrivateMemorySize64),$($p.Handles)")`
+  try {
+    const result = await execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", cmd], {
+      timeout: 5_000,
+      windowsHide: true,
+      maxBuffer: 4_096,
+    })
+    const match = /^(\d+),(\d+),(\d+)$/.exec(result.stdout.trim())
+    if (!match) return { frame, atMs: Number(at.toFixed(2)), status: "unavailable" as const }
+    return {
+      frame,
+      atMs: Number(at.toFixed(2)),
+      workingSetBytes: Number(match[1]),
+      privateBytes: Number(match[2]),
+      handles: Number(match[3]),
+    }
+  } catch {
+    return { frame, atMs: Number(at.toFixed(2)), status: "unavailable" as const }
+  }
+}
+
 const acquired: number[] = []
 const prepared: number[] = []
 const observed: number[] = []
+const samples: Array<ReturnType<typeof sample>> = []
 let failure: Error | undefined
 let sequence = 0
 let gaps = 0
@@ -38,15 +65,21 @@ try {
       acquired.push(frame.acquisitionMs)
       prepared.push(frame.preparationMs)
       observed.push(performance.now() - started)
+      if (observed.length === 1 || observed.length % 200 === 0) {
+        const pid = host.pid()
+        if (pid) samples.push(sample(pid, observed.length, performance.now() - started))
+      }
     }
     await Bun.sleep(5)
   }
   const memory = process.memoryUsage()
+  const elapsed = Number((performance.now() - started).toFixed(2))
+  const native = await Promise.all(samples)
   console.log(
     JSON.stringify(
       {
         format: "raya.computer-use-native-benchmark",
-        version: 2,
+        version: 3,
         mode: "local-native-source-host",
         status: failure
           ? "unavailable"
@@ -63,9 +96,11 @@ try {
         timeToFirstFrameMs: observed.length ? Number(observed[0].toFixed(2)) : undefined,
         acquisitionMs: summary(acquired),
         preparationMs: summary(prepared),
-        elapsedMs: Number((performance.now() - started).toFixed(2)),
+        elapsedMs: elapsed,
         hostMemoryBytes: { rss: memory.rss, heapUsed: memory.heapUsed, external: memory.external },
-        note: "No pixels are saved. Host memory excludes the native child; this does not measure model or action-to-frame latency.",
+        nativeMemorySamples: native,
+        nativeMemoryStatus: native.length && native.every((item) => !("status" in item)) ? "complete" : "partial",
+        note: "No pixels are saved. Native memory samples are bounded point observations; this does not measure model or action-to-frame latency.",
       },
       undefined,
       2,

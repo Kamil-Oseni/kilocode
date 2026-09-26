@@ -15,6 +15,13 @@ export namespace TaskAuthority {
     windowID?: string
     identity?: string
   }
+  type SelectedComputer = {
+    version: 2
+    parentSessionID: string
+    childSessionID: string
+    grantID: string
+    binding: { version: 1; windowID: string; identity: string }
+  }
 
   const safe = ["read", "grep", "glob", "list", "semantic_search", "todoread", "chief_message"]
   const computer = [
@@ -54,6 +61,12 @@ export namespace TaskAuthority {
     return { ...metadata, [computerKey]: { version: 1, ...proof } satisfies Computer }
   }
 
+  export function bindSelected(metadata: Record<string, unknown>, proof: Omit<SelectedComputer, "version">) {
+    if (!/^0x[0-9A-F]+$/.test(proof.binding.windowID) || !/^[A-F0-9]{64}$/.test(proof.binding.identity))
+      throw new Error("Selected Computer Use child binding is invalid")
+    return { ...metadata, [computerKey]: { version: 2, ...proof } satisfies SelectedComputer }
+  }
+
   export function proof(metadata: Record<string, unknown> | undefined, sessionID: string, parentID?: string) {
     if (read(metadata) !== "computer") return
     const value = metadata?.[computerKey]
@@ -61,14 +74,38 @@ export namespace TaskAuthority {
       throw new Error("Computer task delegation is missing")
     const record = value as Record<string, unknown>
     if (
-      record.version !== 1 ||
+      (record.version !== 1 && record.version !== 2) ||
       typeof record.parentSessionID !== "string" ||
       !record.parentSessionID ||
       typeof record.childSessionID !== "string" ||
       record.childSessionID !== sessionID ||
       record.parentSessionID !== parentID ||
       typeof record.grantID !== "string" ||
-      !record.grantID ||
+      !record.grantID
+    )
+      throw new Error("Computer task delegation does not match this child")
+    if (record.version === 2) {
+      const binding = record.binding
+      if (!binding || typeof binding !== "object" || Array.isArray(binding))
+        throw new Error("Selected Computer Use child binding is missing")
+      const selected = binding as Record<string, unknown>
+      if (
+        selected.version !== 1 ||
+        typeof selected.windowID !== "string" ||
+        !/^0x[0-9A-F]+$/.test(selected.windowID) ||
+        typeof selected.identity !== "string" ||
+        !/^[A-F0-9]{64}$/.test(selected.identity)
+      )
+        throw new Error("Selected Computer Use child binding is invalid")
+      return {
+        parentSessionID: record.parentSessionID,
+        childSessionID: record.childSessionID,
+        grantID: record.grantID,
+        windowID: selected.windowID,
+        identity: selected.identity,
+      }
+    }
+    if (
       (record.windowID !== undefined &&
         (typeof record.windowID !== "string" || !record.windowID || record.windowID.length > 200)) ||
       (record.windowID !== undefined) !== (record.identity !== undefined) ||

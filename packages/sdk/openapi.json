@@ -85560,6 +85560,27 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200
+              },
+              "binding": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "windowID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "identity": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["version", "windowID", "identity"],
+                "additionalProperties": false
               }
             },
             "required": ["operation", "decision", "reason"],

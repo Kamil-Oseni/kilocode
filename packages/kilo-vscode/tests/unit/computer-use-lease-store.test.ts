@@ -64,6 +64,7 @@ describe("Computer Use lease store", () => {
       reason: "Authorized by active Computer Use grant",
       grantID: lease.id,
     })
+    expect(store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child", target: { version: 1, windowID: "0x123" } })).decision).toBe("deny")
     const delegation = { parentSessionID: "session_test", childSessionID: "session_child", grantID: lease.id }
     expect(
       store.authorize(auth({ sessionID: "session_child", action: "observe", windowID: undefined, delegation })),
@@ -154,6 +155,48 @@ describe("Computer Use lease store", () => {
       store.authorize(auth({ sessionID: "session_child", delegation: { ...delegation, identity: "identity_one" } }))
         .decision,
     ).toBe("deny")
+  })
+
+  it("admits one versioned child target from a multi-window grant and denies sibling widening", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const windows = [
+      { windowID: "0x111", identity: "A".repeat(64) },
+      { windowID: "0x222", identity: "B".repeat(64) },
+    ]
+    const lease = await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "selected",
+      windows,
+      actions: ["observe", "pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    const admission = auth({
+      action: "observe",
+      windowID: undefined,
+      admission: "computer_child",
+      target: { version: 1, windowID: "0x222" },
+    })
+    expect(store.authorize(admission)).toMatchObject({
+      decision: "allow",
+      grantID: lease.id,
+      binding: { version: 1, windowID: "0x222", identity: "B".repeat(64) },
+    })
+    expect(store.authorize(auth({ ...admission, target: { version: 1, windowID: "0x333" } })).decision).toBe("deny")
+    expect(store.authorize(auth({ ...admission, target: undefined })).decision).toBe("deny")
+    const delegation = {
+      parentSessionID: "session_test",
+      childSessionID: "session_child",
+      grantID: lease.id,
+      windowID: "0x222",
+      identity: "B".repeat(64),
+    }
+    expect(store.authorize(auth({ sessionID: "session_child", action: "observe", windowID: undefined, target: { version: 1, windowID: "0x111" }, delegation })).decision).toBe("deny")
+    expect(store.authorize(auth({ sessionID: "session_child", action: "observe", windowID: undefined, target: { version: 1, windowID: "0x222" }, delegation })).decision).toBe("allow")
+    await store.pause()
+    expect(store.authorize(admission).decision).toBe("deny")
   })
 
   it("migrates v2 exact-window leases but rejects missing or shared window identities", async () => {

@@ -6464,6 +6464,11 @@ export type DesktopResult =
       grantID?: ComputerUseGrantId
       windowID?: string
       identity?: string
+      binding?: {
+        version: 1
+        windowID: string
+        identity: string
+      }
     }
   | {
       operation: "observe"

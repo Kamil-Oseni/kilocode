@@ -77,6 +77,11 @@ export const SelectedWindowTarget = Schema.Struct({
   version: Schema.Literal(1),
   windowID: Identity,
 })
+export const SelectedChildBinding = Schema.Struct({
+  version: Schema.Literal(1),
+  windowID: Identity,
+  identity: Identity,
+})
 
 export const ObserveRequest = Schema.Struct({
   ...Base,
@@ -331,6 +336,7 @@ export const AuthorizeResult = Schema.Struct({
   grantID: Schema.optional(GrantID),
   windowID: Schema.optional(Identity),
   identity: Schema.optional(Identity),
+  binding: Schema.optional(SelectedChildBinding),
 })
 
 export const Timing = Schema.Struct({

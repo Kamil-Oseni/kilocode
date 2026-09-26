@@ -64,6 +64,35 @@ describe("Computer Use child authority", () => {
     expect(() => TaskAuthority.select({ saved: "computer", requested: "edit", parent: [] })).toThrow()
   })
 
+  it("decodes exact version-two window bindings and rejects malformed restart metadata", () => {
+    const binding = { version: 1 as const, windowID: "0x123", identity: "A".repeat(64) }
+    const metadata = TaskAuthority.bindSelected(TaskAuthority.save({}, "computer"), {
+      parentSessionID: "session_parent",
+      childSessionID: "session_child",
+      grantID: "grant_one",
+      binding,
+    })
+    expect(TaskAuthority.proof(metadata, "session_child", "session_parent")).toMatchObject({
+      grantID: "grant_one",
+      windowID: "0x123",
+      identity: binding.identity,
+    })
+    for (const changed of [
+      { ...binding, windowID: "0xBAD`" },
+      { ...binding, identity: "B".repeat(63) },
+      { ...binding, version: 2 },
+    ])
+      expect(() =>
+        TaskAuthority.proof(
+          { ...metadata, [TaskAuthority.computerKey]: { ...(metadata[TaskAuthority.computerKey] as object), binding: changed } },
+          "session_child",
+          "session_parent",
+        ),
+      ).toThrow()
+    expect(() => TaskAuthority.proof(metadata, "session_other", "session_parent")).toThrow()
+    expect(() => TaskAuthority.proof(metadata, "session_child", "session_other")).toThrow()
+  })
+
   it("does not infer computer access when a task omits access", () => {
     expect(TaskAuthority.select({ parent: Permission.fromConfig({ "*": "deny" }) })).toBeUndefined()
   })

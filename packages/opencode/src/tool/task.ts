@@ -34,6 +34,8 @@ import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_c
 import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse failed equivalent children
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
 import { Desktop } from "@/kilocode/desktop/service" // kilocode_change - exact Computer Use child grant admission
+import { SelectedWindowTarget } from "@/kilocode/desktop/protocol" // kilocode_change - versioned child window admission
+import { TaskComputer } from "@/kilocode/tool/task-computer" // kilocode_change - keep selected child admission in a Kilo-owned boundary
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - bind planned Auto branches to child calls
 import { ChiefTaskBinding } from "@/kilocode/chief/task-binding" // kilocode_change - saved branch preflight
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan" // kilocode_change - request-bound branch admission
@@ -94,6 +96,9 @@ const BaseParameterFields = {
     description:
       'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" only for an active goal with authorized file changes. Auto tasks without saved authority default to read-only; other agents retain legacy behavior.',
   }),
+  computer_target: Schema.optional(SelectedWindowTarget).annotate({
+    description: "Bind a Computer Use child to this exact window ID from the parent's selected-window grant.",
+  }), // kilocode_change - selected child authority cannot span a multi-window grant
   branch_id: Schema.optional(Schema.String).annotate({
     description:
       "Use only an exact branch ID returned by a successful chief_plan call for this request. Never invent one from a task name. Omit this field entirely when no plan was saved; a read-only unplanned task does not need it.",
@@ -255,33 +260,14 @@ export const TaskTool = Tool.define(
         goalActive: Schema.is(RayaGoal.State)(goal) && goal.status === "active",
         parent: ruleset,
       })
-      const computer =
-        access === "computer"
-          ? yield* Effect.gen(function* () {
-              if (!desktop) throw new Error("Computer Use is unavailable in this client")
-              const result = yield* desktop.request({
-                operation: "authorize",
-                sessionID: ctx.sessionID,
-                surface: "desktop",
-                action: "observe",
-                sensitive: false,
-                admission: "computer_child",
-              })
-              if (result.operation !== "authorize" || result.decision !== "allow" || !result.grantID)
-                throw new Error("Computer Use child needs an active parent desktop grant")
-              if (!!result.windowID !== !!result.identity)
-                throw new Error("Selected Computer Use grant lacks an exact window identity")
-              const prior = resumed ? TaskAuthority.proof(resumed.metadata, resumed.id, ctx.sessionID) : undefined
-              if (
-                prior &&
-                (prior.grantID !== result.grantID ||
-                  prior.windowID !== result.windowID ||
-                  prior.identity !== result.identity)
-              )
-                throw new Error("Computer Use grant changed; the existing child cannot be rebound")
-              return { grantID: result.grantID, windowID: result.windowID, identity: result.identity }
-            })
-          : undefined
+      const computer = yield* TaskComputer.admit({
+        access,
+        desktop,
+        sessionID: ctx.sessionID,
+        parent,
+        resumed,
+        target: params.computer_target,
+      }) // kilocode_change - immutable exact desktop child scope
       // kilocode_change end
       const candidates = (yield* agent.list()).filter(
         (item) =>
@@ -613,13 +599,7 @@ export const TaskTool = Tool.define(
         access,
       )
       const bound = computer
-        ? TaskAuthority.bind(base, {
-            parentSessionID: ctx.sessionID,
-            childSessionID: nextSession.id,
-            grantID: computer.grantID,
-            ...(computer.windowID ? { windowID: computer.windowID } : {}),
-            ...(computer.identity ? { identity: computer.identity } : {}),
-          })
+        ? TaskComputer.bind(base, ctx.sessionID, nextSession.id, computer) // kilocode_change
         : base
       yield* sessions
         .setMetadata({

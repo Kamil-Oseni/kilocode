@@ -274,6 +274,32 @@ describe("desktop observation bridge", () => {
     return { store, lease }
   }
 
+  it("rejects a delegated target-only sibling observation before capture", async () => {
+    const grant = await multi()
+    const test = setup({ frameWindow: "window_1", validate: (request) => grant.store.authorize(request) })
+    const delegation = {
+      parentSessionID: "ses_parent",
+      childSessionID: "ses_child",
+      grantID: grant.lease.id,
+      windowID: "window_2",
+      identity: "identity_two",
+    }
+    const observe: DesktopRequest = {
+      ...request,
+      id: "delegated_sibling_target",
+      sessionID: "ses_child",
+      target: { version: 1, windowID: "window_1" },
+      authorization: { kind: "grant", grantID: grant.lease.id, delegation },
+    }
+    for (const listener of test.events)
+      listener({ type: "kilocode.desktop.requested", properties: observe } as SSEPayload, "C:\\workspace")
+    await Bun.sleep(20)
+    expect(test.observed()).toBe(0)
+    expect(test.replies).toEqual([])
+    expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: observe.id }))
+    test.bridge.dispose()
+  })
+
   it("refuses targetless and forged requests for a multi-window grant before capture", async () => {
     const grant = await multi()
     const test = setup({

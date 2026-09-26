@@ -274,7 +274,9 @@ export class ComputerUseLeaseStore {
       return answer("deny", "Computer Use child delegation no longer matches the active grant")
     if (invalidAdmission(request))
       return answer("deny", "Computer Use child admission is only for a parent's ordinary desktop observation grant")
-    if (!delegation && lease.lifetime.kind === "session" && lease.lifetime.sessionID !== request.sessionID)
+    if (needsSelectedAdmission(lease, request))
+      return answer("deny", "Selected child admission needs a selected-window parent grant")
+    if (belongsElsewhere(lease, request, !!delegation))
       return answer("ask", "The grant belongs to another task")
     const boundary = scope(lease, request)
     if (boundary) return limited(boundary, !!delegation)
@@ -319,17 +321,14 @@ function scope(lease: ComputerUseLease, request: AuthorizationRequest): Authoriz
 function selectedScope(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
   if (lease.applications.kind !== "selected") return
   if (request.surface !== "desktop") return answer("deny", "Selected window grants apply only to this desktop window")
-  if (request.target && request.target.windowID !== request.windowID)
+  if (windowConflict(request))
     return answer("deny", "The selected desktop target differs from its authorization window")
   if ("admission" in request && request.admission === "computer_child") return
   const delegation = "delegation" in request ? request.delegation : undefined
-  const window =
-    request.windowID ??
-    delegation?.windowID ??
-    (request.action === "observe" && lease.applications.values.length === 1 ? lease.applications.values[0] : undefined)
+  const window = requestedWindow(lease, request, request.action === "observe")
   if (!window || !lease.applications.values.includes(window))
     return answer("deny", "This application is outside the selected grant")
-  if (delegation && request.windowID && request.windowID !== delegation.windowID)
+  if (delegation && window !== delegation.windowID)
     return answer("deny", "The requested window differs from the delegated window")
 }
 
@@ -345,14 +344,28 @@ function limited(result: Authorization, delegation: boolean): Authorization {
 
 function selectedResult(lease: ComputerUseLease, request: AuthorizationRequest, result: Authorization): Authorization {
   if (lease.applications.kind !== "selected" || result.decision === "deny") return result
-  const delegation = "delegation" in request ? request.delegation : undefined
-  const window =
-    request.windowID ??
-    delegation?.windowID ??
-    (lease.applications.values.length === 1 ? lease.applications.values[0] : undefined)
+  const window = requestedWindow(lease, request, true)
   const identity = window ? lease.applications.identities[window] : undefined
   if (!window || !identity) return answer("deny", "Selected window has no stable process identity")
   return { ...result, windowID: window, identity }
+}
+
+function needsSelectedAdmission(lease: ComputerUseLease, request: AuthorizationRequest): boolean {
+  return "admission" in request && request.admission === "computer_child" && !!request.target && lease.applications.kind !== "selected"
+}
+
+function windowConflict(request: AuthorizationRequest): boolean {
+  return !!("target" in request && request.target && request.windowID && request.target.windowID !== request.windowID)
+}
+
+function belongsElsewhere(lease: ComputerUseLease, request: AuthorizationRequest, delegation: boolean): boolean {
+  return !delegation && lease.lifetime.kind === "session" && lease.lifetime.sessionID !== request.sessionID
+}
+
+function requestedWindow(lease: ComputerUseLease, request: AuthorizationRequest, fallback: boolean): string | undefined {
+  const target = "target" in request && request.target && "windowID" in request.target ? request.target.windowID : undefined
+  const delegation = "delegation" in request ? request.delegation : undefined
+  return request.windowID ?? target ?? delegation?.windowID ?? (fallback && lease.applications.kind === "selected" && lease.applications.values.length === 1 ? lease.applications.values[0] : undefined)
 }
 
 function invalidAdmission(request: AuthorizationRequest): boolean {
@@ -363,21 +376,23 @@ function invalidAdmission(request: AuthorizationRequest): boolean {
     request.action !== "observe" ||
     request.sensitive ||
     request.windowID ||
-    request.target
+    (request.target && (request.target.version !== 1 || !request.target.windowID))
   )
 }
 
 function selectedAdmission(lease: ComputerUseLease, request: AuthorizationRequest): Authorization | undefined {
   if (!("admission" in request) || request.admission !== "computer_child" || lease.applications.kind !== "selected")
     return
-  if (lease.applications.values.length !== 1)
+  const window = request.target?.windowID ?? (lease.applications.values.length === 1 ? lease.applications.values[0] : undefined)
+  if (!window || !lease.applications.values.includes(window))
     return answer("deny", "Computer Use child admission needs one exact selected window")
-  const identity = lease.applications.identities[lease.applications.values[0]!]
+  const identity = lease.applications.identities[window]
   if (!identity) return answer("deny", "Selected window has no stable process identity")
   return {
     ...answer("allow", "Authorized by active Computer Use grant", lease.id),
-    windowID: lease.applications.values[0],
+    windowID: window,
     identity,
+    binding: { version: 1, windowID: window, identity },
   }
 }
 

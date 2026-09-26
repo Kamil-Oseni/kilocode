@@ -102,4 +102,22 @@ describe("installed Windows desktop release gate", () => {
     task.frame = "data:image/png;base64,cG5n"
     expect(gate(input).issues).toContain(`${scenarios[0]} has an unexpected field: frame`)
   })
+
+  test("rejects fractional counts and impossible duration measurements", () => {
+    const input = report()
+    input.tasks[0].unknownNativeReplays = 0.5
+    input.tasks[0].promptTokens = 12.5
+    input.tasks[0].timeToFirstActionMs = 101
+    input.tasks[1].totalCompletionMs = 0
+    input.tasks[2].baselineCompletionMs = 0
+    expect(gate(input).issues).toEqual(
+      expect.arrayContaining([
+        `${scenarios[0]}.unknownNativeReplays must be an integer`,
+        `${scenarios[0]}.promptTokens must be an integer`,
+        `${scenarios[0]}.timeToFirstActionMs cannot exceed totalCompletionMs`,
+        `${scenarios[1]}.totalCompletionMs must be positive`,
+        `${scenarios[2]}.baselineCompletionMs must be positive`,
+      ]),
+    )
+  })
 })

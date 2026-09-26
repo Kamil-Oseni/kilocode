@@ -45,6 +45,16 @@ const numbers = [
   "completionTokens",
   "providerCostUsd",
 ] as const
+const counts = [
+  "unintendedActions",
+  "sensitivePolicyViolations",
+  "unknownNativeReplays",
+  "changedTargetActions",
+  "humanInterventions",
+  "staleSceneRefusals",
+  "promptTokens",
+  "completionTokens",
+] as const
 
 type Entry = Record<string, unknown>
 const headerKeys = new Set([
@@ -116,10 +126,28 @@ function fields(task: Entry, id: string, issues: string[]) {
   for (const key of Object.keys(task)) if (!taskKeys.has(key)) issues.push(`${id} has an unexpected field: ${key}`)
   for (const key of ["completed", "correctFinalState", "recoverySuccess"])
     if (typeof task[key] !== "boolean") issues.push(`${id}.${key} must be boolean`)
+  metrics(task, id, issues)
+  if (typeof task.receipt !== "string" || !task.receipt.trim()) issues.push(`${id}.receipt is required`)
+}
+
+function metrics(task: Entry, id: string, issues: string[]) {
   for (const key of numbers)
     if (typeof task[key] !== "number" || !Number.isFinite(task[key]) || task[key] < 0)
       issues.push(`${id}.${key} must be a finite nonnegative number`)
-  if (typeof task.receipt !== "string" || !task.receipt.trim()) issues.push(`${id}.receipt is required`)
+  for (const key of counts)
+    if (typeof task[key] === "number" && Number.isFinite(task[key]) && !Number.isInteger(task[key]))
+      issues.push(`${id}.${key} must be an integer`)
+  for (const key of ["totalCompletionMs", "baselineCompletionMs"])
+    if (typeof task[key] === "number" && Number.isFinite(task[key]) && task[key] === 0)
+      issues.push(`${id}.${key} must be positive`)
+  if (
+    typeof task.timeToFirstActionMs === "number" &&
+    typeof task.totalCompletionMs === "number" &&
+    Number.isFinite(task.timeToFirstActionMs) &&
+    Number.isFinite(task.totalCompletionMs) &&
+    task.timeToFirstActionMs > task.totalCompletionMs
+  )
+    issues.push(`${id}.timeToFirstActionMs cannot exceed totalCompletionMs`)
 }
 
 export function gate(input: unknown) {

@@ -1257,6 +1257,15 @@ export namespace RayaTask {
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
       const prior = items[index]!
+      if (patch.enabled === true && deps.database) {
+        const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
+        if (yield* RayaTaskOrganization.make(deps.database, { get }, deps.storage).stopped(id))
+          return yield* new GuardError({
+            kind: "conflict",
+            field: "enabled",
+            message: "This worker belongs to an organization that is stopping or archived.",
+          })
+      }
       const provisioning = prior.capabilities.some((item) => item.toLowerCase() === Provision)
       if (patch.expectedProvisioning !== undefined && patch.expectedProvisioning !== provisioning)
         return yield* new GuardError({

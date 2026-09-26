@@ -543,6 +543,10 @@ export namespace RayaTaskOrganization {
       const value = yield* Schema.decodeUnknownEffect(Archive)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Provide the organization revision being archived." })),
       )
+      if (!workers.stop)
+        return yield* new Conflict({
+          message: "Worker cancellation is unavailable. Cannot safely archive this organization.",
+        })
       if (workers.stop) {
         const members = yield* mutate(
           storage,

@@ -64,7 +64,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       const database = yield* Database.Service
       const storage = memory()
       const tasks = RayaTask.make({ storage, database })
-      const organizations = RayaTaskOrganization.make(database, tasks, storage)
+      const organizations = RayaTaskOrganization.make(database, { ...tasks, stop: () => Effect.void }, storage)
       const inbox = RayaTaskInbox.make(database)
       const chief = yield* tasks.create({
         name: "Chief",
@@ -190,6 +190,8 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       yield* tasks.transition(run, { ...run, status: "error", blockedReason: "Stopped." })
       const archived = yield* organizations.archive(created.id, { expectedRevision: 2 })
       expect(archived).toMatchObject({ archived: true, revision: 3 })
+      expect(Exit.isFailure(yield* tasks.update(chief.id, { enabled: true }).pipe(Effect.exit))).toBe(true)
+      expect((yield* tasks.get(chief.id)).enabled).toBe(false)
       expect((yield* organizations.list()).items).toEqual([])
       expect(yield* organizations.shares(chief.id, books.id)).toBe(false)
       expect((yield* organizations.list({ archived: true })).items[0]?.id).toBe(created.id)
@@ -200,6 +202,26 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       expect(yield* database.db.get(sql`SELECT count(*) AS count FROM raya_routine_organization_revision`)).toEqual({
         count: 3,
       })
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("archive refuses a missing cancellation service even for paused workers", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const tasks = RayaTask.make({ storage, database })
+      const worker = yield* tasks.create({ name: "Worker", objective: "Work", schedule: { kind: "manual" } })
+      const organizations = RayaTaskOrganization.make(database, tasks, storage)
+      const item = yield* organizations.create({ name: "Team", members: [{ agentID: worker.id, role: "Worker" }] })
+      yield* tasks.update(worker.id, { enabled: false })
+      expect(yield* organizations.archive(item.id, { expectedRevision: 1 }).pipe(Effect.flip)).toEqual(
+        new Conflict({ message: "Worker cancellation is unavailable. Cannot safely archive this organization." }),
+      )
+      expect((yield* organizations.get(item.id)).archived).toBe(false)
+      expect(yield* organizations.pending()).toEqual([])
+      expect((yield* tasks.get(worker.id)).enabled).toBe(false)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
@@ -389,7 +411,7 @@ test("organization usage retains removed and archived membership history", async
       const database = yield* Database.Service
       const storage = memory()
       const tasks = RayaTask.make({ storage, database })
-      const organizations = RayaTaskOrganization.make(database, tasks, storage)
+      const organizations = RayaTaskOrganization.make(database, { ...tasks, stop: () => Effect.void }, storage)
       const owner = yield* tasks.create({ name: "Owner", objective: "Lead", schedule: { kind: "manual" } })
       const former = yield* tasks.create({ name: "Former", objective: "Work", schedule: { kind: "manual" } })
       expect(yield* organizations.used(former.id)).toEqual({ used: false, complete: true })
@@ -444,6 +466,9 @@ test("interrupted organization stop stays visible and fenced until a retry compl
       expect((yield* organizations.list()).items.map((entry) => entry.id)).toContain(item.id)
       expect((yield* failed.pending()).map((entry) => entry.id)).toContain(item.id)
       expect(yield* failed.stopped(worker.id)).toBe(true)
+      expect(Exit.isFailure(yield* tasks.update(worker.id, { enabled: true }).pipe(Effect.exit))).toBe(true)
+      expect((yield* tasks.get(worker.id)).enabled).toBe(false)
+      expect((yield* tasks.update(worker.id, { enabled: false })).enabled).toBe(false)
       const resumed = RayaTaskOrganization.make(database, { ...tasks, stop: () => Effect.void }, storage)
       expect((yield* resumed.archive(item.id, { expectedRevision: 1 })).archived).toBe(true)
       expect(yield* resumed.pending()).toEqual([])

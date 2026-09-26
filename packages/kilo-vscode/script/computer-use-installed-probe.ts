@@ -31,9 +31,10 @@ async function child(file: string, args: string[], timeout: number) {
   } catch (err) {
     const failure = err as Error & { code?: number | string; stdout?: string; stderr?: string }
     const code = typeof failure.stdout === "string" ? /"code":"([a-z_]+)"/.exec(failure.stdout)?.[1] : undefined
+    const detail = /(?:^|\n)error: ([^\r\n]+)/.exec(failure.stderr ?? "")?.[1]
     return {
       status: "failed" as const,
-      reason: code || failure.stderr?.trim().slice(0, 300) || failure.message.slice(0, 300),
+      reason: code || detail?.slice(0, 300) || failure.stderr?.trim().slice(0, 300) || failure.message.slice(0, 300),
       exitCode: failure.code,
     }
   }

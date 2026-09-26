@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 import type {
   DesktopFailure,
   DesktopRequest,
@@ -20,7 +20,25 @@ export interface DesktopConnection {
 }
 
 type Receipt = { fingerprint: string; result?: DesktopResult; failure?: DesktopFailure; delivered?: boolean }
-type Journal = { version: 2; epoch: string; revision: number; lastAckAt: number | null; items: unknown[] }
+type Audit = {
+  hash: string
+  effect: "manage" | "interact"
+  outcome: "confirmed" | "unknown"
+  startedAt: number
+  finishedAt: number
+}
+type Journal = {
+  version: 3
+  epoch: string
+  revision: number
+  lastAckAt: number | null
+  items: unknown[]
+  auditSalt: string
+  audit: Audit[]
+}
+type LegacyJournal =
+  | { version: 1; items: unknown[] }
+  | { version: 2; epoch: string; revision: number; lastAckAt: number | null; items: unknown[] }
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
 type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
@@ -90,6 +108,10 @@ export class DesktopBridge {
   private readonly offState: () => void
   private writes = Promise.resolve()
   private epoch: string = randomUUID()
+  private auditSalt = randomBytes(16).toString("hex")
+  private migratedAudit: Audit[] = []
+  private migratedRevision = 0
+  private migratedAck: number | null = null
   private committed: Journal | undefined
   private pendingAck: number | undefined
   private journalFault = false
@@ -668,7 +690,12 @@ export class DesktopBridge {
       return
     }
     const value = saved
-    if (value.version === 2) this.epoch = value.epoch as string
+    if (value.version === 2 || value.version === 3) this.epoch = value.epoch as string
+    if (value.version === 3) this.auditSalt = value.auditSalt
+    if (value.version === 2 || value.version === 3) {
+      this.migratedRevision = value.revision
+      this.migratedAck = value.lastAckAt
+    }
     let migrated = false
     const seen = new Set<string>()
     for (const item of value.items) {
@@ -685,8 +712,9 @@ export class DesktopBridge {
       }
       this.receipts.set(entry[0], entry[1])
     }
-    if (value.version === 2 && !migrated) this.committed = structuredClone(value as Journal)
-    if (value.version === 1 || migrated) {
+    if (value.version === 3 && !migrated) this.committed = structuredClone(value)
+    if (value.version === 3 && migrated) this.migratedAudit = structuredClone(value.audit)
+    if (value.version !== 3 || migrated) {
       this.migration = true
       void this.persistJournal().catch((error) =>
         console.error("[Raya] Desktop receipt journal migration failed", error),
@@ -699,7 +727,7 @@ export class DesktopBridge {
     return this.persistJournal()
   }
 
-  /** Read-only journal availability; an in-flight migration has no durable v2 summary yet. */
+  /** Read-only journal availability; an in-flight migration has no durable v3 summary yet. */
   journalState() {
     if (!this.store) return "unavailable" as const
     if (this.journalFault) return "malformed" as const
@@ -718,7 +746,28 @@ export class DesktopBridge {
       if (entry?.[1].result) counts.confirmed += 1
       if (entry?.[1].failure) counts.unknown += 1
     }
-    return { epoch: saved.epoch, revision: saved.revision, lastAckAt: saved.lastAckAt, pendingNative: counts }
+    return {
+      epoch: saved.epoch,
+      revision: saved.revision,
+      lastAckAt: saved.lastAckAt,
+      pendingNative: counts,
+      audit: {
+        count: saved.audit.length,
+        confirmed: saved.audit.filter((item) => item.outcome === "confirmed").length,
+        unknown: saved.audit.filter((item) => item.outcome === "unknown").length,
+      },
+    }
+  }
+
+  /** Durable-only, redacted native effects for independent installed-host evaluation. */
+  journalAudit() {
+    const saved = this.committed
+    if (!saved) return null
+    return {
+      epoch: saved.epoch,
+      revision: saved.revision,
+      entries: saved.audit.map((item) => ({ ...item })),
+    }
   }
 
   private persistJournal(): Promise<void> {
@@ -748,16 +797,38 @@ export class DesktopBridge {
           }))
           .slice(-256)
         const ack = this.pendingAck
+        const audit = new Map((this.committed?.audit ?? this.migratedAudit).map((item) => [item.hash, item]))
+        for (const value of this.receipts.values()) {
+          const proof = persistable(value.result)
+            ? value.result.receipt
+            : persistableFailure(value.failure)
+              ? value.failure.receipt
+              : undefined
+          if (!proof || (proof.effect !== "manage" && proof.effect !== "interact")) continue
+          const hash = createHash("sha256").update(`${this.auditSalt}:${value.fingerprint}`).digest("hex")
+          audit.set(hash, {
+            hash,
+            effect: proof.effect,
+            outcome: proof.outcome,
+            startedAt: proof.startedAt,
+            finishedAt: proof.finishedAt,
+          })
+        }
         const saved: Journal = {
-          version: 2,
+          version: 3,
           epoch: this.committed?.epoch ?? this.epoch,
-          revision: (this.committed?.revision ?? 0) + 1,
+          revision: (this.committed?.revision ?? this.migratedRevision) + 1,
           lastAckAt:
-            ack === undefined ? (this.committed?.lastAckAt ?? null) : Math.max(this.committed?.lastAckAt ?? 0, ack),
+            ack === undefined
+              ? (this.committed?.lastAckAt ?? this.migratedAck)
+              : Math.max(this.committed?.lastAckAt ?? this.migratedAck ?? 0, ack),
           items,
+          auditSalt: this.auditSalt,
+          audit: [...audit.values()].slice(-256),
         }
         await Promise.resolve(this.store!.update(journal, saved))
         this.committed = saved
+        this.migratedAudit = []
         this.migration = false
         if (this.pendingAck === ack) this.pendingAck = undefined
       })
@@ -896,18 +967,46 @@ function persistableFailure(
   )
 }
 
-function validSaved(value: unknown): value is {
-  version: 1 | 2
-  items: unknown[]
-  epoch?: unknown
-  revision?: unknown
-  lastAckAt?: unknown
-} {
+function validSaved(value: unknown): value is Journal | LegacyJournal {
   if (!value || typeof value !== "object") return false
-  const saved = value as { version?: unknown; items?: unknown; epoch?: unknown; revision?: unknown; lastAckAt?: unknown }
+  const saved = value as {
+    version?: unknown
+    items?: unknown
+    epoch?: unknown
+    revision?: unknown
+    lastAckAt?: unknown
+    auditSalt?: unknown
+    audit?: unknown
+  }
   if (!Array.isArray(saved.items) || saved.items.length > 256) return false
   if (saved.version === 1) return true
-  return validJournal(saved)
+  if (!validJournal(saved)) return false
+  if (saved.version === 2) return true
+  if (saved.version !== 3 || typeof saved.auditSalt !== "string" || !/^[a-f0-9]{32}$/.test(saved.auditSalt))
+    return false
+  if (!Array.isArray(saved.audit) || saved.audit.length > 256) return false
+  const hashes = new Set<string>()
+  for (const item of saved.audit) {
+    if (!validAudit(item) || hashes.has(item.hash)) return false
+    hashes.add(item.hash)
+  }
+  return true
+}
+
+function validAudit(value: unknown): value is Audit {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  return (
+    Object.keys(item).sort().join(",") === "effect,finishedAt,hash,outcome,startedAt" &&
+    typeof item.hash === "string" &&
+    /^[a-f0-9]{64}$/.test(item.hash) &&
+    (item.effect === "manage" || item.effect === "interact") &&
+    (item.outcome === "confirmed" || item.outcome === "unknown") &&
+    Number.isSafeInteger(item.startedAt) &&
+    (item.startedAt as number) > 0 &&
+    Number.isSafeInteger(item.finishedAt) &&
+    (item.finishedAt as number) >= (item.startedAt as number)
+  )
 }
 
 function validJournal(value: {
@@ -916,9 +1015,9 @@ function validJournal(value: {
   epoch?: unknown
   revision?: unknown
   lastAckAt?: unknown
-}): value is Journal {
+}): boolean {
   return (
-    value.version === 2 &&
+    (value.version === 2 || value.version === 3) &&
     Array.isArray(value.items) &&
     value.items.length <= 256 &&
     typeof value.epoch === "string" &&

@@ -20,6 +20,7 @@ export type Probe = {
       revision: number
       lastAckAt: number | null
       pendingNative: { confirmed: number; unknown: number }
+      audit?: { count: number; confirmed: number; unknown: number }
     } | null
   }
   observe: () => Promise<{
@@ -64,7 +65,8 @@ function changed(input: Probe, process: NonNullable<ReturnType<Probe["process"]>
     next.generation !== process.generation
   )
     return "The managed Raya backend changed during observation"
-  if (JSON.stringify(input.lease()) !== JSON.stringify(lease)) return "The Computer Use lease changed during observation"
+  if (JSON.stringify(input.lease()) !== JSON.stringify(lease))
+    return "The Computer Use lease changed during observation"
   return null
 }
 

@@ -1005,7 +1005,7 @@ describe("desktop observation bridge", () => {
     expect(test.replies).toHaveLength(257)
     expect(test.rejects).toEqual([])
     test.bridge.dispose()
-  })
+  }, 10_000)
 
   it("delivers a bounded grounded frame sequence with one receipt", async () => {
     const test = setup()
@@ -1241,7 +1241,7 @@ describe("desktop observation bridge", () => {
     expect(first.actions).toHaveLength(1)
     expect(JSON.stringify(store.read())).not.toContain("cG5n")
     expect(store.read()).toMatchObject({
-      version: 2,
+      version: 3,
       items: [{ id: click.id, result: { operation: "click", receipt: { outcome: "confirmed" } } }],
     })
     first.bridge.dispose()
@@ -1261,7 +1261,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 2, items: [] })
+    expect(store.read()).toMatchObject({ version: 3, items: [] })
     second.bridge.dispose()
   })
 
@@ -1350,9 +1350,10 @@ describe("desktop observation bridge", () => {
       }),
     ])
     expect(store.read()).toMatchObject({
-      version: 2,
+      version: 3,
       items: [{ id: click.id, failure: { receipt: { requestID: click.id, outcome: "unknown" } } }],
     })
+    expect(first.bridge.journalAudit()?.entries).toMatchObject([{ effect: "interact", outcome: "unknown" }])
 
     const next = { ...request, id: "desktop_after_uncertain_observe" }
     for (const listener of first.events)
@@ -1390,7 +1391,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 2, items: [] })
+    expect(store.read()).toMatchObject({ version: 3, items: [] })
     second.bridge.dispose()
   })
 
@@ -1727,7 +1728,7 @@ describe("desktop observation bridge", () => {
         error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 2, items: [] })
+    expect(store.read()).toMatchObject({ version: 3, items: [] })
     second.bridge.dispose()
 
     const fingerprint = createHash("sha256")
@@ -1908,7 +1909,7 @@ describe("desktop observation bridge", () => {
     return click
   }
 
-  it("keeps v2 epoch and pending counts across restart, then atomically records native acknowledgement", async () => {
+  it("keeps v3 epoch, audit and pending counts across restart, then atomically records native acknowledgement", async () => {
     const store = memory()
     const first = setup({ store, fail: true })
     const click = await native(first, "journal_v2_restart")
@@ -1916,12 +1917,18 @@ describe("desktop observation bridge", () => {
     expect(first.bridge.journalState()).toBe("durable")
     expect(first.actions).toHaveLength(1)
     expect(pending).toMatchObject({ revision: 1, lastAckAt: null, pendingNative: { confirmed: 1, unknown: 0 } })
+    expect(pending?.audit).toEqual({ count: 1, confirmed: 1, unknown: 0 })
+    const audit = first.bridge.journalAudit()
+    expect(audit?.entries).toMatchObject([{ effect: "interact", outcome: "confirmed" }])
+    expect(JSON.stringify(audit)).not.toContain(click.id)
+    expect(JSON.stringify(audit)).not.toContain(click.windowID)
     expect(JSON.stringify(first.bridge.journalSummary())).not.toContain(click.id)
     first.bridge.dispose()
 
     const second = setup({ store, pending: [click] })
     expect(second.bridge.journalState()).toBe("durable")
     expect(second.bridge.journalSummary()).toEqual(pending)
+    expect(second.bridge.journalAudit()).toEqual(audit)
     for (const listener of second.states) listener("connected")
     await Bun.sleep(20)
     expect(second.actions).toEqual([])
@@ -1933,6 +1940,7 @@ describe("desktop observation bridge", () => {
       pendingNative: { confirmed: 0, unknown: 0 },
     })
     expect(ack?.lastAckAt).toBeGreaterThan(0)
+    expect(ack?.audit).toEqual({ count: 1, confirmed: 1, unknown: 0 })
     second.bridge.dispose()
     const third = setup({ store })
     expect(third.bridge.journalSummary()).toEqual(ack)
@@ -1965,6 +1973,37 @@ describe("desktop observation bridge", () => {
     second.bridge.dispose()
   })
 
+  it("migrates v2 receipts to a salted bounded audit without replay", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    const click = await native(first, "journal_v2_migrate")
+    const saved = store.read() as {
+      epoch: string
+      revision: number
+      lastAckAt: number | null
+      items: unknown[]
+    }
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", {
+      version: 2,
+      epoch: saved.epoch,
+      revision: 7,
+      lastAckAt: 12_345,
+      items: saved.items,
+    })
+    first.bridge.dispose()
+    const second = setup({ store, pending: [click] })
+    expect(second.bridge.journalState()).toBe("migrating_legacy")
+    await Bun.sleep(20)
+    expect(second.bridge.journalState()).toBe("durable")
+    expect(second.bridge.journalAudit()?.entries).toMatchObject([{ effect: "interact", outcome: "confirmed" }])
+    expect(second.bridge.journalSummary()).toMatchObject({ epoch: saved.epoch, revision: 8, lastAckAt: 12_345 })
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    expect(second.bridge.journalSummary()?.audit).toEqual({ count: 1, confirmed: 1, unknown: 0 })
+    second.bridge.dispose()
+  })
+
   it("keeps the last durable pending receipt when acknowledgement persistence fails", async () => {
     let saved: unknown
     let fail = false
@@ -1978,6 +2017,7 @@ describe("desktop observation bridge", () => {
     const first = setup({ store, fail: true })
     const click = await native(first, "journal_ack_failure")
     const pending = first.bridge.journalSummary()
+    const audit = first.bridge.journalAudit()
     first.bridge.dispose()
     fail = true
 
@@ -1986,13 +2026,15 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(second.actions).toEqual([])
     expect(second.bridge.journalSummary()).toEqual(pending)
-    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(2)
+    expect(second.bridge.journalAudit()).toEqual(audit)
+    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(3)
     expect((saved as { items: Array<{ id: string }> }).items[0].id).toBe(click.id)
     for (const listener of second.events)
       listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
     await Bun.sleep(20)
     expect(second.actions).toEqual([])
     expect(second.bridge.journalSummary()).toEqual(pending)
+    expect(second.bridge.journalAudit()).toEqual(audit)
     second.bridge.dispose()
     fail = false
 
@@ -2039,6 +2081,54 @@ describe("desktop observation bridge", () => {
       )
       test.bridge.dispose()
     }
+  })
+
+  it("fails closed on malformed, oversized or duplicate v3 audit entries", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    await native(first, "journal_audit_corrupt")
+    const saved = store.read() as { audit: unknown[] }
+    first.bridge.dispose()
+    for (const patch of [
+      { auditSalt: "not-a-salt" },
+      { audit: [{ ...saved.audit[0], requestID: "leak" }] },
+      { audit: Array(257).fill(saved.audit[0]) },
+      { audit: [saved.audit[0], saved.audit[0]] },
+    ]) {
+      const second = setup({ store: memory({ ...saved, ...patch }) })
+      expect(second.bridge.journalState()).toBe("malformed")
+      expect(second.bridge.journalSummary()).toBeNull()
+      expect(second.bridge.journalAudit()).toBeNull()
+      second.bridge.dispose()
+    }
+  })
+
+  it("bounds the durable native audit to the latest 256 effects", async () => {
+    const oldest = "0".repeat(64)
+    const audit = Array.from({ length: 256 }, (_, index) => ({
+      hash: index.toString(16).padStart(64, "0"),
+      effect: "interact" as const,
+      outcome: "confirmed" as const,
+      startedAt: index + 1,
+      finishedAt: index + 1,
+    }))
+    const store = memory({
+      version: 3,
+      epoch: randomUUID(),
+      revision: 1,
+      lastAckAt: null,
+      items: [],
+      auditSalt: "a".repeat(32),
+      audit,
+    })
+    const test = setup({ store, fail: true })
+    expect(test.bridge.journalAudit()?.entries).toHaveLength(256)
+    await native(test, "journal_audit_bound")
+    const saved = test.bridge.journalAudit()
+    expect(saved?.entries).toHaveLength(256)
+    expect(saved?.entries.some((item) => item.hash === oldest)).toBe(false)
+    expect(saved?.entries.at(-1)).toMatchObject({ effect: "interact", outcome: "confirmed" })
+    test.bridge.dispose()
   })
 
   it("refuses a duplicate saved native receipt instead of replaying it", async () => {

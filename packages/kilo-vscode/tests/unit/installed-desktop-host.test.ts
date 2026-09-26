@@ -4,7 +4,13 @@ import { inspectInstalledHost } from "../../src/commands/installed-desktop-host-
 const version = "7.4.23-snapshot+abc.test.1"
 const digest = "a".repeat(64)
 const process = { pid: 123, startedAt: 1000, port: 41123, generation: 1 }
-const lease = { grantHash: "b".repeat(64), level: "autonomous" as const, state: "active" as const, scopeCount: 2, expiresAt: null }
+const lease = {
+  grantHash: "b".repeat(64),
+  level: "autonomous" as const,
+  state: "active" as const,
+  scopeCount: 2,
+  expiresAt: null,
+}
 const frame = {
   before: { windowID: "0x10", location: "same", identity: "A".repeat(64) },
   after: { windowID: "0x10", location: "same", identity: "A".repeat(64) },
@@ -27,7 +33,13 @@ function input() {
     lease: () => lease,
     journal: () => ({
       state: "durable" as const,
-      summary: { epoch: "epoch-test", revision: 3, lastAckAt: null, pendingNative: { confirmed: 1, unknown: 2 } },
+      summary: {
+        epoch: "epoch-test",
+        revision: 3,
+        lastAckAt: null,
+        pendingNative: { confirmed: 1, unknown: 2 },
+        audit: { count: 4, confirmed: 3, unknown: 1 },
+      },
     }),
     observe: async () => frame,
   }
@@ -47,6 +59,7 @@ describe("installed interactive host probe", () => {
       revision: 3,
       lastAckAt: null,
       pendingNative: { confirmed: 1, unknown: 2 },
+      audit: { count: 4, confirmed: 3, unknown: 1 },
     })
     expect(report.taskFinalState).toBeNull()
     expect(report.backendProcess).toEqual(process)

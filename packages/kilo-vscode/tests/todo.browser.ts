@@ -68,6 +68,38 @@ test("Todo planning submits the user's goal through Raya and filters priorities"
   await expect(page.locator("body")).not.toHaveAttribute("data-asked-raya", /I want to learn violin/)
 })
 
+test("orders saved open tasks by overdue state and priority after reload", async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto("/")
+  await page.evaluate(() => {
+    const now = Date.now()
+    const items = [
+      { id: "low", title: "Low priority", priority: "low", done: false, revision: 1, createdAt: 1, updatedAt: 5 },
+      { id: "high", title: "High priority", priority: "high", done: false, revision: 1, createdAt: 2, updatedAt: 2 },
+      {
+        id: "overdue",
+        title: "Overdue task",
+        priority: "low",
+        dueAt: now - 60_000,
+        done: false,
+        revision: 1,
+        createdAt: 3,
+        updatedAt: 3,
+      },
+      { id: "done", title: "Completed task", priority: "urgent", done: true, revision: 1, createdAt: 4, updatedAt: 4 },
+    ]
+    localStorage.setItem("raya-todo-fixture-items", JSON.stringify(items))
+  })
+  await page.reload({ waitUntil: "domcontentloaded" })
+  await expect(page.locator('[data-slot="personal-todo-item"]')).toHaveCount(4)
+  await expect(page.locator('[data-slot="personal-todo-item"]')).toContainText([
+    "Overdue task",
+    "High priority",
+    "Low priority",
+    "Completed task",
+  ])
+})
+
 test("Todo planning leaves a draft for review when sending is unavailable", async ({ page }) => {
   await page.goto("/?state=plan-offline")
   await page.getByRole("textbox", { name: "Ask Raya to plan a todo" }).fill("  Learn violin  ")

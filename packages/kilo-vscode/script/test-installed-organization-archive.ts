@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { hostname, tmpdir } from "node:os"
 import { join, resolve, sep } from "node:path"
 
 type Host = { url: string; child: Bun.Subprocess; stderr: Promise<string> }
@@ -123,8 +123,8 @@ async function backend(exe: string, root: string, env: Record<string, string | u
   throw new Error("Installed backend did not become ready")
 }
 
-async function call(host: Host, password: string, root: string, method: string, path: string, body?: unknown) {
-  const response = await fetch(`${host.url}${path}`, {
+function request(host: Host, password: string, root: string, method: string, path: string, body?: unknown) {
+  return fetch(`${host.url}${path}`, {
     method,
     headers: {
       Authorization: `Basic ${Buffer.from(`kilo:${password}`).toString("base64")}`,
@@ -134,6 +134,10 @@ async function call(host: Host, password: string, root: string, method: string, 
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(35_000),
   })
+}
+
+async function call(host: Host, password: string, root: string, method: string, path: string, body?: unknown) {
+  const response = await request(host, password, root, method, path, body)
   const value = await response.json()
   if (response.status !== 200) throw new Error(`${method} ${path}: ${response.status} ${JSON.stringify(value)}`)
   return value
@@ -214,18 +218,58 @@ async function main() {
     )
     await Bun.sleep(Math.max(0, due + 65_000 - Date.now()))
     assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${scheduled.id}/runs`), [])
-    const blocked = await fetch(`${host.url}/kilocode/agent/${scheduled.id}/run`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`kilo:${password}`).toString("base64")}`,
-        "x-kilo-directory": root,
-      },
-      signal: AbortSignal.timeout(20_000),
-    })
+    const blocked = await request(host, password, root, "POST", `/kilocode/agent/${scheduled.id}/run`)
     assert.equal(blocked.status, 400)
     assert.equal(fake.count(), 1)
+
+    const uncertain = (await call(host, password, root, "POST", "/kilocode/agent", {
+      ...headers,
+      name: "Uncertain start",
+      objective: "Never start after archive begins.",
+      schedule: { kind: "manual" },
+    })) as Worker
+    const pending = (await call(host, password, root, "POST", "/kilocode/organization", {
+      name: "Interrupted archive acceptance",
+      members: [{ agentID: uncertain.id, role: "Worker" }],
+    })) as Organization
+    const id = crypto.randomUUID()
+    const key = createHash("sha256").update(uncertain.id).digest("hex")
+    const dir = join(home, ".local", "share", "kilo", "storage", "raya", "agent-claims")
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, `${key}.json`),
+      JSON.stringify({
+        version: 1,
+        agentID: uncertain.id,
+        id,
+        at: Date.now(),
+        phase: "claimed",
+        owner: { host: hostname(), pid: 2_147_483_647 },
+      }),
+    )
+    const refused = await request(host, password, root, "DELETE", `/kilocode/organization/${pending.id}`, {
+      expectedRevision: pending.revision,
+    })
+    assert.equal(refused.status, 409)
+    assert.equal(
+      ((await call(host, password, root, "GET", `/kilocode/organization/${pending.id}`)) as Organization).archived,
+      false,
+    )
+    await stop(host)
+    host = await backend(app.exe, root, env)
+    assert.equal((await request(host, password, root, "POST", `/kilocode/agent/${uncertain.id}/run`)).status, 400)
+    assert.equal(fake.count(), 1)
+    await call(host, password, root, "POST", `/kilocode/agent/${uncertain.id}/runs/${id}/recovery`)
+    assert.equal(
+      (
+        (await call(host, password, root, "DELETE", `/kilocode/organization/${pending.id}`, {
+          expectedRevision: pending.revision,
+        })) as Organization
+      ).archived,
+      true,
+    )
     console.log(
-      `Installed archive acceptance passed: ${app.version}, active run stopped, due schedule fenced after restart`,
+      `Installed archive acceptance passed: ${app.version}, live run stopped, due schedule fenced, unknown start held through restart and recovered`,
     )
   } finally {
     if (host) await stop(host)

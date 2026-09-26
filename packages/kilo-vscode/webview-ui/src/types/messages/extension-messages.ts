@@ -496,6 +496,15 @@ export interface RoutineOrganizationArchivedMessage {
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
+export interface RoutineOrganizationArchivedListResultMessage {
+  type: "routineOrganizationArchivedList"
+  requestID: string
+  items?: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"]
+  next?: string
+  error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
+}
+
 export interface RoutineProvisioningUpdatedMessage {
   type: "routineProvisioningUpdated"
   requestID: string
@@ -2053,6 +2062,7 @@ export type ExtensionMessage =
   | RoutineOrganizationUpdatedMessage
   | RoutineProvisioningUpdatedMessage
   | RoutineOrganizationArchivedMessage
+  | RoutineOrganizationArchivedListResultMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

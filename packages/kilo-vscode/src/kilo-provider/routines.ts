@@ -165,6 +165,7 @@ const replies: Record<string, string> = {
   routineOrganizationProposal: "routineOrganizationProposal",
   routineOrganizationUpdate: "routineOrganizationUpdated",
   routineOrganizationArchive: "routineOrganizationArchived",
+  routineOrganizationArchivedList: "routineOrganizationArchivedList",
   routineProvisioningUpdate: "routineProvisioningUpdated",
 }
 
@@ -289,6 +290,7 @@ const messages = new Set([
   "routineOrganizationProposal",
   "routineOrganizationUpdate",
   "routineOrganizationArchive",
+  "routineOrganizationArchivedList",
   "routineProvisioningUpdate",
 ])
 
@@ -819,7 +821,8 @@ async function retire(ctx: Ctx) {
       type: "routineOrganizationArchived",
       requestID: msg.requestID,
       organizationID: msg.organizationID,
-      error: "Raya could not finish archiving this organization. It remains in your active list. Review its workers before retrying.",
+      error:
+        "Raya could not finish archiving this organization. It remains in your active list. Review its workers before retrying.",
       recovery: { kind: "conflict", next: "Refresh its workers and retry. Resolve any interrupted start first." },
     })
     return
@@ -833,6 +836,33 @@ async function retire(ctx: Ctx) {
     revision: result.data.revision,
   })
   await ctx.refresh?.()
+}
+
+async function archived(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID)) throw new Error("Reload archived organizations before reading them.")
+  const cursor = msg.cursor === undefined ? undefined : String(msg.cursor)
+  if (cursor !== undefined && (cursor.length < 1 || cursor.length > 256))
+    throw new Error("This archived organization page is invalid. Reload the list.")
+  const result = await ctx.kilo.organization.list(
+    { directory: ctx.dir, archived: "true", limit: "20", ...(cursor ? { cursor } : {}) },
+    { throwOnError: true },
+  )
+  if (
+    !result.data ||
+    !Array.isArray(result.data.items) ||
+    result.data.items.length > 20 ||
+    !result.data.items.every((item) => organization(item, true)) ||
+    (result.data.next !== undefined &&
+      (typeof result.data.next !== "string" || result.data.next.length < 1 || result.data.next.length > 256))
+  )
+    throw new Error("The archived organization list could not be verified. Refresh and try again.")
+  ctx.post({
+    type: "routineOrganizationArchivedList",
+    requestID: msg.requestID,
+    items: result.data.items,
+    next: result.data.next,
+  })
 }
 
 async function provision(ctx: Ctx) {
@@ -1288,6 +1318,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineOrganizationProposal: proposal,
   routineOrganizationUpdate: revise,
   routineOrganizationArchive: retire,
+  routineOrganizationArchivedList: archived,
   routineProvisioningUpdate: provision,
   routineList: list,
   routineCreate: create,

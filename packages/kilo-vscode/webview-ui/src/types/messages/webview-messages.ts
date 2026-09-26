@@ -365,6 +365,12 @@ export interface RoutineOrganizationArchiveMessage {
   expectedRevision: number
 }
 
+export interface RoutineOrganizationArchivedListMessage {
+  type: "routineOrganizationArchivedList"
+  requestID: string
+  cursor?: string
+}
+
 export interface RoutineProvisioningUpdateMessage {
   type: "routineProvisioningUpdate"
   requestID: string
@@ -2135,6 +2141,7 @@ export type WebviewMessage =
   | RoutineOrganizationUpdateMessage
   | RoutineProvisioningUpdateMessage
   | RoutineOrganizationArchiveMessage
+  | RoutineOrganizationArchivedListMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

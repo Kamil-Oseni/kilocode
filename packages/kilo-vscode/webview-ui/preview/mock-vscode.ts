@@ -120,6 +120,8 @@ const agents =
         design,
       ]
     : [books, legal, design]
+const roster = () =>
+  scene === "archive-missing-worker" && websiteArchived ? agents.filter((agent) => agent.id !== books.id) : agents
 const workload = Array.from({ length: 39 }, (_, index) => {
   const count = index + 1
   return {
@@ -143,6 +145,7 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
 }))
 let stopped = false
 let websiteArchived = false
+let archivedRequests = 0
 const reports = new Map<string, { enabled: boolean; quiet?: { start: number; end: number; timezone: string } }>()
 
 function destination(message: Extract<WebviewMessage, { type: "routineContactDestination" }>) {
@@ -699,11 +702,61 @@ const archive = (message: Extract<WebviewMessage, { type: "routineOrganizationAr
     return
   }
   websiteArchived = true
+  for (const worker of [legal, books, design]) worker.enabled = false
   emit({
     type: "routineOrganizationArchived",
     requestID: message.requestID,
     organizationID: message.organizationID,
     revision: message.expectedRevision + 1,
+  })
+}
+
+const archived = (message: Extract<WebviewMessage, { type: "routineOrganizationArchivedList" }>) => {
+  archivedRequests += 1
+  if (scene === "archived-late" && archivedRequests === 1) {
+    setTimeout(
+      () =>
+        emit({
+          type: "routineOrganizationArchivedList",
+          requestID: message.requestID,
+          error: "Late response replaced the list.",
+        }),
+      16_000,
+    )
+    return
+  }
+  if (scene === "archived-error") {
+    emit({
+      type: "routineOrganizationArchivedList",
+      requestID: message.requestID,
+      error: "Archived teams could not be loaded.",
+    })
+    return
+  }
+  emit({
+    type: "routineOrganizationArchivedList",
+    requestID: message.requestID,
+    items: websiteArchived
+      ? [
+          {
+            version: 1,
+            id: "org_11111111111111111111111111111111",
+            name: "Website Builders",
+            purpose: "Find, design, build, and support better client websites.",
+            revision: 2,
+            archived: true,
+            archivedAt: Date.now(),
+            createdAt: 1,
+            updatedAt: Date.now(),
+            members: [
+              { agentID: legal.id, role: "Chief of Staff", position: 0 },
+              { agentID: books.id, role: "Accounting", supervisorID: legal.id, position: 1 },
+              { agentID: design.id, role: "Design", supervisorID: legal.id, position: 2 },
+            ],
+            delegations: [],
+          },
+        ]
+      : [],
   })
 }
 
@@ -787,7 +840,7 @@ const respond = (message: WebviewMessage) => {
       requestID: id,
       viewID: view,
       refreshID: 1,
-      agents,
+      agents: roster(),
       templates: [],
       organizations: [
         {
@@ -1044,6 +1097,7 @@ const respond = (message: WebviewMessage) => {
 
 const reply = (message: WebviewMessage) => {
   if (message.type === "routineContactDestination") return destination(message)
+  if (message.type === "routineOrganizationArchivedList") return archived(message)
   return initial(message) || respond(message)
 }
 

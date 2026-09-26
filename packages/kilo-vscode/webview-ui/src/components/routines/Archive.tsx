@@ -47,7 +47,7 @@ function clips(value: unknown) {
   return rows.length ? rows : undefined
 }
 
-function parse(value: unknown, id: string) {
+export function parse(value: unknown, id: string) {
   if (!Array.isArray(value)) return
   const rows: Note[] = []
   for (const item of value) {

@@ -32,6 +32,7 @@ import { OutputReview } from "./OutputReview"
 import RoutineSetup from "./RoutineSetup"
 import { Inbox, status, type Anchor, type Box } from "./Inbox"
 import { OrganizationActivity } from "./OrganizationActivity"
+import { ArchivedOrganizations } from "./ArchivedOrganizations"
 import { ReportSetting } from "./ReportSetting"
 import { polling } from "./routine-polling"
 import { Output } from "../../../../src/shared/routine-output"
@@ -1904,6 +1905,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </div>
               </section>
             </Show>
+            <ArchivedOrganizations agents={agents()} />
           </Show>
           <div class="sr-only" role="status" aria-live="polite" aria-busy={refreshing()}>
             {freshness()}

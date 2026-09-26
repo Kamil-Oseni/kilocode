@@ -823,12 +823,90 @@ test("archive receipt removes the active team and keeps worker conversation reac
   await expect(page.getByRole("button", { name: "Website Builders 3" })).toHaveCount(0)
   await expect(page.locator(".routines-team-directory")).not.toContainText("Website Builders")
   await expect(page.getByRole("button", { name: "Finance 1" })).toBeVisible()
-  await page.locator('.routines-identity[data-routine-worker="routine"]').click()
-  const thread = page.getByRole("region", { name: "Conversation with Books" })
+  await page.getByRole("button", { name: "Archived teams" }).click()
+  const archived = page.getByRole("region", { name: "Archived teams" })
+  await expect(archived.getByRole("button", { name: /Website Builders.*3 workers.*Archived/ })).toBeVisible()
+  await archived.getByRole("button", { name: /Website Builders.*3 workers.*Archived/ }).click()
+  await expect(archived.getByText("These workers cannot run from this team.", { exact: false })).toBeVisible()
+  await archived
+    .getByRole("listitem")
+    .filter({ hasText: "Books" })
+    .getByRole("button", { name: "Open conversation" })
+    .click()
+  await expect(page.getByRole("region", { name: "Saved conversation with Books" })).toBeVisible()
+  const thread = page.getByRole("region", { name: "Saved conversation with Books" })
   await expect(thread).toBeVisible()
   await expect(thread.getByText("Friday expenses increased in travel.", { exact: false })).toBeVisible()
   await expect(thread.getByText("Friday expenses increased in travel.", { exact: false })).toHaveCount(1)
   await expect(thread.getByRole("button", { name: "Open vendor-travel-ledger-q3-close-final.pdf" })).toBeVisible()
+})
+
+test("archived member history remains reachable after the worker leaves the active roster", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines&target=organization&scene=archive-missing-worker")
+  await page.getByRole("button", { name: "Archive organization", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Archive Website Builders?" })
+    .getByRole("button", { name: "Archive organization" })
+    .click()
+  await expect(page.getByRole("button", { name: /^Books,/ })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /^Counsel,/ })).toBeVisible()
+  await page.getByRole("button", { name: "Archived teams" }).click()
+  const archived = page.getByRole("region", { name: "Archived teams" })
+  await archived.getByRole("button", { name: /Website Builders.*3 workers.*Archived/ }).click()
+  await archived
+    .getByRole("listitem")
+    .filter({ hasText: "Accounting" })
+    .getByRole("button", { name: "Open conversation" })
+    .click()
+  const thread = archived.getByRole("region", { name: "Saved conversation with Accounting" })
+  await expect(thread.getByText("Friday expenses increased in travel.", { exact: false })).toBeVisible()
+  await expect(thread.getByRole("textbox")).toHaveCount(0)
+  await expect(thread.getByRole("button", { name: "Send" })).toHaveCount(0)
+})
+
+test("archived team retrieval gives a clear empty and failure state", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Archived teams" }).click()
+  await expect(page.getByRole("region", { name: "Archived teams" }).getByText("No archived teams yet.")).toBeVisible()
+  await page.goto("/?state=light-routines&scene=archived-error")
+  await page.getByRole("button", { name: "Archived teams" }).click()
+  await expect(page.getByRole("region", { name: "Archived teams" }).getByRole("alert")).toContainText(
+    "Archived teams could not be loaded",
+  )
+  await expect(
+    page.getByRole("region", { name: "Archived teams" }).getByRole("button", { name: "Retry" }),
+  ).toBeVisible()
+})
+
+test("archived list times out and ignores a late reply after retry", async ({ page }) => {
+  await page.clock.install()
+  await page.goto("/?state=light-routines&scene=archived-late")
+  await page.getByRole("button", { name: "Archived teams" }).click()
+  await page.clock.fastForward(15_100)
+  const archived = page.getByRole("region", { name: "Archived teams" })
+  await expect(archived.getByRole("alert")).toContainText("took too long to load")
+  await archived.getByRole("button", { name: "Retry" }).click()
+  await expect(archived.getByText("No archived teams yet.")).toBeVisible()
+  await page.clock.fastForward(1_000)
+  await expect(archived.getByRole("alert")).toHaveCount(0)
+})
+
+test("archived team details fit a narrow Routines panel", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines&target=organization")
+  await page.getByRole("button", { name: "Archive organization", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Archive Website Builders?" })
+    .getByRole("button", { name: "Archive organization" })
+    .click()
+  await page.getByRole("button", { name: "Archived teams" }).click()
+  const archived = page.getByRole("region", { name: "Archived teams" })
+  await archived.getByRole("button", { name: /Website Builders.*3 workers.*Archived/ }).click()
+  await expect(archived.getByRole("button", { name: "Open conversation" })).toHaveCount(3)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath("archived-team-narrow.png"), fullPage: true })
 })
 
 test("archive refusal stays visible in the organization overview", async ({ page }) => {

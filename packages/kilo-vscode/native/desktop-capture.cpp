@@ -1131,9 +1131,13 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
       {
+        HWND instance = CreateWindowExW(0, L"STATIC", L"Raya instance self-test", 0,
+                                       0, 0, 1, 1, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
+        if (!instance) throw Failure("capture_failed", "window instance self-test could not create a window");
         ForegroundWatch watch;
         const auto epoch = watch.value();
-        NotifyWinEvent(EVENT_SYSTEM_FOREGROUND, GetForegroundWindow(), OBJID_WINDOW, CHILDID_SELF);
+        const HWND event = GetForegroundWindow() ? GetForegroundWindow() : instance;
+        NotifyWinEvent(EVENT_SYSTEM_FOREGROUND, event, OBJID_WINDOW, CHILDID_SELF);
         for (int attempt = 0; attempt < 100 && watch.value() == epoch; ++attempt) Sleep(2);
         if (watch.value() == epoch)
           throw Failure("capture_failed", "foreground change event was not observed");
@@ -1144,6 +1148,20 @@ int wmain(int argc, wchar_t** argv) {
         const std::string base = "pid:7;start:123;class:Editor";
         if (tagged(base, 0) != base || tagged(base, 1) == base || tagged(base, 1) == tagged(base, 2))
           throw Failure("capture_failed", "window instance fingerprint self-test failed");
+        static constexpr wchar_t property[] = L"RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B";
+        const auto initial = fingerprint(instance, GetCurrentProcessId());
+        const bool first = SetPropW(instance, property, reinterpret_cast<HANDLE>(uintptr_t(1))) != 0;
+        const auto tokenized = fingerprint(instance, GetCurrentProcessId());
+        const bool second = SetPropW(instance, property, reinterpret_cast<HANDLE>(uintptr_t(2))) != 0;
+        const auto replaced = fingerprint(instance, GetCurrentProcessId());
+        RemovePropW(instance, property);
+        DestroyWindow(instance);
+        if (!first || !second || initial.empty() || tokenized.empty() || replaced.empty() ||
+            initial == tokenized || tokenized == replaced || initial == replaced) {
+          std::fprintf(stderr, "Raya native instance self-test fingerprint failed: %d %d %zu %zu %zu\n",
+                       first, second, initial.size(), tokenized.size(), replaced.size());
+          throw Failure("capture_failed", "same-window instance token change was not detected");
+        }
         Target bound{};
         bound.handle = GetForegroundWindow();
         DWORD pid = 0;
@@ -1354,11 +1372,15 @@ int wmain(int argc, wchar_t** argv) {
     CoUninitialize();
     return 0;
   } catch (const Failure& error) {
+    if (argc == 2 && std::wstring(argv[1]) == L"--self-test")
+      std::fprintf(stderr, "Native capture self-test: %s\n", error.what());
     terminal(pipe, error.code);
     clearreceipt();
     CoUninitialize();
     return 1;
   } catch (const std::exception& error) {
+    if (argc == 2 && std::wstring(argv[1]) == L"--self-test")
+      std::fprintf(stderr, "Native capture self-test: %s\n", error.what());
     // Pipe closure is cancellation. A live consumer receives one terminal error packet.
     if (std::string(error.what()) != "stdout pipe closed") {
       terminal(pipe, "capture_failed");

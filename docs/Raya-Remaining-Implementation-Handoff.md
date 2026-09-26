@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-26 15:58 America/Toronto - selected-window snapshot installed, open backend older
+
+Commit `0a939fe24f` is pushed to `origin/main`. The low-memory snapshot passed SDK generation, CLI smoke checks, extension/webview typechecks, lint, production bundle, native capture/input self-tests, input-host round trip, package and install. VS Code lists `eden.raya@7.4.23-snapshot+0a939fe24f.kamil-oseni.1790452368020`; retained rollback VSIX SHA-256 is `4a1092ec34ca1156feab728b21d0b60c6db5890ee69dcbb4ad1e42003cbfebfe`. Both active `kilo.exe serve` processes still point to older `+4dc086be2b`, so this is installed but not loaded-host acceptance. Next: reload Raya/VS Code normally, inspect the exact loaded extension/backend, then run selected-window and first-change latency checks plus independent 17-task Desktop scoring. `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-26 15:40 America/Toronto - selected-window and first-change source slice
 
 The current source adds task-scoped exact-window selection to the Desktop grant panel, grant-click binding and a Stop/Decline race guard. It also adds opt-in `first_change_v2` observation, a conservative native dirty-rectangle capacity guard and a release-ineligible redacted task-audit delta helper. Focused extension, CLI and native checks pass; see the dated progress entry for counts and limits. The open Raya host has not been proven to load this source, and no installed-host 17-task or latency result exists. Next: push and install the source-matched snapshot, reload the interactive host, identify the active package/backend, then test selected windows, changed-scene latency and independent receipt/final-state scoring. Keep `FUT-CU-01` In progress.

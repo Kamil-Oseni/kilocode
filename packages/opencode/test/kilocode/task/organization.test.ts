@@ -526,6 +526,66 @@ test("restart finishes a stopped scheduled worker after an in-flight start clear
   )
 })
 
+test("recovery stops later organizations when an earlier archive still has an in-flight start", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const sessions = {
+        create: () => Effect.die("unexpected session"),
+        get: () => Effect.die("unexpected session"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const halted: string[] = []
+      const runner = RayaTaskRunner.make({
+        storage,
+        database,
+        sessions,
+        halt: (id) => Effect.sync(() => halted.push(id)),
+      })
+      const first = yield* runner.tasks.create({ name: "First", objective: "Work", schedule: { kind: "manual" } })
+      const second = yield* runner.tasks.create({ name: "Second", objective: "Work", schedule: { kind: "manual" } })
+      const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
+      const blocked = yield* organizations.create({ name: "Blocked", members: [{ agentID: first.id, role: "Worker" }] })
+      const ready = yield* organizations.create({ name: "Ready", members: [{ agentID: second.id, role: "Worker" }] })
+      const id = crypto.randomUUID()
+      const key = ["raya", "agent-claims", createHash("sha256").update(first.id).digest("hex")]
+      yield* storage.create(key, {
+        version: 1,
+        agentID: first.id,
+        id,
+        at: Date.now(),
+        phase: "claimed",
+        owner: { ...owner(), pid: 2_147_483_647 },
+      })
+      expect(Exit.isFailure(yield* organizations.archive(blocked.id, { expectedRevision: 1 }).pipe(Effect.exit))).toBe(
+        true,
+      )
+      const sid = SessionID.make("ses_archive_recovery_later")
+      yield* runner.tasks.record({
+        id: "run_archive_recovery_later",
+        agentID: second.id,
+        sessionID: sid,
+        at: Date.now(),
+        status: "running",
+      })
+      const failed = RayaTaskOrganization.make(
+        database,
+        { ...runner.tasks, stop: () => Effect.die("stop interrupted") },
+        storage,
+      )
+      expect(Exit.isFailure(yield* failed.archive(ready.id, { expectedRevision: 1 }).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* runner.recoverStops().pipe(Effect.exit))).toBe(true)
+      expect((yield* organizations.get(blocked.id)).archived).toBe(false)
+      expect((yield* organizations.get(ready.id)).archived).toBe(true)
+      expect((yield* runner.tasks.get(second.id)).enabled).toBe(false)
+      expect((yield* runner.tasks.runsFor(second.id))[0]?.status).toBe("error")
+      expect(halted).toEqual([sid])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("archived organizations cannot restart recurring or event workers after recovery", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

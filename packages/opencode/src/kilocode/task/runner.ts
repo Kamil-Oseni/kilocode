@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises"
 import { createHash } from "node:crypto"
-import { Cause, Duration, Effect, Option, Schema } from "effect"
+import { Cause, Duration, Effect, Exit, Option, Schema } from "effect"
 import type { Bus } from "@/bus"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import type { Session } from "@/session/session"
@@ -964,7 +964,13 @@ export namespace RayaTaskRunner {
     const recoverStops = Effect.fn("RayaTaskRunner.recoverStops")(function* () {
       if (!input.database || !input.halt) return
       const pending = RayaTaskOrganization.make(input.database, { ...tasks, stop: stopMembers }, input.storage)
-      for (const row of yield* pending.pending()) yield* pending.archive(row.id, { expectedRevision: row.revision })
+      const results = yield* Effect.forEach(
+        yield* pending.pending(),
+        (row) => pending.archive(row.id, { expectedRevision: row.revision }).pipe(Effect.exit),
+        { concurrency: 1 },
+      )
+      const failed = results.find(Exit.isFailure)
+      if (failed) return yield* Effect.failCause(failed.cause)
     })
 
     const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (run: RayaTask.Run) {

@@ -54,6 +54,7 @@ function setup(foreground: string) {
   opened = 0
   posts.length = 0
   const grants: GrantInput[] = []
+  const saved: SensitivePolicy[] = []
   const state = { identity: "A".repeat(64) }
   const target = { windowID: foreground, title: "Editor", identity: state.identity }
   const session = {
@@ -78,19 +79,24 @@ function setup(foreground: string) {
     authorize: () => ({ operation: "authorize", decision: "allow", reason: "Granted", grantID: "grant_test" }),
     onChange: () => () => undefined,
     current: () => undefined,
+    savedPolicy: () => undefined,
+    savePolicy: async (value: SensitivePolicy) => {
+      saved.push(value)
+    },
   }
   const panel = new DesktopPanel(session as never, lease as never, async () => true)
-  const grant = () =>
+  const grant = (rememberPolicy = false, sensitive: SensitivePolicy = policy("ask")) =>
     receive?.({
       type: "grant",
       level: "observe",
       duration: "session",
       applications: "current",
       actions: ["observe"],
-      sensitive: {},
+      sensitive,
+      rememberPolicy,
       cooperativeInput: false,
     })
-  return { panel, grants, grant, state }
+  return { panel, grants, saved, grant, state }
 }
 
 const policy = (rule: SensitivePolicy[keyof SensitivePolicy]): SensitivePolicy => ({
@@ -140,6 +146,22 @@ function active(level: "assisted" | "autonomous", rule: SensitivePolicy[keyof Se
 }
 
 describe("selected desktop grant review", () => {
+  it("saves reusable sensitive choices only when explicitly selected in grant review", async () => {
+    const test = setup("0x111")
+    const first = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    test.grant()
+    await first
+    expect(test.saved).toHaveLength(0)
+    const second = test.panel.authorize(request("0x111"))
+    await Bun.sleep(0)
+    const sensitive = policy("deny")
+    sensitive.communications = "allow_always"
+    test.grant(true, sensitive)
+    await second
+    expect(test.saved).toEqual([sensitive])
+  })
+
   it("refuses an agent-named window that was not foreground before the panel opened", async () => {
     const test = setup("0x111")
     const done = test.panel.authorize(request("0x222"))

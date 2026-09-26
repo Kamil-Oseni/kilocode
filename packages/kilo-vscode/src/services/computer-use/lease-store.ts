@@ -57,6 +57,7 @@ export interface LeaseRevocations {
 }
 
 const key = "raya.computerUse.lease.v1"
+const policyKey = "raya.computerUse.sensitivePolicy.v1"
 const actions = new Set<LeaseAction>([
   "observe",
   "pointer",
@@ -83,10 +84,12 @@ const rules = new Set<SensitiveRule>(["allow_session", "allow_always", "ask", "d
 
 export class ComputerUseLeaseStore {
   private lease: ComputerUseLease | undefined
+  private policy: SensitivePolicy | undefined
   private readonly listeners = new Set<(lease: ComputerUseLease | undefined) => void>()
   private readonly sessions = new Set<string>()
   private readonly revoked = new Set<string>()
   private writes = Promise.resolve()
+  private policyWrites = Promise.resolve()
   private revision = 0
   private pending: { id: string; revision: number; sessionID: string; durable: boolean } | undefined
 
@@ -97,6 +100,7 @@ export class ComputerUseLeaseStore {
     private readonly unavailable?: string,
   ) {
     if (unavailable) return
+    this.policy = decodeSavedPolicy(storage.get<unknown>(policyKey))
     this.lease = decode(storage.get<unknown>(key))
     if (
       this.lease &&
@@ -109,6 +113,30 @@ export class ComputerUseLeaseStore {
 
   current(): ComputerUseLease | undefined {
     return this.lease ? structuredClone(this.lease) : undefined
+  }
+
+  savedPolicy(): SensitivePolicy | undefined {
+    return this.policy ? { ...this.policy } : undefined
+  }
+
+  async savePolicy(value: SensitivePolicy): Promise<void> {
+    if (this.unavailable) throw new Error(this.unavailable)
+    const policy = decodePolicy(value)
+    if (!policy) throw new Error("Choose a policy for every sensitive action category")
+    this.policyWrites = this.policyWrites
+      .catch(() => undefined)
+      .then(() => Promise.resolve(this.storage.update(policyKey, { version: 1, sensitive: policy })))
+    await this.policyWrites
+    this.policy = policy
+  }
+
+  async clearPolicy(): Promise<void> {
+    if (this.unavailable) throw new Error(this.unavailable)
+    this.policyWrites = this.policyWrites
+      .catch(() => undefined)
+      .then(() => Promise.resolve(this.storage.update(policyKey, undefined)))
+    await this.policyWrites
+    this.policy = undefined
   }
 
   onChange(listener: (lease: ComputerUseLease | undefined) => void): () => void {
@@ -437,6 +465,13 @@ function decodePolicy(value: unknown): SensitivePolicy | undefined {
   const policy = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
   if (!policy || categories.some((category) => !rules.has(policy[category] as SensitiveRule))) return
   return Object.fromEntries(categories.map((category) => [category, policy[category]])) as SensitivePolicy
+}
+
+function decodeSavedPolicy(value: unknown): SensitivePolicy | undefined {
+  if (!value || typeof value !== "object") return
+  const saved = value as Record<string, unknown>
+  if (saved.version !== 1) return
+  return decodePolicy(saved.sensitive)
 }
 
 function decodeLifetime(value: unknown): Lifetime | undefined {

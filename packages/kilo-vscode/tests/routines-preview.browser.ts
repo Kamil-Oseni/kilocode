@@ -15,6 +15,18 @@ test("Routines overview sends a team request and opens teams", async ({ page }, 
   await page.screenshot({ path: info.outputPath("team.png"), fullPage: true })
 })
 
+test("organization overview fits narrow and wide light and dark previews", async ({ page }, info) => {
+  for (const theme of ["light", "dark"]) {
+    for (const width of [320, 900]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?state=${theme}-routines&target=organization`)
+      await expect(page.locator(".routines-organization-overview")).toBeVisible()
+      expect(await page.locator(".routines-view").evaluate((node) => node.scrollWidth - node.clientWidth)).toBe(0)
+      await page.screenshot({ path: info.outputPath(`organization-${theme}-${width}.png`), fullPage: true })
+    }
+  }
+})
+
 test("Routines plans a worker from the input and leaves a draft when offline", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=dark-routines")

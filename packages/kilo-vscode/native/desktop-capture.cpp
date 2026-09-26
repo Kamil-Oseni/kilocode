@@ -222,7 +222,8 @@ static DWORD pngsize(const std::vector<unsigned char>& bytes) {
 
 static DWORD encode(IWICImagingFactory* imaging, UINT width, UINT height, UINT stride, BYTE* pixels,
                     std::vector<unsigned char>& image) {
-  if (!height || stride > UINT32_MAX / height) throw Failure("unsupported_surface", "source pixels exceed WIC bounds");
+  if (!width || !height || uint64_t(width) * 4 != stride || stride > UINT32_MAX / height)
+    throw Failure("unsupported_surface", "source pixels must be tightly packed within WIC bounds");
   ComPtr<IWICStream> stream;
   ComPtr<IWICBitmapEncoder> encoder;
   ComPtr<IWICBitmapFrameEncode> frame;
@@ -926,45 +927,28 @@ static void run(HANDLE pipe) {
       emitted = Clock::now();
       continue;
     }
-    DWORD size = 0;
-    if (outputs.size() == 1 && !pointer.visible) {
-      const auto& item = outputs.front();
+    for (auto& item : outputs) {
       stable(*item);
       D3D11_MAPPED_SUBRESOURCE mapped{};
       require(item->context->Map(item->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
       try {
-        if (!mapped.pData || mapped.RowPitch < uint64_t(width) * 4)
+        const auto span = UINT(item->tile.right - item->tile.left);
+        if (mapped.RowPitch < uint64_t(span) * 4 || !mapped.pData)
           throw Failure("unsupported_surface", "mapped capture pitch is invalid");
-        size = encode(imaging.Get(), width, height, mapped.RowPitch, static_cast<BYTE*>(mapped.pData), image);
+        blit(surface.data(), width, height, original.rect, item->tile,
+             static_cast<BYTE*>(mapped.pData), mapped.RowPitch);
       } catch (...) {
         item->context->Unmap(item->staging.Get(), 0);
         throw;
       }
       item->context->Unmap(item->staging.Get(), 0);
-    } else {
-      for (auto& item : outputs) {
-        stable(*item);
-        D3D11_MAPPED_SUBRESOURCE mapped{};
-        require(item->context->Map(item->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map");
-        try {
-          const auto span = UINT(item->tile.right - item->tile.left);
-          if (mapped.RowPitch < uint64_t(span) * 4 || !mapped.pData)
-            throw Failure("unsupported_surface", "mapped capture pitch is invalid");
-          blit(surface.data(), width, height, original.rect, item->tile,
-               static_cast<BYTE*>(mapped.pData), mapped.RowPitch);
-        } catch (...) {
-          item->context->Unmap(item->staging.Get(), 0);
-          throw;
-        }
-        item->context->Unmap(item->staging.Get(), 0);
-      }
-      if (owner && pointer.visible)
-        // PointerPosition is relative to its output. HotSpot is not subtracted.
-        compose(surface.data(), width, height, width * 4, pointer,
-                original.rect.left - owner->desc.DesktopCoordinates.left,
-                original.rect.top - owner->desc.DesktopCoordinates.top);
-      size = encode(imaging.Get(), width, height, width * 4, surface.data(), image);
     }
+    if (owner && pointer.visible)
+      // PointerPosition is relative to its output. HotSpot is not subtracted.
+      compose(surface.data(), width, height, width * 4, pointer,
+              original.rect.left - owner->desc.DesktopCoordinates.left,
+              original.rect.top - owner->desc.DesktopCoordinates.top);
+    const DWORD size = encode(imaging.Get(), width, height, width * 4, surface.data(), image);
     auto prepared = Clock::now();
     samebarrier(original, barrier, pipe);
     for (const auto& item : outputs) stable(*item);
@@ -1174,8 +1158,31 @@ int wmain(int argc, wchar_t** argv) {
         require(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                  IID_PPV_ARGS(imaging.GetAddressOf())), "WIC factory");
         BYTE pixels[16]{0, 0, 255, 255, 0, 255, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255};
+        SYSTEM_INFO system{};
+        GetSystemInfo(&system);
+        if (system.dwPageSize < 20) throw Failure("capture_failed", "guard page is too small for pixel test");
+        const auto release = [](BYTE* bytes) { if (bytes) VirtualFree(bytes, 0, MEM_RELEASE); };
+        std::unique_ptr<BYTE, decltype(release)> guarded(
+            static_cast<BYTE*>(VirtualAlloc(nullptr, size_t(system.dwPageSize) * 2,
+                                            MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)), release);
+        if (!guarded) throw Failure("capture_failed", "guarded pixel allocation failed");
+        DWORD prior = 0;
+        if (!VirtualProtect(guarded.get() + system.dwPageSize, system.dwPageSize, PAGE_NOACCESS, &prior))
+          throw Failure("capture_failed", "pixel guard page could not be protected");
+        BYTE* padded = guarded.get() + system.dwPageSize - 20;
+        std::memcpy(padded, pixels, 8);
+        std::memcpy(padded + 12, pixels + 8, 8);
+        BYTE packed[16]{};
+        blit(packed, 2, 2, RECT{0, 0, 2, 2}, RECT{0, 0, 2, 2}, padded, 12);
+        if (std::memcmp(packed, pixels, sizeof(pixels)))
+          throw Failure("capture_failed", "padded final-row copy changed capture pixels");
         std::vector<unsigned char> image(kImageBytes);
-        if (encode(imaging.Get(), 2, 2, 8, pixels, image) < 30) throw Failure("capture_failed", "self-test PNG is too short");
+        bool blocked = false;
+        try { encode(imaging.Get(), 2, 2, 12, padded, image); }
+        catch (const Failure& error) { blocked = error.code == "unsupported_surface"; }
+        if (!blocked) throw Failure("capture_failed", "padded WIC input was not refused");
+        if (encode(imaging.Get(), 2, 2, 8, packed, image) < 30)
+          throw Failure("capture_failed", "self-test PNG is too short");
       }
       clearreceipt();
       CoUninitialize();

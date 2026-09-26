@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
+import { DesktopCaptureWorker, type CaptureSample } from "../../src/services/computer-use/desktop-capture-worker"
 import type { DesktopFrame } from "../../src/services/computer-use/desktop-session"
 
 const frame = (windowID = "0x1", data = "pixels"): DesktopFrame => ({
@@ -210,5 +210,87 @@ describe("continuous desktop capture worker", () => {
     await Bun.sleep(60)
     expect(count).toBe(1)
     expect(worker.latest()).toBeUndefined()
+  })
+
+  it("emits one numeric-only sample for a real frame, not renewals or repeated latest reads", async () => {
+    const samples: CaptureSample[] = []
+    const visual = frame("0x1", "private pixels and typed content")
+    let count = 0
+    const worker = new DesktopCaptureWorker(
+      async () => {
+        if (++count === 1) return { ...visual, sourceSequence: 7 }
+        return new Promise<DesktopFrame>(() => undefined)
+      },
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    const off = worker.onSample((sample) => samples.push(sample))
+    worker.start()
+    await until(() => samples.length === 1)
+    expect(samples[0]).toMatchObject({ acquisitionMs: 1, preparationMs: 1, totalMs: 2 })
+    expect(Number.isFinite(samples[0].capturedAtMs)).toBe(true)
+    expect(Object.keys(samples[0]).sort()).toEqual(["acquisitionMs", "capturedAtMs", "preparationMs", "totalMs"])
+    expect(JSON.stringify(samples)).not.toContain("private")
+    worker.latest()
+    worker.latest()
+    expect(worker.renew(7, visual)).toBe(true)
+    expect(samples).toHaveLength(1)
+    off()
+    worker.stop()
+  })
+
+  it("clears listeners on Stop and dispose, including an in-flight capture", async () => {
+    const pending: Array<(value: DesktopFrame) => void> = []
+    const samples: CaptureSample[] = []
+    const worker = new DesktopCaptureWorker(
+      () => new Promise((resolve) => pending.push(resolve)),
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    worker.onSample((sample) => samples.push(sample))
+    worker.start()
+    await until(() => pending.length === 1)
+    worker.stop()
+    pending[0](frame("old"))
+    await Bun.sleep(1)
+    expect(samples).toEqual([])
+
+    worker.start()
+    await until(() => pending.length === 2)
+    pending[1](frame("new"))
+    await until(() => !!worker.latest())
+    expect(samples).toEqual([])
+    worker.onSample((sample) => samples.push(sample))
+    worker.dispose()
+    expect(worker.latest()).toBeUndefined()
+    worker.start()
+    await until(() => pending.length === 3)
+    pending[2](frame("newer"))
+    await until(() => !!worker.latest())
+    expect(samples).toEqual([])
+    worker.stop()
+  })
+
+  it("contains a throwing metrics listener and still delivers the next listener", async () => {
+    const samples: CaptureSample[] = []
+    const worker = new DesktopCaptureWorker(
+      async () => frame(),
+      () => undefined,
+      (error) => {
+        throw error
+      },
+    )
+    worker.onSample(() => {
+      throw new Error("private callback content")
+    })
+    worker.onSample((sample) => samples.push(sample))
+    worker.start()
+    await until(() => samples.length === 1)
+    expect(worker.latest()).toBeDefined()
+    worker.stop()
   })
 })

@@ -10,6 +10,14 @@ export type CapturedScene = {
   capturedAt: number
 }
 
+export type CaptureSample = {
+  capturedAtMs: number
+  acquisitionMs: number
+  preparationMs: number
+  totalMs: number
+  semanticsMs?: number
+}
+
 function valid(frame: DesktopFrame & { sourceSequence?: number; sourceEpoch?: number; sourceIdentity?: string }) {
   return (
     !!frame.windowID &&
@@ -36,6 +44,7 @@ export class DesktopCaptureWorker {
   private timer: ReturnType<typeof setTimeout> | undefined
   private wake: (() => void) | undefined
   private running = false
+  private readonly listeners = new Set<(sample: CaptureSample) => void>()
 
   constructor(
     private readonly capture: () => Promise<
@@ -53,7 +62,14 @@ export class DesktopCaptureWorker {
     void this.loop(generation, cadence)
   }
 
+  /** A passive numeric-only sample from each accepted capture, never a renewed scene. */
+  onSample(listener: (sample: CaptureSample) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
   stop(): void {
+    this.listeners.clear()
     if (!this.running && !this.scene) return
     this.running = false
     this.generation += 1
@@ -65,6 +81,10 @@ export class DesktopCaptureWorker {
     this.wake?.()
     this.wake = undefined
     this.cancel()
+  }
+
+  dispose(): void {
+    this.stop()
   }
 
   invalidate(): void {
@@ -143,6 +163,23 @@ export class DesktopCaptureWorker {
         version: updated ? ++this.version : this.version,
         capturedAt: performance.now(),
       }
+      if (this.listeners.size) {
+        const sample = Object.freeze({
+          capturedAtMs: this.scene.capturedAt,
+          acquisitionMs: frame.timing.acquisitionMs,
+          preparationMs: frame.timing.preparationMs,
+          totalMs: frame.timing.totalMs,
+          ...(frame.timing.semanticsMs === undefined ? {} : { semanticsMs: frame.timing.semanticsMs }),
+        })
+        for (const listener of this.listeners) {
+          try {
+            listener(sample)
+          } catch {
+            console.error("[Raya] Desktop capture metrics listener failed")
+          }
+        }
+      }
+      if (!this.running || generation !== this.generation) return
       const delay = cadence.next(updated)
       await new Promise<void>((resolve) => {
         this.wake = resolve

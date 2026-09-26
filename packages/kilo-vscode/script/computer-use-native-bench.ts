@@ -2,8 +2,11 @@ import { NativeCaptureHost } from "../src/services/computer-use/desktop-native-h
 
 const binary = Bun.argv[2]
 const count = Number(Bun.argv[3] ?? 40)
+const timeout = Number(Bun.argv[4] ?? 30_000)
 if (!binary) throw new Error("Pass the compiled native capture host path")
 if (!Number.isInteger(count) || count < 1 || count > 1_000) throw new Error("Choose 1 to 1000 native frames")
+if (!Number.isInteger(timeout) || timeout < 1_000 || timeout > 300_000)
+  throw new Error("Choose a 1,000 to 300,000 ms native capture timeout")
 
 function percentile(values: number[], fraction: number) {
   const sorted = [...values].sort((a, b) => a - b)
@@ -27,7 +30,7 @@ const host = new NativeCaptureHost(binary, (error) => {
 })
 try {
   host.start()
-  while (observed.length < count && performance.now() - started < 30_000 && !failure) {
+  while (observed.length < count && performance.now() - started < timeout && !failure) {
     const frame = host.latest(1_000, sequence)
     if (frame && frame.sequence > sequence) {
       if (sequence) gaps += Math.max(0, frame.sequence - sequence - 1)
@@ -43,7 +46,7 @@ try {
     JSON.stringify(
       {
         format: "raya.computer-use-native-benchmark",
-        version: 1,
+        version: 2,
         mode: "local-native-source-host",
         status: failure
           ? "unavailable"
@@ -54,14 +57,15 @@ try {
               : "no_frames",
         ...(failure ? { reason: failure.message } : {}),
         requestedFrames: count,
+        timeoutMs: timeout,
         frames: observed.length,
         skippedSequences: gaps,
         timeToFirstFrameMs: observed.length ? Number(observed[0].toFixed(2)) : undefined,
         acquisitionMs: summary(acquired),
         preparationMs: summary(prepared),
         elapsedMs: Number((performance.now() - started).toFixed(2)),
-        processMemoryBytes: { rss: memory.rss, heapUsed: memory.heapUsed, external: memory.external },
-        note: "No pixels are saved. This does not measure installed-host model latency or action-to-frame time.",
+        hostMemoryBytes: { rss: memory.rss, heapUsed: memory.heapUsed, external: memory.external },
+        note: "No pixels are saved. Host memory excludes the native child; this does not measure model or action-to-frame latency.",
       },
       undefined,
       2,

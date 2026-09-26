@@ -223,6 +223,14 @@ export class KiloConnectionService {
     return this.info
   }
 
+  /** Return only the connected, already-managed child identity; never starts a backend. */
+  currentProcessIdentity() {
+    if (this.state !== "connected" || !this.info) return null
+    const identity = this.serverManager.currentProcessIdentity()
+    if (!identity || identity.port !== this.info.port) return null
+    return identity
+  }
+
   /**
    * Get server config (baseUrl + password). Returns null if not connected.
    * Used by TelemetryProxy to POST events to the CLI server.

@@ -13,7 +13,10 @@ export interface ServerInstance {
   port: number
   password: string
   process: ChildProcess
+  startedAt: number
 }
+
+export type ManagedProcessIdentity = { pid: number; startedAt: number; port: number; generation: number }
 
 const STARTUP_TIMEOUT_SECONDS = 30
 
@@ -67,6 +70,7 @@ export function resolveManagedServerEnv(
 export class ServerManager {
   private instance: ServerInstance | null = null
   private startupPromise: Promise<ServerInstance> | null = null
+  private generation = 0
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -92,11 +96,32 @@ export class ServerManager {
     this.startupPromise = this.startServer()
     try {
       this.instance = await this.startupPromise
+      this.generation += 1
       console.log("[Raya] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
       return this.instance
     } finally {
       this.startupPromise = null
     }
+  }
+
+  /** Read the already-managed child without starting or reconnecting a backend. */
+  currentProcessIdentity(): ManagedProcessIdentity | null {
+    const server = this.instance
+    if (!server || this.startupPromise) return null
+    const proc = server.process
+    if (
+      !Number.isInteger(proc.pid) ||
+      !proc.pid ||
+      proc.pid <= 0 ||
+      proc.exitCode !== null ||
+      proc.signalCode !== null ||
+      proc.killed ||
+      this.generation <= 0 ||
+      !Number.isInteger(server.startedAt) ||
+      server.startedAt <= 0
+    )
+      return null
+    return { pid: proc.pid, startedAt: server.startedAt, port: server.port, generation: this.generation }
   }
 
   private async startServer(): Promise<ServerInstance> {
@@ -142,6 +167,7 @@ export class ServerManager {
       // All three are overridable by the user's environment.
       const extraCaCerts = cfg.get<string>("extraCaCerts", "").trim()
       const proxyStrictSSL = vscode.workspace.getConfiguration("http").get<boolean>("proxyStrictSSL", true)
+      const startedAt = Date.now()
       const serverProcess = spawn(cliPath, launch, {
         cwd: spawnCwd,
         env: {
@@ -196,7 +222,7 @@ export class ServerManager {
         if (port !== null && !resolved) {
           resolved = true
           console.log("[Raya] ServerManager: 🎯 Port detected:", port)
-          resolve({ port, password, process: serverProcess })
+          resolve({ port, password, process: serverProcess, startedAt })
         }
       })
 

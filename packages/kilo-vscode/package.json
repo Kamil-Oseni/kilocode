@@ -171,6 +171,12 @@
         "icon": "$(device-desktop)"
       },
       {
+        "command": "raya.inspectInstalledDesktopHost",
+        "title": "Inspect Installed Desktop Host",
+        "category": "Raya",
+        "icon": "$(pulse)"
+      },
+      {
         "command": "raya.pauseComputerUse",
         "title": "Pause Desktop Control",
         "category": "Raya",

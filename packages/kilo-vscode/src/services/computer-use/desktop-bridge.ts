@@ -777,6 +777,33 @@ export class DesktopBridge {
     }
   }
 
+  /** A host-only task boundary from a settled durable journal, with no private frame or target data. */
+  async settledJournalAudit() {
+    const write = this.writes
+    const saved = await write.then(
+      () => this.committed,
+      () => undefined,
+    )
+    if (
+      !saved ||
+      this.disposed ||
+      !this.connected ||
+      this.journalFault ||
+      this.migration ||
+      this.active.size ||
+      this.pendingAck !== undefined ||
+      this.writes !== write ||
+      this.committed !== saved ||
+      saved.audit.length >= 256
+    )
+      return null
+    return {
+      epoch: saved.epoch,
+      revision: saved.revision,
+      entries: saved.audit.map((item) => ({ ...item })),
+    }
+  }
+
   private persistJournal(): Promise<void> {
     if (!this.store) return Promise.resolve()
     this.writes = this.writes

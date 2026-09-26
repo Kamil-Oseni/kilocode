@@ -202,6 +202,11 @@ export class DesktopAutomationService implements vscode.Disposable {
     }
   }
 
+  /** Host-local durable action boundary for an installed task evaluator. */
+  settledJournalAudit() {
+    return this.bridge?.settledJournalAudit() ?? Promise.resolve(null)
+  }
+
   /** Numeric timing from an existing local capture, or null when none is running. */
   captureTiming(signal?: AbortSignal) {
     return this.driver?.captureTiming(signal) ?? Promise.resolve(null)

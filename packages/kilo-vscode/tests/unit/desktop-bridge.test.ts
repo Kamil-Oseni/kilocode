@@ -1934,9 +1934,12 @@ describe("desktop observation bridge", () => {
 
   async function native(test: ReturnType<typeof setup>, id: string) {
     for (const listener of test.events)
-      listener({ type: "kilocode.desktop.requested", properties: request } as SSEPayload, "C:\\workspace")
+      listener(
+        { type: "kilocode.desktop.requested", properties: { ...request, id: `observe_${id}` } } as SSEPayload,
+        "C:\\workspace",
+      )
     await Bun.sleep(20)
-    const observed = test.replies[0] as { result: { observation: { id: string; target: { windowID: string } } } }
+    const observed = test.replies.at(-1) as { result: { observation: { id: string; target: { windowID: string } } } }
     const click: DesktopRequest = {
       id,
       sessionID: "ses_desktop",
@@ -1954,6 +1957,61 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     return click
   }
+
+  it("reads a settled redacted audit boundary after restart without exposing the native target", async () => {
+    const store = memory()
+    const first = setup({ store })
+    for (const listener of first.states) listener("connected")
+    const click = await native(first, "task_boundary_action")
+    const before = await first.bridge.settledJournalAudit()
+    expect(before).toMatchObject({ revision: expect.any(Number), entries: [{ outcome: "confirmed" }] })
+    expect(JSON.stringify(before)).not.toContain(click.id)
+    expect(JSON.stringify(before)).not.toContain(click.windowID)
+    first.bridge.dispose()
+
+    const second = setup({ store })
+    for (const listener of second.states) listener("connected")
+    expect(await second.bridge.settledJournalAudit()).toEqual(before)
+    second.bridge.dispose()
+  })
+
+  it("refuses a boundary while native input is unsettled and accepts one after it settles", async () => {
+    const store = memory()
+    const input: { store: DesktopReceiptStore; actionHold?: Promise<void> } = { store }
+    const test = setup(input)
+    for (const listener of test.states) listener("connected")
+    await native(test, "task_boundary_first")
+    const gate = Promise.withResolvers<void>()
+    input.actionHold = gate.promise
+    const next = native(test, "task_boundary_second")
+    await next
+    expect(await test.bridge.settledJournalAudit()).toBeNull()
+    gate.resolve()
+    await Bun.sleep(20)
+    expect((await test.bridge.settledJournalAudit())?.entries).toHaveLength(2)
+    test.bridge.dispose()
+  })
+
+  it("refuses an older committed audit after a native receipt write fails", async () => {
+    const data = memory()
+    const state = { fail: false }
+    const store: DesktopReceiptStore = {
+      get: data.get,
+      update: async (key, value) => {
+        if (state.fail) throw new Error("storage unavailable")
+        await data.update(key, value)
+      },
+    }
+    const test = setup({ store })
+    for (const listener of test.states) listener("connected")
+    await native(test, "task_boundary_written")
+    expect((await test.bridge.settledJournalAudit())?.entries).toHaveLength(1)
+    state.fail = true
+    await native(test, "task_boundary_failed")
+    expect(test.bridge.journalAudit()?.entries).toHaveLength(1)
+    expect(await test.bridge.settledJournalAudit()).toBeNull()
+    test.bridge.dispose()
+  })
 
   it("keeps v3 epoch, audit and pending counts across restart, then atomically records native acknowledgement", async () => {
     const store = memory()

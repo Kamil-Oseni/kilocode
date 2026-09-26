@@ -34,6 +34,7 @@ import { registerToggleAutoApprove } from "./commands/toggle-auto-approve"
 import { registerHeapSnapshot } from "./commands/heap-snapshot"
 import { registerDiagnostics } from "./commands/diagnostics"
 import { registerInstalledDesktopHost } from "./commands/installed-desktop-host"
+import { registerInstalledDesktopTaskAudit } from "./commands/installed-desktop-task-audit"
 import { RemoteStatusService } from "./services/RemoteStatusService"
 import { markWorkspace } from "./util/spotlight"
 import { createNotebookBridge } from "./services/notebook"
@@ -101,6 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
   const lease = control.lease
   const desktop = new DesktopAutomationService(connectionService, context, lease)
   context.subscriptions.push(registerInstalledDesktopHost(context, connectionService, lease, desktop))
+  context.subscriptions.push(registerInstalledDesktopTaskAudit(context, connectionService, lease, desktop))
   const browserAutomationService = new BrowserAutomationService(
     connectionService,
     context,

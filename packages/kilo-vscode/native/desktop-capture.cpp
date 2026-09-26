@@ -8,6 +8,7 @@
 #include <wrl/client.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <cstdint>
@@ -38,6 +39,62 @@ static HANDLE receipt = INVALID_HANDLE_VALUE;
 static wchar_t receiptPath[MAX_PATH]{};
 static uintptr_t imageBase = 0;
 static uintptr_t imageLimit = 0;
+static std::atomic<uint64_t> foregroundEpoch{0};
+
+static void CALLBACK foreground(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG, DWORD, DWORD) {
+  if (event == EVENT_SYSTEM_FOREGROUND) foregroundEpoch.fetch_add(1, std::memory_order_release);
+}
+
+struct ForegroundWatch {
+  HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  HANDLE thread = nullptr;
+  DWORD id = 0;
+  HWINEVENTHOOK hook = nullptr;
+
+  static DWORD WINAPI listen(void* value) {
+    auto& watch = *static_cast<ForegroundWatch*>(value);
+    MSG msg{};
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+    watch.hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+                                 foreground, 0, 0, WINEVENT_OUTOFCONTEXT);
+    SetEvent(watch.ready);
+    if (!watch.hook) return 1;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+      TranslateMessage(&msg);
+      DispatchMessageW(&msg);
+    }
+    UnhookWinEvent(watch.hook);
+    return 0;
+  }
+
+  ForegroundWatch() {
+    if (!ready) throw std::runtime_error("foreground event gate is unavailable");
+    thread = CreateThread(nullptr, 0, listen, this, 0, &id);
+    if (!thread) {
+      CloseHandle(ready);
+      ready = nullptr;
+      throw std::runtime_error("foreground event listener could not start");
+    }
+    const DWORD status = WaitForSingleObject(ready, 2'000);
+    if (status != WAIT_OBJECT_0) ExitProcess(2);
+    if (!hook) {
+      PostThreadMessageW(id, WM_QUIT, 0, 0);
+      WaitForSingleObject(thread, INFINITE);
+      CloseHandle(thread);
+      CloseHandle(ready);
+      throw std::runtime_error("foreground event listener could not bind");
+    }
+  }
+
+  ~ForegroundWatch() {
+    PostThreadMessageW(id, WM_QUIT, 0, 0);
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    CloseHandle(ready);
+  }
+
+  uint64_t value() const { return foregroundEpoch.load(std::memory_order_acquire); }
+};
 
 static void hex(char* text, size_t& length, uint64_t value, unsigned digits) {
   static constexpr char symbols[] = "0123456789ABCDEF";
@@ -500,7 +557,9 @@ static Target target(bool bind = false) {
   return {handle, rect, desktop, dpi, id.str(), location.str(), bind ? fingerprint(handle, pid) : ""};
 }
 
-static void same(const Target& original) {
+static void same(const Target& original, uint64_t epoch) {
+  if (foregroundEpoch.load(std::memory_order_acquire) != epoch)
+    throw Failure("target_changed", "foreground changed during capture");
   auto current = target();
   if (current.handle != original.handle || current.location != original.location ||
       !equal(current.desktop, original.desktop) || current.dpi != original.dpi)
@@ -636,9 +695,10 @@ static std::optional<Barrier> receive(HANDLE input, const Target& original, uint
   return std::nullopt;
 }
 
-static void samebarrier(const Target& original, const std::optional<Barrier>& barrier, HANDLE pipe) {
+static void samebarrier(const Target& original, const std::optional<Barrier>& barrier, HANDLE pipe,
+                        uint64_t epoch) {
   try {
-    same(original);
+    same(original, epoch);
     if (barrier && !exact(original, barrier->handle, barrier->pid, barrier->rect, barrier->identity))
       throw Failure("target_changed", "post-action target identity changed");
   }
@@ -764,7 +824,9 @@ static BOOL WINAPI control(DWORD signal) {
 }
 
 static void run(HANDLE pipe) {
+  ForegroundWatch watch;
   auto original = target(true);
+  const auto epoch = watch.value();
   const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
   if (!input || input == INVALID_HANDLE_VALUE || GetFileType(input) != FILE_TYPE_PIPE)
     throw Failure("capture_failed", "capture control pipe is unavailable");
@@ -846,7 +908,7 @@ static void run(HANDLE pipe) {
       if (barrier) unproven(pipe, *barrier, "superseded");
       barrier = std::move(next);
     }
-    samebarrier(original, barrier, pipe);
+    samebarrier(original, barrier, pipe, epoch);
     auto begin = Clock::now();
     bool changed = false;
     for (auto& item : outputs) {
@@ -858,7 +920,7 @@ static void run(HANDLE pipe) {
       if (status == DXGI_ERROR_WAIT_TIMEOUT) continue;
       require(status, "AcquireNextFrame");
       Lease lease(item->duplicate.Get());
-      samebarrier(original, barrier, pipe);
+      samebarrier(original, barrier, pipe, epoch);
       stable(*item);
       const bool previous = touches(pointer, owner, original.rect);
       if (info.LastMouseUpdateTime.QuadPart) {
@@ -904,7 +966,7 @@ static void run(HANDLE pipe) {
         (previous || touches(pointer, owner, original.rect)));
     }
     auto acquired = Clock::now();
-    samebarrier(original, barrier, pipe);
+    samebarrier(original, barrier, pipe, epoch);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     if (barrier && !barrier->present) {
       if (Clock::now() - barrier->started >= kBarrierTimeout) {
@@ -950,7 +1012,7 @@ static void run(HANDLE pipe) {
               original.rect.top - owner->desc.DesktopCoordinates.top);
     const DWORD size = encode(imaging.Get(), width, height, width * 4, surface.data(), image);
     auto prepared = Clock::now();
-    samebarrier(original, barrier, pipe);
+    samebarrier(original, barrier, pipe, epoch);
     for (const auto& item : outputs) stable(*item);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     std::ostringstream header;
@@ -996,6 +1058,16 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
       {
+        ForegroundWatch watch;
+        const auto epoch = watch.value();
+        NotifyWinEvent(EVENT_SYSTEM_FOREGROUND, GetForegroundWindow(), OBJID_WINDOW, CHILDID_SELF);
+        for (int attempt = 0; attempt < 100 && watch.value() == epoch; ++attempt) Sleep(2);
+        if (watch.value() == epoch)
+          throw Failure("capture_failed", "foreground change event was not observed");
+        bool stale = false;
+        try { same(Target{}, epoch); }
+        catch (const Failure& error) { stale = error.code == "target_changed"; }
+        if (!stale) throw Failure("capture_failed", "foreground event did not invalidate the scene");
         const std::string base = "pid:7;start:123;class:Editor";
         if (tagged(base, 0) != base || tagged(base, 1) == base || tagged(base, 1) == tagged(base, 2))
           throw Failure("capture_failed", "window instance fingerprint self-test failed");

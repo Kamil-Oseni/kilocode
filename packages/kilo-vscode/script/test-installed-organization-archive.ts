@@ -174,13 +174,15 @@ async function retained(
   organization: Organization,
   manual: Worker,
   scheduled: Worker,
+  recurring: Worker,
+  event: Worker,
   run: Run,
 ) {
   const item = (await call(host, password, root, "GET", `/kilocode/organization/${organization.id}`)) as Organization
   assert.equal(item.archived, true)
   assert.deepEqual(
     item.members.map((member) => member.agentID),
-    [manual.id, scheduled.id],
+    [manual.id, scheduled.id, recurring.id, event.id],
   )
   const active = (await call(host, password, root, "GET", "/kilocode/organization")) as Page
   const history = (await call(host, password, root, "GET", "/kilocode/organization?archived=true")) as Page
@@ -230,11 +232,27 @@ async function main() {
       objective: "Run at the scheduled time.",
       schedule: { kind: "once", at: due },
     })) as Worker
+    const cronAt = new Date(Date.now() + 90_000)
+    cronAt.setUTCSeconds(0, 0)
+    const recurring = (await call(host, password, root, "POST", "/kilocode/agent", {
+      ...headers,
+      name: "Recurring worker",
+      objective: "Run at the next scheduled minute.",
+      schedule: { kind: "cron", expr: `${cronAt.getUTCMinutes()} ${cronAt.getUTCHours()} * * *`, tz: "UTC" },
+    })) as Worker
+    const event = (await call(host, password, root, "POST", "/kilocode/agent", {
+      ...headers,
+      name: "Event worker",
+      objective: "Run when the archive test event arrives.",
+      schedule: { kind: "event", source: "archive-acceptance" },
+    })) as Worker
     const organization = (await call(host, password, root, "POST", "/kilocode/organization", {
       name: "Archive acceptance",
       members: [
         { agentID: manual.id, role: "Active" },
         { agentID: scheduled.id, role: "Scheduled" },
+        { agentID: recurring.id, role: "Recurring" },
+        { agentID: event.id, role: "Event" },
       ],
     })) as Organization
     await call(host, password, root, "POST", `/kilocode/agent/${manual.id}/run`)
@@ -253,13 +271,23 @@ async function main() {
     const roster = (await call(host, password, root, "GET", "/kilocode/agent")) as Worker[]
     assert.equal(roster.find((item) => item.id === manual.id)?.enabled, false)
     assert.equal(roster.find((item) => item.id === scheduled.id)?.enabled, false)
+    assert.equal(roster.find((item) => item.id === recurring.id)?.enabled, false)
+    assert.equal(roster.find((item) => item.id === event.id)?.enabled, false)
     await stop(host)
     host = await backend(app.exe, root, env)
-    await retained(host, password, root, organization, manual, scheduled, before[0]!)
-    await Bun.sleep(Math.max(0, due + 65_000 - Date.now()))
+    await retained(host, password, root, organization, manual, scheduled, recurring, event, before[0]!)
+    await Bun.sleep(Math.max(0, Math.max(due, cronAt.getTime()) + 65_000 - Date.now()))
     assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${scheduled.id}/runs`), [])
+    assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${recurring.id}/runs`), [])
+    assert.deepEqual(
+      await call(host, password, root, "POST", "/kilocode/agent-event", { source: "archive-acceptance" }),
+      [],
+    )
+    assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${event.id}/runs`), [])
     const blocked = await request(host, password, root, "POST", `/kilocode/agent/${scheduled.id}/run`)
     assert.equal(blocked.status, 400)
+    assert.equal((await request(host, password, root, "POST", `/kilocode/agent/${recurring.id}/run`)).status, 400)
+    assert.equal((await request(host, password, root, "POST", `/kilocode/agent/${event.id}/run`)).status, 400)
     assert.equal(fake.count(), 1)
 
     const uncertain = (await call(host, password, root, "POST", "/kilocode/agent", {
@@ -365,7 +393,7 @@ async function main() {
     assert.equal((await request(host, password, root, "POST", `/kilocode/agent/${members[0]!.id}/run`)).status, 400)
     assert.equal(fake.count(), 2)
     console.log(
-      `Installed archive acceptance passed: ${app.version}, live run stopped, due schedule fenced, membership and conversation retained, unknown start recovered, stop-phase crash recovered`,
+      `Installed archive acceptance passed: ${app.version}, live run stopped, one-shot/cron/event schedules fenced, membership and conversation retained, unknown start recovered, stop-phase crash recovered`,
     )
   } finally {
     if (host) await stop(host)

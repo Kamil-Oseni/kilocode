@@ -1496,6 +1496,7 @@
     "test:canvas-installed": "bun script/test-installed-canvas.ts",
     "test:update-secret-installed": "bun script/test-installed-update-secret.ts",
     "test:review-installed": "bun script/test-installed-review.ts",
+    "test:archive-installed": "bun script/test-installed-organization-archive.ts",
     "test:self-redesign-smoke": "bun script/test-self-redesign-smoke.ts",
     "test:voice-live": "bun script/test-voice-live.ts",
     "test:voice-stt-live": "bun script/test-voice-stt-live.ts",

@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { hostname, tmpdir } from "node:os"
 import { join, resolve, sep } from "node:path"
+import { Database as Sqlite } from "bun:sqlite"
 
 type Host = { url: string; child: Bun.Subprocess; stderr: Promise<string> }
 type Worker = { id: string; enabled: boolean }
@@ -92,6 +93,7 @@ function environment(home: string, url: string, password: string) {
     KILO_DISABLE_AUTOCOMPACT: "1",
     KILO_DISABLE_MODELS_FETCH: "1",
     KILO_AUTH_CONTENT: "{}",
+    RAYA_DB: join(home, "archive-acceptance.db"),
     KILO_SERVER_PASSWORD: password,
     RAYA_NO_DAEMON: "1",
     KILO_NO_DAEMON: "1",
@@ -268,8 +270,64 @@ async function main() {
       ).archived,
       true,
     )
+
+    const members: Worker[] = []
+    for (const index of Array.from({ length: 24 }, (_, value) => value)) {
+      members.push(
+        (await call(host, password, root, "POST", "/kilocode/agent", {
+          ...headers,
+          name: `Crash worker ${index + 1}`,
+          objective: "Wait for the model fixture.",
+          schedule: { kind: "manual" },
+        })) as Worker,
+      )
+    }
+    const interrupted = (await call(host, password, root, "POST", "/kilocode/organization", {
+      name: "Crash during stop acceptance",
+      members: members.map((member) => ({ agentID: member.id, role: "Worker" })),
+    })) as Organization
+    await call(host, password, root, "POST", `/kilocode/agent/${members[0]!.id}/run`)
+    await wait(() => fake.count() === 2, "The crash-test worker did not reach the model fixture")
+    const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+    const row = ledger.query<{ stopping_at: number | null; archived_at: number | null }, [string]>(
+      "SELECT stopping_at, archived_at FROM raya_routine_organization WHERE id = ?",
+    )
+    const response = request(host, password, root, "DELETE", `/kilocode/organization/${interrupted.id}`, {
+      expectedRevision: interrupted.revision,
+    }).then(
+      (result) => result.status,
+      () => 0,
+    )
+    try {
+      await wait(
+        () => {
+          const state = row.get(interrupted.id)
+          if (state && state.archived_at !== null)
+            throw new Error("Archive completed before the stopping window was observed")
+          return state?.stopping_at !== null && state?.stopping_at !== undefined
+        },
+        "The durable stopping intent was not observed",
+        20_000,
+      )
+    } finally {
+      ledger.close()
+    }
+    await stop(host)
+    assert.notEqual(await response, 200)
+    host = await backend(app.exe, root, env)
+    await wait(
+      async () =>
+        ((await call(host!, password, root, "GET", `/kilocode/organization/${interrupted.id}`)) as Organization)
+          .archived,
+      "Restart did not complete the interrupted organization archive",
+      20_000,
+    )
+    const final = (await call(host, password, root, "GET", "/kilocode/agent")) as Worker[]
+    for (const member of members) assert.equal(final.find((item) => item.id === member.id)?.enabled, false)
+    assert.equal((await request(host, password, root, "POST", `/kilocode/agent/${members[0]!.id}/run`)).status, 400)
+    assert.equal(fake.count(), 2)
     console.log(
-      `Installed archive acceptance passed: ${app.version}, live run stopped, due schedule fenced, unknown start held through restart and recovered`,
+      `Installed archive acceptance passed: ${app.version}, live run stopped, due schedule fenced, unknown start recovered, stop-phase crash recovered`,
     )
   } finally {
     if (host) await stop(host)

@@ -3,6 +3,8 @@ import { inspectInstalledHost } from "../../src/commands/installed-desktop-host-
 
 const version = "7.4.23-snapshot+abc.test.1"
 const digest = "a".repeat(64)
+const process = { pid: 123, startedAt: 1000, port: 41123, generation: 1 }
+const lease = { grantHash: "b".repeat(64), level: "autonomous" as const, state: "active" as const, scopeCount: 2, expiresAt: null }
 const frame = {
   before: { windowID: "0x10", location: "same", identity: "A".repeat(64) },
   after: { windowID: "0x10", location: "same", identity: "A".repeat(64) },
@@ -21,6 +23,8 @@ function input() {
     expected: { version, digest },
     desktop: { host: "Default", input: "Default" },
     backend: () => "connected",
+    process: () => process,
+    lease: () => lease,
     observe: async () => frame,
   }
 }
@@ -30,8 +34,12 @@ describe("installed interactive host probe", () => {
     const report = await inspectInstalledHost(input())
     expect(report.status).toBe("observed")
     expect(report.releaseGateEligible).toBe(false)
-    expect(report.actionReceipts).toEqual([])
+    expect(report.version).toBe(2)
+    expect(report.actionReceipts).toBeNull()
+    expect(report.receiptEvidence).toBe("not_inspected")
     expect(report.taskFinalState).toBeNull()
+    expect(report.backendProcess).toEqual(process)
+    expect(report.lease).toEqual(lease)
     expect(JSON.stringify(report)).not.toContain("data:")
   })
 
@@ -103,5 +111,71 @@ describe("installed interactive host probe", () => {
     })
     expect(report.status).toBe("unavailable")
     expect("foreground" in report).toBe(false)
+  })
+
+  test("refuses an unmanaged backend before capture", async () => {
+    let called = false
+    const report = await inspectInstalledHost({
+      ...input(),
+      process: () => null,
+      observe: async () => {
+        called = true
+        return frame
+      },
+    })
+    expect(report.status).toBe("unavailable")
+    expect(report.reason).toContain("managed")
+    expect(called).toBe(false)
+  })
+
+  test("refuses a backend restart or lease transition during capture", async () => {
+    let identity = process
+    let grant = lease
+    const restarted = await inspectInstalledHost({
+      ...input(),
+      process: () => identity,
+      observe: async () => {
+        identity = { ...process, generation: 2 }
+        return frame
+      },
+    })
+    expect(restarted.status).toBe("unavailable")
+    expect(restarted.reason).toContain("backend changed")
+    const changed = await inspectInstalledHost({
+      ...input(),
+      lease: () => grant,
+      observe: async () => {
+        grant = { ...lease, grantHash: "c".repeat(64) }
+        return frame
+      },
+    })
+    expect(changed.status).toBe("unavailable")
+    expect(changed.reason).toContain("lease changed")
+  })
+
+  test("refuses identity and lease changes before starting capture", async () => {
+    let calls = 0
+    let captures = 0
+    const restart = await inspectInstalledHost({
+      ...input(),
+      process: () => (++calls === 1 ? process : { ...process, pid: 456 }),
+      observe: async () => {
+        captures++
+        return frame
+      },
+    })
+    expect(restart.status).toBe("unavailable")
+    expect(captures).toBe(0)
+    calls = 0
+    const policy = await inspectInstalledHost({
+      ...input(),
+      lease: () => (++calls === 1 ? lease : { ...lease, state: "paused" }),
+      observe: async () => {
+        captures++
+        return frame
+      },
+    })
+    expect(policy.status).toBe("unavailable")
+    expect(captures).toBe(0)
   })
 })

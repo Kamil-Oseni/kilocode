@@ -1355,6 +1355,7 @@ function semanticResult(
 export class WindowsDesktopDriver implements DesktopDriver {
   readonly guarded = true as const
   private readonly runner: Runner
+  private probe: Runner | undefined
   private preparing: Promise<void> | undefined
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined
@@ -1371,9 +1372,55 @@ export class WindowsDesktopDriver implements DesktopDriver {
     private readonly binary?: string,
     private readonly args: string[] = [],
     private readonly receiptDir?: string,
+    probe?: Runner,
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
+    this.probe = probe
+  }
+
+  private async query(script: string): Promise<Record<string, unknown>> {
+    const source = (this.probe ??= runner())
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const deadline = new Promise<string>((_, reject) => {
+        timer = setTimeout(() => {
+          if (this.probe === source) this.cancelProbe()
+          reject(new Error("Windows desktop probe timed out"))
+        }, 15_000)
+      })
+      return object(await Promise.race([source.run(script), deadline]))
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  cancelProbe(): void {
+    const source = this.probe
+    this.probe = undefined
+    source?.cancel()
+  }
+
+  async probeCurrent(): Promise<{ windowID: string }> {
+    const result = await this.query(current)
+    if (typeof result.windowID !== "string" || typeof result.location !== "string")
+      throw new Error("Windows desktop probe target identity is incomplete")
+    return { windowID: result.windowID }
+  }
+
+  async probePinCurrent(windowID: string): Promise<{ windowID: string; identity: string }> {
+    if (!/^0x[0-9A-F]+$/.test(windowID)) throw new Error("Selected desktop probe window identity is invalid")
+    const result = await this.query(pinCurrent(windowID))
+    if (
+      result.windowID !== windowID ||
+      typeof result.title !== "string" ||
+      !result.title ||
+      result.title.length > 2048 ||
+      typeof result.identity !== "string" ||
+      !/^[A-F0-9]{64}$/.test(result.identity)
+    )
+      throw new Error("Selected desktop probe window binding is incomplete")
+    return { windowID, identity: result.identity }
   }
 
   async warmup(): Promise<void> {
@@ -1781,6 +1828,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
 
   cancel(): void {
     this.stopCapture()
+    this.cancelProbe()
     this.last = undefined
     this.runner.cancel()
   }

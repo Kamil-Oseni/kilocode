@@ -15,6 +15,30 @@ describe.skipIf(process.platform !== "win32")("persistent Windows desktop runner
     }
   }, 30_000)
 
+  it("keeps selected-window probes off a busy single-command desktop runner", async () => {
+    const host = runner()
+    const scripts: string[] = []
+    const probe = {
+      run: async (script: string) => {
+        scripts.push(script)
+        return JSON.stringify({ windowID: "0x123", location: "test", title: "Editor", identity: "A".repeat(64) })
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(host, undefined, undefined, [], undefined, probe)
+    try {
+      await driver.warmup()
+      const pending = host.run("Start-Sleep -Milliseconds 500; 'done'")
+      await expect(host.run("'overlap'")).rejects.toThrow(/already active/i)
+      expect(await driver.probeCurrent()).toEqual({ windowID: "0x123" })
+      expect(await driver.probePinCurrent("0x123")).toEqual({ windowID: "0x123", identity: "A".repeat(64) })
+      expect(scripts).toHaveLength(2)
+      expect(await pending).toBe("done")
+    } finally {
+      driver.cancel()
+    }
+  }, 30_000)
+
   it("releases only unmatched native input in an accepted SendInput prefix", async () => {
     let script = ""
     const driver = new WindowsDesktopDriver({

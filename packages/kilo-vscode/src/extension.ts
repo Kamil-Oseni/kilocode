@@ -73,7 +73,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
   context.subscriptions.push(new PersonalTodoReminderCoordinator(connectionService))
-  context.subscriptions.push(registerDiagnostics(context, connectionService), registerInstalledDesktopHost(context, connectionService))
+  context.subscriptions.push(registerDiagnostics(context, connectionService))
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
   context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock
   context.subscriptions.push(registerUpdateChecker(context)) // raya_change - poll GitHub Releases for newer Raya builds
@@ -99,6 +99,7 @@ export function activate(context: vscode.ExtensionContext) {
     )
   }
   const lease = control.lease
+  context.subscriptions.push(registerInstalledDesktopHost(context, connectionService, lease))
   const desktop = new DesktopAutomationService(connectionService, context, lease)
   const browserAutomationService = new BrowserAutomationService(
     connectionService,

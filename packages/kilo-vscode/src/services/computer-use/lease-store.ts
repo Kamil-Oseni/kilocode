@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { BrowserRequest, BrowserResult, DesktopRequest, DesktopResult } from "@kilocode/sdk/v2/client"
 
 export type AuthorizationRequest =
@@ -116,6 +116,19 @@ export class ComputerUseLeaseStore {
 
   current(): ComputerUseLease | undefined {
     return this.lease ? structuredClone(this.lease) : undefined
+  }
+
+  /** Non-secret, side-effect-free status for installed-host diagnostics. */
+  summary() {
+    const lease = this.lease
+    if (this.unavailable || !lease) return null
+    return {
+      grantHash: createHash("sha256").update(lease.id).digest("hex"),
+      level: lease.level,
+      state: expired(lease, this.now()) ? ("expired" as const) : lease.state,
+      scopeCount: lease.applications.kind === "all" ? null : lease.applications.values.length,
+      expiresAt: lease.expiry.kind === "expires_at" ? lease.expiry.expiresAt : null,
+    }
   }
 
   savedPolicy(): SensitivePolicy | undefined {

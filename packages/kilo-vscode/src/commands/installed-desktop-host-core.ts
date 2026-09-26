@@ -5,6 +5,14 @@ export type Probe = {
   expected?: { version: string; digest: string; captureSha256?: string }
   desktop: { host?: string; input?: string }
   backend: () => string
+  process: () => { pid: number; startedAt: number; port: number; generation: number } | null
+  lease: () => {
+    grantHash: string
+    level: "observe" | "assisted" | "autonomous"
+    state: "active" | "paused" | "revoked" | "expired"
+    scopeCount: number | null
+    expiresAt: number | null
+  } | null
   observe: () => Promise<{
     before: { windowID: string; location?: string; identity?: string }
     after: { windowID: string; location?: string; identity?: string }
@@ -37,19 +45,44 @@ function expected(input: Probe) {
   )
 }
 
+function changed(input: Probe, process: NonNullable<ReturnType<Probe["process"]>>, lease: ReturnType<Probe["lease"]>) {
+  const next = input.process()
+  if (
+    !next ||
+    next.pid !== process.pid ||
+    next.startedAt !== process.startedAt ||
+    next.port !== process.port ||
+    next.generation !== process.generation
+  )
+    return "The managed Raya backend changed during observation"
+  if (JSON.stringify(input.lease()) !== JSON.stringify(lease)) return "The Computer Use lease changed during observation"
+  return null
+}
+
+function ready(input: Probe, process: ReturnType<Probe["process"]>) {
+  if (input.backend() !== "connected") return "The Raya backend is disconnected"
+  if (!process) return "No managed Raya backend process is connected"
+  return null
+}
+
 // Only host-local, non-pixel evidence is returned. A benchmark task needs separate action receipts and a final-state scorer.
 export async function inspectInstalledHost(input: Probe) {
+  const process = input.process()
+  const lease = input.lease()
   const base = {
     format: "raya.installed-desktop-host-probe" as const,
-    version: 1 as const,
+    version: 2 as const,
     observedAt: new Date().toISOString(),
     loadedVersion: input.loadedVersion,
     loadedCaptureSha256: input.loadedCaptureSha256 ?? null,
     active: input.active ?? null,
     expected: input.expected ?? null,
     desktop: input.desktop,
+    backendProcess: process,
+    lease,
     releaseGateEligible: false as const,
-    actionReceipts: [] as [],
+    actionReceipts: null,
+    receiptEvidence: "not_inspected" as const,
     taskFinalState: null,
   }
   if (!/^\d+\.\d+\.\d+-snapshot\+[^/\\]+$/.test(input.loadedVersion))
@@ -68,14 +101,16 @@ export async function inspectInstalledHost(input: Probe) {
     }
   if (!expected(input))
     return { ...base, status: "unavailable" as const, reason: "The loaded host is not the expected installed snapshot" }
-  if (input.backend() !== "connected")
-    return { ...base, status: "unavailable" as const, reason: "The Raya backend is disconnected" }
+  const connection = ready(input, process)
+  if (connection) return { ...base, status: "unavailable" as const, reason: connection }
   if (!input.desktop.host || !input.desktop.input || input.desktop.host !== input.desktop.input)
     return {
       ...base,
       status: "unavailable" as const,
       reason: "The extension host is not on the interactive input desktop",
     }
+  const before = changed(input, process!, lease)
+  if (before) return { ...base, status: "unavailable" as const, reason: before }
   const started = performance.now()
   const result = await input.observe().then(
     (value) => ({ value }),
@@ -83,6 +118,8 @@ export async function inspectInstalledHost(input: Probe) {
   )
   if (input.backend() !== "connected")
     return { ...base, status: "unavailable" as const, reason: "The Raya backend disconnected during observation" }
+  const after = changed(input, process!, lease)
+  if (after) return { ...base, status: "unavailable" as const, reason: after }
   if (!result.value)
     return { ...base, status: "unavailable" as const, reason: "No stable foreground observation was available" }
   const value = result.value

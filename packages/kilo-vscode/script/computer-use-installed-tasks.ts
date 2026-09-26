@@ -6,10 +6,12 @@ import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises"
 import { basename, join, resolve } from "node:path"
 import { promisify } from "node:util"
 import { inspect } from "./computer-use-installed-probe"
+import { scenarios } from "./computer-use-release-gate"
 
 const execute = promisify(execFile)
 const format = "raya.installed-desktop-task"
 const version = 1
+const scenario = "file-explorer-organization" satisfies (typeof scenarios)[number]
 const files = [
   { name: "alpha-notes.txt", folder: "Notes", data: "Raya benchmark alpha note\n" },
   { name: "beta-notes.txt", folder: "Notes", data: "Raya benchmark beta note\n" },
@@ -19,7 +21,7 @@ const files = [
 type Manifest = {
   format: typeof format
   version: typeof version
-  scenario: "file-explorer-organization"
+  scenario: typeof scenario
   runId: string
   extension: { version: string; captureSha256: string; root: string }
   createdAt: string
@@ -33,7 +35,7 @@ function digest(data: Buffer | string) {
 function valid(input: unknown): input is Manifest {
   if (!input || typeof input !== "object") return false
   const item = input as Record<string, unknown>
-  if (item.format !== format || item.version !== version || item.scenario !== "file-explorer-organization") return false
+  if (item.format !== format || item.version !== version || item.scenario !== scenario) return false
   if (typeof item.runId !== "string" || !/^[\da-f-]{36}$/i.test(item.runId)) return false
   if (!item.extension || typeof item.extension !== "object") return false
   const ext = item.extension as Record<string, unknown>
@@ -65,7 +67,7 @@ export async function prepare(root: string, installed: string) {
   const manifest: Manifest = {
     format,
     version,
-    scenario: "file-explorer-organization",
+    scenario,
     runId: randomUUID(),
     extension: { version: ext.version, captureSha256: ext.sha256, root: ext.root },
     createdAt: new Date().toISOString(),

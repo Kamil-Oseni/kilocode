@@ -4,9 +4,11 @@ import { createHash, randomInt, randomUUID } from "node:crypto"
 import { appendFile, lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { inspect } from "./computer-use-installed-probe"
+import { scenarios } from "./computer-use-release-gate"
 
 const format = "raya.installed-browser-entry-task"
 const version = 1
+const scenario = "browser-research-entry" satisfies (typeof scenarios)[number]
 const names = ["Aster", "Birch", "Cedar"] as const
 const regions = ["North", "East", "West"] as const
 
@@ -14,7 +16,7 @@ type Row = { name: string; region: string; units: number }
 type Manifest = {
   format: typeof format
   version: typeof version
-  scenario: "browser-research-entry"
+  scenario: typeof scenario
   runId: string
   extension: { version: string; captureSha256: string; root: string }
   createdAt: string
@@ -43,7 +45,7 @@ const entry = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Alloc
 function valid(input: unknown): input is Manifest {
   if (!input || typeof input !== "object") return false
   const item = input as Record<string, unknown>
-  if (item.format !== format || item.version !== version || item.scenario !== "browser-research-entry") return false
+  if (item.format !== format || item.version !== version || item.scenario !== scenario) return false
   if (typeof item.runId !== "string" || !/^[\da-f-]{36}$/i.test(item.runId)) return false
   if (!item.extension || typeof item.extension !== "object") return false
   const ext = item.extension as Record<string, unknown>
@@ -70,7 +72,7 @@ export async function prepare(root: string, installed: string) {
   const input: Manifest = {
     format,
     version,
-    scenario: "browser-research-entry",
+    scenario,
     runId: randomUUID(),
     extension: { version: ext.version, captureSha256: ext.sha256, root: ext.root },
     createdAt: new Date().toISOString(),

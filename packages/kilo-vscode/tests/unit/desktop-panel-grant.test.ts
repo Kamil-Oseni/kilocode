@@ -1,28 +1,37 @@
 import { describe, expect, it, mock } from "bun:test"
 import type { DesktopRequest } from "@kilocode/sdk/v2/client"
-import type { GrantInput } from "../../src/services/computer-use/lease-store"
+import {
+  ComputerUseLeaseStore,
+  type GrantInput,
+  type LeaseStorage,
+  type SensitivePolicy,
+} from "../../src/services/computer-use/lease-store"
 
 let receive: ((message: unknown) => void) | undefined
+let opened = 0
 const posts: unknown[] = []
 
 mock.module("vscode", () => ({
   ViewColumn: { Beside: 2 },
   window: {
-    createWebviewPanel: () => ({
-      webview: {
-        html: "",
-        onDidReceiveMessage: (listener: (message: unknown) => void) => {
-          receive = listener
+    createWebviewPanel: () => {
+      opened++
+      return {
+        webview: {
+          html: "",
+          onDidReceiveMessage: (listener: (message: unknown) => void) => {
+            receive = listener
+          },
+          postMessage: async (message: unknown) => {
+            posts.push(message)
+            return true
+          },
         },
-        postMessage: async (message: unknown) => {
-          posts.push(message)
-          return true
-        },
-      },
-      reveal: () => undefined,
-      onDidDispose: () => undefined,
-      dispose: () => undefined,
-    }),
+        reveal: () => undefined,
+        onDidDispose: () => undefined,
+        dispose: () => undefined,
+      }
+    },
     showErrorMessage: async () => undefined,
   },
 }))
@@ -42,6 +51,7 @@ const request = (windowID: string) =>
 
 function setup(foreground: string) {
   receive = undefined
+  opened = 0
   posts.length = 0
   const grants: GrantInput[] = []
   const state = { identity: "A".repeat(64) }
@@ -81,6 +91,52 @@ function setup(foreground: string) {
       cooperativeInput: false,
     })
   return { panel, grants, grant, state }
+}
+
+const policy = (rule: SensitivePolicy[keyof SensitivePolicy]): SensitivePolicy => ({
+  communications: rule,
+  financial: rule,
+  credentials: rule,
+  software: rule,
+  system: rule,
+  deletion: rule,
+  disclosure: rule,
+  legal: rule,
+  publishing: rule,
+})
+
+function active(level: "assisted" | "autonomous", rule: SensitivePolicy[keyof SensitivePolicy]) {
+  receive = undefined
+  opened = 0
+  let writes = 0
+  let pins = 0
+  const storage: LeaseStorage = {
+    get: () => undefined,
+    update: async () => {
+      writes++
+    },
+  }
+  const lease = new ComputerUseLeaseStore(storage, () => 100)
+  const session = {
+    pinCurrent: async () => {
+      pins++
+      return undefined
+    },
+    onState: () => () => undefined,
+    takeControl: () => undefined,
+  }
+  const panel = new DesktopPanel(session as never, lease, async () => true)
+  const grant = () =>
+    lease.grant({
+      sessionID: "session_test",
+      level,
+      duration: "until_stopped",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy(rule),
+      cooperativeInput: false,
+    })
+  return { panel, lease, grant, writes: () => writes, pins: () => pins }
 }
 
 describe("selected desktop grant review", () => {
@@ -124,5 +180,74 @@ describe("selected desktop grant review", () => {
     expect(test.grants).toEqual([
       expect.objectContaining({ applications: "current", windowID: "0x111", identity: "A".repeat(64) }),
     ])
+  })
+})
+
+describe("sensitive action review with an existing lease", () => {
+  for (const level of ["assisted", "autonomous"] as const) {
+    it(`leaves the ${level} lease intact for one action-specific prompt`, async () => {
+      const test = active(level, "ask")
+      const grant = await test.grant()
+      const writes = test.writes()
+      const result = await test.panel.authorize({
+        ...request("window_test"),
+        action: "pointer",
+        sensitive: "communications",
+      })
+      const repeated = await test.panel.authorize({
+        ...request("window_test"),
+        action: "pointer",
+        sensitive: "communications",
+      })
+      expect(result.decision).toBe("ask")
+      expect(repeated.decision).toBe("ask")
+      expect(test.lease.current()?.id).toBe(grant.id)
+      expect(test.lease.current()?.sensitive).toEqual(grant.sensitive)
+      expect(test.writes()).toBe(writes)
+      expect(test.pins()).toBe(0)
+      expect(opened).toBe(0)
+      expect(receive).toBeUndefined()
+    })
+  }
+
+  it("denies sensitive work without opening another grant review", async () => {
+    const test = active("autonomous", "deny")
+    const grant = await test.grant()
+    const writes = test.writes()
+    const result = await test.panel.authorize({
+      ...request("window_test"),
+      action: "pointer",
+      sensitive: "communications",
+    })
+    expect(result.decision).toBe("deny")
+    expect(test.lease.current()?.id).toBe(grant.id)
+    expect(test.writes()).toBe(writes)
+    expect(opened).toBe(0)
+  })
+
+  it("still opens the initial grant review when no lease exists", async () => {
+    const test = active("autonomous", "ask")
+    const done = test.panel.authorize({ ...request("window_test"), action: "pointer", sensitive: "communications" })
+    await Bun.sleep(0)
+    expect(opened).toBe(1)
+    expect(test.lease.current()).toBeUndefined()
+    receive?.({ type: "decline" })
+    expect((await done).decision).toBe("deny")
+    expect(test.writes()).toBe(0)
+  })
+
+  it("keeps out-of-scope work on the grant review path", async () => {
+    const test = active("autonomous", "ask")
+    const grant = await test.grant()
+    const done = test.panel.authorize({
+      ...request("window_test"),
+      action: "keyboard",
+      sensitive: "communications",
+    })
+    await Bun.sleep(0)
+    expect(opened).toBe(1)
+    expect(test.lease.current()?.id).toBe(grant.id)
+    receive?.({ type: "decline" })
+    expect((await done).decision).toBe("deny")
   })
 })

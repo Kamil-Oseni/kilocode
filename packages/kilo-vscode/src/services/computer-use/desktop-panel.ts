@@ -45,6 +45,14 @@ export class DesktopPanel implements vscode.Disposable {
   async authorize(request: AuthorizationRequest): Promise<Authorization> {
     const result = this.lease.review(request)
     if (result.decision !== "ask") return result
+    const lease = this.lease.current()
+    if (
+      request.sensitive &&
+      lease?.state === "active" &&
+      lease.level !== "observe" &&
+      this.lease.authorize({ ...request, sensitive: false }).decision === "allow"
+    )
+      return result
     if (this.pending)
       return { operation: "authorize", decision: "deny", reason: "Another Computer Use grant review is active" }
     const target =

@@ -2,6 +2,19 @@ import { describe, expect, it } from "bun:test"
 import { WindowsDesktopDriver, runner } from "../../src/services/computer-use/desktop-windows"
 
 describe.skipIf(process.platform !== "win32")("persistent Windows desktop runner", () => {
+  it("warms the host without desktop observation or input", async () => {
+    const host = runner()
+    const driver = new WindowsDesktopDriver(host)
+    try {
+      await driver.warmup()
+      const first = await host.run("[string]$PID")
+      await driver.warmup()
+      expect(await host.run("[string]$PID")).toBe(first)
+    } finally {
+      driver.cancel()
+    }
+  }, 30_000)
+
   it("releases only unmatched native input in an accepted SendInput prefix", async () => {
     let script = ""
     const driver = new WindowsDesktopDriver({
@@ -88,4 +101,51 @@ public static class RayaInputProbe {
     expect(await host.run("'recovered'")).toBe("recovered")
     host.cancel()
   }, 15_000)
+})
+
+describe("Windows desktop host preparation", () => {
+  it("coalesces startup and retries after cancellation without dispatching input", async () => {
+    const scripts: string[] = []
+    let reject: ((error: Error) => void) | undefined
+    let calls = 0
+    const driver = new WindowsDesktopDriver({
+      run: (script) => {
+        scripts.push(script)
+        calls++
+        if (calls > 1) return Promise.resolve("")
+        return new Promise<string>((_resolve, fail) => {
+          reject = fail
+        })
+      },
+      cancel: () => reject?.(new Error("Windows desktop driver command was cancelled")),
+    })
+    const first = driver.warmup()
+    const second = driver.warmup()
+    expect(scripts).toEqual(["$null"])
+    const settled = Promise.allSettled([first, second])
+    driver.cancel()
+    expect(await settled).toMatchObject([
+      { status: "rejected", reason: { message: "Windows desktop driver command was cancelled" } },
+      { status: "rejected", reason: { message: "Windows desktop driver command was cancelled" } },
+    ])
+    await driver.warmup()
+    expect(scripts).toEqual(["$null", "$null"])
+    driver.cancel()
+  })
+
+  it("rejects malformed readiness and retries with a new no-input probe", async () => {
+    const scripts: string[] = []
+    const outputs = ["unexpected", ""]
+    const driver = new WindowsDesktopDriver({
+      run: async (script) => {
+        scripts.push(script)
+        return outputs.shift() ?? ""
+      },
+      cancel: () => undefined,
+    })
+    await expect(driver.warmup()).rejects.toThrow(/readiness response is invalid/)
+    await driver.warmup()
+    expect(scripts).toEqual(["$null", "$null"])
+    driver.cancel()
+  })
 })

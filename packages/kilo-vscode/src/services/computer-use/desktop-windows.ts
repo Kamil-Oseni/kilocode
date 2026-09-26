@@ -1355,6 +1355,7 @@ function semanticResult(
 export class WindowsDesktopDriver implements DesktopDriver {
   readonly guarded = true as const
   private readonly runner: Runner
+  private preparing: Promise<void> | undefined
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined
   private host: NativeCaptureHost | undefined
@@ -1373,6 +1374,19 @@ export class WindowsDesktopDriver implements DesktopDriver {
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
+  }
+
+  async warmup(): Promise<void> {
+    if (this.preparing) return this.preparing
+    const pending = this.runner.run("$null").then((result) => {
+      if (result !== "") throw new Error("Windows desktop host readiness response is invalid")
+    })
+    this.preparing = pending
+    try {
+      await pending
+    } finally {
+      if (this.preparing === pending) this.preparing = undefined
+    }
   }
 
   async observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame> {

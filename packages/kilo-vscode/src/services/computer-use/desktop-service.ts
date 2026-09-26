@@ -163,8 +163,23 @@ export class DesktopAutomationService implements vscode.Disposable {
 
   async authorize(request: AuthorizationRequest): Promise<Authorization> {
     if (!this.panel) return { operation: "authorize", decision: "deny", reason: "Desktop control requires Windows" }
+    if (request.surface === "desktop" && !this.lease?.current() && this.lease?.authorize(request).decision === "ask") {
+      try {
+        await this.driver!.warmup()
+      } catch (error) {
+        if (!this.lease?.current()) this.driver?.cancel()
+        return {
+          operation: "authorize",
+          decision: "deny",
+          reason: `Windows desktop host could not start: ${error instanceof Error ? error.message : String(error)}`,
+        }
+      }
+    }
     const result = await this.panel.authorize(request)
-    if (result.decision !== "allow") return result
+    if (result.decision !== "allow") {
+      if (!this.lease?.current()) this.driver?.cancel()
+      return result
+    }
     if (await this.ready()) return result
     return { operation: "authorize", decision: "deny", reason: "The global Pause Raya shortcut is not ready" }
   }

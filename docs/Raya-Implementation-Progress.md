@@ -10124,3 +10124,19 @@ The global Pause/manual-takeover listener now contains synchronous and rejected 
 ## ChatGPT 2026-09-26 00:31 America/Toronto - Exact-window grant scope stays visible
 
 The grant review now names its pinned window, visibly limits that exact-window choice to the current task, disables longer durations for it, and rejects a forged persistent exact-window request before storage. Previously changing duration silently broadened the review to all applications. Thirteen focused grant/UI tests, extension typecheck, lint and formatting pass. Multi-selected applications remain unsupported: lease version 2 has an array of selected values but one shared window identity, while authorization and child delegation require exactly one exact window. Supporting a selected set safely needs a versioned per-window identity contract and bridge migration. Next: package and exercise the review in the loaded host, then implement that versioned selected-app contract. Keep `FUT-CU-01` In progress.
+
+## ChatGPT 2026-09-26 - Versioned selected-window lease contract
+
+The local Computer Use lease is now version 3: each selected window has its own pinned identity. Authorization and delegation check the exact pair, an unbound target is denied, and child admission stays single-window-only. Version 2 exact single-window leases migrate; legacy multi-value leases with one shared identity fail closed. Thirty-one focused lease tests, extension typecheck and targeted lint pass. The grant UI, capture lifecycle and bridge still admit only one selected window, so this contract does not yet enable user-visible multi-window control. Next: version the bridge/protocol target binding, add a reviewed multi-selection UI and test changed-window behavior in the loaded interactive host. Keep `FUT-CU-01` In progress.
+
+## ChatGPT 2026-09-26 - Desktop host grant warmup
+
+The first desktop authorization now starts the existing persistent Windows PowerShell host with a no-input `$null` readiness probe before grant review. A failed probe denies the request; denial cancels an unused host. In-flight probes coalesce and may retry after cancellation or malformed output. The focused preparation tests and a separately rerun real persistent-host warmup test pass; extension typecheck and lint pass. A concurrent full Windows runner suite timed out under typecheck load and is not counted as passing. The sandbox measured roughly 5-10 seconds cold and 1 ms warm for the readiness probe, which is not installed interactive action latency. Next: package/install, reload the host, and measure grant-to-first-action and steady-state action latency on the interactive desktop. Keep `FUT-CU-01` In progress.
+
+## ChatGPT 2026-09-26 - Native dialog task fixture
+
+The version-1 benchmark now has a disposable native WinForms Yes/No dialog fixture and an independent final-state scorer for one exact persisted choice, duplicate-choice replay and altered fixture files. Four focused scorer tests and PowerShell syntax parsing pass. It explicitly reports `releaseGateEligible: false`; no GUI was launched from this sandbox or operated by Raya. Next: run this scenario from a coherent loaded interactive host, collect native receipts and timing, then bind its result to the full installed benchmark. Keep the dialog scenario and `FUT-CU-01` In progress.
+
+## ChatGPT 2026-09-26 - Desktop watch description corrected
+
+The model-facing `desktop_watch` description now matches the existing changed-keyframe path: keyframes are available only for the immediate model step and are not saved in the tool result; the capture indicator applies to a non-autonomous watch. CLI typecheck passes. This is a documentation-in-code correction, not new streaming or installed-host performance evidence. Next: verify the model's live watch behavior and postconditions in the loaded host. Keep `FUT-CU-01` In progress.

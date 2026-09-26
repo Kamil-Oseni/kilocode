@@ -233,7 +233,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
     const desktop = yield* Desktop.Service
     return {
       description:
-        "Adaptively sample a bounded sequence of 2–16 foreground Windows application frames for live visual processing. Changed scenes sample every 50 milliseconds while stable scenes back off to the requested idle interval. The estimated local watch must fit ten seconds. Raya shows one visible cancellable capture indicator, stores each frame in this tool result, and sends no desktop input.",
+        "Adaptively sample 2–16 foreground Windows frames for live visual processing. Changed scenes sample every 50 milliseconds while stable scenes back off to the requested idle interval; the local watch must fit ten seconds. Changed keyframes are available for the immediate model step and are not retained in the saved tool result. A non-autonomous watch shows one cancellable capture indicator. This tool sends no desktop input.",
       parameters: WatchParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {

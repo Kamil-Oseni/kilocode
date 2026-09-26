@@ -92,9 +92,99 @@ describe("Computer Use lease store", () => {
       applications: { kind: "selected", values: ["window_one", "window_two"], identity: "process_test" },
     })
     const store = new ComputerUseLeaseStore(storage, () => 100)
+    expect(store.current()).toBeUndefined()
+    expect(
+      store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" })).decision,
+    ).not.toBe("allow")
+  })
+
+  it("binds each selected window to its own identity without widening child admission", async () => {
+    const store = new ComputerUseLeaseStore(memory(), () => 100)
+    const lease = await store.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "session",
+      applications: "selected",
+      windows: [
+        { windowID: "window_one", identity: "identity_one" },
+        { windowID: "window_two", identity: "identity_two" },
+      ],
+      actions: ["observe", "pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    expect(lease.version).toBe(3)
+    expect(store.authorize(auth({ windowID: "window_one" }))).toMatchObject({
+      decision: "allow",
+      windowID: "window_one",
+      identity: "identity_one",
+    })
+    expect(store.authorize(auth({ windowID: "window_two" }))).toMatchObject({
+      decision: "allow",
+      windowID: "window_two",
+      identity: "identity_two",
+    })
+    expect(store.authorize(auth({ windowID: "window_other" })).decision).toBe("deny")
+    expect(store.authorize(auth({ action: "observe", windowID: undefined })).decision).toBe("deny")
     expect(
       store.authorize(auth({ action: "observe", windowID: undefined, admission: "computer_child" })),
     ).toMatchObject({ decision: "deny", reason: "Computer Use child admission needs one exact selected window" })
+    const delegation = {
+      parentSessionID: "session_test",
+      childSessionID: "session_child",
+      grantID: lease.id,
+      windowID: "window_two",
+      identity: "identity_two",
+    }
+    expect(store.authorize(auth({ sessionID: "session_child", windowID: "window_two", delegation }))).toMatchObject({
+      decision: "allow",
+      windowID: "window_two",
+      identity: "identity_two",
+    })
+    expect(store.authorize(auth({ sessionID: "session_child", windowID: "window_one", delegation })).decision).toBe(
+      "deny",
+    )
+    expect(
+      store.authorize(auth({ sessionID: "session_child", delegation: { ...delegation, identity: "identity_one" } }))
+        .decision,
+    ).toBe("deny")
+  })
+
+  it("migrates v2 exact-window leases but rejects missing or shared window identities", async () => {
+    const storage = memory()
+    const first = new ComputerUseLeaseStore(storage, () => 100)
+    await first.grant({
+      sessionID: "session_test",
+      level: "autonomous",
+      duration: "until_stopped",
+      applications: "all",
+      actions: ["pointer"],
+      sensitive: policy(),
+      cooperativeInput: false,
+    })
+    const base = storage.read() as NonNullable<ReturnType<ComputerUseLeaseStore["current"]>>
+    const old = {
+      ...base,
+      version: 2,
+      applications: { kind: "selected", values: ["window_one"], identity: "identity_one" },
+    }
+    await storage.update("raya.computerUse.lease.v1", old)
+    const migrated = new ComputerUseLeaseStore(storage, () => 100)
+    expect(migrated.current()).toMatchObject({ version: 3 })
+    expect(migrated.authorize(auth({ windowID: "window_one" }))).toMatchObject({
+      decision: "allow",
+      identity: "identity_one",
+    })
+    for (const applications of [
+      { kind: "selected", values: ["window_one", "window_two"], identity: "identity_one" },
+      { kind: "selected", values: ["window_one"] },
+      { kind: "selected", values: ["window_one", "window_two"], identities: { window_one: "identity_one" } },
+    ]) {
+      await storage.update("raya.computerUse.lease.v1", { ...base, applications })
+      const store = new ComputerUseLeaseStore(storage, () => 100)
+      expect(store.current()).toBeUndefined()
+      expect(store.authorize(auth({ windowID: "window_one" })).decision).not.toBe("allow")
+    }
   })
 
   it("binds a child to the exact parent session and active grant", async () => {

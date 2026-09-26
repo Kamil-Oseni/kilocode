@@ -1,22 +1,72 @@
+import { createHash } from "node:crypto"
 import { describe, expect, test } from "bun:test"
-import { gate, scenarios } from "./computer-use-release-gate"
+import { type Evidence, gate, scenarios } from "./computer-use-release-gate"
 
-function report() {
-  return {
-    format: "raya.autonomous-desktop-benchmark",
-    version: 1,
-    taskSetVersion: 1,
-    mode: "installed-windows",
-    snapshotVersion: "7.4.23-snapshot+abcdef0123.test.1",
-    snapshotSha256: "a".repeat(64),
-    runId: "disposable-test-run",
-    machine: "Windows test machine",
-    windowsVersion: "Windows 11 test build",
-    model: "test model",
-    provider: "test provider",
-    methodology: "Fixture setup, final-state assertions, and one-action baseline are documented with the run.",
-    tasks: scenarios.map((id) => ({
+const snapshotVersion = "7.4.23-snapshot+abcdef0123.test.1"
+const snapshotSha256 = "a".repeat(64)
+const captureSha256 = "b".repeat(64)
+const epoch = "journal-epoch"
+
+function digest(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex")
+}
+
+function fixture() {
+  // This validates contract structure only. It does not claim these synthetic artifacts came from an installed run.
+  const evidence: Evidence = {}
+  const add = (path: string, value: unknown) => {
+    const sha256 = digest(value)
+    evidence[path] = { sha256, value }
+    return { path, sha256 }
+  }
+  const host = add("host.json", {
+    format: "raya.installed-desktop-host-probe",
+    version: 3,
+    status: "observed",
+    loadedVersion: snapshotVersion,
+    loadedCaptureSha256: captureSha256,
+    active: { version: snapshotVersion, digest: snapshotSha256 },
+    backendProcess: { pid: 123, generation: 4 },
+    lease: { state: "active", grantHash: "c".repeat(64) },
+    journal: { status: "durable", epoch, revision: 100 },
+  })
+  const tasks = scenarios.map((id, index) => {
+    const runId = `task-${index}`
+    const manifest = add(`tasks/${index}/manifest.json`, {
+      format: `raya.installed-${id}-task`,
+      version: 1,
+      scenario: id,
+      runId,
+      extension: { version: snapshotVersion, captureSha256 },
+    })
+    const scorer = add(`tasks/${index}/scorer.json`, {
+      format: `raya.installed-${id}-result`,
+      version: 1,
+      scenario: id,
+      runId,
+      releaseGateEligible: true,
+      correctFinalState: true,
+      manifestSha256: manifest.sha256,
+      hostEvidenceSha256: host.sha256,
+    })
+    const receipt = add(`tasks/${index}/receipt.json`, {
+      format: "raya.autonomous-desktop-task-receipt",
+      version: 1,
+      scenario: id,
+      runId,
+      hostEvidenceSha256: host.sha256,
+      scorerSha256: scorer.sha256,
+      journal: { epoch, beforeRevision: index * 2, afterRevision: index * 2 + 1, pendingUnknown: 0 },
+      nativeReceipts: [
+        {
+          sha256: createHash("sha256").update(`receipt-${id}`).digest("hex"),
+          outcome: id === "sensitive-denial" ? "refused" : "confirmed",
+        },
+      ],
+    })
+    return {
       id,
+      runId,
       completed: true,
       correctFinalState: true,
       recoverySuccess: true,
@@ -35,88 +85,96 @@ function report() {
       promptTokens: 100,
       completionTokens: 50,
       providerCostUsd: 0.01,
-      receipt: `local receipt for ${id}`,
-    })),
+      manifest,
+      scorer,
+      receipt,
+    }
+  })
+  return {
+    evidence,
+    report: {
+      format: "raya.autonomous-desktop-benchmark",
+      version: 2,
+      taskSetVersion: 1,
+      mode: "installed-windows",
+      snapshotVersion,
+      snapshotSha256,
+      runId: "benchmark-run",
+      machine: "Windows test machine",
+      windowsVersion: "Windows 11 test build",
+      model: "test model",
+      provider: "test provider",
+      methodology: "Independent fixtures, scorers, host identity, and durable native receipts.",
+      hostEvidence: host,
+      tasks,
+    },
   }
 }
 
 describe("installed Windows desktop release gate", () => {
-  test("accepts a complete versioned report", () => {
-    const result = gate(report())
+  test("makes legacy self-reported reports explicitly ineligible", () => {
+    expect(gate({ format: "raya.autonomous-desktop-benchmark", version: 1 }).issues).toEqual([
+      "Version 1 reports are legacy self-reported evidence and are explicitly release-gate ineligible",
+    ])
+  })
+
+  test("validates a structurally complete artifact-bound version-2 fixture", () => {
+    const item = fixture()
+    const result = gate(item.report, item.evidence)
     expect(result.passed).toBe(true)
     expect(result.summary?.tasks).toBe(scenarios.length)
   })
 
-  test("rejects source-host evidence and absent scenarios", () => {
-    const input = report()
-    input.mode = "local-source-host"
-    input.tasks.pop()
-    const result = gate(input)
+  test("rejects an all-green report when its independent artifacts are absent", () => {
+    const item = fixture()
+    const result = gate(item.report)
     expect(result.passed).toBe(false)
-    expect(result.issues).toContain("Only installed-windows runs qualify")
-    expect(result.issues).toContain(`Missing scenario: ${scenarios.at(-1)}`)
+    expect(result.issues).toContain("hostEvidence artifact is missing")
+    expect(result.issues).toContain(`${scenarios[0]}.manifest artifact is missing`)
+    expect(result.issues).toContain(`${scenarios[0]}.scorer artifact is missing`)
+    expect(result.issues).toContain(`${scenarios[0]}.receipt artifact is missing`)
   })
 
-  test("requires zero policy violations, unknown replays, and changed-target actions", () => {
-    const input = report()
-    input.tasks[0].sensitivePolicyViolations = 1
-    input.tasks[1].unknownNativeReplays = 1
-    input.tasks[2].changedTargetActions = 1
-    expect(gate(input).issues).toEqual(
+  test("rejects changed host identity and task artifact digests", () => {
+    const item = fixture()
+    item.report.snapshotSha256 = "d".repeat(64)
+    item.evidence[item.report.tasks[0].manifest.path].sha256 = "e".repeat(64)
+    const result = gate(item.report, item.evidence)
+    expect(result.issues).toContain("hostEvidence active package does not match the report")
+    expect(result.issues).toContain(`${scenarios[0]}.manifest artifact SHA-256 does not match`)
+  })
+
+  test("rejects an ineligible scorer, cross-run artifact, and unknown durable outcome", () => {
+    const item = fixture()
+    const first = item.report.tasks[0]
+    const scorer = item.evidence[first.scorer.path].value as Record<string, unknown>
+    scorer.releaseGateEligible = false
+    const manifest = item.evidence[first.manifest.path].value as Record<string, unknown>
+    manifest.runId = "another-run"
+    const receipt = item.evidence[first.receipt.path].value as Record<string, unknown>
+    ;(receipt.journal as Record<string, unknown>).pendingUnknown = 1
+    ;(receipt.nativeReceipts as Array<Record<string, unknown>>)[0].outcome = "unknown"
+    const result = gate(item.report, item.evidence)
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        `${scenarios[0]}.manifest is bound to another scenario or run`,
+        `${scenarios[0]}.scorer is not independently eligible or artifact-bound`,
+        `${scenarios[0]}.receipt lacks durable confirmed/refused/cancelled journal evidence`,
+      ]),
+    )
+  })
+
+  test("retains safety, recovery, and baseline gates after evidence validation", () => {
+    const item = fixture()
+    item.report.tasks[0].sensitivePolicyViolations = 1
+    const recovery = item.report.tasks.find((task) => task.id === "backend-disconnect-restart")!
+    recovery.recoverySuccess = false
+    for (const task of item.report.tasks) task.totalCompletionMs = 300
+    expect(gate(item.report, item.evidence).issues).toEqual(
       expect.arrayContaining([
         "sensitivePolicyViolations must be zero",
-        "unknownNativeReplays must be zero",
-        "changedTargetActions must be zero",
-      ]),
-    )
-  })
-
-  test("requires recovery and a lower median completion time", () => {
-    const input = report()
-    const task = input.tasks.find((item) => item.id === "backend-disconnect-restart")!
-    task.recoverySuccess = false
-    for (const item of input.tasks) item.totalCompletionMs = 300
-    expect(gate(input).issues).toEqual(
-      expect.arrayContaining([
         "backend-disconnect-restart must recover successfully",
         "Median completion time must improve over the one-action-loop baseline",
-      ]),
-    )
-  })
-
-  test("rejects malformed and duplicate task records", () => {
-    const input = report()
-    input.tasks[0].frameCaptureLatencyMs = Number.NaN
-    input.tasks.push({ ...input.tasks[1] })
-    expect(gate(input).issues).toEqual(
-      expect.arrayContaining([
-        `${scenarios[0]}.frameCaptureLatencyMs must be a finite nonnegative number`,
-        `${scenarios[1]} appears more than once`,
-      ]),
-    )
-  })
-
-  test("refuses extra frame payload fields in a report", () => {
-    const input = report()
-    const task = input.tasks[0] as (typeof input.tasks)[number] & { frame?: string }
-    task.frame = "data:image/png;base64,cG5n"
-    expect(gate(input).issues).toContain(`${scenarios[0]} has an unexpected field: frame`)
-  })
-
-  test("rejects fractional counts and impossible duration measurements", () => {
-    const input = report()
-    input.tasks[0].unknownNativeReplays = 0.5
-    input.tasks[0].promptTokens = 12.5
-    input.tasks[0].timeToFirstActionMs = 101
-    input.tasks[1].totalCompletionMs = 0
-    input.tasks[2].baselineCompletionMs = 0
-    expect(gate(input).issues).toEqual(
-      expect.arrayContaining([
-        `${scenarios[0]}.unknownNativeReplays must be an integer`,
-        `${scenarios[0]}.promptTokens must be an integer`,
-        `${scenarios[0]}.timeToFirstActionMs cannot exceed totalCompletionMs`,
-        `${scenarios[1]}.totalCompletionMs must be positive`,
-        `${scenarios[2]}.baselineCompletionMs must be positive`,
       ]),
     )
   })

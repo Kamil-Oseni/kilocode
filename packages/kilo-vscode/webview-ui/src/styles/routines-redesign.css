@@ -910,16 +910,21 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-field :is(inpu
 /* Organization surfaces share the same soft cards and quiet controls as chat. */
 .routines-view * {
   scrollbar-width: thin;
-  scrollbar-color: #38383b transparent;
+  scrollbar-color: #55555a transparent;
 }
 
 .routines-view *::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 .routines-view *::-webkit-scrollbar-thumb {
-  background: #38383b;
+  border-radius: 999px;
+  background: #55555a;
+}
+
+.routines-view *::-webkit-scrollbar-thumb:hover {
+  background: #74747a;
 }
 
 .routines-view .routines-organization-overview .routines-thread-body,
@@ -1043,5 +1048,178 @@ body:is(.vscode-light, .pv-theme--light) .routines-view .routines-field :is(inpu
   .routines-view .routines-organization-edit-members li,
   .routines-view .routines-field :is(input, select, textarea) {
     transition: none;
+  }
+}
+
+/* Organization editing uses the same restrained rows and dividers as the chat. */
+.routines-view .routines-organization-editor .routines-thread-body {
+  max-width: 760px;
+  gap: 0;
+  padding-bottom: 48px;
+}
+
+.routines-view .routines-organization-editor .routines-field {
+  margin-bottom: 16px;
+}
+
+.routines-view .routines-organization-intro {
+  margin: 0 0 24px;
+  color: var(--routine-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.routines-view .routines-organization-editor .routines-organization-disclosure,
+.routines-view .routines-organization-editor .routines-organization-section {
+  border: 0;
+  border-top: 1px solid var(--routine-line);
+  border-radius: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.routines-view .routines-organization-editor .routines-organization-disclosure > summary {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  min-height: 60px;
+  gap: 2px 12px;
+  padding: 14px 0;
+  border: 0;
+  font-weight: 600;
+}
+
+.routines-view .routines-organization-editor .routines-organization-disclosure[open] > summary {
+  border-bottom: 0;
+}
+
+.routines-view
+  .routines-organization-editor
+  :is(.routines-organization-disclosure, .routines-organization-member-settings)
+  > summary:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, Highlight);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+.routines-view .routines-disclosure-note {
+  color: var(--routine-muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.routines-view .routines-organization-editor .routines-organization-disclosure-body,
+.routines-view .routines-organization-editor .routines-organization-disclosure > .routines-organization-section {
+  margin: 0;
+  padding: 0 0 20px;
+}
+
+.routines-view .routines-organization-editor .routines-thread-body > .routines-organization-section {
+  padding: 18px 0 22px;
+}
+
+.routines-view .routines-organization-editor .routines-organization-section-head h4 {
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.routines-view .routines-organization-editor .routines-organization-section-head p {
+  max-width: 60ch;
+  margin-top: 4px;
+  color: var(--routine-muted);
+  line-height: 1.5;
+}
+
+.routines-view .routines-organization-editor .routines-organization-edit-members {
+  gap: 0;
+}
+
+.routines-view .routines-organization-editor .routines-organization-edit-members li {
+  display: block;
+  min-width: 0;
+  border: 0;
+  border-top: 1px solid var(--routine-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.routines-view .routines-organization-editor .routines-organization-edit-members li:hover {
+  border-color: var(--routine-line);
+}
+
+.routines-view .routines-organization-editor .routines-organization-member-settings > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 0;
+}
+
+.routines-view .routines-organization-editor .routines-organization-member-settings[open] {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.routines-view .routines-organization-editor .routines-organization-member-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.routines-view .routines-organization-editor .routines-organization-member-summary :is(strong, span) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.routines-view .routines-organization-member-action {
+  flex: 0 0 auto;
+  color: var(--routine-muted);
+  font-size: 11px;
+}
+
+.routines-view
+  .routines-organization-editor
+  .routines-organization-member-settings[open]
+  .routines-organization-member-action {
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-view .routines-organization-editor .routines-organization-member-fields {
+  margin: 0;
+  padding: 6px 0 18px;
+}
+
+.routines-view .routines-organization-editor .routines-organization-archive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.routines-view .routines-organization-editor .routines-organization-archive [data-component="button"] {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 480px) {
+  .routines-view .routines-organization-editor .routines-thread-body {
+    padding-inline: 16px;
+  }
+
+  .routines-view .routines-organization-editor .routines-organization-disclosure > summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .routines-view .routines-organization-editor .routines-organization-archive [data-component="button"] {
+    width: 100%;
+    justify-content: center;
   }
 }

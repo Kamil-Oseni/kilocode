@@ -750,7 +750,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible()
   await expect(page.getByLabel("Instructions for the team")).toBeHidden()
   await expect(page.getByLabel("Spending limit ($)")).toBeHidden()
-  await page.getByText("How this team works", { exact: true }).click()
+  await page.getByText("Guidance and budget", { exact: true }).click()
   await expect(page.getByLabel("Instructions for the team")).toHaveValue(
     "Do not contact a prospect until the proposed website has passed design and legal review.",
   )
@@ -764,15 +764,15 @@ test("routines organization editor separates reporting, delegation, and archive"
   const counsel = page.locator(".routines-organization-edit-members > li").filter({
     has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
   })
-  await counsel.getByText("Worker settings", { exact: true }).click()
+  await counsel.getByText("Edit worker", { exact: true }).click()
   const authority = counsel.getByRole("checkbox", { name: "Can create workers" }).first()
   await expect(authority).toBeChecked()
   await counsel.getByText("Can create workers", { exact: true }).first().click()
   await expect(authority).not.toBeChecked()
   await expect(counsel.getByText("Changed by you", { exact: false })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
-  await page.getByText("Who can assign work", { exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Assignment permissions" })).toBeHidden()
+  await page.getByText("Work handoffs", { exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Assignment permissions" })).toBeVisible()
   await expect(page.getByText("Choose which teammates can pass work to each other.")).toBeVisible()
   const lead = page.getByRole("group", { name: "Counsel can assign work to" })
   await expect(lead.getByRole("checkbox", { name: "Books" })).toBeChecked()
@@ -793,8 +793,7 @@ test("routines organization editor separates reporting, delegation, and archive"
   await expect(page.getByText(/\$249\.58 available/)).toBeVisible()
 
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeHidden()
-  await page.locator(".routines-organization-archive > summary").click()
+  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Archive organization", exact: true }).click()
   await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
     "Raya will stop every worker and disable its schedules",
@@ -993,22 +992,24 @@ test("narrow organization editor reveals one settings group at a time", async ({
 
   await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible()
   await expect(page.getByLabel("Instructions for the team")).toBeHidden()
-  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeHidden()
-  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeHidden()
+  await expect(page.getByRole("heading", { name: "Assignment permissions" })).toBeHidden()
+  await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeVisible()
 
-  await page.getByText("How this team works", { exact: true }).click()
+  await page.getByText("Guidance and budget", { exact: true }).click()
   await expect(page.getByLabel("Instructions for the team")).toBeVisible()
-  await page.getByText("How this team works", { exact: true }).click()
+  await page.getByText("Guidance and budget", { exact: true }).click()
   const counsel = page.locator(".routines-organization-edit-members > li").filter({
     has: page.locator(".routines-organization-member-summary strong", { hasText: /^Counsel$/ }),
   })
-  await counsel.getByText("Worker settings", { exact: true }).click()
+  await counsel.getByText("Edit worker", { exact: true }).click()
   await expect(counsel.getByLabel("Role")).toBeVisible()
-  await counsel.getByText("Worker settings", { exact: true }).click()
-  await page.getByText("Who can assign work", { exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Who can hand off work" })).toBeVisible()
-  await page.getByText("Who can assign work", { exact: true }).click()
-  await page.locator(".routines-organization-archive > summary").click()
+  await counsel.getByText("Edit worker", { exact: true }).click()
+  await page.getByText("Work handoffs", { exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Assignment permissions" })).toBeVisible()
+  await page.getByText("Work handoffs", { exact: true }).click()
+  await counsel.locator(".routines-organization-member-summary strong").evaluate((name) => {
+    name.textContent = "A very long worker name that should wrap on a narrow screen"
+  })
   await expect(page.getByRole("button", { name: "Archive organization", exact: true })).toBeVisible()
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

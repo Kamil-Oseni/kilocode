@@ -248,8 +248,14 @@ function OrganizationEditor(props: {
             onInput={(event) => setPurpose(event.currentTarget.value)}
           />
         </label>
+        <p class="routines-organization-intro">
+          Keep the team’s purpose clear, then choose how its workers collaborate.
+        </p>
         <details class="routines-organization-disclosure">
-          <summary>How this team works</summary>
+          <summary>
+            <span>Guidance and budget</span>
+            <span class="routines-disclosure-note">Shared instructions and spending</span>
+          </summary>
           <div class="routines-organization-disclosure-body">
             <label class="routines-field">
               Instructions for the team
@@ -287,19 +293,21 @@ function OrganizationEditor(props: {
           <div class="routines-organization-section-head">
             <div>
               <h4 id={`team-${props.item.id}`}>Team</h4>
-              <p>Choose who belongs here and how they work together.</p>
+              <p>Choose the workers and their roles. Open a worker to change their settings.</p>
             </div>
           </div>
           <ol class="routines-organization-edit-members">
             <For each={members()}>
               {(member) => (
                 <li>
-                  <div class="routines-organization-member-summary">
-                    <strong>{label(member.agentID)}</strong>
-                    <span>{member.role}</span>
-                  </div>
                   <details class="routines-organization-member-settings">
-                    <summary>Worker settings</summary>
+                    <summary>
+                      <span class="routines-organization-member-summary">
+                        <strong>{label(member.agentID)}</strong>
+                        <span>{member.role || "Add a role"}</span>
+                      </span>
+                      <span class="routines-organization-member-action">Edit worker</span>
+                    </summary>
                     <div class="routines-organization-member-fields">
                       <Checkbox
                         checked={provisions(member.agentID)}
@@ -373,11 +381,14 @@ function OrganizationEditor(props: {
         </section>
 
         <details class="routines-organization-disclosure">
-          <summary>Who can assign work</summary>
+          <summary>
+            <span>Work handoffs</span>
+            <span class="routines-disclosure-note">Who may assign work to whom</span>
+          </summary>
           <section class="routines-organization-section" aria-labelledby={`authority-${props.item.id}`}>
             <div class="routines-organization-section-head">
               <div>
-                <h4 id={`authority-${props.item.id}`}>Who can hand off work</h4>
+                <h4 id={`authority-${props.item.id}`}>Assignment permissions</h4>
                 <p>Choose which teammates can pass work to each other.</p>
               </div>
             </div>
@@ -406,24 +417,21 @@ function OrganizationEditor(props: {
           </section>
         </details>
 
-        <details class="routines-organization-disclosure routines-organization-archive">
-          <summary>Archive organization</summary>
-          <section
-            class="routines-organization-section routines-organization-danger"
-            aria-labelledby={`archive-${props.item.id}`}
-          >
-            <div>
-              <h4 id={`archive-${props.item.id}`}>Archive {props.item.name}</h4>
-              <p>
-                Raya stops every worker and disables its schedules. They will not restart on their own. Chats, work and
-                reports stay saved.
-              </p>
-            </div>
-            <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
-              Archive organization
-            </Button>
-          </section>
-        </details>
+        <section
+          class="routines-organization-section routines-organization-archive"
+          aria-labelledby={`archive-${props.item.id}`}
+        >
+          <div class="routines-organization-section-head">
+            <h4 id={`archive-${props.item.id}`}>Archive this team</h4>
+            <p>
+              Raya stops its workers and schedules so they cannot restart on their own. Chats, work and reports stay
+              saved.
+            </p>
+          </div>
+          <Button intent="destructive" scale="compact" pending={props.saving} onClick={props.onArchive}>
+            Archive organization
+          </Button>
+        </section>
       </div>
     </section>
   )

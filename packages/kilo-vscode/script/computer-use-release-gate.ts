@@ -1,6 +1,6 @@
 // Versioned acceptance contract for real, installed Windows desktop runs.
 // Version 2 structurally binds separately captured host, manifest, scorer, and receipt artifacts.
-// Hash binding detects substitution after capture; it is not proof that an independently executed run produced them.
+// It remains ineligible until host-produced native outcome events replace synthetic receipt fields.
 import { createHash } from "node:crypto"
 import { readFile, realpath, stat } from "node:fs/promises"
 import { dirname, isAbsolute, relative, resolve } from "node:path"
@@ -381,6 +381,8 @@ export function gate(input: unknown, evidence: Evidence = {}) {
   const valid = entries(report, evidence, observed, issues)
   if (issues.length) return { passed: false, issues }
   const summary = outcome(valid, issues)
+  if (input.version === 2)
+    issues.push("Version 2 receipt artifacts are structurally checked but have no host-produced native outcome binding")
   return { passed: issues.length === 0, issues, summary }
 }
 

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-26 16:36 America/Toronto - v2 Desktop benchmark pass disabled
+
+The v2 checker still validates artifact hashes, task metrics, recovery and median speed, but it can no longer report a release pass from synthetic native receipt categories. Nine focused gate/CLI tests pass. A replacement versioned gate must bind host-produced pre-dispatch decisions and post-dispatch native outcomes to a real task/run and an independent scorer. Keep `FUT-CU-01` In progress; source tests and the latest installed extension do not satisfy the 17-task Windows release matrix.
+
 ## ChatGPT 2026-09-26 16:22 America/Toronto - Desktop release-receipt contract mismatch
 
 The v2 benchmark gate expects native `confirmed/refused/cancelled` receipt objects and zero pending unknowns. The actual durable DesktopBridge v3 audit records `confirmed/unknown` native effects; refusals and cancellations before dispatch are policy decisions with no native effect, while an ambiguous post-dispatch result must remain unknown. Do not synthesize refused/cancelled native receipts or reinterpret unknown as cancelled to make the gate pass. Next contract slice: add a separate versioned, redacted host event journal for pre-dispatch policy decisions and post-dispatch effects, bind events to an exact session/run, and retain no-replay receipts across restart. Pair bridge entries with the native broker's own dispatch identity before making zero-replay claims. Migrate legacy v3 entries as ineligible, update the release checker and adverse tests, then score real installed Windows tasks. The current task-boundary hooks remain `releaseGateEligible:false`.

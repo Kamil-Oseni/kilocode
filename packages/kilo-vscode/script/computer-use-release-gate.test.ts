@@ -118,10 +118,13 @@ describe("installed Windows desktop release gate", () => {
     ])
   })
 
-  test("validates a structurally complete artifact-bound version-2 fixture", () => {
+  test("reports structural metrics but never passes a version-2 synthetic receipt fixture", () => {
     const item = fixture()
     const result = gate(item.report, item.evidence)
-    expect(result.passed).toBe(true)
+    expect(result.passed).toBe(false)
+    expect(result.issues).toContain(
+      "Version 2 receipt artifacts are structurally checked but have no host-produced native outcome binding",
+    )
     expect(result.summary?.tasks).toBe(scenarios.length)
   })
 

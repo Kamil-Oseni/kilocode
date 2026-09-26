@@ -299,6 +299,10 @@ public static class RayaDesktopNative {
   }
 
   public static void Scroll(int deltaX, int deltaY) {
+    Point cursor;
+    if (!GetCursorPos(out cursor)) throw new InvalidOperationException("Desktop scroll cursor position is unavailable");
+    ValidatePoint(cursor.X, cursor.Y);
+    ValidateTarget(cursor.X, cursor.Y);
     ValidateIdleInput();
     var inputs = new List<Input>();
     if (deltaY != 0) {
@@ -820,8 +824,8 @@ const pixels = observe.replace("$collectSemantics = $true", "$collectSemantics =
 function selectedPixels(target: { windowID: string; identity: string }) {
   const input = payload(target)
   const first = pixels.replace(
-      "$window = Get-RayaWindow\n$scale =",
-      `$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
+    "$window = Get-RayaWindow\n$scale =",
+    `$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${input}")) | ConvertFrom-Json
 $window = Get-RayaWindow
 if ($window.WindowID -ne $target.windowID -or [RayaDesktopNative]::Identity($window.Handle) -ne $target.identity) {
   $global:RayaCaptureCache = $null
@@ -829,21 +833,21 @@ if ($window.WindowID -ne $target.windowID -or [RayaDesktopNative]::Identity($win
   return
 }
 $scale =`,
-    )
+  )
   if (first === pixels) throw new Error("Selected desktop capture cannot bind its foreground precondition")
   const second = first.replace(
-      `  $after = Get-RayaWindow
+    `  $after = Get-RayaWindow
   if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
     throw "Foreground window changed while correlating visual and semantic observations"
   }`,
-      `  $after = Get-RayaWindow
+    `  $after = Get-RayaWindow
   $identity = [RayaDesktopNative]::Identity($after.Handle)
   if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location -or $identity -ne $target.identity) {
     $global:RayaCaptureCache = $null
     [pscustomobject]@{ discard = $true } | ConvertTo-Json -Compress
     return
   }`,
-    )
+  )
   if (second === first) throw new Error("Selected desktop capture cannot bind its foreground postcondition")
   const script = second.replace(
     "    windowID = $window.WindowID\n    location = $window.Location",

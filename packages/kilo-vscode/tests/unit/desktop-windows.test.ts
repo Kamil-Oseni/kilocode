@@ -170,7 +170,9 @@ describe("Windows native desktop driver", () => {
       expect(latest()?.frame.data).toBe("first")
       expect(scripts[0]).toContain("$after.Location -ne $window.Location -or $identity -ne $target.identity")
       expect(scripts[0]).toContain("[RayaDesktopNative]::Identity($window.Handle) -ne $target.identity")
-      expect(scripts[0]).toContain(Buffer.from(JSON.stringify({ windowID: chosen.windowID, identity }), "utf8").toString("base64"))
+      expect(scripts[0]).toContain(
+        Buffer.from(JSON.stringify({ windowID: chosen.windowID, identity }), "utf8").toString("base64"),
+      )
       expect(errors).toHaveLength(0)
       state.window = other
       for (let index = 0; index < 100 && samples < 2; index++) await Bun.sleep(2)
@@ -222,8 +224,19 @@ describe("Windows native desktop driver", () => {
       let cancelled = 0
       const errors: unknown[] = []
       const driver = new WindowsDesktopDriver(
-        { run: async () => { commands++; return JSON.stringify(visual) }, cancel: () => undefined },
-        { run: async () => JSON.stringify(output), cancel: () => { cancelled++ } },
+        {
+          run: async () => {
+            commands++
+            return JSON.stringify(visual)
+          },
+          cancel: () => undefined,
+        },
+        {
+          run: async () => JSON.stringify(output),
+          cancel: () => {
+            cancelled++
+          },
+        },
       )
       driver.startCapture((error) => errors.push(error), target)
       for (let index = 0; index < 100 && !cancelled && !errors.length; index++) await Bun.sleep(2)
@@ -311,17 +324,12 @@ describe("Windows native desktop driver", () => {
       cancel: () => undefined,
     })
     await driver.pinWindow(target)
-    const source = script.slice(0, script.indexOf("$target ="))
-      .replace("[RayaDesktopNative]::EnableDpiAwareness()", "") +
+    const source =
+      script.slice(0, script.indexOf("$target =")).replace("[RayaDesktopNative]::EnableDpiAwareness()", "") +
       '[Console]::WriteLine("RayaDesktopNative compiled")'
-    const result = Bun.spawnSync([
-      "powershell.exe",
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "-",
-    ], { stdin: Buffer.from(source, "utf8") })
+    const result = Bun.spawnSync(["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-"], {
+      stdin: Buffer.from(source, "utf8"),
+    })
     expect(result.exitCode).toBe(0)
     expect(result.stdout.toString()).toContain("RayaDesktopNative compiled")
   })
@@ -1411,7 +1419,8 @@ describe("Windows native desktop driver", () => {
     expect(test.scripts[0]).toContain("unchecked((uint)deltaX)")
     expect(test.scripts[0]).toContain("SendInput((uint)batch.Length, batch")
     expect(test.scripts[0]).toContain("Windows refused complete desktop scroll input")
-    expect(test.scripts[0]).toContain("public static void Scroll(int deltaX, int deltaY) {\n    ValidateIdleInput();")
+    expect(test.scripts[0]).toContain("public static void Scroll(int deltaX, int deltaY) {\n    Point cursor;")
+    expect(test.scripts[0]).toContain("ValidateTarget(cursor.X, cursor.Y);\n    ValidateIdleInput();")
     expect(test.scripts[0]).toContain(
       "[RayaDesktopNative]::Scroll([int][Math]::Round($action.deltaX), [int][Math]::Round($action.deltaY))",
     )

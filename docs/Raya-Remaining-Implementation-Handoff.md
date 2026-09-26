@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-26 17:02 America/Toronto - v4 journal and exact scroll target
+
+The bridge now persists redacted v4 action events that distinguish explicit pre-dispatch refusal/cancellation from post-dispatch confirmed/unknown effects. Legacy receipts migrate without fabricating new event evidence; 59 focused tests, extension typecheck and scoped lint pass. The production PowerShell scroll path now checks the live cursor against the exact granted target before input, and the packaged native broker applies matching pointer, drag, scroll and held-input checks. The 40-case Windows driver suite and broker self-test/round trip pass. These are source checks, not loaded-host proof; the new journal remains `releaseGateEligible:false`. Next: push and install the guarded driver, reload the Raya window, inspect package/backend identity, run real changed-target and restart/no-replay trials, then replace the release contract and score the full matrix. Keep `FUT-CU-01` In progress.
+
+## ChatGPT 2026-09-26 16:41 America/Toronto - native broker safety parity before integration
+
+The native input broker now rejects covered pointer/drag endpoints and any held manual input before SendInput, with focused MSVC `/W4` self-tests and input-host round trip passing. The production driver still uses the warm PowerShell path. Next: wire an explicit native trial path with exact target and broker receipt binding, no fallback after attempted dispatch, cancellation/quiescence handling and real Windows unknown/no-replay/release tests. Do not claim lower latency or complete emergency recovery from this broker-only change; `FUT-CU-01` remains In progress.
+
 ## ChatGPT 2026-09-26 16:36 America/Toronto - v2 Desktop benchmark pass disabled
 
 The v2 checker still validates artifact hashes, task metrics, recovery and median speed, but it can no longer report a release pass from synthetic native receipt categories. Nine focused gate/CLI tests pass. A replacement versioned gate must bind host-produced pre-dispatch decisions and post-dispatch native outcomes to a real task/run and an independent scorer. Keep `FUT-CU-01` In progress; source tests and the latest installed extension do not satisfy the 17-task Windows release matrix.

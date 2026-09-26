@@ -40,6 +40,7 @@ function setup(
     frameWindows?: string[]
     frameLocations?: string[]
     currentWindow?: string
+    currentHold?: Promise<void>
     listed?: string[]
     listedIdentity?: string | (() => string)
     onCapture?: () => void
@@ -104,7 +105,10 @@ function setup(
         minimized: false,
         foreground: windowID === (input.currentWindow ?? "window_2"),
       })),
-    current: async () => ({ windowID: input.currentWindow ?? "window_1", location: "process|title|bounds" }),
+    current: async () => {
+      if (input.currentHold) await input.currentHold
+      return { windowID: input.currentWindow ?? "window_1", location: "process|title|bounds" }
+    },
     focus: async (target) => {
       focused.push(target.windowID)
     },
@@ -192,7 +196,7 @@ function setup(
           }
         : undefined,
   )
-  return { bridge, events, states, replies, rejects, actions, checks, focused, observed: () => observed }
+  return { bridge, session, events, states, replies, rejects, actions, checks, focused, observed: () => observed }
 }
 
 function memory(seed?: unknown) {
@@ -934,6 +938,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      authorization: { kind: "prompt" },
       sensitive: false,
       authorization: { kind: "grant", grantID: "grant_test" },
       action: "click",
@@ -1287,7 +1292,7 @@ describe("desktop observation bridge", () => {
     expect(first.actions).toHaveLength(1)
     expect(JSON.stringify(store.read())).not.toContain("cG5n")
     expect(store.read()).toMatchObject({
-      version: 3,
+      version: 4,
       items: [{ id: click.id, result: { operation: "click", receipt: { outcome: "confirmed" } } }],
     })
     first.bridge.dispose()
@@ -1307,7 +1312,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 3, items: [] })
+    expect(store.read()).toMatchObject({ version: 4, items: [] })
     second.bridge.dispose()
   })
 
@@ -1350,6 +1355,7 @@ describe("desktop observation bridge", () => {
     expect(store.read()).toMatchObject({
       items: [{ id: click.id, failure: { receipt: { outcome: "unknown", requestID: click.id } } }],
     })
+    expect(test.bridge.journalEvents()?.events).toMatchObject([{ phase: "post_dispatch", outcome: "unknown" }])
     gate.resolve()
     await Bun.sleep(20)
     expect(test.actions).toHaveLength(1)
@@ -1396,10 +1402,11 @@ describe("desktop observation bridge", () => {
       }),
     ])
     expect(store.read()).toMatchObject({
-      version: 3,
+      version: 4,
       items: [{ id: click.id, failure: { receipt: { requestID: click.id, outcome: "unknown" } } }],
     })
     expect(first.bridge.journalAudit()?.entries).toMatchObject([{ effect: "interact", outcome: "unknown" }])
+    expect(first.bridge.journalEvents()?.events).toMatchObject([{ phase: "post_dispatch", outcome: "unknown" }])
 
     const next = { ...request, id: "desktop_after_uncertain_observe" }
     for (const listener of first.events)
@@ -1437,7 +1444,7 @@ describe("desktop observation bridge", () => {
         }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 3, items: [] })
+    expect(store.read()).toMatchObject({ version: 4, items: [] })
     second.bridge.dispose()
   })
 
@@ -1774,7 +1781,7 @@ describe("desktop observation bridge", () => {
         error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
       }),
     ])
-    expect(store.read()).toMatchObject({ version: 3, items: [] })
+    expect(store.read()).toMatchObject({ version: 4, items: [] })
     second.bridge.dispose()
 
     const fingerprint = createHash("sha256")
@@ -1946,6 +1953,7 @@ describe("desktop observation bridge", () => {
       operation: "click",
       windowID: observed.result.observation.target.windowID,
       observationID: observed.result.observation.id,
+      authorization: { kind: "prompt" },
       sensitive: false,
       action: "click",
       button: "left",
@@ -1957,6 +1965,137 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     return click
   }
+
+  it("refuses an apparent action success when native dispatch never began", async () => {
+    const test = setup({ store: memory() })
+    test.session.execute = async () => {}
+    await native(test, "event_false_success")
+    expect(test.actions).toEqual([])
+    expect(test.bridge.journalEvents()?.events ?? []).toEqual([])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: expect.stringContaining("without native dispatch") }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
+  it("records a generic error after native dispatch as unknown, never as a refusal", async () => {
+    const test = setup({ store: memory(), rejectFail: true })
+    test.session.execute = async (_action, onDispatch) => {
+      onDispatch?.()
+      throw new Error("Driver failed after dispatch")
+    }
+    await native(test, "event_generic_after_dispatch")
+    expect(test.bridge.journalEvents()?.events).toMatchObject([{ phase: "post_dispatch", outcome: "unknown" }])
+    expect(test.bridge.journalAudit()?.entries).toMatchObject([{ outcome: "unknown" }])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ receipt: expect.objectContaining({ outcome: "unknown" }) }),
+      }),
+    )
+    test.bridge.dispose()
+  })
+
+  it("records an explicit policy refusal before dispatch without inventing a native effect", async () => {
+    const store = memory()
+    const state: { decision: "allow" | "deny" } = { decision: "allow" }
+    const test = setup({ store, dispatch: () => state.decision })
+    const click = await native(test, "event_allowed")
+    expect(test.actions).toHaveLength(1)
+    state.decision = "deny"
+    for (const listener of test.events)
+      listener(
+        { type: "kilocode.desktop.requested", properties: { ...click, id: "event_refused" } } as SSEPayload,
+        "C:\\workspace",
+      )
+    await Bun.sleep(20)
+    expect(test.actions).toHaveLength(1)
+    expect(test.bridge.journalAudit()?.entries).toHaveLength(1)
+    expect(test.bridge.journalEvents()?.events).toMatchObject([
+      { phase: "post_dispatch", outcome: "confirmed" },
+      { phase: "pre_dispatch", outcome: "refused" },
+    ])
+    expect(test.bridge.journalEvents()?.releaseGateEligible).toBe(false)
+    expect(JSON.stringify(test.bridge.journalEvents())).not.toContain(click.windowID)
+    test.bridge.dispose()
+  })
+
+  it("records cancellation before native dispatch without relabeling it as an unknown native effect", async () => {
+    const store = memory()
+    const input: { store: DesktopReceiptStore; currentHold?: Promise<void> } = { store }
+    const test = setup(input)
+    const click = await native(test, "event_before_cancel")
+    const gate = Promise.withResolvers<void>()
+    input.currentHold = gate.promise
+    for (const listener of test.events)
+      listener(
+        { type: "kilocode.desktop.requested", properties: { ...click, id: "event_cancelled" } } as SSEPayload,
+        "C:\\workspace",
+      )
+    await Bun.sleep(20)
+    test.bridge.cancel("User stopped before native dispatch")
+    gate.resolve()
+    await Bun.sleep(20)
+    expect(test.actions).toHaveLength(1)
+    expect(test.bridge.journalEvents()?.events.at(-1)).toMatchObject({
+      phase: "pre_dispatch",
+      outcome: "cancelled",
+    })
+    expect(test.bridge.journalAudit()?.entries).toHaveLength(1)
+    test.bridge.dispose()
+  })
+
+  it("migrates a v3 audit without attributing its legacy effects to new event evidence", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    const click = await native(first, "event_legacy")
+    const saved = store.read() as {
+      version: number
+      events?: unknown[]
+      epoch: string
+      revision: number
+      lastAckAt: number | null
+    }
+    const legacy = { ...saved, version: 3 }
+    delete legacy.events
+    await store.update("raya.computerUse.desktop.actionReceipts.v1", legacy)
+    first.bridge.dispose()
+
+    const second = setup({ store, pending: [click] })
+    expect(second.bridge.journalState()).toBe("migrating_legacy")
+    await Bun.sleep(20)
+    expect(second.bridge.journalSummary()).toMatchObject({
+      epoch: saved.epoch,
+      revision: saved.revision,
+      lastAckAt: saved.lastAckAt,
+    })
+    expect(second.bridge.journalAudit()?.entries).toHaveLength(1)
+    expect(second.bridge.journalEvents()?.events).toEqual([])
+    for (const listener of second.states) listener("connected")
+    await Bun.sleep(20)
+    expect(second.actions).toEqual([])
+    second.bridge.dispose()
+  })
+
+  it("fails closed on forged v4 event phases, extra private fields and duplicate hashes", async () => {
+    const store = memory()
+    const first = setup({ store, fail: true })
+    await native(first, "event_seed")
+    const saved = store.read() as { events: Array<Record<string, unknown>> }
+    first.bridge.dispose()
+    for (const events of [
+      [{ ...saved.events[0], phase: "pre_dispatch", outcome: "confirmed" }],
+      [{ ...saved.events[0], typedText: "secret" }],
+      [saved.events[0], saved.events[0]],
+    ]) {
+      await store.update("raya.computerUse.desktop.actionReceipts.v1", { ...saved, events })
+      const test = setup({ store })
+      expect(test.bridge.journalState()).toBe("malformed")
+      expect(test.bridge.journalEvents()).toBeNull()
+      test.bridge.dispose()
+    }
+  })
 
   it("reads a settled redacted audit boundary after restart without exposing the native target", async () => {
     const store = memory()
@@ -2100,7 +2239,7 @@ describe("desktop observation bridge", () => {
     await Bun.sleep(20)
     expect(second.bridge.journalState()).toBe("durable")
     expect(second.bridge.journalAudit()?.entries).toMatchObject([{ effect: "interact", outcome: "confirmed" }])
-    expect(second.bridge.journalSummary()).toMatchObject({ epoch: saved.epoch, revision: 8, lastAckAt: 12_345 })
+    expect(second.bridge.journalSummary()).toMatchObject({ epoch: saved.epoch, revision: 7, lastAckAt: 12_345 })
     for (const listener of second.states) listener("connected")
     await Bun.sleep(20)
     expect(second.actions).toEqual([])
@@ -2131,7 +2270,7 @@ describe("desktop observation bridge", () => {
     expect(second.actions).toEqual([])
     expect(second.bridge.journalSummary()).toEqual(pending)
     expect(second.bridge.journalAudit()).toEqual(audit)
-    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(3)
+    expect((saved as { version: number; items: Array<{ id: string }> }).version).toBe(4)
     expect((saved as { items: Array<{ id: string }> }).items[0].id).toBe(click.id)
     for (const listener of second.events)
       listener({ type: "kilocode.desktop.requested", properties: click } as SSEPayload, "C:\\workspace")
@@ -2226,6 +2365,7 @@ describe("desktop observation bridge", () => {
       audit,
     })
     const test = setup({ store, fail: true })
+    await Bun.sleep(20)
     expect(test.bridge.journalAudit()?.entries).toHaveLength(256)
     await native(test, "journal_audit_bound")
     const saved = test.bridge.journalAudit()

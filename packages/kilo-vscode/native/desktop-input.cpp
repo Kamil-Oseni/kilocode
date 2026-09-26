@@ -208,6 +208,35 @@ std::string tagged(std::string source, uintptr_t instance) {
   return source;
 }
 
+template <typename Hit, typename Root, typename Cursor>
+bool visible(const Frame& frame, HWND target, Hit hit, Root root, Cursor cursor) {
+  if (frame.action != "move" && frame.action != "click" && frame.action != "double_click" &&
+      frame.action != "drag" && frame.action != "scroll") return true;
+  const HWND owner = root(target);
+  if (!owner) return false;
+  if (frame.action == "scroll") {
+    POINT position{};
+    if (!cursor(&position) || position.x < frame.rect.left || position.y < frame.rect.top ||
+        position.x >= frame.rect.right || position.y >= frame.rect.bottom) return false;
+    const HWND found = hit(position);
+    return found && root(found) == owner;
+  }
+  const auto point = [&](int64_t x, int64_t y) {
+    if (x < 0 || x > 1000000 || y < 0 || y > 1000000) return false;
+    const int64_t width = static_cast<int64_t>(frame.rect.right) - frame.rect.left;
+    const int64_t height = static_cast<int64_t>(frame.rect.bottom) - frame.rect.top;
+    if (width <= 0 || height <= 0) return false;
+    const POINT position{
+      static_cast<LONG>(frame.rect.left + (x * (width - 1) + 500000) / 1000000),
+      static_cast<LONG>(frame.rect.top + (y * (height - 1) + 500000) / 1000000),
+    };
+    const HWND found = hit(position);
+    return found && root(found) == owner;
+  };
+  if (!point(frame.args[0], frame.args[1])) return false;
+  return frame.action != "drag" || point(frame.args[2], frame.args[3]);
+}
+
 bool exact(const Frame& frame) {
   uintptr_t value = 0;
   if (!window(frame.window, value) || !value) return false;
@@ -228,6 +257,9 @@ bool exact(const Frame& frame) {
   rect.bottom = std::min(rect.bottom, bottom);
   if (rect.left != frame.rect.left || rect.top != frame.rect.top ||
       rect.right != frame.rect.right || rect.bottom != frame.rect.bottom) return false;
+  if (!visible(frame, target, [](POINT point) { return WindowFromPoint(point); },
+               [](HWND handle) { return GetAncestor(handle, GA_ROOTOWNER); },
+               [](POINT* point) { return GetCursorPos(point) != 0; })) return false;
   wchar_t cls[512]{};
   if (!GetClassNameW(target, cls, 512)) return false;
   const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -297,17 +329,14 @@ uint64_t now() {
   return ticks / 10000 - 11644473600000ULL;
 }
 
-bool idle(const Frame& frame) {
-  if (frame.action == "click" || frame.action == "double_click" || frame.action == "drag")
-    return !(GetAsyncKeyState(frame.args[frame.action == "drag" ? 4 : 2] ? VK_RBUTTON : VK_LBUTTON) & 0x8000);
-  if (frame.action == "chord") {
-    const int key = static_cast<int>(frame.args[0]);
-    if (GetAsyncKeyState(key) & 0x8000) return false;
-    for (int modifier : {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN})
-      if (GetAsyncKeyState(modifier) & 0x8000) return false;
-  }
+template <typename State>
+bool idleWith(State state) {
+  for (int key = 1; key < 256; ++key)
+    if (state(key) & 0x8000) return false;
   return true;
 }
+
+bool idle(const Frame&) { return idleWith([](int key) { return GetAsyncKeyState(key); }); }
 
 std::vector<INPUT> events(const Frame& frame) {
   std::vector<INPUT> result;
@@ -565,6 +594,41 @@ void waiting(const Frame&) {
 int selftest() {
   const std::string base = "pid:7;start:123;class:Editor";
   if (tagged(base, 0) != base || tagged(base, 1) == base || tagged(base, 1) == tagged(base, 2)) return 31;
+  const HWND owner = reinterpret_cast<HWND>(uintptr_t{1});
+  const HWND child = reinterpret_cast<HWND>(uintptr_t{2});
+  const HWND overlay = reinterpret_cast<HWND>(uintptr_t{3});
+  const auto root = [&](HWND handle) { return handle == child ? owner : handle; };
+  const auto hit = [&](POINT point) { return point.x < 50 ? child : overlay; };
+  const auto cursor = [](POINT* point) { *point = POINT{25, 50}; return true; };
+  Frame sight;
+  sight.rect = RECT{0, 0, 100, 100};
+  sight.args = {250000, 500000, 750000, 500000, 0};
+  for (const char* action : {"move", "click", "double_click"}) {
+    sight.action = action;
+    if (!visible(sight, owner, hit, root, cursor)) return 40;
+    sight.args[0] = 750000;
+    if (visible(sight, owner, hit, root, cursor)) return 41;
+    sight.args[0] = 250000;
+  }
+  sight.action = "drag";
+  if (visible(sight, owner, hit, root, cursor)) return 42;
+  sight.args[2] = 300000;
+  if (!visible(sight, owner, hit, root, cursor)) return 43;
+  sight.args[0] = 750000;
+  if (visible(sight, owner, hit, root, cursor)) return 44;
+  sight.args[0] = 1000001;
+  if (visible(sight, owner, hit, root, cursor)) return 45;
+  sight.action = "scroll";
+  if (!visible(sight, owner, hit, root, cursor) ||
+      visible(sight, owner, hit, root, [](POINT* point) { *point = POINT{75, 50}; return true; }) ||
+      visible(sight, owner, hit, root, [](POINT*) { return false; }) ||
+      visible(sight, owner, hit, root, [](POINT* point) { *point = POINT{125, 50}; return true; })) return 46;
+  sight.action = "click";
+  sight.args[0] = 250000;
+  if (visible(sight, owner, [](POINT) { return static_cast<HWND>(nullptr); }, root, cursor)) return 47;
+  if (!idleWith([](int) -> SHORT { return 0; }) ||
+      idleWith([](int key) -> SHORT { return key == VK_LBUTTON ? -32768 : 0; }) ||
+      idleWith([](int key) -> SHORT { return key == 'A' ? -32768 : 0; })) return 48;
   const std::string first = "11111111111111111111111111111111";
   const std::string second = "22222222222222222222222222222222";
   const std::string third = "33333333333333333333333333333333";

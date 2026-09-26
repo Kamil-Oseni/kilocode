@@ -27,18 +27,29 @@ type Audit = {
   startedAt: number
   finishedAt: number
 }
+type AuditEvent = {
+  hash: string
+  sessionHash: string
+  effect: "manage" | "interact"
+  phase: "pre_dispatch" | "post_dispatch"
+  outcome: "refused" | "cancelled" | "confirmed" | "unknown"
+  startedAt: number
+  finishedAt: number
+}
 type Journal = {
-  version: 3
+  version: 4
   epoch: string
   revision: number
   lastAckAt: number | null
   items: unknown[]
   auditSalt: string
   audit: Audit[]
+  events: AuditEvent[]
 }
 type LegacyJournal =
   | { version: 1; items: unknown[] }
   | { version: 2; epoch: string; revision: number; lastAckAt: number | null; items: unknown[] }
+  | (Omit<Journal, "events" | "version"> & { version: 3 })
 type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }>
 type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
 type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
@@ -108,6 +119,10 @@ export interface DesktopReceiptStore {
   update(key: string, value: unknown): Thenable<void>
 }
 
+class DesktopAuthorizationRefusal extends Error {
+  readonly name = "DesktopAuthorizationRefusal"
+}
+
 export class DesktopBridge {
   private readonly active = new Map<string, AbortController>()
   private readonly receipts = new Map<string, Receipt>()
@@ -117,6 +132,7 @@ export class DesktopBridge {
   private epoch: string = randomUUID()
   private auditSalt = randomBytes(16).toString("hex")
   private migratedAudit: Audit[] = []
+  private readonly events = new Map<string, AuditEvent>()
   private migratedRevision = 0
   private migratedAck: number | null = null
   private committed: Journal | undefined
@@ -254,6 +270,7 @@ export class DesktopBridge {
           ...ground(request),
         },
       }
+      this.record(request, fingerprint, "post_dispatch", "unknown", startedAt, receipt.failure.receipt!.finishedAt)
       interrupted = this.retain(receipt)
         .catch((error) => console.error("[Raya] Interrupted desktop receipt persistence failed", error))
         .then(() => this.deliver(request.id, directory, receipt))
@@ -272,53 +289,124 @@ export class DesktopBridge {
         return
       }
       settled = true
-      receipt.result = result
-      receipt.failure = undefined
-      if (result.operation === "sequence") {
-        const safe = { ...receipt }
-        this.scrub(safe)
-        this.receipts.set(request.id, safe)
-      }
-      await this.retain(this.receipts.get(request.id)!).catch((error) =>
-        console.error("[Raya] Desktop receipt persistence failed; backend delivery will still be attempted", error),
-      )
-      await this.deliver(request.id, directory, receipt)
+      await this.complete(request, directory, fingerprint, receipt, result, startedAt, dispatched)
     } catch (error) {
       if (controller.signal.aborted) {
+        if (!dispatched) await this.preEvent(request, fingerprint, "cancelled", startedAt)
         await interrupted
         return
       }
       settled = true
-      const uncertain = error instanceof DesktopOutcomeError
-      receipt.failure = {
-        code: "invalid_request",
-        message: (error instanceof Error ? error.message : String(error)).slice(0, 10_000),
-        ...(uncertain
-          ? {
-              receipt: {
-                version: 1 as const,
-                requestID: request.id,
-                startedAt,
-                finishedAt: Date.now(),
-                effect: effect(request),
-                outcome: "unknown" as const,
-                ...ground(request),
-              },
-            }
-          : {}),
-      }
-      if (uncertain) this.session.takeControl("A desktop action had an uncertain outcome. Inspect it before resuming.")
-      await this.retain(receipt).catch((error) =>
-        console.error(
-          "[Raya] Desktop failure receipt persistence failed; backend delivery will still be attempted",
-          error,
-        ),
-      )
-      await this.deliver(request.id, directory, receipt)
+      await this.fail(request, directory, fingerprint, receipt, error, startedAt, dispatched)
     } finally {
       controller.signal.removeEventListener("abort", onAbort)
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
     }
+  }
+
+  private async complete(
+    request: DesktopRequest,
+    directory: string,
+    fingerprint: string,
+    receipt: Receipt,
+    result: DesktopResult,
+    startedAt: number,
+    dispatched: boolean,
+  ): Promise<void> {
+    if (actions.has(request.operation) && !dispatched)
+      throw new Error("Desktop action reported completion without native dispatch")
+    receipt.result = result
+    receipt.failure = undefined
+    if (result.operation === "sequence") {
+      const safe = { ...receipt }
+      this.scrub(safe)
+      this.receipts.set(request.id, safe)
+    }
+    const retained = this.receipts.get(request.id)!
+    const proof = persistable(retained.result)
+      ? retained.result.receipt
+      : persistableFailure(retained.failure)
+        ? retained.failure.receipt
+        : undefined
+    if (dispatched && proof && proof.effect !== "observe")
+      this.record(request, fingerprint, "post_dispatch", proof.outcome, startedAt, proof.finishedAt)
+    await this.retain(retained).catch((error) =>
+      console.error("[Raya] Desktop receipt persistence failed; backend delivery will still be attempted", error),
+    )
+    await this.deliver(request.id, directory, receipt)
+  }
+
+  private async preEvent(
+    request: DesktopRequest,
+    fingerprint: string,
+    outcome: "refused" | "cancelled",
+    startedAt: number,
+  ): Promise<void> {
+    if (!actions.has(request.operation)) return
+    this.record(request, fingerprint, "pre_dispatch", outcome, startedAt, Date.now())
+    await this.persistJournal().catch((error) =>
+      console.error("[Raya] Pre-dispatch desktop audit persistence failed", error),
+    )
+  }
+
+  private async fail(
+    request: DesktopRequest,
+    directory: string,
+    fingerprint: string,
+    receipt: Receipt,
+    error: unknown,
+    startedAt: number,
+    dispatched: boolean,
+  ): Promise<void> {
+    const uncertain = dispatched || error instanceof DesktopOutcomeError
+    if (!dispatched && error instanceof DesktopAuthorizationRefusal)
+      await this.preEvent(request, fingerprint, "refused", startedAt)
+    receipt.failure = {
+      code: "invalid_request",
+      message: (error instanceof Error ? error.message : String(error)).slice(0, 10_000),
+      ...(uncertain
+        ? {
+            receipt: {
+              version: 1 as const,
+              requestID: request.id,
+              startedAt,
+              finishedAt: Date.now(),
+              effect: effect(request),
+              outcome: "unknown" as const,
+              ...ground(request),
+            },
+          }
+        : {}),
+    }
+    if (uncertain) this.session.takeControl("A desktop action had an uncertain outcome. Inspect it before resuming.")
+    if (dispatched)
+      this.record(request, fingerprint, "post_dispatch", "unknown", startedAt, receipt.failure.receipt!.finishedAt)
+    await this.retain(receipt).catch((err) =>
+      console.error("[Raya] Desktop failure receipt persistence failed; backend delivery will still be attempted", err),
+    )
+    await this.deliver(request.id, directory, receipt)
+  }
+
+  private record(
+    request: DesktopRequest,
+    fingerprint: string,
+    phase: AuditEvent["phase"],
+    outcome: AuditEvent["outcome"],
+    startedAt: number,
+    finishedAt: number,
+  ): void {
+    if (!actions.has(request.operation)) return
+    const hash = createHash("sha256").update(`${this.auditSalt}:${fingerprint}`).digest("hex")
+    const sessionHash = createHash("sha256").update(`${this.auditSalt}:${request.sessionID}`).digest("hex")
+    this.events.set(hash, {
+      hash,
+      sessionHash,
+      effect: effect(request) as "manage" | "interact",
+      phase,
+      outcome,
+      startedAt,
+      finishedAt,
+    })
   }
 
   private dispatch(
@@ -697,12 +785,7 @@ export class DesktopBridge {
       return
     }
     const value = saved
-    if (value.version === 2 || value.version === 3) this.epoch = value.epoch as string
-    if (value.version === 3) this.auditSalt = value.auditSalt
-    if (value.version === 2 || value.version === 3) {
-      this.migratedRevision = value.revision
-      this.migratedAck = value.lastAckAt
-    }
+    this.restoreMetadata(value)
     let migrated = false
     const seen = new Set<string>()
     for (const item of value.items) {
@@ -719,14 +802,23 @@ export class DesktopBridge {
       }
       this.receipts.set(entry[0], entry[1])
     }
-    if (value.version === 3 && !migrated) this.committed = structuredClone(value)
-    if (value.version === 3 && migrated) this.migratedAudit = structuredClone(value.audit)
-    if (value.version !== 3 || migrated) {
+    if (value.version === 4 && !migrated) this.committed = structuredClone(value)
+    if (value.version === 3 || value.version === 4) this.migratedAudit = structuredClone(value.audit)
+    if (value.version === 4) for (const item of value.events) this.events.set(item.hash, { ...item })
+    if (value.version !== 4 || migrated) {
       this.migration = true
       void this.persistJournal().catch((error) =>
         console.error("[Raya] Desktop receipt journal migration failed", error),
       )
     }
+  }
+
+  private restoreMetadata(value: Journal | LegacyJournal): void {
+    if (value.version === 1) return
+    this.epoch = value.epoch
+    this.migratedRevision = value.revision
+    this.migratedAck = value.lastAckAt
+    if (value.version !== 2) this.auditSalt = value.auditSalt
   }
 
   private retain(receipt: Receipt): Promise<void> {
@@ -774,6 +866,20 @@ export class DesktopBridge {
       epoch: saved.epoch,
       revision: saved.revision,
       entries: saved.audit.map((item) => ({ ...item })),
+    }
+  }
+
+  /** Versioned host-only decisions/effects; legacy v3 audit rows have no attributable event. */
+  journalEvents() {
+    const saved = this.committed
+    if (!saved) return null
+    return {
+      format: "raya.desktop-action-events" as const,
+      version: 1 as const,
+      epoch: saved.epoch,
+      revision: saved.revision,
+      events: saved.events.map((item) => ({ ...item })),
+      releaseGateEligible: false as const,
     }
   }
 
@@ -849,9 +955,9 @@ export class DesktopBridge {
           })
         }
         const saved: Journal = {
-          version: 3,
+          version: 4,
           epoch: this.committed?.epoch ?? this.epoch,
-          revision: (this.committed?.revision ?? this.migratedRevision) + 1,
+          revision: this.committed ? this.committed.revision + 1 : Math.max(1, this.migratedRevision),
           lastAckAt:
             ack === undefined
               ? (this.committed?.lastAckAt ?? this.migratedAck)
@@ -859,6 +965,7 @@ export class DesktopBridge {
           items,
           auditSalt: this.auditSalt,
           audit: [...audit.values()].slice(-256),
+          events: [...this.events.values()].slice(-256),
         }
         await Promise.resolve(this.store!.update(journal, saved))
         this.committed = saved
@@ -948,11 +1055,14 @@ function enforce(decision: AuthorizeResult | undefined, proof: Authorization): v
   }
   if (!proof) throw new Error("Desktop request has no authorization evidence")
   if (proof.kind === "prompt") {
-    if (decision.decision === "deny") throw new Error(`Desktop control is no longer authorized: ${decision.reason}`)
+    if (decision.decision === "deny")
+      throw new DesktopAuthorizationRefusal(`Desktop control is no longer authorized: ${decision.reason}`)
     if (proof.delegation && decision.grantID !== proof.delegation.grantID)
       throw new Error("Delegated desktop prompt is outside its active grant")
     return
   }
+  if (decision.decision === "deny")
+    throw new DesktopAuthorizationRefusal(`Desktop grant is no longer authorized: ${decision.reason}`)
   if (decision.decision !== "allow" || decision.grantID !== proof.grantID)
     throw new Error(`Desktop grant is no longer authorized: ${decision.reason}`)
 }
@@ -1011,20 +1121,53 @@ function validSaved(value: unknown): value is Journal | LegacyJournal {
     lastAckAt?: unknown
     auditSalt?: unknown
     audit?: unknown
+    events?: unknown
   }
   if (!Array.isArray(saved.items) || saved.items.length > 256) return false
   if (saved.version === 1) return true
   if (!validJournal(saved)) return false
   if (saved.version === 2) return true
-  if (saved.version !== 3 || typeof saved.auditSalt !== "string" || !/^[a-f0-9]{32}$/.test(saved.auditSalt))
+  if (
+    (saved.version !== 3 && saved.version !== 4) ||
+    typeof saved.auditSalt !== "string" ||
+    !/^[a-f0-9]{32}$/.test(saved.auditSalt)
+  )
     return false
-  if (!Array.isArray(saved.audit) || saved.audit.length > 256) return false
+  if (!validRows(saved.audit, validAudit)) return false
+  if (saved.version === 3) return true
+  return validRows(saved.events, validEvent)
+}
+
+function validRows<T extends { hash: string }>(value: unknown, check: (item: unknown) => item is T): value is T[] {
+  if (!Array.isArray(value) || value.length > 256) return false
   const hashes = new Set<string>()
-  for (const item of saved.audit) {
-    if (!validAudit(item) || hashes.has(item.hash)) return false
+  for (const item of value) {
+    if (!check(item) || hashes.has(item.hash)) return false
     hashes.add(item.hash)
   }
   return true
+}
+
+function validEvent(value: unknown): value is AuditEvent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  if (Object.keys(item).sort().join(",") !== "effect,finishedAt,hash,outcome,phase,sessionHash,startedAt") return false
+  if (typeof item.hash !== "string" || !/^[a-f0-9]{64}$/.test(item.hash)) return false
+  if (typeof item.sessionHash !== "string" || !/^[a-f0-9]{64}$/.test(item.sessionHash)) return false
+  if (item.effect !== "manage" && item.effect !== "interact") return false
+  if (item.phase === "pre_dispatch" && item.outcome !== "refused" && item.outcome !== "cancelled") return false
+  if (item.phase === "post_dispatch" && item.outcome !== "confirmed" && item.outcome !== "unknown") return false
+  if (item.phase !== "pre_dispatch" && item.phase !== "post_dispatch") return false
+  return validTimes(item.startedAt, item.finishedAt)
+}
+
+function validTimes(startedAt: unknown, finishedAt: unknown) {
+  return (
+    Number.isSafeInteger(startedAt) &&
+    (startedAt as number) > 0 &&
+    Number.isSafeInteger(finishedAt) &&
+    (finishedAt as number) >= (startedAt as number)
+  )
 }
 
 function validAudit(value: unknown): value is Audit {
@@ -1051,7 +1194,7 @@ function validJournal(value: {
   lastAckAt?: unknown
 }): boolean {
   return (
-    (value.version === 2 || value.version === 3) &&
+    (value.version === 2 || value.version === 3 || value.version === 4) &&
     Array.isArray(value.items) &&
     value.items.length <= 256 &&
     typeof value.epoch === "string" &&

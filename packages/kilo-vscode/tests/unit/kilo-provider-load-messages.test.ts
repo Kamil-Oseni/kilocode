@@ -975,6 +975,87 @@ describe("KiloProvider.handleLoadMessages / focus mode freshness", () => {
     expect(loaded!.messages.map((m) => m.id)).toContain("m3")
   })
 
+  it("recovers a terminal Ask acknowledgement missed by the live part stream", async () => {
+    const reply = "Stopped as requested. I won't continue this task."
+    const assistant = {
+      ...mkMessage("m2", "assistant", 2),
+      parts: [
+        { id: "ask", messageID: "m2", sessionID: "s1", type: "tool", tool: "ask_options" },
+        { id: "reply", messageID: "m2", sessionID: "s1", type: "text", text: reply },
+      ],
+    }
+    const client = createClient({ messagesData: [mkMessage("m1", "user", 1), assistant] })
+    const { internal, sent } = makeProvider(client)
+    internal.contextSessionID = "s1"
+    internal.trackedSessionIds.add("s1")
+    internal.scheduleReview = () => undefined
+
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "s1", status: { type: "idle" } } })
+    expect(client.calls).toHaveLength(0)
+
+    // The Ask result reaches the extension, but the later acknowledgement
+    // part event is lost before it reaches the live webview.
+    internal.handleEvent({
+      type: "message.part.updated",
+      properties: {
+        sessionID: "s1",
+        part: {
+          id: "ask",
+          messageID: "m2",
+          sessionID: "s1",
+          type: "tool",
+          tool: "ask_options",
+          state: { status: "completed", metadata: { terminal: true } },
+        },
+      },
+    })
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "s1", status: { type: "idle" } } })
+    await Bun.sleep(0)
+
+    expect(client.calls).toHaveLength(1)
+    const loaded = sent.find(
+      (item) => typeof item === "object" && item && (item as { type?: string }).type === "messagesLoaded",
+    ) as { mode?: string; messages?: Array<{ parts?: Array<{ text?: string }> }> } | undefined
+    expect(loaded?.mode).toBe("reconcile")
+    expect(loaded?.messages?.[1]?.parts?.some((part) => part.text === reply)).toBe(true)
+
+    // A later unrelated idle event cannot refetch or replay the same result.
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "s1", status: { type: "idle" } } })
+    expect(client.calls).toHaveLength(1)
+  })
+
+  it("drops a terminal Ask reconciliation from an older backend generation", async () => {
+    const pending = defer<{ data: unknown[]; response: { headers: Headers } }>()
+    const client = createClient({ messagesDeferred: pending })
+    const { internal, sent } = makeProvider(client)
+    internal.contextSessionID = "s1"
+    internal.trackedSessionIds.add("s1")
+    internal.scheduleReview = () => undefined
+    internal.connectionGeneration = 7
+
+    internal.handleEvent({
+      type: "message.part.updated",
+      properties: {
+        sessionID: "s1",
+        part: {
+          id: "ask",
+          messageID: "m2",
+          sessionID: "s1",
+          type: "tool",
+          tool: "ask_options",
+          state: { status: "completed", metadata: { terminal: true } },
+        },
+      },
+    })
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "s1", status: { type: "idle" } } })
+    expect(client.calls).toHaveLength(1)
+
+    internal.connectionGeneration = 8
+    pending.resolve(mkResult([mkMessage("m1", "user", 1)]))
+    await Bun.sleep(0)
+    expect(sent.some((item) => (item as { type?: string }).type === "messagesLoaded")).toBe(false)
+  })
+
   it("reconciles at most 40 tracked transcript tails after reconnect", async () => {
     const client = createClient()
     const { internal, sent } = makeProvider(client)

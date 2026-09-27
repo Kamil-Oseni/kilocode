@@ -441,6 +441,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly refreshes = new Map<string, number>()
   private readonly anacondaDesktop = new AnacondaDesktopBridge()
   private sessionStatusMap = new Map<string, SessionStatus["type"]>() // Latest status used for destructive config warnings.
+  private readonly terminalAsks = new Set<string>() // Reconcile a Chief Hold/Stop acknowledgement if its final part event is missed.
   private sessionDirectories = new Map<string, string>() // Per-session directory overrides, such as Agent Manager worktrees.
   private sessionGitDirectories = new Map<string, string>() // Stable Git root resolved for each session.
   private sessionGitRecoveries = new Set<string>() // Sessions whose older history was scanned for a Git root.
@@ -5906,6 +5907,17 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage(msg)
       }
       if (event.properties.status.type === "idle") {
+        // A terminal Ask appends its acknowledgement after the tool result. The
+        // final part event can be missed by a live webview even though it is
+        // durable; reconcile only that focused request when it settles.
+        const terminal = this.terminalAsks.delete(sid)
+        if (terminal && sid === this.contextSessionID && this.trackedSessionIds.has(sid)) {
+          void this.handleLoadMessages(sid, {
+            mode: "reconcile",
+            preserveStream: true,
+            generation: this.connectionGeneration,
+          })
+        }
         void this.speech?.speakOnIdle(sid, (message) => this.postMessage(message)) // raya_change - reliable spoken completion
         setTimeout(() => void this.fetchAndSendGoal(sid), 100)
         this.scheduleReview(sid)
@@ -5936,6 +5948,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (event.type === "message.part.updated") {
       this.refreshGitStatusFromPart(event, sessionID)
       this.speech?.trackPart(event.properties.sessionID, event.properties.part) // raya_change - collect final Voice text
+      const part = event.properties.part
+      if (
+        sessionID &&
+        part.type === "tool" &&
+        part.tool === "ask_options" &&
+        part.state.status === "completed" &&
+        part.state.metadata?.terminal === true
+      )
+        this.terminalAsks.add(sessionID)
     }
     if (event.type === "message.part.removed") {
       this.speech?.removePart(event.properties.sessionID, event.properties.partID) // raya_change - exclude transient status parts from speech
@@ -6010,6 +6031,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     if (event.type === "session.deleted") {
       const sid = event.properties.sessionID
+      this.terminalAsks.delete(sid)
       this.trackedSessionIds.delete(sid)
       this.modelUsageSessionIds.delete(sid)
       this.sessionDirectories.delete(sid)

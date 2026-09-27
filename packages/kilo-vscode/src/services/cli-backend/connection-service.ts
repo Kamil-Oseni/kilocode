@@ -6,6 +6,7 @@ import { SdkSSEAdapter, type SSEPayload } from "./sdk-sse-adapter"
 import type { ServerConfig } from "./types"
 import { resolveEventSessionId as resolveEventSessionIdPure } from "./connection-utils"
 import { SandboxPreference } from "../sandbox-preference"
+import { connectionDiagnostic } from "./connection-diagnostic"
 
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "error"
 type SSEEventListener = (event: SSEPayload, directory?: string) => void
@@ -86,8 +87,12 @@ async function drainNetworkWaits(client: KiloClient, dir: string) {
 export class KiloConnectionService {
   readonly sandboxPreference: SandboxPreference
   private readonly serverManager: ServerManager
-  readonly capabilities = new Capabilities(() =>
-    this.client && this.config ? { client: this.client, config: this.config } : undefined,
+  readonly capabilities = new Capabilities(
+    () => (this.client && this.config ? { client: this.client, config: this.config } : undefined),
+    (error) => {
+      if (this.state === "connecting")
+        console.error("[Raya] Connection diagnostic:", connectionDiagnostic("capabilities", this.info?.port, error))
+    },
   )
   private client: KiloClient | null = null
   private sseClient: SdkSSEAdapter | null = null
@@ -170,6 +175,7 @@ export class KiloConnectionService {
       await this.connectPromise
     } catch (error) {
       // If doConnect() fails before SSE can emit a state transition, avoid leaving consumers stuck in "connecting".
+      this.resetConnection()
       this.setState("error", this.error ?? (error instanceof Error ? error : new Error(String(error))))
       throw error
     } finally {
@@ -813,7 +819,10 @@ export class KiloConnectionService {
     // Never expose a stale SDK client while its replacement server is starting.
     this.resetConnection()
 
-    const server = await this.serverManager.getServer()
+    const server = await this.serverManager.getServer().catch((error: unknown) => {
+      console.error("[Raya] Connection diagnostic:", connectionDiagnostic("startup", undefined, error))
+      throw error
+    })
     this.info = { port: server.port }
 
     const config: ServerConfig = {
@@ -831,7 +840,9 @@ export class KiloConnectionService {
         Authorization: authHeader,
       },
     })
-    const sse = new SdkSSEAdapter(client)
+    const sse = new SdkSSEAdapter(client, (error) =>
+      console.error("[Raya] Connection diagnostic:", connectionDiagnostic("initial-sse", server.port, error)),
+    )
     this.client = client
     this.sseClient = sse
 
@@ -901,7 +912,20 @@ export class KiloConnectionService {
 
     sse.connect()
 
-    await connectedPromise
+    const timeout = setTimeout(() => {
+      console.error(
+        "[Raya] Connection diagnostic:",
+        connectionDiagnostic("initial-sse", server.port, { code: "SSE_CONNECT_TIMEOUT" }),
+      )
+      rejectConnected?.(new Error("Raya backend event stream did not connect within 15 seconds. Retry to reconnect."))
+      rejectConnected = null
+      resolveConnected = null
+    }, 15_000)
+    try {
+      await connectedPromise
+    } finally {
+      clearTimeout(timeout)
+    }
 
     this.startCheckin()
     // Start the independent health poll once we are confirmed connected.

@@ -10,7 +10,10 @@ type Manifest = { version: 1; features: Record<string, unknown> }
 export class Capabilities {
   private readonly cache = new WeakMap<KiloClient, Promise<Manifest | undefined>>()
 
-  constructor(private readonly current: () => Connection | undefined) {}
+  constructor(
+    private readonly current: () => Connection | undefined,
+    private readonly failure?: (error: unknown) => void,
+  ) {}
 
   async command(client: KiloClient): Promise<() => boolean> {
     return this.require(client, "goal.commandCheck")
@@ -37,12 +40,22 @@ export class Capabilities {
         signal: controller.signal,
         redirect: "error",
       })
-      if (!response.ok) return undefined
+      if (!response.ok) {
+        this.failure?.({ status: response.status })
+        return undefined
+      }
       const value: unknown = await response.json()
-      if (!value || typeof value !== "object" || !("version" in value) || value.version !== 1) return undefined
-      if (!("features" in value) || !value.features || typeof value.features !== "object") return undefined
+      if (!value || typeof value !== "object" || !("version" in value) || value.version !== 1) {
+        this.failure?.({ code: "INVALID_MANIFEST" })
+        return undefined
+      }
+      if (!("features" in value) || !value.features || typeof value.features !== "object") {
+        this.failure?.({ code: "INVALID_MANIFEST" })
+        return undefined
+      }
       return { version: 1, features: Object.fromEntries(Object.entries(value.features)) }
-    } catch {
+    } catch (error) {
+      this.failure?.(error)
       // The caller receives an explicit compatibility failure; never mutate to probe support.
       return undefined
     } finally {

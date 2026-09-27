@@ -5058,7 +5058,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async fetchAndSendGoal(sessionID: string, notice?: string): Promise<void> {
     if (!this.client) return
     const directory = this.getWorkspaceDirectory(sessionID)
-    const response = await this.client.kilocode.goal.get({ sessionID, directory })
+    const response = await this.client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
+    if (!response?.response || (response.error && response.response.status !== 404)) {
+      this.postMessage({
+        type: "goalState",
+        sessionID,
+        notice: "Raya could not read the current goal. Retry after the backend reconnects.",
+      })
+      return
+    }
     this.postMessage({
       type: "goalState",
       sessionID,

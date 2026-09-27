@@ -56,6 +56,7 @@ export class SdkSSEAdapter {
   private abortController: AbortController | null = null
   private attemptController: AbortController | null = null
   private heartbeatTimer: ReturnType<typeof setTimeout> | null = null
+  private reportedInitial = false
 
   // Server sends heartbeats every 10s, so this gives a 5s grace window before forcing a reconnect.
   // Reduced from 90s: with 90s a dead connection could linger for ~1.5 minutes.
@@ -63,7 +64,10 @@ export class SdkSSEAdapter {
   private static readonly RECONNECT_DELAY_MS = 250
   private static readonly MAX_RECONNECT_DELAY_MS = 5_000
 
-  constructor(private readonly client: KiloClient) {}
+  constructor(
+    private readonly client: KiloClient,
+    private readonly initialFailure?: (error: unknown) => void,
+  ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -182,6 +186,10 @@ export class SdkSSEAdapter {
             if (error instanceof DOMException && error.name === "AbortError") {
               return
             }
+            if (!ready && !this.reportedInitial) {
+              this.reportedInitial = true
+              this.initialFailure?.(error)
+            }
             const transient =
               error instanceof TypeError ||
               (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
@@ -214,9 +222,7 @@ export class SdkSSEAdapter {
           this.notifyEvent(normalize(event.payload), event.directory)
         }
 
-        console.log(
-          ready ? "[Raya] SSE: 📭 Stream ended normally" : "[Raya] SSE: 📭 Stream ended before first event",
-        )
+        console.log(ready ? "[Raya] SSE: 📭 Stream ended normally" : "[Raya] SSE: 📭 Stream ended before first event")
       } catch (error) {
         // Suppress AbortErrors — they are expected when the heartbeat timer
         // or reconnect() aborts the per-attempt controller.
@@ -225,6 +231,10 @@ export class SdkSSEAdapter {
           (error instanceof TypeError && /terminated|network|fetch/i.test(error.message)) ||
           (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
         if (!aborted) {
+          if (!ready && !this.reportedInitial) {
+            this.reportedInitial = true
+            this.initialFailure?.(error)
+          }
           if (transient) {
             console.warn("[Raya] SSE: stream dropped, reconnecting:", error)
           } else {

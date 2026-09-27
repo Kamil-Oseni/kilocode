@@ -43,6 +43,13 @@ export function goalTools(
       .pipe(Effect.orDie)
   }) // raya_change - goal tool outcomes deterministically release Auto's final synthesis step
 
+  const finish = Effect.fn("RayaGoalTool.finish")(function* (sessionID: Parameters<Goals["get"]>[0]) {
+    if (!sessions) return
+    const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+    if (RayaChief.phase(session.metadata) !== "goal") return
+    yield* phase(sessionID, "done")
+  })
+
   const create = Tool.define(
     "create_goal",
     Effect.succeed({
@@ -74,6 +81,7 @@ export function goalTools(
             yield* phase(ctx.sessionID, "done")
             return result("No goal", "No goal is armed for this session.")
           }
+          if (goal.status === "complete") yield* finish(ctx.sessionID)
           const evidence = yield* goals.evidence(ctx.sessionID).pipe(
             Effect.match({
               onFailure: (err) => ({ error: failure(err) }),
@@ -111,12 +119,14 @@ export function goalTools(
               "This worker conversation records the assistant's written reply automatically. Answer the message directly without update_goal.",
               current.status,
             )
-          if (current?.status === "complete")
+          if (current?.status === "complete") {
+            yield* finish(ctx.sessionID)
             return result(
               "Goal already complete",
               "The prior goal is complete. Handle the current user request directly without updating or reopening that goal. Do not ask about the completed goal unless the user explicitly requests a change to it.",
               current.status,
             )
+          }
           const rejected: Record<RayaGoal.ModelUpdate["status"], string> = {
             complete: "Completion audit rejected",
             blocked: "Goal not blocked",

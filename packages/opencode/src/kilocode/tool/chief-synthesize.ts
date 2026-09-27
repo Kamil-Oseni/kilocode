@@ -12,12 +12,21 @@ type Metadata = { requestID: string; goalCreatedAt?: number; requestRevision?: s
 
 export function chiefSynthesizeTool(deps: {
   storage: Storage.Interface
-  sessions: Pick<Session.Interface, "get" | "messages">
+  sessions: Pick<Session.Interface, "get" | "messages" | "setMetadata">
   goals: Pick<ReturnType<typeof RayaGoal.make>, "get">
 }) {
   const parameters = Schema.Struct({
     summary: Schema.String,
     findings: Schema.Array(Schema.Struct({ branch_id: Schema.String, conclusion: Schema.String })),
+  })
+  const finish = Effect.fn("ChiefSynthesize.finish")(function* (sessionID: Parameters<typeof deps.goals.get>[0]) {
+    const goal = yield* deps.goals.get(sessionID)
+    const session = yield* deps.sessions.get(sessionID)
+    if (RayaChief.phase(session.metadata) !== "task" && RayaChief.phase(session.metadata) !== "goal") return
+    yield* deps.sessions.setMetadata({
+      sessionID,
+      metadata: { ...session.metadata, [RayaChief.phaseKey]: goal?.status === "active" ? "goal" : "done" },
+    })
   })
   return Tool.define<typeof parameters, Metadata, never>(
     "chief_synthesize",
@@ -40,6 +49,7 @@ export function chiefSynthesizeTool(deps: {
               summary: input.summary,
               findings: input.findings.map((item) => ({ branchID: item.branch_id, conclusion: item.conclusion })),
             })
+            yield* finish(ctx.sessionID)
             return {
               title: "Chief branch synthesis saved",
               output: JSON.stringify({ summary: saved.summary, findings: saved.findings }, null, 2),
@@ -57,6 +67,7 @@ export function chiefSynthesizeTool(deps: {
             summary: input.summary,
             findings: input.findings.map((item) => ({ branchID: item.branch_id, conclusion: item.conclusion })),
           })
+          yield* finish(ctx.sessionID)
           return {
             title: "Chief branch synthesis saved",
             output: JSON.stringify({ summary: saved.summary, findings: saved.findings }, null, 2),

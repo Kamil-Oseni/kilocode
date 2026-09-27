@@ -53,7 +53,7 @@ test("a rejected Chief completion keeps Auto in the task phase", async () => {
 
 test("a completed goal cannot be reopened by a later unrelated request", async () => {
   const id = SessionID.make("ses_chief_completed_followup")
-  const metadata: Record<string, unknown> = { [RayaChief.phaseKey]: "done" }
+  const metadata: Record<string, unknown> = { [RayaChief.phaseKey]: "goal" }
   const sessions = {
     get: () => Effect.succeed({ metadata }),
     setMetadata: ({ metadata: next }: { metadata: Record<string, unknown> }) =>
@@ -107,4 +107,90 @@ test("a completed goal cannot be reopened by a later unrelated request", async (
   }
   expect(calls).toEqual([])
   expect(RayaChief.phase(metadata)).toBe("done")
+})
+
+test("reading a historical completed goal releases Chief only after task work", async () => {
+  const id = SessionID.make("ses_chief_completed_read")
+  const metadata: Record<string, unknown> = { [RayaChief.phaseKey]: "task" }
+  const sessions = {
+    get: () => Effect.succeed({ metadata }),
+    setMetadata: ({ metadata: next }: { metadata: Record<string, unknown> }) =>
+      Effect.sync(() => Object.assign(metadata, next)),
+  } as unknown as Pick<Session.Interface, "get" | "setMetadata">
+  const goals = {
+    get: () => Effect.succeed({ status: "complete", objective: "Earlier finished work" }),
+    evidence: () => Effect.succeed([]),
+  } as unknown as ReturnType<typeof RayaGoal.make>
+  const tool = goalTools(goals, sessions).get
+  const response = await Effect.runPromise(
+    Effect.gen(function* () {
+      const def = yield* (yield* tool).init()
+      const ctx = {
+        sessionID: id,
+        messageID: MessageID.ascending(),
+        agent: "auto",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const early = yield* def.execute({}, ctx)
+      expect(early.metadata.status).toBe("complete")
+      expect(RayaChief.phase(metadata)).toBe("task")
+      metadata[RayaChief.phaseKey] = "goal"
+      return yield* def.execute({}, ctx)
+    }).pipe(
+      Effect.provideService(Truncate.Service, {
+        output: (text) => Effect.succeed({ content: text, truncated: false as const }),
+      } as Truncate.Interface),
+      Effect.provideService(
+        Agent.Service,
+        Agent.Service.of({ get: () => Effect.succeed({ name: "auto" }) } as unknown as Agent.Interface),
+      ),
+    ),
+  )
+  expect(response.output).toContain("Earlier finished work")
+  expect(RayaChief.phase(metadata)).toBe("done")
+})
+
+test("reading an active goal leaves the Chief audit phase available", async () => {
+  const id = SessionID.make("ses_chief_active_read")
+  const metadata: Record<string, unknown> = { [RayaChief.phaseKey]: "goal" }
+  const sessions = {
+    get: () => Effect.succeed({ metadata }),
+    setMetadata: ({ metadata: next }: { metadata: Record<string, unknown> }) =>
+      Effect.sync(() => Object.assign(metadata, next)),
+  } as unknown as Pick<Session.Interface, "get" | "setMetadata">
+  const goals = {
+    get: () => Effect.succeed({ status: "active", objective: "Current work" }),
+    evidence: () => Effect.succeed([]),
+  } as unknown as ReturnType<typeof RayaGoal.make>
+  const tool = goalTools(goals, sessions).get
+  const response = await Effect.runPromise(
+    Effect.gen(function* () {
+      const def = yield* (yield* tool).init()
+      return yield* def.execute(
+        {},
+        {
+          sessionID: id,
+          messageID: MessageID.ascending(),
+          agent: "auto",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+    }).pipe(
+      Effect.provideService(Truncate.Service, {
+        output: (text) => Effect.succeed({ content: text, truncated: false as const }),
+      } as Truncate.Interface),
+      Effect.provideService(
+        Agent.Service,
+        Agent.Service.of({ get: () => Effect.succeed({ name: "auto" }) } as unknown as Agent.Interface),
+      ),
+    ),
+  )
+  expect(response.metadata.status).toBe("active")
+  expect(RayaChief.phase(metadata)).toBe("goal")
 })

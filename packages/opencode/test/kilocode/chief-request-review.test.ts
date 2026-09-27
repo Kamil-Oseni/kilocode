@@ -306,6 +306,30 @@ describe("request-bound Chief review eligibility", () => {
           ],
         })
         expect(result.findings).toHaveLength(2)
+        const tool = yield* chiefSynthesizeTool({ storage: state.storage, sessions: state.sessions, goals }).pipe(
+          Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Truncate.Service, truncate),
+        )
+        yield* (yield* tool.init()).execute(
+          {
+            summary: "Both fixes verified",
+            findings: [
+              { branch_id: "safety", conclusion: "Authorization fixed" },
+              { branch_id: "design", conclusion: "Navigation fixed" },
+            ],
+          },
+          {
+            sessionID: state.parent.id,
+            messageID: MessageID.ascending(),
+            agent: "auto",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("done")
+        expect((yield* goals.get(state.parent.id))?.status).toBe("complete")
       }),
     30_000,
   )
@@ -411,6 +435,7 @@ describe("request-bound Chief review eligibility", () => {
         )
         expect(result.metadata.requestRevision).toBe(state.plan.identity.revision)
         expect((yield* state.ledger.read(state.parent.id, state.user.id))?.synthesis?.findings).toHaveLength(2)
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("done")
       }),
     30_000,
   )

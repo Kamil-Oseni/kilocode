@@ -58,7 +58,9 @@ describe("Auto Chief branch synthesis", () => {
       const sessions = {
         get: () => Effect.succeed(parent),
         messages: () => Effect.succeed([]),
-      } as Pick<Session.Interface, "get" | "messages">
+        setMetadata: ({ metadata }: { metadata: Record<string, unknown> }) =>
+          Effect.sync(() => Object.assign(parent.metadata!, metadata)),
+      } as unknown as Pick<Session.Interface, "get" | "messages" | "setMetadata">
       const agents = { get: () => Effect.succeed({}) } as unknown as Agent.Interface
       const truncate = {
         output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
@@ -99,6 +101,7 @@ describe("Auto Chief branch synthesis", () => {
       ).toBe(true)
       const result = yield* def.execute(input, ctx)
       expect(result.output).toContain("Safety and UX findings are ready.")
+      expect(RayaChief.phase(parent.metadata)).toBe("goal")
       expect((yield* ledger.read(id))?.synthesis?.findings.map((item) => item.branchID)).toEqual(["safety", "design"])
       raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
       expect(yield* def.execute(input, ctx)).toEqual(result)

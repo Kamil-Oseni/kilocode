@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-27 04:07 EDT - remove pre-route specialist choice
+
+The source now omits `task` from Auto's available tools during a fresh `route` phase, including missing phase metadata, while retaining it in the valid `task` and `goal` phases. The TaskTool execution guard remains as defense in depth. This addresses the wasted refused `task` observed before `chief_route` in the installed completed-goal follow-up, without widening authority from a historical decision. Focused route/tool-set tests pass, CLI typecheck and formatting pass. The larger Chief routing test file has a pre-existing 250 ms performance assertion that measured 276-320 ms on this loaded host, and a default 5-second hook timeout; the focused tests pass under a 60-second timeout. This is source evidence only until a new snapshot is installed and the exact host repeats the follow-up. Next: push/install and verify the current-request route occurs without a refused pre-route task, then continue the real editor review gate.
+
 ## ChatGPT 2026-09-27 03:55 EDT - installed completed-goal follow-up reaches final answer
 
 Commit `c5c0a722d4` is pushed; the push hook passed 29 cross-package typechecks and the JetBrains gate. The low-memory build passed CLI smoke, extension/webview typechecks and lint, native helper self-tests, input-host round trip and VSIX packaging, then installed `7.4.23-snapshot+c5c0a722d4.kamil-oseni.1790494746926`. The retained rollback VSIX digest is `194462CEC46C2A50420892D98C884100666B840EC948E3E13CBB162980245540`. The first probe in the reloaded `dummy` VS Code window showed the new loaded version but an old active vault; a settled probe at 07:48:41 UTC matched the new loaded and active version/digest, backend PID 2204. The separate French Study window was untouched.

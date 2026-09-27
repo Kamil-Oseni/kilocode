@@ -87,7 +87,7 @@ export namespace RayaChief {
       "chief_inspect",
       "chief_review",
       "chief_synthesize",
-      "task",
+      ...(phase(metadata) === "route" ? [] : ["task"]), // raya_change - fresh requests must route before delegation
       "get_goal",
       "update_goal",
       "update_goal_plan",

@@ -125,7 +125,6 @@ describe("Computer Use child authority", () => {
     expect(Permission.evaluate("edit", "*", child).action).toBe("deny")
     expect(Object.keys(RayaChief.tools({ read: true, chief_route: true, task: true }, undefined))).toEqual([
       "chief_route",
-      "task",
     ])
   })
 

@@ -193,7 +193,7 @@ describe("Raya Chief routing", () => {
   })
 
   // raya_change start - Auto phase enforcement regression
-  it("keeps the bounded Auto workflow dispatchable across same-response tool calls", () => {
+  it("withholds delegation until Chief routes a fresh request", () => {
     const tools = {
       chief_route: { id: "chief" },
       chief_plan: { id: "plan-branches" },
@@ -218,17 +218,27 @@ describe("Raya Chief routing", () => {
       "update_goal",
       "update_goal_plan",
     ]
-    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(workflow)
+    const initial = workflow.filter((name) => name !== "task")
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(initial)
+    expect(Object.keys(RayaChief.tools(tools, undefined))).toEqual(initial)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "goal" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "done" }))).toEqual(workflow)
+    expect(
+      Object.keys(
+        RayaChief.tools(tools, {
+          [RayaChief.phaseKey]: "task",
+          [RayaChief.pendingKey]: { request: "Review two files" },
+        }),
+      ),
+    ).toContain("task")
 
     // raya_change start - Auto's prompt tells it to ask the user directly, so ask_options must
     // survive the whitelist; the canvas tools only join it when the user invoked /canvas.
     const rich = { ...tools, ask_options: { id: "ask" }, create_canvas: { id: "cc" }, update_canvas: { id: "uc" } }
-    expect(Object.keys(RayaChief.tools(rich, { [RayaChief.phaseKey]: "route" }))).toEqual([...workflow, "ask_options"])
+    expect(Object.keys(RayaChief.tools(rich, { [RayaChief.phaseKey]: "route" }))).toEqual([...initial, "ask_options"])
     expect(Object.keys(RayaChief.tools(rich, { "raya.canvas.command": true }))).toEqual([
-      ...workflow,
+      ...initial,
       "ask_options",
       "create_canvas",
       "update_canvas",
@@ -243,7 +253,7 @@ describe("Raya Chief routing", () => {
       assign_organization_work: { id: "assign" },
     }
     const expected = [
-      ...workflow,
+      ...initial,
       "ask_options",
       "schedule_task",
       "inspect_routines",
@@ -271,7 +281,7 @@ describe("Raya Chief routing", () => {
       expect(Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: request }))).toEqual(expected)
     expect(
       Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: "Build a team dashboard for my workers" })),
-    ).toEqual([...workflow, "ask_options"])
+    ).toEqual([...initial, "ask_options"])
     expect(RayaChief.prompt(agents)).toContain("use the available Routines tools yourself")
     expect(RayaChief.prompt(agents)).toContain("chief_plan")
     expect(RayaChief.prompt(agents)).toContain("background:true")

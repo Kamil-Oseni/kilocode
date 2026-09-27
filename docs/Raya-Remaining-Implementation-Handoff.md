@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 04:07 America/Toronto - pre-route tool choice correction
+
+Auto's tool registry no longer offers `task` while a fresh request is in `route`; valid task/goal continuations still retain it, and the TaskTool guard still rejects an unauthorized call. Focused tool-set tests, CLI typecheck and formatting pass. The broader routing file's strict 250 ms benchmark measured 276-320 ms in this loaded environment, so it is not counted as a clean full-file pass. Push/install, verify the exact active host, and repeat a new completed-goal follow-up to check that no pre-route task refusal appears. The separate installed review-card Keep all action currently reports a live workspace/snapshot mismatch for two added disposable files; determine whether that is genuine stale content or a snapshot association defect before weakening the verifier.
+
 ## ChatGPT 2026-09-27 03:55 America/Toronto - installed post-goal continuation completes
 
 `c5c0a722d4` is pushed and installed as `7.4.23-snapshot+c5c0a722d4.kamil-oseni.1790494746926`. A settled probe in the exact `dummy` Raya host matched loaded and active digest `194462CEC46C2A50420892D98C884100666B840EC948E3E13CBB162980245540`, backend PID 2204. In a new request after the arithmetic goal was Complete, the guard refused a pre-route `task`, Raya called `chief_route` for the current request, one read-only Designer specialist read the two disposable files, and the parent gave the exact final answer without an Ask. The goal stayed Complete; file lengths and timestamps were unchanged. This verifies the narrow installed continuation and final-answer path. The refused pre-route call cost latency, and concurrent pending-Ask, broader agent lifecycle, Desktop and review gates still need independent tests. Preserve the separate French Study window; next optimize pre-route tool selection, then measure a wider post-goal and restart matrix.

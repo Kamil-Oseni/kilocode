@@ -633,7 +633,7 @@ export const TaskTool = Tool.define(
 
       // kilocode_change start
       // raya_change start - consume the already logged Chief decision exactly once
-      if (chief && !branch) {
+      if (ctx.agent === "auto" && !branch && RayaChief.phase(parent.metadata) === "task") {
         const latest = yield* sessions.get(ctx.sessionID).pipe(Effect.tapError(() => lease.release))
         const clean = Object.fromEntries(
           Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey),

@@ -1907,7 +1907,13 @@ describe("tool.task", () => {
       yield* sessions.updateMessage(chief)
       yield* sessions.setMetadata({
         sessionID: chat.id,
-        metadata: { [RayaChief.modelKey]: ref },
+        // kilocode_change start
+        metadata: {
+          [RayaChief.modelKey]: ref,
+          [RayaChief.requestKey]: "Implement a typed API endpoint and add unit tests",
+          [RayaChief.phaseKey]: "route",
+        },
+        // kilocode_change end
       })
       const result = yield* def.execute(
         { objective: "Implement a typed API endpoint and add unit tests" },
@@ -2148,6 +2154,10 @@ describe("tool.task", () => {
         metadata: {
           [RayaChief.pendingKey]: pending,
           [RayaChief.modelKey]: ref,
+          // kilocode_change start
+          [RayaChief.requestKey]: pending.request,
+          [RayaChief.phaseKey]: "task",
+          // kilocode_change end
           [RayaChief.logKey]: [{ ...pending, model: "test/test-model" }],
         },
       })
@@ -2214,6 +2224,20 @@ describe("tool.task", () => {
             [RayaChief.modelKey]: ref,
             [RayaChief.requestKey]: "Implement a typed API endpoint and tests",
             [RayaChief.phaseKey]: "route",
+            [RayaChief.logKey]: [
+              {
+                request: "Older, already completed request",
+                agent: "designer",
+                model: "test/test-model",
+                needs_plan: false,
+                confidence: 0.9,
+                reason: "Earlier UI work",
+                latency: 1,
+                chiefModel: "test/test-model",
+                candidates: [{ agent: "designer", role: "designer", score: 2, reason: "UI work" }],
+                prompted: false,
+              },
+            ],
           },
         })
         const blocked = yield* def
@@ -2225,6 +2249,7 @@ describe("tool.task", () => {
         yield* sessions.setMetadata({
           sessionID: chat.id,
           metadata: {
+            ...(yield* sessions.get(chat.id)).metadata,
             [RayaChief.modelKey]: ref,
             [RayaChief.requestKey]: "Implement a typed API endpoint and tests",
             [RayaChief.phaseKey]: "task",
@@ -2238,7 +2263,8 @@ describe("tool.task", () => {
         expect(part?.type).toBe("text")
         if (part?.type !== "text") throw new Error("expected structured text brief")
         expect(part.text).toContain("Objective: Implement a typed API endpoint and tests")
-        expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toEqual([])
+        expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("goal")
+        expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
       }),
     {
       config: {

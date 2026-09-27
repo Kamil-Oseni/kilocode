@@ -504,6 +504,7 @@ ${registry}`
   }
 
   export function pending(metadata: Record<string, unknown> | undefined) {
+    if (phase(metadata) !== "task") return undefined
     const value = metadata?.[pendingKey]
     if (!value || typeof value !== "object") return undefined
     const item = value as Partial<Pending>
@@ -512,7 +513,7 @@ ${registry}`
     if (typeof item.confidence !== "number" || typeof item.reason !== "string") return undefined
     if (typeof item.needs_plan !== "boolean" || typeof item.prompted !== "boolean") return undefined
     if (typeof item.latency !== "number" || typeof item.chiefModel !== "string") return undefined
-    if (item.direct === true && phase(metadata) !== "done") return undefined
+    if (item.direct === true || item.request !== request(metadata)) return undefined
     return item as Pending
   }
 
@@ -537,9 +538,9 @@ ${registry}`
   export function follow(metadata: Record<string, unknown> | undefined) {
     const ready = pending(metadata)
     if (ready) return ready
+    if (phase(metadata) !== "task" && phase(metadata) !== "goal") return undefined
     const last = history(metadata).at(-1)
-    if (!last) return undefined
-    if (last.direct) return undefined
+    if (!last || last.direct || last.request !== request(metadata)) return undefined
     const role = last.candidates.find((item: Candidate) => item.agent === last.agent)?.role
     if (!role) return undefined
     return { ...last, role } satisfies Pending

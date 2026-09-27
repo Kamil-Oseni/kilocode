@@ -311,24 +311,37 @@ describe("Raya Chief routing", () => {
       }),
     ).toBeUndefined()
     expect(RayaChief.continuation({ [RayaChief.phaseKey]: "task" })).toBeUndefined()
+    const request = "Create three temporary text files"
+    const decision = {
+      request,
+      agent: "generalist",
+      role: "generalist" as const,
+      model: "test/model",
+      needs_plan: false,
+      confidence: 0.94,
+      reason: "small direct task",
+      latency: 1,
+      chiefModel: "test/model",
+      candidates: [{ agent: "generalist", role: "generalist" as const, score: 1, reason: "small" }],
+      prompted: false,
+    }
+    const current = {
+      [RayaChief.phaseKey]: "task",
+      [RayaChief.requestKey]: request,
+      [RayaChief.logKey]: [decision],
+    }
+    expect(RayaChief.follow(current)?.agent).toBe("generalist")
+    expect(RayaChief.follow({ ...current, [RayaChief.phaseKey]: "goal" })?.agent).toBe("generalist")
+    expect(RayaChief.follow({ ...current, [RayaChief.phaseKey]: "route" })).toBeUndefined()
+    expect(RayaChief.follow({ ...current, [RayaChief.phaseKey]: "done" })).toBeUndefined()
+    expect(RayaChief.follow({ ...current, [RayaChief.requestKey]: "Read these two files" })).toBeUndefined()
+    expect(RayaChief.pending({ ...current, [RayaChief.pendingKey]: decision })?.agent).toBe("generalist")
     expect(
-      RayaChief.follow({
-        [RayaChief.logKey]: [
-          {
-            request: "Create three temporary text files",
-            agent: "generalist",
-            model: "test/model",
-            needs_plan: false,
-            confidence: 0.94,
-            reason: "small direct task",
-            latency: 1,
-            chiefModel: "test/model",
-            candidates: [{ agent: "generalist", role: "generalist", score: 1, reason: "small" }],
-            prompted: false,
-          },
-        ],
-      })?.agent,
-    ).toBe("generalist")
+      RayaChief.pending({ ...current, [RayaChief.phaseKey]: "route", [RayaChief.pendingKey]: decision }),
+    ).toBeUndefined()
+    expect(
+      RayaChief.pending({ ...current, [RayaChief.requestKey]: "A newer request", [RayaChief.pendingKey]: decision }),
+    ).toBeUndefined()
     expect(RayaChief.lastStep).toContain("update_goal")
   })
   // raya_change end

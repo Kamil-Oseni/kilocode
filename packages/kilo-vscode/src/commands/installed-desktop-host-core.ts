@@ -1,3 +1,13 @@
+const stages = ["foreground_before", "identity_before", "capture", "identity_after", "foreground_after"] as const
+export type ObservationStage = (typeof stages)[number]
+
+/** A bounded diagnostic: native exception text can contain private window or process details. */
+export class ObservationFailure extends Error {
+  constructor(readonly stage: ObservationStage) {
+    super("Installed desktop observation failed")
+  }
+}
+
 export type Probe = {
   loadedVersion: string
   loadedCaptureSha256?: string
@@ -92,7 +102,7 @@ export async function inspectInstalledHost(input: Probe) {
   const receipt = journal(input.journal())
   const base = {
     format: "raya.installed-desktop-host-probe" as const,
-    version: 3 as const,
+    version: 4 as const,
     observedAt: new Date().toISOString(),
     loadedVersion: input.loadedVersion,
     loadedCaptureSha256: input.loadedCaptureSha256 ?? null,
@@ -135,15 +145,23 @@ export async function inspectInstalledHost(input: Probe) {
   if (before) return { ...base, status: "unavailable" as const, reason: before }
   const started = performance.now()
   const result = await input.observe().then(
-    (value) => ({ value }),
-    () => ({ value: undefined }),
+    (value) => ({ value, stage: undefined }),
+    (error: unknown) => ({
+      value: undefined,
+      stage: error instanceof ObservationFailure && stages.includes(error.stage) ? error.stage : "unknown",
+    }),
   )
   if (input.backend() !== "connected")
     return { ...base, status: "unavailable" as const, reason: "The Raya backend disconnected during observation" }
   const after = changed(input, process!, lease)
   if (after) return { ...base, status: "unavailable" as const, reason: after }
   if (!result.value)
-    return { ...base, status: "unavailable" as const, reason: "No stable foreground observation was available" }
+    return {
+      ...base,
+      status: "unavailable" as const,
+      reason: "No stable foreground observation was available",
+      observationFailure: { stage: result.stage },
+    }
   const value = result.value
   if (!stable(value))
     return {

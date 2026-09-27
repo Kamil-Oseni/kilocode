@@ -101,8 +101,13 @@ function artifact(ref: Ref | undefined, label: string, evidence: Evidence, issue
 }
 
 function hostIdentity(value: Entry, input: Entry, issues: string[]) {
-  if (value.format !== "raya.installed-desktop-host-probe" || value.version !== 3 || value.status !== "observed")
-    issues.push("hostEvidence is not a successful version-3 installed-host observation")
+  if (
+    value.format !== "raya.installed-desktop-host-probe" ||
+    (value.version !== 3 && value.version !== 4) ||
+    value.status !== "observed" ||
+    value.observationFailure !== undefined
+  )
+    issues.push("hostEvidence is not a successful supported installed-host observation")
   if (value.loadedVersion !== input.snapshotVersion)
     issues.push("hostEvidence loaded version does not match the report")
   if (!sha.test(String(value.loadedCaptureSha256))) issues.push("hostEvidence lacks a native capture identity")

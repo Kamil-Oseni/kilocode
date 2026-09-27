@@ -7,7 +7,7 @@ import { WindowsDesktopDriver } from "../services/computer-use/desktop-windows"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 import type { ComputerUseLeaseStore } from "../services/computer-use/lease-store"
 import type { DesktopAutomationService } from "../services/computer-use/desktop-service"
-import { inspectInstalledHost } from "./installed-desktop-host-core"
+import { inspectInstalledHost, ObservationFailure, type ObservationStage } from "./installed-desktop-host-core"
 import { desktopNames } from "./windows-desktop-name"
 
 export function registerInstalledDesktopHost(
@@ -53,11 +53,15 @@ export function registerInstalledDesktopHost(
         journal: () => desktop.journalEvidence(),
         observe: async () => {
           if (!driver) throw new Error("Windows desktop is unavailable")
-          const before = await driver.current()
-          const initial = await driver.identity(before.windowID)
-          const frame = await driver.observe({ fresh: true })
-          const identity = await driver.identity(frame.windowID)
-          const after = await driver.current()
+          const stage = <T>(name: ObservationStage, operation: () => Promise<T>) =>
+            operation().catch(() => {
+              throw new ObservationFailure(name)
+            })
+          const before = await stage("foreground_before", () => driver.current())
+          const initial = await stage("identity_before", () => driver.identity(before.windowID))
+          const frame = await stage("capture", () => driver.observe({ fresh: true }))
+          const identity = await stage("identity_after", () => driver.identity(frame.windowID))
+          const after = await stage("foreground_after", () => driver.current())
           return {
             before: { ...before, identity: initial },
             after: { ...after, identity },

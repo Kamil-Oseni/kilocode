@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 19:39 America/Toronto - baseline evidence and capture diagnostic source
+
+An isolated `fe45c22a49` baseline reproduces the three named older review failures identically to current HEAD; correcting only the outdated fixture assumptions passes all three (8 assertions), and review-diff passes 4/4 at both revisions. The baseline is under `.tmp/byte-audit-baseline` for reproducibility, with untouched `revert-original.test.ts` and corrected `revert.test.ts`. The installed host report now has source for a version-4 runtime-validated bounded failed-stage diagnostic without raw native errors or pixels, with release-gate version-3 compatibility and rejection of unknown/failed reports (probe/release-gate tests 20/105, extension typecheck/ESLint pass). Commit/install that source once concurrent CLI recovery work settles, then repeat the read-only host probe to identify the failed stage. Process-restart and cross-directory child-worktree recovery tests are being implemented; do not claim installed Undo recovery or the full benchmark from source results.
+
 ## ChatGPT 2026-09-27 19:31 America/Toronto - current installed snapshot
 
 The sequential Undo source slice is pushed in `6bd79d6d57` and installed as `7.4.23-snapshot+6bd79d6d57.kamil-oseni.1790551251213`. A live report after reloading only dummy VS Code matched loaded and active versions and digest `4a040592be3cedb2ccab4a2e1f7539069bf162756ecedad14e5bd1736564d7f9`; frontend startup succeeded. Foreground capture in that report was unavailable, so it is not an action or recovery benchmark. The earlier authorized exact-B test belonged to the previous snapshot; no new destructive host test was run. Next: separately authorize a disposable sequential-Undo host test, then prove restart/disconnect, changed target, child ordering and resource endurance. Keep `EN-05` and `FUT-CU-01` In progress.

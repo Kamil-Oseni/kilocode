@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { inspectInstalledHost } from "../../src/commands/installed-desktop-host-core"
+import { inspectInstalledHost, ObservationFailure } from "../../src/commands/installed-desktop-host-core"
 
 const version = "7.4.23-snapshot+abc.test.1"
 const digest = "a".repeat(64)
@@ -50,7 +50,7 @@ describe("installed interactive host probe", () => {
     const report = await inspectInstalledHost(input())
     expect(report.status).toBe("observed")
     expect(report.releaseGateEligible).toBe(false)
-    expect(report.version).toBe(3)
+    expect(report.version).toBe(4)
     expect(report.actionReceipts).toBeNull()
     expect(report.receiptEvidence).toBe("durable_summary")
     expect(report.journal).toEqual({
@@ -104,8 +104,51 @@ describe("installed interactive host probe", () => {
       observe: async () => ({ ...frame, after: { ...frame.after, identity: "B".repeat(64) } }),
     })
     expect(empty.status).toBe("unavailable")
+    expect(empty.observationFailure).toEqual({ stage: "unknown" })
     expect(changed.status).toBe("unavailable")
     expect(replaced.status).toBe("unavailable")
+  })
+
+  test("reports only a bounded observation stage and never raw native failure details", async () => {
+    const privateText = "private window password clipboard data:image/png;base64,secret"
+    for (const stage of [
+      "foreground_before",
+      "identity_before",
+      "capture",
+      "identity_after",
+      "foreground_after",
+    ] as const) {
+      const error = new ObservationFailure(stage)
+      error.message = privateText
+      const report = await inspectInstalledHost({
+        ...input(),
+        observe: async () => {
+          throw error
+        },
+      })
+      expect(report.status).toBe("unavailable")
+      expect(report.observationFailure).toEqual({ stage })
+      expect(JSON.stringify(report)).not.toContain(privateText)
+      expect("foreground" in report).toBe(false)
+      expect(report.releaseGateEligible).toBe(false)
+    }
+    const report = await inspectInstalledHost({
+      ...input(),
+      observe: async () => {
+        throw new Error(privateText)
+      },
+    })
+    expect(report.observationFailure).toEqual({ stage: "unknown" })
+    expect(JSON.stringify(report)).not.toContain(privateText)
+    const forged = Object.assign(new ObservationFailure("capture"), { stage: privateText })
+    const invalid = await inspectInstalledHost({
+      ...input(),
+      observe: async () => {
+        throw forged
+      },
+    })
+    expect(invalid.observationFailure).toEqual({ stage: "unknown" })
+    expect(JSON.stringify(invalid)).not.toContain(privateText)
   })
 
   test("refuses capture on a sandbox desktop even when the package and backend match", async () => {

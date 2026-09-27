@@ -112,6 +112,24 @@ function fixture() {
 }
 
 describe("installed Windows desktop release gate", () => {
+  test("accepts compatible host report versions but refuses a failure diagnostic or unknown version", () => {
+    for (const version of [3, 4, 5]) {
+      const item = fixture()
+      const ref = item.report.hostEvidence
+      const artifact = item.evidence[ref.path]
+      const value = { ...(artifact.value as Record<string, unknown>), version }
+      artifact.value = value
+      artifact.sha256 = ref.sha256 = digest(value)
+      const issue = "hostEvidence is not a successful supported installed-host observation"
+      expect(gate(item.report, item.evidence).issues.includes(issue)).toBe(version === 5)
+      if (version !== 4) continue
+      const failed = { ...value, observationFailure: { stage: "capture" } }
+      artifact.value = failed
+      artifact.sha256 = ref.sha256 = digest(failed)
+      expect(gate(item.report, item.evidence).issues).toContain(issue)
+    }
+  })
+
   test("makes legacy self-reported reports explicitly ineligible", () => {
     expect(gate({ format: "raya.autonomous-desktop-benchmark", version: 1 }).issues).toEqual([
       "Version 1 reports are legacy self-reported evidence and are explicitly release-gate ineligible",

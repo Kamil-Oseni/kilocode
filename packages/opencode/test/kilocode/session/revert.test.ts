@@ -229,6 +229,149 @@ it.live(
   90_000,
 )
 
+for (const git of [true, false])
+  it.live(
+    `reviews a later child deletion after keeping a child-created file from its actual ${git ? "Git" : "non-Git"} snapshot`,
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const summary = yield* SessionSummary.Service
+          const file = path.join(dir, "raya-review-fresh-a.txt")
+          const child = yield* state.sessions.create({ parentID: state.session.id })
+          const providerID = ProviderV2.ID.make("test")
+          const user = yield* state.sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: child.id,
+            role: "user",
+            agent: "auto",
+            model: { providerID, modelID: ModelV2.ID.make("test") },
+            time: { created: Date.now() },
+          })
+          const save = Effect.fn("ReviewChildDelete.save")(function* (
+            sessionID: typeof state.session.id,
+            parentID: typeof user.id,
+            start: string,
+            finish: string,
+          ) {
+            const assistant = yield* state.sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID,
+              role: "assistant",
+              parentID,
+              mode: "default",
+              agent: "default",
+              path: { cwd: dir, root: dir },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: ModelV2.ID.make("test"),
+              providerID,
+              time: { created: Date.now() },
+              finish: "end_turn",
+            })
+            yield* state.sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID,
+              type: "step-start",
+              snapshot: start,
+            })
+            yield* state.sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID,
+              type: "step-finish",
+              reason: "stop",
+              snapshot: finish,
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            })
+            yield* state.sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID,
+              type: "patch",
+              hash: start,
+              files: [file],
+            })
+            return assistant
+          })
+          yield* Effect.promise(() => fs.writeFile(file, "fresh worker A"))
+          const created = yield* state.snapshot.track()
+          if (!created) throw new Error("expected child snapshot")
+          yield* save(child.id, user.id, state.after, created)
+          yield* storage.write(["session_diff", child.id], yield* state.snapshot.diffFull(state.after, created))
+          yield* storage.write(
+            ["session_diff", state.session.id],
+            yield* state.snapshot.diffFull(state.patch.hash, state.after),
+          )
+          const initial = (yield* summary.diff({ sessionID: state.session.id })).find(
+            (diff) => diff.file === path.basename(file),
+          )
+          expect(initial?.status).toBe("added")
+          yield* state.revert.keepChanges({
+            sessionID: state.session.id,
+            files: [file],
+            expected: { [file]: revision(initial!) },
+            requestID: "keep-child-created-file",
+          })
+          yield* Effect.promise(() => fs.rm(file))
+          const removed = yield* state.snapshot.track()
+          if (!removed) throw new Error("expected deletion snapshot")
+          const deleter = yield* state.sessions.create({ parentID: state.session.id })
+          const request = yield* state.sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: deleter.id,
+            role: "user",
+            agent: "auto",
+            model: { providerID, modelID: ModelV2.ID.make("test") },
+            time: { created: Date.now() },
+          })
+          yield* save(deleter.id, request.id, created, removed)
+          yield* storage.write(["session_diff", deleter.id], yield* state.snapshot.diffFull(created, removed))
+          yield* summary.summarize({ sessionID: state.session.id, messageID: state.user.id })
+          expect((yield* state.sessions.get(state.session.id)).summary).toMatchObject({
+            files: 3,
+            additions: 2,
+            deletions: 3,
+          })
+          const current = (yield* summary.diff({ sessionID: state.session.id })).find(
+            (diff) => diff.file === path.basename(file),
+          )
+          expect(current?.status).toBe("deleted")
+          expect(current?.deletions).toBe(1)
+          expect(current?.reviewed).toBe("")
+          const full = yield* summary.diff({ sessionID: state.session.id, file: path.basename(file), full: true })
+          expect(full[0]).toMatchObject({
+            file: path.basename(file),
+            status: "deleted",
+            before: "fresh worker A",
+            after: "",
+          })
+          expect(
+            (yield* Effect.flip(
+              state.revert.keepChanges({
+                sessionID: state.session.id,
+                files: [file],
+                expected: { [file]: revision(initial!) },
+                requestID: "stale-child-revision",
+              }),
+            ))._tag,
+          ).toBe("ReviewConflict")
+          yield* state.revert.discardChanges({
+            sessionID: state.session.id,
+            files: [file],
+            expected: { [file]: revision(current!) },
+            requestID: "undo-parent-deletion",
+          })
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("fresh worker A")
+        }),
+      { git },
+    ),
+    120_000,
+  )
+
 it.live(
   "keeps and later undoes a new file in a non-Git workspace with exact snapshots",
   provideTmpdirInstance(

@@ -9,6 +9,7 @@ import { appendSessionDiffs, readSessionDiffBase } from "@/kilocode/session-port
 import { Storage } from "@/storage/storage" // kilocode_change
 import { Config } from "@/config/config"
 import { reviewed, ReviewDiff } from "@/kilocode/session/review-state" // kilocode_change - persisted review acceptance
+import { detail as reviewDetail, overlay as reviewOverlay } from "@/kilocode/session/review-diff" // kilocode_change
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -128,16 +129,26 @@ const layer = Layer.effect(
             )
           : yield* computeDiff({ messages: all })
       // kilocode_change end
+      yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore) // kilocode_change
+      // kilocode_change start - a saved Keep can expose later cross-session deletion; avoid
+      // traversing the entire child history on the hot summarization path without one.
+      const kept = yield* storage.read<Record<string, string>>(["session_kept", input.sessionID]).pipe(
+        Effect.catchTag("NotFoundError", () => Effect.succeed({} as Record<string, string>)),
+        Effect.orDie,
+      )
+      const view = Object.keys(kept).length
+        ? yield* reviewOverlay(snapshot, storage, sessions, input.sessionID, diffs)
+        : diffs
+      // kilocode_change end
       yield* sessions.setSummary({
         sessionID: input.sessionID,
         summary: {
-          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-          files: diffs.length,
+          additions: view.reduce((sum, x) => sum + x.additions, 0), // kilocode_change
+          deletions: view.reduce((sum, x) => sum + x.deletions, 0), // kilocode_change
+          files: view.length, // kilocode_change
         },
       })
-      yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore) // kilocode_change
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: view }) // kilocode_change
 
       if (!target || target.info.role !== "user") return
       const msgDiffs = base.length > 0 ? local : yield* computeDiff({ messages }) // kilocode_change
@@ -149,6 +160,12 @@ const layer = Layer.effect(
       // kilocode_change - full-content detail input
       // kilocode_change start - authoritative full-content detail for one file (editor diff tabs)
       if (input.full && input.file) {
+        // kilocode_change start - only the session-wide review may use child/Keep projection.
+        if (!input.messageID) {
+          const projected = yield* reviewDetail(snapshot, storage, sessions, input.sessionID, input.file)
+          if (projected.matched) return projected.diff ? [projected.diff] : []
+        }
+        // kilocode_change end
         const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
         const messages = input.messageID
           ? all.filter(
@@ -218,7 +235,8 @@ const layer = Layer.effect(
             fold(normalize(yield* readStored(kid.id)))
           }
         }
-        return yield* reviewed(snapshot, storage, sessions, input.sessionID, [...merged.values()]) // kilocode_change
+        const diffs = yield* reviewOverlay(snapshot, storage, sessions, input.sessionID, [...merged.values()]) // kilocode_change
+        return yield* reviewed(snapshot, storage, sessions, input.sessionID, diffs) // kilocode_change
       }
       // kilocode_change end
       const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 01:45 America/Toronto - corrected authority snapshot installed
+
+Commit `1123bca858` is pushed and installed as `eden.raya@7.4.23-snapshot+1123bca858.kamil-oseni.1790487442043`; the low-memory build and native self-tests passed. Retained rollback VSIX SHA-256: `E42E2CF791222D7617CE5E9EF0C80DF015344F07E772EE16F4B31D090C9DBAF3`. After the intended `dummy` window reloaded, a settled installed-host probe matched the loaded extension and active vault version/digest with backend PID 13384, and Raya reopened its saved chat. The first probe during activation saw the old vault version and must not be used as acceptance. Next, run a disposable completed-goal request that starts editing workers and inspect the persisted result after restart; the current installed evidence proves loading and identity only. Preserve the separate French Study window. `EN-05` still needs the real deleted/renamed-file editor journey described below.
+
 ## ChatGPT 2026-09-27 01:33 America/Toronto - audited file review and completed-goal authority
 
 The Grok-attributed file-review changes in `87a7680782`, `3df03553e3` and `8119256e53` were audited against the later repair `6b97169dc1`; current focused review suites pass 51 tests and 191 assertions. `EN-05` was incorrectly marked fully Verified without an installed VS Code deleted/renamed-file editor journey, so its canonical row is In progress. To close it, use a disposable saved review in the installed editor: delete and rename a file, open the exact review buffer, exercise Keep/Undo against its current revision, change the target and verify stale refusal, then restart and inspect the retained state. Do not substitute component previews for this evidence.

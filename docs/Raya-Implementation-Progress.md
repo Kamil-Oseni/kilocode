@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-27 01:45 EDT - completed-goal authority snapshot loaded
+
+Product and evidence commit `1123bca858` is pushed to `origin/main`; the push hook passed the cross-package and JetBrains typecheck gates. The low-memory snapshot build passed SDK generation, CLI smoke checks, extension and webview typechecks, extension lint, native capture/input self-tests, input-host round trip and VSIX packaging. VS Code installed `eden.raya@7.4.23-snapshot+1123bca858.kamil-oseni.1790487442043`; retained rollback VSIX SHA-256 is `E42E2CF791222D7617CE5E9EF0C80DF015344F07E772EE16F4B31D090C9DBAF3`. The exact `dummy` VS Code window reloaded normally, first showed a brief loaded/active vault mismatch while activation settled, then a second host probe at 05:45:19 UTC matched loaded and active version plus the retained digest with backend PID 13384. Raya reopened the saved Ready chat and compact composer. The installed post-goal edit/parallel-worker task and `EN-05` real-editor review remain untested; neither is promoted to Verified by installation or the host-identity probe.
+
 ## ChatGPT 2026-09-27 01:33 EDT - completed-goal authority audit and Grok review
 
 The three Grok-attributed deleted/renamed-file review commits (`87a7680782`, `3df03553e3`, `8119256e53`) were compared with their dated repair record and current source. Their original stale-refresh, persistence-warning, ghost-identity and renderer defects were repaired by `6b97169dc1`; six focused file-review suites pass 51 tests and 191 assertions. The later `EN-05` Verified claim relied on source, backend and Chromium component tests while the dated record still says a packaged VS Code deleted/renamed-file interaction was unperformed. Its register row is corrected to In progress pending a real installed editor Keep/Undo, virtual-buffer and stale-revision journey.

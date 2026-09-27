@@ -145,6 +145,18 @@ describe("Computer Use child authority", () => {
       "edit",
     )
     expect(TaskAuthority.admit({ auto: true, saved: "edit", goalActive: false, userEdit: true, parent })).toBe("edit")
+    const files =
+      "This is a new disposable test after the completed arithmetic goal. In the current dummy workspace, use two parallel editing specialists: one creates raya-review-fresh-a.txt containing exactly fresh worker A; the other creates raya-review-fresh-b.txt containing exactly fresh worker B. Wait for both, verify each file once, and give one final answer. Do not change or reopen the old goal, ask a question, or edit any other file."
+    expect(TaskAuthority.current(files, files)).toBe(true)
+    expect(TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, userEdit: true, parent })).toBe(
+      "edit",
+    )
+    expect(TaskAuthority.current(files, "Authorize the two file creations now")).toBe(false)
+    expect(TaskAuthority.current(files, "Hold — do not create the files")).toBe(false)
+    expect(TaskAuthority.current(files, "Stop here — no files to create")).toBe(false)
+    expect(TaskAuthority.explicit("Authorize the two file creations now")).toBe(false)
+    expect(TaskAuthority.explicit("Hold — do not create the files")).toBe(false)
+    expect(TaskAuthority.explicit("Stop here — no files to create")).toBe(false)
     expect(() =>
       TaskAuthority.admit({
         auto: true,
@@ -166,6 +178,33 @@ describe("Computer Use child authority", () => {
     expect(TaskAuthority.current("Review only, no edits: fix nothing", "Review only, no edits: fix nothing")).toBe(
       false,
     )
+    expect(
+      TaskAuthority.current(
+        "Create the named file; do not edit any other file",
+        "Create the named file; do not edit any other file",
+      ),
+    ).toBe(true)
+    expect(
+      TaskAuthority.current("Create the named file; no edits outside it", "Create the named file; no edits outside it"),
+    ).toBe(true)
+    expect(
+      TaskAuthority.current(
+        "Do not reopen the old goal; create the named file",
+        "Do not reopen the old goal; create the named file",
+      ),
+    ).toBe(true)
+    expect(
+      TaskAuthority.current(
+        "Create the named file; do not edit anything",
+        "Create the named file; do not edit anything",
+      ),
+    ).toBe(false)
+    expect(
+      TaskAuthority.current(
+        "Create the named file; without editing the workspace",
+        "Create the named file; without editing the workspace",
+      ),
+    ).toBe(false)
     for (const request of [
       "Write a summary of this file",
       "Create a summary of the project code",
@@ -193,6 +232,38 @@ describe("Computer Use child authority", () => {
     expect(() => TaskAuthority.admit({ auto: true, saved: "edit", goalActive: false, parent })).toThrow(
       "explicit current user request",
     )
+  })
+
+  it("treats an in-turn Ask hold or dismissal as revoking edit authority", () => {
+    expect(
+      TaskAuthority.declined({
+        answers: [
+          { prompt: "Create these files?", selected: [{ id: "authorize", label: "Authorize now" }], other: [] },
+        ],
+      }),
+    ).toBe(false)
+    expect(
+      TaskAuthority.declined({
+        answers: [
+          { prompt: "Create these files?", selected: [{ id: "hold", label: "Hold — do not create" }], other: [] },
+        ],
+      }),
+    ).toBe(true)
+    expect(
+      TaskAuthority.declined({
+        answers: [{ prompt: "Continue?", selected: [{ id: "stop", label: "Stop here — no files" }], other: [] }],
+      }),
+    ).toBe(true)
+    expect(TaskAuthority.declined({ answers: [{ selected: [], other: ["Cancel this edit"] }] })).toBe(false)
+    expect(TaskAuthority.declined({ terminal: true, answers: [{ selected: [], other: [] }] })).toBe(true)
+    expect(TaskAuthority.declined({ answers: [], dismissed: true })).toBe(true)
+    expect(TaskAuthority.declined({ answers: [{ selected: [], other: ["Use the requested names"] }] })).toBe(false)
+    expect(
+      TaskAuthority.declined({
+        answers: [{ selected: [{ id: "authorize", label: "No problem, proceed" }], other: [] }],
+      }),
+    ).toBe(false)
+    expect(TaskAuthority.declined({ answers: "hold" })).toBe(false)
   })
 
   it("admits single Auto edits with an active goal and explicit parent editing permission", () => {

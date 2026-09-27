@@ -245,7 +245,25 @@ export const TaskTool = Tool.define(
       // A fresh user-authored edit request is authority without a formal goal.
       const intent = RayaChief.request(parent.metadata)
       const latest = messages.filter((item) => item.info.role === "user" && RayaChief.requestText(item.parts)).at(-1)
-      const userEdit = TaskAuthority.current(intent, latest ? RayaChief.requestText(latest.parts) : undefined)
+      const declined = messages
+        .slice(latest ? messages.indexOf(latest) + 1 : 0)
+        .some((item) =>
+          item.parts.some(
+            (part) =>
+              part.type === "tool" &&
+              part.tool === "ask_options" &&
+              part.state.status === "completed" &&
+              TaskAuthority.declined(part.state.metadata),
+          ),
+        )
+      if (
+        ctx.agent === "auto" &&
+        declined &&
+        (branch?.access === "edit" || params.access === "edit" || saved === "edit")
+      )
+        return yield* Effect.fail(new Error("The user held or stopped editing for this request"))
+      const userEdit =
+        !declined && TaskAuthority.current(intent, latest ? RayaChief.requestText(latest.parts) : undefined)
       const goal =
         gated && !userEdit // kilocode_change - current user may authorize edit without a goal
           ? storage

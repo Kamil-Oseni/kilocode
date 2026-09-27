@@ -11,6 +11,9 @@ const Option = Schema.Struct({
   label: Schema.String.check(Schema.isMinLength(1)).annotate({
     description: "Concise text shown on the clickable option card",
   }),
+  terminal: Schema.optional(Schema.Boolean).annotate({
+    description: "Set true when selecting this option must stop the current task, such as Hold or Stop",
+  }),
 })
 
 const Prompt = Schema.Struct({
@@ -34,6 +37,7 @@ export const Parameters = Schema.Struct({
 type Metadata = {
   answers: Answer[]
   dismissed?: boolean
+  terminal?: boolean
 }
 
 export const AskOptionsTool = Tool.define<typeof Parameters, Metadata, Question.Service>(
@@ -42,14 +46,18 @@ export const AskOptionsTool = Tool.define<typeof Parameters, Metadata, Question.
     const question = yield* Question.Service
     return {
       description:
-        "Ask the user one or more discrete questions as clickable in-chat option cards. Each question requires at least two options with stable ids. Set allow_multiple when several choices may be selected. An Other free-text choice is always included. Use this instead of asking discrete questions in prose, especially before an unapproved destructive action.",
+        "Ask the user one or more discrete questions as clickable in-chat option cards. Each question requires at least two options with stable ids. Set allow_multiple when several choices may be selected. Mark a Hold or Stop option terminal so selecting it ends the current task. An Other free-text choice is always included. Use this instead of asking discrete questions in prose, especially before an unapproved destructive action.",
       parameters: Parameters,
       execute: (params, ctx) =>
         RayaAskOptions.ask(question, {
           sessionID: ctx.sessionID,
           questions: params.questions.map((item) => ({
             prompt: item.prompt,
-            options: item.options.map((option) => ({ id: option.id, label: option.label })),
+            options: item.options.map((option) => ({
+              id: option.id,
+              label: option.label,
+              terminal: option.terminal,
+            })),
             allow_multiple: item.allow_multiple,
           })),
           tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
@@ -57,13 +65,20 @@ export const AskOptionsTool = Tool.define<typeof Parameters, Metadata, Question.
           Effect.map((answers) => ({
             title: `Asked ${params.questions.length} question${params.questions.length === 1 ? "" : "s"}`,
             output: JSON.stringify({ answers }),
-            metadata: { answers },
+            metadata: {
+              answers,
+              ...(ctx.agent === "auto" && RayaAskOptions.terminal(params.questions, answers) ? { terminal: true } : {}),
+            },
           })),
           Effect.catchTag("QuestionRejectedError", () =>
             Effect.succeed({
               title: "Question dismissed",
               output: "User dismissed the question.",
-              metadata: { answers: [], dismissed: true as const },
+              metadata: {
+                answers: [],
+                dismissed: true as const,
+                ...(ctx.agent === "auto" ? { terminal: true } : {}),
+              },
             }),
           ),
         ),

@@ -150,6 +150,34 @@ describe("ask_options", () => {
     }),
   )
 
+  it.instance("marks a Chief Hold choice terminal without granting a positive choice that status", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const info = yield* AskOptionsTool
+      const tool = yield* info.init()
+      const options = {
+        questions: [
+          {
+            prompt: "Continue this request?",
+            options: [
+              { id: "authorize_edit", label: "Continue" },
+              { id: "hold", label: "Hold — do not continue" },
+            ],
+          },
+        ],
+      }
+      const first = yield* tool.execute(options, { ...ctx, agent: "auto" }).pipe(Effect.forkScoped)
+      const pendingFirst = yield* pending(question)
+      yield* question.reply({ requestID: pendingFirst.id, answers: [["raya-option:authorize_edit"]] })
+      expect((yield* Fiber.join(first)).metadata.terminal).toBeUndefined()
+
+      const second = yield* tool.execute(options, { ...ctx, agent: "auto" }).pipe(Effect.forkScoped)
+      const pendingSecond = yield* pending(question)
+      yield* question.reply({ requestID: pendingSecond.id, answers: [["raya-option:hold"]] })
+      expect((yield* Fiber.join(second)).metadata.terminal).toBe(true)
+    }),
+  )
+
   it.instance("builds destructive confirmations from the same contract", () =>
     Effect.sync(() => {
       expect(RayaAskOptions.confirm("Delete this session?")).toEqual({

@@ -5,11 +5,12 @@ import { Question } from "@/question"
 export type Option = {
   id: string
   label: string
+  terminal?: boolean
 }
 
 export type Prompt = {
   prompt: string
-  options: Option[]
+  options: readonly Option[]
   allow_multiple?: boolean
 }
 
@@ -46,6 +47,20 @@ function validate(questions: Prompt[]) {
 }
 
 export namespace RayaAskOptions {
+  export function terminalID(id: unknown) {
+    return typeof id === "string" && /^(?:hold|stop|stop_here)$/.test(id)
+  }
+
+  /** A Chief stop choice ends this request, not the next user-authored turn. */
+  export function terminal(questions: readonly Prompt[], answers: readonly Answer[]) {
+    return answers.some((answer, index) =>
+      answer.selected.some((selected) => {
+        const option = questions[index]?.options.find((item) => item.id === selected.id)
+        return option?.terminal === true || terminalID(selected.id)
+      }),
+    )
+  }
+
   export function request(input: Input) {
     validate(input.questions)
     return {

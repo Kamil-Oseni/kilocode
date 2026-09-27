@@ -1059,6 +1059,84 @@ it.instance("ask_options click resolves the tool and the same turn continues on 
 // raya_change end
 // kilocode_change end
 
+// kilocode_change start - a Chief stop choice must terminate its request before another model step
+it.instance("Auto Hold choice stops the request and a new user message can proceed", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Stopped Chief request",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const request = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID: session.id,
+      agent: "auto",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: request.id,
+      sessionID: session.id,
+      type: "text",
+      text: "Create two disposable files",
+    })
+    const assistant = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "assistant",
+      parentID: request.id,
+      sessionID: session.id,
+      mode: "auto",
+      agent: "auto",
+      cost: 0,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      time: { created: Date.now() },
+      finish: "tool-calls",
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: assistant.id,
+      sessionID: session.id,
+      type: "tool",
+      callID: "hold-choice",
+      tool: "ask_options",
+      state: {
+        status: "completed",
+        input: {},
+        output: '{"answers":[{"selected":[{"id":"hold","label":"Hold — do not create the files"}]}]}',
+        title: "Asked 1 question",
+        metadata: { terminal: true },
+        time: { start: 1, end: 2 },
+      },
+    })
+    const stopped = yield* prompt.loop({ sessionID: session.id })
+    expect(yield* llm.calls).toBe(0)
+    expect(stopped.parts.some((part) => part.type === "text" && part.text.includes("Stopped as requested"))).toBe(
+      true,
+    )
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "Now answer this new request" }],
+    })
+    yield* llm.text("This new request can proceed")
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(yield* llm.calls).toBe(1)
+    expect(result.parts.some((part) => part.type === "text" && part.text === "This new request can proceed")).toBe(true)
+  }),
+  60_000,
+)
+// kilocode_change end
+
 it.instance("glob tool keeps instance context during prompt runs", () =>
   Effect.gen(function* () {
     const { dir, llm } = yield* useServerConfig(providerCfg)

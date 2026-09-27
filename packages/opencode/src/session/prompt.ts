@@ -1607,6 +1607,34 @@ export const layer = Layer.effect(
           latest.assistantMessage &&
           KiloSessionMessageOrder.compare(latest.userMessage, latest.assistantMessage) < 0
         // kilocode_change end
+        // kilocode_change start - a Chief Hold/Stop answer ends only its owning request
+        if (
+          lastUser.agent === "auto" &&
+          lastAssistant?.parentID === lastUser.id &&
+          userBeforeAssistant &&
+          lastAssistantMsg?.parts.some(
+            (part) =>
+              part.type === "tool" &&
+              part.tool === "ask_options" &&
+              part.state.status === "completed" &&
+              part.state.metadata?.terminal === true,
+          )
+        ) {
+          const acknowledgement = "Stopped as requested. I won't continue this task."
+          if (!lastAssistantMsg?.parts.some((part) => part.type === "text" && part.text === acknowledgement)) {
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: lastAssistant.id,
+              sessionID,
+              type: "text",
+              text: acknowledgement,
+            })
+          }
+          yield* sessions.updateMessage({ ...lastAssistant, finish: "stop" })
+          yield* Effect.logInfo("Chief request stopped by user choice", { "session.id": sessionID })
+          break
+        }
+        // kilocode_change end
         // kilocode_change start - carry local review command marker into LLM telemetry
         const telemetry =
           KiloSessionProcessor.extractReviewTelemetry(

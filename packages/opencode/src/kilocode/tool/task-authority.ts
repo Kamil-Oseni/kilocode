@@ -1,4 +1,5 @@
 import { Permission } from "@/permission"
+import { RayaAskOptions } from "@/kilocode/ask-options"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 
 /** A child session's durable ceiling. Missing metadata means a pre-existing legacy task. */
@@ -177,9 +178,20 @@ export namespace TaskAuthority {
   export function explicit(request: string | undefined) {
     if (!request) return false
     const text = request.trim()
-    if (/^(?:please\s+)?(?:do\s+not|don't|never|avoid)\b/i.test(text)) return false
     if (
-      /\b(?:read[- ]only|no edits?|without (?:editing|changing|modifying)|do not (?:edit|change|modify))\b/i.test(text)
+      /^(?:please\s+)?(?:do\s+not|don't|never|avoid)\b/i.test(text) &&
+      !/[.;]\s*(?:please\s+)?(?:commit|push|fix|implement|edit|modify|patch|refactor|build|write|create|add|update|remove|delete)\b/i.test(
+        text,
+      )
+    )
+      return false
+    if (/^(?:please\s+)?(?:hold|stop|pause|cancel)\b/i.test(text)) return false
+    if (/\bread[- ]only\b|\bno edits?\b(?!\s+(?:outside|beyond|to|in|on|except))/i.test(text)) return false
+    // A restriction on *other* files or an old goal does not revoke the requested edit.
+    if (
+      /\b(?:without|do not) (?:edit|editing|change|changing|modify|modifying)(?=\s*(?:[.!?;:]|$)|\s+(?:anything|any files?|any code|the (?:workspace|repo(?:sitory)?))\b)/i.test(
+        text,
+      )
     )
       return false
     if (
@@ -219,6 +231,24 @@ export namespace TaskAuthority {
 
   export function current(request: string | undefined, latest: string | undefined) {
     return !!request && request === latest && explicit(request)
+  }
+
+  /** A later in-turn Ask refusal revokes an earlier edit request until the user sends a new request. */
+  export function declined(metadata: unknown) {
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false
+    const record = metadata as Record<string, unknown>
+    if (record.terminal === true || record.dismissed === true) return true
+    if (!Array.isArray(record.answers)) return false
+    return record.answers.some((answer) => {
+      if (!answer || typeof answer !== "object" || Array.isArray(answer)) return false
+      const row = answer as Record<string, unknown>
+      const selected = Array.isArray(row.selected) ? row.selected : []
+      return selected.some((option) => {
+        if (!option || typeof option !== "object" || Array.isArray(option)) return false
+        const id = (option as Record<string, unknown>).id
+        return RayaAskOptions.terminalID(id)
+      })
+    })
   }
 
   /** Admit Auto children with a durable minimum authority and current-request-bound edits. */

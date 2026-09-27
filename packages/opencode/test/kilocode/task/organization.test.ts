@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm"
 import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { InstanceRef } from "@/effect/instance-ref"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import {
@@ -582,6 +583,68 @@ test("recovery stops later organizations when an earlier archive still has an in
       expect((yield* runner.tasks.get(second.id)).enabled).toBe(false)
       expect((yield* runner.tasks.runsFor(second.id))[0]?.status).toBe("error")
       expect(halted).toEqual([sid])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("routine stop recovery uses the booting workspace for its own worker", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const dir = process.cwd()
+      const sid = SessionID.make("ses_archive_same_workspace")
+      const sessions = {
+        create: () => Effect.die("unexpected session"),
+        get: () => Effect.die("unexpected session"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const halted: string[] = []
+      const runner = RayaTaskRunner.make({
+        storage,
+        database,
+        sessions,
+        halt: () =>
+          Effect.gen(function* () {
+            halted.push((yield* InstanceRef)?.directory ?? "missing")
+          }),
+      })
+      const worker = yield* runner.tasks.create({
+        name: "Worker",
+        objective: "Work",
+        dir,
+        schedule: { kind: "manual" },
+      })
+      const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
+      const item = yield* organizations.create({ name: "Team", members: [{ agentID: worker.id, role: "Worker" }] })
+      yield* runner.tasks.record({
+        id: "run_archive_same_workspace",
+        agentID: worker.id,
+        sessionID: sid,
+        at: Date.now(),
+        status: "running",
+      })
+      const failed = RayaTaskOrganization.make(
+        database,
+        { ...runner.tasks, stop: () => Effect.die("stop interrupted") },
+        storage,
+      )
+      expect(Exit.isFailure(yield* failed.archive(item.id, { expectedRevision: 1 }).pipe(Effect.exit))).toBe(true)
+      const ctx = {
+        directory: dir,
+        worktree: dir,
+        project: {
+          id: ProjectV2.ID.make("project_archive_same_workspace"),
+          worktree: dir,
+          sandboxes: [],
+          time: { created: 1, updated: 1 },
+        },
+      }
+      yield* runner.recoverStops().pipe(Effect.provideService(InstanceRef, ctx))
+      expect(halted).toEqual([dir])
+      expect((yield* organizations.get(item.id)).archived).toBe(true)
+      expect((yield* runner.tasks.runsFor(worker.id))[0]?.status).toBe("error")
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

@@ -31,6 +31,8 @@ import { inspect, recover } from "./recovery"
 import { stopped } from "./owner"
 import { poll } from "./poll"
 import { InstanceState } from "@/effect/instance-state"
+import { capture } from "@/kilocode/instance"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import type { Database } from "@opencode-ai/core/database/database"
 import { scheduler } from "./scheduler"
 import { RayaTaskQueue } from "./queue"
@@ -138,11 +140,13 @@ function open<A, E, R>(dir: string | undefined, effect: Effect.Effect<A, E, R>) 
   const path = dir?.trim()
   if (!path) return effect
   return Effect.gen(function* () {
-    const store = yield* workspace()
     yield* Effect.tryPromise({
       try: () => mkdir(path, { recursive: true }),
       catch: () => new RayaTask.GuardError({ message: "Could not create that write folder." }),
     })
+    const ctx = capture()
+    if (ctx && FSUtil.resolve(ctx.directory) === FSUtil.resolve(path)) return yield* effect
+    const store = yield* workspace()
     return yield* store.provide({ directory: path }, effect)
   })
 }
@@ -1565,6 +1569,7 @@ export namespace RayaTaskRunner {
         }),
         (listener) => Effect.sync(() => GlobalBus.off("event", listener)),
       )
+      yield* Effect.logInfo("Raya routine stop recovery starting")
       yield* runner
         .recoverStops()
         .pipe(
@@ -1572,6 +1577,8 @@ export namespace RayaTaskRunner {
             Effect.sync(() => log.error("organization stop recovery failed", { err: Cause.squash(cause) })),
           ),
         )
+      yield* Effect.logInfo("Raya routine stop recovery complete")
+      yield* Effect.logInfo("Raya routine revival starting")
       yield* runner
         .revive()
         .pipe(
@@ -1579,6 +1586,7 @@ export namespace RayaTaskRunner {
             Effect.sync(() => log.error("task revive failed", { err: Cause.squash(cause) })),
           ),
         )
+      yield* Effect.logInfo("Raya routine revival complete")
       if (input.database) {
         const organizations = RayaTaskOrganization.make(input.database, runner.tasks, input.storage)
         const messenger = RayaContactMessenger.make(input.database, {

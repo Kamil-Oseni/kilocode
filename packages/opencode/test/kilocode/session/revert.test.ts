@@ -128,6 +128,95 @@ const setup = Effect.fnUntraced(function* (dir: string, deleted = false) {
   }
 })
 
+it.live(
+  "keeps and later undoes a new file in a non-Git workspace with exact snapshots",
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const state = yield* setup(dir)
+        const storage = yield* Storage.Service
+        const summary = yield* SessionSummary.Service
+        const file = path.join(dir, "created.txt")
+        const providerID = ProviderV2.ID.make("test")
+        const save = Effect.fn("ReviewAddedFile.save")(function* (before: string, after: string) {
+          const assistant = yield* state.sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: state.session.id,
+            role: "assistant",
+            parentID: state.user.id,
+            mode: "default",
+            agent: "default",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ModelV2.ID.make("test"),
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          const patch = yield* state.snapshot.patch(before, after)
+          expect(patch.files).toContain(file.replaceAll("\\", "/"))
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: state.session.id,
+            type: "step-start",
+            snapshot: before,
+          })
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: state.session.id,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: after,
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          })
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: state.session.id,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+        })
+
+        const base = state.after
+        yield* Effect.promise(() => fs.writeFile(file, "kept"))
+        const first = yield* state.snapshot.track()
+        if (!first) throw new Error("expected first snapshot")
+        yield* save(base, first)
+        yield* storage.write(["session_diff", state.session.id], yield* state.snapshot.diffFull(base, first))
+        const one = (yield* summary.diff({ sessionID: state.session.id })).find((diff) => diff.file === "created.txt")!
+        yield* state.revert.keepChanges({
+          sessionID: state.session.id,
+          files: [file],
+          expected: { [one.file!]: revision(one) },
+        })
+        expect(
+          (yield* summary.diff({ sessionID: state.session.id })).find((diff) => diff.file === "created.txt")?.reviewed,
+        ).toBe(revision(one))
+
+        yield* Effect.promise(() => fs.writeFile(file, "later edit"))
+        const second = yield* state.snapshot.track()
+        if (!second) throw new Error("expected second snapshot")
+        yield* save(first, second)
+        yield* storage.write(["session_diff", state.session.id], yield* state.snapshot.diffFull(base, second))
+        const two = (yield* summary.diff({ sessionID: state.session.id })).find((diff) => diff.file === "created.txt")!
+        yield* state.revert.discardChanges({
+          sessionID: state.session.id,
+          files: [file],
+          expected: { [two.file!]: revision(two) },
+        })
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("kept")
+      }),
+    { git: false },
+  ),
+  120_000,
+)
+
 describe("kept boundary integrity", () => {
   for (const action of ["keepChanges", "discardChanges"] as const) {
     it.live(

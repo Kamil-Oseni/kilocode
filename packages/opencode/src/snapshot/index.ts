@@ -70,7 +70,7 @@ export interface Interface {
     snapshotInitialization?: KiloSnapshotTrack.SnapshotInitialization
   }) => Effect.Effect<string | undefined>
   // kilocode_change end
-  readonly patch: (hash: string) => Effect.Effect<Patch>
+  readonly patch: (hash: string, to?: string) => Effect.Effect<Patch> // kilocode_change - pin file scope to a completed snapshot
   readonly restore: (snapshot: string) => Effect.Effect<void>
   readonly revert: (patches: Patch[], expected?: readonly Patch[]) => Effect.Effect<void> // kilocode_change - recheck live files before guarded restore
   readonly matches: (patches: readonly Patch[]) => Effect.Effect<boolean> // kilocode_change - live workspace precondition
@@ -503,17 +503,27 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             )
           })
 
-          const patch = Effect.fnUntraced(function* (hash: string) {
+          // kilocode_change start - pin review file scope to an immutable completed snapshot
+          const patch = Effect.fnUntraced(function* (hash: string, to?: string) {
             return yield* locked(
               Effect.gen(function* () {
-                yield* add()
+                if (!to) yield* add() // kilocode_change - a completed step must not re-stage another worker's later edit
                 const result = yield* git(
-                  // kilocode_change start
                   [
                     ...quote,
-                    ...args(["diff", "--cached", "--no-ext-diff", "--no-renames", "--name-only", hash, "--", "."]),
+                    ...args([
+                      "diff",
+                      ...(to ? [] : ["--cached"]),
+                      "--no-ext-diff",
+                      "--no-renames",
+                      "--name-only",
+                      "-z",
+                      hash,
+                      ...(to ? [to] : []),
+                      "--",
+                      ".",
+                    ]),
                   ],
-                  // kilocode_change end
                   {
                     cwd: state.directory,
                   },
@@ -522,11 +532,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                   yield* Effect.logWarning("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
-                const files = result.text
-                  .trim()
-                  .split("\n")
-                  .map((x) => x.trim())
-                  .filter(Boolean)
+                const files = result.text.split("\0").filter(Boolean) // kilocode_change - retain literal paths, including whitespace
 
                 // Hide ignored-file removals from the user-facing patch output.
                 const ignored = yield* ignore(files)
@@ -540,6 +546,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               }),
             )
           })
+          // kilocode_change end
 
           const restore = Effect.fnUntraced(function* (snapshot: string) {
             return yield* locked(
@@ -1057,11 +1064,11 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             operation: "track",
           })
         }),
-        patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
+        patch: Effect.fn("Snapshot.patch")(function* (hash: string, to?: string) {
           const ctx = yield* InstanceState.context
           const guard = trackState(ctx.worktree)
           return yield* KiloSnapshotTrack.protect({
-            inner: InstanceState.useEffect(state, (s) => s.patch(hash)),
+            inner: InstanceState.useEffect(state, (s) => s.patch(hash, to)), // kilocode_change
             state: guard,
             fallback: { hash, files: [] },
             operation: "patch",

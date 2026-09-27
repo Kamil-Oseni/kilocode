@@ -149,6 +149,33 @@ it.instance(
   { git: false },
 )
 
+// kilocode_change start - concurrent workers must not widen an earlier completed patch
+it.instance(
+  "pins a completed non-git patch before another worker writes",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    const first = fwd(tmp.path, "first.txt")
+    const second = fwd(tmp.path, "second.txt")
+    yield* write(first, "first worker")
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+    yield* write(second, "second worker")
+    if (!before || !after) throw new Error("expected completed snapshots")
+
+    const patch = yield* snapshot.patch(before, after)
+    expect(patch.files).toEqual([first])
+    expect(yield* snapshot.matches([{ hash: after, files: [first] }])).toBe(true)
+    expect(yield* snapshot.matches([{ hash: after, files: [second] }])).toBe(false)
+    expect(yield* readText(second)).toBe("second worker")
+  }),
+  { git: false },
+  process.platform === "win32" ? 90_000 : 5_000,
+)
+// kilocode_change end
+
 // raya_change - regression guard for the dummy-folder undo bug: a non-git workspace resolves to the
 // synthetic "global" project whose worktree is "/". Git then reports work-tree paths relative to "/",
 // dropping the Windows drive letter, so `git checkout -- <file>` could not match on a MODIFY revert

@@ -703,18 +703,22 @@ const layer = Layer.effect(
             // kilocode_change end
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
-              if (patch.files.length) {
-                yield* session.updatePart({
-                  id: PartID.ascending(),
-                  messageID: ctx.assistantMessage.id,
-                  sessionID: ctx.sessionID,
-                  type: "patch",
-                  hash: patch.hash,
-                  files: patch.files,
-                })
+              // kilocode_change start - a patch needs the exact completed snapshot; never claim later worker writes
+              if (completedSnapshot) {
+                const patch = yield* snapshot.patch(ctx.snapshot, completedSnapshot)
+                if (patch.files.length) {
+                  yield* session.updatePart({
+                    id: PartID.ascending(),
+                    messageID: ctx.assistantMessage.id,
+                    sessionID: ctx.sessionID,
+                    type: "patch",
+                    hash: patch.hash,
+                    files: patch.files,
+                  })
+                }
               }
               ctx.snapshot = undefined
+              // kilocode_change end
             }
             yield* summary
               .summarize({
@@ -803,18 +807,10 @@ const layer = Layer.effect(
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
         if (ctx.snapshot) {
-          const patch = yield* snapshot.patch(ctx.snapshot)
-          if (patch.files.length) {
-            yield* session.updatePart({
-              id: PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.sessionID,
-              type: "patch",
-              hash: patch.hash,
-              files: patch.files,
-            })
-          }
+          // kilocode_change start - an interrupted step has no completed snapshot to bind a reviewable patch
+          // Keep the live files intact; a later review must not attribute another worker's edits to this step.
           ctx.snapshot = undefined
+          // kilocode_change end
         }
 
         if (ctx.currentText) {

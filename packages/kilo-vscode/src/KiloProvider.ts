@@ -6640,7 +6640,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const expected = new Map<string, string>()
     const accepted = new Map<string, string>()
     let authoritative = true
-    const ids = new Set([sid, ...this.syncedChildSessions])
+    // The backend session diff already includes descendants. Synced children can
+    // belong to another chat, so they must not block this chat's review stats.
+    const ids = [sid]
     const files = new Map<string, { additions: number; deletions: number }>()
     for (const id of ids) {
       const directory = this.getWorkspaceDirectory(id)

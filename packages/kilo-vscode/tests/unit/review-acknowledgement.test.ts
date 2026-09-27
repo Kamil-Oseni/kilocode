@@ -65,6 +65,42 @@ describe("host review acknowledgements", () => {
     )
   })
 
+  test("stale synced children do not block the selected session review", async () => {
+    const calls: string[] = []
+    const client = {
+      session: {
+        diff: async ({ sessionID }: { sessionID: string }) => {
+          calls.push(sessionID)
+          if (sessionID === "old-child") throw new Error("Old child has incomplete snapshots")
+          return { data: [{ file: "current.txt", patch: "+current", additions: 1, deletions: 0, status: "added" }] }
+        },
+      },
+    }
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    provider.postMessage = (message) => messages.push(message)
+    const host = provider as unknown as {
+      syncedChildSessions: Set<string>
+      getWorkspaceDirectory: () => string
+      loadReview: (session: string) => Promise<void>
+    }
+    host.syncedChildSessions.add("old-child")
+    host.getWorkspaceDirectory = () => process.cwd()
+
+    await host.loadReview("current-session")
+
+    expect(calls).toEqual(["current-session"])
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: "reviewStatsLoaded",
+        sessionID: "current-session",
+        source: "session",
+        files: 1,
+        additions: 1,
+      }),
+    )
+  })
+
   test("review detail refresh is scoped to the current session", () => {
     const provider = new KiloProvider({} as never, {} as never)
     const requested: Array<string | undefined> = []

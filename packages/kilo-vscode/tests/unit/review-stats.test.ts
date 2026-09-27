@@ -1,11 +1,19 @@
 // raya_change - chat review counts prefer session snapshots over workspace git
 import { describe, expect, it } from "bun:test"
 import path from "path"
-import { apply, collect, fromMessages, fromParts, fromSummary, prefer, type ReviewCounts } from "../../webview-ui/src/components/chat/review-stats"
+import { apply, collect, display, fromMessages, fromParts, fromSummary, prefer, type ReviewCounts } from "../../webview-ui/src/components/chat/review-stats"
 
 const root = path.join(__dirname, "../..")
 
 describe("review stats", () => {
+  it("shows an authoritative empty review over stale chat summary counts", () => {
+    const fallback = { files: 1, additions: 0, deletions: 1 }
+    const current = { session: "current", files: 0, additions: 0, deletions: 0 }
+    expect(display("current", current, fallback)).toEqual(current)
+    expect(display("other", current, fallback)).toEqual(fallback)
+    expect(display("current", undefined, fallback)).toEqual(fallback)
+  })
+
   it("prefers the richest non-empty session snapshot over git fallback", () => {
     expect(
       prefer(

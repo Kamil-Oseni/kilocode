@@ -42,6 +42,7 @@ import { TranscriptSearchProvider } from "../../context/transcript-search"
 import { isPromptBlocked, isSuggesting, isQuestioning } from "./prompt-input-utils"
 import { editReview } from "./edit-review" // raya_change - inline edit review chrome
 import { ready, reviewResult, retry, type ReviewRequest } from "./review-request"
+import { display } from "./review-stats"
 import { showTabStrip } from "../../utils/local-tabs"
 
 interface ChatViewProps {
@@ -192,11 +193,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       scope: revision()?.session === id() && revision()?.source === "workspace" ? "workspace" : undefined,
     })
 
-  const stats = createMemo(() => {
-    const details = revision()
-    if (details?.session === id() && details?.source === "workspace") return details
-    return session.reviewStats() ?? details
-  })
+  const stats = createMemo(() => display(id(), revision(), session.reviewStats()))
   const workspace = () => revision()?.session === id() && revision()?.source === "workspace"
   const missing = () => !workspace() && !ready(id(), revision())
 

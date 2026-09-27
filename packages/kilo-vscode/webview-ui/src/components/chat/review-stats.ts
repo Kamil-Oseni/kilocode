@@ -7,6 +7,15 @@ export type ReviewCounts = {
   sessionID?: string
 }
 
+/** A loaded review is authoritative even when Undo leaves no files. */
+export function display(
+  sid: string | undefined,
+  current: (ReviewCounts & { session: string }) | undefined,
+  fallback: ReviewCounts | undefined,
+): ReviewCounts | undefined {
+  return current?.session === sid ? current : fallback
+}
+
 type Diff = {
   file?: string
   additions?: number

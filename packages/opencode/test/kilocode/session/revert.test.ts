@@ -1650,6 +1650,174 @@ describe("files-only discard (Undo all)", () => {
     30_000,
   )
 
+  it.live(
+    "refreshes an intermediate review and permits a second guarded per-file Undo",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const summary = yield* SessionSummary.Service
+          const snapshot = yield* Snapshot.Service
+          const storage = yield* Storage.Service
+          const session = yield* sessions.create({})
+          const file = path.join(dir, "notes.txt")
+          const providerID = ProviderV2.ID.make("test")
+          const modelID = ModelV2.ID.make("test")
+          const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          const save = Effect.fn("ReviewStep.save")(function* (start: string, finish: string) {
+            const user = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "user",
+              agent: "default",
+              model: { providerID, modelID },
+              time: { created: Date.now() },
+            })
+            const assistant = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "assistant",
+              parentID: user.id,
+              mode: "default",
+              agent: "default",
+              path: { cwd: dir, root: dir },
+              cost: 0,
+              tokens,
+              modelID,
+              providerID,
+              time: { created: Date.now() },
+              finish: "end_turn",
+            })
+            const patch = yield* snapshot.patch(start, finish)
+            expect(patch.files).toContain(file.replaceAll("\\", "/"))
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "step-start",
+              snapshot: start,
+            })
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "step-finish",
+              reason: "stop",
+              snapshot: finish,
+              cost: 0,
+              tokens,
+            })
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "patch",
+              hash: patch.hash,
+              files: patch.files,
+            })
+          })
+
+          yield* Effect.promise(() => fs.writeFile(file, "A"))
+          const first = yield* snapshot.track()
+          if (!first) throw new Error("expected first snapshot")
+          yield* Effect.promise(() => fs.writeFile(file, "B"))
+          const middle = yield* snapshot.track()
+          if (!middle) throw new Error("expected middle snapshot")
+          yield* save(first, middle)
+          yield* Effect.promise(() => fs.writeFile(file, "C"))
+          const last = yield* snapshot.track()
+          if (!last) throw new Error("expected last snapshot")
+          yield* save(middle, last)
+          yield* storage.write(["session_diff", session.id], yield* snapshot.diffFull(first, last))
+
+          const current = (yield* summary.diff({ sessionID: session.id })).find((diff) => diff.file === "notes.txt")
+          expect(current?.status).toBe("modified")
+          expect((yield* summary.diff({ sessionID: session.id, file: "notes.txt", full: true }))[0]).toMatchObject({
+            before: "A",
+            after: "C",
+          })
+          const firstUndo = {
+            sessionID: session.id,
+            files: [file],
+            expected: { [file]: revision(current!) },
+            requestID: "undo-latest",
+          }
+          yield* revert.discardChanges(firstUndo)
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("B")
+
+          const [key] = yield* storage.list(["review_receipt", session.id])
+          expect(key).toBeDefined()
+          const receipt = yield* storage.read<Record<string, unknown>>(key)
+          yield* storage.replace(key, { ...receipt, complete: false })
+          yield* revert.discardChanges(firstUndo)
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("B")
+          expect(yield* storage.read(key)).toMatchObject({ complete: true })
+
+          yield* storage.replace(key, { ...receipt, complete: false })
+          yield* Effect.promise(() => fs.writeFile(file, "manual"))
+          const uncertain = yield* Effect.flip(revert.discardChanges(firstUndo))
+          expect(uncertain._tag).toBe("ReviewConflict")
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("manual")
+          yield* Effect.promise(() => fs.writeFile(file, "B"))
+          yield* revert.discardChanges(firstUndo)
+          expect(yield* storage.read(key)).toMatchObject({ complete: true })
+
+          const pending = (yield* summary.diff({ sessionID: session.id })).find((diff) => diff.file === "notes.txt")
+          expect(pending?.status).toBe("modified")
+          const detail = yield* summary.diff({ sessionID: session.id, file: "notes.txt", full: true })
+          expect(detail[0]).toMatchObject({ before: "A", after: "B" })
+
+          yield* Effect.promise(() => fs.writeFile(file, "D"))
+          const newer = yield* snapshot.track()
+          if (!newer) throw new Error("expected post-Undo snapshot")
+          yield* save(middle, newer)
+          yield* storage.write(["session_diff", session.id], yield* snapshot.diffFull(first, newer))
+          const revised = (yield* summary.diff({ sessionID: session.id })).find((diff) => diff.file === "notes.txt")
+          expect(revised?.status).toBe("modified")
+          expect((yield* summary.diff({ sessionID: session.id, file: "notes.txt", full: true }))[0]).toMatchObject({
+            before: "A",
+            after: "D",
+          })
+
+          yield* Effect.promise(() => fs.writeFile(file, "B"))
+          const repeated = yield* snapshot.track()
+          if (!repeated) throw new Error("expected repeated-content snapshot")
+          yield* save(newer, repeated)
+          yield* storage.write(["session_diff", session.id], yield* snapshot.diffFull(first, repeated))
+          const same = (yield* summary.diff({ sessionID: session.id })).find((diff) => diff.file === "notes.txt")
+          expect(same?.generation).not.toBe(pending?.generation)
+          expect(revision(same!)).not.toBe(revision(pending!))
+          yield* revert.discardChanges({
+            sessionID: session.id,
+            files: [file],
+            expected: { [file]: revision(same!) },
+            requestID: "undo-repeated-bytes",
+          })
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("D")
+          yield* revert.discardChanges({
+            sessionID: session.id,
+            files: [file],
+            expected: { [file]: revision(revised!) },
+            requestID: "undo-post-undo-edit",
+          })
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("B")
+          const remaining = (yield* summary.diff({ sessionID: session.id })).find((diff) => diff.file === "notes.txt")
+          expect(remaining?.generation).toBe(pending?.generation)
+          yield* revert.discardChanges({
+            sessionID: session.id,
+            files: [file],
+            expected: { [file]: revision(remaining!) },
+            requestID: "undo-earlier",
+          })
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("A")
+          expect(yield* summary.diff({ sessionID: session.id })).toEqual([])
+        }),
+      { git: true },
+    ),
+    90_000,
+  )
+
   // raya_change - Keep must fence Undo. After "date" is written and kept, adding
   // "time" then Undo all must step back to the kept "date", NOT wipe everything to
   // the pre-session empty file (the reported "Keep all then Undo all deletes the

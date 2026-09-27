@@ -14,9 +14,10 @@ import { SessionSummary } from "./summary"
 import { KiloSessionRevert } from "@/kilocode/session/revert" // kilocode_change
 import { RayaRevertNote } from "@/kilocode/session/revert-note" // kilocode_change
 import { ReviewConflict, verify, workspace } from "@/kilocode/session/review-revision" // kilocode_change - reject stale review actions
-import { boundaries } from "@/kilocode/session/review-boundaries" // kilocode_change - honor child-session acceptance during parent Undo
+import { boundaries, canonical } from "@/kilocode/session/review-boundaries" // kilocode_change - honor child-session acceptance during parent Undo
 import { receipt, recovery } from "@/kilocode/session/review-receipt" // kilocode_change - durable review retries
 import { project } from "@/kilocode/session/review-patches" // kilocode_change - project legacy patch scope from completed steps
+import { active, append, read as undone } from "@/kilocode/session/review-undo" // kilocode_change - durable per-file Undo history
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -223,7 +224,11 @@ const layer = Layer.effect(
           )
         : input.files
       if (input.expected && files?.length === 0) return session
-      const all = yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory) // kilocode_change
+      const all = active( // kilocode_change
+        yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory),
+        session.directory,
+        yield* undone(storage, sessions, input.sessionID),
+      )
       if (input.expected) yield* workspace(snap, all, files ?? [], session.directory)
       const want = files ? new Set(files.map((file) => file.replaceAll("\\", "/"))) : undefined
       const latest: Record<string, string> = {}
@@ -267,9 +272,14 @@ const layer = Layer.effect(
           )
         : input.files
       if (input.expected && files?.length === 0) return session
-      const all = yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory) // kilocode_change
+      const all = active( // kilocode_change
+        yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory),
+        session.directory,
+        yield* undone(storage, sessions, input.sessionID),
+      )
       const expected = input.expected ? yield* workspace(snap, all, files ?? [], session.directory) : undefined
       const kept = yield* boundaries(storage, sessions, input.sessionID)
+      const plan = KiloSessionRevert.plan(all, files ? [...files] : undefined, kept, !!input.files?.length)
       const result = yield* KiloSessionRevert.discardAll(
         snap,
         all,
@@ -293,13 +303,14 @@ const layer = Layer.effect(
         const raw = yield* storage
           .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
           .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
-        const gone = new Set(result.files.map((file) => file.replaceAll("\\", "/")))
-        const left = raw.filter((item) => !gone.has((item.file ?? "").replaceAll("\\", "/")))
+        const gone = new Set(result.files.map((file) => canonical(file, session.directory)))
+        const left = raw.filter((item) => !item.file || !gone.has(canonical(item.file, session.directory)))
         yield* storage.write(["session_diff", input.sessionID], left).pipe(Effect.orDie)
         yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: left })
       }
       // A prior partial revert boundary would otherwise keep a redo affordance alive.
       if (session.revert) yield* sessions.clearRevert(input.sessionID)
+      yield* append(storage, input.sessionID, session.directory, plan.events) // kilocode_change
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
     // kilocode_change end

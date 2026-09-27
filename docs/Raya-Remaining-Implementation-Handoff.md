@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 19:16 America/Toronto - sequential Undo source result and remaining host gate
+
+The current installed dummy VS Code snapshot is `7.4.23-snapshot+42d6fcb705.kamil-oseni.1790548012287`; its settled loaded/active version and package digest matched. The authorized exact 14-byte B deletion and per-file Undo restored its original bytes with no newline. The same chat's dock and Changes view then agreed on zero changed files with no stale Keep/Undo controls. The separate French Study window was untouched. The progress record has the exact commits and host evidence. `EN-05` and `FUT-CU-01` remain In progress.
+
+The multi-edit Undo source gap is now fixed with a versioned per-file generation ledger. A real-service test covers A→B→C, two guarded Undos, a new edit after Undo, repeated bytes in different generations, receipt loss without restore replay and refusal on manual byte changes; it passes 24 assertions. CLI typecheck, scoped lint, annotation guard and diff check pass. The broader 51-test review run has 15 failures, apparently older fixture/strict-snapshot mismatches; clean-HEAD comparison has not been established. Next, build and install a snapshot, verify loaded binary identity, then test interruption/restart and child ordering on the installed host using a separately authorized disposable file. Cross-directory child worktree projection also needs a source regression. Do not run another destructive dummy test without authorization beyond the exact B test already granted. `EN-05` and `FUT-CU-01` remain In progress.
+
 ## ChatGPT 2026-09-27 12:44 America/Toronto - settled snapshot and open review gate
 
 `4c1b34fefb` is installed in the moved second-screen `dummy` VS Code window. Settled host inspection matched loaded/active version and digest `7de9f32cf4eaa0eb34c3f38cd5ec92e5b12a2a751ea41965453225b0a54d321a` (PID 4028). The French Study window was untouched. A fresh terminal Hold displayed its saved stop acknowledgement live, without reload; the turn ended with no further action and the old goal remained Complete.

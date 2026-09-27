@@ -7,6 +7,7 @@ import type { SessionID } from "@/session/schema"
 import { revision } from "./review-revision"
 import { boundaries as read } from "./review-boundaries"
 import { project } from "./review-patches"
+import { active, read as undone } from "./review-undo"
 
 export const ReviewDiff = Snapshot.FileDiff.mapFields((fields) => ({
   ...fields,
@@ -32,6 +33,7 @@ export const reviewed = Effect.fn("ReviewState.reviewed")(function* (
 ) {
   if (!diffs.length) return []
   const kept = yield* read(storage, sessions, sessionID)
+  const history = yield* undone(storage, sessions, sessionID)
   const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
   const normalize = (file: string) => {
     const absolute = path.resolve(session.directory, file)
@@ -46,10 +48,10 @@ export const reviewed = Effect.fn("ReviewState.reviewed")(function* (
     if (visited.has(id)) continue
     visited.add(id)
     const owner = yield* sessions.get(id).pipe(Effect.orDie)
-    const messages = yield* project(
-      snap,
-      yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie),
+    const messages = active(
+      yield* project(snap, yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie), owner.directory),
       owner.directory,
+      history,
     )
     for (const message of messages)
       for (const part of message.parts) {

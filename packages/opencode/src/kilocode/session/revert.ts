@@ -65,14 +65,14 @@ export namespace KiloSessionRevert {
   }
 
   /** Derive the exact snapshots an Undo would restore without touching the workspace. */
-  export function targets(
+  export function plan(
     messages: MessageV2.WithParts[],
     only?: string[],
     kept?: Record<string, string>,
     step = !!only?.length,
   ) {
     const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
-    const perFile = new Map<string, { id: string; hash: string }[]>()
+    const perFile = new Map<string, { id: string; hash: string; generation: string }[]>()
     for (const msg of messages)
       for (const part of msg.parts)
         if (part.type === "patch")
@@ -80,17 +80,28 @@ export namespace KiloSessionRevert {
             const norm = file.replaceAll("\\", "/")
             if (filter && !matches(norm, filter)) continue
             const list = perFile.get(file) ?? (perFile.set(file, []), perFile.get(file)!)
-            list.push({ id: msg.info.id, hash: part.hash })
+            list.push({ id: msg.info.id, hash: part.hash, generation: `${msg.info.id}:${part.id}` })
           }
     const result: Snapshot.Patch[] = []
+    const events: { file: string; generation: string }[] = []
     for (const [file, list] of perFile) {
       const boundary = kept?.[canonical(file)] ?? kept?.[file.replaceAll("\\", "/")]
       const eligible = boundary ? list.filter((patch) => patch.id > boundary) : list
       if (eligible.length === 0) continue
       const target = step ? eligible[eligible.length - 1] : eligible[0]
       result.push({ hash: target.hash, files: [file] })
+      for (const patch of step ? [target] : eligible) events.push({ file, generation: patch.generation })
     }
-    return result
+    return { patches: result, events }
+  }
+
+  export function targets(
+    messages: MessageV2.WithParts[],
+    only?: string[],
+    kept?: Record<string, string>,
+    step = !!only?.length,
+  ) {
+    return plan(messages, only, kept, step).patches
   }
 
   /**

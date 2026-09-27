@@ -8,6 +8,7 @@ import type { Storage } from "@/storage/storage"
 import { boundaries, canonical } from "./review-boundaries"
 import { project } from "./review-patches"
 import { ReviewConflict } from "./review-revision"
+import { active, read } from "./review-undo"
 
 type Span = { file: string; start: string; finish: string; first: string; last: string }
 
@@ -19,6 +20,7 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
   sessionID: SessionID,
 ) {
   const kept = yield* boundaries(storage, sessions, sessionID)
+  const undone = yield* read(storage, sessions, sessionID)
   const result = new Map<string, Span>()
   const queue = [sessionID]
   const visited = new Set<SessionID>()
@@ -51,7 +53,7 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
   // Reject an incomplete descendant before projecting any historical patch. Otherwise
   // each review refresh queues Git work that cannot change the refusal.
   for (const group of groups) {
-    const messages = yield* project(snap, group.messages, group.directory)
+    const messages = active(yield* project(snap, group.messages, group.directory), group.directory, undone)
     for (const message of messages) {
       let start: string | undefined
       let finish: string | undefined
@@ -90,10 +92,16 @@ export const overlay = Effect.fn("ReviewDiff.overlay")(function* (
 ) {
   const owner = yield* sessions.get(sessionID).pipe(Effect.orDie)
   const kept = yield* boundaries(storage, sessions, sessionID)
+  const undone = yield* read(storage, sessions, sessionID)
   const scope = yield* spans(snap, storage, sessions, sessionID)
   const result = new Map(
     diffs
-      .filter((diff) => !!diff.file && !kept[canonical(diff.file, owner.directory)])
+      .filter(
+        (diff) =>
+          !!diff.file &&
+          !kept[canonical(diff.file, owner.directory)] &&
+          !undone.has(canonical(diff.file, owner.directory)),
+      )
       .map((diff) => [canonical(diff.file!, owner.directory), diff]),
   )
   for (const [key, span] of scope) {

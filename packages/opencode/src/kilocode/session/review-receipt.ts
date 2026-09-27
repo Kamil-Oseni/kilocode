@@ -12,6 +12,7 @@ import { RayaRevertNote } from "./revert-note"
 import { boundaries, canonical } from "./review-boundaries"
 import { ReviewConflict, verify, workspace } from "./review-revision"
 import { project } from "./review-patches"
+import { active, append, read as undone } from "./review-undo"
 
 const Proof = Schema.Union([
   Schema.Struct({ action: Schema.Literal("keep"), boundaries: Schema.Record(Schema.String, Schema.String) }),
@@ -20,6 +21,7 @@ const Proof = Schema.Union([
     patches: Schema.Array(Snapshot.Patch),
     files: Schema.Array(Schema.String),
     revert: Schema.Boolean,
+    events: Schema.optional(Schema.Array(Schema.Struct({ file: Schema.String, generation: Schema.String }))),
   }),
 ])
 export type Proof = typeof Proof.Type
@@ -51,7 +53,11 @@ export function recovery(services: Services) {
       session.directory,
       input.files,
     )
-    const all = yield* project(services.snap, yield* services.gather(input.sessionID, true), session.directory)
+    const all = active(
+      yield* project(services.snap, yield* services.gather(input.sessionID, true), session.directory),
+      session.directory,
+      yield* undone(services.storage, services.sessions, input.sessionID),
+    )
     yield* workspace(services.snap, all, files, session.directory)
     const wanted = new Set(files.map((file) => canonical(file, session.directory)))
     const latest: Record<string, string> = {}
@@ -75,15 +81,20 @@ export function recovery(services: Services) {
       session.directory,
       input.files,
     )
-    const all = yield* project(services.snap, yield* services.gather(input.sessionID, true), session.directory)
+    const all = active(
+      yield* project(services.snap, yield* services.gather(input.sessionID, true), session.directory),
+      session.directory,
+      yield* undone(services.storage, services.sessions, input.sessionID),
+    )
     yield* workspace(services.snap, all, files, session.directory)
     const kept = yield* boundaries(services.storage, services.sessions, input.sessionID)
-    const patches = KiloSessionRevert.targets(all, files, kept, !!input.files?.length)
+    const plan = KiloSessionRevert.plan(all, files, kept, !!input.files?.length)
     return {
       action: "undo" as const,
-      patches,
-      files: [...new Set(patches.flatMap((patch) => patch.files))],
+      patches: plan.patches,
+      files: [...new Set(plan.patches.flatMap((patch) => patch.files))],
       revert: !!session.revert,
+      events: plan.events,
     }
   })
 
@@ -105,6 +116,7 @@ export function recovery(services: Services) {
       Effect.orDie,
     )
     if (raw.some((diff) => !!diff.file && gone.has(normalize(diff.file)))) return false
+    if (proof.events?.length) yield* append(services.storage, sessionID, session.directory, proof.events)
     yield* Effect.promise(() => RayaRevertNote.record(sessionID, proof.files))
     return true
   })

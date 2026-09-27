@@ -12,6 +12,7 @@ import { Storage } from "@/storage/storage"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { ChiefRequestReview } from "@/kilocode/chief/request-review"
 import { RayaChief } from "@/kilocode/chief"
+import { RayaGoal } from "@/kilocode/goal"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import { chiefInspectTool } from "@/kilocode/tool/chief-inspect"
 import { chiefPlanTool } from "@/kilocode/tool/chief-plan"
@@ -47,11 +48,18 @@ const proposals = [
   },
 ]
 
-const setup = Effect.fn("ChiefRequestReviewTest.setup")(function* () {
+const setup = Effect.fn("ChiefRequestReviewTest.setup")(function* (
+  opts: {
+    request?: string
+    access?: "read" | "edit"
+    parent?: Permission.Ruleset
+    completed?: boolean
+  } = {},
+) {
   const sessions = yield* Session.Service
   const storage = yield* Storage.Service
   const parent = yield* sessions.create({ title: "Request review" })
-  const request = "Audit authorization and navigation"
+  const request = opts.request ?? "Audit authorization and navigation"
   const user = yield* sessions.updateMessage({
     id: MessageID.ascending(),
     role: "user",
@@ -71,16 +79,27 @@ const setup = Effect.fn("ChiefRequestReviewTest.setup")(function* () {
     sessionID: parent.id,
     metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
   })
+  if (opts.completed) {
+    const now = Date.now()
+    yield* storage.create(["raya", "goal", parent.id], {
+      objective: "Previous completed work",
+      status: "complete",
+      createdAt: now - 1000,
+      updatedAt: now,
+      usage: { turns: 1, continuations: 0, toolCalls: 0 },
+      progress: [],
+    } satisfies RayaGoal.State)
+  }
   const ledger = ChiefRequestPlan.make(storage, sessions)
   const plan = yield* ledger.start({
     sessionID: parent.id,
     requestID: user.id,
-    proposals,
+    proposals: proposals.map((item) => ({ ...item, access: opts.access ?? item.access })),
     agents: [
       { name: "researcher", mode: "subagent" },
       { name: "designer", mode: "subagent" },
     ],
-    parent: Permission.fromConfig({ task: "allow" }),
+    parent: opts.parent ?? Permission.fromConfig({ task: "allow", edit: "allow" }),
   })
   const review = ChiefRequestReview.make(storage, sessions)
   return { sessions, storage, parent, user, plan, ledger, review }
@@ -105,7 +124,7 @@ const child = Effect.fn("ChiefRequestReviewTest.child")(function* (
     title: id,
     parentID: state.parent.id,
     agent: specialist,
-    metadata: TaskAuthority.save({}, "read"),
+    metadata: TaskAuthority.save({}, state.plan.branches.find((branch) => branch.id === id)?.access),
   })
   const input = yield* state.sessions.updateMessage({
     id: MessageID.ascending(),
@@ -143,7 +162,7 @@ const child = Effect.fn("ChiefRequestReviewTest.child")(function* (
     messageID: tool.id,
     sessionID: session.id,
     type: "tool",
-    tool: "read",
+    tool: state.plan.branches.find((branch) => branch.id === id)?.access === "edit" ? "write" : "read",
     callID: `read-${id}`,
     state: {
       status: "completed",
@@ -230,6 +249,85 @@ const receipt = Effect.fn("ChiefRequestReviewTest.receipt")(function* (
 })
 
 describe("request-bound Chief review eligibility", () => {
+  it.instance(
+    "admits and reviews exact edit branches for a fresh explicit request",
+    () =>
+      Effect.gen(function* () {
+        const state = yield* setup({ request: "Fix authorization and navigation", access: "edit", completed: true })
+        const goals = RayaGoal.make({ storage: state.storage, sessions: state.sessions })
+        expect((yield* goals.get(state.parent.id))?.status).toBe("complete")
+        const agents = {
+          get: () => Effect.succeed({ permission: Permission.fromConfig({ task: "allow", edit: "allow" }) }),
+          list: () =>
+            Effect.succeed([
+              { name: "researcher", mode: "subagent" },
+              { name: "designer", mode: "subagent" },
+            ]),
+        } as unknown as Agent.Interface
+        const truncate = {
+          output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
+        } as Truncate.Interface
+        const planner = yield* chiefPlanTool({ storage: state.storage, sessions: state.sessions, goals, agents }).pipe(
+          Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Truncate.Service, truncate),
+        )
+        const planned = yield* (yield* planner.init()).execute(
+          { proposals: proposals.map((item) => ({ ...item, access: "edit" as const })) },
+          {
+            sessionID: state.parent.id,
+            messageID: MessageID.ascending(),
+            agent: "auto",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        expect(planned.metadata.revision).toBe(state.plan.identity.revision)
+        expect(state.plan.branches.every((branch) => branch.access === "edit")).toBe(true)
+        const safety = yield* child(state, "safety")
+        const design = yield* child(state, "design")
+        const view = yield* state.review.inspect(state.parent.id)
+        expect(view.branches.every((branch) => branch.access === "edit" && branch.evidence[0]?.tool === "write")).toBe(
+          true,
+        )
+        const first = yield* receipt(state)
+        yield* state.review.review({ ...safety, inspect: first, evidence: safety.evidence, assessment: "Verified" })
+        const second = yield* receipt(state)
+        yield* state.review.review({ ...design, inspect: second, evidence: design.evidence, assessment: "Verified" })
+        const result = yield* state.review.synthesize({
+          sessionID: state.parent.id,
+          requestID: state.user.id,
+          revision: state.plan.identity.revision,
+          summary: "Both fixes verified",
+          findings: [
+            { branchID: "safety", conclusion: "Authorization fixed" },
+            { branchID: "design", conclusion: "Navigation fixed" },
+          ],
+        })
+        expect(result.findings).toHaveLength(2)
+      }),
+    30_000,
+  )
+
+  it.instance(
+    "rejects edit plans without a current explicit request or parent edit permission",
+    () =>
+      Effect.gen(function* () {
+        expect(Exit.isFailure(yield* setup({ access: "edit" }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* setup({
+              request: "Fix authorization and navigation",
+              access: "edit",
+              parent: Permission.fromConfig({ task: "allow" }),
+            }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+      }),
+    30_000,
+  )
+
   it.instance(
     "exposes exact read-only inspection, review, and synthesis through Auto tools",
     () =>

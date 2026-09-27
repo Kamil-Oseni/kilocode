@@ -41,7 +41,7 @@ export namespace ChiefRequestReview {
           if (
             child.parentID !== id ||
             child.agent !== branch.specialist ||
-            TaskAuthority.read(child.metadata) !== "read"
+            TaskAuthority.read(child.metadata) !== branch.access
           )
             throw new Error("Chief request child identity or authority changed")
           const rows = yield* sessions.messages({ sessionID: branch.sessionID })
@@ -93,12 +93,11 @@ export namespace ChiefRequestReview {
           if (
             !branch ||
             branch.state !== "completed" ||
-            branch.access !== "read" ||
             branch.callID !== input.callID ||
             branch.sessionID !== input.childID ||
             branch.messageID !== input.messageID
           )
-            throw new Error("Only the exact completed read-only branch can be reviewed")
+            throw new Error("Only the exact completed branch can be reviewed")
           const assessment = input.assessment.trim()
           if (!assessment || assessment.length > 2_000)
             throw new Error("Chief request review needs a bounded assessment")

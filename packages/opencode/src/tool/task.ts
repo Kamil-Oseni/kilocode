@@ -94,7 +94,7 @@ const BaseParameterFields = {
   access: Schema.optional(Schema.Literals(["read", "edit", "computer"])).annotate({
     // kilocode_change
     description:
-      'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" only for an active goal with authorized file changes. Auto tasks without saved authority default to read-only; other agents retain legacy behavior.',
+      'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" for an active goal or the current user\'s explicit request to change work, subject to parent permission. Auto tasks without saved authority default to read-only; other agents retain legacy behavior.',
   }),
   computer_target: Schema.optional(SelectedWindowTarget).annotate({
     description: "Bind a Computer Use child to this exact window ID from the parent's selected-window grant.",

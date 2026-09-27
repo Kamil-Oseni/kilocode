@@ -9,8 +9,9 @@ import { RayaChief } from "@/kilocode/chief"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefPlan } from "@/kilocode/chief/plan"
 import { durable, stopped } from "@/kilocode/task/owner"
+import { TaskAuthority } from "@/kilocode/tool/task-authority"
 
-/** Dormant request-bound plan storage and exact read-only branch admission. */
+/** Request-bound plan storage and exact branch admission. */
 export namespace ChiefRequestPlan {
   const Identity = Schema.Struct({
     version: Schema.Literal(1),
@@ -86,7 +87,7 @@ export namespace ChiefRequestPlan {
         identity.revision !== hash(JSON.stringify([id, identity.requestID, latest.info.time.created, request]))
       )
         throw new Error("Chief request plan identity changed")
-      return identity
+      return request
     })
 
     const read = Effect.fn("ChiefRequestPlan.read")(function* (id: SessionID, request: MessageID) {
@@ -121,7 +122,7 @@ export namespace ChiefRequestPlan {
       if (
         record.branches.some(
           (branch) =>
-            branch.access !== "read" ||
+            (branch.access !== "read" && branch.access !== "edit") ||
             (branch.state === "planned" && (branch.callID || branch.sessionID || branch.messageID)) ||
             (branch.state === "admitted" && !branch.callID) ||
             (branch.state === "completed" && (!branch.callID || !branch.sessionID || !branch.messageID)),
@@ -137,7 +138,9 @@ export namespace ChiefRequestPlan {
     const load = Effect.fn("ChiefRequestPlan.load")(function* (id: SessionID) {
       const record = yield* saved(id)
       if (!record) return
-      yield* exact(id, record.identity)
+      const request = yield* exact(id, record.identity)
+      if (record.branches.some((branch) => branch.access === "edit") && !TaskAuthority.explicit(request))
+        throw new Error("Chief request edit authority no longer matches the current user request")
       return record
     })
 
@@ -177,8 +180,11 @@ export namespace ChiefRequestPlan {
             agents: input.agents,
             parent: input.parent,
           })
-          if (branches.some((branch) => branch.access !== "read"))
-            throw new Error("Request-bound Chief plans currently allow read-only branches only")
+          if (
+            branches.some((branch) => branch.access === "edit") &&
+            !TaskAuthority.current(request, RayaChief.requestText(latest.parts))
+          )
+            throw new Error("Request-bound Chief edit branches require an explicit current user request")
           const goalPlan = yield* ChiefBranches.make(storage).read(input.sessionID)
           if (goalPlan) {
             const goal = yield* storage
@@ -260,7 +266,7 @@ export namespace ChiefRequestPlan {
             throw new Error("Chief request plan changed before reservation")
           if (!input.callID.trim()) throw new Error("Chief request branch needs an exact call ID")
           const branch = record.branches.find((item) => item.id === input.branchID)
-          if (!branch || branch.access !== "read" || branch.state !== "planned")
+          if (!branch || branch.state !== "planned")
             throw new Error("Chief request branch is unavailable or already reserved")
           if (record.branches.some((item) => item.callID === input.callID))
             throw new Error("Chief request call ID already belongs to a branch")

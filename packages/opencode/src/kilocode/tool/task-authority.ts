@@ -178,8 +178,28 @@ export namespace TaskAuthority {
     if (!request) return false
     const text = request.trim()
     if (/^(?:please\s+)?(?:do\s+not|don't|never|avoid)\b/i.test(text)) return false
-    return /^(?:(?:please|can you|could you|i (?:want|need) you to|let's)\s+)?(?:commit|push|fix|implement|edit|modify|patch|refactor|build|write|create|add|update|remove|delete)\b/i.test(
-      text,
+    if (
+      /\b(?:read[- ]only|no edits?|without (?:editing|changing|modifying)|do not (?:edit|change|modify))\b/i.test(text)
+    )
+      return false
+    if (
+      /^(?:please\s+)?(?:review|inspect|audit|explain|analyze|summarize|check)\b/i.test(text) &&
+      !/\b(?:and|then|also)\s+(?:fix|edit|implement|modify|patch|refactor|build|write|create|add|update|remove|delete)\b/i.test(
+        text,
+      )
+    )
+      return false
+    if (
+      /\b(?:commit|push|fix|implement|edit|modify|patch|refactor|build|write|create|add|update|remove|delete)\b/i.test(
+        text,
+      )
+    )
+      return true
+    return (
+      !/^(?:what|why|how)\b/i.test(text) &&
+      /\b(?:an? (?:issue|bug|problem)|is broken|doesn.t work|can.t work|couldn.t work|shouldn.t|should not)\b/i.test(
+        text,
+      )
     )
   }
 

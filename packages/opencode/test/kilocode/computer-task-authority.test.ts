@@ -133,6 +133,15 @@ describe("Computer Use child authority", () => {
     const parent = Permission.fromConfig({ "*": "allow" })
     const request = "Commit and push all changes"
     expect(TaskAuthority.current(request, request)).toBe(true)
+    expect(
+      TaskAuthority.current(
+        "There was also an issue where the agent couldn't work after the goal was completed, which shouldn't be so",
+        "There was also an issue where the agent couldn't work after the goal was completed, which shouldn't be so",
+      ),
+    ).toBe(true)
+    expect(TaskAuthority.current("I want Raya to fix the history view", "I want Raya to fix the history view")).toBe(
+      true,
+    )
     expect(TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, userEdit: true, parent })).toBe(
       "edit",
     )
@@ -153,6 +162,11 @@ describe("Computer Use child authority", () => {
     expect(TaskAuthority.current("Commit and push all changes", "Review the latest changes")).toBe(false)
     expect(TaskAuthority.current("Do not commit these changes", "Do not commit these changes")).toBe(false)
     expect(TaskAuthority.current("Review the changes", "Review the changes")).toBe(false)
+    expect(TaskAuthority.current("Review how to fix this bug", "Review how to fix this bug")).toBe(false)
+    expect(TaskAuthority.current("Review and fix this bug", "Review and fix this bug")).toBe(true)
+    expect(TaskAuthority.current("Review only, no edits: fix nothing", "Review only, no edits: fix nothing")).toBe(
+      false,
+    )
     expect(() => TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, parent })).toThrow(
       "explicit current user request",
     )

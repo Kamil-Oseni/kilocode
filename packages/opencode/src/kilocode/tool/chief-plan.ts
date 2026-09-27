@@ -23,7 +23,7 @@ export function chiefPlanTool(deps: {
     "chief_plan",
     Effect.succeed({
       description:
-        "Propose two or three independent Auto Chief branches. Each needs distinct scope, exact specialist, bounded brief, and justified authority. Ordinary requests currently allow read-only branches; an active goal may also allow edit branches. This records a plan but does not start workers.",
+        "Propose two or three independent Auto Chief branches. Each needs distinct scope, exact specialist, bounded brief, and justified authority. A current explicit user request or active goal may authorize edit branches when the parent permits editing. This records a plan but does not start workers.",
       parameters: Parameters,
       execute: (input: typeof Parameters.Type, ctx) =>
         Effect.gen(function* () {

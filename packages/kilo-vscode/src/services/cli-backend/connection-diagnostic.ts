@@ -1,4 +1,16 @@
-type Phase = "capabilities" | "initial-sse" | "startup"
+type Phase = "capabilities" | "initial-sse" | "sdk-request" | "startup"
+
+function code(value: unknown) {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{1,39}$/.test(value) ? value : undefined
+}
+
+function address(value: unknown) {
+  return value === "127.0.0.1" || value === "::1" ? value : undefined
+}
+
+function status(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599 ? value : undefined
+}
 
 /** Keep connection diagnostics useful without serializing errors, URLs, or credentials. */
 export function connectionDiagnostic(phase: Phase, port: number | undefined, error: unknown) {
@@ -9,17 +21,9 @@ export function connectionDiagnostic(phase: Phase, port: number | undefined, err
     const value = pending.shift()
     if (!value || typeof value !== "object") continue
     const item = value as Record<string, unknown>
-    if (!result.code && typeof item.code === "string" && /^[A-Z][A-Z0-9_]{1,39}$/.test(item.code))
-      result.code = item.code
-    if (!result.address && (item.address === "127.0.0.1" || item.address === "::1")) result.address = item.address
-    if (
-      !result.status &&
-      typeof item.status === "number" &&
-      Number.isInteger(item.status) &&
-      item.status >= 100 &&
-      item.status <= 599
-    )
-      result.status = item.status
+    result.code ??= code(item.code)
+    result.address ??= address(item.address)
+    result.status ??= status(item.status)
     if (item.cause) pending.push(item.cause)
     if (Array.isArray(item.errors) && item.errors.length) pending.push(item.errors[0])
   }

@@ -834,10 +834,22 @@ export class KiloConnectionService {
 
     // Create SDK client with Basic Auth header
     const authHeader = `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`
+    let reported = false
     const client = createKiloClient({
       baseUrl: config.baseUrl,
       headers: {
         Authorization: authHeader,
+      },
+      fetch: async (input, init) => {
+        try {
+          return await fetch(input, { ...init, duplex: "half", timeout: false } as RequestInit)
+        } catch (error) {
+          if (!reported) {
+            reported = true
+            console.error("[Raya] Connection diagnostic:", connectionDiagnostic("sdk-request", server.port, error))
+          }
+          throw error
+        }
       },
     })
     const sse = new SdkSSEAdapter(client, (error) =>

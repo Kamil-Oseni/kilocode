@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 19:31 America/Toronto - current installed snapshot
+
+The sequential Undo source slice is pushed in `6bd79d6d57` and installed as `7.4.23-snapshot+6bd79d6d57.kamil-oseni.1790551251213`. A live report after reloading only dummy VS Code matched loaded and active versions and digest `4a040592be3cedb2ccab4a2e1f7539069bf162756ecedad14e5bd1736564d7f9`; frontend startup succeeded. Foreground capture in that report was unavailable, so it is not an action or recovery benchmark. The earlier authorized exact-B test belonged to the previous snapshot; no new destructive host test was run. Next: separately authorize a disposable sequential-Undo host test, then prove restart/disconnect, changed target, child ordering and resource endurance. Keep `EN-05` and `FUT-CU-01` In progress.
+
 ## ChatGPT 2026-09-27 19:16 America/Toronto - sequential Undo source result and remaining host gate
 
 The current installed dummy VS Code snapshot is `7.4.23-snapshot+42d6fcb705.kamil-oseni.1790548012287`; its settled loaded/active version and package digest matched. The authorized exact 14-byte B deletion and per-file Undo restored its original bytes with no newline. The same chat's dock and Changes view then agreed on zero changed files with no stale Keep/Undo controls. The separate French Study window was untouched. The progress record has the exact commits and host evidence. `EN-05` and `FUT-CU-01` remain In progress.

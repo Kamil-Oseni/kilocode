@@ -189,6 +189,20 @@ export namespace TaskAuthority {
       )
     )
       return false
+    // A request to compose an answer is not authority to mutate the workspace.
+    // An explicit destination or a separate change instruction still authorizes it.
+    if (
+      /\b(?:write|create)\s+(?:(?:me|us)\s+)?(?:(?:an?|the)\s+)?(?:summary|explanation|report|answer|response|list|outline|plan|description|message|email|post|poem|story|draft)\b/i.test(
+        text,
+      ) &&
+      !/\b(?:and|then|also)\s+(?:commit|push|fix|implement|edit|modify|patch|refactor|build|add|update|remove|delete)\b/i.test(
+        text,
+      ) &&
+      !/\b(?:in|to|as|at|under)\s+(?:(?:an?|the|new)\s+)?(?:file|document|artifact|repository|repo|folder|directory|[\w./\\-]+\.(?:md|txt|docx|pdf|json|ts|tsx|js|jsx|py|html|css))\b/i.test(
+        text,
+      )
+    )
+      return false
     if (
       /\b(?:commit|push|fix|implement|edit|modify|patch|refactor|build|write|create|add|update|remove|delete)\b/i.test(
         text,

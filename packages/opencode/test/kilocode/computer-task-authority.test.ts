@@ -167,6 +167,27 @@ describe("Computer Use child authority", () => {
     expect(TaskAuthority.current("Review only, no edits: fix nothing", "Review only, no edits: fix nothing")).toBe(
       false,
     )
+    for (const request of [
+      "Write a summary of this file",
+      "Create a summary of the project code",
+      "Write a report explaining how to fix this bug",
+      "Write a report and explain how to fix this bug",
+      "Write a report about docs/readme.md",
+      "Write a summary of package.json",
+      "Write a summary and create a plan",
+      "Create a plan for the next release",
+      "Write me an email about the changes",
+    ]) {
+      expect(TaskAuthority.current(request, request)).toBe(false)
+    }
+    for (const request of [
+      "Write a summary in a file",
+      "Create a report at docs/report.md",
+      "Write a summary and fix this bug",
+      "Create a plan, then implement it",
+    ]) {
+      expect(TaskAuthority.current(request, request)).toBe(true)
+    }
     expect(() => TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, parent })).toThrow(
       "explicit current user request",
     )

@@ -19,6 +19,7 @@ import { DiffFull } from "../kilocode/snapshot/diff-full"
 import { KiloSnapshotTrack } from "../kilocode/snapshot/track"
 import { KiloSnapshotSeed } from "../kilocode/snapshot/seed"
 import { KiloSnapshotMaterialize } from "../kilocode/snapshot/materialize"
+import { KiloSnapshotTiming } from "../kilocode/snapshot/timing"
 import { present } from "../kilocode/snapshot/stage"
 import { internal } from "../kilocode/snapshot/internal"
 import { matches as verify, WorkspaceConflict } from "../kilocode/snapshot/verify"
@@ -138,10 +139,14 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const git = Effect.fnUntraced(
             function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
-              const result = yield* appProcess.run(
-                ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
-                { stdin: opts?.stdin },
-              )
+              const start = performance.now() // kilocode_change - measure only slow Git calls
+              // kilocode_change start
+              const result = yield* appProcess
+                .run(ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }), {
+                  stdin: opts?.stdin,
+                })
+                .pipe(Effect.ensuring(Effect.suspend(() => KiloSnapshotTiming.git(cmd, state.gitdir, start))))
+              // kilocode_change end
               return {
                 code: ChildProcessSpawner.ExitCode(result.exitCode),
                 text: result.stdout.toString("utf8"),
@@ -236,8 +241,8 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           const remove = (file: string) => fs.remove(file, { force: true }).pipe(Effect.orDie)
           // kilocode_change end
           // kilocode_change start - serialize snapshot repositories across CLI and extension processes
-          const locked = <A, R>(fx: Effect.Effect<A, never, R>) =>
-            lock(state.gitdir).withPermits(1)(flock.withLock(fx, `snapshot:${state.gitdir}`).pipe(Effect.orDie))
+          const locked = <A, R>(op: string, fx: Effect.Effect<A, never, R>) =>
+            KiloSnapshotTiming.lock({ op, gitdir: state.gitdir, sem: lock(state.gitdir), flock, effect: fx })
 
           // kilocode_change end
 
@@ -400,7 +405,10 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           })
 
           const materialize = Effect.fnUntraced(function* () {
-            yield* locked(KiloSnapshotMaterialize.run({ gitdir: state.gitdir, git, fs }).pipe(Effect.orDie)).pipe(
+            yield* locked(
+              "materialize",
+              KiloSnapshotMaterialize.run({ gitdir: state.gitdir, git, fs }).pipe(Effect.orDie),
+            ).pipe(
               Effect.timeout("5 minutes"),
               Effect.catchCause((cause) =>
                 Effect.logError("snapshot materialization failed", { cause: Cause.pretty(cause) }),
@@ -413,6 +421,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const cleanup = Effect.fnUntraced(function* () {
             return yield* locked(
+              "cleanup", // kilocode_change
               Effect.gen(function* () {
                 if (!(yield* enabled())) return
                 if (!(yield* exists(state.gitdir))) return
@@ -437,6 +446,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           const track = Effect.fnUntraced(function* (opts?: Parameters<Interface["track"]>[0]) {
             // kilocode_change end
             return yield* locked(
+              "track", // kilocode_change
               Effect.gen(function* () {
                 if (!(yield* enabled())) return
                 const existed = yield* exists(state.gitdir)
@@ -506,6 +516,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // kilocode_change start - pin review file scope to an immutable completed snapshot
           const patch = Effect.fnUntraced(function* (hash: string, to?: string) {
             return yield* locked(
+              "patch",
               Effect.gen(function* () {
                 if (!to) yield* add() // kilocode_change - a completed step must not re-stage another worker's later edit
                 const result = yield* git(
@@ -550,6 +561,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const restore = Effect.fnUntraced(function* (snapshot: string) {
             return yield* locked(
+              "restore", // kilocode_change
               Effect.gen(function* () {
                 // kilocode_change start - contaminated legacy snapshots must not overwrite live runtime data
                 if (stores.paths.length) {
@@ -594,11 +606,12 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 patches,
               )
             })
-          const matches = (patches: readonly Patch[]) => locked(current(patches))
+          const matches = (patches: readonly Patch[]) => locked("matches", current(patches))
           // kilocode_change end
           const revert = Effect.fnUntraced(function* (patches: Patch[], expected?: readonly Patch[]) {
             // kilocode_change
             return yield* locked(
+              "revert", // kilocode_change
               Effect.gen(function* () {
                 // kilocode_change start - validate every checkpoint before mutating workspace files
                 if (patches.some((item) => item.files.some(stores.contains)))
@@ -746,6 +759,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const diff = Effect.fnUntraced(function* (hash: string) {
             return yield* locked(
+              "diff", // kilocode_change
               Effect.gen(function* () {
                 yield* add()
                 const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
@@ -766,6 +780,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
             return yield* locked(
+              "diffFull", // kilocode_change
               Effect.gen(function* () {
                 type Row = {
                   file: string
@@ -1014,6 +1029,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // kilocode_change start - authoritative full-content detail for editor diff tabs
           const diffFile = Effect.fnUntraced(function* (from: string, to: string, file: string) {
             return yield* locked(
+              "diffFile",
               DiffFull.detail(
                 {
                   diff: (cmd) => git([...quote, ...args(cmd)], { cwd: state.directory }),

@@ -5,6 +5,7 @@ import { capture as captureGitState, apply as applyGitState, type GitSnapshot } 
 import { getErrorMessage } from "../kilo-provider-utils"
 import { PLATFORM } from "./constants"
 import { recordForkHandoff } from "./fork-handoff"
+import { logAbort } from "../kilo-provider/abort"
 
 export interface ContinueContext {
   root: string
@@ -31,6 +32,7 @@ export type StepResult<T> = { ok: true; value: T } | { ok: false; error: string 
 export async function abortSession(ctx: ContinueContext, sessionId: string): Promise<void> {
   try {
     const client = ctx.getClient()
+    logAbort(sessionId, "host-continue-in-worktree")
     await client.session.abort({ sessionID: sessionId }).catch((err) => {
       ctx.log("Session abort failed (may already be idle):", getErrorMessage(err))
     })

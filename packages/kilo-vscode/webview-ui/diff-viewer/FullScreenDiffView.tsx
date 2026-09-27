@@ -71,6 +71,7 @@ type DiffStyle = "unified" | "split"
 /** Well-known diff source notices → i18n keys (mirrors the standalone viewer). */
 const DIFF_NOTICE_KEYS: Record<string, string> = {
   "snapshots-disabled": "diffViewer.notice.snapshotsDisabled",
+  "review-unavailable": "diffViewer.notice.reviewUnavailable",
 }
 
 interface FullScreenDiffViewProps {

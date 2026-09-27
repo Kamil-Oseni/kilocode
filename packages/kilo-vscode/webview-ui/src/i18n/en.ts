@@ -1315,6 +1315,8 @@ export const dict = {
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":
     "Snapshots are disabled for this repository. Please edit your configuration files in order to display session changes.",
+  "diffViewer.notice.reviewUnavailable":
+    "Review is unavailable because the saved snapshots do not match the current files. Reconcile the files before reviewing.",
 
   "diffViewer.baseBranch.auto": "Default",
   "diffViewer.baseBranch.default": "Default",

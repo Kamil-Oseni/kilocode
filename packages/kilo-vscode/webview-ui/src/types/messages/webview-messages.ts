@@ -43,6 +43,7 @@ export interface SendMessageRequest {
 export interface AbortRequest {
   type: "abort"
   sessionID: string
+  source: "user-stop" | "user-escape" | "user-retry-cancel"
 }
 
 // raya_change start - Milestone A goal state controls

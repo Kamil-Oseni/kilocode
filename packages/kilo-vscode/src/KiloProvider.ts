@@ -100,7 +100,7 @@ import {
 import { childID } from "./kilo-provider/task-session"
 import { VisibleTaskStreams } from "./kilo-provider/visible-task-streams"
 import { handleNetworkEvent, clearNetworkWaits } from "./kilo-provider/network"
-import { SessionAbort } from "./kilo-provider/abort"
+import { SessionAbort, webviewAbortSource, type AbortSource } from "./kilo-provider/abort"
 import {
   buildAutocompleteSettingsMessage,
   validAutocompleteSetting,
@@ -3049,13 +3049,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async handleSessionControl(message: {
     type: string
     sessionID?: string
+    source?: unknown
     messageID?: string
     partID?: string
     text?: string
   }): Promise<boolean> {
     if (message.type === "abort") {
       this.cancelRetry(message.sessionID ?? "")
-      await this.handleAbort(message.sessionID)
+      await this.handleAbort(message.sessionID, webviewAbortSource(message.source))
       return true
     }
     if (message.type === "deleteMessage") {
@@ -4641,7 +4642,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async handleCostAlertResponse(sid: string, limit: number, response: MaxCostChoice): Promise<void> {
     this.activeAlerts.delete(sid)
     this.costs.resolve(sid, response, limit)
-    if (response !== "continue") await this.handleAbort(sid)
+    if (response !== "continue") await this.handleAbort(sid, "cost-alert-stop")
     this.postMessage({ type: "sessionCostAlertResolved", sessionID: sid, limit })
   }
 
@@ -5221,19 +5222,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.closedDrafts.add(draft)
       if (sid) targets.add(sid)
     }
-    await Promise.all([...targets].map((sid) => this.stopSession(sid)))
+    await Promise.all([...targets].map((sid) => this.stopSession(sid, "host-session-management")))
   }
 
-  private stopSession(sid: string): Promise<boolean> {
+  private stopSession(sid: string, source: AbortSource): Promise<boolean> {
     this.cancelRetry(sid)
     const client = this.client
     if (!client) return Promise.resolve(false)
-    return this.aborts.stop(client, sid, this.getWorkspaceDirectory(sid))
+    return this.aborts.stop(client, sid, this.getWorkspaceDirectory(sid), source)
   }
 
-  private async handleAbort(sessionID?: string): Promise<void> {
+  private async handleAbort(sessionID?: string, source: AbortSource = "unknown-webview"): Promise<void> {
     const sid = sessionID || this.currentSession?.id
-    if (!sid || !(await this.stopSession(sid))) return
+    if (!sid || !(await this.stopSession(sid, source))) return
     this.sessionStatusMap.set(sid, "idle")
     this.streams.flush(sid)
     this.postMessage({ type: "sessionTurnClosed", sessionID: sid, reason: "interrupted" })

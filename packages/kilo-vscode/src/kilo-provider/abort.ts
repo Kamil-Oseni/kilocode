@@ -1,6 +1,24 @@
 import type { KiloClient, SessionStatus } from "@kilocode/sdk/v2/client"
 import { sameDirectory } from "../kilo-provider-utils"
 
+export type AbortSource =
+  | "user-stop"
+  | "user-escape"
+  | "user-retry-cancel"
+  | "cost-alert-stop"
+  | "host-session-management"
+  | "host-continue-in-worktree"
+  | "unknown-webview"
+
+export function logAbort(sessionID: string, source: AbortSource) {
+  console.info("[Kilo New] Session abort requested", { sessionID, source })
+}
+
+export function webviewAbortSource(value: unknown): AbortSource {
+  if (value === "user-stop" || value === "user-escape" || value === "user-retry-cancel") return value
+  return "unknown-webview"
+}
+
 export class SessionAbort {
   private active = new Map<string, Set<string>>()
 
@@ -27,11 +45,11 @@ export class SessionAbort {
     this.observe(sessionID, status, dir)
   }
 
-  async stop(client: KiloClient, sessionID: string, fallback: string) {
+  async stop(client: KiloClient, sessionID: string, fallback: string, source: AbortSource) {
     const known = this.active.has(sessionID)
     const dirs = [...(this.active.get(sessionID) ?? [])]
     if (!dirs.some((dir) => sameDirectory(dir, fallback))) dirs.push(fallback)
-    const results = await Promise.allSettled(dirs.map((dir) => abortSession({ client, sessionID, dir })))
+    const results = await Promise.allSettled(dirs.map((dir) => abortSession({ client, sessionID, dir, source })))
     const failures = results.flatMap((result, index) =>
       result.status === "rejected" ? [{ dir: dirs[index], error: result.reason }] : [],
     )
@@ -65,6 +83,7 @@ export class SessionAbort {
   }
 }
 
-export async function abortSession(input: { client: KiloClient; sessionID: string; dir: string }) {
+export async function abortSession(input: { client: KiloClient; sessionID: string; dir: string; source: AbortSource }) {
+  logAbort(input.sessionID, input.source)
   await input.client.session.abort({ sessionID: input.sessionID, directory: input.dir }, { throwOnError: true })
 }

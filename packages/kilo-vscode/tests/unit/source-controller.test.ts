@@ -434,6 +434,33 @@ describe("SourceController.reactivate", () => {
 })
 
 describe("SourceController.refresh", () => {
+  it("clears stale session changes on fetch failure and clears the notice after recovery", async () => {
+    let failed = false
+    const source: DiffSource = {
+      descriptor: SESSION_DESC,
+      async fetch() {
+        if (failed) throw new Error("ReviewConflict")
+        return { diffs: [{ file: "old.txt" } as never] }
+      },
+    }
+    const { controller, posted } = make({ "session:s1": source })
+    controller.setContext({ workspaceRoot: "/repo", sessionId: "s1" })
+    await controller.activate("session:s1", { poll: false })
+    posted.length = 0
+
+    failed = true
+    await controller.refresh()
+    expect(byType(posted, "diffViewer.diffs").at(-1)?.diffs).toEqual([])
+    expect(byType(posted, "diffViewer.notice").at(-1)?.notice).toBe("review-unavailable")
+
+    posted.length = 0
+    failed = false
+    await controller.refresh()
+    expect(byType(posted, "diffViewer.diffs").at(-1)?.diffs).toEqual([{ file: "old.txt" }])
+    expect(byType(posted, "diffViewer.notice").at(-1)?.notice).toBeUndefined()
+    controller.stop()
+  })
+
   it("runs a one-shot active source fetch without restarting polling", async () => {
     let fetches = 0
     const source: DiffSource = {

@@ -272,7 +272,7 @@ interface SessionContextValue {
     origin?: string | null,
     overrides?: { agent?: string; model?: string; variant?: string },
   ) => void
-  abort: () => void
+  abort: (source?: "user-stop" | "user-escape") => void
   compact: () => void
   respondToPermission: (
     permissionId: string,
@@ -1678,7 +1678,7 @@ export const SessionProvider: ParentComponent = (props) => {
     message?: string,
     next?: number,
   ) {
-    const shouldAbort = aborts.update(sessionID, newStatus)
+    const source = aborts.update(sessionID, newStatus)
     confirmSubmissions(sessionID)
     const prev = statusMap[sessionID] ?? { type: "idle" }
     const info: SessionStatusInfo =
@@ -1706,7 +1706,7 @@ export const SessionProvider: ParentComponent = (props) => {
       // messages themselves will be reconciled on the next messagesLoaded.
       pendingOptimistic.delete(sessionID)
     }
-    if (shouldAbort) vscode.postMessage({ type: "abort", sessionID })
+    if (source) vscode.postMessage({ type: "abort", sessionID, source })
   }
 
   function handlePermissionRequest(permission: PermissionRequest) {
@@ -2419,7 +2419,7 @@ export const SessionProvider: ParentComponent = (props) => {
     })
   }
 
-  function abort() {
+  function abort(source: "user-stop" | "user-escape" = "user-stop") {
     const sessionID = currentSessionID()
     const scope = sessionID ?? draftSessionID()
     if (!scope) {
@@ -2427,11 +2427,11 @@ export const SessionProvider: ParentComponent = (props) => {
       return
     }
     const messageID = [...pendingSubmissions].reverse().find(([, sid]) => sid === scope)?.[0]
-    if (!aborts.request(scope, status(), messageID) || !sessionID) return
-
+    if (!aborts.request(scope, status(), messageID, source) || !sessionID) return
     vscode.postMessage({
       type: "abort",
       sessionID,
+      source,
     })
   }
 

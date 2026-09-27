@@ -127,7 +127,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || (!session.submitting() && session.status() === "idle") || e.defaultPrevented) return
       e.preventDefault()
-      session.abort()
+      session.abort("user-escape")
     }
     document.addEventListener("keydown", handler)
     onCleanup(() => document.removeEventListener("keydown", handler))

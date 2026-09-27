@@ -1797,7 +1797,7 @@ export interface DiffViewerCapabilitiesMessage {
  * Well-known notice kinds surfaced by a diff source. The webview maps these
  * to translated user-facing messages. `undefined` clears any active notice.
  */
-export type DiffViewerNotice = "snapshots-disabled"
+export type DiffViewerNotice = "snapshots-disabled" | "review-unavailable"
 
 export interface DiffViewerNoticeMessage {
   type: "diffViewer.notice"

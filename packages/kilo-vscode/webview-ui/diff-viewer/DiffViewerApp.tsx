@@ -29,6 +29,7 @@ import { withReviewCounts } from "./review-hunks" // raya_change - repair zeroed
 
 const NOTICE_KEYS: Record<DiffViewerNotice, string> = {
   "snapshots-disabled": "diffViewer.notice.snapshotsDisabled",
+  "review-unavailable": "diffViewer.notice.reviewUnavailable",
 }
 
 type DiffStyle = "unified" | "split"

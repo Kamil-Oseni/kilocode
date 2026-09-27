@@ -206,7 +206,7 @@ export class SourceController {
       const result = await source.fetch()
       if (this.epoch !== epoch) return false
 
-      if (result.notice !== undefined) {
+      if (result.notice !== undefined || source.descriptor.type === "session") {
         this.send(this.messages.notice?.(source, result.notice))
       }
 
@@ -219,10 +219,11 @@ export class SourceController {
       return !result.stopPolling
     } catch (err) {
       if (this.epoch !== epoch) return false
-      // Errors are swallowed for the webview (it just needs the loading
-      // indicator cleared below), but we always log so initial-fetch
-      // failures leave a trace in the Extension Host output — previously
-      // they were silent and invisible in production.
+      if (source.descriptor.type === "session") {
+        this.lastHash = hashFileDiffs([])
+        this.send(this.messages.diffs(source, []))
+        this.send(this.messages.notice?.(source, "review-unavailable"))
+      }
       console.log("[Raya] SourceController.fetch error", { initial, err })
       return true
     } finally {

@@ -28,7 +28,7 @@ export interface DiffSourceDescriptor {
  * Well-known notice kinds that a source can surface to the diff viewer.
  * The webview maps these to translated messages.
  */
-export type DiffSourceNotice = "snapshots-disabled"
+export type DiffSourceNotice = "snapshots-disabled" | "review-unavailable"
 
 export interface DiffSourceFetch {
   diffs: DiffFile[]

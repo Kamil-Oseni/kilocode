@@ -1061,7 +1061,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (e.key === "Escape" && isBusy()) {
       e.preventDefault()
       e.stopPropagation()
-      session.abort()
+      session.abort("user-escape")
       return
     }
     if (isEnterKeyCommitNotIme(e) && !e.shiftKey) {

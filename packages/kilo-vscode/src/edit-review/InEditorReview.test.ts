@@ -23,6 +23,7 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
     defer: false,
     reviewed: undefined as string | undefined,
     generation: undefined as string | undefined,
+    failed: false,
   }
   const reads: ((response: Response) => void)[] = []
   const requests: { path: string; body: unknown; resolve: (response: Response) => void }[] = []
@@ -67,6 +68,8 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
           },
         ])
       if (request.method === "GET" && state.defer) return new Promise<Response>((resolve) => reads.push(resolve))
+      if (request.method === "GET" && state.failed)
+        return Response.json({ _tag: "ReviewConflict", message: "Review unavailable" }, { status: 409 })
       if (request.method === "GET")
         return Response.json([
           {
@@ -106,6 +109,18 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
 }
 
 describe("in-editor review acknowledgements", () => {
+  test("clears stale lenses when review fetch fails and restores them after recovery", async () => {
+    const fixture = setup()
+    await fixture.review.refresh()
+    expect(await fixture.read()).toHaveLength(3)
+    fixture.state.failed = true
+    await fixture.review.refresh()
+    expect(await fixture.read()).toHaveLength(0)
+    fixture.state.failed = false
+    await fixture.review.refresh()
+    expect(await fixture.read()).toHaveLength(3)
+  })
+
   test("a later patch generation reopens identical content and invalidates old commands", async () => {
     const fixture = setup()
     fixture.state.generation = "first:patch"
@@ -349,7 +364,9 @@ describe("in-editor review acknowledgements", () => {
     const document = { uri: ghost!, lineCount: 2 } as vscode.TextDocument
     expect((await fixture.read(document))[0]?.command?.title).toContain("Deleted file")
     expect((await fixture.read(document))[2]?.command?.title).toBe("$(discard) Undo file")
-    expect(await fixture.contents()?.provideTextDocumentContent(ghost!, {} as vscode.CancellationToken)).toBe("old\nlines")
+    expect(await fixture.contents()?.provideTextDocumentContent(ghost!, {} as vscode.CancellationToken)).toBe(
+      "old\nlines",
+    )
   })
 
   test("ghost identity is immutable across sessions and stale controls cannot act on the replacement", async () => {

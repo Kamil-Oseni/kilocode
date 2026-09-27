@@ -102,7 +102,11 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       ranges,
       anchors,
       revision: fingerprint(item),
-      summary: renamed ? "Renamed file" : deleted ? "Deleted file" : `${item.additions} added, ${item.deletions} removed in file`,
+      summary: renamed
+        ? "Renamed file"
+        : deleted
+          ? "Deleted file"
+          : `${item.additions} added, ${item.deletions} removed in file`,
     }
   }
 
@@ -171,7 +175,13 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
           return undefined
         })
       if (disposed || ticket !== generation || next !== deps.session()) return
-      if (!res?.data) return
+      if (!res?.data) {
+        reviews.clear()
+        dismissed.clear()
+        applyAll()
+        changes.fire()
+        return
+      }
       for (const item of res.data) {
         const review = build(item, dir)
         if (!review) continue

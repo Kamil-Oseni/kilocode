@@ -1050,7 +1050,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // kilocode_change - key the turn guard on the real directory. Non-git projects share
           // worktree "/", so one dismissed/slow snapshot would otherwise poison tracking for every
           // plain folder (dropping patch parts -> Undo no-op and no in-editor lenses).
-          const guard = trackState(ctx.worktree === "/" ? ctx.directory : ctx.worktree)
+          const guard = trackState(KiloSnapshotTrack.key(ctx))
           return yield* KiloSnapshotTrack.protect({
             inner: KiloSnapshotTrack.wrap({
               inner: InstanceState.useEffect(state, (s) => s.track(opts)),
@@ -1066,7 +1066,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
         }),
         patch: Effect.fn("Snapshot.patch")(function* (hash: string, to?: string) {
           const ctx = yield* InstanceState.context
-          const guard = trackState(ctx.worktree)
+          const guard = trackState(KiloSnapshotTrack.key(ctx)) // kilocode_change - non-git directories must not share a patch guard
           return yield* KiloSnapshotTrack.protect({
             inner: InstanceState.useEffect(state, (s) => s.patch(hash, to)), // kilocode_change
             state: guard,

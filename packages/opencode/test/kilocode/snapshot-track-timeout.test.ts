@@ -135,11 +135,12 @@ describe("KiloSnapshotTrack.protect", () => {
 
   test("keeps circuit state isolated by directory", () => {
     const states = KiloSnapshotTrack.makeStates()
-    const first = states("/repo/a")
+    const first = states(KiloSnapshotTrack.key({ directory: "/repo/a", worktree: "/" }))
     first.disabledForSession = true
 
-    expect(states("/repo/a")).toBe(first)
-    expect(states("/repo/b").disabledForSession).toBe(false)
+    expect(states(KiloSnapshotTrack.key({ directory: "/repo/a", worktree: "/" }))).toBe(first)
+    expect(states(KiloSnapshotTrack.key({ directory: "/repo/b", worktree: "/" })).disabledForSession).toBe(false)
+    expect(KiloSnapshotTrack.key({ directory: "/repo/child", worktree: "/repo" })).toBe("/repo")
   })
 })
 

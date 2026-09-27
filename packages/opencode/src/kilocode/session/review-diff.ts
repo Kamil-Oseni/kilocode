@@ -6,6 +6,7 @@ import type { Snapshot } from "@/snapshot"
 import type { Storage } from "@/storage/storage"
 import { boundaries, canonical } from "./review-boundaries"
 import { project } from "./review-patches"
+import { ReviewConflict } from "./review-revision"
 
 type Span = { file: string; start: string; finish: string; first: string; last: string }
 
@@ -33,6 +34,20 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
     for (const message of messages) {
       let start: string | undefined
       let finish: string | undefined
+      const blind = message.parts.some(
+        (part) => part.type === "tool" && ["bash", "edit", "write", "apply_patch", "multiedit"].includes(part.tool),
+      )
+      if (
+        blind &&
+        (!message.parts.some((part) => part.type === "step-start" && !!part.snapshot) ||
+          !message.parts.some((part) => part.type === "step-finish" && !!part.snapshot))
+      )
+        return yield* Effect.die(
+          new ReviewConflict({
+            message:
+              "A file operation ran without a completed snapshot. Review is unavailable until the files are reconciled.",
+          }),
+        )
       for (const part of message.parts) {
         if (part.type === "step-start") {
           start = part.snapshot
@@ -68,11 +83,21 @@ export const overlay = Effect.fn("ReviewDiff.overlay")(function* (
   diffs: readonly Snapshot.FileDiff[],
 ) {
   const owner = yield* sessions.get(sessionID).pipe(Effect.orDie)
+  const kept = yield* boundaries(storage, sessions, sessionID)
   const scope = yield* spans(snap, storage, sessions, sessionID)
   const result = new Map(
-    diffs.filter((diff) => !!diff.file).map((diff) => [canonical(diff.file!, owner.directory), diff]),
+    diffs
+      .filter((diff) => !!diff.file && !kept[canonical(diff.file, owner.directory)])
+      .map((diff) => [canonical(diff.file!, owner.directory), diff]),
   )
   for (const [key, span] of scope) {
+    if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }])))
+      return yield* Effect.die(
+        new ReviewConflict({
+          message:
+            "The workspace no longer matches the reviewed snapshot. Refresh or reconcile the files before reviewing.",
+        }),
+      )
     const batch = yield* snap.diffFull(span.start, span.finish)
     const diff = batch.find((item) => item.file && canonical(item.file, owner.directory) === key)
     if (diff) result.set(key, diff)
@@ -89,8 +114,19 @@ export const detail = Effect.fn("ReviewDiff.detail")(function* (
   file: string,
 ) {
   const owner = yield* sessions.get(sessionID).pipe(Effect.orDie)
-  const span = (yield* spans(snap, storage, sessions, sessionID)).get(canonical(file, owner.directory))
-  if (!span) return { matched: false as const }
+  const key = canonical(file, owner.directory)
+  const span = (yield* spans(snap, storage, sessions, sessionID)).get(key)
+  if (!span) {
+    const kept = yield* boundaries(storage, sessions, sessionID)
+    return kept[key] ? { matched: true as const, diff: undefined } : { matched: false as const }
+  }
+  if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }])))
+    return yield* Effect.die(
+      new ReviewConflict({
+        message:
+          "The workspace no longer matches the reviewed snapshot. Refresh or reconcile the files before reviewing.",
+      }),
+    )
   return {
     matched: true as const,
     diff: yield* snap.diffFile(span.start, span.finish, path.relative(owner.directory, span.file)),

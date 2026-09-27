@@ -160,6 +160,10 @@ export namespace KiloSnapshotTrack {
     }
   }
 
+  /** Non-Git contexts report "/" as their shared worktree; guard the real folder. */
+  export const key = (ctx: { directory: string; worktree: string }) =>
+    ctx.worktree === "/" ? ctx.directory : ctx.worktree
+
   export interface ProtectInput<A> {
     readonly inner: Effect.Effect<A>
     readonly state: State

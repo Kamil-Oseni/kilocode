@@ -2,9 +2,10 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Global } from "@opencode-ai/core/global"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -20,7 +21,7 @@ import { Storage } from "@/storage/storage"
 import { revision } from "@/kilocode/session/review-revision"
 import { ReviewGate } from "@/kilocode/session/review-gate"
 import { BackgroundJob } from "@/background/job"
-import { provideInstance, provideTmpdirInstance } from "../../fixture/fixture"
+import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
 
 const env = LayerNode.compile(
@@ -38,6 +39,251 @@ const env = LayerNode.compile(
 )
 const it = testEffect(env)
 const guarded = process.platform === "win32" ? it.live.skip : it.live
+
+it.live(
+  "refuses a foreign child worktree review rather than aliasing the parent's same-named file",
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const summary = yield* SessionSummary.Service
+        const revert = yield* SessionRevert.Service
+        const snapshot = yield* Snapshot.Service
+        const storage = yield* Storage.Service
+        const parent = yield* sessions.create({})
+        const branch = path.join(dir, "branch")
+        yield* Effect.promise(async () => {
+          const proc = Bun.spawn(["git", "worktree", "add", "--detach", branch], {
+            cwd: dir,
+            stdout: "ignore",
+            stderr: "pipe",
+          })
+          const failure = await new Response(proc.stderr).text()
+          if ((await proc.exited) !== 0) throw new Error(failure)
+        })
+        const own = path.join(dir, "notes.txt")
+        const file = path.join(branch, "notes.txt")
+        yield* Effect.promise(() => fs.writeFile(own, "parent safe"))
+        const child = yield* Effect.gen(function* () {
+          const session = yield* sessions.create({ parentID: parent.id })
+          const providerID = ProviderV2.ID.make("test")
+          const modelID = ModelV2.ID.make("test")
+          const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          const user = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "user",
+            agent: "default",
+            model: { providerID, modelID },
+            time: { created: Date.now() },
+          })
+          yield* Effect.promise(() => fs.writeFile(file, "child original"))
+          const start = yield* snapshot.track({ snapshotInitialization: "wait" })
+          if (!start) throw new Error("Missing child start snapshot")
+          yield* Effect.promise(() => fs.writeFile(file, "child edited"))
+          const finish = yield* snapshot.track({ snapshotInitialization: "wait" })
+          if (!finish) throw new Error("Missing child finish snapshot")
+          const assistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "assistant",
+            parentID: user.id,
+            mode: "default",
+            agent: "default",
+            path: { cwd: branch, root: branch },
+            cost: 0,
+            tokens,
+            modelID,
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          const patch = yield* snapshot.patch(start, finish)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: session.id,
+            type: "step-start",
+            snapshot: start,
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: session.id,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: finish,
+            cost: 0,
+            tokens,
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: session.id,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+          yield* storage.write(["session_diff", session.id], yield* snapshot.diffFull(start, finish))
+          return session
+        }).pipe(provideInstance(branch))
+        expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id })))).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              revert.discardChanges({ sessionID: parent.id, expected: {}, requestID: "foreign-parent-review" }),
+            ),
+          ),
+        ).toBe(true)
+        expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent safe")
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("child edited")
+        yield* Effect.gen(function* () {
+          const diff = (yield* summary.diff({ sessionID: child.id })).find((item) => item.file === "notes.txt")
+          if (!diff) throw new Error("Missing child-local review")
+          yield* revert.discardChanges({
+            sessionID: child.id,
+            files: [file],
+            expected: { [file]: revision(diff) },
+            requestID: "child-local-undo",
+          })
+          expect(yield* summary.diff({ sessionID: child.id })).toEqual([])
+        }).pipe(provideInstance(branch))
+        expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent safe")
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("child original")
+        expect(yield* summary.diff({ sessionID: parent.id })).toEqual([])
+        const messages = yield* sessions.messages({ sessionID: child.id })
+        const original = messages.find((message) => message.info.role === "assistant")
+        if (!original || original.info.role !== "assistant") throw new Error("Missing child assistant")
+        const report = yield* sessions.updateMessage({ ...original.info, id: MessageID.ascending() })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: report.id,
+          sessionID: child.id,
+          type: "text",
+          text: "The child-local Undo is complete.",
+        })
+        expect(yield* summary.diff({ sessionID: parent.id })).toEqual([])
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: report.id,
+          sessionID: child.id,
+          type: "tool",
+          tool: "write",
+          callID: "foreign-uncaptured-write",
+          state: {
+            status: "completed",
+            input: { filePath: file, content: "unknown" },
+            output: "",
+            metadata: {},
+            title: "Uncaptured child write",
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id })))).toBe(true)
+        expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent safe")
+      }),
+    { git: true },
+  ),
+  90_000,
+)
+
+it.live(
+  "recovers sequential Undo after an OS process restart without replaying an unknown action",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = yield* tmpdirScoped({ git: true })
+      const control = path.join(root, "control.json")
+      const file = path.join(dir, "notes.txt")
+      const fixture = fileURLToPath(new URL("./fixtures/review-restart.ts", import.meta.url))
+      const result = Schema.decodeUnknownSync(
+        Schema.Struct({
+          pid: Schema.Number,
+          bytes: Schema.String,
+          refused: Schema.optional(Schema.Boolean),
+          final: Schema.optional(Schema.String),
+          detail: Schema.optional(
+            Schema.Array(
+              Schema.Struct({ before: Schema.optional(Schema.String), after: Schema.optional(Schema.String) }),
+            ),
+          ),
+          remaining: Schema.optional(Schema.Array(Schema.Unknown)),
+        }),
+      )
+      const launch = (mode: string) =>
+        Bun.spawn([process.execPath, fixture, mode, dir, control], {
+          stdout: "pipe",
+          stderr: "pipe",
+          env: {
+            ...process.env,
+            XDG_DATA_HOME: path.join(root, "data"),
+            XDG_STATE_HOME: path.join(root, "state"),
+            XDG_CACHE_HOME: path.join(root, "cache"),
+            XDG_CONFIG_HOME: path.join(root, "config"),
+            KILO_TEST_HOME: path.join(root, "home"),
+            KILO_DB: path.join(root, "review.sqlite"),
+          },
+        })
+      const first = yield* Effect.promise(async () => {
+        const proc = launch("seed")
+        const reader = proc.stdout.getReader()
+        const timeout = setTimeout(() => proc.kill(), 60_000)
+        try {
+          const chunks: string[] = []
+          while (!/REVIEW_READY [^\n]*\n/.test(chunks.join(""))) {
+            const next = await reader.read()
+            if (next.done) throw new Error(await new Response(proc.stderr).text())
+            chunks.push(new TextDecoder().decode(next.value))
+          }
+          const line = chunks
+            .join("")
+            .split("\n")
+            .find((item) => item.startsWith("REVIEW_READY "))
+          if (!line) throw new Error("Missing stopped process evidence")
+          return result(JSON.parse(line.slice("REVIEW_READY ".length)))
+        } finally {
+          clearTimeout(timeout)
+          proc.kill()
+          await proc.exited
+          reader.releaseLock()
+        }
+      })
+      expect(first.bytes).toBe("B")
+      const run = (mode: string) =>
+        Effect.promise(async () => {
+          const proc = launch(mode)
+          const timeout = setTimeout(() => proc.kill(), 60_000)
+          try {
+            const [output, failure, code] = await Promise.all([
+              new Response(proc.stdout).text(),
+              new Response(proc.stderr).text(),
+              proc.exited,
+            ])
+            if (code !== 0) throw new Error(failure)
+            const line = output.split("\n").find((item) => item.startsWith("REVIEW_RESULT "))
+            if (!line) throw new Error(`Missing restarted process evidence: ${output}`)
+            return result(JSON.parse(line.slice("REVIEW_RESULT ".length)))
+          } finally {
+            clearTimeout(timeout)
+            if (proc.exitCode === null) proc.kill()
+            await proc.exited
+          }
+        })
+      yield* Effect.promise(() => fs.writeFile(file, "manual"))
+      const unknown = yield* run("unknown")
+      expect(unknown.pid).not.toBe(first.pid)
+      expect(unknown).toMatchObject({ refused: true, bytes: "manual" })
+      expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("manual")
+      yield* Effect.promise(() => fs.writeFile(file, "B"))
+      const resumed = yield* run("resume")
+      expect(resumed.pid).not.toBe(first.pid)
+      expect(resumed.pid).not.toBe(unknown.pid)
+      expect(resumed).toMatchObject({ bytes: "B", final: "A", remaining: [] })
+      expect(resumed.detail?.[0]).toMatchObject({ before: "A", after: "B" })
+      expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("A")
+    }),
+  180_000,
+)
 
 const setup = Effect.fnUntraced(function* (dir: string, deleted = false) {
   const sessions = yield* Session.Service
@@ -440,8 +686,8 @@ it.live(
           expected: { [one.file!]: revision(one) },
         })
         expect(
-          (yield* summary.diff({ sessionID: state.session.id })).find((diff) => diff.file === "created.txt")?.reviewed,
-        ).toBe(revision(one))
+          (yield* summary.diff({ sessionID: state.session.id })).find((diff) => diff.file === "created.txt"),
+        ).toBeUndefined()
 
         yield* Effect.promise(() => fs.writeFile(file, "later edit"))
         const second = yield* state.snapshot.track()
@@ -547,10 +793,14 @@ describe("kept boundary integrity", () => {
             const child = yield* state.sessions.create({ parentID: state.session.id })
             yield* state.sessions.updateMessage({ ...state.user, id: MessageID.ascending(), sessionID: child.id })
             let done = false
+            const summary = yield* SessionSummary.Service
+            const expected = Object.fromEntries(
+              (yield* summary.diff({ sessionID: state.session.id })).map((diff) => [diff.file!, revision(diff)]),
+            )
             const operation =
               action === "remove"
                 ? state.sessions.remove(state.session.id).pipe(Effect.orDie)
-                : state.revert[action]({ sessionID: state.session.id, expected: {} }).pipe(Effect.asVoid, Effect.orDie)
+                : state.revert[action]({ sessionID: state.session.id, expected }).pipe(Effect.asVoid, Effect.orDie)
             const pending = yield* operation.pipe(
               Effect.tap(() =>
                 Effect.sync(() => {
@@ -1617,8 +1867,25 @@ describe("files-only discard (Undo all)", () => {
             time: { created: Date.now() },
             finish: "end_turn",
           })
-          const commit = (hash: string, files: string[]) =>
-            sessions.updatePart({
+          const commit = Effect.fnUntraced(function* (hash: string, files: string[]) {
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "step-start",
+              snapshot: hash,
+            })
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "step-finish",
+              snapshot: yield* snapshot.track(),
+              reason: "stop",
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            })
+            yield* sessions.updatePart({
               id: PartID.ascending(),
               messageID: assistant.id,
               sessionID: session.id,
@@ -1626,6 +1893,7 @@ describe("files-only discard (Undo all)", () => {
               hash,
               files,
             })
+          })
 
           // Edit 1: create the file with "Welcome".
           const base0 = yield* snapshot.track()

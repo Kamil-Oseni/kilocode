@@ -9,7 +9,7 @@ import { appendSessionDiffs, readSessionDiffBase } from "@/kilocode/session-port
 import { Storage } from "@/storage/storage" // kilocode_change
 import { Config } from "@/config/config"
 import { reviewed, ReviewDiff } from "@/kilocode/session/review-state" // kilocode_change - persisted review acceptance
-import { detail as reviewDetail, overlay as reviewOverlay } from "@/kilocode/session/review-diff" // kilocode_change
+import { detail as reviewDetail, overlay as reviewOverlay, provenance } from "@/kilocode/session/review-diff" // kilocode_change
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -191,6 +191,7 @@ const layer = Layer.effect(
       // kilocode_change end
       // kilocode_change start - retain cumulative diffs for legacy TUI and VS Code consumers
       if (!input.messageID) {
+        const owner = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
         const normalize = (items: Snapshot.FileDiff[]) =>
           items.map((item) => {
             const file = item.file === undefined ? undefined : unquoteGitPath(item.file)
@@ -232,7 +233,12 @@ const layer = Layer.effect(
           if (!id) break
           for (const kid of yield* sessions.children(id)) {
             queue.push(kid.id)
-            fold(normalize(yield* readStored(kid.id)))
+            const stored = normalize(yield* readStored(kid.id))
+            fold(
+              kid.directory === owner.directory
+                ? stored
+                : provenance(stored, yield* sessions.messages({ sessionID: kid.id }).pipe(Effect.orDie)),
+            )
           }
         }
         const diffs = yield* reviewOverlay(snapshot, storage, sessions, input.sessionID, [...merged.values()]) // kilocode_change

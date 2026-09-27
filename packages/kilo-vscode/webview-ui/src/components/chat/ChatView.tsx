@@ -198,6 +198,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     return session.reviewStats() ?? details
   })
   const workspace = () => revision()?.session === id() && revision()?.source === "workspace"
+  const missing = () => !workspace() && !ready(id(), revision())
 
   const changeKey = () => {
     const sid = id()
@@ -299,6 +300,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   }
 
   const changesTooltip = () => {
+    if (missing()) return "Review details are unavailable. Open the changes view for the current status."
     const next = stats()
     if (!next?.files) return language.t("sidebar.session.showChanges.tooltip.empty")
     return (
@@ -529,11 +531,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </Show>
           <Show when={canReviewChanges(hasChat)}>
             <SessionReviewCluster
-              files={stats()?.files ?? 0}
-              additions={stats()?.additions ?? 0}
-              deletions={stats()?.deletions ?? 0}
+              files={missing() ? 0 : (stats()?.files ?? 0)}
+              additions={missing() ? 0 : (stats()?.additions ?? 0)}
+              deletions={missing() ? 0 : (stats()?.deletions ?? 0)}
               pending={!!pending()}
-              missing={!workspace() && !ready(id(), revision())}
+              missing={missing()}
               workspace={!!workspace()}
               loading={waiting() || session.status() !== "idle"}
               discarding={discarding()}

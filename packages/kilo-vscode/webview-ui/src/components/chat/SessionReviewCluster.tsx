@@ -49,7 +49,7 @@ export const SessionReviewCluster: Component<{
         Workspace changes. Keep and Undo aren't available here.
       </span>
     </Show>
-    <Show when={props.files > 0 && props.missing && !props.workspace}>
+    <Show when={props.missing && !props.workspace}>
       <span class="session-review-status" role="status">
         {props.loading ? "Checking review details" : "Review details unavailable"}
       </span>

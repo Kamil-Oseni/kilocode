@@ -1002,6 +1002,8 @@ const layer = Layer.effect(
         KilocodeDefaultPlugins.apply(result, { disabled: Flag.KILO_DISABLE_DEFAULT_PLUGINS, log })
         // kilocode_change end
 
+        yield* Effect.logInfo("instance config loaded") // kilocode_change - startup phase without private config values
+
         return {
           config: result,
           directories,

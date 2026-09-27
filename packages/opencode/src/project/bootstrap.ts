@@ -40,8 +40,11 @@ const layer = Layer.effect(
       yield* Effect.logDebug("bootstrapping", { directory: ctx.directory }) // kilocode_change - avoid printing on every startup
       // everything depends on config so eager load it for nice traces
       yield* config.get()
+      yield* Effect.logInfo("instance bootstrap config ready") // kilocode_change - bounded startup diagnosis
       // Plugin can mutate config so it has to be initialized before anything else.
+      yield* Effect.logInfo("instance bootstrap plugin initialization starting") // kilocode_change
       yield* plugin.init()
+      yield* Effect.logInfo("instance bootstrap plugins ready") // kilocode_change
       yield* kilocode.init().pipe(Effect.catchCause((cause) => Effect.logWarning("kilocode init failed", { cause }))) // kilocode_change
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.

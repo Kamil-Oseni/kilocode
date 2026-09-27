@@ -190,7 +190,11 @@ const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
+        // kilocode_change start - phase-only startup diagnostics; never log external specifiers or config
+        yield* Effect.logInfo("initializing internal plugins")
+        // kilocode_change end
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
+          yield* Effect.logInfo("initializing internal plugin", { name: plugin.name }) // kilocode_change
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
             catch: errorMessage,
@@ -205,12 +209,14 @@ const layer = Layer.effect(
           }
           // kilocode_change end
         }
+        yield* Effect.logInfo("internal plugins ready") // kilocode_change
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
         if (flags.pure && cfg.plugin_origins?.length) {
         }
         if (plugins.length) yield* config.waitForDependencies()
 
+        yield* Effect.logInfo("loading external plugins", { count: plugins.length }) // kilocode_change
         const loaded = yield* Effect.promise(() =>
           PluginLoader.loadExternal({
             items: plugins,
@@ -247,6 +253,7 @@ const layer = Layer.effect(
             },
           }),
         )
+        yield* Effect.logInfo("external plugin modules ready") // kilocode_change
         // kilocode_change start - register external hooks with their declaring config scope
         for (const item of loaded) {
           if (!item) continue
@@ -285,6 +292,7 @@ const layer = Layer.effect(
             Effect.ignore,
           )
         }
+        yield* Effect.logInfo("plugin config hooks ready") // kilocode_change
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.location?.directory !== ctx.directory) return Effect.void

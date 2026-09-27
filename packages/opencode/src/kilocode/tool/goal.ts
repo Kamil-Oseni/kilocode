@@ -111,6 +111,12 @@ export function goalTools(
               "This worker conversation records the assistant's written reply automatically. Answer the message directly without update_goal.",
               current.status,
             )
+          if (current?.status === "complete")
+            return result(
+              "Goal already complete",
+              "The prior goal is complete. Handle the current user request directly without updating or reopening that goal. Do not ask about the completed goal unless the user explicitly requests a change to it.",
+              current.status,
+            )
           const rejected: Record<RayaGoal.ModelUpdate["status"], string> = {
             complete: "Completion audit rejected",
             blocked: "Goal not blocked",
@@ -126,7 +132,12 @@ export function goalTools(
           const output = yield* goals.update(ctx.sessionID, input).pipe(
             Effect.tap(() => phase(ctx.sessionID, "done")),
             Effect.match({
-              onFailure: (err) => result(rejected[input.status], `${failure(err)} The goal remains active.`, "active"),
+              onFailure: (err) =>
+                result(
+                  rejected[input.status],
+                  `${failure(err)} The goal status remains ${current?.status ?? "unarmed"}.`,
+                  current?.status,
+                ),
               onSuccess: (goal) =>
                 result(
                   goal.review?.status === "pending" ? "Goal ready for review" : succeeded[goal.status],

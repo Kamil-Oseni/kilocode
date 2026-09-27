@@ -740,6 +740,7 @@ export const TaskTool = Tool.define(
         yield* ops
           .prompt({
             sessionID: ctx.sessionID,
+            backgroundResult: true, // kilocode_change - queue behind pending user questions
             agent: currentParent.agent ?? ctx.agent,
             variant,
             ...(branch && ctx.agent === "auto" && RayaChief.request(currentParent.metadata)

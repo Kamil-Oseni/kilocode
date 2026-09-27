@@ -1513,6 +1513,11 @@ export const layer = Layer.effect(
         // Otherwise the old turn can resume from a dismissed question and start another
         // LLM step before hasFollowup observes the replacement prompt.
         const dismiss = Effect.gen(function* () {
+          // kilocode_change start - worker completions queue behind unanswered user decisions
+          // A completed background worker is an internal continuation, not a new
+          // user decision. Keep an unanswered question open until the user acts.
+          if (input.backgroundResult) return
+          // kilocode_change end
           yield* Effect.promise(() => Suggestion.dismissAll(input.sessionID)).pipe(Effect.orDie)
           yield* question.dismissAll(input.sessionID)
         })
@@ -2686,6 +2691,7 @@ export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts" |
   ephemeralTools?: Record<string, boolean>
   goalQueuedAt?: number // kilocode_change - internal dispatch precondition, never accepted from HTTP clients
   goalObjective?: string // kilocode_change - raya_change: internal continuation routing, never accepted from HTTP clients
+  backgroundResult?: true // kilocode_change - internal worker notice must not dismiss pending user questions
 }
 // kilocode_change end
 

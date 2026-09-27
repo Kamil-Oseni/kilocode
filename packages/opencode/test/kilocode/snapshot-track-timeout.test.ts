@@ -667,6 +667,51 @@ describe("KiloSnapshotTrack progress indicator", () => {
     }
   })
 
+  test("concurrent tracks publish only one transient indicator and release ownership", async () => {
+    const state = KiloSnapshotTrack.makeState()
+    const { hooks, calls } = makeHooks("continue")
+    const first = Effect.runPromise(
+      KiloSnapshotTrack.wrap({
+        inner: slowInner(70, "first"),
+        state,
+        sessionID: SESSION,
+        messageID: MESSAGE,
+        hooks,
+        timeoutMs: 1_000,
+        progressDelayMs: 5,
+      }),
+    )
+    const second = Effect.runPromise(
+      KiloSnapshotTrack.wrap({
+        inner: slowInner(50, "second"),
+        state,
+        sessionID: SESSION,
+        messageID: MESSAGE,
+        hooks,
+        timeoutMs: 1_000,
+        progressDelayMs: 5,
+      }),
+    )
+
+    expect(await Promise.all([first, second])).toEqual(["first", "second"])
+    expect(calls.progress.filter((event) => event.kind === "start")).toHaveLength(1)
+    expect(calls.progress.filter((event) => event.kind === "end")).toHaveLength(1)
+    expect(state.progress).toBeUndefined()
+
+    await Effect.runPromise(
+      KiloSnapshotTrack.wrap({
+        inner: slowInner(30, "third"),
+        state,
+        sessionID: SESSION,
+        messageID: MESSAGE,
+        hooks,
+        timeoutMs: 1_000,
+        progressDelayMs: 5,
+      }),
+    )
+    expect(calls.progress.filter((event) => event.kind === "start")).toHaveLength(2)
+  })
+
   test("failed progress publication does not start update retries", async () => {
     const state = KiloSnapshotTrack.makeState()
     const { hooks: base } = makeHooks("continue")

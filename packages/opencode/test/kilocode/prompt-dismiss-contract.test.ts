@@ -13,6 +13,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 const PROMPT_FILE = path.resolve(import.meta.dir, "../../src/session/prompt.ts")
+const TASK_FILE = path.resolve(import.meta.dir, "../../src/tool/task.ts")
 
 describe("prompt.ts Kilo-specific invariants", () => {
   test("imports Suggestion from kilocode/suggestion", () => {
@@ -48,5 +49,15 @@ describe("prompt.ts Kilo-specific invariants", () => {
     // finishes naturally (tokens + inline tool calls) and the next LLM step is
     // skipped when a follow-up is already queued.
     expect(content).toContain("KiloSessionPromptQueue.hasFollowup(sessionID)")
+  })
+
+  test("background worker completions queue without dismissing a pending user decision", () => {
+    const prompt = fs.readFileSync(PROMPT_FILE, "utf-8")
+    const task = fs.readFileSync(TASK_FILE, "utf-8")
+    expect(task).toMatch(/injectBackgroundResult[\s\S]*?\.prompt\(\{[\s\S]*?backgroundResult: true/)
+    expect(prompt).toMatch(
+      /const dismiss = Effect\.gen\(function\* \(\) \{[\s\S]*?if \(input\.backgroundResult\) return[\s\S]*?question\.dismissAll/,
+    )
+    expect(prompt).toContain("backgroundResult?: true")
   })
 })

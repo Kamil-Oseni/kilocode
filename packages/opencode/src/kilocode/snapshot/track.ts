@@ -140,6 +140,8 @@ export namespace KiloSnapshotTrack {
     asked: boolean
     /** Identify the invocation that currently owns the slow-repository prompt. */
     owner?: symbol
+    /** Only one concurrent track publishes a transient progress part. */
+    progress?: symbol
   }
 
   export const makeState = (): State => ({
@@ -288,8 +290,9 @@ export namespace KiloSnapshotTrack {
 
       // The progress part is only published when we have both a session and
       // a target message. Background/non-turn callers skip the indicator.
+      const owner = Symbol()
       const handle: ProgressHandle | undefined =
-        input.sessionID && input.messageID
+        input.sessionID && input.messageID && !input.state.progress
           ? {
               sessionID: input.sessionID,
               messageID: input.messageID,
@@ -298,7 +301,7 @@ export namespace KiloSnapshotTrack {
               ended: false,
             }
           : undefined
-      const owner = Symbol()
+      if (handle) input.state.progress = owner
       let cleared = false
       let removal: Promise<void> | undefined
       let reset = false
@@ -404,6 +407,7 @@ export namespace KiloSnapshotTrack {
           const cancelSnapshot = Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)
           const cleanup = Effect.gen(function* () {
             yield* stopProgress
+            if (input.state.progress === owner) input.state.progress = undefined
             if (input.state.owner !== owner) return
             if (reset) input.state.asked = false
             input.state.owner = undefined

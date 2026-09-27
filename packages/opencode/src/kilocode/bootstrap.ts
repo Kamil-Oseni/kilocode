@@ -75,6 +75,7 @@ export namespace KilocodeBootstrap {
 
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
         if (storage) {
+          yield* Effect.logInfo("Raya transaction recovery starting")
           const recovery = yield* recoverPending(storage).pipe(
             Effect.catchCause((cause) => {
               log.warn("file transaction startup scan failed", { err: Cause.squash(cause) })
@@ -83,6 +84,8 @@ export namespace KilocodeBootstrap {
           )
           if (recovery?.issues.length)
             log.warn("file transaction startup scan retained conflicts", { issues: recovery.issues })
+          yield* Effect.logInfo("Raya transaction recovery complete")
+          yield* Effect.logInfo("Raya routine staging recovery starting")
           const staged = yield* RayaTask.make({ storage, database })
             .recoverStages()
             .pipe(
@@ -96,11 +99,17 @@ export namespace KilocodeBootstrap {
               issues: staged.issues,
               truncated: staged.truncated,
             })
+          yield* Effect.logInfo("Raya routine staging recovery complete")
         }
+        yield* Effect.logInfo("Raya watcher initialization starting")
         yield* watcher.init()
+        yield* Effect.logInfo("Raya watcher initialization complete")
+        yield* Effect.logInfo("Raya session initialization starting")
         yield* kilo.init()
+        yield* Effect.logInfo("Raya session initialization complete")
         yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
         if (storage) {
+          yield* Effect.logInfo("Raya goal and routine initialization starting")
           yield* RayaGoalContinuation.subscribe({
             database,
             bus,
@@ -111,6 +120,7 @@ export namespace KilocodeBootstrap {
           }) // raya_change - Milestones A/I configurable idle continuation
           if (attention) yield* InstanceState.get(attention)
           if (routines) yield* routines()
+          yield* Effect.logInfo("Raya goal and routine initialization complete")
           yield* RayaGoalContinuation.restore({
             database,
             directory: Instance.directory,

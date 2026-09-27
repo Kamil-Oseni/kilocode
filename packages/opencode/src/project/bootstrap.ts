@@ -45,7 +45,9 @@ const layer = Layer.effect(
       yield* Effect.logInfo("instance bootstrap plugin initialization starting") // kilocode_change
       yield* plugin.init()
       yield* Effect.logInfo("instance bootstrap plugins ready") // kilocode_change
+      yield* Effect.logInfo("instance bootstrap Raya services starting") // kilocode_change
       yield* kilocode.init().pipe(Effect.catchCause((cause) => Effect.logWarning("kilocode init failed", { cause }))) // kilocode_change
+      yield* Effect.logInfo("instance bootstrap Raya services ready") // kilocode_change
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
@@ -53,6 +55,7 @@ const layer = Layer.effect(
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+      yield* Effect.logInfo("instance bootstrap complete") // kilocode_change
     }).pipe(Effect.withSpan("InstanceBootstrap"))
 
     return Service.of({ run })

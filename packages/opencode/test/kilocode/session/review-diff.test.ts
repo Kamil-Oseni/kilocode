@@ -306,3 +306,102 @@ it.live(
   ),
   45_000,
 )
+
+it.live(
+  "clears a child deletion review after its file is restored to the exact prior snapshot",
+  provideTmpdirProject(
+    (dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const summary = yield* SessionSummary.Service
+        const snapshot = yield* Snapshot.Service
+        const storage = yield* Storage.Service
+        const parent = yield* sessions.create({})
+        const creator = yield* sessions.create({ parentID: parent.id })
+        const deleter = yield* sessions.create({ parentID: parent.id })
+        const file = path.join(dir, "b.txt")
+        const body = "fresh worker B"
+        const base = yield* snapshot.track({ snapshotInitialization: "wait" })
+        if (!base) throw new Error("missing base snapshot")
+        const save = Effect.fn("ReviewDiff.saveChild")(function* (
+          sessionID: typeof parent.id,
+          start: string,
+          finish: string,
+        ) {
+          const user = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID,
+            role: "user",
+            agent: "auto",
+            model: { providerID, modelID },
+            time: { created: Date.now() },
+          })
+          const assistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID,
+            role: "assistant",
+            parentID: user.id,
+            mode: "default",
+            agent: "coder",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens,
+            modelID,
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID,
+            type: "step-start",
+            snapshot: start,
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: finish,
+            cost: 0,
+            tokens,
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID,
+            type: "patch",
+            hash: start,
+            files: [file],
+          })
+          return assistant
+        })
+        yield* Effect.promise(() => fs.writeFile(file, body))
+        const created = yield* snapshot.track({ snapshotInitialization: "wait" })
+        if (!created) throw new Error("missing creation snapshot")
+        const first = yield* save(creator.id, base, created)
+        yield* storage.write(["session_kept", parent.id], { [file]: first.id })
+        yield* Effect.promise(() => fs.rm(file))
+        const deleted = yield* snapshot.track({ snapshotInitialization: "wait" })
+        if (!deleted) throw new Error("missing deletion snapshot")
+        yield* save(deleter.id, created, deleted)
+        yield* storage.write(["session_diff", deleter.id], yield* snapshot.diffFull(created, deleted))
+        expect((yield* summary.diff({ sessionID: parent.id })).map((diff) => diff.status)).toEqual(["deleted"])
+
+        yield* snapshot.revert([{ hash: created, files: [file] }])
+        const bytes = yield* Effect.promise(() => fs.readFile(file))
+        expect(bytes.length).toBe(14)
+        expect(bytes.equals(Buffer.from(body))).toBe(true)
+        expect(yield* summary.diff({ sessionID: parent.id })).toEqual([])
+        expect(yield* summary.diff({ sessionID: parent.id, full: true, file: "b.txt" })).toEqual([])
+
+        yield* Effect.promise(() => fs.writeFile(file, `${body}\n`))
+        expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id })))).toBe(true)
+        expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id, full: true, file: "b.txt" })))).toBe(true)
+      }),
+    { git: true },
+  ),
+  45_000,
+)

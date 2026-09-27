@@ -97,13 +97,20 @@ export const overlay = Effect.fn("ReviewDiff.overlay")(function* (
       .map((diff) => [canonical(diff.file!, owner.directory), diff]),
   )
   for (const [key, span] of scope) {
-    if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }])))
+    if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }]))) {
+      // A full-file Undo restores the first pending edit's starting snapshot.
+      // Historical child diffs can still name that edit after the restore.
+      if (yield* snap.matches([{ hash: span.start, files: [span.file] }])) {
+        result.delete(key)
+        continue
+      }
       return yield* Effect.die(
         new ReviewConflict({
           message:
             "The workspace no longer matches the reviewed snapshot. Refresh or reconcile the files before reviewing.",
         }),
       )
+    }
     const batch = yield* snap.diffFull(span.start, span.finish)
     const diff = batch.find((item) => item.file && canonical(item.file, owner.directory) === key)
     if (diff) result.set(key, diff)
@@ -126,13 +133,16 @@ export const detail = Effect.fn("ReviewDiff.detail")(function* (
     const kept = yield* boundaries(storage, sessions, sessionID)
     return kept[key] ? { matched: true as const, diff: undefined } : { matched: false as const }
   }
-  if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }])))
+  if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }]))) {
+    if (yield* snap.matches([{ hash: span.start, files: [span.file] }]))
+      return { matched: true as const, diff: undefined }
     return yield* Effect.die(
       new ReviewConflict({
         message:
           "The workspace no longer matches the reviewed snapshot. Refresh or reconcile the files before reviewing.",
       }),
     )
+  }
   return {
     matched: true as const,
     diff: yield* snap.diffFile(span.start, span.finish, path.relative(owner.directory, span.file)),

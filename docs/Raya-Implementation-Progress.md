@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-27 17:20 EDT - exact-restoration review closure source fix
+
+The installed B deletion/Undo restored exact bytes but left an empty Changes panel with a snapshot-mismatch banner. The review projection still pinned the historical child deletion's final snapshot after Undo returned the file to its starting snapshot. A Kilo-owned correction now treats an exact match to the starting snapshot as no pending review entry in both the summary and full-file detail; any state matching neither snapshot still raises `ReviewConflict`. A focused child-deletion regression covers the 14-byte no-newline file, exact restoration, empty review/detail and divergent bytes. Four targeted tests, CLI typecheck and scoped lint pass. This is source proof only. Next: commit/push, install a snapshot and verify the old banner clears in the dummy host. Per-file one-step Undo after multiple unkept edits can restore an intermediate snapshot, which still needs durable history handling; `EN-05` and `FUT-CU-01` remain In progress.
+
 ## ChatGPT 2026-09-27 17:03 EDT - installed exact-byte deleted-file Undo passed
 
 Commit `f14663cbc4` is pushed and installed as `7.4.23-snapshot+f14663cbc4.kamil-oseni.1790541854538`. The low-memory build passed CLI smoke, extension/webview typechecks, lint, production bundling, native capture/input self-tests and packaging. Only the second-screen `dummy` VS Code window was reloaded. Its settled installed-host probe matched loaded and active versions and digest `94564de8f2d103a95f7c81909a5c915cdd5a14d24b150e8a5923108beeef1247`; the French Study window was not operated.

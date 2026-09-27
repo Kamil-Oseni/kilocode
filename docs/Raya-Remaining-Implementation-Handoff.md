@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 12:44 America/Toronto - settled snapshot and open review gate
+
+`4c1b34fefb` is installed in the moved second-screen `dummy` VS Code window. Settled host inspection matched loaded/active version and digest `7de9f32cf4eaa0eb34c3f38cd5ec92e5b12a2a751ea41965453225b0a54d321a` (PID 4028). The French Study window was untouched. A fresh terminal Hold displayed its saved stop acknowledgement live, without reload; the turn ended with no further action and the old goal remained Complete.
+
+Do not mark `EN-05` Verified. Exact-byte no-newline Undo passes the source test but has not been repeated in this installed snapshot. A new deletion request for the intact 14-byte B file routed, then a separate HTTP session abort ended the assistant with `MessageAbortedError` before any file action or final answer; its caller is not known. Automatic approval review rejected a follow-up agent-origin deletion request, so no retry was sent and the draft was cleared. B remains intact. Next: obtain explicit authorization for a disposable installed deletion/Undo test, instrument abort source if the failure recurs, then complete rename, changed-target and restart checks. Keep the broader autonomous-desktop and agent rows In progress.
+
 ## ChatGPT 2026-09-27 12:08 America/Toronto - installed review and Hold follow-up
 
 `1849713a8b` is installed in the exact `dummy` host; loaded and active version/digest match, and the French Study host was untouched. The Changes panel now shows the post-Keep child deletion with saved original text (`4 Files Changed +3 -1`). Hunk Discard restored the deleted A file but added a trailing newline; source now preserves the patch's no-newline marker and an exact-byte regression passes. Rebuild/install and repeat the deletion Undo, then test rename, stale target, Keep/Undo and restart before promoting `EN-05`.

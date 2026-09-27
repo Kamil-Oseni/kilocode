@@ -1,8 +1,38 @@
 // raya_change - verify exact per-hunk rollback content for the inline review surface
 import { describe, expect, test } from "bun:test"
+import { toSessionDiffFile } from "../../src/diff/sources/session"
 import { reviewHunks, withReviewCounts } from "../../webview-ui/diff-viewer/review-hunks"
 
 describe("inline change review", () => {
+  test("restores exact bytes for a deleted file without a final newline", () => {
+    const patch = [
+      "diff --git a/raya-review-fresh-a.txt b/raya-review-fresh-a.txt",
+      "deleted file mode 100644",
+      "--- a/raya-review-fresh-a.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-fresh worker A",
+      "\\ No newline at end of file",
+      "",
+    ].join("\n")
+    const diff = toSessionDiffFile({
+      file: "raya-review-fresh-a.txt",
+      patch,
+      additions: 0,
+      deletions: 1,
+      status: "deleted",
+    })
+
+    expect(diff.before).toBe("fresh worker A")
+    expect(diff.after).toBe("")
+    const hunks = reviewHunks(diff)
+    expect(hunks).toHaveLength(1)
+    expect(hunks[0]?.expected).toBe("")
+    expect(hunks[0]?.content).toBe("fresh worker A")
+    expect(Buffer.from(hunks[0]!.content)).toEqual(Buffer.from("fresh worker A"))
+    expect(Buffer.byteLength(hunks[0]!.content)).toBe(14)
+  })
+
   test("reverts one modified hunk without touching another", () => {
     const before = "alpha\nold one\nmiddle\nold two\nomega\n"
     const after = "alpha\nnew one\nmiddle\nnew two\nomega\n"

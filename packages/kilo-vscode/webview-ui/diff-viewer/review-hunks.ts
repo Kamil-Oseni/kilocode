@@ -30,7 +30,7 @@ export function reviewHunks(diff: WorktreeFileDiff): ReviewHunk[] {
     const oldCount = match[2] === undefined ? 1 : Number(match[2])
     const newStart = Number(match[3])
     const newCount = match[4] === undefined ? 1 : Number(match[4])
-    const lines = diff.after.split("\n")
+    const lines = diff.after === "" ? [] : diff.after.split("\n")
     const replacement = oldCount === 0 ? [] : before.slice(Math.max(0, oldStart - 1), oldStart - 1 + oldCount)
     lines.splice(Math.max(0, newStart - 1), newCount, ...replacement)
     const content = lines.join("\n")

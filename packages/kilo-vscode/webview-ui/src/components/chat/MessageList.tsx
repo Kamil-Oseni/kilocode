@@ -32,6 +32,7 @@ import { useProvider } from "../../context/provider"
 import { WelcomeEmptyState } from "./WelcomeEmptyState"
 import { TranscriptRowView } from "./TranscriptRow"
 import { TranscriptActivity } from "./TranscriptActivity"
+import { DirectRows } from "./DirectRows"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
 import { RevertBanner } from "./RevertBanner"
 import { AccountSwitcher } from "../shared/AccountSwitcher"
@@ -1306,31 +1307,33 @@ export const MessageList: Component<MessageListProps> = (props) => {
 
   onCleanup(() => save(session.currentSessionID()))
 
-  const render = (row: TranscriptViewRow, index?: number): JSX.Element =>
-    row.type === "activity" ? (
+  const render = (item: TranscriptViewRow | Accessor<TranscriptViewRow>, index?: number): JSX.Element => {
+    const row = typeof item === "function" ? item : () => item
+    return row().type === "activity" ? (
       <TranscriptActivity
-        row={row}
+        row={row() as Extract<TranscriptViewRow, { type: "activity" }>}
         index={index}
-        force={opened() === row.key}
-        timing={timing().get(row.turn)}
+        force={opened() === row().key}
+        timing={timing().get(row().turn)}
         markers={markers()}
         highlight={highlight}
         onForkMessage={props.onForkMessage}
       />
     ) : (
       <TranscriptRowView
-        row={row}
-        section={sections().has(row.key)}
+        row={row() as TranscriptRow}
+        section={sections().has(row().key)}
         index={index}
-        timeline={markers().get(row.key)}
-        timing={timing().get(row.turn)}
+        timeline={markers().get(row().key)}
+        timing={timing().get(row().turn)}
         onForkMessage={props.onForkMessage}
         highlight={highlight}
-        activeSearch={activeKey() === row.key}
-        activeSearchPartID={activeKey() === row.key ? activeMatch()?.partId : undefined}
-        activeSearchPartFile={activeKey() === row.key ? activeMatch()?.partFile : undefined}
+        activeSearch={activeKey() === row().key}
+        activeSearchPartID={activeKey() === row().key ? activeMatch()?.partId : undefined}
+        activeSearchPartFile={activeKey() === row().key ? activeMatch()?.partFile : undefined}
       />
     )
+  }
 
   return (
     <div class="message-list-container">
@@ -1405,7 +1408,9 @@ export const MessageList: Component<MessageListProps> = (props) => {
                     {(row, index) => render(row, index())}
                   </Virtualizer>
                 </Show>
-                <For each={tail()}>{(key) => render(lookup().get(key)!)}</For>
+                <DirectRows keys={tail()} get={(key) => lookup().get(key)!}>
+                  {(row) => render(row)}
+                </DirectRows>
               </div>
             </Show>
             <Show when={revert()}>

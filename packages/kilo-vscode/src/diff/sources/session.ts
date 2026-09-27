@@ -92,8 +92,19 @@ export function toSessionDiffFile(raw: SnapshotFileDiff): DiffFile {
       return null
     }
   })()
-  const before = view ? text(view, "deletions") : ""
-  const after = view ? text(view, "additions") : ""
+  // Pierre returns a final line without its terminator, while text() adds one
+  // for display. Preserve Git's explicit EOF marker for review discards.
+  const lines = raw.patch?.split("\n") ?? []
+  const missing = (side: "-" | "+") =>
+    lines.some(
+      (line, index) =>
+        line === "\\ No newline at end of file" &&
+        (lines[index - 1]?.startsWith(side) || lines[index - 1]?.startsWith(" ")),
+    )
+  const old = view ? text(view, "deletions") : ""
+  const next = view ? text(view, "additions") : ""
+  const before = missing("-") && old.endsWith("\n") ? old.slice(0, -1) : old
+  const after = missing("+") && next.endsWith("\n") ? next.slice(0, -1) : next
   const image = (() => {
     if (mime === "image/svg+xml" && view) {
       return {

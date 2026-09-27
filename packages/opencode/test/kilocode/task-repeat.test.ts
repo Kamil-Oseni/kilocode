@@ -48,7 +48,7 @@ function history(error: string, stateInput: Record<string, unknown> = input): Se
 test("equivalent failed tasks return the resumable child without matching changed work", () => {
   const messages = history('Transport failed. This task can be resumed with task_id="ses_child".')
 
-  expect(TaskRepeat.failed(messages, input)).toEqual({ id: "ses_child", repair: false })
+  expect(TaskRepeat.failed(messages, input)).toEqual({ id: "ses_child", repair: false, blocked: false })
   expect(TaskRepeat.failed(messages, { ...input, prompt: "repair a different deployment" })).toBeUndefined()
   expect(TaskRepeat.failed(history("failed without a resume receipt"), input)).toBeUndefined()
 })
@@ -58,7 +58,7 @@ test("provider tool-schema rejection requires contract repair", () => {
     'tools.function.parameters.type is required and must be "object". This task can be resumed with task_id="ses_child".',
   )
 
-  expect(TaskRepeat.failed(messages, input)).toEqual({ id: "ses_child", repair: true })
+  expect(TaskRepeat.failed(messages, input)).toEqual({ id: "ses_child", repair: true, blocked: false })
   expect(TaskRepeat.guard(messages, input)).toContain("Do not spawn or resume another child")
   expect(TaskRepeat.guard(messages, { ...input, prompt: "recover after repair", task_id: "ses_child" })).toContain(
     "Do not spawn or resume another child",
@@ -71,6 +71,20 @@ test("recoverable failures require the existing child and admit its exact resume
   expect(TaskRepeat.guard(messages, input)).toContain('task_id="ses_child"')
   expect(TaskRepeat.guard(messages, { ...input, task_id: "ses_other" })).toContain('task_id="ses_child"')
   expect(TaskRepeat.guard(messages, { ...input, task_id: "ses_child" })).toBeUndefined()
+})
+
+test("provider moderation stops unchanged child retries without repeating rejected content", () => {
+  const error =
+    'Bad Request: data: {"error":{"code":"data_inspection_failed","message":"private rejected payload"}}. This task can be resumed with task_id="ses_child".'
+  const messages = history(error)
+
+  expect(TaskRepeat.failed(messages, input)).toEqual({ id: "ses_child", repair: false, blocked: true })
+  expect(TaskRepeat.guard(messages, input)).toContain("Do not retry or create a replacement unchanged")
+  expect(TaskRepeat.guard(messages, { ...input, task_id: "ses_child" })).toContain("Do not spawn or resume")
+  expect(TaskRepeat.guard(messages, { ...input, prompt: "revised request" })).toBeUndefined()
+  expect(TaskRepeat.blocked(error)).toContain("Provider moderation refused")
+  expect(TaskRepeat.blocked(error)).not.toContain("private rejected payload")
+  expect(TaskRepeat.blocked("Connection reset by server")).toBeUndefined()
 })
 
 test("the latest equivalent outcome releases a previously failed task", () => {

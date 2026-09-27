@@ -633,6 +633,83 @@ describe("session.compaction.create", () => {
 })
 
 describe("session.compaction.prune", () => {
+  // kilocode_change start - bound stale tool context in a long active turn
+  it.live(
+    "bounds stale tool inputs in a long active user turn when the request payload is large",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const user = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: user.id,
+          sessionID: info.id,
+          type: "text",
+          text: "Complete the current task",
+        })
+        const assistant = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID: info.id,
+          mode: "build",
+          agent: "build",
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          parentID: user.id,
+          time: { created: Date.now() },
+          finish: "tool-calls",
+        } satisfies SessionV1.Assistant)
+        for (let i = 0; i < 16; i++) {
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: info.id,
+            type: "tool",
+            callID: crypto.randomUUID(),
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: `echo ${i}`, payload: "x".repeat(100_000) },
+              output: `done ${i}`,
+              title: "done",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+        }
+
+        yield* compact.prune({ sessionID: info.id, reason: "payload-limit" })
+
+        const msgs = yield* ssn.messages({ sessionID: info.id })
+        const parts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "tool")
+        expect(parts.length).toBe(16)
+        const stale = parts.filter((part) => part.state.status === "completed" && part.state.time.compacted)
+        expect(stale.length).toBeGreaterThan(0)
+        expect(stale.length).toBeLessThan(parts.length)
+        expect(stale[0]?.state.status === "completed" && stale[0].state.input).toEqual({
+          command: expect.any(String),
+          payload: "x".repeat(100_000),
+        })
+
+        const model = yield* MessageV2.toModelMessagesEffect(msgs, createModel({ context: 100_000, output: 32_000 }))
+        expect(Buffer.byteLength(JSON.stringify(model))).toBeLessThan(700_000)
+      }),
+    ),
+  )
+  // kilocode_change end
+
   it.live(
     "compacts old completed tool output",
     provideTmpdirInstance(

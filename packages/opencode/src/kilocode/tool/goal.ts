@@ -65,7 +65,7 @@ export function goalTools(
     "get_goal",
     Effect.succeed({
       description:
-        "Read the current persistent goal, status, usage, audit, blocked reason, continuation progress, and the exact IDs of completed tool calls eligible as completion evidence. Evidence comes from recorded goal inputs and delegated inputs linked by saved task metadata. Unrelated work in reused child sessions and older task results without input lineage are excluded. Task handoff reports and child summaries do not prove completion; cite the underlying work or verification results. Artifact metadata is a recorded snapshot, not a current check; completion rechecks recorded read/write/edit/patch revisions and rejects stale or unverifiable files, including recreated deleted paths. A fresh read can verify the current file without editing it; partial-read fingerprints do not prove full content review.",
+        "Read the current persistent goal, status, usage, audit, blocked reason, continuation progress, and the exact IDs of completed tool calls eligible as completion evidence. For update_goal_plan, copy planUpdate.expectedIntent and planUpdate.expectedRevision exactly; the goal's revision is not the plan revision. Evidence comes from recorded goal inputs and delegated inputs linked by saved task metadata. Unrelated work in reused child sessions and older task results without input lineage are excluded. Task handoff reports and child summaries do not prove completion; cite the underlying work or verification results. Artifact metadata is a recorded snapshot, not a current check; completion rechecks recorded read/write/edit/patch revisions and rejects stale or unverifiable files, including recreated deleted paths. A fresh read can verify the current file without editing it; partial-read fingerprints do not prove full content review.",
       parameters: Schema.Struct({}),
       execute: (_input: {}, ctx) =>
         Effect.gen(function* () {
@@ -80,7 +80,19 @@ export function goalTools(
               onSuccess: (items) => items,
             }),
           )
-          return result("Current goal", JSON.stringify({ goal, eligibleEvidence: evidence }, null, 2), goal.status)
+          return result(
+            "Current goal",
+            JSON.stringify(
+              {
+                planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
+                goal,
+                eligibleEvidence: evidence,
+              },
+              null,
+              2,
+            ),
+            goal.status,
+          )
         }),
     }),
   )
@@ -140,7 +152,7 @@ export function goalTools(
     "update_goal_plan",
     Effect.succeed({
       description:
-        "Save the active goal's work plan. Read get_goal first and provide its intent and plan revision (null when absent). Preserve the full objective. Tasks need stable IDs, descriptions, outputs, owners, verification instructions and dependencies. Independent tasks may run together; dependencies must be completed before a task is in_progress or completed. Statuses and owners are recorded plan claims, not worker control or completion evidence. Updating the plan does not complete, resume or delegate the goal.",
+        "Save the active goal's work plan. Read get_goal first and copy its planUpdate.expectedIntent and planUpdate.expectedRevision exactly. The goal's revision is not the plan revision; expectedRevision is null when goal.plan is absent. Preserve the full objective. Tasks need stable IDs, descriptions, outputs, owners, verification instructions and dependencies. Independent tasks may run together; dependencies must be completed before a task is in_progress or completed. Statuses and owners are recorded plan claims, not worker control or completion evidence. Updating the plan does not complete, resume or delegate the goal.",
       parameters: Update,
       execute: (input: typeof Update.Type, ctx) =>
         goals.plan(ctx.sessionID, input).pipe(

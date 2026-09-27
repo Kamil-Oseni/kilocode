@@ -1075,13 +1075,22 @@ export namespace RayaGoal {
       const prior = yield* requireGoal(sessionID)
       if (prior.status === "complete")
         return yield* new AuditError({ message: "A completed goal's plan cannot be edited." })
+      // raya_change - a goal revision is a valid first-plan CAS token when no plan exists.
+      // Repeating that exact request after it saves is an idempotent no-op.
+      const same =
+        input.expectedIntent === (prior.intent ?? "unset") &&
+        prior.plan?.objective === prior.objective &&
+        !prior.plan.review &&
+        isDeepStrictEqual(prior.plan.tasks, input.tasks)
+      if (same) return prior
+      const fallback = !prior.plan && input.expectedRevision === prior.revision
       if (
         input.expectedIntent !== (prior.intent ?? "unset") ||
-        input.expectedRevision !== (prior.plan?.revision ?? null)
+        (input.expectedRevision !== (prior.plan?.revision ?? null) && !fallback)
       )
         return yield* new AuditError({
           conflict: true,
-          message: "The goal or plan changed. Read get_goal before updating the plan.",
+          message: `The goal or plan changed. Read get_goal before updating the plan, then copy planUpdate exactly: {"expectedIntent":"${prior.intent ?? "unset"}","expectedRevision":${JSON.stringify(prior.plan?.revision ?? null)}}. Do not use goal.revision as the plan revision.`,
         })
       const tasks = yield* Schema.decodeUnknownEffect(Planning.Tasks)(input.tasks).pipe(
         Effect.mapError(

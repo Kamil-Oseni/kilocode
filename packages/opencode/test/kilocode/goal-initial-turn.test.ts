@@ -153,7 +153,7 @@ it.live(
 )
 
 it.live(
-  "registered goal plan tool persists updates and rejects stale writes",
+  "registered goal plan tool accepts a first-plan goal revision, is idempotent, and rejects stale writes",
   () =>
     provideTmpdirInstance(
       () =>
@@ -167,6 +167,8 @@ it.live(
           const goal = yield* goals.create(session.id, "Verify the complete deliverable")
           const tool = (yield* registry.all()).find((item) => item.id === "update_goal_plan")
           if (!tool) throw new Error("Missing goal plan tool")
+          const read = (yield* registry.all()).find((item) => item.id === "get_goal")
+          if (!read) throw new Error("Missing goal read tool")
           const input = {
             expectedIntent: goal.intent!,
             expectedRevision: null,
@@ -191,12 +193,34 @@ it.live(
             metadata: () => Effect.void,
             ask: () => Effect.die("Unexpected approval"),
           }
-          const saved = yield* tool.execute(input, ctx)
+          const before = JSON.parse((yield* read.execute({}, ctx)).output)
+          expect(before.planUpdate).toEqual({ expectedIntent: goal.intent, expectedRevision: null })
+          const saved = yield* tool.execute({ ...input, expectedRevision: goal.revision }, ctx)
           expect(saved.title).toBe("Goal plan saved")
+          const revision = (yield* goals.get(session.id))?.plan?.revision
           expect((yield* goals.get(session.id))?.plan?.tasks[0].id).toBe("verify")
-          const rejected = yield* tool.execute(input, ctx)
+          const repeated = yield* tool.execute({ ...input, expectedRevision: goal.revision }, ctx)
+          expect(repeated.title).toBe("Goal plan saved")
+          expect((yield* goals.get(session.id))?.plan?.revision).toBe(revision)
+          const after = JSON.parse((yield* read.execute({}, ctx)).output)
+          expect(after.planUpdate).toEqual({ expectedIntent: goal.intent, expectedRevision: revision })
+          const repeatedNull = yield* tool.execute(input, ctx)
+          expect(repeatedNull.title).toBe("Goal plan saved")
+          expect((yield* goals.get(session.id))?.plan?.revision).toBe(revision)
+          const rejected = yield* tool.execute({ ...input, tasks: [{ ...input.tasks[0], status: "in_progress" }] }, ctx)
           expect(rejected.title).toBe("Goal plan not saved")
           expect(rejected.output).toContain("changed")
+          expect(rejected.output).toContain(`"expectedRevision":"${revision}"`)
+          const changed = yield* tool.execute(
+            { ...input, expectedRevision: goal.revision, tasks: [{ ...input.tasks[0], status: "in_progress" }] },
+            ctx,
+          )
+          expect(changed.title).toBe("Goal plan not saved")
+          const updated = yield* tool.execute(
+            { ...input, expectedRevision: revision!, tasks: [{ ...input.tasks[0], status: "in_progress" }] },
+            ctx,
+          )
+          expect(updated.title).toBe("Goal plan saved")
           expect((yield* goals.get(session.id))?.status).toBe("active")
         }),
       {

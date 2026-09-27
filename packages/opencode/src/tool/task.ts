@@ -242,22 +242,28 @@ export const TaskTool = Tool.define(
       // kilocode_change start - resumed child authority cannot be widened
       const saved = TaskAuthority.read(resumed?.metadata)
       const gated = ctx.agent === "auto" && !branch && (params.access === "edit" || saved === "edit")
-      const goal = gated
-        ? storage
-          ? yield* storage.read<unknown>(["raya", "goal", ctx.sessionID]).pipe(
-              Effect.catchIf(
-                (err) => Storage.NotFoundError.isInstance(err),
-                () => Effect.succeed(undefined),
-              ),
-            )
-          : yield* Effect.fail(new Error("Auto editing requires an active goal"))
-        : undefined
+      // A fresh user-authored edit request is authority without a formal goal.
+      const intent = RayaChief.request(parent.metadata)
+      const latest = messages.filter((item) => item.info.role === "user" && RayaChief.requestText(item.parts)).at(-1)
+      const userEdit = TaskAuthority.current(intent, latest ? RayaChief.requestText(latest.parts) : undefined)
+      const goal =
+        gated && !userEdit // kilocode_change - current user may authorize edit without a goal
+          ? storage
+            ? yield* storage.read<unknown>(["raya", "goal", ctx.sessionID]).pipe(
+                Effect.catchIf(
+                  (err) => Storage.NotFoundError.isInstance(err),
+                  () => Effect.succeed(undefined),
+                ),
+              )
+            : yield* Effect.fail(new Error("Auto editing requires an active goal"))
+          : undefined
       const access = TaskAuthority.admit({
         auto: ctx.agent === "auto",
         planned: branch?.access,
         requested: params.access,
         saved,
         goalActive: Schema.is(RayaGoal.State)(goal) && goal.status === "active",
+        userEdit, // kilocode_change - exact current request authority
         parent: ruleset,
       })
       const computer = yield* TaskComputer.admit({
@@ -715,7 +721,9 @@ export const TaskTool = Tool.define(
           // kilocode_change start - expose terminal child assistant errors through the task tool boundary,
           // including the resumable task_id so the parent agent can continue the subagent (#11620)
           if (result.info.role === "assistant" && result.info.error) {
-            return yield* Effect.fail(new Error(`${errorMessage(result.info.error)}\n${resumeHint(nextSession.id)}`))
+            const message = errorMessage(result.info.error)
+            const blocked = TaskRepeat.blocked(message)
+            return yield* Effect.fail(new Error(blocked ?? `${message}\n${resumeHint(nextSession.id)}`))
           }
           // kilocode_change end
           return result.parts.findLast((item) => item.type === "text")?.text ?? ""

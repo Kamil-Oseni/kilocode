@@ -173,18 +173,39 @@ export namespace TaskAuthority {
     return access
   }
 
-  /** Admit Auto children with a durable minimum authority and goal-bound edits. */
+  /** A current user request may authorize ordinary editing without creating a formal goal. */
+  export function explicit(request: string | undefined) {
+    if (!request) return false
+    const text = request.trim()
+    if (/^(?:please\s+)?(?:do\s+not|don't|never|avoid)\b/i.test(text)) return false
+    return /^(?:(?:please|can you|could you|i (?:want|need) you to|let's)\s+)?(?:commit|push|fix|implement|edit|modify|patch|refactor|build|write|create|add|update|remove|delete)\b/i.test(
+      text,
+    )
+  }
+
+  export function current(request: string | undefined, latest: string | undefined) {
+    return !!request && request === latest && explicit(request)
+  }
+
+  /** Admit Auto children with a durable minimum authority and current-request-bound edits. */
   export function admit(input: {
     auto: boolean
     planned?: Access
     requested?: Access
     saved?: Access
     goalActive: boolean
+    userEdit?: boolean
     parent: Permission.Ruleset
   }) {
     const requested = input.planned ?? input.requested ?? input.saved ?? (input.auto ? "read" : undefined)
-    if (input.auto && !input.planned && (requested === "edit" || input.saved === "edit") && !input.goalActive)
-      throw new Error("Auto editing requires an active goal")
+    if (
+      input.auto &&
+      !input.planned &&
+      (requested === "edit" || input.saved === "edit") &&
+      !input.goalActive &&
+      !input.userEdit
+    )
+      throw new Error("Auto editing requires an active goal or an explicit current user request")
     return select({ requested, saved: input.saved, parent: input.parent })
   }
 }

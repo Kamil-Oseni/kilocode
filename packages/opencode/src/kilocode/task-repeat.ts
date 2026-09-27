@@ -19,6 +19,12 @@ function repair(error: string) {
   )
 }
 
+function refusal(error: string) {
+  return /\b(?:content_filter|content_policy_violation|data_inspection_failed|moderation_blocked|safety_violation)\b/i.test(
+    error,
+  )
+}
+
 function rejected(messages: SessionV1.WithParts[], id: string) {
   for (const message of messages.toReversed()) {
     for (const part of message.parts.toReversed()) {
@@ -26,7 +32,7 @@ function rejected(messages: SessionV1.WithParts[], id: string) {
       const match = part.state.status === "error" ? part.state.error.match(/task_id="([^"]+)"/)?.[1] : undefined
       if (part.state.input.task_id !== id && match !== id) continue
       if (part.state.status !== "error") return false
-      return repair(part.state.error)
+      return repair(part.state.error) || refusal(part.state.error)
     }
   }
   return false
@@ -91,7 +97,7 @@ export namespace TaskRepeat {
   export function failed(
     messages: SessionV1.WithParts[],
     input: Record<string, unknown>,
-  ): { id: string; repair: boolean } | undefined {
+  ): { id: string; repair: boolean; blocked: boolean } | undefined {
     const expected = fingerprint(input)
     for (const message of messages.toReversed()) {
       for (const part of message.parts.toReversed()) {
@@ -100,7 +106,7 @@ export namespace TaskRepeat {
         if (part.state.status !== "error") return undefined
         const match = part.state.error.match(/task_id="([^"]+)"/)
         if (!match?.[1]) return undefined
-        return { id: match[1], repair: repair(part.state.error) }
+        return { id: match[1], repair: repair(part.state.error), blocked: refusal(part.state.error) }
       }
     }
     return undefined
@@ -108,9 +114,11 @@ export namespace TaskRepeat {
 
   export function guard(messages: SessionV1.WithParts[], input: Record<string, unknown>): string | undefined {
     if (typeof input.task_id === "string" && rejected(messages, input.task_id)) {
-      return `Child ${input.task_id} already failed because the provider rejected the shared tool schema. Do not spawn or resume another child; repair or change the provider/tool contract first.`
+      return `Child ${input.task_id} already failed at a non-retryable provider boundary. Do not spawn or resume another child unchanged; inspect the saved failure and revise the request or provider first.`
     }
     const match = failed(messages, input)
+    if (match?.blocked)
+      return `Equivalent child ${match.id} was refused by provider moderation. Do not retry or create a replacement unchanged; revise the request or provider first.`
     if (match?.repair) {
       return `Equivalent child ${match.id} already failed because the provider rejected the shared tool schema. Do not spawn or resume another child; repair or change the provider/tool contract first.`
     }
@@ -118,5 +126,11 @@ export namespace TaskRepeat {
       return `An equivalent task already failed in resumable child ${match.id}. Retry it with task_id="${match.id}" instead of creating a replacement child.`
     }
     return undefined
+  }
+
+  /** Keep provider-refused content and raw gateway payloads out of the parent transcript. */
+  export function blocked(error: string) {
+    if (!refusal(error)) return
+    return "Provider moderation refused this child request. Do not retry it unchanged; review the request and provider policy before continuing."
   }
 }

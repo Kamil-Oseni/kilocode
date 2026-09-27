@@ -820,7 +820,8 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("replaces compacted tool output with placeholder", async () => {
+  // kilocode_change start - compacted tool inputs stay in receipts, not model context
+  test("replaces compacted tool output and input with placeholders", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -868,7 +869,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-call",
             toolCallId: "call-1",
             toolName: "bash",
-            input: { cmd: "ls" },
+            input: {},
             providerExecuted: undefined,
           },
         ],
@@ -886,6 +887,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ])
   })
+  // kilocode_change end
 
   test("truncates tool output when requested", async () => {
     const userID = "m-user"

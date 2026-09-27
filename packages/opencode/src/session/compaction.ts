@@ -289,7 +289,10 @@ const layer = Layer.effect(
       loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
         const msg = msgs[msgIndex]
         if (msg.info.role === "user") turns++
-        if (turns < 2) continue
+        // Payload limits can be reached during one long user turn. Keep the
+        // recent tool budget below, but allow older completed calls in that
+        // same turn to leave the model context.
+        if (turns < 2 && reason !== "payload-limit") continue
         if (msg.info.role === "assistant" && msg.info.summary) break loop
         for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
           const part = msg.parts[partIndex]
@@ -297,7 +300,9 @@ const layer = Layer.effect(
           if (part.state.status !== "completed") continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
           if (part.state.time.compacted) break loop
-          const estimate = Token.estimate(part.state.output)
+          const estimate =
+            Token.estimate(part.state.output) +
+            (reason === "payload-limit" ? Token.estimate(JSON.stringify(part.state.input)) : 0)
           total += estimate
           if (total <= PRUNE_PROTECT) continue
           pruned += estimate

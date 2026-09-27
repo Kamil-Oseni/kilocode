@@ -84,7 +84,10 @@ describe("Computer Use child authority", () => {
     ])
       expect(() =>
         TaskAuthority.proof(
-          { ...metadata, [TaskAuthority.computerKey]: { ...(metadata[TaskAuthority.computerKey] as object), binding: changed } },
+          {
+            ...metadata,
+            [TaskAuthority.computerKey]: { ...(metadata[TaskAuthority.computerKey] as object), binding: changed },
+          },
           "session_child",
           "session_parent",
         ),
@@ -126,12 +129,40 @@ describe("Computer Use child authority", () => {
     ])
   })
 
-  it("admits single Auto edits only with an active goal and explicit parent editing permission", () => {
+  it("admits an unplanned Auto edit for the exact current user request with parent permission", () => {
     const parent = Permission.fromConfig({ "*": "allow" })
-    expect(() => TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, parent })).toThrow(
-      "active goal",
+    const request = "Commit and push all changes"
+    expect(TaskAuthority.current(request, request)).toBe(true)
+    expect(TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, userEdit: true, parent })).toBe(
+      "edit",
     )
-    expect(() => TaskAuthority.admit({ auto: true, saved: "edit", goalActive: false, parent })).toThrow("active goal")
+    expect(TaskAuthority.admit({ auto: true, saved: "edit", goalActive: false, userEdit: true, parent })).toBe("edit")
+    expect(() =>
+      TaskAuthority.admit({
+        auto: true,
+        requested: "edit",
+        goalActive: false,
+        userEdit: true,
+        parent: Permission.fromConfig({ edit: "deny" }),
+      }),
+    ).toThrow("parent policy")
+  })
+
+  it("does not inherit edit authority from an old or non-mutating request", () => {
+    const parent = Permission.fromConfig({ "*": "allow" })
+    expect(TaskAuthority.current("Commit and push all changes", "Review the latest changes")).toBe(false)
+    expect(TaskAuthority.current("Do not commit these changes", "Do not commit these changes")).toBe(false)
+    expect(TaskAuthority.current("Review the changes", "Review the changes")).toBe(false)
+    expect(() => TaskAuthority.admit({ auto: true, requested: "edit", goalActive: false, parent })).toThrow(
+      "explicit current user request",
+    )
+    expect(() => TaskAuthority.admit({ auto: true, saved: "edit", goalActive: false, parent })).toThrow(
+      "explicit current user request",
+    )
+  })
+
+  it("admits single Auto edits with an active goal and explicit parent editing permission", () => {
+    const parent = Permission.fromConfig({ "*": "allow" })
     expect(TaskAuthority.admit({ auto: true, requested: "edit", goalActive: true, parent })).toBe("edit")
     expect(() =>
       TaskAuthority.admit({

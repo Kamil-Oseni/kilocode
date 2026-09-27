@@ -119,6 +119,14 @@ describe("Raya Chief routing", () => {
     ).toMatchObject({ agent: "reasoner", role: "reasoner" })
   })
 
+  it("routes version-control work to a git-capable specialist", () => {
+    for (const request of ["Commit and push all changes", "Push the curriculum branch to origin/main"]) {
+      const decision = RayaChief.route({ request, agents })
+      expect(decision).toMatchObject({ agent: "coder", role: "coder", needs_plan: false })
+      expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(false)
+    }
+  })
+
   it("keeps one small temporary file task away from Designer", () => {
     const decision = RayaChief.route({
       request: "Create one temporary test file, explain what you did, then stop.",

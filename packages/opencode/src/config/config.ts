@@ -864,9 +864,15 @@ const layer = Layer.effect(
           // kilocode_change end
         }
 
-        const activeAccount = Option.getOrUndefined(
-          yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+        // kilocode_change start - keep local startup available when account state or remote org config stalls
+        yield* Effect.logInfo("loading active organization config")
+        const account = yield* accountSvc.active().pipe(
+          Effect.catch(() => Effect.succeed(Option.none())),
+          Effect.timeoutOption("5 seconds"),
         )
+        if (Option.isNone(account)) yield* Effect.logWarning("active organization lookup timed out")
+        const activeAccount = Option.isSome(account) ? Option.getOrUndefined(account.value) : undefined
+        // kilocode_change end
         if (activeAccount?.active_org_id) {
           const accountID = activeAccount.id
           const orgID = activeAccount.active_org_id
@@ -899,6 +905,12 @@ const layer = Layer.effect(
             }
           }).pipe(
             Effect.withSpan("Config.loadActiveOrgConfig"),
+            Effect.timeoutOption("10 seconds"), // kilocode_change - bound remote config and token refresh together
+            // kilocode_change start
+            Effect.tap((result) =>
+              Option.isNone(result) ? Effect.logWarning("active organization config timed out") : Effect.void,
+            ),
+            // kilocode_change end
             Effect.catch((err) =>
               Effect.logDebug("failed to fetch remote account config", {
                 error: err instanceof Error ? err.message : String(err),
@@ -906,6 +918,7 @@ const layer = Layer.effect(
             ),
           )
         }
+        yield* Effect.logInfo("active organization config step complete") // kilocode_change
 
         const managedDir = ConfigManaged.managedConfigDir()
         // kilocode_change start - include kilo.json/kilo.jsonc in managed dir loading

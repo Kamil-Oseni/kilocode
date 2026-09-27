@@ -760,6 +760,36 @@ accountTokenIt.instance("resolves env templates in account config with account t
   }),
 )
 
+// kilocode_change start - a stalled account service must not hold instance config initialization
+for (const phase of ["active", "config", "token"] as const) {
+  const stalledAccountIt = configIt({
+    account: Layer.mock(Account.Service)({
+      active: () =>
+        phase === "active"
+          ? Effect.never
+          : Effect.succeed(
+              Option.some({
+                id: AccountID.make("account-1"),
+                email: "user@example.com",
+                url: "https://control.example.com",
+                active_org_id: OrgID.make("org-1"),
+              }),
+            ),
+      config: () => (phase === "config" ? Effect.never : Effect.succeed(Option.none())),
+      token: () =>
+        phase === "token" ? Effect.never : Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
+    }),
+  })
+
+  stalledAccountIt.instance(`finishes local config when account ${phase} never responds`, () =>
+    Effect.gen(function* () {
+      expect((yield* Config.use.get()).username).toBeDefined()
+    }),
+    30_000,
+  )
+}
+// kilocode_change end
+
 // kilocode_change start
 it.instance("validates config schema and reports warning on invalid fields", () =>
   Effect.gen(function* () {

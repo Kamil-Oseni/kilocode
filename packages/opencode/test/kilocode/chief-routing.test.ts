@@ -75,6 +75,47 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(false)
   })
 
+  it("routes an exact file-facts request without asking about unrelated specialists", () => {
+    const request =
+      "Read-only check in this dummy workspace: report whether raya-review-fresh-a.txt and raya-review-fresh-b.txt exist, each exact byte length, and whether each ends with a newline. Do not edit any file, change the completed goal, launch apps, or interact with the desktop."
+    const available = agents.map((item) => {
+      if (item.name === "generalist")
+        return {
+          ...item,
+          description:
+            "Fast generalist for small file operations, concise answers, and other direct low-complexity work.",
+        }
+      if (item.name === "designer")
+        return {
+          ...item,
+          description:
+            "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
+        }
+      if (item.name === "accountant")
+        return {
+          ...item,
+          description:
+            "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
+        }
+      return item
+    })
+    const decision = RayaChief.route({ request, agents: available })
+
+    expect(decision.agent).toBe("generalist")
+    expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(false)
+    expect(RayaChief.prompt(available)).toContain("do not launch another existence-only child")
+    expect(RayaChief.prompt(available)).toContain("Use file_facts or state uncertainty")
+  })
+
+  it("still asks when design and finance are genuinely tied", () => {
+    const request = "Create a Figma accounting finance template"
+    const decision = RayaChief.route({ request, agents })
+
+    expect(decision.candidates.slice(0, 2).map((item) => item.role)).toEqual(["accountant", "designer"])
+    expect(decision.candidates[0]?.score).toBe(decision.candidates[1]?.score)
+    expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(true)
+  })
+
   it("marks an explicit parallel review for a saved Chief plan", () => {
     const request =
       "Review two independent things in parallel using read-only specialists: inspect chat timestamps and composer styles."

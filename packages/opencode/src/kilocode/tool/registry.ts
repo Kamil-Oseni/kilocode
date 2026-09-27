@@ -10,6 +10,7 @@ import { MemoryRecallTool } from "./memory-recall"
 import { MemorySaveTool } from "./memory-save"
 import { NotifyUserTool } from "./notify-user"
 import { SendFileTool } from "./send-file"
+import { FileFactsTool } from "./file-facts"
 import * as Tool from "../../tool/tool"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Effect } from "effect"
@@ -125,6 +126,7 @@ export namespace KiloToolRegistry {
       const sessions = yield* KiloSessions.Service
       const notify = yield* NotifyUserTool.pipe(Effect.provideService(KiloSessions.Service, sessions))
       const send = yield* SendFileTool
+      const facts = yield* FileFactsTool
       const chief = yield* ChiefRouteTool // raya_change - Milestone B intelligent auto-routing
       const ask = yield* AskOptionsTool // raya_change - Milestone C selectable options
       const discover = yield* DiscoverCapabilitiesTool
@@ -212,6 +214,7 @@ export namespace KiloToolRegistry {
           terminal,
           notify,
           send,
+          facts,
           chief,
           ask,
           discover,
@@ -251,6 +254,7 @@ export namespace KiloToolRegistry {
         terminal,
         notify,
         send,
+        facts,
         chief,
         ask,
         discover,
@@ -292,6 +296,7 @@ export namespace KiloToolRegistry {
       terminal?: Tool.Info
       notify: Tool.Info
       send: Tool.Info
+      facts?: Tool.Info
       notebookRead?: Tool.Info
       notebookEdit?: Tool.Info
       notebookExecute?: Tool.Info
@@ -342,6 +347,7 @@ export namespace KiloToolRegistry {
         notify: Tool.init(tools.notify),
         send: Tool.init(tools.send),
       })
+      const facts = tools.facts ? yield* Tool.init(tools.facts) : undefined
       const chief = tools.chief ? yield* Tool.init(tools.chief) : undefined // raya_change - Milestone B
       const branches =
         tools.chiefPlan && tools.chiefInspect && tools.chiefReview && tools.chiefSynthesize
@@ -404,6 +410,7 @@ export namespace KiloToolRegistry {
         semantic,
         notify: base.notify,
         send: base.send,
+        facts,
         chief,
         ...branches,
         ask,
@@ -506,6 +513,7 @@ export namespace KiloToolRegistry {
       terminal?: Tool.Def
       notify: Tool.Def
       send: Tool.Def
+      facts?: Tool.Def
       notebookRead?: Tool.Def
       notebookEdit?: Tool.Def
       notebookExecute?: Tool.Def
@@ -591,6 +599,7 @@ export namespace KiloToolRegistry {
       ...(tools.personalTodo ? [tools.personalTodo] : []),
       tools.notify,
       tools.send,
+      ...(tools.facts ? [tools.facts] : []),
     ]
   }
 

@@ -22,6 +22,7 @@ import { Instruction } from "../../src/session/instruction"
 import { LSP } from "../../src/lsp/lsp"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { ReadTool } from "../../src/tool/read"
+import { FileFactsTool } from "../../src/kilocode/tool/file-facts"
 import * as Tool from "../../src/tool/tool"
 import { Truncate } from "../../src/tool/truncate"
 import { WriteTool } from "../../src/tool/write"
@@ -75,6 +76,13 @@ const runRead = (args: Tool.InferParameters<typeof ReadTool>, next: Tool.Context
     const info = yield* ReadTool
     const tool = yield* info.init()
     return yield* tool.execute(args, next)
+  })
+
+const runFacts = (filepath: string) =>
+  Effect.gen(function* () {
+    const info = yield* FileFactsTool
+    const tool = yield* info.init()
+    return yield* tool.execute({ path: filepath }, ctx)
   })
 
 const runWrite = (args: Tool.InferParameters<typeof WriteTool>) =>
@@ -206,6 +214,25 @@ describe("tool encoding preservation", () => {
   })
 
   describe("ReadTool streaming and pagination", () => {
+    it.live("distinguishes physical EOF facts hidden by one-line read output", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const first = path.join(dir, "first.txt")
+          const second = path.join(dir, "second.txt")
+          yield* Effect.promise(() => fs.writeFile(first, "fresh worker A\n"))
+          yield* Effect.promise(() => fs.writeFile(second, "fresh worker B"))
+
+          const a = yield* runRead({ filePath: first })
+          const b = yield* runRead({ filePath: second })
+          expect(a.output).toContain("1: fresh worker A\n\n(End of file - total 1 lines)")
+          expect(b.output).toContain("1: fresh worker B\n\n(End of file - total 1 lines)")
+          expect(JSON.parse((yield* runFacts(first)).output)).toEqual({ bytes: "15", newline: "LF" })
+          expect(JSON.parse((yield* runFacts(second)).output)).toEqual({ bytes: "14", newline: "none" })
+        }),
+      ),
+      20_000,
+    )
+
     it.live("releases a truncated UTF-8 file before atomic replacement", () =>
       provideTmpdirInstance((dir) =>
         Effect.gen(function* () {

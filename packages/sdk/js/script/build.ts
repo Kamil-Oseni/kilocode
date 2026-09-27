@@ -143,7 +143,10 @@ if (!legacyPatched.includes(sandbox)) {
 }
 await Bun.write(legacyTypesPath, legacyPatched)
 
-await $`bun prettier --write src/gen src/v2`
+// kilocode_change start - Windows can briefly lock a newly generated file during the first format pass
+const formatted = await $`bun prettier --write src/gen src/v2`.nothrow()
+if (formatted.exitCode !== 0) await $`bun prettier --write src/gen src/v2`
+// kilocode_change end
 await $`rm -rf dist tsconfig.tsbuildinfo`
 await $`bun tsc`
 await $`rm openapi.json`

@@ -74,6 +74,7 @@ const report = {
 }
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
+const booksState = scene === "paused-composer" ? "paused" : "scheduled"
 const children = Array.from({ length: 12 }, (_, index) => {
   const count = index + 1
   const status =
@@ -924,7 +925,7 @@ const respond = (message: WebviewMessage) => {
           role: books.role,
           latest: report,
           unread: 1,
-          state: "scheduled",
+          state: booksState,
         },
         {
           agentID: legal.id,

@@ -1526,7 +1526,7 @@ export const Inbox: Component<{
           </label>
           <Show when={props.box?.state === "paused"}>
             <p class="routines-hint">
-              This worker is paused. Follow-ups still arrive here. Scheduled starts stay off until it is enabled.
+              You can still message this worker. Scheduled work stays paused.
             </p>
           </Show>
           <div class="routines-compose-actions">

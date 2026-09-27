@@ -2059,6 +2059,14 @@ html[data-theme="kilo-vscode"] .routines-info-primary-action {
   border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
 
+.routines-composer:has(> .routines-hint) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.routines-composer:has(> .routines-hint) .routines-compose-actions {
+  justify-self: end;
+}
+
 .routines-compose-field textarea {
   min-height: 2.5rem;
   max-height: 8rem;

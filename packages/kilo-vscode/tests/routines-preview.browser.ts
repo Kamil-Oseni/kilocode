@@ -27,6 +27,30 @@ test("organization overview fits narrow and wide light and dark previews", async
   }
 })
 
+test("paused worker composer keeps message field usable at narrow and wide widths", async ({ page }, info) => {
+  for (const width of [320, 900]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/?state=light-routines&scene=paused-composer")
+    await page.locator('.routines-identity[data-routine-worker="routine"]').click()
+    const thread = page.getByRole("region", { name: "Conversation with Books" })
+    await expect(thread).toBeVisible()
+    await expect(thread.getByText("You can still message this worker. Scheduled work stays paused.")).toBeVisible()
+    const field = thread.getByLabel("Message this worker")
+    await expect(field).toBeEnabled()
+    await field.fill("A follow-up draft remains readable")
+    const box = await field.boundingBox()
+    const form = await thread.locator(".routines-composer").boundingBox()
+    expect(box).not.toBeNull()
+    expect(form).not.toBeNull()
+    expect(box!.width).toBeGreaterThan(form!.width * 0.6)
+    expect(box!.x).toBeGreaterThanOrEqual(form!.x)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(form!.x + form!.width + 1)
+    expect(await page.locator(".routines-composer").evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
+    await page.screenshot({ path: info.outputPath(`paused-composer-${width}.png`), fullPage: true })
+  }
+})
+
 test("Routines plans a worker from the input and leaves a draft when offline", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=dark-routines")

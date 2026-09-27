@@ -24,7 +24,7 @@ export namespace TaskAuthority {
     binding: { version: 1; windowID: string; identity: string }
   }
 
-  const safe = ["read", "grep", "glob", "list", "semantic_search", "todoread", "chief_message"]
+  const safe = ["read", "file_facts", "grep", "glob", "list", "semantic_search", "todoread", "chief_message"]
   const computer = [
     "desktop_observe",
     "desktop_windows",

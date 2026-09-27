@@ -11,6 +11,7 @@ describe("Computer Use child authority", () => {
     expect(Permission.evaluate("desktop_observe", "*", child).action).toBe("allow")
     expect(Permission.evaluate("desktop_sequence", "*", child).action).toBe("allow")
     expect(Permission.evaluate("read", "*", child).action).toBe("deny")
+    expect(Permission.evaluate("file_facts", "*", child).action).toBe("deny")
     expect(Permission.evaluate("write", "*", child).action).toBe("deny")
     expect(Permission.evaluate("edit", "*", child).action).toBe("deny")
     expect(Permission.evaluate("bash", "*", child).action).toBe("deny")
@@ -23,6 +24,12 @@ describe("Computer Use child authority", () => {
     const child = Permission.merge(TaskAuthority.rules("computer"), TaskAuthority.denies("computer", parent))
     expect(Permission.evaluate("read", "*", child).action).toBe("deny")
     expect(Permission.evaluate("desktop_observe", "*", child).action).toBe("allow")
+  })
+
+  it("keeps an explicit parent file-facts denial for a read-only child", () => {
+    const parent = Permission.fromConfig({ file_facts: "deny" })
+    const child = Permission.merge(TaskAuthority.rules("read"), TaskAuthority.denies("read", parent))
+    expect(Permission.evaluate("file_facts", "*", child).action).toBe("deny")
   })
 
   it("preserves a specific parent desktop denial", () => {
@@ -107,6 +114,7 @@ describe("Computer Use child authority", () => {
     const child = Permission.merge(TaskAuthority.rules(read), TaskAuthority.denies(read, parent))
     expect(TaskAuthority.read(metadata)).toBe("read")
     expect(Permission.evaluate("read", "*", child).action).toBe("allow")
+    expect(Permission.evaluate("file_facts", "*", child).action).toBe("allow")
     expect(Permission.evaluate("write", "*", child).action).toBe("deny")
     expect(Permission.evaluate("edit", "*", child).action).toBe("deny")
     expect(Permission.evaluate("bash", "*", child).action).toBe("deny")
@@ -120,6 +128,7 @@ describe("Computer Use child authority", () => {
     const parent = agents.auto?.permission ?? []
     const child = Permission.merge(TaskAuthority.rules("read"), TaskAuthority.denies("read", parent))
     expect(Permission.evaluate("read", "*", child).action).toBe("allow")
+    expect(Permission.evaluate("file_facts", "*", child).action).toBe("allow")
     expect(Permission.evaluate("grep", "*", child).action).toBe("allow")
     expect(Permission.evaluate("chief_message", "*", child).action).toBe("allow")
     expect(Permission.evaluate("edit", "*", child).action).toBe("deny")

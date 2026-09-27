@@ -966,6 +966,7 @@ export function addAuto(
         task: "allow",
         // The Chief's visible tool list stays curated; these grants let a read-only child inherit inspection tools.
         read: "allow",
+        file_facts: "allow",
         grep: "allow",
         glob: "allow",
         list: "allow",

@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { ready, reviewResult, retry } from "../../webview-ui/src/components/chat/review-request"
 
-test("bulk review waits for nonempty details from the current session", () => {
+test("bulk review accepts loaded empty details from the current session", () => {
   expect(ready("session-a", undefined)).toBe(false)
   expect(ready("session-a", { session: "session-a" })).toBe(false)
-  expect(ready("session-a", { session: "session-a", expected: {} })).toBe(false)
+  expect(ready("session-a", { session: "session-a", expected: {} })).toBe(true)
+  expect(ready("session-a", { session: "session-b", expected: {} })).toBe(false)
   expect(ready("session-a", { session: "session-b", expected: { "file.ts": "revision" } })).toBe(false)
   expect(ready("session-a", { session: "session-a", expected: { "file.ts": "revision" } })).toBe(true)
 })

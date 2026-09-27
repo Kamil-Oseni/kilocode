@@ -14,7 +14,7 @@ export function ready(
   session: string | undefined,
   details: { session: string; expected?: Record<string, string> } | undefined,
 ) {
-  return !!session && details?.session === session && !!details.expected && Object.keys(details.expected).length > 0
+  return !!session && details?.session === session && details.expected !== undefined
 }
 
 /** Reuse an attempt only while its action, scope, revision and session still match. */

@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 04:53 America/Toronto - legacy review claim recovery
+
+The already-saved `dummy` parent patch falsely lists A+B, while its immutable completed step contains only A; the saved patch hash correctly equals that step's start snapshot. Source now narrows every saved patch claim to files changed between its own start and finish, consistently for review generation selection, Keep receipts and Undo. A missing or invalid pair makes no claim, and strict live matching remains. A real snapshot/session test passes the polluted-patch Keep→later-edit→Undo case; CLI typecheck passes. Retest the old card and a fresh two-worker review only after a new snapshot is installed and the exact active host is verified. `EN-05` remains In progress.
+
+## ChatGPT 2026-09-27 04:47 America/Toronto - source-matched install preparation
+
+Two low-memory snapshot attempts stopped during Windows SDK generation when Prettier could not immediately open newly generated files. Retrying formatting outside that first burst succeeded, so the SDK build now makes one bounded retry and still fails on a persistent error. The elevated SDK build, extension SDK preparation, SDK typecheck and formatting pass. No new production snapshot is installed yet. Wait for the saved-review projection's adverse test, then commit/push and install; verify both loaded and active package digests in the exact `dummy` window before judging its review card. Preserve the other French Study VS Code window and keep `EN-05` In progress.
+
 ## ChatGPT 2026-09-27 04:29 America/Toronto - immutable review patch producer and legacy recovery
 
 The installed `dummy` Keep all error is explained by saved parent session `ses_f1e977bf7ffeKXrvQxhhkRchK6`: its finish snapshot had file A, then the parent patch claimed A+B after B was written concurrently. Current strict `Snapshot.matches` correctly refused file B against that earlier finish snapshot. The producer now records file scope from immutable start/finish snapshots and omits an unreviewable live-staged patch on missing finish/interrupted cleanup. Focused non-Git concurrency and real backend Keep→edit→Undo tests pass; CLI typecheck, scoped lint, formatting, annotation check and diff check pass. Push/install and run a fresh multi-worker review in the exact loaded host. The old dummy card requires a separate safe projection that intersects each saved patch's file list with its immutable start/finish diff, consistently across review version selection, Keep boundaries and Undo. Do not weaken live matching or silently rebaseline old files. `EN-05` remains In progress until installed deleted/renamed and stale-action checks pass.

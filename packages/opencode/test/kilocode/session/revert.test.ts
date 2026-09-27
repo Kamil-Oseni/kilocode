@@ -129,6 +129,107 @@ const setup = Effect.fnUntraced(function* (dir: string, deleted = false) {
 })
 
 it.live(
+  "projects a polluted saved patch through its completed step for review, Keep and Undo",
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const state = yield* setup(dir)
+        const storage = yield* Storage.Service
+        const summary = yield* SessionSummary.Service
+        const late = path.join(dir, "late.txt")
+        const providerID = ProviderV2.ID.make("test")
+        const save = Effect.fn("ReviewLegacyPatch.save")(function* (start: string, finish: string, files: string[]) {
+          const assistant = yield* state.sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: state.session.id,
+            role: "assistant",
+            parentID: state.user.id,
+            mode: "default",
+            agent: "default",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ModelV2.ID.make("test"),
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: state.session.id,
+            type: "step-start",
+            snapshot: start,
+          })
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: state.session.id,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: finish,
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          })
+          const part = yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: state.session.id,
+            type: "patch",
+            hash: start,
+            files,
+          })
+          return { assistant, part }
+        })
+
+        yield* Effect.promise(() => fs.writeFile(late, "kept"))
+        const written = yield* state.snapshot.track()
+        if (!written) throw new Error("expected completed snapshot")
+        const valid = yield* save(state.after, written, [late])
+        const polluted = yield* save(state.patch.hash, state.after, [state.writable, late])
+        yield* state.sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: polluted.assistant.id,
+          sessionID: state.session.id,
+          type: "patch",
+          hash: state.patch.hash,
+          files: [late],
+        })
+        const diffs = yield* state.snapshot.diffFull(state.patch.hash, written)
+        yield* storage.write(["session_diff", state.session.id], diffs)
+        const review = yield* summary.diff({ sessionID: state.session.id })
+        const owned = review.find(
+          (diff) => diff.file && path.resolve(dir, diff.file).replaceAll("\\", "/") === late.replaceAll("\\", "/"),
+        )
+        expect(owned?.generation).toBe(`${valid.assistant.id}:${valid.part.id}`)
+        expect(owned?.generation).not.toBe(`${polluted.assistant.id}:${polluted.part.id}`)
+        const expected = Object.fromEntries(
+          review.filter((diff) => diff.file).map((diff) => [diff.file!, revision(diff)]),
+        )
+        yield* state.revert.keepChanges({ sessionID: state.session.id, expected })
+        const kept = yield* storage.read<Record<string, string>>(["session_kept", state.session.id])
+        expect(kept[late.replaceAll("\\", "/")]).toBe(valid.assistant.id)
+
+        yield* Effect.promise(() => fs.writeFile(late, "newer"))
+        const newer = yield* state.snapshot.track()
+        if (!newer) throw new Error("expected newer snapshot")
+        yield* save(written, newer, [late])
+        yield* storage.write(
+          ["session_diff", state.session.id],
+          yield* state.snapshot.diffFull(state.patch.hash, newer),
+        )
+        const current = yield* summary.diff({ sessionID: state.session.id })
+        const next = Object.fromEntries(current.filter((diff) => diff.file).map((diff) => [diff.file!, revision(diff)]))
+        yield* state.revert.discardChanges({ sessionID: state.session.id, expected: next })
+        expect(yield* Effect.promise(() => fs.readFile(late, "utf8"))).toBe("kept")
+        expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+      }),
+    { git: true },
+  ),
+  90_000,
+)
+
+it.live(
   "keeps and later undoes a new file in a non-Git workspace with exact snapshots",
   provideTmpdirInstance(
     (dir) =>

@@ -11,6 +11,7 @@ import { KiloSessionRevert } from "./revert"
 import { RayaRevertNote } from "./revert-note"
 import { boundaries, canonical } from "./review-boundaries"
 import { ReviewConflict, verify, workspace } from "./review-revision"
+import { project } from "./review-patches"
 
 const Proof = Schema.Union([
   Schema.Struct({ action: Schema.Literal("keep"), boundaries: Schema.Record(Schema.String, Schema.String) }),
@@ -50,7 +51,7 @@ export function recovery(services: Services) {
       session.directory,
       input.files,
     )
-    const all = yield* services.gather(input.sessionID, true)
+    const all = yield* project(services.snap, yield* services.gather(input.sessionID, true), session.directory)
     yield* workspace(services.snap, all, files, session.directory)
     const wanted = new Set(files.map((file) => canonical(file, session.directory)))
     const latest: Record<string, string> = {}
@@ -74,7 +75,7 @@ export function recovery(services: Services) {
       session.directory,
       input.files,
     )
-    const all = yield* services.gather(input.sessionID, true)
+    const all = yield* project(services.snap, yield* services.gather(input.sessionID, true), session.directory)
     yield* workspace(services.snap, all, files, session.directory)
     const kept = yield* boundaries(services.storage, services.sessions, input.sessionID)
     const patches = KiloSessionRevert.targets(all, files, kept, !!input.files?.length)

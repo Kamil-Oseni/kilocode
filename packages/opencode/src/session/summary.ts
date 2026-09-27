@@ -9,7 +9,6 @@ import { appendSessionDiffs, readSessionDiffBase } from "@/kilocode/session-port
 import { Storage } from "@/storage/storage" // kilocode_change
 import { Config } from "@/config/config"
 import { reviewed, ReviewDiff } from "@/kilocode/session/review-state" // kilocode_change - persisted review acceptance
-import { Database } from "@opencode-ai/core/database/database" // kilocode_change - narrow review patch projection
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -83,7 +82,6 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const storage = yield* Storage.Service // kilocode_change
-    const database = yield* Database.Service // kilocode_change - narrow review patch projection
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -147,19 +145,26 @@ const layer = Layer.effect(
       yield* sessions.updateMessage(target.info)
     })
 
-    const diff = Effect.fn("SessionSummary.diff")(function* (input: DiffInput) { // kilocode_change - full-content detail input
+    const diff = Effect.fn("SessionSummary.diff")(function* (input: DiffInput) {
+      // kilocode_change - full-content detail input
       // kilocode_change start - authoritative full-content detail for one file (editor diff tabs)
       if (input.full && input.file) {
         const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
         const messages = input.messageID
           ? all.filter(
-              (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+              (m) =>
+                m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
             )
           : all
         let from: string | undefined
         let to: string | undefined
         for (const item of messages) {
-          if (!from) for (const part of item.parts) if (part.type === "step-start" && part.snapshot) { from = part.snapshot; break }
+          if (!from)
+            for (const part of item.parts)
+              if (part.type === "step-start" && part.snapshot) {
+                from = part.snapshot
+                break
+              }
           for (const part of item.parts) if (part.type === "step-finish" && part.snapshot) to = part.snapshot
         }
         if (!from || !to) return []
@@ -213,7 +218,7 @@ const layer = Layer.effect(
             fold(normalize(yield* readStored(kid.id)))
           }
         }
-        return yield* reviewed(database.db, storage, sessions, input.sessionID, [...merged.values()])
+        return yield* reviewed(snapshot, storage, sessions, input.sessionID, [...merged.values()]) // kilocode_change
       }
       // kilocode_change end
       const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
@@ -244,7 +249,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node, Database.node], // kilocode_change
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node], // kilocode_change
 })
 
 export * as SessionSummary from "./summary"

@@ -16,6 +16,7 @@ import { RayaRevertNote } from "@/kilocode/session/revert-note" // kilocode_chan
 import { ReviewConflict, verify, workspace } from "@/kilocode/session/review-revision" // kilocode_change - reject stale review actions
 import { boundaries } from "@/kilocode/session/review-boundaries" // kilocode_change - honor child-session acceptance during parent Undo
 import { receipt, recovery } from "@/kilocode/session/review-receipt" // kilocode_change - durable review retries
+import { project } from "@/kilocode/session/review-patches" // kilocode_change - project legacy patch scope from completed steps
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -222,7 +223,7 @@ const layer = Layer.effect(
           )
         : input.files
       if (input.expected && files?.length === 0) return session
-      const all = yield* gather(input.sessionID, !!input.expected)
+      const all = yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory) // kilocode_change
       if (input.expected) yield* workspace(snap, all, files ?? [], session.directory)
       const want = files ? new Set(files.map((file) => file.replaceAll("\\", "/"))) : undefined
       const latest: Record<string, string> = {}
@@ -266,7 +267,7 @@ const layer = Layer.effect(
           )
         : input.files
       if (input.expected && files?.length === 0) return session
-      const all = yield* gather(input.sessionID, !!input.expected)
+      const all = yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory) // kilocode_change
       const expected = input.expected ? yield* workspace(snap, all, files ?? [], session.directory) : undefined
       const kept = yield* boundaries(storage, sessions, input.sessionID)
       const result = yield* KiloSessionRevert.discardAll(

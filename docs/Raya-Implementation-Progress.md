@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-27 04:53 EDT - saved-review claims projected through completed steps
+
+The existing `dummy` review stored a parent patch that claimed files A+B even though that parent's completed snapshot changed only A; its saved patch hash matches its preceding step-start snapshot. The review, Keep receipt and Undo paths now intersect each patch's original file list with the immutable start-to-finish diff for that same completed step. Missing or mismatched snapshots produce no accepted file claim, and live workspace revision checks remain strict. A real snapshot/session regression covers polluted saved metadata, current generation selection, Keep, a later edit and Undo to kept bytes. CLI typecheck and the focused regression pass. This is source evidence; the already-saved card and a fresh concurrent review still require installed-host retests. Next: finish lint/guards, commit/push, install a source-matched snapshot, then check exact loaded host identity and both review paths. Keep `EN-05` In progress.
+
+## ChatGPT 2026-09-27 04:47 EDT - SDK snapshot build reliability
+
+The first two attempts to build a source-matched snapshot stopped while Prettier formatted freshly generated SDK files on Windows: one or two generated files failed to open during the parallel format pass, although each file existed and a subsequent single-file or full-directory format succeeded. The SDK build now retries that format pass once after a failed first pass; the retry still fails the build if formatting remains broken. An elevated SDK build, the extension's SDK preparation step, SDK typecheck and source formatting pass. No new snapshot has been installed yet. Next: finish the saved-review recovery regression, commit and push the source changes, then build/install and test in the exact loaded disposable host.
+
 ## ChatGPT 2026-09-27 04:29 EDT - parallel review snapshot race corrected in source
 
 A source-matched installed `dummy` review exposed a real Keep all refusal for two new files. The current session diff showed both files as added, but `ReviewRevision.workspace` rejected the live-file check. Read-only inspection of saved session `ses_f1e977bf7ffeKXrvQxhhkRchK6` found the parent `step-finish` snapshot contained only file A while a later parent patch part listed A and B; creator child finish snapshots contained both matching live blobs. `session/processor.ts` captured the finish snapshot, then `Snapshot.patch` re-staged the live workspace after another worker wrote B. This is a provenance race, not permission to bypass the verifier.

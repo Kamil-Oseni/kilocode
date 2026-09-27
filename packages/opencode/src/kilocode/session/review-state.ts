@@ -6,8 +6,7 @@ import type { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import { revision } from "./review-revision"
 import { boundaries as read } from "./review-boundaries"
-import type { Database } from "@opencode-ai/core/database/database"
-import { patches } from "./review-history"
+import { project } from "./review-patches"
 
 export const ReviewDiff = Snapshot.FileDiff.mapFields((fields) => ({
   ...fields,
@@ -25,7 +24,7 @@ export const ReviewDiff = Snapshot.FileDiff.mapFields((fields) => ({
 
 /** Project persisted acceptance onto current content; never trust client dismissal state. */
 export const reviewed = Effect.fn("ReviewState.reviewed")(function* (
-  db: Database.Interface["db"],
+  snap: Snapshot.Interface,
   storage: Storage.Interface,
   sessions: Session.Interface,
   sessionID: SessionID,
@@ -46,13 +45,22 @@ export const reviewed = Effect.fn("ReviewState.reviewed")(function* (
     const id = queue.shift()!
     if (visited.has(id)) continue
     visited.add(id)
-    for (const patch of yield* patches(db, id)) {
-      for (const file of patch.files) {
-        const key = normalize(file)
-        if (!latest.has(key) || latest.get(key)!.generation < patch.generation)
-          latest.set(key, { message: patch.message, generation: patch.generation })
+    const owner = yield* sessions.get(id).pipe(Effect.orDie)
+    const messages = yield* project(
+      snap,
+      yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie),
+      owner.directory,
+    )
+    for (const message of messages)
+      for (const part of message.parts) {
+        if (part.type !== "patch") continue
+        const generation = `${message.info.id}:${part.id}`
+        for (const file of part.files) {
+          const key = normalize(file)
+          if (!latest.has(key) || latest.get(key)!.generation < generation)
+            latest.set(key, { message: message.info.id, generation })
+        }
       }
-    }
     for (const child of yield* sessions.children(id)) queue.push(child.id)
   }
   return diffs.map((diff) => {

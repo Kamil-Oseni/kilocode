@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { Effect, Exit } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -13,6 +13,7 @@ import { SessionSummary } from "@/session/summary"
 import { MessageID, PartID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
+import { spans } from "@/kilocode/session/review-diff"
 import { provideTmpdirProject } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
 
@@ -31,6 +32,128 @@ const it = testEffect(env)
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 const providerID = ProviderV2.ID.make("test")
 const modelID = ModelV2.ID.make("test")
+
+it.live(
+  "refuses a blind descendant before replaying parent patches, even across concurrent reviews",
+  provideTmpdirProject(
+    (dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const snapshot = yield* Snapshot.Service
+        const parent = yield* sessions.create({})
+        const child = yield* sessions.create({ parentID: parent.id })
+        const user = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: parent.id,
+          role: "user",
+          agent: "auto",
+          model: { providerID, modelID },
+          time: { created: Date.now() },
+        })
+        const assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: parent.id,
+          role: "assistant",
+          parentID: user.id,
+          mode: "default",
+          agent: "coder",
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens,
+          modelID,
+          providerID,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: parent.id,
+          type: "step-start",
+          snapshot: "start",
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: parent.id,
+          type: "step-finish",
+          reason: "stop",
+          snapshot: "finish",
+          cost: 0,
+          tokens,
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: parent.id,
+          type: "patch",
+          hash: "start",
+          files: [path.join(dir, "a.txt")],
+        })
+        const childUser = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: child.id,
+          role: "user",
+          agent: "coder",
+          model: { providerID, modelID },
+          time: { created: Date.now() },
+        })
+        const childAssistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: child.id,
+          role: "assistant",
+          parentID: childUser.id,
+          mode: "default",
+          agent: "coder",
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens,
+          modelID,
+          providerID,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: childAssistant.id,
+          sessionID: child.id,
+          type: "tool",
+          tool: "bash",
+          callID: "call-blind",
+          state: {
+            status: "completed",
+            input: { command: "edit a.txt" },
+            output: "",
+            metadata: {},
+            title: "Edit a.txt",
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+
+        let calls = 0
+        const snap: Snapshot.Interface = {
+          ...snapshot,
+          patch: () => {
+            calls++
+            return Effect.die(new Error("patch was replayed before review refusal"))
+          },
+        }
+        const results = yield* Effect.forEach(
+          Array.from({ length: 8 }),
+          () => Effect.exit(spans(snap, storage, sessions, parent.id)),
+          { concurrency: "unbounded" },
+        )
+        expect(calls).toBe(0)
+        for (const result of results) {
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("without a completed snapshot")
+        }
+      }),
+    { git: true },
+  ),
+  30_000,
+)
 
 it.live(
   "hides kept raw additions and refuses a later edit without snapshots",

@@ -2,6 +2,7 @@ import path from "node:path"
 import { Effect } from "effect"
 import type { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
+import type { MessageV2 } from "@/session/message-v2"
 import type { Snapshot } from "@/snapshot"
 import type { Storage } from "@/storage/storage"
 import { boundaries, canonical } from "./review-boundaries"
@@ -21,19 +22,14 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
   const result = new Map<string, Span>()
   const queue = [sessionID]
   const visited = new Set<SessionID>()
+  const groups: { directory: string; messages: MessageV2.WithParts[] }[] = []
   while (queue.length) {
     const id = queue.shift()!
     if (visited.has(id)) continue
     visited.add(id)
     const owner = yield* sessions.get(id).pipe(Effect.orDie)
-    const messages = yield* project(
-      snap,
-      yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie),
-      owner.directory,
-    )
+    const messages = yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie)
     for (const message of messages) {
-      let start: string | undefined
-      let finish: string | undefined
       const blind = message.parts.some(
         (part) => part.type === "tool" && ["bash", "edit", "write", "apply_patch", "multiedit"].includes(part.tool),
       )
@@ -48,6 +44,17 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
               "A file operation ran without a completed snapshot. Review is unavailable until the files are reconciled.",
           }),
         )
+    }
+    groups.push({ directory: owner.directory, messages })
+    for (const child of yield* sessions.children(id)) queue.push(child.id)
+  }
+  // Reject an incomplete descendant before projecting any historical patch. Otherwise
+  // each review refresh queues Git work that cannot change the refusal.
+  for (const group of groups) {
+    const messages = yield* project(snap, group.messages, group.directory)
+    for (const message of messages) {
+      let start: string | undefined
+      let finish: string | undefined
       for (const part of message.parts) {
         if (part.type === "step-start") {
           start = part.snapshot
@@ -57,11 +64,11 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
         if (part.type !== "patch" || !start || !finish) continue
         const order = `${message.info.id}:${part.id}`
         for (const file of part.files) {
-          const key = canonical(file, owner.directory)
+          const key = canonical(file, group.directory)
           if (kept[key] && message.info.id <= kept[key]) continue
           const prior = result.get(key)
           result.set(key, {
-            file: path.resolve(owner.directory, file),
+            file: path.resolve(group.directory, file),
             start: prior && prior.first < order ? prior.start : start,
             finish: prior && prior.last > order ? prior.finish : finish,
             first: prior && prior.first < order ? prior.first : order,
@@ -70,7 +77,6 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
         }
       }
     }
-    for (const child of yield* sessions.children(id)) queue.push(child.id)
   }
   return result
 })

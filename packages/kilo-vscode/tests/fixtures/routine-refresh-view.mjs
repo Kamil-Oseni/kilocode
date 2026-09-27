@@ -119,6 +119,7 @@ try {
   })
   reply({ type: "routineState", refresh: "complete" })
   assert.equal(sent.filter((msg) => msg.type === "routineList").length, 2)
+  button("Review runs").click()
   assert.match(root.textContent, /Retained report/)
   reply({ type: "routineState", refreshID: 2, refresh: "loading" })
   reply({ type: "routineRuns", refreshID: 2, agentID: agent.id, error: "History unavailable" })
@@ -126,6 +127,7 @@ try {
   assert.match(root.textContent, /History may be stale: History unavailable/)
   assert.match(root.textContent, /Some history could not be refreshed/)
   assert.match(root.textContent, /Retained report/)
+  button("Close review").click()
   assert.equal(button("Refresh").disabled, false)
   button("Refresh").click()
   assert.equal(sent.filter((msg) => msg.type === "routineList").length, 3)
@@ -218,7 +220,7 @@ try {
     agents: [{ ...agent, output: { ...output, description: "Current authoritative requirements" } }],
   })
   assert.match(root.querySelector("[data-routine-comparison]").textContent, /Current authoritative requirements/)
-  assert.equal(root.querySelector("section textarea").value, "Original requirements")
+  assert.equal(root.querySelector(".routines-instructions textarea").value, "Original requirements")
   console.log("routine-refresh-view: 22 assertions passed")
 } finally {
   dispose()

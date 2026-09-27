@@ -235,7 +235,11 @@ try {
   assert.match(root.querySelector(".routines-organization-editor h3").textContent, /Organization settings/)
   assert.doesNotMatch(root.querySelector(".routines-organization-editor").textContent, /Revision \d+/)
   const settings = [...root.querySelectorAll(".routines-organization-disclosure")]
-  assert.equal(settings.length, 3)
+  assert.equal(settings.length, 2)
+  assert.deepEqual(
+    settings.map((item) => item.querySelector("summary span")?.textContent?.trim()),
+    ["Guidance and budget", "Work handoffs"],
+  )
   assert.ok(settings.every((item) => !item.open))
   const workerSettings = root.querySelector(".routines-organization-member-settings")
   assert.equal(workerSettings.open, false)

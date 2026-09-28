@@ -1,7 +1,15 @@
 import { describe, expect, it } from "bun:test"
-import { WindowsDesktopDriver } from "../../src/services/computer-use/desktop-windows"
+import { WindowsDesktopDriver as Driver } from "../../src/services/computer-use/desktop-windows"
 import type { DesktopNativeDispatch } from "../../src/services/computer-use/desktop-session"
 import type { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
+
+// Existing script fixtures explicitly supply both independently owned command boundaries.
+class WindowsDesktopDriver extends Driver {
+  constructor(...args: ConstructorParameters<typeof Driver>) {
+    const semantic = args[0] ? { run: args[0].run.bind(args[0]), cancel: () => undefined } : undefined
+    super(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7] ?? semantic)
+  }
+}
 
 function harness(outputs: string[]) {
   const scripts: string[] = []
@@ -48,6 +56,75 @@ process.stdin.on("data",chunk=>{
 }
 
 describe("Windows native desktop driver", () => {
+  it("refuses a retired warm scene when Stop occurs during current-window verification", async () => {
+    const frame = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      mime: "image/png" as const,
+      data: "retired",
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    let release: ((value: string) => void) | undefined
+    const input = {
+      run: () =>
+        new Promise<string>((resolve) => {
+          release = resolve
+        }),
+      cancel: () => undefined,
+    }
+    let captures = 0
+    const background = {
+      run: async () => {
+        captures += 1
+        if (captures === 1) return JSON.stringify(frame)
+        return new Promise<string>(() => undefined)
+      },
+      cancel: () => undefined,
+    }
+    const driver = new WindowsDesktopDriver(input, background)
+    driver.startCapture(() => undefined)
+    try {
+      for (let index = 0; index < 100 && captures < 2; index++) await Bun.sleep(1)
+      const pending = driver.observe({ semantics: false })
+      const outcome = pending.catch((error: unknown) => error)
+      expect(release).toBeDefined()
+      driver.stopCapture()
+      release?.(JSON.stringify({ windowID: frame.windowID, location: frame.location }))
+      expect(((await outcome) as Error).message).toMatch(/cancelled after capture changed/)
+    } finally {
+      driver.cancel()
+    }
+  })
+  it("keeps unchanged fallback keyframes separate across visual and semantic children", async () => {
+    const base = {
+      windowID: "0x123",
+      location: "pid:5;title:Editor;bounds:0,0,20,10",
+      width: 20,
+      height: 10,
+      acquisitionMs: 0,
+      preparationMs: 0,
+    }
+    const input = harness([
+      JSON.stringify({ ...base, change: "keyframe", mime: "image/png", data: "visual" }),
+      JSON.stringify({ ...base, change: "unchanged" }),
+    ])
+    const semantic = harness([
+      JSON.stringify({ ...base, change: "keyframe", mime: "image/png", data: "semantic" }),
+      JSON.stringify({ ...base, change: "unchanged" }),
+    ])
+    const driver = new Driver(input.runner, undefined, undefined, [], undefined, undefined, undefined, semantic.runner)
+    try {
+      expect((await driver.observe()).data).toBe("semantic")
+      expect((await driver.observe({ semantics: false })).data).toBe("visual")
+      expect((await driver.observe()).data).toBe("semantic")
+      expect((await driver.observe({ semantics: false })).data).toBe("visual")
+    } finally {
+      driver.cancel()
+    }
+  })
   it("routes selected continuous pixels through a bound native child and rechecks identity before consumption", async () => {
     const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10", identity: "A".repeat(64) }
     const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
@@ -161,7 +238,8 @@ describe("Windows native desktop driver", () => {
         {
           run: async (value) => {
             calls.push(value)
-            if (value.includes("[RayaDesktopNative]::Identity($window.Handle)")) return JSON.stringify(current)
+            if (value.includes("[RayaDesktopNative]::Identity($window.Handle)") && !value.includes("CopyFromScreen"))
+              return JSON.stringify(current)
             if (value.includes("CopyFromScreen"))
               return JSON.stringify({
                 windowID: current.windowID,
@@ -190,7 +268,12 @@ describe("Windows native desktop driver", () => {
         expect((await driver.observe({ semantics: false })).data).toBe(
           current.identity === identity ? image.toString("base64") : "fresh pixels",
         )
-        expect(calls.filter((value) => value.includes("[RayaDesktopNative]::Identity($window.Handle)"))).toHaveLength(1)
+        expect(
+          calls.filter(
+            (value) =>
+              value.includes("[RayaDesktopNative]::Identity($window.Handle)") && !value.includes("CopyFromScreen"),
+          ),
+        ).toHaveLength(1)
         expect(calls.filter((value) => value.includes("CopyFromScreen"))).toHaveLength(
           current.identity === identity ? 0 : 1,
         )

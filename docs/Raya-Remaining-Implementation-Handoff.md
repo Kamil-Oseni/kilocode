@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 00:38 EDT - semantic worker source ready
+
+The independent semantic worker is validated: 53 tests/330 assertions, extension/webview types, scoped lint/format/diff pass. One lazy child/read, generation cancellation, pre-start and result-time monotonic deadlines, exact selected fingerprint and warm cancellation checks preserve the fail-closed boundary; fallback image caches are isolated by runner. No event cache or native UIA worker exists yet. Actual provider-hang/continuous-capture/Pause/selected-target/latency host checks remain open, with desktop interaction stopped after Escape. Native launch and durable recovery slices are finishing their separate source gates; root owns coherent commits/push/install. Keep all full release gates In progress.
+
 ## ChatGPT 2026-09-28 00:27 EDT - current authoritative checkpoint
 
 Main/origin main is `c9050940fa`; the normal push and full low-memory snapshot install completed. Installed version is `7.4.23-snapshot+c9050940fa.kamil-oseni.1790568550613`, VSIX digest `51fe7ed13664a541fa15385db5da930a32b127591b10de4cceb83a41d195e106`. Physical Escape stopped Computer Use before fresh loaded-window verification; leave desktop interaction stopped until the user resumes it. Prior b8 reports remain the last observed loaded host. Do not repeat the already completed exact-file deletion/Undo test. Commit/push authorization to the existing remote is explicit; MCP remains deferred.

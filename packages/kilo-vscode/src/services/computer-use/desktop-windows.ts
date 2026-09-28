@@ -14,6 +14,7 @@ import {
 import { DesktopCaptureWorker, type CapturedScene, type CaptureEvent } from "./desktop-capture-worker"
 import { observeCapture } from "./desktop-capture-metrics"
 import { DesktopCaptureClock, parse as parseClock } from "./desktop-capture-clock"
+import { DesktopSemanticWorker } from "./desktop-semantic-worker"
 import { NativeCaptureHost } from "./desktop-native-host"
 import type { NativeFrame } from "./desktop-native-frame"
 import {
@@ -651,7 +652,9 @@ $window = Get-RayaWindow
 if ($window.WindowID -ne $target.windowID -or $window.Location -ne $target.location) {
   throw "Foreground window changed before semantic observation"
 }
-if ($target.identity -and [RayaDesktopNative]::Identity($window.Handle) -ne $target.identity) {
+$identity = [RayaDesktopNative]::Identity($window.Handle)
+if (-not $identity) { throw "Desktop semantic process identity is unavailable" }
+if ($target.identity -and $identity -ne $target.identity) {
   throw "Desktop process identity changed before semantic observation"
 }
 $timer = [Diagnostics.Stopwatch]::StartNew()
@@ -676,8 +679,7 @@ $after = Get-RayaWindow
 if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
   throw "Foreground window changed while correlating semantic observations"
 }
-$identity = if ($target.identity) { [RayaDesktopNative]::Identity($after.Handle) } else { $null }
-if ($target.identity -and $identity -ne $target.identity) {
+if ([RayaDesktopNative]::Identity($after.Handle) -ne $identity) {
   throw "Desktop process identity changed while correlating semantic observations"
 }
 [pscustomobject]@{
@@ -708,6 +710,8 @@ function Test-RayaImage($stream) {
 }
 $window = Get-RayaWindow
 $scale = [Math]::Min(1.0, [Math]::Min(${CAPTURE.edge}.0 / $window.Width, ${CAPTURE.edge}.0 / $window.Height))
+$identity = if ($collectSemantics) { [RayaDesktopNative]::Identity($window.Handle) } else { $null }
+if ($collectSemantics -and -not $identity) { throw "Desktop semantic process identity is unavailable" }
 $area = [double]$window.Width * [double]$window.Height
 if ($area -gt ${CAPTURE.pixels}) { $scale = [Math]::Min($scale, [Math]::Sqrt(${CAPTURE.pixels}.0 / $area)) }
 $width = [Math]::Max(1, [int][Math]::Floor($window.Width * $scale))
@@ -806,6 +810,9 @@ try {
   $after = Get-RayaWindow
   if ($after.WindowID -ne $window.WindowID -or $after.Location -ne $window.Location) {
     throw "Foreground window changed while correlating visual and semantic observations"
+  }
+  if ($collectSemantics -and [RayaDesktopNative]::Identity($after.Handle) -ne $identity) {
+    throw "Desktop process identity changed while correlating visual and semantic observations"
   }
   $result = [ordered]@{
     windowID = $window.WindowID
@@ -1445,9 +1452,14 @@ function semanticResult(
 export class WindowsDesktopDriver implements DesktopDriver {
   readonly guarded = true as const
   private readonly runner: Runner
+  private readonly semantic: DesktopSemanticWorker
   private probe: Runner | undefined
   private preparing: Promise<void> | undefined
-  private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
+  private readonly last = new Map<
+    boolean,
+    Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data">
+  >()
+  private revision = 0
   private worker: DesktopCaptureWorker | undefined
   private timing: ReturnType<typeof observeCapture> | undefined
   private readonly measurements = new Set<(event: CaptureEvent) => void>()
@@ -1497,9 +1509,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
     private readonly receiptDir?: string,
     probe?: Runner,
     private readonly nativeInput?: { binary: string; args?: string[] },
+    semantic?: Runner,
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
+    this.semantic = new DesktopSemanticWorker(semantic ?? runner())
     this.probe = probe
   }
 
@@ -1588,18 +1602,25 @@ export class WindowsDesktopDriver implements DesktopDriver {
 
   async observe(options?: { semantics?: boolean; fresh?: boolean }): Promise<DesktopFrame> {
     const scope = this.scope
+    const revision = this.revision
     if (options?.semantics === false) {
       const scene = this.warm(options)
       if (scene && (await this.matches(scene))) {
         const frame = await this.scoped(scene.frame, scope)
+        this.check(revision)
         this.worker?.consume(scene)
         return frame
       }
     }
+    this.check(revision)
     const candidate = options?.semantics === false ? undefined : this.warm(options)
     if (candidate) {
       const started = performance.now()
-      const target = { windowID: candidate.frame.windowID, location: candidate.frame.location ?? "" }
+      const target = {
+        windowID: candidate.frame.windowID,
+        location: candidate.frame.location ?? "",
+        identity: candidate.sourceIdentity,
+      }
       const result = await this.observeSemantics(target)
       const scene = this.worker?.latest()
       if (scene) {
@@ -1625,23 +1646,32 @@ export class WindowsDesktopDriver implements DesktopDriver {
           },
           scope,
         )
+        this.check(revision)
         this.worker?.consume(scene)
         return frame
       }
     }
+    this.check(revision)
     const started = performance.now()
-    const result = object(await this.runner.run(options?.semantics === false ? pixels : observe))
-    const next = frame(result, performance.now() - started, this.last)
+    const visual = options?.semantics === false
+    const result = object(await (visual ? this.runner.run(pixels) : this.semantic.read(observe)))
+    this.check(revision)
+    const next = frame(result, performance.now() - started, this.last.get(visual))
     await this.scoped(next, scope)
-    this.last = {
+    this.check(revision)
+    this.last.set(visual, {
       windowID: next.windowID,
       location: next.location,
       width: next.width,
       height: next.height,
       mime: next.mime,
       data: next.data,
-    }
+    })
     return next
+  }
+
+  private check(revision: number): void {
+    if (revision !== this.revision) throw new Error("Desktop observation cancelled after capture changed")
   }
 
   private async scoped(frame: DesktopFrame, scope: { windowID: string; identity: string } | undefined) {
@@ -1780,7 +1810,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       throw new Error("Semantic-only desktop target identity is invalid")
     if (target.identity !== undefined && !/^[A-F0-9]{64}$/.test(target.identity))
       throw new Error("Semantic-only desktop process identity is invalid")
-    const output = object(await this.runner.run(semanticOnly(target)))
+    const output = object(await this.semantic.read(semanticOnly(target)))
     return semanticResult(output, target)
   }
 
@@ -1806,7 +1836,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
         this.receiptDir,
         () => {
           this.worker?.invalidate()
-          this.last = undefined
+          this.last.clear()
         },
         () => this.measurements.size > 0,
         target,
@@ -1930,11 +1960,13 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   stopCapture(): void {
+    this.revision += 1
+    this.semantic.cancel()
     this.scope = undefined
     this.host = undefined
     this.worker?.stop()
     this.worker = undefined
-    this.last = undefined
+    this.last.clear()
   }
 
   private async matches(scene: CapturedScene): Promise<boolean> {
@@ -2104,7 +2136,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
     if (this.inputHost && !this.inputStop) this.stopInput(this.inputHost)
     this.stopCapture()
     this.cancelProbe()
-    this.last = undefined
+    this.last.clear()
     this.runner.cancel()
   }
 

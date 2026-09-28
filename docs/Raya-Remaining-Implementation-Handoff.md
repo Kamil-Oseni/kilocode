@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 08:20 EDT - installed snapshot cannot listen until AppRuntime wiring is fixed
+
+Source/installed snapshot `396d2328b5` has green types/lint/tests/builds and exact artifact hashes, but actual isolated installed CLI startup fails before listening: missing `@raya/PtyArchive`. The in-process HTTP graph includes its node; shipped listener uses AppLayer without it. An agent is adding the smallest marked import/node registration in `src/effect/app-runtime.ts` and testing real `Server.listen`. Do not call installed voice recovery proven yet. Next publish that correction, build/install a fresh snapshot, rerun the isolated installed HTTP restart test and record its result. The failed test server/root are cleaned; no desktop control or reload resumed, no provider/microphone calls, French Study untouched.
+
+ChatGPT 2026-09-28 08:25 EDT: minimal marked runtime registration and real listener regression are ready. Actual listener test passes one/three; CLI types, scoped untyped lint, format, annotations, facade and diff checks pass. The intentional integration-test facade count is explicitly updated; no runtime facade added. Publish correction and fresh snapshot, then rerun exact installed restart smoke. Keep the failed earlier installed readiness result in the record.
+
 ## ChatGPT 2026-09-28 08:04 EDT - spoken recovery source checks pass; publish and install next
 
 Current published HEAD `75dde85287`, installed runtime `2f7d60b422`. `OVR-01` source now adds bounded version-one full snapshots to optional binding payloads, strict revision/idempotency, provider predecessor ordering, terminal invalidation for assistant and deleted/conflicting user speech, fresh active authority for same-parent history, separate exact-acknowledged prefill and no action replay. Retention is one hour; latest recovery is capped at 8 KiB. Actual killed-owner/fresh-process SQLite tests pass six cases/19 assertions; combined real HTTP/full voice-service/reducer tests pass 31/282; final omission-focused tests pass five/54. SDK is regenerated. No core SQL migration or altered ownership identities. Broker/collector final repeat and serial types/lint/publication remain next.

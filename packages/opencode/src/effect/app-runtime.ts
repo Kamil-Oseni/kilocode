@@ -71,11 +71,13 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy" // kilocode_change
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session" // kilocode_change
 import { PtyTicket } from "@opencode-ai/core/pty/ticket" // kilocode_change
 import { Pty } from "@opencode-ai/core/pty" // kilocode_change
+import { PtyArchive } from "@/kilocode/pty/archive" // kilocode_change
 
 // kilocode_change start - retain Kilo runtime services in the upstream node graph
 const memory = LayerNode.make({ service: MemoryService.Service, layer: MemoryService.layer, deps: [] })
 // raya_change start - Milestone F browser bridge
 const kilo = LayerNode.group([
+  PtyArchive.node, // kilocode_change - listener handlers require the shared terminal archive service
   TaskWorker.node,
   Credential.node,
   ModelCache.node,

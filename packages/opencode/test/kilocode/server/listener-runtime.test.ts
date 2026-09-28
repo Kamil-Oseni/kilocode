@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
+import { PtyArchive } from "../../../src/kilocode/pty/archive"
 import { AppRuntime } from "../../../src/effect/app-runtime"
 import { InstanceRef } from "../../../src/effect/instance-ref"
 import { Server } from "../../../src/server/server"
@@ -76,6 +77,14 @@ test("listener aborts shared parent and subagent runners", async () => {
     ])
     const listener = await Server.listen({ hostname: "127.0.0.1", port: 0 })
     try {
+      const archive = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          return yield* PtyArchive.Service
+        }),
+      )
+      expect(typeof archive.stop).toBe("function")
+      const invalid = await AppRuntime.runPromiseExit(archive.stop(tree.parent.id, `${tmp.path}-wrong`))
+      expect(Exit.isFailure(invalid)).toBe(true)
       const response = await fetch(new URL(SessionPaths.abort.replace(":sessionID", tree.parent.id), listener.url), {
         method: "POST",
         headers: { "x-kilo-directory": tmp.path },

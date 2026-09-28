@@ -15,6 +15,7 @@ import { DesktopCaptureWorker, type CapturedScene, type CaptureEvent } from "./d
 import { observeCapture } from "./desktop-capture-metrics"
 import { DesktopCaptureClock, parse as parseClock } from "./desktop-capture-clock"
 import { DesktopSemanticWorker } from "./desktop-semantic-worker"
+import { NativeSemanticHost } from "./desktop-semantic-host"
 import { NativeCaptureHost } from "./desktop-native-host"
 import type { NativeFrame } from "./desktop-native-frame"
 import {
@@ -1453,6 +1454,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   readonly guarded = true as const
   private readonly runner: Runner
   private readonly semantic: DesktopSemanticWorker
+  private readonly nativeSemantic: NativeSemanticHost | undefined
   private probe: Runner | undefined
   private preparing: Promise<void> | undefined
   private readonly last = new Map<
@@ -1510,10 +1512,12 @@ export class WindowsDesktopDriver implements DesktopDriver {
     probe?: Runner,
     private readonly nativeInput?: { binary: string; args?: string[] },
     semantic?: Runner,
+    nativeSemantic?: { binary: string },
   ) {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
     this.semantic = new DesktopSemanticWorker(semantic ?? runner())
+    this.nativeSemantic = nativeSemantic ? new NativeSemanticHost(nativeSemantic.binary) : undefined
     this.probe = probe
   }
 
@@ -1630,6 +1634,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
         if (!(await this.matches(scene)))
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
+        this.freshness(result.validUntil)
         const frame = await this.scoped(
           {
             ...scene.frame,
@@ -1778,7 +1783,13 @@ export class WindowsDesktopDriver implements DesktopDriver {
     } finally {
       latest?.data.fill(0)
     }
+    this.freshness(result.validUntil)
     return result
+  }
+
+  private freshness(until: number | undefined): void {
+    if (until !== undefined && performance.now() >= until)
+      throw new Error("Desktop accessibility observation became stale during scene validation")
   }
 
   private async verifyCurrent(
@@ -1810,8 +1821,21 @@ export class WindowsDesktopDriver implements DesktopDriver {
       throw new Error("Semantic-only desktop target identity is invalid")
     if (target.identity !== undefined && !/^[A-F0-9]{64}$/.test(target.identity))
       throw new Error("Semantic-only desktop process identity is invalid")
+    if (this.nativeSemantic && target.identity) {
+      const result = await this.nativeSemantic.read({ ...target, identity: target.identity })
+      return {
+        windowID: target.windowID,
+        location: target.location,
+        identity: target.identity,
+        semantics: result.semantics,
+        semanticsMs:
+          (Number(BigInt(result.clock.prepared) - BigInt(result.clock.acquisition)) * 1_000) /
+          Number(result.clock.frequency),
+        validUntil: performance.now() + 125 - result.age,
+      }
+    }
     const output = object(await this.semantic.read(semanticOnly(target)))
-    return semanticResult(output, target)
+    return { ...semanticResult(output, target), validUntil: undefined }
   }
 
   startCapture(failed: (error: unknown) => void, target?: { windowID: string; identity: string }): void {
@@ -1962,6 +1986,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   stopCapture(): void {
     this.revision += 1
     this.semantic.cancel()
+    this.nativeSemantic?.cancel()
     this.scope = undefined
     this.host = undefined
     this.worker?.stop()

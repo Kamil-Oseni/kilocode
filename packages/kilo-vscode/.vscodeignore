@@ -41,6 +41,9 @@ bin/raya-desktop-capture.ilk
 bin/raya-desktop-input.exe
 bin/raya-desktop-input.pdb
 bin/raya-desktop-input.ilk
+bin/raya-desktop-semantic.exe
+bin/raya-desktop-semantic.pdb
+bin/raya-desktop-semantic.ilk
 # Native process assets are included only after exact Windows x64 validation.
 bin/raya-process-host.exe
 bin/raya-process-host.pdb

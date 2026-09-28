@@ -20,9 +20,13 @@ const capture = join(root, "bin", "raya-desktop-capture.exe")
 const symbols = join(root, "bin", "raya-desktop-capture.pdb")
 const input = join(root, "bin", "raya-desktop-input.exe")
 const inputSymbols = join(root, "bin", "raya-desktop-input.pdb")
+const semantic = join(root, "bin", "raya-desktop-semantic.exe")
+const semanticSymbols = join(root, "bin", "raya-desktop-semantic.pdb")
 // Remove a prior candidate even if this build later fails or targets another platform.
 rmSync(capture, { force: true })
 rmSync(input, { force: true })
+rmSync(semantic, { force: true })
+rmSync(semanticSymbols, { force: true })
 await ProcessHost.clear(join(root, "bin"))
 const repair = await load(join(root, "..", ".."), process.argv[3] ?? process.env.RAYA_REPAIR_BUILD_INPUT)
 if ((mode === "repair") !== Boolean(repair))
@@ -125,6 +129,12 @@ if (includeCapture) {
   )
   if (!existsSync(input)) throw new Error("Native desktop input build did not produce its executable")
   if (!existsSync(inputSymbols)) throw new Error("Native desktop input build did not produce matching symbols")
+  console.log("\nBuilding and self-testing native desktop accessibility worker...")
+  await $`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${join(root, "script", "build-desktop-semantic.ps1")} -Output ${semantic}`.cwd(
+    root,
+  )
+  if (!existsSync(semantic) || !existsSync(semanticSymbols))
+    throw new Error("Native desktop accessibility build did not produce executable and matching symbols")
 }
 
 console.log("\n📦 Packaging VSIX...")
@@ -158,6 +168,8 @@ try {
       "bin/raya-desktop-capture.exe",
       "bin/raya-desktop-capture.pdb",
       "bin/raya-desktop-input.exe",
+      "bin/raya-desktop-semantic.exe",
+      "bin/raya-desktop-semantic.pdb",
       "bin/raya-desktop-input.pdb",
     ]
     const source = readFileSync(join(root, ".vscodeignore"), "utf8")

@@ -24,7 +24,7 @@ export function registerInstalledDesktopHost(
       const [active, names, capture] = await Promise.all([
         measure((signal) => vault.current(signal), 5_000),
         measure(async (signal) => {
-          const value = await desktopNames(signal)
+          const value = await desktopNames(join(context.extensionPath, "bin", "raya-desktop-input.exe"), signal)
           return value.host && value.input ? value : undefined
         }, 8_000),
         measure(async (signal) => {

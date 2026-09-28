@@ -37,7 +37,10 @@ export function registerInstalledDesktopTaskAudit(
     if (!before || !grant || grant.state !== "active") return null
     const [active, names, capture] = await Promise.all([
       vault.current().catch(() => undefined),
-      desktopNames().catch(() => ({ host: undefined, input: undefined })),
+      desktopNames(join(context.extensionPath, "bin", "raya-desktop-input.exe")).catch(() => ({
+        host: undefined,
+        input: undefined,
+      })),
       readFile(join(context.extensionPath, "bin", "raya-desktop-capture.exe")).then(
         (value) => createHash("sha256").update(value).digest("hex"),
         () => undefined,
@@ -52,7 +55,8 @@ export function registerInstalledDesktopTaskAudit(
       active.version !== context.extension.packageJSON.version ||
       !capture ||
       !names.host ||
-      names.host !== names.input
+      names.host !== "Default" ||
+      names.input !== "Default"
     )
       return null
     return {

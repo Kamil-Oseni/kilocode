@@ -180,20 +180,23 @@ describe("installed interactive host probe", () => {
     expect(JSON.stringify(invalid)).not.toContain(privateText)
   })
 
-  test("refuses capture on a sandbox desktop even when the package and backend match", async () => {
-    let called = false
-    const report = await inspectInstalledHost({
-      ...input(),
-      desktop: { host: "CodexSandboxDesktop-123", input: "Default" },
-      observe: async () => {
-        called = true
-        return frame
-      },
-    })
-    expect(report.status).toBe("unavailable")
-    expect(report.desktop).toEqual({ host: "CodexSandboxDesktop-123", input: "Default" })
-    expect(called).toBe(false)
-  })
+  test.each(["Default", "CodexSandboxDesktop-123"])(
+    "refuses capture on a sandbox desktop with input %s even when package and backend match",
+    async (name) => {
+      let called = false
+      const report = await inspectInstalledHost({
+        ...input(),
+        desktop: { host: "CodexSandboxDesktop-123", input: name },
+        observe: async () => {
+          called = true
+          return frame
+        },
+      })
+      expect(report.status).toBe("unavailable")
+      expect(report.desktop).toEqual({ host: "CodexSandboxDesktop-123", input: name })
+      expect(called).toBe(false)
+    },
+  )
 
   test("rejects backend disconnect during observation", async () => {
     let state = "connected"

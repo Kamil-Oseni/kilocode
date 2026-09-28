@@ -80,7 +80,8 @@ function identity(input: Probe) {
   if (!expected(input)) return "The loaded host is not the expected installed snapshot"
   if (!input.desktop.host || !input.desktop.input)
     return `Interactive desktop identity is unavailable (${input.diagnostics?.desktop.status ?? "missing"})`
-  if (input.desktop.host !== input.desktop.input) return "The extension host is not on the interactive input desktop"
+  if (input.desktop.host !== "Default" || input.desktop.input !== "Default")
+    return "The extension host is not on the interactive input desktop"
   return null
 }
 

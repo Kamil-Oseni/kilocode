@@ -25,6 +25,77 @@ constexpr uint32_t kHeader = 4096;
 constexpr size_t kHistory = 1024;
 constexpr std::string_view kZero = "00000000000000000000000000000000";
 
+struct Desktop {
+  HDESK value;
+  ~Desktop() { if (value) CloseDesktop(value); }
+  bool close() {
+    if (!value) return true;
+    if (!CloseDesktop(value)) return false;
+    value = nullptr;
+    return true;
+  }
+};
+
+// Metadata-only operation: never construct Broker, switch desktops or initialize input.
+std::string name(HDESK desktop) {
+  if (!desktop) return "null";
+  std::array<wchar_t, 256> value{};
+  DWORD needed = 0;
+  if (!GetUserObjectInformationW(desktop, UOI_NAME, value.data(),
+      static_cast<DWORD>(value.size() * sizeof(wchar_t)), &needed) ||
+      needed < sizeof(wchar_t) * 2 || needed > value.size() * sizeof(wchar_t) ||
+      needed % sizeof(wchar_t) || value[needed / sizeof(wchar_t) - 1] != L'\0') return "null";
+  const int length = static_cast<int>(needed / sizeof(wchar_t) - 1);
+  for (int i = 0; i < length; ++i) if (!value[i]) return "null";
+  const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), length,
+      nullptr, 0, nullptr, nullptr);
+  if (bytes <= 0 || bytes > 1020) return "null";
+  std::string text(static_cast<size_t>(bytes), '\0');
+  if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), length,
+      text.data(), bytes, nullptr, nullptr) != bytes) return "null";
+  std::string result = "\"";
+  constexpr char hex[] = "0123456789abcdef";
+  for (const unsigned char c : text) {
+    if (c == '"' || c == '\\') { result += '\\'; result += static_cast<char>(c); continue; }
+    if (c < 0x20) {
+      result += "\\u00";
+      result += hex[c >> 4];
+      result += hex[c & 15];
+      continue;
+    }
+    result += static_cast<char>(c);
+  }
+  result += '"';
+  return result;
+}
+
+int desktops() {
+  const auto host = name(GetThreadDesktop(GetCurrentThreadId()));
+  Desktop desktop{OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS)};
+  const auto input = name(desktop.value);
+  if (!desktop.close()) return 11;
+  const bool interactive = host == "\"Default\"" && input == "\"Default\"";
+  return std::printf("{\"version\":1,\"operation\":\"desktop-names\",\"host\":%s,\"input\":%s,\"interactive\":%s}\n",
+      host.c_str(), input.c_str(), interactive ? "true" : "false") > 0 ? 0 : 12;
+}
+
+int desktoptest() {
+  const auto before = GetThreadDesktop(GetCurrentThreadId());
+  const auto epoch = GetTickCount64();
+  const auto suffix = std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(epoch);
+  const auto label = std::wstring(L"RayaMetadata-\u00e9-\u96ea-\"") + suffix;
+  Desktop desktop{CreateDesktopW(label.c_str(), nullptr, nullptr, 0,
+      DESKTOP_READOBJECTS | DESKTOP_CREATEWINDOW, nullptr)};
+  if (!desktop.value) return 13;
+  const auto expected = std::string("\"RayaMetadata-\xc3\xa9-\xe9\x9b\xaa-\\\"") +
+      std::to_string(GetCurrentProcessId()) + "-" + std::to_string(epoch) + "\"";
+  const auto value = name(desktop.value);
+  const bool valid = name(nullptr) == "null" && value == expected && value != "\"Default\"" &&
+      before == GetThreadDesktop(GetCurrentThreadId());
+  if (!desktop.close()) return 14;
+  return valid ? 0 : 15;
+}
+
 struct Frame {
   uint32_t version = 1;
   std::string type;
@@ -834,6 +905,8 @@ int selftest() {
 }
 
 int main(int argc, char** argv) {
+  if (argc == 2 && std::string_view(argv[1]) == "--desktop-names-v1") return desktops();
+  if (argc == 2 && std::string_view(argv[1]) == "--desktop-names-self-test-v1") return desktoptest();
   if (argc == 2 && std::string_view(argv[1]) == "--self-test") return selftest();
   if (argc != 1) return 2;
   if (!SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) return 10;

@@ -46,11 +46,40 @@ function input() {
 }
 
 describe("installed interactive host probe", () => {
+  test("distinguishes unavailable startup evidence from an actual package mismatch", async () => {
+    for (const status of ["missing", "timeout", "failed"] as const) {
+      let called = false
+      const report = await inspectInstalledHost({
+        ...input(),
+        active: undefined,
+        diagnostics: {
+          vault: { status, elapsedMs: 5 },
+          desktop: { status: "ready", elapsedMs: 3 },
+          capture: { status: "ready", elapsedMs: 1 },
+        },
+        observe: async () => {
+          called = true
+          return frame
+        },
+      })
+      expect(report.status).toBe("unavailable")
+      expect(report.reason).toContain(`unavailable (${status})`)
+      expect(report.reason).not.toContain("does not match")
+      expect(report.diagnostics?.vault).toEqual({ status, elapsedMs: 5 })
+      expect(report.releaseGateEligible).toBe(false)
+      expect(called).toBe(false)
+    }
+    const missing = await inspectInstalledHost({ ...input(), desktop: {} })
+    expect(missing.reason).toContain("desktop identity is unavailable")
+    const different = await inspectInstalledHost({ ...input(), active: { version: "old", digest } })
+    expect(different.reason).toContain("does not match")
+  })
+
   test("records a stable live observation without pixels or claiming task success", async () => {
     const report = await inspectInstalledHost(input())
     expect(report.status).toBe("observed")
     expect(report.releaseGateEligible).toBe(false)
-    expect(report.version).toBe(4)
+    expect(report.version).toBe(5)
     expect(report.actionReceipts).toBeNull()
     expect(report.receiptEvidence).toBe("durable_summary")
     expect(report.journal).toEqual({

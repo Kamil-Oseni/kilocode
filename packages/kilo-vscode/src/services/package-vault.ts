@@ -51,8 +51,8 @@ export class PackageVault {
     this.locks = join(root, ".locks")
   }
 
-  private lock<T>(work: () => Promise<T>) {
-    return Flock.withLock("raya-package-vault", work, { dir: this.locks, staleMs: 60_000, timeoutMs: 120_000 })
+  private lock<T>(work: () => Promise<T>, signal?: AbortSignal) {
+    return Flock.withLock("raya-package-vault", work, { dir: this.locks, staleMs: 60_000, timeoutMs: 120_000, signal })
   }
 
   private async read() {
@@ -241,13 +241,13 @@ export class PackageVault {
     })
   }
 
-  current() {
+  current(signal?: AbortSignal) {
     return this.lock(async () => {
       const saved = await this.read()
       if (!saved.active) return
       const matches = saved.packages.filter((value) => value.artifact.digest === saved.active)
       if (matches.length !== 1) throw new Error("The Raya package vault active package is missing or ambiguous.")
       return matches[0]
-    })
+    }, signal)
   }
 }

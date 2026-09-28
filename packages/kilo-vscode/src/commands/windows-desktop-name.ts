@@ -30,12 +30,12 @@ finally { if ($inputHandle -ne [IntPtr]::Zero) { [void][RayaDesktopName]::CloseD
 @{ host = $hostName; input = $inputName } | ConvertTo-Json -Compress
 `
 
-export async function desktopNames(): Promise<{ host?: string; input?: string }> {
+export async function desktopNames(signal?: AbortSignal): Promise<{ host?: string; input?: string }> {
   if (process.platform !== "win32") return {}
   const output = await execute(
     "powershell.exe",
     ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
-    { windowsHide: true, timeout: 8_000, maxBuffer: 8_192 },
+    { windowsHide: true, timeout: 8_000, maxBuffer: 8_192, signal },
   )
   const value = JSON.parse(output.stdout) as Record<string, unknown>
   return {

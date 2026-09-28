@@ -1,3 +1,5 @@
+import type { Diagnostic } from "./installed-desktop-stage"
+
 const stages = ["foreground_before", "identity_before", "capture", "identity_after", "foreground_after"] as const
 export type ObservationStage = (typeof stages)[number]
 
@@ -14,6 +16,7 @@ export type Probe = {
   active?: { version: string; digest: string }
   expected?: { version: string; digest: string; captureSha256?: string }
   desktop: { host?: string; input?: string }
+  diagnostics?: { vault: Diagnostic; desktop: Diagnostic; capture: Diagnostic }
   backend: () => string
   process: () => { pid: number; startedAt: number; port: number; generation: number } | null
   lease: () => {
@@ -65,6 +68,22 @@ function expected(input: Probe) {
   )
 }
 
+function identity(input: Probe) {
+  if (!/^\d+\.\d+\.\d+-snapshot\+[^/\\]+$/.test(input.loadedVersion))
+    return "The loaded Raya extension is not an installed snapshot"
+  if (!input.loadedCaptureSha256 || !/^[a-f0-9]{64}$/i.test(input.loadedCaptureSha256))
+    return "The loaded native capture binary could not be identified"
+  if (!input.active)
+    return `The active package vault snapshot is unavailable (${input.diagnostics?.vault.status ?? "missing"})`
+  if (input.active.version !== input.loadedVersion)
+    return "The loaded host does not match the active package vault snapshot"
+  if (!expected(input)) return "The loaded host is not the expected installed snapshot"
+  if (!input.desktop.host || !input.desktop.input)
+    return `Interactive desktop identity is unavailable (${input.diagnostics?.desktop.status ?? "missing"})`
+  if (input.desktop.host !== input.desktop.input) return "The extension host is not on the interactive input desktop"
+  return null
+}
+
 function changed(input: Probe, process: NonNullable<ReturnType<Probe["process"]>>, lease: ReturnType<Probe["lease"]>) {
   const next = input.process()
   if (
@@ -102,13 +121,14 @@ export async function inspectInstalledHost(input: Probe) {
   const receipt = journal(input.journal())
   const base = {
     format: "raya.installed-desktop-host-probe" as const,
-    version: 4 as const,
+    version: 5 as const,
     observedAt: new Date().toISOString(),
     loadedVersion: input.loadedVersion,
     loadedCaptureSha256: input.loadedCaptureSha256 ?? null,
     active: input.active ?? null,
     expected: input.expected ?? null,
     desktop: input.desktop,
+    diagnostics: input.diagnostics ?? null,
     backendProcess: process,
     lease,
     journal: receipt,
@@ -117,30 +137,10 @@ export async function inspectInstalledHost(input: Probe) {
     receiptEvidence: evidence(receipt),
     taskFinalState: null,
   }
-  if (!/^\d+\.\d+\.\d+-snapshot\+[^/\\]+$/.test(input.loadedVersion))
-    return { ...base, status: "unavailable" as const, reason: "The loaded Raya extension is not an installed snapshot" }
-  if (!input.loadedCaptureSha256 || !/^[a-f0-9]{64}$/i.test(input.loadedCaptureSha256))
-    return {
-      ...base,
-      status: "unavailable" as const,
-      reason: "The loaded native capture binary could not be identified",
-    }
-  if (!input.active || input.active.version !== input.loadedVersion)
-    return {
-      ...base,
-      status: "unavailable" as const,
-      reason: "The loaded host does not match the active package vault snapshot",
-    }
-  if (!expected(input))
-    return { ...base, status: "unavailable" as const, reason: "The loaded host is not the expected installed snapshot" }
+  const mismatch = identity(input)
+  if (mismatch) return { ...base, status: "unavailable" as const, reason: mismatch }
   const connection = ready(input, process)
   if (connection) return { ...base, status: "unavailable" as const, reason: connection }
-  if (!input.desktop.host || !input.desktop.input || input.desktop.host !== input.desktop.input)
-    return {
-      ...base,
-      status: "unavailable" as const,
-      reason: "The extension host is not on the interactive input desktop",
-    }
   const before = changed(input, process!, lease)
   if (before) return { ...base, status: "unavailable" as const, reason: before }
   const started = performance.now()

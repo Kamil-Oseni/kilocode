@@ -9,6 +9,7 @@ import type { ComputerUseLeaseStore } from "../services/computer-use/lease-store
 import type { DesktopAutomationService } from "../services/computer-use/desktop-service"
 import { inspectInstalledHost, ObservationFailure, type ObservationStage } from "./installed-desktop-host-core"
 import { desktopNames } from "./windows-desktop-name"
+import { measure } from "./installed-desktop-stage"
 
 export function registerInstalledDesktopHost(
   context: vscode.ExtensionContext,
@@ -20,22 +21,18 @@ export function registerInstalledDesktopHost(
     "raya.inspectInstalledDesktopHost",
     async (expected?: { version: string; digest: string; captureSha256?: string }) => {
       const vault = new PackageVault(join(context.globalStorageUri.fsPath, "package-vault"))
-      const active = await Promise.race([
-        vault.current().then(
-          (value) => value,
-          () => undefined,
-        ),
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
+      const [active, names, capture] = await Promise.all([
+        measure((signal) => vault.current(signal), 5_000),
+        measure(async (signal) => {
+          const value = await desktopNames(signal)
+          return value.host && value.input ? value : undefined
+        }, 8_000),
+        measure(async (signal) => {
+          const value = await readFile(join(context.extensionPath, "bin", "raya-desktop-capture.exe"), { signal })
+          return createHash("sha256").update(value).digest("hex")
+        }, 5_000),
       ])
       const driver = process.platform === "win32" ? new WindowsDesktopDriver() : undefined
-      const names = await desktopNames().then(
-        (value) => value,
-        () => ({}),
-      )
-      const capture = await readFile(join(context.extensionPath, "bin", "raya-desktop-capture.exe")).then(
-        (value) => createHash("sha256").update(value).digest("hex"),
-        () => undefined,
-      )
       const lost = { value: false }
       const off = connection.onStateChange((state) => {
         if (state !== "connected") lost.value = true
@@ -43,10 +40,15 @@ export function registerInstalledDesktopHost(
       const timeout = setTimeout(() => driver?.cancel(), 15_000)
       const probe = inspectInstalledHost({
         loadedVersion: String(context.extension.packageJSON.version),
-        loadedCaptureSha256: capture,
-        active: active ? { version: active.version, digest: active.artifact.digest } : undefined,
+        loadedCaptureSha256: capture.value,
+        active: active.value ? { version: active.value.version, digest: active.value.artifact.digest } : undefined,
         expected,
-        desktop: names,
+        desktop: names.value ?? {},
+        diagnostics: {
+          vault: { status: active.status, elapsedMs: active.elapsedMs },
+          desktop: { status: names.status, elapsedMs: names.elapsedMs },
+          capture: { status: capture.status, elapsedMs: capture.elapsedMs },
+        },
         backend: () => (lost.value ? "disconnected" : connection.getConnectionState()),
         process: () => connection.currentProcessIdentity(),
         lease: () => lease.summary(),

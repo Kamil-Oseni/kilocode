@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 01:46 EDT - native metadata snapshot installed
+
+Source `b4988053cd` is published through normal 29 TypeScript/JetBrains push checks. Sequential low-memory validation, production bundle, native capture/input self-tests, refused-target input round trip, packaging and installation succeeded. Snapshot: `7.4.23-snapshot+b4988053cd.kamil-oseni.1790573861925`; retained VSIX `ba3e7796ed48d1eda4a5412fc8b5d22e29cf190a09fc4d03b700c00e3257ce35`, 592,507,603 bytes. SDK is unchanged and the unchanged CLI binary was reused. Native input EXE/PDB SHA256: `709090d0f0708558c3f7ea5ecba5a9e7d0d37f8e38bd9c19dd8b867987effaa7` / `74b5058f3d6c625e534ab6eab12b41808e503cbf503544c8b602f3cc2775a413`. Installed package version and both helper hashes match the built artifacts. Retention removed one vault, one staged and one extension snapshot.
+
+Actual metadata/caller tests passed 9/44 against both freshly bundled and installed helper files. Installed helper six-call sample: first 149.44 ms, warm median 100.18 ms and maximum 135.38 ms; this is a small unflushed child-start sample, not loaded-window, task-completion or equivalent baseline benchmark evidence. Focused source checks passed host probe 12/104, diagnostic deadlines 5/32, extension types/lint/format, Knip, forbidden-marker and Markdown guards.
+
+No desktop control or window reload resumed after Escape; b8 remains the last directly observed loaded window. Next integrate native MTA accessibility and central core PTY admission/Job-empty lifetime, then complete true SQLite crash-boundary recovery and dummy-only installed benchmark/restart/manual-takeover/secure-desktop/resource matrices after control resumes. Keep EN-05/FUT-CU-01 and the full goal In progress. MCP remains deferred and French Study/user-owned files are untouched.
+
 ## ChatGPT 2026-09-28 01:34 EDT - native desktop metadata source checkpoint
 
 Desktop identity now uses the explicit installed `raya-desktop-input.exe --desktop-names-v1` instead of launching PowerShell and compiling C#. The native branch precedes Broker/DPI/input setup, reads bounded Unicode desktop names and closes opened handles without switching desktops, capturing or injecting input. Strict v1 validation rejects incompatible/extra/malformed fields, invalid Unicode, contradictory interactive flags and oversized replies. Async execution retains cancellation, an 8-second monotonic deadline and no fallback. Both installed host/task audit boundaries now require Default/Default: matching private desktop names no longer admit observation or task audit. Inherited-child desktop metadata is diagnostic evidence, not independent parent-thread authority.

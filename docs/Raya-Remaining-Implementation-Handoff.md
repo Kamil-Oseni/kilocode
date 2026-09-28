@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 16:41 EDT - direct transport pushed; independent OpenAI engine work available
+
+Source `3f7e7590df` is pushed with normal cached TypeScript/JetBrains gates passing. Final CGO-zero Go tests/vet and formatting/diff/Markdown checks pass; no CGO/container, SFU/browser, deployment or installed-host proof. If host dependencies remain unavailable, implement the independent OpenAI MF engine adapter/routing next using official current contracts, while preserving the exact source/playback distinction. The container and real frame-attribution gates below still must pass before full voice verification.
+
 ## ChatGPT 2026-09-28 16:40 EDT - direct RTP sender checked; real codec/SFU gates next
 
 Current source replaces queued/timed LiveKit PCM output with synchronous Opus and one owned direct RTP writer. New non-CGO `sender.go`/`track.go` own bounded packets/deadlines, immutable negotiated target, exact +960 RTP ticks/frame and no replay after uncertainty. The CGO adapter uses exact 960-byte/24 kHz frames, copied codec output, serialized encoding, local-only flush barriers and at most one asynchronous cleanup owner. Close never declares transport termination on a deadline.

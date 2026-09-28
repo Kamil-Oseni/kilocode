@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 16:41 EDT - direct transport source published
+
+Source `3f7e7590df` is pushed through the normal 29 cached TypeScript checks and cached JetBrains gate. Full CGO-zero Go tests/vet, formatting/diff and 484-file Markdown checks pass; the production CGO codec/container and real SFU/browser gates remain unrun. No deployment or installed-host verification is claimed. While those host dependencies are unavailable, continue the independent OpenAI MF engine/routing implementation rather than repeating an unavailable container check. Preserve the single-clock transport and require exact playback receipts before settlement.
+
 ## ChatGPT 2026-09-28 16:40 EDT - direct RTP transport checked; production codec gate unrun
 
 The Go LiveKit adapter now encodes each exact 24 kHz mono PCM16 20 ms frame synchronously into one bounded owned Opus packet and sends it through a single owned RTP writer. The SDK PCM helper, private queue, resampler and second timer are removed. Payloads are capped at 1,275 bytes; randomized sequence/timestamp starts advance by 960 ticks per admitted frame at the 48 kHz RTP clock. Concurrent writes refuse. A deadline/error stops future writes without replay; Close reports unknown until actual writer termination rather than pretending to drain it.

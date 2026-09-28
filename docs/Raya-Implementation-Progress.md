@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 17:12 EDT - GPT-Live source published
+
+Source `bb6acb9b8a` is committed and pushed through the normal 29 cached TypeScript checks and cached JetBrains gate. Ten Live loopback tests, 42 top-level app tests, the full CGO-zero Go suite/vet and formatting/diff/484-file Markdown checks pass. The external media service remains undeployed and the installed extension snapshot unchanged; production CGO, provider/SFU/browser/acoustic and recovery/resource gates remain open. Next implement the trusted extension-to-MF Live bridge and exact delegation/result correlation described below. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress.
+
 ## ChatGPT 2026-09-28 17:10 EDT - GPT-Live media adapter and terminal usage checked
 
 The Go media frontend now has an actual `gpt-live-1` primary WebSocket adapter, distinct from Realtime and Qwen. Version-two start requests bind provider/model selection; legacy unversioned Qwen requests remain compatible. Unknown versions/providers, model mismatches and Live requests without a rate-aware room driver refuse before allocation. The driver binds the exact client and 24 kHz microphone decoder rate before subscription callbacks. Live sessions validate exact 20 ms mono PCM and forward silence without the legacy local speech/interruption gate.

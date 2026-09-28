@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 17:12 EDT - GPT-Live source pushed; actual bridge next
+
+Source `bb6acb9b8a` is pushed with normal cached TypeScript/JetBrains gates passing. Ten Live loopback tests, 42 top-level app tests, full CGO-zero Go tests/vet and formatting/diff/Markdown checks pass. Begin the trusted extension-to-MF Live bridge and exact delegation/result routing described below; the service remains undeployed and installed snapshot unchanged. CGO/container, real provider/SFU/browser/acoustic, recovery and prolonged resources still must pass. No full-voice verification or desktop resumption is claimed.
+
 ## ChatGPT 2026-09-28 17:10 EDT - GPT-Live MF source checked; bridge and installed-host gates next
 
 The current Go slice adds `internal/engine/live` for the actual primary `gpt-live-1` WebSocket protocol. `wire.Start.version=2` enables provider selection; version-zero unqualified Qwen remains compatible. Manager refuses wrong versions/providers/models and missing audio-rate authority before allocation. CGO LiveKit binds exact client + 24 kHz microphone decoding before subscriptions; app descriptor configuration precedes workers and forwards exact continuous PCM including silence without legacy manual barge handling. Qwen keeps its current path.

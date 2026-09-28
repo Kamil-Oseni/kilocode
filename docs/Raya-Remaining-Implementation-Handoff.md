@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 04:26 EDT - native accessibility source published and installed
+
+Source `7d842a6db4` is pushed through normal 29 TypeScript/JetBrains hooks. Snapshot `7.4.23-snapshot+7d842a6db4.kamil-oseni.1790583714893` is installed after sequential types/lint/bundle/native helper verification, self-tests and input round trip. SDK/CLI inputs were unchanged and reused. Retained VSIX SHA256 `4f39051b374f78afa089faffa258eb06fe829a15aca15f472d743db9d10b1fe8`, 604,324,743 bytes. Installed package, five EXEs and semantic PDB match built artifacts; full hashes are in progress. Installed semantic helper target-refusal round trip passes 1/1. Private provider fixture is not packaged. No open host reload or desktop control/capture after Escape; b8 remains the last observed loaded window.
+
+Next source slices: propagate semantic-child loss to the foreground pause experience, native owner/root/cwd ancestor pins and durable identity-safe sidecar cleanup. Keep the native semantic trial and cold combined fallback until a real fresh foreground join is proven. Actual installed provider-hang/task/latency/restart/backend-loss/manual-takeover/changed-target/sensitive-denial/prolonged-resource gates remain unverified; provider-internal allocation is opaque. Desktop acceptance requires explicit control resume. Do not repeat the exact-file Undo or touch French Study/user-owned edits. EN-05/FUT-CU-01/full goal remain In progress; MCP deferred.
+
 ## ChatGPT 2026-09-28 04:16 EDT - native accessibility publication next
 
 Source adds native/desktop-semantic.cpp, its separate never-activated private fixture/build script, strict desktop-semantic-protocol.ts, persistent desktop-semantic-host.ts and trial warm-path integration. Readiness, one outstanding nonce/generation, per-read QPC calibration/acquisition, exact native target/Default desktop checks, host scene/manual/freshness checks, bounded traversal/output and password/Edit/Document/descendant redaction are implemented. Cold combined fallback remains; no semantic/event cache ships. Replacement waits for actual child exit and ignores retired startup rejection. Whole-request deadline is not refreshed by readiness. Production provider allocation is opaque; full resource gate remains open.

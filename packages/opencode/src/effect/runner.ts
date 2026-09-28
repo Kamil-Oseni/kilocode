@@ -47,12 +47,18 @@ export const make = <A, E = never>(
     onIdle?: Effect.Effect<void>
     onBusy?: Effect.Effect<void>
     onInterrupt?: Effect.Effect<A, E>
+    admit?: <B, E2, R>(body: Effect.Effect<B, E2, R>) => Effect.Effect<B, E2, R> // kilocode_change - only the state publication is gated
   },
 ): Runner<A, E> => {
   const ref = SynchronizedRef.makeUnsafe<State<A, E>>({ _tag: "Idle" })
   const idle = opts?.onIdle ?? Effect.void
   const onBusy = opts?.onBusy ?? Effect.void
   const onInterrupt = opts?.onInterrupt
+  // kilocode_change start - live handles remain busy through cancellation cleanup
+  const admit = opts?.admit ?? (<B, E2, R>(body: Effect.Effect<B, E2, R>) => body)
+  const live = new Set<object>()
+  let epoch = 0
+  // kilocode_change end
   let ids = 0
 
   const state = () => SynchronizedRef.getUnsafe(ref)
@@ -88,10 +94,16 @@ export const make = <A, E = never>(
   // kilocode_change start - do not let work publish busy before the Running state is committed
   const startRun = (work: Effect.Effect<A, E>, done: Deferred.Deferred<A, E | Cancelled>) => {
     const id = next()
+    live.add(done) // kilocode_change
     return KiloRunner.start({
       work: executing(done, work), // kilocode_change - carry the actual execution identity into its work
       scope,
-      finish: (exit) => finishRun(id, done, exit),
+      finish: (exit) =>
+        Effect.gen(function* () {
+          // kilocode_change start - work finalizers have drained before this onExit callback
+          live.delete(done)
+          yield* finishRun(id, done, exit)
+        }), // kilocode_change end
       handle: (fiber) => ({ id, done, fiber }) satisfies RunHandle<A, E>,
     })
   }
@@ -99,18 +111,21 @@ export const make = <A, E = never>(
 
   // kilocode_change start - open work only after the Running state is committed
   const finishShell = (id: number) =>
-    SynchronizedRef.modifyEffect(
-      ref,
-      Effect.fnUntraced(function* (st) {
-        if (st._tag === "Shell" && st.shell.id === id) {
-          return [idle, { _tag: "Idle" }] as const
-        }
-        if (st._tag === "ShellThenRun" && st.shell.id === id) {
-          return yield* KiloRunner.commit(startRun(st.run.work, st.run.done), Effect.void)
-        }
-        return [Effect.void, st] as const
-      }),
-    ).pipe(Effect.flatten)
+    admit(
+      SynchronizedRef.modifyEffect(
+        // kilocode_change - a queued shell follow-up is another admission
+        ref,
+        Effect.fnUntraced(function* (st) {
+          if (st._tag === "Shell" && st.shell.id === id) {
+            return [idle, { _tag: "Idle" }] as const
+          }
+          if (st._tag === "ShellThenRun" && st.shell.id === id) {
+            return yield* KiloRunner.commit(startRun(st.run.work, st.run.done), Effect.void)
+          }
+          return [Effect.void, st] as const
+        }),
+      ),
+    ).pipe(Effect.flatten) // kilocode_change
   // kilocode_change end
 
   const stopShell = (shell: ShellHandle<A, E>) =>
@@ -122,97 +137,133 @@ export const make = <A, E = never>(
 
   // kilocode_change start - open work only after the Running state is committed
   const ensureRunning = (work: Effect.Effect<A, E>) =>
-    SynchronizedRef.modifyEffect(
-      ref,
-      Effect.fnUntraced(function* (st) {
-        switch (st._tag) {
-          case "Running":
-          case "ShellThenRun":
-            return [awaitDone(st.run.done), st] as const
-          case "Shell": {
-            const run = {
-              id: next(),
-              done: yield* Deferred.make<A, E | Cancelled>(),
-              work,
-            } satisfies PendingHandle<A, E>
-            return [awaitDone(run.done), { _tag: "ShellThenRun", shell: st.shell, run }] as const
-          }
-          case "Idle": {
-            const done = yield* Deferred.make<A, E | Cancelled>()
-            return yield* KiloRunner.commit(startRun(work, done), awaitDone(done))
-          }
-        }
-      }),
-    ).pipe(Effect.flatten)
+    Effect.suspend(() => {
+      // kilocode_change start - cancellation invalidates queued admission before it can fork work
+      const ticket = epoch
+      return admit(
+        SynchronizedRef.modifyEffect(
+          ref,
+          Effect.fnUntraced(function* (st) {
+            if (ticket !== epoch) return [onInterrupt ?? Effect.die(new Cancelled()), st] as const
+            switch (st._tag) {
+              case "Running":
+              case "ShellThenRun":
+                return [awaitDone(st.run.done), st] as const
+              case "Shell": {
+                const run = {
+                  id: next(),
+                  done: yield* Deferred.make<A, E | Cancelled>(),
+                  work,
+                } satisfies PendingHandle<A, E>
+                return [awaitDone(run.done), { _tag: "ShellThenRun", shell: st.shell, run }] as const
+              }
+              case "Idle": {
+                const done = yield* Deferred.make<A, E | Cancelled>()
+                return yield* KiloRunner.commit(startRun(work, done), awaitDone(done))
+              }
+              default:
+                return yield* Effect.die(new Error("Unknown runner state"))
+            }
+          }),
+        ),
+      ).pipe(Effect.flatten)
+    }) // kilocode_change end
 
   const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | Busy> =>
-    SynchronizedRef.modifyEffect(
-      ref,
-      // kilocode_change end
-      Effect.fnUntraced(function* (st) {
-        if (st._tag !== "Idle") {
-          const reject: Effect.Effect<A, E | Busy> = Effect.fail(new Busy())
-          return [reject, st] as const
-        }
-        yield* onBusy
-        const id = next()
-        const cancelled = yield* Deferred.make<void>()
-        const fiber = yield* work.pipe(Effect.ensuring(finishShell(id)), Effect.forkChild)
-        const shell = { id, cancelled, ready, fiber } satisfies ShellHandle<A, E>
-        return [
-          Effect.gen(function* () {
-            const exit = yield* Fiber.await(fiber)
-            if (Exit.isSuccess(exit)) return exit.value
-            if (
-              Cause.hasInterruptsOnly(exit.cause) ||
-              ((yield* Deferred.isDone(cancelled)) && Cause.hasInterrupts(exit.cause) && !Cause.hasDies(exit.cause))
-            ) {
-              if (onInterrupt) return yield* onInterrupt
-              return yield* Effect.die(new Cancelled())
+    Effect.suspend(() => {
+      // kilocode_change start - gate only shell publication, not shell execution
+      const ticket = epoch
+      return admit(
+        SynchronizedRef.modifyEffect(
+          ref,
+          // kilocode_change end
+          Effect.fnUntraced(function* (st) {
+            if (ticket !== epoch) return [onInterrupt ?? Effect.die(new Cancelled()), st] as const
+            if (st._tag !== "Idle") {
+              const reject: Effect.Effect<A, E | Busy> = Effect.fail(new Busy())
+              return [reject, st] as const
             }
-            return yield* Effect.failCause(exit.cause)
+            yield* onBusy
+            const id = next()
+            const cancelled = yield* Deferred.make<void>()
+            live.add(cancelled)
+            const fiber = yield* work.pipe(
+              Effect.ensuring(finishShell(id)),
+              Effect.ensuring(
+                Effect.gen(function* () {
+                  live.delete(cancelled)
+                  yield* idleIfCurrent()
+                }),
+              ),
+              Effect.forkChild,
+            )
+            const shell = { id, cancelled, ready, fiber } satisfies ShellHandle<A, E>
+            return [
+              Effect.gen(function* () {
+                const exit = yield* Fiber.await(fiber)
+                if (Exit.isSuccess(exit)) return exit.value
+                if (
+                  Cause.hasInterruptsOnly(exit.cause) ||
+                  ((yield* Deferred.isDone(cancelled)) && Cause.hasInterrupts(exit.cause) && !Cause.hasDies(exit.cause))
+                ) {
+                  if (onInterrupt) return yield* onInterrupt
+                  return yield* Effect.die(new Cancelled())
+                }
+                return yield* Effect.failCause(exit.cause)
+              }),
+              { _tag: "Shell", shell },
+            ] as const
           }),
-          { _tag: "Shell", shell },
-        ] as const
-      }),
-    ).pipe(Effect.flatten)
+        ),
+      ).pipe(Effect.flatten)
+    }) // kilocode_change end
 
-  const cancel = SynchronizedRef.modify(ref, (st) => {
-    switch (st._tag) {
-      case "Idle":
-        return [Effect.void, st] as const
-      case "Running":
-        return [
-          Effect.gen(function* () {
-            yield* Fiber.interrupt(st.run.fiber)
-            yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
-            yield* idleIfCurrent()
-          }),
-          { _tag: "Idle" } as const,
-        ] as const
-      case "Shell":
-        return [
-          Effect.gen(function* () {
-            yield* stopShell(st.shell)
-            yield* idleIfCurrent()
-          }),
-          { _tag: "Idle" } as const,
-        ] as const
-      case "ShellThenRun":
-        return [
-          Effect.gen(function* () {
-            yield* stopShell(st.shell)
-            yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
-            yield* idleIfCurrent()
-          }),
-          { _tag: "Idle" } as const,
-        ] as const
-    }
-  }).pipe(Effect.flatten)
+  const cancel = Effect.suspend(() => {
+    // kilocode_change - cancel pending admission as well as running handles
+    epoch += 1
+    return SynchronizedRef.modify(ref, (st) => {
+      switch (st._tag) {
+        case "Idle":
+          return [idleIfCurrent(), st] as const // kilocode_change - release cancelled admission-only runner bindings
+        case "Running":
+          return [
+            Effect.gen(function* () {
+              yield* Fiber.interrupt(st.run.fiber)
+              yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
+              yield* idleIfCurrent()
+            }),
+            { _tag: "Idle" } as const,
+          ] as const
+        case "Shell":
+          return [
+            Effect.gen(function* () {
+              yield* stopShell(st.shell)
+              yield* idleIfCurrent()
+            }),
+            { _tag: "Idle" } as const,
+          ] as const
+        case "ShellThenRun":
+          return [
+            Effect.gen(function* () {
+              yield* stopShell(st.shell)
+              yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
+              yield* idleIfCurrent()
+            }),
+            { _tag: "Idle" } as const,
+          ] as const
+        default:
+          return [Effect.die(new Error("Unknown runner state")), st] as const
+      }
+    }).pipe(Effect.flatten)
+  }) // kilocode_change
 
   // kilocode_change start - compare identity and select the exact handle atomically
   const requestCancel = (id: string) =>
-    SynchronizedRef.modify(ref, (st) => cancelObserved(st, id, idleIfCurrent(), new Cancelled())).pipe(
+    SynchronizedRef.modify(ref, (st) => {
+      const pair = cancelObserved(st, id, idleIfCurrent(), new Cancelled())
+      if (pair[1] !== st) epoch += 1 // invalidate calls queued before this exact execution was cancelled
+      return pair
+    }).pipe(
       Effect.flatMap((stop) => Effect.forkIn(stop, scope)),
       Effect.map((fiber) => Fiber.join(fiber)),
       Effect.uninterruptible,
@@ -225,7 +276,7 @@ export const make = <A, E = never>(
       return state()
     },
     get busy() {
-      return state()._tag !== "Idle"
+      return state()._tag !== "Idle" || live.size > 0 // kilocode_change - logical Idle does not prove old fibers have drained
     },
     ensureRunning,
     startShell,

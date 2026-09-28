@@ -87,6 +87,9 @@ func (s *Session) finish() {
 	}
 	s.closed = errors.Join(s.room.Close(), s.engine.Close())
 	s.wait.Wait()
+	if terminal, ok := s.engine.(engine.Terminal); ok {
+		s.closed = errors.Join(s.closed, s.terminal(terminal))
+	}
 	s.statusMu.Lock()
 	s.status.Cleanup = delivery(s.closed)
 	if s.status.Failure == nil {

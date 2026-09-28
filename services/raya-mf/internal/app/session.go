@@ -20,6 +20,7 @@ import (
 type Session struct {
 	id         string
 	engine     engine.Session
+	cfg        engine.Descriptor
 	room       room.Room
 	backend    Backend
 	ctx        context.Context
@@ -47,6 +48,14 @@ type Session struct {
 }
 
 func NewSession(ctx context.Context, id string, voice engine.Session, media room.Room, backend Backend, client ...string) *Session {
+	identity := ""
+	if len(client) == 1 {
+		identity = client[0]
+	}
+	return NewSessionWithDescriptor(ctx, id, voice, media, backend, identity, engine.Descriptor{})
+}
+
+func NewSessionWithDescriptor(ctx context.Context, id string, voice engine.Session, media room.Room, backend Backend, client string, cfg engine.Descriptor) *Session {
 	run, cancel := context.WithCancel(ctx)
 	session := &Session{
 		id: id, engine: voice, room: media, backend: backend, ctx: run, cancel: cancel,
@@ -54,14 +63,16 @@ func NewSession(ctx context.Context, id string, voice engine.Session, media room
 		done:   make(chan struct{}),
 		status: wire.Status{ID: id, State: "active"},
 		spans:  make(map[uint64]wire.Span),
-	}
-	if len(client) == 1 {
-		session.client = client[0]
+		client: client,
+		cfg:    cfg,
 	}
 	session.status.RoomReport = "not_attempted"
 	session.status.BackendReport = "not_configured"
 	if backend != nil {
 		session.status.BackendReport = "not_attempted"
+	}
+	if cfg != (engine.Descriptor{}) && (cfg.ID != "openai-live" || !cfg.RequiresContinuousInput || !cfg.NativeBargeIn || cfg.InputRate != 24000 || cfg.OutputRate != 24000) {
+		session.fail("audio_input")
 	}
 	session.wait.Add(4)
 	go session.input()
@@ -114,8 +125,12 @@ func (s *Session) input() {
 				s.fail("room_input_closed")
 				return
 			}
-			speech := audible(frame.PCM, 0.025)
-			if speech && s.speaking.Load() {
+			if s.cfg.RequiresContinuousInput && (s.cfg.InputRate < 8000 || s.cfg.InputRate > 48000 ||
+				s.cfg.InputRate%50 != 0 || frame.Rate != s.cfg.InputRate || len(frame.PCM) != s.cfg.InputRate/50*2) {
+				s.fail("audio_input")
+				return
+			}
+			if !s.cfg.RequiresContinuousInput && !s.cfg.NativeBargeIn && audible(frame.PCM, 0.025) && s.speaking.Load() {
 				s.barge()
 				if s.ctx.Err() != nil {
 					return
@@ -161,7 +176,7 @@ func (s *Session) publish(frame engine.Frame) bool {
 	if s.stopped || (s.fenced != 0 && frame.Epoch <= s.fenced) {
 		return true
 	}
-	if !validFrame(frame) || frame.Seq <= s.frame || frame.Epoch < s.epoch {
+	if !validFrame(frame) || (s.cfg.OutputRate != 0 && frame.Rate != s.cfg.OutputRate) || frame.Seq <= s.frame || frame.Epoch < s.epoch {
 		s.fail("playout_metadata")
 		return false
 	}
@@ -292,6 +307,9 @@ func (s *Session) events() {
 			if !ok {
 				s.fail("engine_events_closed")
 				return
+			}
+			if _, terminal := s.engine.(engine.Terminal); terminal && event.Type == "session.closed" {
+				continue
 			}
 			if event.Type == "engine.error" {
 				s.fail("engine_failure")

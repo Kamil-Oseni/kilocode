@@ -9,6 +9,7 @@ import (
 const FramePeriod = 20 * time.Millisecond
 
 type Config struct {
+	Provider     string `json:"provider,omitempty"`
 	Endpoint     string
 	Key          string
 	Model        string
@@ -99,4 +100,19 @@ type Session interface {
 	Prefill(context.Context, Snapshot) error
 	Stats() Stats
 	Close() error
+}
+
+// Terminal exposes a confirmed provider receipt after local capture has stopped.
+// It grants no media or work authority and never infers usage from local time.
+type Terminal interface {
+	Usage() (Usage, error)
+}
+
+type Usage struct {
+	Session string
+	EventID string
+	Model   string
+	Reason  string
+	Seconds float64
+	At      time.Time
 }

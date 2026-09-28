@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
+	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine/live"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine/qwen"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
@@ -21,6 +22,7 @@ import (
 type Manager struct {
 	rooms    room.Factory
 	engine   engine.Engine
+	live     engine.Engine
 	mu       sync.RWMutex
 	sessions map[string]*ownership
 	limit    int
@@ -41,7 +43,7 @@ const (
 
 func NewManager(rooms room.Factory) *Manager {
 	return &Manager{
-		rooms: rooms, engine: qwen.Engine{}, sessions: map[string]*ownership{},
+		rooms: rooms, engine: qwen.Engine{}, live: live.Engine{}, sessions: map[string]*ownership{},
 		limit: sessionLimit, timeout: setupTimeout,
 	}
 }
@@ -60,6 +62,36 @@ type ownership struct {
 func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wire.Started, error) {
 	if len(token) < 32 {
 		return wire.Started{}, ErrAuthorization
+	}
+	if input.Version != 0 && input.Version != 2 {
+		return wire.Started{}, errors.New("unsupported media start contract version")
+	}
+	if input.Engine.Provider != "" && input.Version != 2 {
+		return wire.Started{}, errors.New("explicit voice provider requires media start contract version two")
+	}
+	selected := m.engine
+	provider := input.Engine.Provider
+	if provider == "" && input.Engine.Model == "gpt-live-1" {
+		provider = "openai-live"
+	}
+	switch provider {
+	case "", "qwen-realtime":
+		if input.Engine.Model == "gpt-live-1" {
+			return wire.Started{}, errors.New("voice model does not match the selected provider")
+		}
+	case "openai-live":
+		if input.Version != 2 {
+			return wire.Started{}, errors.New("OpenAI Live requires media start contract version two")
+		}
+		if input.Engine.Model != "" && input.Engine.Model != "gpt-live-1" {
+			return wire.Started{}, errors.New("unsupported OpenAI Live voice model")
+		}
+		if _, ok := m.rooms.(room.AudioAuthority); !ok {
+			return wire.Started{}, errors.New("OpenAI Live requires an audio-rate-aware room driver")
+		}
+		selected = m.live
+	default:
+		return wire.Started{}, errors.New("unsupported voice provider")
 	}
 	if input.BackendURL != "" {
 		backend, err := local(input.BackendURL)
@@ -112,7 +144,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 			}
 		}
 	}()
-	voice, err := m.engine.Open(run, input.Engine)
+	voice, err := selected.Open(run, input.Engine)
 	if err != nil {
 		expiry.Lock()
 		timedout := expired
@@ -123,6 +155,9 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		return wire.Started{}, err
 	}
 	media, err := func() (room.Room, error) {
+		if factory, ok := m.rooms.(room.AudioAuthority); ok {
+			return factory.JoinAudioAuthorized(run, input.LiveKitURL, input.LiveKitToken, input.Room, "client-"+id, selected.Descriptor().InputRate)
+		}
 		if factory, ok := m.rooms.(room.Authority); ok {
 			return factory.JoinAuthorized(run, input.LiveKitURL, input.LiveKitToken, input.Room, "client-"+id)
 		}
@@ -150,16 +185,14 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	if input.BackendURL != "" {
 		backend = HTTPBackend{URL: input.BackendURL, Auth: input.BackendAuth, Directory: input.Directory}
 	}
-	claim.session = NewSession(
-		run,
-		id,
-		voice,
-		media,
-		backend,
-		"client-"+id,
-	)
+	claim.session = func() *Session {
+		if provider == "openai-live" {
+			return NewSessionWithDescriptor(run, id, voice, media, backend, "client-"+id, selected.Descriptor())
+		}
+		return NewSession(run, id, voice, media, backend, "client-"+id)
+	}()
 	m.mu.Unlock()
-	return wire.Started{ID: id, Descriptor: m.engine.Descriptor(), StartedAt: time.Now()}, nil
+	return wire.Started{ID: id, Descriptor: selected.Descriptor(), StartedAt: time.Now()}, nil
 }
 
 func (m *Manager) Inject(ctx context.Context, id string, token string, item engine.ContextItem) error {

@@ -8,6 +8,7 @@ import (
 )
 
 type Start struct {
+	Version      int           `json:"version,omitempty"`
 	ID           string        `json:"id"`
 	Room         string        `json:"room"`
 	LiveKitURL   string        `json:"livekitUrl"`

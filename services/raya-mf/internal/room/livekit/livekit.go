@@ -28,13 +28,20 @@ func (factory Factory) Join(ctx context.Context, url, token, name string) (room.
 	return factory.JoinAuthorized(ctx, url, token, name, "")
 }
 
-func (Factory) JoinAuthorized(ctx context.Context, url, token, _ string, client string) (room.Room, error) {
+func (factory Factory) JoinAuthorized(ctx context.Context, url, token, name string, client string) (room.Room, error) {
+	return factory.JoinAudioAuthorized(ctx, url, token, name, client, 16000)
+}
+
+func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, client string, rate int) (room.Room, error) {
+	if rate != 16000 && rate != 24000 {
+		return nil, errors.New("unsupported voice microphone sample rate")
+	}
 	if !strings.HasPrefix(client, "client-rvs_") || len(client) > 256 {
 		return nil, errors.New("authorized voice client identity is required")
 	}
 	input := make(chan engine.Frame, 64)
 	data := make(chan room.Data, 64)
-	writer := &writer{input: input}
+	writer := &writer{input: input, rate: rate}
 	var remoteMu sync.Mutex
 	remote := make(map[string]*lkmedia.PCMRemoteTrack)
 	callback := &lksdk.RoomCallback{
@@ -52,7 +59,7 @@ func (Factory) JoinAuthorized(ctx context.Context, url, token, _ string, client 
 				decoded, err := lkmedia.NewPCMRemoteTrack(
 					track,
 					writer,
-					lkmedia.WithTargetSampleRate(16000),
+					lkmedia.WithTargetSampleRate(rate),
 					lkmedia.WithTargetChannels(1),
 				)
 				if err != nil {
@@ -288,6 +295,7 @@ func (e *encoded) Close() error {
 
 type writer struct {
 	input  chan<- engine.Frame
+	rate   int
 	closed bool
 	mu     sync.RWMutex
 }
@@ -303,7 +311,7 @@ func (w *writer) WriteSample(sample media.PCM16Sample) error {
 		binary.LittleEndian.PutUint16(pcm[index*2:], uint16(value))
 	}
 	select {
-	case w.input <- engine.Frame{PCM: pcm, Rate: 16000}:
+	case w.input <- engine.Frame{PCM: pcm, Rate: w.rate}:
 	default:
 	}
 	return nil

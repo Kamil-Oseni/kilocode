@@ -30,3 +30,9 @@ type Factory interface {
 type Authority interface {
 	JoinAuthorized(context.Context, string, string, string, string) (Room, error)
 }
+
+// AudioAuthority binds the microphone decoder rate before subscriptions start.
+// A continuous provider must not receive silently relabeled/resampled input.
+type AudioAuthority interface {
+	JoinAudioAuthorized(context.Context, string, string, string, string, int) (Room, error)
+}

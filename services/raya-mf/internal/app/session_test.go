@@ -2,6 +2,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"math"
@@ -492,6 +493,101 @@ func TestExplicitEmptyResponseCannotSettleUnknownOrNewOutput(t *testing.T) {
 	}
 }
 
+func TestContinuousNativeSessionForwardsSpeechAndSilenceWithoutManualTurns(t *testing.T) {
+	voice := newFakeEngine()
+	media := newFakeRoom()
+	cfg := engine.Descriptor{ID: "openai-live", NativeBargeIn: true, RequiresContinuousInput: true, InputRate: 24000, OutputRate: 24000}
+	s := NewSessionWithDescriptor(context.Background(), "continuous", voice, media, nil, "client-continuous", cfg)
+	defer s.Close()
+	cfg.InputRate = 16000 // The running contract is a value captured before workers start.
+	if !s.publish(engine.Frame{Item: "local-stream", PCM: make([]byte, 960), Rate: 24000, Epoch: 1, Seq: 1, End: 480}) {
+		t.Fatal("local continuous source PCM refused")
+	}
+	packet := <-media.sent
+	<-media.published
+	var span wire.Span
+	if err := json.Unmarshal(packet.Body, &span); err != nil || span.Version != 2 || span.Turn != "" || span.Final {
+		t.Fatalf("continuous output invented a provider boundary: %#v / %v", span, err)
+	}
+	for _, spoken := range []bool{false, true, false} {
+		pcm := make([]byte, 960)
+		if spoken {
+			for index := 0; index < len(pcm); index += 2 {
+				pcm[index], pcm[index+1] = 0xff, 0x3f
+			}
+		}
+		media.input <- engine.Frame{PCM: pcm, Rate: 24000}
+		select {
+		case received := <-voice.received:
+			if !bytes.Equal(received, pcm) {
+				t.Fatal("continuous input bytes changed")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("continuous silence or speech was not forwarded")
+		}
+	}
+	select {
+	case <-voice.interrupted:
+		t.Fatal("native continuous input invented a manual provider interruption")
+	case <-voice.committed:
+		t.Fatal("native continuous input invented a manual turn commit")
+	case <-media.flushed:
+		t.Fatal("native continuous input invented a client playout boundary")
+	default:
+	}
+	if s.Status().State != "active" {
+		t.Fatal("native speech was failed for missing manual heard evidence")
+	}
+}
+
+func TestContinuousInputRefusesWrongRateAndFrameSize(t *testing.T) {
+	for _, frame := range []engine.Frame{{Rate: 16000, PCM: make([]byte, 960)}, {Rate: 24000, PCM: make([]byte, 640)}, {Rate: 24000, PCM: make([]byte, 958)}, {Rate: 24000, PCM: make([]byte, 1920)}} {
+		voice := newFakeEngine()
+		media := newFakeRoom()
+		s := NewSessionWithDescriptor(context.Background(), "format", voice, media, nil, "client-format", engine.Descriptor{ID: "openai-live", NativeBargeIn: true, RequiresContinuousInput: true, InputRate: 24000, OutputRate: 24000})
+		media.input <- frame
+		status := finished(t, s)
+		if status.Failure == nil || status.Failure.Code != "audio_input" {
+			t.Fatalf("status = %#v", status)
+		}
+		select {
+		case <-voice.received:
+			t.Fatal("malformed continuous PCM reached provider")
+		default:
+		}
+		s.Close()
+	}
+}
+
+func TestContinuousHelperRefusesUnsupportedProviderContract(t *testing.T) {
+	for _, cfg := range []engine.Descriptor{{ID: "qwen-realtime", NativeBargeIn: true, RequiresContinuousInput: true, InputRate: 16000, OutputRate: 24000}, {ID: "openai-live", InputRate: 24000, OutputRate: 24000}, {ID: "openai-live", NativeBargeIn: true, RequiresContinuousInput: true, InputRate: 16000, OutputRate: 24000}} {
+		s := NewSessionWithDescriptor(context.Background(), "unsupported", newFakeEngine(), newFakeRoom(), nil, "client-unsupported", cfg)
+		status := finished(t, s)
+		if status.Failure == nil || status.Failure.Code != "audio_input" {
+			t.Fatalf("unsupported contract = %#v", status)
+		}
+		s.Close()
+	}
+}
+
+func TestContinuousOutputCannotRelabelDifferentSampleRate(t *testing.T) {
+	media := newFakeRoom()
+	s := NewSessionWithDescriptor(context.Background(), "output-rate", newFakeEngine(), media, nil, "client-output-rate", engine.Descriptor{ID: "openai-live", NativeBargeIn: true, RequiresContinuousInput: true, InputRate: 24000, OutputRate: 24000})
+	defer s.Close()
+	if s.publish(engine.Frame{Item: "local-stream", PCM: make([]byte, 1920), Rate: 48000, Epoch: 1, Seq: 1, End: 960}) {
+		t.Fatal("different output sample rate was relabeled as continuous24k")
+	}
+	status := finished(t, s)
+	if status.Failure == nil || status.Failure.Code != "playout_metadata" {
+		t.Fatalf("status = %#v", status)
+	}
+	select {
+	case <-media.published:
+		t.Fatal("mismatched output PCM was published")
+	default:
+	}
+}
+
 func (f *blockedRoom) Flush(ctx context.Context, item string) error {
 	close(f.entered)
 	select {
@@ -536,6 +632,8 @@ type fakeEngine struct {
 	events      chan engine.Event
 	interrupted chan time.Duration
 	pushed      chan struct{}
+	received    chan []byte
+	committed   chan struct{}
 }
 
 func newFakeEngine() *fakeEngine {
@@ -544,13 +642,19 @@ func newFakeEngine() *fakeEngine {
 		events:      make(chan engine.Event, 8),
 		interrupted: make(chan time.Duration, 1),
 		pushed:      make(chan struct{}, 64),
+		received:    make(chan []byte, 64),
+		committed:   make(chan struct{}, 8),
 	}
 }
 
-func (f *fakeEngine) PushAudio(context.Context, []byte) error { f.pushed <- struct{}{}; return nil }
-func (f *fakeEngine) Commit(context.Context) error            { return nil }
-func (f *fakeEngine) Audio() <-chan engine.Frame              { return f.audio }
-func (f *fakeEngine) Events() <-chan engine.Event             { return f.events }
+func (f *fakeEngine) PushAudio(_ context.Context, pcm []byte) error {
+	f.received <- append([]byte(nil), pcm...)
+	f.pushed <- struct{}{}
+	return nil
+}
+func (f *fakeEngine) Commit(context.Context) error { f.committed <- struct{}{}; return nil }
+func (f *fakeEngine) Audio() <-chan engine.Frame   { return f.audio }
+func (f *fakeEngine) Events() <-chan engine.Event  { return f.events }
 func (f *fakeEngine) Interrupt(_ context.Context, _ string, heard time.Duration) error {
 	f.interrupted <- heard
 	return nil

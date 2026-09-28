@@ -1,12 +1,12 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer, Schema } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { Cause, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
 import fs, { rename, rm, symlink } from "fs/promises"
 import os from "os"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import path from "path"
 import { pathToFileURL } from "url"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -15,9 +15,7 @@ import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "../../src/background/job"
-import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
-import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -31,7 +29,6 @@ import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider/provider"
 import { Question } from "../../src/question"
-import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
 import { LLM } from "../../src/session/llm"
@@ -53,6 +50,10 @@ import { Truncate } from "../../src/tool/truncate"
 import { KiloHeadless } from "../../src/kilocode/permission/headless"
 import { KiloSessionPrompt } from "../../src/kilocode/session/prompt"
 import { KiloReadObject } from "../../src/kilocode/tool/read-object"
+import * as TaskWorker from "../../src/kilocode/session/task-worker"
+import { make as voice } from "../../src/kilocode/voice/openai"
+import { RayaVoice } from "../../src/kilocode/voice/service"
+import type { State as MediaLive } from "../../src/kilocode/voice/mf-live"
 import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions"
 import { Storage } from "../../src/storage/storage"
 import { RayaTask } from "../../src/kilocode/task"
@@ -155,6 +156,7 @@ const promptRoot = LayerNode.group([
   BackgroundJob.node,
   SessionStatus.node,
   SessionRunState.node,
+  TaskWorker.node,
   Database.node,
   EventV2Bridge.node,
   Question.node,
@@ -1435,53 +1437,65 @@ it.live(
   { timeout: 30_000 },
 )
 
-it.live("active tool calls use permissions changed after model streaming starts", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ dir, llm }) {
-      const config = yield* Config.Service
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const permission = yield* Permission.Service
-      const file = path.join(dir, "note.txt")
-      const gate = Promise.withResolvers<void>()
+it.live(
+  "active tool calls use permissions changed after model streaming starts",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ dir, llm }) {
+        const config = yield* Config.Service
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const permission = yield* Permission.Service
+        const file = path.join(dir, "note.txt")
+        const gate = Promise.withResolvers<void>()
 
-      yield* Effect.promise(() => Bun.write(file, "old"))
-      yield* llm.push(reply().wait(gate.promise).tool("edit", { filePath: file, oldString: "old", newString: "new" }))
+        yield* Effect.promise(() => Bun.write(file, "old"))
+        yield* llm.push(reply().wait(gate.promise).tool("edit", { filePath: file, oldString: "old", newString: "new" }))
 
-      const chat = yield* sessions.create({ title: "Pinned" })
-      yield* prompt.prompt({
-        sessionID: chat.id,
-        agent: "build",
-        noReply: true,
-        parts: [{ type: "text", text: "edit note" }],
-      })
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "edit note" }],
+        })
 
-      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkScoped)
-      yield* llm.wait(1)
-      yield* config.update({ permission: { edit: { "*": "allow" } } } as Config.Info)
-      gate.resolve(undefined)
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkScoped)
+        yield* llm.wait(1)
+        yield* config.update({ permission: { edit: { "*": "allow" } } } as Config.Info)
+        gate.resolve(undefined)
 
-      yield* waitFor(
-        "edit without permission prompt",
-        Effect.gen(function* () {
-          const pending = yield* permission.list()
-          if (pending.length) throw new Error("edit permission was requested after config allowed it")
-          const text = yield* Effect.promise(() => Bun.file(file).text())
-          if (text === "new") return text
-        }),
-      )
+        yield* waitFor(
+          "edit without permission prompt",
+          Effect.gen(function* () {
+            const pending = yield* permission.list()
+            if (pending.length) throw new Error("edit permission was requested after config allowed it")
+            // Checked replacement temporarily moves the original into its verified holding path.
+            const text = yield* Effect.promise(() =>
+              Bun.file(file)
+                .text()
+                .catch((err: unknown) => {
+                  if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return undefined
+                  throw err
+                }),
+            )
+            if (text === "new") return text
+          }),
+        )
 
-      const exit = yield* Fiber.await(fiber)
-      expect(Exit.isSuccess(exit)).toBe(true)
-    }),
-    {
-      git: true,
-      config: (url) => ({
-        ...providerCfg(url),
-        permission: { edit: "ask" },
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("new")
       }),
-    },
-  ),
+      {
+        git: true,
+        config: (url) => ({
+          ...providerCfg(url),
+          permission: { edit: "ask" },
+        }),
+      },
+    ),
+  30_000,
 )
 
 const worker = (mode: "subagent" | "all"): AgentSvc.Info => ({
@@ -1498,6 +1512,276 @@ const bash = (sessionID: Session.Info["id"]) => ({
   always: ["echo 1"],
   metadata: {},
 })
+
+routineIt.live(
+  "MF canonical runtime preserves edit permission rejection and original delegation identity",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ dir, llm }) {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const sessions = yield* Session.Service
+        const prompts = yield* SessionPrompt.Service
+        const workers = yield* TaskWorker.Service
+        const permission = yield* Permission.Service
+        const scope = yield* Scope.Scope
+        const file = path.join(dir, "voice-permission.txt")
+        yield* Effect.promise(() => Bun.write(file, "original"))
+        yield* llm.push(
+          reply().tool("edit", { filePath: file, oldString: "original", newString: "changed" }),
+          reply().text("I could not change the file because permission was rejected.").stop(),
+        )
+        const parent = yield* sessions.create({ title: "MF permission review" })
+        yield* prompts.prompt({
+          sessionID: parent.id,
+          agent: "code",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+          noReply: true,
+          parts: [{ type: "text", text: "Await my voice request." }],
+        })
+        // A bounded lease isolates canonical tool permissions; this does not test real goal charging.
+        const canonical = yield* voice({
+          storage,
+          database,
+          sessions,
+          prompts,
+          workers,
+          admissions: () =>
+            Effect.succeed({ amount: 1, dispatch: Effect.void, finish: Effect.void, release: Effect.void }),
+        })
+        const bodies: Record<string, unknown>[] = []
+        const server = Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          async fetch(request) {
+            const body = (await request.json()) as Record<string, unknown>
+            bodies.push(body)
+            return Response.json(
+              {
+                version: 2,
+                sessionID: new URL(request.url).pathname.split("/")[3],
+                delegationID: body.delegationID,
+                receiptID: body.receiptID,
+                accepted: true,
+                played: false,
+              },
+              { status: 202 },
+            )
+          },
+        })
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            server.stop(true)
+          }),
+        )
+        const mf = RayaVoice.make({
+          storage,
+          scope,
+          openai: canonical,
+          sessions: { get: sessions.get, create: () => Effect.die("Live must not create a legacy child") },
+          prompts: {
+            prompt: () => Effect.die("Live must not use legacy prompting"),
+            cancel: () => Effect.die("Live must not cancel unrelated canonical work"),
+          },
+        })
+        const info = yield* mf.start(
+          { version: 2, engine: "openai-live", parentSessionID: parent.id, mediaURL: server.url.origin },
+          "q".repeat(43),
+        )
+        const envelope = (seq: number, type: string, data: Record<string, unknown>, item?: string, text?: string) => ({
+          session: info.id,
+          seq,
+          event: {
+            seq,
+            type,
+            session: "provider_permission",
+            at: new Date().toISOString(),
+            data,
+            ...(item ? { item } : {}),
+            ...(text ? { text } : {}),
+          },
+        })
+        expect(yield* mf.event(envelope(1, "session.started", { model: "gpt-live-1" }), info.controlToken)).toBe(true)
+        const text = `Change ${file} from original to changed.`
+        expect(
+          yield* mf.event(
+            envelope(
+              2,
+              "transcript.input.delta",
+              {
+                type: "session.input_transcript.delta",
+                event_id: "caption_permission",
+                delta: text,
+                start_ms: 10,
+                end_ms: 20,
+                completeTurn: false,
+              },
+              "caption_permission",
+              text,
+            ),
+            info.controlToken,
+          ),
+        ).toBe(true)
+        const request = envelope(
+          3,
+          "session.delegation.created",
+          {
+            event_id: "event_permission",
+            offset_ms: 30,
+            delegation: { id: "delegation_permission", type: "delegation", target: "client" },
+          },
+          "delegation_permission",
+        )
+        expect(yield* mf.event(request, info.controlToken).pipe(Effect.timeout("150 millis"))).toBe(true)
+        const pending = yield* pollWithTimeout(
+          Effect.gen(function* () {
+            return (yield* permission.list()).find(
+              (entry) => entry.sessionID === parent.id && entry.permission === "edit",
+            )
+          }),
+          "MF canonical edit permission was never requested",
+          "15 seconds",
+        )
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("original")
+        yield* permission.reply({ requestID: pending.id, reply: "reject" })
+        const task = yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const saved = yield* storage.read<{ live: MediaLive }>(["raya_voice", info.id])
+            const task = Object.values(saved.live.tasks ?? {}).find((entry) => entry.id === "delegation_permission")
+            if (task?.phase !== "accepted" || !task.call || !saved.live.binding || !saved.live.secret) return
+            return { task, binding: saved.live.binding, secret: saved.live.secret }
+          }),
+          "MF canonical refusal result did not settle",
+          "15 seconds",
+        )
+        const call = yield* canonical.get(
+          task.binding.id,
+          task.task.call!.callID,
+          task.binding.generation,
+          task.secret,
+          dir,
+        )
+        expect(call.status).toBe("failed")
+        expect(call.error?.code).toBe("tool_failed")
+        expect(call.parentSessionID).toBe(parent.id)
+        expect(call.result?.evidence).toContainEqual(expect.objectContaining({ tool: "edit", status: "error" }))
+        const messages = yield* sessions.messages({ sessionID: parent.id })
+        const tools = messages
+          .flatMap((message) => message.parts)
+          .filter((part) => part.type === "tool" && part.tool === "edit")
+        expect(tools).toHaveLength(1)
+        expect(tools[0]).toMatchObject({ state: { status: "error" } })
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("original")
+        const count = yield* llm.calls
+        expect(yield* mf.event(request, info.controlToken)).toBe(true)
+        yield* Effect.sleep("50 millis")
+        expect(yield* llm.calls).toBe(count)
+        expect(bodies).toHaveLength(1)
+        expect(bodies[0]?.delegationID).toBe("delegation_permission")
+        expect(bodies[0]?.content).toBe("The task could not finish. Details are available in chat.")
+        expect(task.task.ack?.played).toBe(false)
+        expect(yield* permission.list()).toEqual([])
+        const followup = "Why was the file not changed? Explain only; do not edit it."
+        expect(
+          yield* mf.event(
+            envelope(
+              4,
+              "transcript.input.delta",
+              {
+                type: "session.input_transcript.delta",
+                event_id: "caption_followup",
+                delta: followup,
+                start_ms: 40,
+                end_ms: 50,
+                completeTurn: false,
+              },
+              "caption_followup",
+              followup,
+            ),
+            info.controlToken,
+          ),
+        ).toBe(true)
+        expect(
+          yield* mf.event(
+            envelope(
+              5,
+              "session.delegation.created",
+              {
+                event_id: "event_followup",
+                offset_ms: 60,
+                delegation: { id: "delegation_followup", type: "delegation", target: "client" },
+              },
+              "delegation_followup",
+            ),
+            info.controlToken,
+          ),
+        ).toBe(true)
+        const resumed = yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const saved = yield* storage.read<{ live: MediaLive }>(["raya_voice", info.id])
+            const next = Object.values(saved.live.tasks ?? {}).find((entry) => entry.id === "delegation_followup")
+            if (next?.phase !== "accepted" || !next.call) return
+            return next.call
+          }),
+          "MF conversation did not continue after permission refusal",
+          "15 seconds",
+        )
+        expect(resumed.status).toBe("completed")
+        expect(resumed.result?.text).toContain("permission was rejected")
+        expect(resumed.parentSessionID).toBe(parent.id)
+        expect(yield* llm.calls).toBe(count + 1)
+        expect(bodies).toHaveLength(2)
+        expect(bodies[1]?.delegationID).toBe("delegation_followup")
+        expect(bodies[1]?.content).toContain("permission was rejected")
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("original")
+        const final = yield* sessions.messages({ sessionID: parent.id })
+        expect(
+          final.flatMap((message) => message.parts).filter((part) => part.type === "tool" && part.tool === "edit"),
+        ).toHaveLength(1)
+        yield* mf.close(info.id)
+      }),
+      { git: true, config: (url) => ({ ...providerCfg(url), permission: { edit: "ask" } }) },
+    ),
+  30_000,
+)
+
+it.live(
+  "permission refresh refuses a removed session instead of reusing stale allow rules",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ dir }) {
+        const permission = yield* Permission.Service
+        const sessions = yield* Session.Service
+        const agents = yield* AgentSvc.Service
+        const agent = yield* agents.defaultInfo()
+        const created = yield* sessions.create({ title: "Removed authority" })
+        yield* sessions.setPermission({
+          sessionID: created.id,
+          permission: Permission.fromConfig({ bash: "allow" }),
+        })
+        const stale = yield* sessions.get(created.id)
+        expect(Permission.evaluate("bash", "echo 1", stale.permission ?? []).action).toBe("allow")
+        yield* sessions.remove(stale.id)
+        const file = path.join(dir, "stale-permission.txt")
+        const err = yield* awaitWithTimeout(
+          KiloSessionPrompt.askPermission({
+            permission,
+            agents,
+            sessions,
+            agent,
+            session: stale,
+            request: bash(stale.id),
+          }).pipe(Effect.andThen(Effect.promise(() => Bun.write(file, "must not be written"))), Effect.flip),
+          "removed session permission refresh did not refuse",
+        )
+        expect(err).toMatchObject({ _tag: "NotFoundError" })
+        expect(yield* permission.list()).toEqual([])
+        expect(yield* Effect.promise(() => Bun.file(file).exists())).toBe(false)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
 
 // Reproduces #11903: a sync subagent hitting an "ask" rule in a headless run
 // used to block forever on a permission prompt no client would ever answer.

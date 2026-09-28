@@ -28,6 +28,7 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { RayaVoice } from "@/kilocode/voice/service"
+import type { State as MediaLive } from "@/kilocode/voice/mf-live"
 import * as Session from "@/session/session"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
@@ -206,7 +207,188 @@ it.live("MF Live refuses an insufficient canonical duration before returning pro
   }).pipe(Effect.scoped),
 )
 
-for (const mode of ["accepted", "unknown", "stopped", "private", "held"] as const) {
+for (const mode of ["missing", "correlated", "consumed", "unknown", "held", "blocked"] as const) {
+  it.live(
+    `MF Live clarifies ${mode} intent without dispatching or replaying guessed work`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        return yield* Effect.gen(function* () {
+          const scope = yield* Scope.Scope
+          const entered = yield* Deferred.make<void>()
+          let release: (() => void) | undefined
+          const held = new Promise<void>((resolve) => {
+            release = resolve
+          })
+          const bodies: Record<string, unknown>[] = []
+          const server = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(request) {
+              const body = (await request.json()) as Record<string, unknown>
+              bodies.push(body)
+              if (mode === "held") {
+                await Effect.runPromise(Deferred.succeed(entered, undefined))
+                await held
+              }
+              return Response.json({
+                version: 2,
+                sessionID: mode === "unknown" ? "wrong_owner" : new URL(request.url).pathname.split("/")[3],
+                delegationID: body.delegationID,
+                receiptID: body.receiptID,
+                accepted: true,
+                played: false,
+              })
+            },
+          })
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              void server.stop(true)
+              release?.()
+            }),
+          )
+          const state = yield* fixture(root)
+          yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+          const mf = frontend(state, scope)
+          const info = yield* mf.start(
+            {
+              version: 2,
+              engine: "openai-live",
+              parentSessionID: session,
+              mediaURL: `http://127.0.0.1:${server.port}`,
+            },
+            "q".repeat(43),
+          )
+          let seq = 0
+          const envelope = (type: string, data: Record<string, unknown>, item?: string, text?: string) => {
+            seq++
+            return {
+              session: info.id,
+              seq,
+              event: {
+                seq,
+                type,
+                session: "provider_clarification",
+                at: new Date().toISOString(),
+                data,
+                ...(item ? { item } : {}),
+                ...(text !== undefined ? { text } : {}),
+              },
+            }
+          }
+          const caption = (id: string, client?: string) =>
+            envelope(
+              "transcript.input.delta",
+              {
+                type: "session.input_transcript.delta",
+                event_id: id,
+                delta: "Summarize the file",
+                start_ms: seq * 10,
+                end_ms: seq * 10 + 5,
+                completeTurn: false,
+                ...(client ? { client_event_id: client } : {}),
+              },
+              id,
+              "Summarize the file",
+            )
+          const delegation = (id: string) =>
+            envelope(
+              "session.delegation.created",
+              {
+                event_id: `event_${id}`,
+                offset_ms: 1000,
+                delegation: { id, type: "delegation", target: "client" },
+              },
+              id,
+            )
+          const read = () => state.storage.read<{ live: MediaLive }>(["raya_voice", info.id])
+          const receipt = (id: string, phase: string) =>
+            Effect.gen(function* () {
+              for (const _ of Array.from({ length: 200 })) {
+                const saved = yield* read()
+                const task = Object.values(saved.live.tasks ?? {}).find((task) => task.id === id)
+                if (task?.phase === phase) return task
+                yield* Effect.sleep("10 millis")
+              }
+              return yield* Effect.die("Clarification receipt did not settle")
+            })
+          expect(yield* mf.event(envelope("session.started", { model: "gpt-live-1" }), info.controlToken)).toBe(true)
+          if (mode === "blocked") {
+            const invalid = caption("invalid_caption")
+            expect(
+              yield* mf.event(
+                { ...invalid, event: { ...invalid.event, data: { ...invalid.event.data, end_ms: -1 } } },
+                info.controlToken,
+              ),
+            ).toBe(false)
+            expect(yield* mf.event(delegation("blocked_clarification"), info.controlToken)).toBe(false)
+            expect(state.calls).toHaveLength(0)
+            expect(bodies).toHaveLength(0)
+            expect(Object.values((yield* read()).live.tasks ?? {})).toHaveLength(0)
+            yield* mf.close(info.id)
+            return
+          }
+          if (mode === "correlated")
+            expect(yield* mf.event(caption("correlated_caption", "client_result"), info.controlToken)).toBe(true)
+          if (mode === "consumed") {
+            expect(yield* mf.event(caption("prior_user"), info.controlToken)).toBe(true)
+            expect(yield* mf.event(delegation("prior_work"), info.controlToken)).toBe(true)
+            yield* receipt("prior_work", "accepted")
+            expect(state.calls).toHaveLength(1)
+          }
+          const before = bodies.length
+          const request = delegation("clarify_original")
+          expect(yield* mf.event(request, info.controlToken)).toBe(true)
+          expect(yield* mf.event(request, info.controlToken)).toBe(true)
+          expect(state.calls).toHaveLength(mode === "consumed" ? 1 : 0)
+          if (mode === "held") {
+            yield* Deferred.await(entered)
+            expect(
+              yield* mf
+                .event(caption("while_clarification_pending"), info.controlToken)
+                .pipe(Effect.timeout("150 millis")),
+            ).toBe(true)
+            expect(yield* mf.close(info.id).pipe(Effect.timeout("150 millis"))).toBe(true)
+            release?.()
+            yield* receipt("clarify_original", "unknown")
+          } else {
+            const task = yield* receipt("clarify_original", mode === "unknown" ? "unknown" : "accepted")
+            expect(task.call).toBeUndefined()
+            expect(task.offer?.content).toContain("Please")
+            expect(task.offer?.delegationID).toBe("clarify_original")
+            if (mode !== "unknown") expect(task.ack?.played).toBe(false)
+          }
+          expect(bodies).toHaveLength(before + 1)
+          expect(bodies.at(-1)?.delegationID).toBe("clarify_original")
+          expect(bodies.at(-1)?.content).not.toContain("ses_")
+          if (mode === "unknown") {
+            const resumed = frontend(state, scope)
+            const replay = { ...request, seq: seq + 1, event: { ...request.event, seq: seq + 1 } }
+            expect(yield* resumed.event(replay, info.controlToken)).toBe(false)
+            yield* Effect.sleep("120 millis")
+            expect(bodies).toHaveLength(before + 1)
+          }
+          if (!["unknown", "held"].includes(mode)) {
+            expect(yield* mf.event(caption("fresh_clarified_user"), info.controlToken)).toBe(true)
+            expect(yield* mf.event(delegation("clarified_work"), info.controlToken)).toBe(true)
+            const task = yield* receipt("clarified_work", "accepted")
+            expect(task.call?.parentSessionID).toBe(session)
+            expect(state.calls).toHaveLength(mode === "consumed" ? 2 : 1)
+            expect(bodies).toHaveLength(before + 2)
+          }
+          yield* mf.close(info.id)
+        }).pipe(
+          Effect.provide([
+            Storage.layerFromDir(path.join(root, "mf-storage")),
+            Database.layerFromPath(path.join(root, "mf.sqlite")),
+          ]),
+        )
+      }).pipe(Effect.scoped),
+    30_000,
+  )
+}
+
+for (const mode of ["accepted", "unknown", "stopped", "private", "empty", "held"] as const) {
   it.live(
     `MF canonical delegation keeps original scope and one ${mode} result attempt`,
     () =>
@@ -249,6 +431,7 @@ for (const mode of ["accepted", "unknown", "stopped", "private", "held"] as cons
             }),
           )
           const state = yield* fixture(root, "gpt-live-1", (input) => {
+            if (mode === "empty") return Effect.succeed({ ...answer(input), parts: [] })
             if (mode === "private") {
               const result = answer(input)
               return Effect.succeed({
@@ -326,7 +509,19 @@ for (const mode of ["accepted", "unknown", "stopped", "private", "held"] as cons
               { event_id: `event_${id}`, offset_ms: 100, delegation: { id, type: "delegation", target: "client" } },
               id,
             )
-          expect(yield* mf.event(delegation(3, "client_only"), info.controlToken)).toBe(false)
+          const unsupported = delegation(3, "mismatched_item")
+          expect(
+            yield* mf.event(
+              {
+                ...unsupported,
+                event: {
+                  ...unsupported.event,
+                  item: "foreign_delegation",
+                },
+              },
+              info.controlToken,
+            ),
+          ).toBe(false)
           expect(state.calls).toHaveLength(0)
           expect(yield* mf.event(caption(4, "caption_user", "Please summarize the file"), info.controlToken)).toBe(true)
           const wrong = caption(5, "caption_next", "Read-only please")
@@ -397,7 +592,7 @@ for (const mode of ["accepted", "unknown", "stopped", "private", "held"] as cons
                 )
                 if (call.status === "completed") break
               }
-            } else if (task.phase === (mode === "private" ? "accepted" : mode)) break
+            } else if (task.phase === (["private", "empty"].includes(mode) ? "accepted" : mode)) break
             yield* Effect.sleep("10 millis")
           }
           const saved = yield* read()
@@ -422,14 +617,14 @@ for (const mode of ["accepted", "unknown", "stopped", "private", "held"] as cons
               )).status,
             ).toBe("completed")
           } else {
-            expect(task.phase).toBe(mode === "private" ? "accepted" : mode)
+            expect(task.phase).toBe(["private", "empty"].includes(mode) ? "accepted" : mode)
             expect(bodies).toHaveLength(1)
             expect(bodies[0].delegationID).toBe("original_task_id")
             expect(Buffer.byteLength(String(bodies[0].content), "utf8")).toBeLessThanOrEqual(500)
             expect(bodies[0].content).toBe(
-              mode === "private" ? "The task completed. Details are available in chat." : "Verified Live result",
+              ["private", "empty"].includes(mode) ? "The task response is available in chat." : "Verified Live result",
             )
-            if (mode === "accepted" || mode === "private") expect(task.ack?.played).toBe(false)
+            if (["accepted", "private", "empty"].includes(mode)) expect(task.ack?.played).toBe(false)
             yield* frontend(state, scope).event(
               { ...request, seq: 8, event: { ...request.event, seq: 8 } },
               info.controlToken,

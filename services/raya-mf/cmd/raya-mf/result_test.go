@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,7 +46,18 @@ func (*silent) Send(context.Context, room.Data) error { return nil }
 func (*silent) Flush(context.Context, string) error   { return nil }
 func (*silent) Close() error                          { return nil }
 
-func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T) {
+type journey struct {
+	request  func(string, string, any, string) (int, map[string]any)
+	events   <-chan wire.Envelope
+	commands <-chan map[string]any
+	inputs   <-chan map[string]any
+	input    chan engine.Frame
+	conn     *websocket.Conn
+	dials    *atomic.Int32
+}
+
+func travel(t *testing.T) *journey {
+	t.Helper()
 	events := make(chan wire.Envelope, 16)
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var event wire.Envelope
@@ -61,9 +73,13 @@ func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T)
 		}
 		_, _ = w.Write([]byte("true"))
 	}))
-	defer backend.Close()
+	t.Cleanup(backend.Close)
 	commands := make(chan map[string]any, 8)
+	inputs := make(chan map[string]any, 4)
+	peers := make(chan *websocket.Conn, 1)
+	dials := &atomic.Int32{}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dials.Add(1)
 		if r.URL.Path != "/v1/live/sessions" || r.Header.Get("Authorization") != "Bearer loopback-result-key" {
 			http.Error(w, "invalid provider boundary", 400)
 			return
@@ -74,6 +90,7 @@ func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T)
 			return
 		}
 		defer conn.CloseNow()
+		peers <- conn
 		var config map[string]any
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -96,6 +113,8 @@ func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T)
 			case "session.commentary.append":
 				commands <- value
 				answer = map[string]any{"type": "session.commentary.appended", "event_id": "ack_" + value["event_id"].(string), "client_event_id": value["event_id"], "start_ms": 1, "end_ms": 2}
+			case "session.input_audio.append":
+				inputs <- value
 			case "session.close":
 				answer = map[string]any{"type": "session.closed", "event_id": "closed_result", "client_event_id": value["event_id"], "session": config, "reason": "close_requested", "usage": map[string]any{"seconds": 0.02}}
 			}
@@ -120,26 +139,27 @@ func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T)
 			}
 		}
 	}))
-	defer provider.Close()
+	t.Cleanup(provider.Close)
 	key, err := control.ParseKey(routeToken)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager := app.NewManager(&silent{input: make(chan engine.Frame), data: make(chan room.Data)})
+	input := make(chan engine.Frame, 1)
+	manager := app.NewManager(&silent{input: input, data: make(chan room.Data)})
 	server := httptest.NewServer(routes(manager, key))
-	defer server.Close()
-	defer func() {
+	t.Cleanup(server.Close)
+	t.Cleanup(func() {
 		if err := manager.CloseAll(); err != nil {
 			t.Error(err)
 		}
-	}()
-	request := func(path string, value interface{}, token string) (int, map[string]interface{}) {
+	})
+	request := func(method, path string, value any, token string) (int, map[string]any) {
 		t.Helper()
 		raw, err := json.Marshal(value)
 		if err != nil {
 			t.Fatal(err)
 		}
-		req, err := http.NewRequest(http.MethodPost, server.URL+path, strings.NewReader(string(raw)))
+		req, err := http.NewRequest(method, server.URL+path, strings.NewReader(string(raw)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -150,28 +170,43 @@ func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T)
 			t.Fatal(err)
 		}
 		defer response.Body.Close()
-		var body map[string]interface{}
+		var body map[string]any
 		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
 		return response.StatusCode, body
 	}
-	status, _ := request("/v1/sessions", wire.Start{Version: 2, ID: "media_result", BackendURL: backend.URL, Engine: engine.Config{Provider: "openai-live", Endpoint: "ws" + strings.TrimPrefix(provider.URL, "http") + "/v1/live/sessions", Key: "loopback-result-key", Delegation: "client", MaximumSeconds: 10}}, routeToken)
+	status, _ := request(http.MethodPost, "/v1/sessions", wire.Start{Version: 2, ID: "media_result", BackendURL: backend.URL, Engine: engine.Config{Provider: "openai-live", Endpoint: "ws" + strings.TrimPrefix(provider.URL, "http") + "/v1/live/sessions", Key: "loopback-result-key", Delegation: "client", MaximumSeconds: 10}}, routeToken)
 	if status != http.StatusCreated {
 		t.Fatal("actual Live manager failed admission", status)
 	}
+	return &journey{request: request, events: events, commands: commands, inputs: inputs, input: input, conn: <-peers, dials: dials}
+}
+
+func (j *journey) observed(t *testing.T, kind string) wire.Envelope {
+	t.Helper()
 	end := time.After(time.Second)
 	for {
 		select {
-		case event := <-events:
-			if event.Event.Type == "session.delegation.created" {
-				goto registered
+		case event := <-j.events:
+			if strings.HasPrefix(event.Event.Type, "transcript.") {
+				t.Fatal("fixture unexpectedly injected a user caption")
+			}
+			if event.Event.Type == kind {
+				return event
 			}
 		case <-end:
-			t.Fatal("original delegation did not cross actual authenticated callback")
+			t.Fatal("missing actual callback", kind)
 		}
 	}
-registered:
+}
+
+func TestResultVersionTwoExactACKThroughActualManagerAndLiveSocket(t *testing.T) {
+	j := travel(t)
+	j.observed(t, "session.delegation.created")
+	request := func(path string, value any, token string) (int, map[string]any) {
+		return j.request(http.MethodPost, path, value, token)
+	}
 	for _, version := range []int{2, 1} {
 		receipt := []string{"receipt_v1", "receipt_v2"}[version-1]
 		input := map[string]interface{}{"version": version, "delegationID": "original_result", "receiptID": receipt, "kind": "commentary", "content": "Task result", "ttl": 1000, "created": time.Now().UTC().Format(time.RFC3339Nano)}
@@ -188,7 +223,7 @@ registered:
 			t.Fatal("version one compatibility changed", body)
 		}
 		select {
-		case command := <-commands:
+		case command := <-j.commands:
 			if command["delegation_id"] != "original_result" || command["content"] != "Task result" || command["event_id"] == receipt {
 				t.Fatal("provider command mismatched result identity", command)
 			}
@@ -205,8 +240,87 @@ registered:
 		}
 	}
 	select {
-	case command := <-commands:
+	case command := <-j.commands:
 		t.Fatal("retry/unauthorized request resent provider result", command)
+	case <-time.After(25 * time.Millisecond):
+	}
+}
+
+func TestCaptionFreeClarificationKeepsMediaAndAcceptsFreshDelegation(t *testing.T) {
+	j := travel(t)
+	original := j.observed(t, "session.delegation.created")
+	if original.Event.Item != "original_result" {
+		t.Fatal("fixture lost original provider delegation")
+	}
+	for index, id := range []string{"original_result", "fresh_result"} {
+		if index == 1 {
+			event := map[string]any{"type": "session.delegation.created", "event_id": "delegated_fresh", "offset_ms": 3, "delegation": map[string]any{"id": id, "type": "delegation", "target": "client"}}
+			raw, err := json.Marshal(event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			err = j.conn.Write(ctx, websocket.MessageText, raw)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
+			observed := j.observed(t, "session.delegation.created")
+			if observed.Event.Item != id {
+				t.Fatal("new original provider delegation was refused")
+			}
+		}
+		receipt := []string{"clarify_receipt", "fresh_receipt"}[index]
+		content := []string{"Please restate what you would like me to do.", "Thanks for clarifying your request."}[index]
+		input := map[string]any{"version": 2, "delegationID": id, "receiptID": receipt, "kind": "delegation.result", "content": content, "ttl": 1000, "created": time.Now().UTC().Format(time.RFC3339Nano)}
+		status, body := j.request(http.MethodPost, "/v1/sessions/media_result/result", input, routeToken)
+		if status != http.StatusAccepted || len(body) != 6 || body["version"] != float64(2) || body["sessionID"] != "media_result" || body["delegationID"] != id || body["receiptID"] != receipt || body["accepted"] != true || body["played"] != false {
+			t.Fatal("clarification/fresh result ACK lost exact original identity", status, body)
+		}
+		select {
+		case command := <-j.commands:
+			if command["type"] != "session.commentary.append" || command["delegation_id"] != id || command["content"] != content || command["event_id"] == receipt {
+				t.Fatal("clarification/fresh result reached wrong provider identity", command)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("result route fabricated provider acceptance")
+		}
+		accepted := j.observed(t, "context.injected")
+		if accepted.Event.Item != receipt {
+			t.Fatal("exact acceptance callback lost private receipt")
+		}
+		status, _ = j.request(http.MethodPost, "/v1/sessions/media_result/result", input, routeToken)
+		if status != http.StatusAccepted {
+			t.Fatal("exact clarification retry failed")
+		}
+		select {
+		case j.input <- engine.Frame{Rate: 24000, PCM: make([]byte, 960)}:
+		case <-time.After(150 * time.Millisecond):
+			t.Fatal("clarification blocked continuous media input")
+		}
+		select {
+		case input := <-j.inputs:
+			if input["type"] != "session.input_audio.append" || input["audio"] != strings.Repeat("A", 1280) {
+				t.Fatal("continuous silent PCM changed")
+			}
+		case <-time.After(150 * time.Millisecond):
+			t.Fatal("clarification/fresh result stopped actual provider input")
+		}
+	}
+	if j.dials.Load() != 1 {
+		t.Fatal("clarification restarted or redialed provider", j.dials.Load())
+	}
+	status, body := j.request(http.MethodDelete, "/v1/sessions/media_result", nil, routeToken)
+	if status != http.StatusOK || body["closed"] != true {
+		t.Fatal("explicit Stop did not close actual voice session", status, body)
+	}
+	status, body = j.request(http.MethodPost, "/v1/sessions/media_result/result", map[string]any{"version": 2, "delegationID": "fresh_result", "receiptID": "after_stop", "kind": "delegation.result", "content": "Do not send this", "ttl": 1000, "created": time.Now().UTC().Format(time.RFC3339Nano)}, routeToken)
+	if status != http.StatusConflict || body["accepted"] == true {
+		t.Fatal("Stop allowed late result acceptance", status, body)
+	}
+	select {
+	case command := <-j.commands:
+		t.Fatal("duplicate/stopped result sent another provider command", command)
 	case <-time.After(25 * time.Millisecond):
 	}
 }

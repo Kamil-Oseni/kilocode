@@ -264,9 +264,7 @@ export namespace KiloSessionPrompt {
     request: Omit<Permission.AskInput, "ruleset" | "hardRuleset">
   }) {
     const agent = (yield* input.agents.get(input.agent.name)) ?? input.agent
-    const session = yield* input.sessions
-      .get(input.session.id)
-      .pipe(Effect.catchCause(() => Effect.succeed(input.session)))
+    const session = yield* input.sessions.get(input.session.id)
     const ceiling = TaskAuthority.rules(TaskAuthority.read(session.metadata))
 
     // kilocode_change start - tag every rule with its true origin before merging, so the winning
@@ -277,7 +275,10 @@ export namespace KiloSessionPrompt {
     const taggedSession = PermissionProvenance.tagSession(session.permission ?? [])
     const ruleset = Permission.merge(
       taggedAgent,
-      guardPermissions({ agent: { name: agent.name, permission: taggedAgent }, session: { permission: taggedSession } }),
+      guardPermissions({
+        agent: { name: agent.name, permission: taggedAgent },
+        session: { permission: taggedSession },
+      }),
     )
     const outcome = yield* input.permission.ask({
       ...input.request,

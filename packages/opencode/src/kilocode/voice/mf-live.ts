@@ -28,9 +28,10 @@ export type State = {
 }
 type Task = {
   id: string
-  selection: (typeof LiveCall.Type)["context"]
+  kind?: "work" | "clarification"
+  selection?: (typeof LiveCall.Type)["context"]
   fingerprint: string
-  phase: "intent" | "admitted" | "offered" | "accepted" | "unknown" | "failed"
+  phase: "intent" | "admitted" | "clarifying" | "offered" | "accepted" | "unknown" | "failed"
   call?: typeof OpenAICall.Type
   deadline: number
   offer?: typeof Result.Result.Type
@@ -295,8 +296,41 @@ const delegate = Effect.fn("RayaVoice.Live.delegate")(function* (
   if (prior) return prior.fingerprint === fingerprint
   if (Object.keys(state.tasks).length >= 64) return false
   const selection = Context.select(state.captions, delegation.id, data.offset_ms)
-  if (!selection) return false
-  const task: Task = { id: delegation.id, selection, fingerprint, phase: "intent", deadline: Date.now() + 30 * 60_000 }
+  if (!selection) {
+    const created = new Date().toISOString()
+    const deadline = Math.min(
+      Date.now() + 5000,
+      state.binding!.expiresAt,
+      entry.info.createdAt + (entry.info.maximumSeconds ?? 0) * 1000,
+    )
+    if (deadline <= Date.now()) return false
+    state.tasks[key] = {
+      id: delegation.id,
+      kind: "clarification",
+      fingerprint,
+      phase: "clarifying",
+      deadline,
+      offer: {
+        version: 2,
+        delegationID: delegation.id,
+        receiptID: `clarification_${crypto.randomUUID()}`,
+        kind: "delegation.result",
+        content: clarification,
+        ttl: Math.floor(deadline - Date.parse(created)),
+        created,
+      },
+    }
+    yield* save()
+    return !stopped()
+  }
+  const task: Task = {
+    id: delegation.id,
+    kind: "work",
+    selection,
+    fingerprint,
+    phase: "intent",
+    deadline: Date.now() + 30 * 60_000,
+  }
   state.tasks[key] = task
   yield* save()
   if (stopped()) {
@@ -324,7 +358,10 @@ const delegate = Effect.fn("RayaVoice.Live.delegate")(function* (
 })
 
 export function pending(entry: Entry) {
-  return !!entry.mediaKey && Object.values(entry.live?.tasks ?? {}).some((task) => task.phase === "admitted")
+  return (
+    !!entry.mediaKey &&
+    Object.values(entry.live?.tasks ?? {}).some((task) => ["admitted", "clarifying"].includes(task.phase))
+  )
 }
 
 export const poll = Effect.fn("RayaVoice.Live.poll")(function* (
@@ -337,12 +374,14 @@ export const poll = Effect.fn("RayaVoice.Live.poll")(function* (
   if (stopped() || entry.info.status !== "active" || !entry.mediaKey || !state.binding) return
   for (const task of Object.values(state.tasks ?? {})) {
     if (stopped()) return
-    if (task.phase !== "admitted" || !task.call) continue
+    if (!["admitted", "clarifying"].includes(task.phase)) continue
     if (Date.now() >= task.deadline) {
       task.phase = "unknown"
       yield* save()
       continue
     }
+    if (task.kind === "clarification") return yield* prepare(entry, task, save, stopped)
+    if (!task.call) continue
     const call = yield* service
       .get(state.binding.id, task.call.callID, state.binding.generation, state.secret, entry.directory)
       .pipe(Effect.catch(() => Effect.succeed(undefined)))
@@ -364,22 +403,34 @@ export const poll = Effect.fn("RayaVoice.Live.poll")(function* (
       ttl: 5000,
       created: new Date().toISOString(),
     }
-    task.phase = "offered"
+    return yield* prepare(entry, task, save, stopped)
+  }
+})
+
+const clarification = "Please tell me what you'd like me to do."
+const prepare = Effect.fn("RayaVoice.Live.prepare")(function* (
+  entry: Entry,
+  task: Task,
+  save: () => Effect.Effect<void>,
+  stopped: () => boolean,
+) {
+  const offer = task.offer
+  if (!offer || stopped()) return
+  task.phase = "offered"
+  yield* save()
+  if (stopped()) {
+    task.phase = "unknown"
     yield* save()
-    if (stopped()) {
-      task.phase = "unknown"
-      yield* save()
-      return
-    }
-    return {
-      task,
-      offer: task.offer,
-      url: entry.info.mediaURL,
-      id: entry.info.id,
-      key: entry.mediaKey,
-      token: entry.info.controlToken,
-      provider: state.binding.providerCallID,
-    }
+    return
+  }
+  return {
+    task,
+    offer,
+    url: entry.info.mediaURL,
+    id: entry.info.id,
+    key: entry.mediaKey,
+    token: entry.info.controlToken,
+    provider: entry.live!.binding!.providerCallID,
   }
 })
 
@@ -432,7 +483,8 @@ function excerpt(call: typeof OpenAICall.Type, task: Task, entry: Entry) {
     return call.status === "cancelled"
       ? "The task was cancelled. Details are available in chat."
       : "The task could not finish. Details are available in chat."
-  const text = call.result?.text?.trim() || "The task completed. Details are available in chat."
+  const fallback = "The task response is available in chat."
+  const text = call.result?.text?.trim() || fallback
   const ids = [
     task.id,
     call.id,
@@ -447,16 +499,16 @@ function excerpt(call: typeof OpenAICall.Type, task: Task, entry: Entry) {
     entry.live?.secret,
     entry.info.controlToken,
     entry.mediaKey,
-    ...task.selection.fragments.flatMap((item) => [item.id, item.client]),
+    ...(task.selection?.fragments ?? []).flatMap((item) => [item.id, item.client]),
   ]
-  if (ids.some((id) => id && text.includes(id))) return "The task completed. Details are available in chat."
+  if (ids.some((id) => id && text.includes(id))) return fallback
   const content = Buffer.from(text, "utf8").toString("utf8").trim()
   let output = ""
   for (const point of content) {
     if (Buffer.byteLength(output + point, "utf8") > 500) break
     output += point
   }
-  return output || "The task finished. Details are available in chat."
+  return output || fallback
 }
 
 function registry(entry: Entry) {
@@ -474,20 +526,42 @@ function registry(entry: Entry) {
       key !== createHash("sha256").update(task.id).digest("hex") ||
       typeof task.fingerprint !== "string" ||
       !/^[a-f0-9]{64}$/.test(task.fingerprint) ||
-      !["intent", "admitted", "offered", "accepted", "unknown", "failed"].includes(String(task.phase)) ||
+      !["intent", "admitted", "clarifying", "offered", "accepted", "unknown", "failed"].includes(String(task.phase)) ||
       typeof task.deadline !== "number" ||
       !Number.isSafeInteger(task.deadline) ||
-      task.deadline < 0 ||
-      !Schema.is(LiveCall)({ generation: state.binding?.generation, context: task.selection })
+      task.deadline < 0
     )
       return false
     if (task.call && (!Schema.is(OpenAICall)(task.call) || task.call.parentSessionID !== entry.info.parentSessionID))
       return false
     if (task.offer && !Schema.is(Result.Result)(task.offer)) return false
+    if (task.kind === "clarification") return validClarification(task)
+    if (task.kind !== undefined && task.kind !== "work") return false
+    if (
+      task.phase === "clarifying" ||
+      !Schema.is(LiveCall)({ generation: state.binding?.generation, context: task.selection })
+    )
+      return false
     if (["admitted", "offered", "accepted"].includes(String(task.phase)) && !task.call) return false
     if (["offered", "accepted"].includes(String(task.phase)) && !task.offer) return false
     return true
   })
+}
+
+function validClarification(task: Record<string, unknown>) {
+  const offer = Context.object(task.offer)
+  return (
+    task.selection === undefined &&
+    task.call === undefined &&
+    !!offer &&
+    offer.delegationID === task.id &&
+    offer.kind === "delegation.result" &&
+    offer.content === clarification &&
+    typeof offer.created === "string" &&
+    typeof offer.ttl === "number" &&
+    Date.parse(offer.created) + offer.ttl === task.deadline &&
+    ["clarifying", "offered", "accepted", "unknown", "failed"].includes(String(task.phase))
+  )
 }
 
 const started = Effect.fn("RayaVoice.Live.started")(function* (

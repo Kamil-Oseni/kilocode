@@ -690,6 +690,45 @@ export const make = (deps: Deps) =>
           })
           return
         }
+        const tools = message.parts.filter((part) => part.type === "tool")
+        const text = message.parts
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n")
+        const receipt = {
+          text:
+            text.length > 12000
+              ? `${text.slice(0, 11800)}\n[Response shortened; inspect the Raya session for the full result.]`
+              : text,
+          assistantMessageID: message.info.id,
+          evidence: tools
+            .filter((part) => part.tool.length <= 128)
+            .slice(0, 64)
+            .map((part) => ({
+              messageID: part.messageID,
+              partID: part.id,
+              tool: part.tool,
+              status: part.state.status,
+            })),
+        }
+        if (
+          message.info.time.completed &&
+          message.info.finish === "tool-calls" &&
+          tools.length > 0 &&
+          tools.every((part) => part.state.status === "completed" || part.state.status === "error") &&
+          tools.some((part) => part.state.status === "error")
+        ) {
+          yield* finish(id, callID, {
+            status: "failed",
+            result: receipt,
+            error: {
+              code: "tool_failed",
+              message:
+                "The task stopped after a tool was refused or failed. Inspect the Raya session before continuing.",
+            },
+          })
+          return
+        }
         if (
           !message.info.time.completed ||
           !message.info.finish ||
@@ -707,29 +746,9 @@ export const make = (deps: Deps) =>
           })
           return
         }
-        const text = message.parts
-          .filter((part) => part.type === "text")
-          .map((part) => part.text)
-          .join("\n")
         yield* finish(id, callID, {
           status: "completed",
-          result: {
-            text:
-              text.length > 12000
-                ? `${text.slice(0, 11800)}\n[Response shortened; inspect the Raya session for the full result.]`
-                : text,
-            assistantMessageID: message.info.id,
-            evidence: message.parts
-              .filter((part) => part.type === "tool")
-              .filter((part) => part.tool.length <= 128)
-              .slice(0, 64)
-              .map((part) => ({
-                messageID: part.messageID,
-                partID: part.id,
-                tool: part.tool,
-                status: part.state.status,
-              })),
-          },
+          result: receipt,
         })
       }).pipe(
         Effect.onExit((exit) =>

@@ -1971,6 +1971,93 @@ it.live(
   30_000,
 )
 
+for (const mode of ["failed", "pending", "running", "completed", "untimed"] as const) {
+  it.live(
+    `terminal tool-call receipts retain ${mode === "failed" ? "settled failure" : `${mode} uncertainty`} without replay`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        yield* Effect.gen(function* () {
+          const messages: MessageV2.WithParts[] = []
+          const state = yield* fixture(root, (input) => {
+            const message = answer(input)
+            if (message.info.role !== "assistant") return Effect.die("Expected assistant fixture")
+            message.info.finish = "tool-calls"
+            if (mode === "untimed") delete message.info.time.completed
+            const failed: MessageV2.ToolPart = {
+              id: PartID.ascending(),
+              messageID: message.info.id,
+              sessionID: input.sessionID,
+              type: "tool",
+              callID: "refused_edit",
+              tool: "edit",
+              state: {
+                status: "error",
+                input: { filePath: "voice-permission.txt" },
+                error: "The user rejected permission to use this specific tool call.",
+                time: { start: 1, end: 2 },
+              },
+            }
+            const sibling: MessageV2.ToolPart = {
+              ...failed,
+              id: PartID.ascending(),
+              callID: "observed_read",
+              tool: "read",
+              state:
+                mode === "pending"
+                  ? { status: "pending", input: {}, raw: "" }
+                  : mode === "running"
+                    ? { status: "running", input: {}, time: { start: 1 } }
+                    : {
+                        status: "completed",
+                        input: {},
+                        output: "Observed file contents",
+                        title: "Read file",
+                        metadata: {},
+                        time: { start: 1, end: 2 },
+                      },
+            }
+            message.parts = [...message.parts, ...(mode === "completed" ? [] : [failed]), sibling]
+            messages.push(message)
+            return Effect.succeed(message)
+          })
+          yield* state.voice.submit(state.binding.id, state.input, secret, root)
+          const call = yield* settled(
+            state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+          )
+          expect(call.status).toBe(mode === "failed" ? "failed" : "unknown")
+          expect(call.error?.code).toBe(mode === "failed" ? "tool_failed" : "incomplete")
+          if (mode === "failed") {
+            expect(call.result).toEqual({
+              text: "Verified response",
+              assistantMessageID: messages[0]!.info.id,
+              evidence: messages[0]!.parts
+                .filter((part) => part.type === "tool")
+                .map((part) => ({
+                  messageID: part.messageID,
+                  partID: part.id,
+                  tool: part.tool,
+                  status: part.state.status,
+                })),
+            })
+            expect(call.error?.message).toContain("stopped")
+          } else expect(call.result).toBeUndefined()
+          expect(yield* state.voice.submit(state.binding.id, state.input, secret, root)).toEqual(call)
+          expect(
+            yield* state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+          ).toEqual(call)
+          expect(state.calls).toHaveLength(1)
+        }).pipe(
+          Effect.provide([
+            Storage.layerFromDir(path.join(root, "storage")),
+            Database.layerFromPath(path.join(root, "voice.sqlite")),
+          ]),
+        )
+      }),
+    30_000,
+  )
+}
+
 it.live(
   "bounds result text and keeps only exact observed tool identities",
   () =>

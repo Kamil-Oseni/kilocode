@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 18:12 EDT - reserved Live bridge source published
+
+Source `a65c6667ee` is committed and pushed. Normal push gates passed all 29 TypeScript tasks from a fresh cache and the JetBrains generated-client/typecheck gate (two executed Gradle tasks, 20 up-to-date). Focused tests, scoped ordinary lint, knip, Go suite/vet, generated SDK and extension bundle checks below pass. No installed-host or external MF deployment claim; default direct Live UI and installed snapshot remain unchanged. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress.
+
+Next implement dedicated setup receipt settlement before activating MF Live. Keep failed setup closed to work: exact validated startup identity and optional confirmed final usage must cross an authenticated receipt-only path, with immutable persisted intent before accounting-only bind/close/metering. Failed/closed public sessions must never become active just to receive usage. Missing final ACK remains unknown, and changed provider identity cannot rebind. Add typed Go Open failures preserving observed receipts and cleanup status; create the reporter before paid startup, share the reserved setup deadline with room Join, retain unresolved claims, and check active provider state before readiness. Actual socket tests must cover Join failure, startup cancellation/late ACK, budget expiry during Join, callback refusal/loss, Stop-before-settlement, contradictory receipt identity and missing final usage. Then connect original-task caption/delegation/result routing. The handoff contains the implementation direction and remaining host gates.
+
 ## ChatGPT 2026-09-28 17:54 EDT - reserved Live media bridge foundation checked
 
 The trusted extension-to-MF path now supports explicit version-two Live provider selection, original task/directory/server ownership, bounded saved ordinary context and private credential boundaries. Actual canonical budget reservation precedes returned room credentials; its exact finite duration propagates to Go and fences capture/media before the paid lifetime expires. Authenticated callbacks bind exact provider identity and record immutable final usage. Media cleanup runs before canonical backend cleanup; unknown admission/cleanup retains ownership and is never replayed.

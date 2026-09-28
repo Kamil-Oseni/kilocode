@@ -35,11 +35,26 @@ type Inject struct {
 }
 
 type Playout struct {
+	Version int    `json:"version"`
+	Epoch   uint64 `json:"epoch"`
+	Seq     uint64 `json:"seq"`
 	Session string `json:"session"`
 	Item    string `json:"item"`
 	Samples uint64 `json:"samples"`
 	Rate    int    `json:"rate"`
 	Jitter  int    `json:"jitterMs"`
+}
+
+// Span identifies published source samples, never proof that a client heard them.
+type Span struct {
+	Version int    `json:"version"`
+	Session string `json:"session"`
+	Item    string `json:"item"`
+	Epoch   uint64 `json:"epoch"`
+	Seq     uint64 `json:"seq"`
+	Start   uint64 `json:"start"`
+	End     uint64 `json:"end"`
+	Rate    int    `json:"rate"`
 }
 
 type Discontinuity struct {

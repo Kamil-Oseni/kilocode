@@ -109,6 +109,11 @@ type Session struct {
 	ready      chan error
 	readyOnce  sync.Once
 	writeMu    sync.Mutex
+	audioMu    sync.Mutex
+	active     string
+	last       string
+	pending    string
+	responses  map[string]bool
 	itemsMu    sync.RWMutex
 	items      []engine.ContextItem
 	wait       sync.WaitGroup
@@ -151,10 +156,36 @@ func (s *Session) Events() <-chan engine.Event {
 
 func (s *Session) Interrupt(ctx context.Context, reason string, heard time.Duration) error {
 	s.interrupts.Add(1)
-	if err := s.write(ctx, map[string]any{"event_id": cryptoID(), "type": "response.cancel"}); err != nil {
-		return err
+	s.audioMu.Lock()
+	turn := s.active
+	if turn == "" {
+		turn = s.last
 	}
-	s.emit(engine.Event{Type: "response.interrupted", HeardMS: heard.Milliseconds(), Data: map[string]any{
+	if s.pending != "" || turn == "" {
+		s.audioMu.Unlock()
+		return errors.New("qwen response cancellation is not confirmed")
+	}
+	running := s.active != ""
+	if s.active != "" {
+		s.responses[s.active] = true
+		s.pending = s.active
+	}
+	err := s.clock.Drop(ctx, "")
+	if err != nil {
+		s.audioMu.Unlock()
+		return fmt.Errorf("flush qwen audio: %w", err)
+	}
+	// Qwen exposes only current-response cancellation. Keep its local authority
+	// fenced until the exact cancelled response is acknowledged; a competing
+	// response closes the session rather than being treated as the intended one.
+	if running {
+		if err := s.write(ctx, map[string]any{"event_id": cryptoID(), "type": "response.cancel"}); err != nil {
+			s.audioMu.Unlock()
+			return err
+		}
+	}
+	s.audioMu.Unlock()
+	s.emit(engine.Event{Type: "response.interrupted", Turn: turn, HeardMS: heard.Milliseconds(), Data: map[string]any{
 		"reason":            reason,
 		"contextTruncated":  false,
 		"capabilityMissing": "measured-playout truncation",
@@ -222,12 +253,17 @@ func (s *Session) Prefill(ctx context.Context, snapshot engine.Snapshot) error {
 
 func (s *Session) Stats() engine.Stats {
 	frames, underruns := s.clock.Stats()
+	loss := s.clock.Loss()
 	return engine.Stats{
-		InputBytes:  s.input.Load(),
-		OutputBytes: s.output.Load(),
-		Frames:      frames,
-		Underruns:   underruns,
-		Interrupts:  s.interrupts.Load(),
+		InputBytes:    s.input.Load(),
+		OutputBytes:   s.output.Load(),
+		Frames:        frames,
+		Underruns:     underruns,
+		Interrupts:    s.interrupts.Load(),
+		DroppedBytes:  loss.DroppedBytes,
+		DroppedFrames: loss.DroppedFrames,
+		InvalidChunks: loss.InvalidChunks,
+		QueuedBytes:   loss.QueuedBytes,
 	}
 }
 
@@ -261,8 +297,27 @@ func (s *Session) read() {
 
 func (s *Session) handle(msg message) {
 	switch msg.Type {
-	case "session.created", "response.created":
+	case "session.created":
 		s.emit(engine.Event{Type: msg.Type, Session: msg.Session.ID, Data: msg.Data()})
+	case "response.created":
+		s.audioMu.Lock()
+		if s.responses == nil {
+			s.responses = make(map[string]bool)
+		}
+		_, exists := s.responses[msg.Response.ID]
+		valid := msg.Response.ID != "" && len(msg.Response.ID) <= 256 && !exists && len(s.responses) < 256 && s.pending == ""
+		if valid {
+			s.responses[msg.Response.ID] = false
+			s.active = msg.Response.ID
+			s.last = msg.Response.ID
+		}
+		s.audioMu.Unlock()
+		if !valid {
+			s.emit(engine.Event{Type: "engine.error", Text: "invalid or exhausted qwen response identity"})
+			s.cancel()
+			return
+		}
+		s.emit(engine.Event{Type: msg.Type, Turn: msg.Response.ID, Data: msg.Data()})
 	case "session.updated":
 		s.readyOnce.Do(func() { s.ready <- nil })
 		s.emit(engine.Event{Type: msg.Type, Session: msg.Session.ID, Data: msg.Data()})
@@ -279,16 +334,26 @@ func (s *Session) handle(msg message) {
 	case "response.audio_transcript.done":
 		s.emit(engine.Event{Type: "transcript.output.done", Item: msg.ItemID, Text: first(msg.Transcript, msg.Text), Stable: true})
 	case "response.audio.delta":
+		s.audioMu.Lock()
+		valid := s.active != "" && msg.ResponseID == s.active && !s.responses[s.active]
+		if !valid {
+			s.audioMu.Unlock()
+			s.emit(engine.Event{Type: "audio.dropped", Item: msg.ItemID, Data: map[string]any{"reason": "stale or unbound response"}})
+			return
+		}
 		pcm, err := base64.StdEncoding.DecodeString(msg.Delta)
 		if err != nil {
+			s.audioMu.Unlock()
 			s.emit(engine.Event{Type: "engine.error", Text: "invalid qwen audio: " + err.Error()})
 			return
 		}
 		s.output.Add(uint64(len(pcm)))
-		select {
-		case s.clock.Input() <- media.Chunk{Item: msg.ItemID, PCM: pcm}:
-		default:
+		accepted := s.clock.Submit(media.Chunk{Item: msg.ItemID, PCM: pcm})
+		s.audioMu.Unlock()
+		if !accepted {
 			s.emit(engine.Event{Type: "audio.dropped", Item: msg.ItemID, Data: map[string]any{"bytes": len(pcm)}})
+			s.emit(engine.Event{Type: "engine.error", Text: "qwen audio exceeded bounded media allowance"})
+			s.cancel()
 		}
 	case "response.function_call_arguments.done":
 		s.emit(engine.Event{Type: "delegation.request", Item: msg.ItemID, Text: msg.Arguments, Data: map[string]any{
@@ -296,7 +361,16 @@ func (s *Session) handle(msg message) {
 			"name": msg.Name,
 		}})
 	case "response.done":
-		s.emit(engine.Event{Type: "response.done", Data: map[string]any{"status": msg.Response.Status}})
+		s.audioMu.Lock()
+		if msg.Response.ID == s.active {
+			s.responses[s.active] = true
+			s.active = ""
+		}
+		if msg.Response.ID == s.pending && msg.Response.Status == "cancelled" {
+			s.pending = ""
+		}
+		s.audioMu.Unlock()
+		s.emit(engine.Event{Type: "response.done", Turn: msg.Response.ID, Data: map[string]any{"status": msg.Response.Status}})
 	case "error":
 		err := errors.New(first(msg.Error.Message, msg.Message))
 		s.readyOnce.Do(func() { s.ready <- err })
@@ -328,6 +402,7 @@ func (s *Session) write(ctx context.Context, value any) error {
 }
 
 type message struct {
+	ResponseID string `json:"response_id"`
 	Type       string `json:"type"`
 	ItemID     string `json:"item_id"`
 	Delta      string `json:"delta"`
@@ -342,6 +417,7 @@ type message struct {
 		ID string `json:"id"`
 	} `json:"session"`
 	Response struct {
+		ID     string `json:"id"`
 		Status string `json:"status"`
 	} `json:"response"`
 	Error struct {

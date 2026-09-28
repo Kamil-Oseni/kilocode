@@ -8,8 +8,9 @@ import (
 )
 
 type Data struct {
-	Topic string
-	Body  []byte
+	Identity string
+	Topic    string
+	Body     []byte
 }
 
 type Room interface {
@@ -23,4 +24,9 @@ type Room interface {
 
 type Factory interface {
 	Join(context.Context, string, string, string) (Room, error)
+}
+
+// Authority binds microphone admission before subscription callbacks can fire.
+type Authority interface {
+	JoinAuthorized(context.Context, string, string, string, string) (Room, error)
 }

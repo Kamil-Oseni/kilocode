@@ -29,6 +29,34 @@ type joining struct {
 
 func (j joining) Join(ctx context.Context, _, _, _ string) (room.Room, error) { return j.join(ctx) }
 
+type binding struct {
+	joining
+	client string
+	media  room.Room
+}
+
+func (a *binding) JoinAuthorized(_ context.Context, _, _, _, client string) (room.Room, error) {
+	a.client = client
+	return a.media, nil
+}
+
+func TestManagerBindsClientBeforeRoomSubscription(t *testing.T) {
+	factory := &binding{media: newFakeRoom(), joining: joining{join: func(context.Context) (room.Room, error) {
+		t.Fatal("authorized room fell back to an unbound join")
+		return nil, errors.New("unbound")
+	}}}
+	manager := NewManager(factory)
+	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return newFakeEngine(), nil }}
+	const id = "rvs_bound"
+	if _, err := manager.Start(context.Background(), wire.Start{ID: id}, mediaAuth); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close(id, mediaAuth)
+	if factory.client != "client-"+id || manager.sessions[id].session.client != factory.client {
+		t.Fatal("room subscription and receipt owner did not share the minted identity")
+	}
+}
+
 type closing struct {
 	*fakeEngine
 	count atomic.Int32

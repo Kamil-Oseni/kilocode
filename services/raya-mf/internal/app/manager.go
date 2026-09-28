@@ -122,7 +122,12 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		}
 		return wire.Started{}, err
 	}
-	media, err := m.rooms.Join(run, input.LiveKitURL, input.LiveKitToken, input.Room)
+	media, err := func() (room.Room, error) {
+		if factory, ok := m.rooms.(room.Authority); ok {
+			return factory.JoinAuthorized(run, input.LiveKitURL, input.LiveKitToken, input.Room, "client-"+id)
+		}
+		return m.rooms.Join(run, input.LiveKitURL, input.LiveKitToken, input.Room)
+	}()
 	if err != nil {
 		claim.closed = voice.Close()
 		expiry.Lock()
@@ -151,6 +156,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		voice,
 		media,
 		backend,
+		"client-"+id,
 	)
 	m.mu.Unlock()
 	return wire.Started{ID: id, Descriptor: m.engine.Descriptor(), StartedAt: time.Now()}, nil

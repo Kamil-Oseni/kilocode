@@ -31,10 +31,14 @@ type Descriptor struct {
 }
 
 type Frame struct {
-	Item string
-	PCM  []byte
-	Rate int
-	At   time.Time
+	Epoch uint64
+	Seq   uint64
+	Start uint64
+	End   uint64
+	Item  string
+	PCM   []byte
+	Rate  int
+	At    time.Time
 }
 
 type Event struct {
@@ -66,11 +70,15 @@ type Snapshot struct {
 }
 
 type Stats struct {
-	InputBytes  uint64 `json:"inputBytes"`
-	OutputBytes uint64 `json:"outputBytes"`
-	Frames      uint64 `json:"frames"`
-	Underruns   uint64 `json:"underruns"`
-	Interrupts  uint64 `json:"interrupts"`
+	InputBytes    uint64 `json:"inputBytes"`
+	OutputBytes   uint64 `json:"outputBytes"`
+	Frames        uint64 `json:"frames"`
+	Underruns     uint64 `json:"underruns"`
+	Interrupts    uint64 `json:"interrupts"`
+	DroppedBytes  uint64 `json:"droppedBytes"`
+	DroppedFrames uint64 `json:"droppedFrames"`
+	InvalidChunks uint64 `json:"invalidChunks"`
+	QueuedBytes   uint64 `json:"queuedBytes"`
 }
 
 type Engine interface {

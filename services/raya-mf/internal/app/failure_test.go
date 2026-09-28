@@ -115,27 +115,37 @@ func finished(t *testing.T, s *Session) wire.Status {
 	}
 }
 func TestCriticalBoundariesStopAndReportSanitizedFailure(t *testing.T) {
-	for _, code := range []string{"audio_input", "audio_publish", "playout_metadata", "transcript_send", "playout_flush", "engine_interrupt", "interruption_send", "engine_failure", "engine_inject", "room_input_closed", "room_data_closed", "engine_audio_closed", "engine_events_closed", "backend_delivery"} {
+	for _, code := range []string{"audio_input", "audio_publish", "playout_metadata", "transcript_send", "playout_flush", "playout_unconfirmed", "engine_interrupt", "interruption_send", "engine_failure", "engine_inject", "room_input_closed", "room_data_closed", "engine_audio_closed", "engine_events_closed", "backend_delivery"} {
 		t.Run(code, func(t *testing.T) {
 			voice := &failingEngine{fakeEngine: newFakeEngine(), code: code}
 			media := &failingRoom{fakeRoom: newFakeRoom(), code: code}
 			backend := &failingBackend{code: code, events: make(chan wire.Envelope, 8)}
-			s := NewSession(context.Background(), "failure", voice, media, backend)
+			s := NewSession(context.Background(), "failure", voice, media, backend, "client-failure")
 			defer s.Close()
 			switch code {
 			case "audio_input":
 				media.input <- engine.Frame{PCM: []byte{0, 0}}
 			case "audio_publish":
-				voice.audio <- engine.Frame{PCM: []byte{0, 0}}
+				voice.audio <- engine.Frame{PCM: make([]byte, 960), Rate: 24000, Epoch: 1, Seq: 1}
 			case "playout_metadata":
-				voice.audio <- engine.Frame{Item: "assistant", PCM: []byte{0, 0}}
+				voice.audio <- engine.Frame{Item: "assistant", PCM: make([]byte, 960), Rate: 24000, Epoch: 1, Seq: 1, End: 480}
 			case "transcript_send":
 				voice.events <- engine.Event{Type: "transcript.input.done", Text: "synthetic"}
-			case "playout_flush", "engine_interrupt", "interruption_send":
-				s.heard = wire.Playout{Item: "intended-assistant", Samples: 12000, Rate: 24000}
+			case "playout_flush", "playout_unconfirmed", "engine_interrupt", "interruption_send":
+				published(t, s, media.fakeRoom, "intended-assistant", 25)
+				if code != "playout_unconfirmed" {
+					reported(t, s, wire.Playout{Version: 2, Session: "failure", Item: "intended-assistant", Epoch: 1, Seq: 25, Samples: 12000, Rate: 24000})
+				}
 				s.barge()
 				if media.item != "intended-assistant" {
 					t.Fatalf("flushed wrong speech: %q", media.item)
+				}
+				if code == "playout_unconfirmed" {
+					select {
+					case <-voice.interrupted:
+						t.Fatal("unconfirmed playback fabricated a provider truncation")
+					default:
+					}
 				}
 			case "engine_failure":
 				voice.events <- engine.Event{Type: "engine.error", Text: secret.Error()}

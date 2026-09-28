@@ -22,7 +22,14 @@ import (
 
 type Factory struct{}
 
-func (Factory) Join(_ context.Context, url, token, _ string) (room.Room, error) {
+func (factory Factory) Join(ctx context.Context, url, token, name string) (room.Room, error) {
+	return factory.JoinAuthorized(ctx, url, token, name, "")
+}
+
+func (Factory) JoinAuthorized(ctx context.Context, url, token, _ string, client string) (room.Room, error) {
+	if !strings.HasPrefix(client, "client-rvs_") || len(client) > 256 {
+		return nil, errors.New("authorized voice client identity is required")
+	}
 	input := make(chan engine.Frame, 64)
 	data := make(chan room.Data, 64)
 	writer := &writer{input: input}
@@ -30,7 +37,10 @@ func (Factory) Join(_ context.Context, url, token, _ string) (room.Room, error) 
 	remote := make(map[string]*lkmedia.PCMRemoteTrack)
 	callback := &lksdk.RoomCallback{
 		ParticipantCallback: lksdk.ParticipantCallback{
-			OnTrackSubscribed: func(track *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, _ *lksdk.RemoteParticipant) {
+			OnTrackSubscribed: func(track *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, participant *lksdk.RemoteParticipant) {
+				if participant == nil || participant.Identity() != client {
+					return
+				}
 				if publication.Source() != lkproto.TrackSource_MICROPHONE {
 					return
 				}
@@ -64,21 +74,30 @@ func (Factory) Join(_ context.Context, url, token, _ string) (room.Room, error) 
 					_ = decoded.Close()
 				}
 			},
-			OnDataPacket: func(packet lksdk.DataPacket, _ lksdk.DataReceiveParams) {
+			OnDataPacket: func(packet lksdk.DataPacket, params lksdk.DataReceiveParams) {
+				if params.SenderIdentity != client {
+					return
+				}
 				user, ok := packet.(*lksdk.UserDataPacket)
-				if !ok {
+				if !ok || user.Topic != "raya.playout" || len(user.Payload) > 4096 {
 					return
 				}
 				select {
-				case data <- room.Data{Topic: user.Topic, Body: user.Payload}:
+				case data <- room.Data{Identity: params.SenderIdentity, Topic: user.Topic, Body: user.Payload}:
 				default:
 				}
 			},
 		},
 	}
-	joined, err := lksdk.ConnectToRoomWithToken(url, token, callback)
-	if err != nil {
+	joined := lksdk.NewRoom(callback)
+	if err := joined.JoinWithContextAndToken(ctx, url, token); err != nil {
+		joined.Disconnect()
 		return nil, err
+	}
+	identity := joined.LocalParticipant.Identity()
+	if identity != "media-"+strings.TrimPrefix(client, "client-") {
+		joined.Disconnect()
+		return nil, errors.New("unexpected media participant identity")
 	}
 	track, err := lkmedia.NewPCMLocalTrack(24000, 1, logger.GetLogger())
 	if err != nil {

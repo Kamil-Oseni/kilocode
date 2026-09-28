@@ -22,6 +22,7 @@ var failures = map[string]string{
 	"playout_metadata":     "Audio playback could not be associated with its response.",
 	"transcript_send":      "The live voice transcript could not be delivered.",
 	"playout_flush":        "Voice playback could not be interrupted safely.",
+	"playout_unconfirmed":  "The current voice playback position could not be confirmed safely.",
 	"engine_interrupt":     "The voice engine did not accept the interruption.",
 	"interruption_send":    "The interrupted playback position could not be delivered.",
 	"backend_delivery":     "Voice events could not reach the Raya task.",

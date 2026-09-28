@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 03:53 EDT - terminal ownership source published and installed
+
+Source `94b332aa89` is pushed through normal 29 TypeScript and JetBrains checks. Snapshot `7.4.23-snapshot+94b332aa89.kamil-oseni.1790581292522` is installed after sequential extension/webview typecheck, ESLint, production bundle, rebuilt CLI smoke tests, native verification/self-tests and refused-target round trip. SDK regeneration left no tracked differences. Retained VSIX SHA256 `3087d804bdcf664e49f2c05a6adc2c2ee94c252e982fc7539fad42795cb554d2`, 592,611,093 bytes. Installed package version and all four executable hashes match the build; full identities are in progress. No open host was reloaded or inspected after Escape; b8 is still the last directly observed loaded window.
+
+Central PTY immutable ownership/admission, archive all-attempt shutdown and true fresh-process SQLite recovery now have passing source evidence recorded below. Next source work: separate bounded native MTA accessibility worker, final native directory race and durable identity-safe sidecar cleanup. Installed provider-hang/latency/task/restart/backend-loss/manual-takeover/changed-target/denial/resource matrices remain unverified and require desktop-control resume. Keep EN-05/FUT-CU-01/full goal In progress. Do not repeat exact-file Undo or touch French Study/user-owned edits. MCP remains deferred.
+
 ## ChatGPT 2026-09-28 03:13 EDT - source validated, publication next
 
 Central Windows PTY admission is being integrated across core and canonical/legacy location graphs through neutral core contracts and Kilo-owned durable adapters. Creation ownership is immutable and separate from viewed-chat sessionID; optional ownerSessionID is a shared additive contract requiring SDK regeneration. Root owns native-request deadlines, archive injection, docs and publication; authority specialist owns central/native target-exit/cancellation; workspace specialist owns durable adapter/retry; recovery specialist owns actual archive fixtures and true fresh-process SQLite recovery.

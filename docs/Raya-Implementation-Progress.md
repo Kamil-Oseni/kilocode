@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 03:53 EDT - terminal ownership snapshot installed
+
+Source `94b332aa89` is committed and pushed through normal hooks: all 29 TypeScript tasks and JetBrains typecheck passed. Sequential low-memory snapshot validation passed extension/webview types, ESLint and production bundling. SDK regeneration left no tracked source changes. The CLI was rebuilt, not reused; its 233,534,464-byte executable passed version, models and sandbox-worker smoke tests. Native process-host verification, capture/input self-tests and refused-target input round trip passed.
+
+Installed snapshot: `7.4.23-snapshot+94b332aa89.kamil-oseni.1790581292522`. Retained VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.3087d804bdcf664e49f2c05a6adc2c2ee94c252e982fc7539fad42795cb554d2.vsix`, 592,611,093 bytes; SHA256 matches the filename. Installed package version and CLI/process/input/capture hashes match built artifacts: `282e675c36b8ad1ce8fb626c729e9b1b59ecf60c1df13352f1bd6c34202f38d5`, `9e2ab076bcb8e891d313674d43d18442c375486615f07a8ffeeb4d226f6ae464`, `48e4e95b9d901ea7b40ab780260c894d137846df5f779b8938fa86af1f6599f3`, `73286ab2fbd42edac3823801d05a2110a34ff65f8b46b434b63987cadb0a798d`. Retention removed one vault package, one staged package and one old extension.
+
+Installation does not prove an open window loaded this version; b8 remains the last observed loaded host. No desktop control or window reload resumed after Escape. Next implement the separate bounded native MTA accessibility worker, close the final native directory race and durable sidecar cleanup gap, then run installed-host benchmark/restart/takeover/denial/resource matrices after desktop control resumes. EN-05/FUT-CU-01/full goal remain In progress. MCP stays deferred; French Study and user-owned edits are preserved.
+
 ## ChatGPT 2026-09-28 03:13 EDT - central terminal ownership source validated
 
 Parallel source work connects central core PTY creation to suspended Windows Job admission, immutable creation ownership and the canonical/legacy location graphs. Viewed-chat reassociation does not change the worker that owns a terminal. Organization archive has an injected exact persisted-location service to stop central terminals and reconcile historical ownership; archive source regressions pass. Physical workspace and archive authorization are revalidated before dispatch and admission. A remaining final native directory race is not claimed resolved by callback checks alone.

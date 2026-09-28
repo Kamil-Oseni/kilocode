@@ -25,6 +25,129 @@ async function until(check: () => boolean) {
 }
 
 describe("native desktop capture host", () => {
+  it("binds a selected child before its first image and rejects an unselected barrier", async () => {
+    const selected = { windowID: "0x12AB", identity: "A".repeat(64) }
+    const header = {
+      v: 3,
+      type: "frame",
+      epoch: 1,
+      sequence: 1,
+      ...selected,
+      location: "pid:42;title:Editor;bounds:0,0,1,1",
+      width: 1,
+      height: 1,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    }
+    const packet = encode(header).toString("base64")
+    const script = `if(JSON.stringify(process.argv.slice(-3))!==JSON.stringify(["--selected-v1","0x12AB","${selected.identity}"]))process.exit(9);process.stdout.write(Buffer.from(${JSON.stringify(packet)},"base64"));setInterval(()=>{},1000)`
+    const errors: Error[] = []
+    const host = new NativeCaptureHost(
+      process.execPath,
+      (error) => errors.push(error),
+      ["-e", script, "--"],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+    )
+    selected.identity = "B".repeat(64)
+    host.start()
+    try {
+      expect((await host.next()).identity).toBe("A".repeat(64))
+      await expect(
+        host.barrierAfter({
+          request: "a".repeat(32),
+          scene: 1,
+          source: 1,
+          windowID: "0x34AB",
+          location: header.location,
+          identity: "A".repeat(64),
+        }),
+      ).rejects.toThrow(/does not match its binding/i)
+      expect(host.latest(Infinity)?.windowID).toBe("0x12AB")
+      expect(errors).toEqual([])
+    } finally {
+      host.stop()
+    }
+    expect(host.latest(Infinity)).toBeUndefined()
+  })
+
+  it("withholds selected pixels without exact mandatory identity and clears retained bytes on resets", async () => {
+    const selected = { windowID: "0x12AB", identity: "A".repeat(64) }
+    const header = {
+      v: 3,
+      type: "frame",
+      epoch: 1,
+      sequence: 1,
+      ...selected,
+      location: "pid:42;title:Editor;bounds:0,0,1,1",
+      width: 1,
+      height: 1,
+      mime: "image/png",
+      acquisitionMs: 1,
+      preparationMs: 1,
+    }
+    for (const changed of [
+      { ...header, identity: undefined },
+      { ...header, identity: "B".repeat(64) },
+      { ...header, windowID: "0x34AB" },
+      { ...header, v: 1, epoch: undefined },
+    ]) {
+      const errors: Error[] = []
+      const packet = encode(changed).toString("base64")
+      const script = `process.stdout.write(Buffer.from(${JSON.stringify(packet)},"base64"));setInterval(()=>{},1000)`
+      const host = new NativeCaptureHost(
+        process.execPath,
+        (error) => errors.push(error),
+        ["-e", script, "--"],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        selected,
+      )
+      host.start()
+      try {
+        await expect(host.next()).rejects.toThrow(/capture stopped/i)
+        expect(host.latest(Infinity)).toBeUndefined()
+        expect(errors).toHaveLength(1)
+        expect(errors[0]?.message).toMatch(/does not match its binding/i)
+      } finally {
+        host.stop()
+      }
+    }
+    const stream = Buffer.concat([
+      encode(header),
+      encode({ v: 3, type: "reset", epoch: 2, reason: "target_changed" }, Buffer.alloc(0)),
+    ]).toString("base64")
+    const script = `process.stdout.write(Buffer.from(${JSON.stringify(stream)},"base64"));setInterval(()=>{},1000)`
+    const errors: Error[] = []
+    const host = new NativeCaptureHost(
+      process.execPath,
+      (error) => errors.push(error),
+      ["-e", script],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+    )
+    host.start()
+    try {
+      await host.next()
+      await until(() => errors.length === 1)
+      await expect(host.next(1)).rejects.toThrow(/capture is stopped/i)
+      expect(host.latest(Infinity)).toBeUndefined()
+      expect(errors).toHaveLength(1)
+      expect(errors[0]?.message).toMatch(/cannot rebind/i)
+    } finally {
+      host.stop()
+    }
+  })
+
   it("calibrates source clocks through a real child pipe, retaining receipt stamps and bounded uncertainty", async () => {
     const script = `
       function packet(value,image=Buffer.from([137,80,78,71,13,10,26,10,1])) {

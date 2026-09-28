@@ -1790,7 +1790,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       failed(error)
     }
     this.scope = target
-    if (this.binary && !target) {
+    if (this.binary) {
       const host = new NativeCaptureHost(
         this.binary,
         (error) => {
@@ -1809,6 +1809,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
           this.last = undefined
         },
         () => this.measurements.size > 0,
+        target,
       )
       let sequence = 0
       this.worker = new DesktopCaptureWorker(

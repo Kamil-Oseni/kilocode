@@ -5,6 +5,8 @@
 #include <dxgi1_2.h>
 #include <wincodec.h>
 #include <wincrypt.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 #include <wrl/client.h>
 #include <algorithm>
 #include <array>
@@ -455,10 +457,40 @@ struct Target {
   std::string id;
   std::string location;
   std::string identity;
+  bool selected = false;
 };
+
+struct Binding {
+  HWND handle;
+  std::string identity;
+};
+
+static constexpr wchar_t instanceProperty[] = L"RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B";
+
+static Binding binding(const wchar_t* handle, const wchar_t* identity) {
+  const std::wstring id(handle);
+  const std::wstring hash(identity);
+  if (id.size() < 3 || id.size() > 18 || id.substr(0, 2) != L"0x" || hash.size() != 64)
+    throw Failure("invalid_argument", "selected capture binding is invalid");
+  uint64_t value = 0;
+  for (size_t index = 2; index < id.size(); ++index) {
+    const auto digit = id[index];
+    if (!((digit >= L'0' && digit <= L'9') || (digit >= L'A' && digit <= L'F')))
+      throw Failure("invalid_argument", "selected capture handle is invalid");
+    value = value * 16 + uint64_t(digit <= L'9' ? digit - L'0' : digit - L'A' + 10);
+  }
+  if (!value || value > UINTPTR_MAX || !std::all_of(hash.begin(), hash.end(), [](wchar_t digit) {
+        return (digit >= L'0' && digit <= L'9') || (digit >= L'A' && digit <= L'F');
+      })) throw Failure("invalid_argument", "selected capture identity is invalid");
+  std::string digest;
+  digest.reserve(64);
+  for (const auto digit : hash) digest.push_back(static_cast<char>(digit));
+  return {reinterpret_cast<HWND>(uintptr_t(value)), digest};
+}
 
 static std::string fingerprint(HWND window, DWORD pid);
 static std::string pinned(HWND window, DWORD pid);
+static bool matches(HWND window, DWORD pid, const Binding& selected);
 
 static bool equal(RECT first, RECT second) {
   return first.left == second.left && first.top == second.top &&
@@ -525,9 +557,15 @@ static void blit(BYTE* surface, UINT width, UINT height, RECT rect, RECT tile, c
                 pixels + size_t(row) * stride, size_t(span) * 4);
 }
 
-static Target target(bool bind = false) {
+static Target target(bool bind = false, const Binding* selected = nullptr) {
   HWND handle = GetForegroundWindow();
   if (!handle || !IsWindowVisible(handle)) throw Failure("no_foreground_window", "no visible foreground window");
+  if (selected) {
+    DWORD cloaked = 0;
+    if (handle != selected->handle || IsIconic(handle) ||
+        FAILED(DwmGetWindowAttribute(handle, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) || cloaked)
+      throw Failure("target_changed", "selected capture window is not visible foreground");
+  }
   RECT rect{};
   if (!GetWindowRect(handle, &rect)) throw std::runtime_error("foreground window bounds unavailable");
   int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -547,6 +585,8 @@ static Target target(bool bind = false) {
   DWORD pid = 0;
   GetWindowThreadProcessId(handle, &pid);
   if (!pid) throw std::runtime_error("foreground process unavailable");
+  if (selected && !matches(handle, pid, *selected))
+    throw Failure("target_changed", "selected capture window instance changed");
   wchar_t title[2048]{};
   int count = GetWindowTextW(handle, title, 2048);
   if (count < 0) throw std::runtime_error("foreground title unavailable");
@@ -555,7 +595,8 @@ static Target target(bool bind = false) {
   std::ostringstream location;
   location << "pid:" << pid << ";title:" << utf8(std::wstring(title, size_t(count))) << ";bounds:"
            << rect.left << ',' << rect.top << ',' << width << ',' << height;
-  return {handle, rect, desktop, dpi, id.str(), location.str(), bind ? pinned(handle, pid) : ""};
+  return {handle, rect, desktop, dpi, id.str(), location.str(),
+          selected ? selected->identity : bind ? pinned(handle, pid) : "", selected != nullptr};
 }
 
 static void same(const Target& original, uint64_t epoch) {
@@ -571,6 +612,7 @@ static void sameidentity(const Target& original) {
   if (original.identity.empty()) return;
   DWORD pid = 0;
   if (GetForegroundWindow() != original.handle || !IsWindowVisible(original.handle) ||
+      (original.selected && (!GetPropW(original.handle, instanceProperty) || IsIconic(original.handle))) ||
       !GetWindowThreadProcessId(original.handle, &pid) ||
       fingerprint(original.handle, pid) != original.identity)
     throw Failure("target_changed", "foreground window instance changed during capture");
@@ -668,6 +710,11 @@ static std::string pinned(HWND window, DWORD pid) {
   return fingerprint(window, pid);
 }
 
+static bool matches(HWND window, DWORD pid, const Binding& selected) {
+  return window == selected.handle && GetPropW(window, instanceProperty) &&
+         fingerprint(window, pid) == selected.identity;
+}
+
 static bool exact(const Target& original, uint64_t handle, uint32_t pid, const RECT& rect,
                   const std::string& identity) {
   if (original.identity.empty() || original.identity != identity ||
@@ -762,6 +809,13 @@ static void samebarrier(const Target& original, const std::optional<Barrier>& ba
                         uint64_t epoch) {
   try {
     same(original, epoch);
+    if (original.selected) {
+      DWORD cloaked = 0;
+      if (FAILED(DwmGetWindowAttribute(original.handle, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) || cloaked)
+        throw Failure("target_changed", "selected capture window became cloaked");
+      sameidentity(original);
+      same(original, epoch);
+    }
     if (barrier && !exact(original, barrier->handle, barrier->pid, barrier->rect, barrier->identity))
       throw Failure("target_changed", "post-action target identity changed");
   }
@@ -889,9 +943,9 @@ static BOOL WINAPI control(DWORD signal) {
 }
 
 static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint64_t epoch,
-                  uint64_t& scene) {
-  auto original = target(true);
+                  uint64_t& scene, const Binding* selected = nullptr) {
   const auto foreground = watch.value();
+  auto original = target(true, selected);
   const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
   if (!input || input == INVALID_HANDLE_VALUE || GetFileType(input) != FILE_TYPE_PIPE)
     throw Failure("capture_failed", "capture control pipe is unavailable");
@@ -1047,6 +1101,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
       if (Clock::now() - emitted < std::chrono::milliseconds(50)) continue;
       for (const auto& item : outputs) stable(*item);
       sameidentity(original);
+      samebarrier(original, barrier, pipe, foreground);
       std::ostringstream header;
       header << "{\"v\":3,\"type\":\"unchanged\",\"epoch\":" << epoch
              << ",\"sequence\":" << ++sequence
@@ -1088,6 +1143,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
     for (const auto& item : outputs) stable(*item);
     if (InterlockedCompareExchange(&stopped, 0, 0)) break;
     sameidentity(original);
+    samebarrier(original, barrier, pipe, foreground);
     std::ostringstream header;
     base = ++sequence;
     acquisitionBase = acquisition;
@@ -1113,7 +1169,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
   }
 }
 
-static void run(HANDLE pipe) {
+static void run(HANDLE pipe, const Binding* selected = nullptr) {
   ForegroundWatch watch;
   uint64_t sequence = 0;
   uint64_t scene = 0;
@@ -1122,10 +1178,11 @@ static void run(HANDLE pipe) {
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
     const auto before = sequence;
     try {
-      bound(pipe, watch, sequence, epoch, scene);
+      bound(pipe, watch, sequence, epoch, scene, selected);
       return;
     } catch (const Failure& error) {
       if (InterlockedCompareExchange(&stopped, 0, 0)) return;
+      if (selected) throw;
       const bool changed = error.code == "target_changed" || error.code == "display_changed" ||
                            (error.code == "no_foreground_window" && sequence > before);
       if (changed) {
@@ -1195,10 +1252,27 @@ int wmain(int argc, wchar_t** argv) {
           throw Failure("capture_failed", "window instance fingerprint self-test failed");
         static constexpr wchar_t property[] = L"RayaDesktopWindowInstanceV1_74CB301759F7435B9AD54D283319FF5B";
         const auto initial = fingerprint(instance, GetCurrentProcessId());
+        const auto parsed = binding(L"0x12AB", std::wstring(64, L'A').c_str());
+        if (parsed.handle != reinterpret_cast<HWND>(uintptr_t(0x12AB)) || parsed.identity != std::string(64, 'A'))
+          throw Failure("capture_failed", "selected binding parser self-test failed");
+        for (const auto* invalid : {L"0x0", L"0x12ab", L"0x10000000000000000", L"12AB"}) {
+          bool refused = false;
+          try { binding(invalid, std::wstring(64, L'A').c_str()); }
+          catch (const Failure& error) { refused = error.code == "invalid_argument"; }
+          if (!refused) throw Failure("capture_failed", "invalid selected handle was admitted");
+        }
+        if (matches(instance, GetCurrentProcessId(), Binding{instance, initial}) || GetPropW(instance, property))
+          throw Failure("capture_failed", "selected binding created or admitted an absent instance token");
         const bool first = SetPropW(instance, property, reinterpret_cast<HANDLE>(uintptr_t(1))) != 0;
         const auto tokenized = fingerprint(instance, GetCurrentProcessId());
+        const Binding selected{instance, tokenized};
+        if (!matches(instance, GetCurrentProcessId(), selected))
+          throw Failure("capture_failed", "selected instance token was not verified");
         const bool second = SetPropW(instance, property, reinterpret_cast<HANDLE>(uintptr_t(2))) != 0;
         const auto replaced = fingerprint(instance, GetCurrentProcessId());
+        if (matches(instance, GetCurrentProcessId(), selected) ||
+            GetPropW(instance, property) != reinterpret_cast<HANDLE>(uintptr_t(2)))
+          throw Failure("capture_failed", "selected binding admitted or rewrote a changed token");
         RemovePropW(instance, property);
         DestroyWindow(instance);
         if (!first || !second || initial.empty() || tokenized.empty() || replaced.empty() ||
@@ -1411,8 +1485,10 @@ int wmain(int argc, wchar_t** argv) {
       CoUninitialize();
       return 0;
     }
-    if (argc != 1) throw Failure("invalid_argument", "unsupported capture argument");
-    run(pipe);
+    if (argc != 1 && !(argc == 4 && std::wstring(argv[1]) == L"--selected-v1"))
+      throw Failure("invalid_argument", "unsupported capture argument");
+    const auto selected = argc == 4 ? std::optional<Binding>(binding(argv[2], argv[3])) : std::nullopt;
+    run(pipe, selected ? &*selected : nullptr);
     clearreceipt();
     CoUninitialize();
     return 0;

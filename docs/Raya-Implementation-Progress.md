@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-27 23:36 EDT - selected-window native capture source verified
+
+Selected native capture accepts a versioned immutable HWND/fingerprint binding before pixels. It reads the existing window-instance property without creating or replacing it, refuses minimized/cloaked or changed targets, and checks foreground epoch before initial binding plus identity/epoch around capture/encoding. The host validates packets before retaining bytes, renewing continuity or producing barrier evidence. Target loss/reset stops capture until the lease/lifecycle explicitly resumes; it cannot follow another application. Default native capture and explicit PowerShell fallback remain supported.
+
+Combined host/parser/Windows regression passes 84 tests/495 assertions; lifecycle regression passes 6/41, totaling 90 tests/536 assertions. The initially hanging selected reset fixture was replaced with a real child emitting coalesced frame/reset packets, proving retained-image clearing and future refusal without extending production timeouts. One old fallback fixture was corrected to explicitly disable native capture. Final warning-free MSVC /W4 build, self-tests, intentional fault receipt, extension/webview types, scoped lint/format and diff checks pass. This is source evidence, not installed latency or multi-monitor acceptance. Independent cancellable UIA freshness, installed recovery/resource tests and FUT-CU-01 remain open. Next commit this slice and build/install a fresh snapshot after the native process packaging checks finish.
+
 ## ChatGPT 2026-09-27 23:29 EDT - bounded startup evidence and native latency work
 
 The user explicitly authorized full commit/push to the existing remote. The first retry's pre-push hook refused a new diagnostic helper's unsupported Promise.withResolvers call; that implementation was replaced with the extension-compatible Promise constructor, and the final core/CLI/extension/webview typechecks pass. No hook was bypassed. Publication retry is next after saving validated source.

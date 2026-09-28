@@ -87,6 +87,7 @@ function command(value: BarrierRequest, frame: NativeFrame): Buffer {
 }
 
 export class NativeCaptureHost {
+  private readonly selected: Readonly<{ windowID: string; identity: string }> | undefined
   private readonly clock = new DesktopCaptureClock()
   private calibration: { request: string; start: number } | undefined
   private calibrated = -Infinity
@@ -112,14 +113,27 @@ export class NativeCaptureHost {
     private readonly dir?: string,
     private readonly reset?: (reset: NativeReset) => void,
     private readonly measured: () => boolean = () => false,
-  ) {}
+    selected?: { windowID: string; identity: string },
+  ) {
+    this.selected = selected ? Object.freeze({ ...selected }) : undefined
+  }
 
   start(): void {
     if (this.process) return
+    if (
+      this.selected &&
+      (!/^0x[0-9A-F]{1,16}$/.test(this.selected.windowID) ||
+        BigInt(this.selected.windowID) === 0n ||
+        !/^[A-F0-9]{64}$/.test(this.selected.identity))
+    )
+      throw new Error("Native selected capture binding is invalid")
     const generation = ++this.generation
     const parser = new NativeFrameParser()
     const receipt = this.dir ? this.path() : undefined
-    const child = spawn(this.binary, this.args, {
+    const args = this.selected
+      ? [...this.args, "--selected-v1", this.selected.windowID, this.selected.identity]
+      : this.args
+    const child = spawn(this.binary, args, {
       windowsHide: true,
       stdio: ["pipe", "pipe", "ignore"],
       ...(receipt ? { env: { ...process.env, RAYA_NATIVE_FAULT_RECEIPT: receipt } } : {}),
@@ -153,6 +167,7 @@ export class NativeCaptureHost {
   }
 
   private accept(result: NativePacket): void {
+    this.verify(result)
     const now = performance.now()
     if (result.type === "clock") {
       this.synchronize(result, now)
@@ -201,6 +216,20 @@ export class NativeCaptureHost {
       const waiting = this.waiting
       this.waiting = undefined
       waiting.resolve({ ...this.frame, data: Buffer.from(result.frame.data) })
+    }
+  }
+
+  private verify(result: NativePacket): void {
+    if (!this.selected) return
+    if (result.type === "reset") throw new Error("Native selected capture cannot rebind after a target reset")
+    if (result.type !== "frame" && result.type !== "unchanged") return
+    if (
+      result.frame.epoch === undefined ||
+      result.frame.windowID !== this.selected.windowID ||
+      result.frame.identity !== this.selected.identity
+    ) {
+      if (result.type === "frame") result.frame.data.fill(0)
+      throw new Error("Native selected capture packet does not match its binding")
     }
   }
 
@@ -329,6 +358,8 @@ export class NativeCaptureHost {
     const frame = this.frame
     if (!child?.stdin || !frame) return Promise.reject(new Error("Native desktop capture has no active image"))
     if (this.barrier) return Promise.reject(new Error("Native desktop barrier already has a request"))
+    if (this.selected && (value.windowID !== this.selected.windowID || value.identity !== this.selected.identity))
+      return Promise.reject(new Error("Native selected capture barrier does not match its binding"))
     const data = command(value, frame)
     const generation = this.generation
     return new Promise((resolve, reject) => {

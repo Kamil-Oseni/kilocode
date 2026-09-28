@@ -48,6 +48,59 @@ process.stdin.on("data",chunk=>{
 }
 
 describe("Windows native desktop driver", () => {
+  it("routes selected continuous pixels through a bound native child and rechecks identity before consumption", async () => {
+    const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10", identity: "A".repeat(64) }
+    const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
+    const header = Buffer.from(
+      JSON.stringify({
+        v: 3,
+        type: "frame",
+        epoch: 1,
+        sequence: 1,
+        ...target,
+        width: 20,
+        height: 10,
+        mime: "image/png",
+        acquisitionMs: 1,
+        preparationMs: 1,
+      }),
+    )
+    const packet = Buffer.alloc(8 + header.length + image.length)
+    packet.writeUInt32LE(header.length, 0)
+    header.copy(packet, 4)
+    packet.writeUInt32LE(image.length, 4 + header.length)
+    image.copy(packet, 8 + header.length)
+    const script = `if(JSON.stringify(process.argv.slice(-3))!==JSON.stringify(["--selected-v1","0x123","${target.identity}"]))process.exit(9);process.stdout.write(Buffer.from(${JSON.stringify(packet.toString("base64"))},"base64"));setInterval(()=>{},1000)`
+    const calls: string[] = []
+    const state = { identity: target.identity }
+    const runner = {
+      run: async (script: string) => {
+        calls.push(script)
+        if (script.includes("CopyFromScreen")) throw new Error("Selected pixels must use native capture")
+        return JSON.stringify({ ...target, identity: state.identity })
+      },
+      cancel: () => undefined,
+    }
+    const errors: unknown[] = []
+    const driver = new WindowsDesktopDriver(runner, runner, process.execPath, ["-e", script, "--"])
+    driver.startCapture((error) => errors.push(error), target)
+    try {
+      const latest = () => (Reflect.get(driver, "worker") as DesktopCaptureWorker | undefined)?.latest()
+      for (let index = 0; index < 300 && !latest(); index++) await Bun.sleep(5)
+      expect(latest()?.sourceIdentity).toBe(target.identity)
+      expect((await driver.observe({ semantics: false })).data).toBe(image.toString("base64"))
+      expect(
+        calls.some((script) => script.includes("Desktop process identity changed after post-action capture")),
+      ).toBe(true)
+      state.identity = "B".repeat(64)
+      await expect(driver.observe({ semantics: false })).rejects.toThrow(/Selected pixels must use native capture/)
+      expect(errors).toEqual([])
+    } finally {
+      driver.stopCapture()
+    }
+    expect(Reflect.get(driver, "worker") as DesktopCaptureWorker | undefined).toBeUndefined()
+  })
+
   it("observes only an existing capture without restarting it after Stop, and erases an aborted diagnostic", async () => {
     let captures = 0
     const background = {
@@ -148,7 +201,7 @@ describe("Windows native desktop driver", () => {
     }
   })
 
-  it("retains only the selected window across foreground changes and rejects a reused identity", async () => {
+  it("keeps the PowerShell fallback scoped across foreground changes and rejects a reused identity", async () => {
     const identity = "A".repeat(64)
     const chosen = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
     const other = { windowID: "0x456", location: "pid:6;title:Other;bounds:0,0,20,10" }
@@ -192,7 +245,7 @@ describe("Windows native desktop driver", () => {
       },
       cancel: () => undefined,
     }
-    const driver = new WindowsDesktopDriver(primary, background, "not-a-native-binary")
+    const driver = new WindowsDesktopDriver(primary, background)
     const errors: unknown[] = []
     const latest = () => (Reflect.get(driver, "worker") as DesktopCaptureWorker | undefined)?.latest()
     driver.startCapture((error) => errors.push(error), { windowID: chosen.windowID, identity })

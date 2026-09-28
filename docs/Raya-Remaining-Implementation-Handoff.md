@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 00:27 EDT - current authoritative checkpoint
+
+Main/origin main is `c9050940fa`; the normal push and full low-memory snapshot install completed. Installed version is `7.4.23-snapshot+c9050940fa.kamil-oseni.1790568550613`, VSIX digest `51fe7ed13664a541fa15385db5da930a32b127591b10de4cceb83a41d195e106`. Physical Escape stopped Computer Use before fresh loaded-window verification; leave desktop interaction stopped until the user resumes it. Prior b8 reports remain the last observed loaded host. Do not repeat the already completed exact-file deletion/Undo test. Commit/push authorization to the existing remote is explicit; MCP remains deferred.
+
+Current ownership: semantic specialist owns desktop-windows.ts plus new independent worker/tests; occupancy specialist owns terminal lifecycle, workspace occupancy and adverse tests; native specialist owns core process-host launch primitive/build/native tests, without central PTY integration yet. Root owns docs, review, checks/publication/install and startup responsiveness audit. Preserve user-owned progress hunks and other files. Next finalize these slices with actual adverse evidence, then implement core PTY lifecycle/admission integration and event-invalidated semantic caching. No full installed benchmark/restart/resource gate is complete. The cold event-loop stall's cause remains unproven; deadline refusal alone is not responsiveness improvement.
+
 ## ChatGPT 2026-09-28 00:05 EDT - published/installed native slice, deadline source fix next
 
 User-authorized normal push succeeded through full TypeScript/JetBrains hooks: origin/main=`b8e26d4c2b`. Low-memory full build/install succeeded, CLI233,419,264 bytes, loaded snapshot `7.4.23-snapshot+b8e26d4c2b.kamil-oseni.1790567158334`, VSIX digest `923a793f292d45b2fb5a2dbc640e6ef547e2b7d399960714adffdab855afc666`; verified native process companions included. Only dummy on second screen was reloaded. Cold v5 report delayed timeout callbacks to13.8s and mislabeled a late desktop result ready. Warm report matched active/loaded/capture/backend identity but capture observation was unavailable. No release/latency/task proof; do not infer the exact blocking operation or unchanged rollback retention after one old snapshot was pruned.

@@ -69326,6 +69326,10 @@
               "mode": {
                 "type": "string",
                 "enum": ["first_change_v2"]
+              },
+              "sampling": {
+                "type": "string",
+                "enum": ["visual_only_v1"]
               }
             },
             "required": ["id", "sessionID", "operation", "frameCount", "intervalMs"],

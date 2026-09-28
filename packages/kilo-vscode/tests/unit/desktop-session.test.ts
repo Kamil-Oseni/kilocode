@@ -23,6 +23,7 @@ class Driver implements DesktopDriver {
   readonly targets: DesktopDispatchTarget[] = []
   readonly frames: DesktopFrame[] = []
   readonly fresh: boolean[] = []
+  readonly sampling: (boolean | undefined)[] = []
   readonly focused: string[] = []
   list: DesktopWindow[] = [
     {
@@ -40,7 +41,8 @@ class Driver implements DesktopDriver {
   ]
   cancelled = 0
 
-  async observe(options?: { fresh?: boolean }) {
+  async observe(options?: { fresh?: boolean; semantics?: boolean }) {
+    this.sampling.push(options?.semantics)
     this.fresh.push(options?.fresh === true)
     const next = this.frames.shift()
     if (next) return next
@@ -70,6 +72,98 @@ class Driver implements DesktopDriver {
 }
 
 describe("native desktop session boundary", () => {
+  it("passes visual-only sampling to the driver and refuses unclassified effects and sequences", async () => {
+    const driver = new Driver()
+    driver.frame = {
+      ...driver.frame,
+      semantics: {
+        source: "windows_ui_automation",
+        status: "available",
+        viewport: { x: 0, y: 0, width: 1280, height: 720 },
+        controls: [],
+        truncated: false,
+      },
+      timing: { acquisitionMs: 5, preparationMs: 7, semanticsMs: 1, totalMs: 20 },
+    }
+    const session = new DesktopSession(driver)
+    const observed = await session.observe({ semantics: false })
+    expect(driver.sampling).toEqual([false])
+    expect(observed.semantics).toBeUndefined()
+    expect(observed.timing.semanticsMs).toBeUndefined()
+    const base = { windowID: observed.windowID, sensitive: false as const }
+    for (const effect of [
+      { operation: "pointer", action: "click", x: 0.5, y: 0.5 },
+      { operation: "pointer", action: "double_click", x: 0.5, y: 0.5 },
+      { operation: "drag", startX: 0.1, startY: 0.1, endX: 0.5, endY: 0.5 },
+      { operation: "type", text: "secret" },
+      { operation: "key", key: "Enter" },
+    ] as const) {
+      const frame = await session.observe({ semantics: false })
+      const action = { ...base, ...effect, observationID: frame.observation.id }
+      await expect(session.execute(action)).rejects.toThrow(/visual-only watch requires desktop_observe/i)
+      await expect(session.execute(action)).rejects.toThrow(/unknown or was already used/i)
+    }
+    await expect(
+      session.sequence({
+        observationID: observed.observation.id,
+        steps: [{ operation: "pointer", action: "click", x: 0.5, y: 0.5, sensitive: false }],
+        maxDurationMs: 1000,
+      }),
+    ).rejects.toThrow(/visual-only watch requires desktop_observe/i)
+    expect(driver.actions).toEqual([])
+    const fresh = await session.observe()
+    expect(fresh.semantics?.status).toBe("available")
+    await session.execute({
+      ...base,
+      operation: "pointer",
+      action: "click",
+      x: 0.5,
+      y: 0.5,
+      observationID: fresh.observation.id,
+    })
+    expect(driver.sampling.at(-1)).toBeUndefined()
+    expect(driver.actions).toHaveLength(1)
+  })
+
+  it("allows visual-only move and scroll but rejects observations after manual takeover", async () => {
+    const driver = new Driver()
+    const session = new DesktopSession(driver)
+    const first = await session.observe({ semantics: false })
+    await session.execute({
+      operation: "pointer",
+      action: "move",
+      x: 0.5,
+      y: 0.5,
+      sensitive: false,
+      windowID: first.windowID,
+      observationID: first.observation.id,
+    })
+    const second = await session.observe({ semantics: false })
+    await session.execute({
+      operation: "scroll",
+      deltaX: 0,
+      deltaY: 120,
+      sensitive: false,
+      windowID: second.windowID,
+      observationID: second.observation.id,
+    })
+    const third = await session.observe({ semantics: false })
+    session.takeControl()
+    session.resume()
+    await expect(
+      session.execute({
+        operation: "pointer",
+        action: "move",
+        x: 0.5,
+        y: 0.5,
+        sensitive: false,
+        windowID: third.windowID,
+        observationID: third.observation.id,
+      }),
+    ).rejects.toThrow(/unknown or was already used/i)
+    expect(driver.actions).toHaveLength(2)
+  })
+
   it("rechecks every pinned selected window after the final binding", async () => {
     const driver = Object.assign(new Driver(), {
       pinWindow: async (target: { windowID: string; location: string; identity: string }) => {

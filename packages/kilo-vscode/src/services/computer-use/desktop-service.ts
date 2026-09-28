@@ -129,7 +129,11 @@ export class DesktopAutomationService implements vscode.Disposable {
             let previous: Awaited<ReturnType<DesktopSession["observe"]>> | undefined
             for (const index of Array.from({ length: count }, (_, value) => value)) {
               if (state.cancelled || signal.aborted) throw new Error("Desktop viewing was stopped")
-              const capture = this.session!.observe()
+              const capture = this.session!.observe(
+                request.operation === "watch" && request.sampling === "visual_only_v1"
+                  ? { semantics: false }
+                  : undefined,
+              )
               const frame =
                 request.operation === "watch"
                   ? await limit(capture, deadline - performance.now(), () =>

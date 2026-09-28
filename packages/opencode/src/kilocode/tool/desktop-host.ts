@@ -256,6 +256,10 @@ const WatchParams = Schema.Struct({
     description:
       "Return after the first changed scene following a baseline frame instead of collecting the full watch.",
   }),
+  sampling: Schema.optional(Schema.Literal("visual_only_v1")).annotate({
+    description:
+      "Opt in to visual-only sampling without accessibility walks. Take desktop_observe before clicking, typing, dragging, pressing keys, or running an action sequence from these frames.",
+  }),
 }).check(
   Schema.makeFilter((input) =>
     input.frames * 500 + (input.frames - 1) * input.interval_ms <= 10_000
@@ -292,6 +296,7 @@ export const DesktopWatchTool = Tool.define<typeof WatchParams, { frames: number
               frameCount: params.frames,
               intervalMs: params.interval_ms,
               ...(params.first_change ? { mode: "first_change_v2" as const } : {}),
+              ...(params.sampling ? { sampling: params.sampling } : {}),
               authorization,
               ...(params.target ? { target: params.target } : {}),
             },

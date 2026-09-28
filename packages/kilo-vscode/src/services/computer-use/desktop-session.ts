@@ -153,6 +153,7 @@ export class DesktopSession {
   private readonly observations = new ObservationLedger("Desktop")
   private readonly semantics = new Map<string, DesktopSemantics>()
   private readonly frames = new DesktopFrameRing<DesktopScene>()
+  private readonly visual = new Set<string>()
   private readonly listeners = new Set<(state: DesktopState) => void>()
   private state: DesktopState = { control: "agent", busy: false }
   private revision = 0
@@ -171,18 +172,31 @@ export class DesktopSession {
     return () => this.listeners.delete(listener)
   }
 
-  async observe(): Promise<DesktopFrame & { observation: DesktopObservation }> {
+  async observe(options?: { semantics?: boolean }): Promise<DesktopFrame & { observation: DesktopObservation }> {
     const revision = this.revision
-    const frame = await this.capture()
+    const received = await this.capture(false, undefined, false, options)
+    const frame =
+      options?.semantics === false
+        ? { ...received, semantics: undefined, timing: { ...received.timing, semanticsMs: undefined } }
+        : received
     if (revision !== this.revision) throw new Error("Desktop observation cancelled after control changed")
     const observation = this.observations.issue(this.target(frame), this.revision)
+    if (options?.semantics === false) {
+      this.visual.add(observation.id)
+      while (this.visual.size > 256) this.visual.delete(this.visual.values().next().value!)
+    }
     const scene = { ...frame, observation }
     this.retain(scene)
     return scene
   }
 
-  private async capture(fresh = false, after?: DesktopDispatchTarget, armed = false): Promise<DesktopFrame> {
-    const frame = await this.acquire(fresh, after, armed)
+  private async capture(
+    fresh = false,
+    after?: DesktopDispatchTarget,
+    armed = false,
+    options?: { semantics?: boolean },
+  ): Promise<DesktopFrame> {
+    const frame = await this.acquire(fresh, after, armed, options)
     if (
       !Number.isInteger(frame.width) ||
       frame.width <= 0 ||
@@ -215,9 +229,14 @@ export class DesktopSession {
     return frame
   }
 
-  private acquire(fresh: boolean, after?: DesktopDispatchTarget, armed = false): Promise<DesktopFrame> {
+  private acquire(
+    fresh: boolean,
+    after?: DesktopDispatchTarget,
+    armed = false,
+    options?: { semantics?: boolean },
+  ): Promise<DesktopFrame> {
     if (after && armed && this.driver.observeAfter) return this.driver.observeAfter(after)
-    return this.driver.observe(fresh ? { fresh: true } : undefined)
+    return this.driver.observe(fresh ? { ...options, fresh: true } : options)
   }
 
   async windows(): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
@@ -275,6 +294,7 @@ export class DesktopSession {
         throw new Error("Desktop window switch cancelled for manual takeover; no action was dispatched")
       this.observations.invalidate("desktop")
       this.semantics.clear()
+      this.visual.clear()
       this.frames.clear()
       this.active += 1
       this.update({ control: "agent", busy: true })
@@ -311,6 +331,7 @@ export class DesktopSession {
       if (action.windowID !== current.windowID)
         throw new Error("Desktop action targets a different window; no action was dispatched")
       const semantic = this.semantics.get(action.observationID)
+      const visual = this.visual.delete(action.observationID)
       this.semantics.delete(action.observationID)
       this.frames.delete(action.observationID)
       const observed = this.observations.consume(
@@ -323,12 +344,15 @@ export class DesktopSession {
         this.revision,
       )
       const reason = mismatch(action, semantic)
+      if (visual && action.operation !== "scroll" && !(action.operation === "pointer" && action.action === "move"))
+        throw new Error("Visual-only watch requires desktop_observe before this action; no action was dispatched")
       if (reason) throw new Error(reason)
       const revision = this.revision
       if (this.state.control === "manual" || revision !== this.revision)
         throw new Error("Desktop action cancelled for manual takeover; no action was dispatched")
       this.observations.invalidate("desktop", current.windowID)
       this.semantics.clear()
+      this.visual.clear()
       this.frames.clear()
       this.active += 1
       this.update({ control: "agent", busy: true })
@@ -374,6 +398,10 @@ export class DesktopSession {
     const run = async () => {
       const scene = this.frames.get(input.observationID)
       if (!scene) throw new Error("Desktop sequence requires a retained fresh observation")
+      if (this.visual.has(input.observationID))
+        throw new Error(
+          "Visual-only watch requires desktop_observe before an action sequence; no action was dispatched",
+        )
       const revision = this.revision
       let effects = 0
       this.active += 1
@@ -470,6 +498,7 @@ export class DesktopSession {
     this.revision += 1
     this.observations.invalidate("desktop")
     this.semantics.clear()
+    this.visual.clear()
     this.frames.clear()
     this.driver.cancel?.()
     this.update({ control: "manual", busy: this.active > 0, reason })
@@ -479,6 +508,7 @@ export class DesktopSession {
     this.revision += 1
     this.observations.invalidate("desktop")
     this.semantics.clear()
+    this.visual.clear()
     this.frames.clear()
     this.update({ control: "agent", busy: this.active > 0 })
   }

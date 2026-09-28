@@ -1289,6 +1289,7 @@ export type DesktopRequest =
       frameCount: number
       intervalMs: number
       mode?: "first_change_v2"
+      sampling?: "visual_only_v1"
     }
   | {
       id: DesktopRequestId

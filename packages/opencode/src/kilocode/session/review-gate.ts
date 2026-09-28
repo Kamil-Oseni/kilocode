@@ -5,6 +5,9 @@ import { Context, Effect, Layer, Semaphore } from "effect"
 
 export interface Interface {
   readonly withWorkspace: (directory: string) => <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly withWorkspaces: (
+    directories: readonly string[],
+  ) => <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }
 
 /** Session deletion and checkpoint mutations share one process- and workspace-wide lifecycle boundary. */
@@ -17,19 +20,32 @@ export const node = LayerNode.make({
     Effect.gen(function* () {
       const gate = yield* Semaphore.make(1)
       const flock = yield* EffectFlock.Service
-      const withWorkspace =
-        (directory: string) =>
+      const withWorkspaces =
+        (directories: readonly string[]) =>
         <A, E, R>(body: Effect.Effect<A, E, R>) => {
-          const resolved = path.resolve(directory)
-          const key = process.platform === "win32" ? resolved.toLowerCase() : resolved
+          const keys = [
+            ...new Set(
+              directories.map((directory) => {
+                const resolved = path.resolve(directory)
+                return process.platform === "win32" ? resolved.toLowerCase() : resolved
+              }),
+            ),
+          ].sort()
           return gate.withPermits(1)(
-            flock.withLock(body, `review:${key}`).pipe(
+            Effect.scoped(
+              Effect.gen(function* () {
+                // One scoped acquisition releases every earlier lock if a later lock fails.
+                // Sorting prevents opposing workspace orders from deadlocking across backends.
+                for (const key of keys) yield* flock.acquire(`review:${key}`)
+                return yield* body
+              }),
+            ).pipe(
               Effect.catchTag("LockTimeoutError", Effect.die),
               Effect.catchTag("LockCompromisedError", Effect.die),
             ),
           )
         }
-      return Service.of({ withWorkspace })
+      return Service.of({ withWorkspace: (directory) => withWorkspaces([directory]), withWorkspaces })
     }),
   ),
   deps: [EffectFlock.node],

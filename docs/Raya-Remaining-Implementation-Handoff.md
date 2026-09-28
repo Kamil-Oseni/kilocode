@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 00:40 EDT - native launcher primitive source ready
+
+The separate opt-in suspended launcher capability passes real ConPTY 12/50, existing inspect/guardian four cases, MSVC /W4 /WX/self-test, core/CLI types and scoped lint/format/guards. Actual target enters a no-breakaway Job before exclusive saved-identity resume, with bounded private envelope cleared before inheritance and no unknown replay. Core src/pty.ts still directly spawns arbitrary targets; its registry still needs Job-empty teardown after leader exit. Integrate through dependency-neutral core lifecycle/admission nodes and Kilo-owned opencode adapters supplied to canonical and legacy location graphs, with immutable creation owner separate from mutable viewed-chat association. This unused primitive alone does not close any full installed containment/restart gate. Semantic source is saved as `4010e9d6f5`; durable recovery source final regression is running. Next save/push coherent slices and install once settled; keep desktop interaction stopped after Escape.
+
 ## ChatGPT 2026-09-28 00:38 EDT - semantic worker source ready
 
 The independent semantic worker is validated: 53 tests/330 assertions, extension/webview types, scoped lint/format/diff pass. One lazy child/read, generation cancellation, pre-start and result-time monotonic deadlines, exact selected fingerprint and warm cancellation checks preserve the fail-closed boundary; fallback image caches are isolated by runner. No event cache or native UIA worker exists yet. Actual provider-hang/continuous-capture/Pause/selected-target/latency host checks remain open, with desktop interaction stopped after Escape. Native launch and durable recovery slices are finishing their separate source gates; root owns coherent commits/push/install. Keep all full release gates In progress.

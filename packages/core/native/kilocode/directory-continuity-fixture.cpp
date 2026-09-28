@@ -1,6 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winioctl.h>
+#include <winternl.h>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -67,7 +69,15 @@ struct Reparse {
   wchar_t path[4096];
 };
 
-void reparse(const char* name, HANDLE handle, const std::wstring& target) {
+struct Extended {
+  DWORD flags, tag;
+  GUID guid;
+  uint64_t reserved;
+  Reparse packet;
+};
+static_assert(offsetof(Extended, packet) == 32);
+
+void reparse(const char* name, HANDLE handle, const std::wstring& target, bool extended = false) {
   const auto substitute = L"\\??\\" + target;
   if (substitute.size() + target.size() + 2 > 4096) throw std::runtime_error("Disposable target exceeds bound");
   Reparse packet{};
@@ -78,9 +88,14 @@ void reparse(const char* name, HANDLE handle, const std::wstring& target) {
   packet.length = static_cast<WORD>(8 + (substitute.size() + target.size() + 2) * sizeof(wchar_t));
   CopyMemory(packet.path, substitute.c_str(), (substitute.size() + 1) * sizeof(wchar_t));
   CopyMemory(packet.path + substitute.size() + 1, target.c_str(), (target.size() + 1) * sizeof(wchar_t));
+  Extended wrapper{};
+  wrapper.flags = 1; // REPARSE_DATA_EX_FLAG_GIVEN_TAG_OR_NONE; ExistingReparseTag is zero.
+  wrapper.packet = packet;
+  const auto bytes = static_cast<DWORD>(8 + packet.length);
   DWORD size = 0;
-  const bool success = DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT, &packet,
-    static_cast<DWORD>(8 + packet.length), nullptr, 0, &size, nullptr) != FALSE;
+  const bool success = DeviceIoControl(handle, extended ? FSCTL_SET_REPARSE_POINT_EX : FSCTL_SET_REPARSE_POINT,
+    extended ? static_cast<void*>(&wrapper) : static_cast<void*>(&packet),
+    extended ? static_cast<DWORD>(offsetof(Extended, packet)) + bytes : bytes, nullptr, 0, &size, nullptr) != FALSE;
   row(name, success, success ? 0 : GetLastError());
   if (success) {
     Reparse remove{};
@@ -88,6 +103,61 @@ void reparse(const char* name, HANDLE handle, const std::wstring& target) {
     if (!DeviceIoControl(handle, FSCTL_DELETE_REPARSE_POINT, &remove, 8, nullptr, 0, &size, nullptr))
       throw std::runtime_error("Disposable reparse restoration failed");
   }
+}
+
+DWORD information(HANDLE handle, ULONG kind, void* packet, ULONG bytes) {
+  using Set = NTSTATUS (NTAPI*)(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+  using Convert = ULONG (WINAPI*)(NTSTATUS);
+  const auto module = GetModuleHandleW(L"ntdll.dll");
+  const auto set = reinterpret_cast<Set>(GetProcAddress(module, "NtSetInformationFile"));
+  const auto convert = reinterpret_cast<Convert>(GetProcAddress(module, "RtlNtStatusToDosError"));
+  if (!set || !convert) throw std::runtime_error("Disposable POSIX API unavailable");
+  IO_STATUS_BLOCK result{};
+  const auto status = set(handle, &result, packet, bytes, static_cast<FILE_INFORMATION_CLASS>(kind));
+  if (status == static_cast<NTSTATUS>(0x103)) throw std::runtime_error("Disposable POSIX completion is pending");
+  return status < 0 ? convert(status) : 0;
+}
+
+void posix(const char* name, const std::wstring& source, const std::wstring& target = L"") {
+  Handle handle(CreateFileW(source.c_str(), DELETE | FILE_READ_ATTRIBUTES,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+  if (handle.value == INVALID_HANDLE_VALUE) {
+    row(name, false, GetLastError());
+    return;
+  }
+  if (target.empty()) {
+    DWORD flags = 3; // FILE_DISPOSITION_DELETE | FILE_DISPOSITION_POSIX_SEMANTICS.
+    const auto error = information(handle.value, 64, &flags, sizeof(flags));
+    row(name, !error, error);
+    return;
+  }
+  const auto destination = L"\\??\\" + target;
+  const auto bytes = offsetof(FILE_RENAME_INFO, FileName) + destination.size() * sizeof(wchar_t);
+  std::vector<BYTE> buffer(bytes);
+  const auto packet = reinterpret_cast<FILE_RENAME_INFO*>(buffer.data());
+  packet->Flags = 3; // FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS.
+  packet->FileNameLength = static_cast<DWORD>(destination.size() * sizeof(wchar_t));
+  CopyMemory(packet->FileName, destination.data(), packet->FileNameLength);
+  const auto error = information(handle.value, 65, packet, static_cast<ULONG>(bytes));
+  row(name, !error, error);
+}
+
+void named(const char* name, const std::wstring& path, HANDLE expected) {
+  Handle handle(CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+  BY_HANDLE_FILE_INFORMATION before{}, after{};
+  const bool same = handle.value != INVALID_HANDLE_VALUE && GetFileInformationByHandle(expected, &before) &&
+    GetFileInformationByHandle(handle.value, &after) && before.dwVolumeSerialNumber == after.dwVolumeSerialNumber &&
+    before.nFileIndexHigh == after.nFileIndexHigh && before.nFileIndexLow == after.nFileIndexLow;
+  row(name, same);
+}
+
+void absent(const char* name, const std::wstring& path) {
+  const auto flags = GetFileAttributesW(path.c_str());
+  const auto error = flags == INVALID_FILE_ATTRIBUTES ? GetLastError() : 0;
+  row(name, flags == INVALID_FILE_ATTRIBUTES && error == ERROR_FILE_NOT_FOUND);
 }
 
 int wmain(int argc, wchar_t** argv) {
@@ -149,6 +219,35 @@ int wmain(int argc, wchar_t** argv) {
     const bool removed = RemoveDirectoryW((cwd + L"\\nested").c_str()) != FALSE;
     row("nested-delete", removed, removed ? 0 : GetLastError());
 
+    // Real supported-operation controls run with the same pinned parent as the adverse cases.
+    const auto ordinary = cwd + L"\\posix-source";
+    const auto replacement = cwd + L"\\posix-target";
+    file(ordinary);
+    file(replacement);
+    Handle readable(CreateFileW(replacement.c_str(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (readable.value == INVALID_HANDLE_VALUE) throw std::runtime_error("Disposable POSIX readable handle unavailable");
+    posix("ordinary-posix-replace", ordinary, replacement);
+    absent("ordinary-posix-source-absent", ordinary);
+    posix("ordinary-posix-unlink", replacement);
+    absent("ordinary-posix-target-absent", replacement);
+    char retained[7]{};
+    DWORD count = 0;
+    const bool accessible = ReadFile(readable.value, retained, 7, &count, nullptr) && count == 7 &&
+      std::string(retained, 7) == "fixture";
+    row("ordinary-posix-retained-stream", accessible);
+    posix("cwd-posix-unlink", cwd);
+    posix("cwd-posix-rename", cwd, root + L"\\cwd-posix-moved");
+    named("cwd-posix-identity", cwd, pins.back()->value);
+
+    // An empty pinned target exercises replacement independently of nonempty-directory refusal.
+    Handle empty(pin(probe));
+    if (empty.value == INVALID_HANDLE_VALUE) throw std::runtime_error("Disposable empty-directory pin unavailable");
+    const auto incoming = base + L"\\incoming";
+    directory(incoming);
+    posix("empty-directory-posix-replace", incoming, probe);
+    named("empty-directory-posix-identity", probe, empty.value);
+
     const auto witness = cwd + L"\\witness";
     Handle kept(CreateFileW(witness.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
       nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
@@ -156,15 +255,26 @@ int wmain(int argc, wchar_t** argv) {
     rename("witness-rename", witness, cwd + L"\\witness-moved");
     const bool deleted = DeleteFileW(witness.c_str()) != FALSE;
     row("witness-delete", deleted, deleted ? 0 : GetLastError());
+    posix("witness-posix-unlink", witness);
+    posix("witness-posix-rename", witness, cwd + L"\\witness-posix-moved");
+    const auto substitute = cwd + L"\\witness-substitute";
+    file(substitute);
+    posix("witness-posix-replace", substitute, witness);
+    named("witness-posix-identity", witness, kept.value);
+    if (GetFileAttributesW(substitute.c_str()) != INVALID_FILE_ATTRIBUTES && !DeleteFileW(substitute.c_str()))
+      throw std::runtime_error("Disposable POSIX replacement cleanup failed");
     reparse("witness-metadata-reparse", mutator.value, target);
+    reparse("witness-metadata-reparse-ex", mutator.value, target, true);
     Handle parent(attributes(root));
     if (parent.value == INVALID_HANDLE_VALUE) throw std::runtime_error("Disposable ancestor metadata handle unavailable");
     reparse("nonempty-ancestor-reparse", parent.value, target);
+    reparse("nonempty-ancestor-reparse-ex", parent.value, target, true);
     kept.close();
     if (!DeleteFileW(witness.c_str())) throw std::runtime_error("Disposable witness cleanup failed");
 
     // This positive control distinguishes a true nonempty fence from access or malformed-buffer refusal.
     reparse("empty-metadata-reparse", mutator.value, target);
+    reparse("empty-metadata-reparse-ex", mutator.value, target, true);
     row("experiment-finished", true);
     return 0;
   } catch (const std::exception& error) {

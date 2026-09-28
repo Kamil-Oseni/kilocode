@@ -53,8 +53,8 @@ suite(
         .trim()
         .split(/\r?\n/)
         .map((line) => parse(JSON.parse(line)))
-      expect(rows).toHaveLength(20)
-      expect(new Set(rows.map((row) => row.case)).size).toBe(20)
+      expect(rows).toHaveLength(37)
+      expect(new Set(rows.map((row) => row.case)).size).toBe(37)
       const find = (name: string) => {
         const row = rows.find((row) => row.case === name)
         if (!row) throw new Error(`Native directory experiment omitted ${name}`)
@@ -68,6 +68,12 @@ suite(
         "cwd-rename",
         "witness-rename",
         "witness-delete",
+        "cwd-posix-unlink",
+        "cwd-posix-rename",
+        "empty-directory-posix-replace",
+        "witness-posix-unlink",
+        "witness-posix-rename",
+        "witness-posix-replace",
       ]) {
         expect(find(name)).toEqual({ case: name, success: false, error: 32 })
       }
@@ -82,11 +88,25 @@ suite(
         "nested-create",
         "nested-delete",
         "empty-metadata-reparse",
+        "empty-metadata-reparse-ex",
+        "ordinary-posix-replace",
+        "ordinary-posix-source-absent",
+        "ordinary-posix-unlink",
+        "ordinary-posix-target-absent",
+        "ordinary-posix-retained-stream",
+        "cwd-posix-identity",
+        "empty-directory-posix-identity",
+        "witness-posix-identity",
         "experiment-finished",
       ]) {
         expect(find(name)).toEqual({ case: name, success: true, error: 0 })
       }
-      for (const name of ["witness-metadata-reparse", "nonempty-ancestor-reparse"]) {
+      for (const name of [
+        "witness-metadata-reparse",
+        "nonempty-ancestor-reparse",
+        "witness-metadata-reparse-ex",
+        "nonempty-ancestor-reparse-ex",
+      ]) {
         expect(find(name)).toEqual({ case: name, success: false, error: 145 })
       }
     } finally {

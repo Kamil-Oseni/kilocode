@@ -85,11 +85,17 @@ function fixture(timeout = 15_000) {
     sockets: [] as ServerWebSocket<undefined>[],
     controls: [] as WebSocket[],
     providers: 0,
+    active: 1,
     activated: 0,
     proof: undefined as Record<string, unknown> | undefined,
     proofs: new Map<string, Record<string, unknown>>(),
     handoff: "",
     activation: undefined as Record<string, unknown> | undefined,
+    manifest: undefined as Record<string, unknown> | undefined,
+    obligations: new Map<
+      string,
+      { reference: Record<string, unknown>; receipt: Record<string, unknown>; delivery: Record<string, unknown> }
+    >(),
   }
   const binding = {
     id: "binding_1",
@@ -100,9 +106,15 @@ function fixture(timeout = 15_000) {
     directory: "C:/project",
     model: OPENAI_VOICE_MODEL,
   }
-  const work = (request: Request, url: URL, body: Record<string, unknown>) => {
+  const bound = (id: number) => ({
+    ...binding,
+    id: `binding_${id}`,
+    generation: `generation_${id}`,
+    providerCallID: `rtc_provider_${id}`,
+  })
+  const work = (request: Request, url: URL, body: Record<string, unknown>, owner = binding) => {
     if (url.pathname.endsWith("/calls")) {
-      expect(body.generation).toBe(binding.generation)
+      expect(body.generation).toBe(owner.generation)
       if (typeof body.callID !== "string") return new Response("invalid call", { status: 400 })
       if (state.mode === "pending") {
         if (state.pending) {
@@ -111,14 +123,35 @@ function fixture(timeout = 15_000) {
         }
         state.pending = body.callID
       }
-      return Response.json({
+      const receipt = {
         id: `work_${body.callID}`,
         callID: body.callID,
-        messageID: `message_${body.callID}`,
+        messageID: `msg_${body.callID}`,
         parentSessionID: state.mode === "receipt" ? "unrelated" : input.sessionID,
         status: state.mode === "pending" ? "accepted" : "completed",
-        result: { text: "Verified result", assistantMessageID: "assistant_1", evidence: [] },
+        createdAt: Date.now() - (state.mode === "expired" ? 30 * 60_000 + 1 : 0),
+        updatedAt: Date.now(),
+        result: { text: "Verified result", assistantMessageID: "msg_assistant_1", evidence: [] },
+      }
+      const ref = {
+        version: 1,
+        id: `ref_${body.callID}`,
+        originID: owner.id,
+        originGeneration: owner.generation,
+        callID: body.callID,
+        receiptID: receipt.id,
+        messageID: receipt.messageID,
+        parentSessionID: input.sessionID,
+        directory: binding.directory,
+        createdAt: receipt.createdAt,
+        ...(state.mode === "short-deadline" ? { deadline: Date.now() + 300 } : {}),
+      }
+      state.obligations.set(String(ref.id), {
+        reference: ref,
+        receipt,
+        delivery: { version: 1, reference: ref, epoch: 0, phase: "pending", acks: [] },
       })
+      return Response.json(receipt)
     }
     if (request.method !== "GET") return new Response("unexpected", { status: 404 })
     const id = url.pathname.split("/").at(-1)!
@@ -136,7 +169,7 @@ function fixture(timeout = 15_000) {
   }
   const history = (url: URL, body: Record<string, unknown>, owner = binding) => {
     if (url.pathname.endsWith("/context")) {
-      expect(url.searchParams.get("generation")).toBe(binding.generation)
+      expect(url.searchParams.get("generation")).toBe(owner.generation)
       return Response.json({ version: 1, items: state.history, incomplete: false })
     }
     if (url.pathname.endsWith("/spoken")) {
@@ -180,6 +213,90 @@ function fixture(timeout = 15_000) {
       })
     }
   }
+  const owned = (url: URL) => bound(Number(url.pathname.match(/binding_(\d+)/)?.[1] ?? 1))
+  const retained = (
+    url: URL,
+    body: Record<string, unknown>,
+    source: typeof binding,
+    target: typeof binding,
+    owner: typeof binding,
+  ) => {
+    if (url.pathname.endsWith("/handoff/obligations")) {
+      state.manifest = {
+        version: 1,
+        manifestID: "manifest_1",
+        hash: "a".repeat(64),
+        sourceID: source.id,
+        sourceGeneration: source.generation,
+        candidateID: target.id,
+        candidateGeneration: target.generation,
+        references: [...state.obligations.values()].map((value) => value.reference),
+      }
+      return Response.json(state.manifest)
+    }
+    if (url.pathname.endsWith("/obligations"))
+      return Response.json({
+        version: 1,
+        references: [...state.obligations.values()].map((value) => value.reference),
+      })
+    if (url.pathname.includes("/obligations/")) {
+      const id = url.pathname.split("/obligations/")[1].split("/")[0]
+      const entry = state.obligations.get(id)!
+      if (url.pathname.endsWith("/delivery")) {
+        if (body.action === "offer") {
+          const { action: _action, generation, ...fields } = body
+          const offer = { ...fields, targetID: owner.id, targetGeneration: generation, offeredAt: Date.now() }
+          entry.delivery = { ...entry.delivery, phase: "offered", epoch: body.deliveryEpoch, offer }
+          return Response.json({ version: 1, reference: entry.reference, offer })
+        }
+        const { action: _action, ...fields } = body
+        const ack = { ...fields, targetID: owner.id, reference: entry.reference, acknowledgedAt: Date.now() }
+        entry.delivery = { ...entry.delivery, phase: body.phase, acks: [...(entry.delivery.acks as unknown[]), ack] }
+        return Response.json(ack)
+      }
+      const call = String(entry.reference.callID)
+      state.polls.push(call)
+      if (entry.receipt.status === "accepted")
+        entry.receipt = { ...entry.receipt, status: "running", updatedAt: Date.now() }
+      if (state.released.has(call)) {
+        state.pending = undefined
+        entry.receipt = {
+          ...entry.receipt,
+          status: "completed",
+          updatedAt: Date.now(),
+          result: { text: `Verified ${call}`, assistantMessageID: `msg_assistant_${call}`, evidence: [] },
+        }
+      }
+      const terminal = !["accepted", "running"].includes(String(entry.receipt.status))
+      return Response.json({
+        version: 1,
+        reference: entry.reference,
+        delivery: entry.delivery,
+        receipt: entry.receipt,
+        ...(terminal ? { resultHash: createHash("sha256").update(JSON.stringify(entry.receipt)).digest("hex") } : {}),
+      })
+    }
+  }
+  const presentation = (socket: ServerWebSocket<undefined>, event: Record<string, unknown>) => {
+    const metadata = (event.response as { metadata?: { raya_kind?: string } } | undefined)?.metadata
+    if (state.mode === "warm-retained" && event.type === "response.create" && metadata?.raya_kind === "narration") {
+      socket.send(JSON.stringify({ type: "response.created", response: { id: event.event_id, metadata } }))
+      socket.send(
+        JSON.stringify({
+          type: "response.done",
+          event_id: `done_${event.event_id}`,
+          response: { id: event.event_id, metadata, status: "completed", output: [] },
+        }),
+      )
+    }
+    const item = event.item as Record<string, unknown> | undefined
+    if (
+      event.type === "conversation.item.create" &&
+      item?.type === "message" &&
+      String(item.id).startsWith("raya_result_")
+    )
+      socket.send(JSON.stringify({ type: "conversation.item.done", event_id: `ack_${item.id}`, item }))
+  }
   const server = Bun.serve<undefined>({
     port: 0,
     hostname: "127.0.0.1",
@@ -187,8 +304,7 @@ function fixture(timeout = 15_000) {
       const url = new URL(request.url)
       if (url.pathname === "/v1/realtime") {
         expect(request.headers.get("authorization")).toBe("Bearer openai-only")
-        if (state.mode.startsWith("warm"))
-          expect(["rtc_provider_1", "rtc_provider_2"]).toContain(url.searchParams.get("call_id"))
+        if (state.mode.startsWith("warm")) expect(url.searchParams.get("call_id")).toMatch(/^rtc_provider_[123]$/)
         else expect(url.searchParams.get("call_id")).toBe(binding.providerCallID)
         if (server.upgrade(request)) return
         return new Response("upgrade failed", { status: 400 })
@@ -238,11 +354,15 @@ function fixture(timeout = 15_000) {
       expect(capability).toMatch(/^[a-f0-9]{64}$/)
       if (!state.capability) state.capability = capability!
       if (!state.mode.startsWith("warm")) expect(capability).toBe(state.capability)
-      const target = { ...binding, id: "binding_2", generation: "generation_2", providerCallID: "rtc_provider_2" }
-      const owner = url.pathname.includes("binding_2") ? target : binding
+      const source = bound(state.active)
+      const target = bound(state.active + 1)
+      const owner = owned(url)
+      const observed = retained(url, body, source, target, owner)
+      if (observed) return observed
       if (url.pathname.endsWith("/handoff/candidate")) {
         state.handoff = String(body.requestID)
-        expect(capability).toBe(state.capability)
+        state.proof = undefined
+        expect(capability).toMatch(/^[a-f0-9]{64}$/)
         expect(request.headers.get("X-Raya-Voice-Target-Key")).toMatch(/^[a-f0-9]{64}$/)
         expect(request.headers.get("X-Raya-Voice-Target-Key")).not.toBe(capability)
         return Response.json({
@@ -250,8 +370,8 @@ function fixture(timeout = 15_000) {
           handoff: {
             version: 1,
             requestID: body.requestID,
-            sourceID: binding.id,
-            sourceGeneration: binding.generation,
+            sourceID: source.id,
+            sourceGeneration: source.generation,
             candidateID: target.id,
             candidateGeneration: target.generation,
             phase: "candidate",
@@ -259,7 +379,7 @@ function fixture(timeout = 15_000) {
         })
       }
       if (url.pathname.endsWith("/handoff/context")) {
-        const spoken = state.spoken.filter((row) => row.providerCallID === binding.providerCallID).at(-1)!
+        const spoken = state.spoken.filter((row) => row.providerCallID === source.providerCallID).at(-1)!
         const items = spoken.items as {
           id: string
           previous: string | null
@@ -280,8 +400,8 @@ function fixture(timeout = 15_000) {
         }
         return Response.json({
           version: 1,
-          sourceID: binding.id,
-          sourceGeneration: binding.generation,
+          sourceID: source.id,
+          sourceGeneration: source.generation,
           sourceRevision: spoken.revision,
           sourceHash: createHash("sha256").update(JSON.stringify(canonical)).digest("hex"),
           incomplete: spoken.incomplete,
@@ -302,8 +422,8 @@ function fixture(timeout = 15_000) {
         state.proof = {
           ...body,
           requestID: state.handoff,
-          sourceID: binding.id,
-          sourceGeneration: binding.generation,
+          sourceID: source.id,
+          sourceGeneration: source.generation,
           candidateID: target.id,
           candidateGeneration: target.generation,
           ...(body.priorReadyID ? { rearmedAt: Date.now() } : { phase: "ready" }),
@@ -316,19 +436,22 @@ function fixture(timeout = 15_000) {
         state.proofs.set(id, state.proof)
         return Response.json(url.pathname.endsWith("/rearm") ? state.proof : { ...target, handoff: state.proof })
       }
-      if (url.pathname.endsWith("/handoff/activate")) {
+      if (url.pathname.endsWith("/handoff/activate-retained")) {
         state.activated++
+        const { manifestID: _id, manifestHash: _hash, generation: _generation, ...activation } = body
         state.activation = {
-          ...body,
+          ...activation,
           version: 1,
-          sourceID: binding.id,
-          sourceGeneration: binding.generation,
+          sourceID: source.id,
+          sourceGeneration: source.generation,
           activatedAt: Date.now(),
         }
+        state.active++
         if (state.mode === "warm-lost") return new Response("lost acknowledgement", { status: 503 })
-        return Response.json(state.activation)
+        return Response.json({ version: 1, manifest: state.manifest, activation: state.activation })
       }
-      if (url.pathname.endsWith("/handoff/receipt")) return Response.json(state.activation)
+      if (url.pathname.endsWith("/handoff/retained-receipt"))
+        return Response.json({ version: 1, manifest: state.manifest, activation: state.activation })
       if (url.pathname.endsWith("/spoken") && owner.id === target.id && !state.activated)
         return new Response("candidate spoken publication forbidden", { status: 409 })
       const admitted = admission(state.mode, url.pathname, request.method, body, owner)
@@ -348,7 +471,7 @@ function fixture(timeout = 15_000) {
           sha256: state.mode === "image-receipt" ? "wrong" : createHash("sha256").update(bytes).digest("hex"),
         })
       }
-      if (url.pathname.includes("/calls")) return work(request, url, body)
+      if (url.pathname.includes("/calls")) return work(request, url, body, owner)
       return new Response("unexpected", { status: 404 })
     },
     websocket: {
@@ -359,6 +482,7 @@ function fixture(timeout = 15_000) {
       message(socket, value) {
         const event = JSON.parse(String(value)) as Record<string, unknown>
         state.events.push(event)
+        presentation(socket, event)
         if (
           state.mode === "warm-setup" &&
           event.type === "session.update" &&
@@ -385,7 +509,8 @@ function fixture(timeout = 15_000) {
             socket.send(JSON.stringify({ type: "error", error: { event_id: event.event_id, code: "invalid_request" } }))
             return
           }
-          if (state.mode !== "output-pending") socket.send(JSON.stringify({ type: "conversation.item.done", item }))
+          if (state.mode !== "output-pending")
+            socket.send(JSON.stringify({ type: "conversation.item.done", event_id: `ack_${item.id}`, item }))
         }
       },
     },
@@ -554,6 +679,339 @@ function generated(state: { events: Record<string, unknown>[] }) {
     return !!metadata && typeof metadata === "object" && "raya_kind" in metadata
   })
 }
+
+test("retained pending work transfers only after media ACK and emits one target-local semantic result", async () => {
+  const f = fixture()
+  const handoff = {
+    version: 1 as const,
+    id: "retained_handoff",
+    sessionID: input.sessionID,
+    source: input.requestID,
+    target: "request_2",
+  }
+  try {
+    f.state.mode = "pending"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("retained_call"))
+    await until(() => f.state.polls.includes("retained_call"))
+    const original = f.state.obligations.get("ref_retained_call")!.reference
+    f.state.providers = 1
+    f.state.mode = "warm-retained"
+    await f.broker.prepare(
+      handoff,
+      sdp,
+      () => undefined,
+      (error) => f.state.errors.push(error),
+    )
+    await f.broker.prepared(handoff)
+    f.broker.quiesce(handoff, 42)
+    await f.broker.commit(handoff)
+    expect(f.state.events.some((event) => String(event.event_id).startsWith("raya_result_"))).toBe(false)
+    await f.broker.cutover(handoff)
+    await f.broker.retire(handoff)
+    f.state.released.add("retained_call")
+    await until(() => f.state.events.some((event) => String(event.event_id).startsWith("raya_result_")))
+    const outputs = f.state.events.filter((event) => String(event.event_id).startsWith("raya_result_"))
+    expect(outputs).toHaveLength(1)
+    expect(outputs[0].item).toMatchObject({ type: "message", role: "user" })
+    expect(JSON.stringify(outputs)).toContain("Verified retained_call")
+    expect(JSON.stringify(outputs)).not.toContain('retained_call"}')
+    expect(JSON.stringify(outputs)).not.toContain("originGeneration")
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+    expect(f.state.obligations.get("ref_retained_call")!.reference).toEqual(original)
+    await until(() => f.state.requests.some((request) => request.body.phase === "accepted"))
+    expect(f.state.requests.find((request) => request.body.action === "offer")!.path).toContain("binding_2")
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("pending canonical work survives A to B to C without a new call or deadline", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "pending"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("original"))
+    await until(() => f.state.polls.includes("original"))
+    const ref = f.state.obligations.get("ref_original")!.reference
+    f.state.providers = 1
+    f.state.mode = "warm-retained"
+    for (const index of [1, 2]) {
+      const handoff = {
+        version: 1 as const,
+        id: `chain_${index}`,
+        sessionID: input.sessionID,
+        source: `request_${index}`,
+        target: `request_${index + 1}`,
+      }
+      await f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      )
+      await f.broker.prepared(handoff)
+      f.broker.quiesce(handoff, index)
+      await f.broker.commit(handoff)
+      await f.broker.cutover(handoff)
+      expect((await f.broker.retire(handoff)).confirmed).toBe(true)
+      expect(f.state.manifest!.references).toEqual([ref])
+    }
+    f.state.released.add("original")
+    await until(() => f.state.events.some((event) => String(event.event_id).startsWith("raya_result_")))
+    expect(f.state.events.filter((event) => String(event.event_id).startsWith("raya_result_"))).toHaveLength(1)
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+    expect(f.state.requests.find((request) => request.body.action === "offer")!.path).toContain("binding_3")
+    expect(f.state.obligations.get("ref_original")!.reference).toEqual(ref)
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("ordinary accepted and generated offers remain quarantined on the successor without replay", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("presented"))
+    await until(() => generated(f.state).length === 1)
+    const request = generated(f.state)[0]
+    const metadata = (request.response as Record<string, unknown>).metadata
+    f.send({ type: "response.created", response: { id: "presented_response", metadata } })
+    f.send({
+      type: "response.done",
+      event_id: "presented_done",
+      response: { id: "presented_response", metadata, status: "completed", output: [] },
+    })
+    await until(() => f.state.requests.some((request) => request.body.phase === "generated"))
+    const original = f.state.obligations.get("ref_presented")!.delivery
+    f.state.mode = "warm-retained"
+    f.state.providers = 1
+    const handoff = {
+      version: 1 as const,
+      id: "offered_handoff",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    await f.broker.prepare(
+      handoff,
+      sdp,
+      () => undefined,
+      (error) => f.state.errors.push(error),
+    )
+    await f.broker.prepared(handoff)
+    f.broker.quiesce(handoff, 12)
+    await f.broker.commit(handoff)
+    await f.broker.cutover(handoff)
+    await f.broker.retire(handoff)
+    await Bun.sleep(30)
+    expect(f.state.events.filter((event) => String(event.event_id).startsWith("raya_result_"))).toHaveLength(1)
+    expect(f.state.requests.filter((request) => request.body.action === "offer")).toHaveLength(1)
+    expect(f.state.obligations.get("ref_presented")!.delivery).toEqual(original)
+    expect(
+      f.state.requests.some((request) => request.body.phase === "played" || request.body.phase === "omitted"),
+    ).toBe(false)
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("new target work waits for inherited canonical work instead of failing its lane or replaying the source", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "pending"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("inherited"))
+    await until(() => f.state.polls.includes("inherited"))
+    f.state.mode = "warm-retained"
+    f.state.providers = 1
+    const handoff = {
+      version: 1 as const,
+      id: "queued_handoff",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    await f.broker.prepare(
+      handoff,
+      sdp,
+      () => undefined,
+      (error) => f.state.errors.push(error),
+    )
+    await f.broker.prepared(handoff)
+    f.broker.quiesce(handoff, 12)
+    await f.broker.commit(handoff)
+    await f.broker.cutover(handoff)
+    await f.broker.retire(handoff)
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("new_target"))
+    await Bun.sleep(30)
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+    const next = { ...handoff, id: "queued_next", source: "request_2", target: "request_3" }
+    await f.broker.prepare(
+      next,
+      sdp,
+      () => undefined,
+      (error) => f.state.errors.push(error),
+    )
+    const progress = { ready: false }
+    const preparing = f.broker.prepared(next).then(
+      () => {
+        progress.ready = true
+      },
+      () => undefined,
+    )
+    await Bun.sleep(30)
+    expect(progress.ready).toBe(false)
+    expect(f.state.activated).toBe(1)
+    expect((await f.broker.cancel(next)).restore).toBe(true)
+    await preparing
+    f.state.released.add("inherited")
+    await until(() => f.state.events.filter((event) => String(event.event_id).startsWith("raya_result_")).length === 2)
+    expect(
+      f.state.requests.filter((request) => request.path.endsWith("/calls")).map((request) => request.body.callID),
+    ).toEqual(["inherited", "new_target"])
+    expect(f.state.requests.filter((request) => request.body.action === "offer")).toHaveLength(2)
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("Stop retains canonical work and a new logical call cannot inherit local delivery state", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("same"))
+    await until(() => generated(f.state).length === 1)
+    const original = f.state.obligations.get("ref_same")!.reference.createdAt
+    await f.broker.stop()
+    f.state.capability = ""
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("same"))
+    await until(() => generated(f.state).length === 2)
+    expect(f.state.obligations.get("ref_same")!.reference.createdAt).toBeGreaterThan(Number(original))
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(2)
+    expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("an expired terminal canonical receipt remains chat-only without a new offer", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "expired"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("expired"))
+    await until(() => f.state.errors.length > 0)
+    expect(f.state.errors).toEqual(["Voice delivery deadline expired. The existing work remains in the conversation."])
+    expect(f.state.requests.some((request) => request.body.action === "offer")).toBe(false)
+    expect(f.state.events.some((event) => String(event.event_id).startsWith("raya_result_"))).toBe(false)
+    expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+test("result presentation cannot extend an explicit original work deadline", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "short-deadline"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("short"))
+    await until(() => generated(f.state).length === 1)
+    await Bun.sleep(350)
+    expect(f.state.errors.length).toBeGreaterThan(0)
+    expect(f.state.requests.filter((request) => request.body.action === "offer")).toHaveLength(1)
+    expect(generated(f.state)).toHaveLength(1)
+    expect(
+      f.state.requests.some(
+        (request) =>
+          request.body.phase === "generated" || request.body.phase === "played" || request.body.phase === "omitted",
+      ),
+    ).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+test("64 retained jobs refuse a successor's 65th admission before backend submission", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "warm-retained"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    const metadata = await f.begin("batch")
+    f.send({
+      type: "response.done",
+      response: {
+        id: "batch",
+        metadata,
+        status: "completed",
+        output: Array.from({ length: 64 }, (_, index) => completed(`bounded_${index}`).response.output[0]),
+      },
+    })
+    await until(() => f.state.requests.filter((request) => request.body.action === "offer").length === 64)
+    for (const index of [0, 1]) {
+      await until(() => generated(f.state).length > index)
+      const request = generated(f.state)[index]
+      const metadata = (request.response as Record<string, unknown>).metadata
+      const id = `bounded_response_${index}`
+      f.send({ type: "response.created", response: { id, metadata } })
+      f.send({
+        type: "response.done",
+        event_id: `bounded_done_${index}`,
+        response: { id, metadata, status: "completed", output: [] },
+      })
+    }
+    await until(() => f.state.requests.filter((request) => request.body.phase === "generated").length === 64)
+    const handoff = {
+      version: 1 as const,
+      id: "bounded_handoff",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    await f.broker.prepare(
+      handoff,
+      sdp,
+      () => undefined,
+      (error) => f.state.errors.push(error),
+    )
+    await f.broker.prepared(handoff)
+    f.broker.quiesce(handoff, 1)
+    await f.broker.commit(handoff)
+    await f.broker.cutover(handoff)
+    await f.broker.retire(handoff)
+    f.send({ type: "input_audio_buffer.speech_started" })
+    await f.complete(completed("overflow"))
+    await until(() => f.state.errors.length > 0)
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(64)
+    expect(f.state.obligations.size).toBe(64)
+    expect(f.state.requests.some((request) => request.body.callID === "overflow")).toBe(false)
+    expect(
+      f.state.requests.some(
+        (request) =>
+          request.body.phase === "played" || request.body.phase === "omitted" || request.path.endsWith("/cancel"),
+      ),
+    ).toBe(false)
+  } finally {
+    await f.close()
+  }
+}, 15_000)
 
 test("saved task context requires exact completed acknowledgement and cannot replay historical work", async () => {
   const f = fixture()
@@ -1566,7 +2024,7 @@ for (const mode of ["warm", "warm-lost"]) {
       await route({ type: "speechOpenAIHandoffQuiesced", quiet }, ctx)
       expect(f.broker.state(handoff).phase).toBe("committed")
       expect(f.state.activated).toBe(1)
-      expect(f.state.requests.filter((item) => item.path.endsWith("/handoff/receipt"))).toHaveLength(
+      expect(f.state.requests.filter((item) => item.path.endsWith("/handoff/retained-receipt"))).toHaveLength(
         mode === "warm-lost" ? 1 : 0,
       )
       const count = posts.length

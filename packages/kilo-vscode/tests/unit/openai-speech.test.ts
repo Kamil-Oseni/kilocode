@@ -211,12 +211,14 @@ test("unconfirmed audio acknowledgement fences new speech and output rejection n
   expect(f.state.errors).toHaveLength(1)
   f.result()
   f.advance(30_000)
-  expect(f.state.errors).toHaveLength(2)
+  expect(f.state.errors).toHaveLength(1)
   f.result("later")
-  expect(f.state.events).toHaveLength(1)
+  expect(f.state.events).toHaveLength(0)
+  expect(f.speech.delivery("rejected")!.phase).toBe("uncertain")
+  expect(f.speech.boundary().quiet).toBe(false)
   f.speech.close()
   f.advance(60_000)
-  expect(f.state.errors).toHaveLength(2)
+  expect(f.state.errors).toHaveLength(1)
 })
 
 test("receipt arrival, terminal completion, stale scope and closure cannot resurrect holding speech", () => {
@@ -291,7 +293,8 @@ test("malformed response and playback IDs cannot own or release the speech lane"
   })
   expect(f.state.events).toHaveLength(1)
   f.done()
-  expect(f.state.events).toHaveLength(2)
+  expect(f.state.events).toHaveLength(1)
+  expect(f.speech.delivery("result_1")!.phase).toBe("uncertain")
   f.speech.close()
 })
 
@@ -510,7 +513,7 @@ test("inherited results reject pending ordinary output collisions without losing
   const f = fixture()
   f.speech.result("existing", "call", "{}")
   expect(() => f.speech.semantic("existing", "result", 5000)).toThrow("delivery boundary")
-  expect(f.speech.delivery("existing")).toBeUndefined()
+  expect(f.speech.delivery("existing")!.phase).toBe("pending")
   f.event({
     type: "conversation.item.created",
     item: { id: "existing", type: "function_call_output", call_id: "call", output: "{}" },
@@ -521,6 +524,170 @@ test("inherited results reject pending ordinary output collisions without losing
   expect(f.state.errors).toEqual([])
   expect(f.speech.boundary().quiet).toBe(false)
 })
+
+for (const kind of ["ordinary", "semantic"]) {
+  test(`${kind} delivery retains immutable exact provider acceptance and generation observations`, () => {
+    const f = fixture()
+    if (kind === "ordinary") f.speech.result("exact", "call", "{}", 5000)
+    if (kind === "semantic") f.speech.semantic("exact", "verified", 5000)
+    const item =
+      kind === "ordinary"
+        ? {
+            type: "conversation.item.created",
+            item: { id: "exact", type: "function_call_output", call_id: "call", output: "{}" },
+          }
+        : semantic("exact", "verified")
+    f.event({ ...item, event_id: "server_accept" })
+    const accepted = f.speech.delivery("exact")!.accepted!
+    expect(accepted).toEqual({ eventID: "server_accept" })
+    expect(Object.isFrozen(accepted)).toBe(true)
+    f.event({ ...item, type: "conversation.item.done", event_id: "server_duplicate" })
+    expect(f.speech.delivery("exact")!.accepted).toBe(accepted)
+    expect(f.state.events).toHaveLength(1)
+    const metadata = (f.state.events[0].response as Record<string, unknown>).metadata
+    f.event({ type: "response.created", event_id: "server_created", response: { id: "response_exact", metadata } })
+    f.event({
+      type: "response.done",
+      event_id: "server_generated",
+      response: { id: "response_exact", metadata, status: "completed" },
+    })
+    const generated = f.speech.delivery("exact")!.generated!
+    expect(generated).toEqual({ eventID: "server_generated", responseID: "response_exact" })
+    expect(Object.isFrozen(generated)).toBe(true)
+    f.event({
+      type: "response.done",
+      event_id: "server_duplicate_done",
+      response: { id: "response_exact", metadata, status: "completed" },
+    })
+    expect(f.speech.delivery("exact")!.generated).toBe(generated)
+    expect(f.speech.delivery("exact")!.providerSettled).toBe(false)
+    expect("played" in f.speech.delivery("exact")!).toBe(false)
+  })
+}
+
+test("missing or invalid server event identities cannot manufacture durable provider observations", () => {
+  for (const eventID of [undefined, "", "界", "a".repeat(129)]) {
+    const f = fixture()
+    f.speech.result("exact", "call", "{}")
+    f.event({
+      type: "conversation.item.created",
+      event_id: eventID,
+      item: { id: "exact", type: "function_call_output", call_id: "call", output: "{}" },
+    })
+    expect(f.speech.delivery("exact")!.accepted).toBeUndefined()
+    const metadata = (f.state.events[0].response as Record<string, unknown>).metadata
+    f.event({ type: "response.created", response: { id: "response_exact", metadata } })
+    f.event({
+      type: "response.done",
+      event_id: eventID,
+      response: { id: "response_exact", metadata, status: "completed" },
+    })
+    expect(f.speech.delivery("exact")!.generated).toBeUndefined()
+    expect(f.speech.delivery("exact")!.phase).toBe("generated")
+  }
+})
+
+test("a later exact acceptance event may fill a missing receipt without requesting speech twice", () => {
+  const f = fixture()
+  f.result("exact")
+  f.event({
+    type: "conversation.item.done",
+    event_id: "server_late_accept",
+    item: { id: "exact", type: "function_call_output", call_id: "call_1", output: "{}" },
+  })
+  expect(f.speech.delivery("exact")!.accepted).toEqual({ eventID: "server_late_accept" })
+  expect(f.state.events).toHaveLength(1)
+})
+
+for (const fault of ["missing-created", "metadata", "status", "response"]) {
+  test(`generation observation refuses ${fault} correlation`, () => {
+    const f = fixture()
+    f.result("exact")
+    const metadata = (f.state.events[0].response as Record<string, unknown>).metadata
+    if (fault !== "missing-created") f.event({ type: "response.created", response: { id: "response_exact", metadata } })
+    f.event({
+      type: "response.done",
+      event_id: "server_done",
+      response: {
+        id: fault === "response" ? "other_response" : "response_exact",
+        metadata: fault === "metadata" ? {} : metadata,
+        status: fault === "status" ? "cancelled" : "completed",
+      },
+    })
+    expect(f.speech.delivery("exact")!.generated).toBeUndefined()
+    expect(f.speech.delivery("exact")!.phase).toBe("uncertain")
+    expect(f.state.events).toHaveLength(1)
+  })
+}
+
+test("ordinary results preserve one absolute deadline through acknowledgement and response creation", () => {
+  const f = fixture()
+  f.state.now = 4500
+  f.speech.result("exact", "call", "{}", 5000)
+  f.event({
+    type: "conversation.item.created",
+    event_id: "server_accept",
+    item: { id: "exact", type: "function_call_output", call_id: "call", output: "{}" },
+  })
+  f.advance(499)
+  expect(f.speech.delivery("exact")!.phase).toBe("accepted")
+  f.advance(1)
+  expect(f.speech.delivery("exact")!.phase).toBe("uncertain")
+  expect(f.speech.delivery("exact")!.deadline).toBe(5000)
+  f.advance(30_000)
+  expect(f.state.events).toHaveLength(1)
+  expect(() => f.speech.result("exact", "call", "{}", f.state.now + 5000)).toThrow("delivery boundary")
+})
+
+test("accepted delivery cannot begin generation after its original deadline while held", () => {
+  const f = fixture()
+  f.speech.hold(true)
+  f.result("exact")
+  expect(f.state.events).toEqual([])
+  f.advance(30_000)
+  f.speech.hold(false)
+  f.speech.flush()
+  expect(f.state.events).toEqual([])
+  expect(f.speech.delivery("exact")!.phase).toBe("uncertain")
+  expect(f.state.errors).toHaveLength(1)
+})
+
+for (const kind of ["ordinary", "semantic"]) {
+  test(`${kind} observed response creation cannot extend the original generation deadline`, () => {
+    const f = fixture()
+    f.state.now = 4500
+    if (kind === "ordinary") f.speech.result("exact", "call", "{}", 5000)
+    if (kind === "semantic") f.speech.semantic("exact", "verified", 5000)
+    const item =
+      kind === "ordinary"
+        ? {
+            type: "conversation.item.created",
+            item: { id: "exact", type: "function_call_output", call_id: "call", output: "{}" },
+          }
+        : semantic("exact", "verified")
+    f.event({ ...item, event_id: "server_accept" })
+    const metadata = (f.state.events[0].response as Record<string, unknown>).metadata
+    f.event({ type: "response.created", event_id: "server_created", response: { id: "response_exact", metadata } })
+    f.advance(499)
+    expect(f.speech.delivery("exact")!.phase).toBe("accepted")
+    f.advance(1)
+    expect(f.speech.delivery("exact")!.phase).toBe("uncertain")
+    expect(f.speech.delivery("exact")!.deadline).toBe(5000)
+    expect(f.speech.delivery("exact")!.generated).toBeUndefined()
+    expect(f.speech.delivery("exact")!.providerSettled).toBe(false)
+    expect(f.state.errors).toHaveLength(1)
+    f.event({
+      type: "response.done",
+      event_id: "server_late_done",
+      response: { id: "response_exact", metadata, status: "completed" },
+    })
+    f.advance(60_000)
+    expect(f.speech.delivery("exact")!.phase).toBe("uncertain")
+    expect(f.speech.delivery("exact")!.generated).toBeUndefined()
+    expect(f.state.events).toHaveLength(1)
+    expect(f.state.errors).toHaveLength(1)
+  })
+}
 
 test("inherited results require meaningful UTF-8 text within the byte limit", () => {
   for (const text of ["", " \n\t", "界".repeat(5462)]) {

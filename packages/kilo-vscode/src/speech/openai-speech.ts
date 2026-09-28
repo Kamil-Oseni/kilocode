@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { cancelled } from "../shared/voice-interruption"
 
 type Work = { id: string; started: number; rung: number; background: boolean; status?: "accepted" | "running" }
-type Request = { id: string; kind: "narration" | "result"; response?: string; deliveries?: string[] }
+type Request = { id: string; kind: "narration" | "result"; response?: string; observed?: true; deliveries?: string[] }
 type Narration = Readonly<{
   version: 1
   started: number
@@ -16,6 +16,10 @@ type Delivery = {
   hash: string
   assigned: boolean
   settled: boolean
+  call?: string
+  semantic?: true
+  accepted?: Readonly<{ eventID: string }>
+  generated?: Readonly<{ eventID: string; responseID: string }>
 }
 type Clock = {
   now: () => number
@@ -192,7 +196,7 @@ export class OpenAISpeech {
     }
     this.activity()
     const hash = createHash("sha256").update(text).digest("hex")
-    const delivery: Delivery = { deadline, hash, phase: "pending", assigned: false, settled: false }
+    const delivery: Delivery = { deadline, hash, phase: "pending", assigned: false, settled: false, semantic: true }
     this.deliveries.set(id, delivery)
     this.outputs.set(id, {
       semantic: true,
@@ -211,7 +215,13 @@ export class OpenAISpeech {
   delivery(id: string) {
     const value = this.deliveries.get(id)
     if (!value) return
-    return Object.freeze({ phase: value.phase, deadline: value.deadline, providerSettled: value.settled })
+    return Object.freeze({
+      phase: value.phase,
+      deadline: value.deadline,
+      providerSettled: value.settled,
+      ...(value.accepted ? { accepted: value.accepted } : {}),
+      ...(value.generated ? { generated: value.generated } : {}),
+    })
   }
 
   observe(id: string, status: unknown) {
@@ -228,18 +238,37 @@ export class OpenAISpeech {
     this.work = undefined
   }
 
-  result(id: string, call: string, output: string) {
+  result(id: string, call: string, output: string, deadline = this.time.now() + 30_000) {
     if (this.closed) return
-    this.activity(!identifier(id) || !identifier(call))
+    if (
+      !identifier(id) ||
+      !identifier(call) ||
+      typeof output !== "string" ||
+      !Number.isFinite(deadline) ||
+      deadline <= this.time.now() ||
+      deadline - this.time.now() > 30_000 ||
+      this.deliveries.size >= 64 ||
+      this.deliveries.has(id) ||
+      this.outputs.has(id)
+    ) {
+      this.activity(true)
+      throw new Error("Voice result has an invalid delivery boundary")
+    }
+    this.activity()
+    const hash = createHash("sha256").update(output).digest("hex")
+    const delivery: Delivery = { deadline, hash, call, phase: "pending", assigned: false, settled: false }
+    this.deliveries.set(id, delivery)
     this.outputs.set(id, {
       call,
-      hash: createHash("sha256").update(output).digest("hex"),
+      hash,
       cancel: this.time.after(() => {
         if (this.closed || !this.outputs.has(id)) return
         this.outputs.delete(id)
+        delivery.phase = "uncertain"
+        this.uncertain = true
         this.activity(true)
         if (this.current()) this.failed("Voice result delivery is unconfirmed. Review the result in the conversation.")
-      }, 30_000),
+      }, deadline - this.time.now()),
     })
   }
 
@@ -274,11 +303,12 @@ export class OpenAISpeech {
     this.audio(event)
     if (event.type === "conversation.item.done" || event.type === "conversation.item.created") {
       const item = record(event.item)
-      if (typeof item?.id === "string") this.acknowledge(item)
+      if (typeof item?.id === "string") this.acknowledge(item, event.event_id)
     }
     const response = record(event.response)
     if (event.type === "response.created" && response && identifier(response.id)) this.created(response)
-    if (event.type === "response.done" && response && identifier(response.id)) return this.done(response)
+    if (event.type === "response.done" && response && identifier(response.id))
+      return this.done(response, event.event_id)
     if (event.type === "error") return cancelled(event, this.cancellations) || this.error(record(event.error))
     return false
   }
@@ -349,15 +379,19 @@ export class OpenAISpeech {
     }
   }
 
-  private acknowledge(item: Record<string, unknown>) {
+  private acknowledge(item: Record<string, unknown>, event: unknown) {
     const id = String(item.id)
     const output = this.outputs.get(id)
-    if (!output) return
+    const delivery = this.deliveries.get(id)
+    if (!output) {
+      if (delivery && !delivery.accepted && identifier(event) && acknowledged(item, delivery))
+        delivery.accepted = Object.freeze({ eventID: event })
+      return
+    }
     if (!acknowledged(item, output)) {
       this.activity(true)
       output.cancel()
       this.outputs.delete(id)
-      const delivery = this.deliveries.get(id)
       if (delivery) {
         delivery.phase = "uncertain"
         this.uncertain = true
@@ -368,8 +402,10 @@ export class OpenAISpeech {
     output.cancel()
     this.activity()
     this.outputs.delete(id)
-    const delivery = this.deliveries.get(id)
-    if (delivery) delivery.phase = "accepted"
+    if (delivery) {
+      delivery.phase = "accepted"
+      if (identifier(event)) delivery.accepted = Object.freeze({ eventID: event })
+    }
     this.pending = true
   }
 
@@ -393,19 +429,35 @@ export class OpenAISpeech {
       request.deliveries = [...this.deliveries]
         .filter(([, value]) => value.phase === "accepted" && !value.assigned)
         .map(([id]) => id)
+      if (request.deliveries.some((id) => this.deliveries.get(id)!.deadline <= this.time.now())) {
+        for (const id of request.deliveries) this.deliveries.get(id)!.phase = "uncertain"
+        this.uncertain = true
+        this.activity(true)
+        if (this.current()) this.failed("Voice response delivery deadline expired. Work remains in the conversation.")
+        return
+      }
       for (const id of request.deliveries) this.deliveries.get(id)!.assigned = true
     }
     this.request = request
     this.requests.set(request.id, request)
     if (this.requests.size > 256) this.requests.delete(this.requests.keys().next().value!)
-    this.watchdog = this.time.after(() => {
-      if (this.closed || this.request !== request || request.response) return
-      // An unacknowledged request may already be producing audio. Never retry it.
-      this.uncertain = true
-      for (const id of request.deliveries ?? []) this.deliveries.get(id)!.phase = "uncertain"
-      this.activity(true)
-      if (this.current()) this.failed("Voice response delivery is unconfirmed. Work remains in the conversation.")
-    }, 30_000)
+    this.watchdog = this.time.after(
+      () => {
+        if (this.closed || this.request !== request || (request.response && !request.deliveries?.length)) return
+        // Creation or completion may be unconfirmed while audio is produced. Never retry it.
+        this.uncertain = true
+        for (const id of request.deliveries ?? []) this.deliveries.get(id)!.phase = "uncertain"
+        this.activity(true)
+        if (this.current()) this.failed("Voice response delivery is unconfirmed. Work remains in the conversation.")
+      },
+      Math.max(
+        0,
+        Math.min(
+          30_000,
+          ...(request.deliveries ?? []).map((id) => this.deliveries.get(id)!.deadline - this.time.now()),
+        ),
+      ),
+    )
     this.send({
       type: "response.create",
       event_id: request.id,
@@ -444,8 +496,10 @@ export class OpenAISpeech {
     }
     if (request.response && request.response !== id) return
     request.response = id
+    if (matches(request, response)) request.observed = true
     if (this.speaking || this.turn || this.responses.size > 1 || this.playback.size) this.silence(request)
     if (this.request !== request) return
+    if (request.deliveries?.length) return
     this.watchdog?.()
     this.watchdog = undefined
   }
@@ -468,20 +522,28 @@ export class OpenAISpeech {
     while (this.cancellations.size > 512) this.cancellations.delete(this.cancellations.values().next().value!)
   }
 
-  private delivered(request: Request | undefined, response: Record<string, unknown>) {
+  private delivered(request: Request | undefined, response: Record<string, unknown>, event: unknown) {
     const valid =
-      request?.response === response.id && this.responses.has(String(response.id)) && !this.uncertain && !this.fault
+      request?.observed &&
+      matches(request, response) &&
+      this.responses.has(String(response.id)) &&
+      !this.uncertain &&
+      !this.fault
     for (const id of request?.deliveries ?? []) {
       const delivery = this.deliveries.get(id)!
+      if (delivery.phase === "generated") continue
       if (delivery.phase !== "uncertain")
-        delivery.phase = valid && response.status === "completed" ? "generated" : "uncertain"
+        delivery.phase =
+          valid && response.status === "completed" && this.time.now() <= delivery.deadline ? "generated" : "uncertain"
+      if (delivery.phase === "generated" && !delivery.generated && identifier(event) && identifier(response.id))
+        delivery.generated = Object.freeze({ eventID: event, responseID: response.id })
       if (!valid) this.uncertain = true
     }
   }
 
-  private done(response: Record<string, unknown>) {
+  private done(response: Record<string, unknown>, event: unknown) {
     const request = this.owned(response)
-    this.delivered(request, response)
+    this.delivered(request, response, event)
     this.responses.delete(String(response.id))
     if (request === this.request && request && (!request.response || request.response === response.id)) {
       this.watchdog?.()
@@ -567,6 +629,13 @@ function acknowledged(item: Record<string, unknown>, output: { semantic?: true; 
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+
+function matches(request: Request, response: Record<string, unknown>) {
+  const metadata = record(response.metadata)
+  return (
+    request.response === response.id && metadata?.raya_request === request.id && metadata.raya_kind === request.kind
+  )
 }
 
 function identifier(value: unknown): value is string {

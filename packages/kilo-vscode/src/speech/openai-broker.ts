@@ -11,6 +11,7 @@ import { OPENAI_VOICE_MODEL } from "../shared/speech"
 import { sameDirectory } from "../kilo-provider-utils"
 import { valid, type Handoff } from "../shared/voice-handoff"
 import { OpenAIHistory } from "./openai-history"
+import * as Obligations from "./openai-obligation"
 
 type Config = {
   key: string
@@ -41,11 +42,26 @@ type Reservation = {
 
 type Input = { requestID: string; sessionID: string; sdp: string }
 type Work = { id: string; name: unknown; arguments: string; responseID?: string; itemID?: string }
+type Obligation = {
+  reference: Obligations.Reference
+  owner: Claim
+  abort: AbortController
+  task?: Promise<void>
+  observation?: Obligations.Observation
+  item?: string
+  offer?: Obligations.OfferReceipt
+  accepted?: boolean
+  generated?: boolean
+  uncertain: boolean
+  publication: Promise<void>
+  timing?: ReturnType<OpenAISpeech["narration"]>
+}
 type Claim = {
   input: Input
   capability: string
   abort: AbortController
   calls: Map<string, string>
+  admissions: Set<string>
   responses: Map<string, Reservation>
   settled: Set<string>
   queue: Promise<void>
@@ -78,6 +94,7 @@ type Claim = {
   configured: boolean
   buffered: Record<string, unknown>[]
   warm?: ReturnType<typeof setTimeout>
+  narrating?: string
 }
 
 type Replacement = {
@@ -92,6 +109,7 @@ type Replacement = {
   previous?: string
   deadline?: number
   preparing?: Promise<{ version: 1; readyID: string; sourceRevision: number; sourceHash: string }>
+  manifest?: Obligations.Manifest
 }
 
 const origin = "https://api.openai.com"
@@ -149,6 +167,7 @@ export class OpenAIBroker {
   private disposed = false
   private logical?: string
   private totals: VoiceUsage = empty()
+  private obligations = new Map<string, Obligation>()
 
   constructor(
     private readonly request: typeof fetch = fetch,
@@ -184,6 +203,8 @@ export class OpenAIBroker {
     this.cancellation = undefined
     this.logical = input.requestID
     this.totals = empty()
+    for (const entry of this.obligations.values()) entry.abort.abort()
+    this.obligations.clear()
     this.claim = claim
     claim.opening = this.open(claim, load, ready).catch(async (error: unknown) => {
       const cancelled = claim.cancelled
@@ -199,6 +220,7 @@ export class OpenAIBroker {
       capability: randomBytes(32).toString("hex"),
       abort: new AbortController(),
       calls: new Map(),
+      admissions: new Set(),
       responses: new Map(),
       settled: new Set(),
       images: new OpenAIImages(),
@@ -300,8 +322,9 @@ export class OpenAIBroker {
       this.matching(handoff)
       if (performance.now() >= deadline) throw new Error("Voice replacement did not reach a quiet boundary in time")
       const checkpoint = await state.source.transcript!.checkpoint()
+      await Promise.all([...this.obligations.values()].map((entry) => entry.publication))
       const boundary = state.source.speech.boundary()
-      if (!checkpoint.ready || !boundary.quiet || !this.authority(state.source)) {
+      if (!checkpoint.ready || !this.idle(state.source)) {
         await delay(signal, 100)
         continue
       }
@@ -335,6 +358,7 @@ export class OpenAIBroker {
       const latest = await state.source.transcript!.checkpoint()
       if (!unchanged(latest, { ...checkpoint, boundary: boundary.epoch }, state.source.speech.boundary())) continue
       const readyID = await this.arm(state, checkpoint, boundary.epoch)
+      state.manifest = await this.manifest(state)
       const confirmed = await state.source.transcript!.checkpoint()
       if (
         !confirmed.ready ||
@@ -440,6 +464,7 @@ export class OpenAIBroker {
       state.target.configured = true
     }
     const checkpoint = await state.source.transcript!.checkpoint()
+    await Promise.all([...this.obligations.values()].map((entry) => entry.publication))
     const boundary = state.source.speech.boundary()
     this.matching(handoff)
     if (
@@ -450,6 +475,10 @@ export class OpenAIBroker {
       boundary.epoch !== state.checkpoint.boundary
     )
       throw new Error("Voice replacement source changed before activation")
+    const manifest = await this.retained(state)
+    this.matching(handoff)
+    if (!unchanged(checkpoint, { ...state.checkpoint, boundary: boundary.epoch }, state.source.speech.boundary()))
+      throw new Error("Voice changed while retained work was checked")
     const body = {
       version: 1,
       generation: state.source.binding!.generation,
@@ -459,10 +488,12 @@ export class OpenAIBroker {
       sourceRevision: checkpoint.revision,
       sourceHash: checkpoint.fingerprint,
       readyID: state.checkpoint.readyID,
+      manifestID: manifest.manifestID,
+      manifestHash: manifest.hash,
     }
     state.phase = "committing"
     const path = `/session/${encodeURIComponent(state.source.binding!.id)}/handoff`
-    const receipt = await this.backend(state.source, `${path}/activate`, {
+    const result = await this.backend(state.source, `${path}/activate-retained`, {
       method: "POST",
       body: JSON.stringify(body),
     }).catch(async (error: unknown) => {
@@ -471,8 +502,14 @@ export class OpenAIBroker {
         throw error
       }
       state.phase = "unknown"
-      return this.backend(state.source, `${path}/receipt`, { method: "GET" })
+      return this.backend(state.source, `${path}/retained-receipt`, { method: "GET" })
     })
+    const transferred = Obligations.transfer(result)
+    if (JSON.stringify(transferred.manifest) !== JSON.stringify(manifest)) {
+      state.phase = "unknown"
+      throw new Error("Voice retained activation manifest changed")
+    }
+    const receipt = transferred.activation
     if (!activation(receipt, state, body)) {
       state.phase = "unknown"
       throw new Error("Voice replacement activation receipt changed")
@@ -506,8 +543,30 @@ export class OpenAIBroker {
     this.candidate = undefined
     state.target.warming = false
     state.phase = "cutover"
+    this.inherit(state)
     // Work authority becomes available only after configuration, durable authority and media acknowledgement.
     for (const event of state.target.buffered.splice(0)) this.event(state.target, event)
+  }
+
+  private inherit(state: Replacement) {
+    const tasks: Promise<void>[] = []
+    for (const ref of state.manifest!.references) {
+      const entry = this.adopt(state.source, ref)
+      entry.abort.abort()
+      if (entry.offer || entry.observation?.delivery.offer || entry.uncertain) continue
+      if (state.source.narrating === ref.id) entry.timing = state.source.speech.narration()
+      entry.owner = state.target
+      entry.abort = new AbortController()
+      entry.task = undefined
+      if (entry.timing && ["accepted", "running"].includes(String(entry.observation?.receipt.status))) {
+        state.target.speech.restore(ref.id, entry.timing)
+        state.target.narrating = ref.id
+      }
+      tasks.push(this.collect(entry))
+    }
+    state.target.queue = Promise.all(tasks)
+      .then(() => undefined)
+      .catch(() => this.block(state.target))
   }
 
   async retire(handoff: Handoff) {
@@ -515,6 +574,7 @@ export class OpenAIBroker {
     const state = this.matching(handoff)
     if (state.phase !== "cutover" || (this.retiring !== state.source && !state.source.closing))
       throw new Error("Voice source retirement does not match the committed replacement")
+    await Promise.all([...this.obligations.values()].map((entry) => entry.publication))
     const error = await this.close(state.source)
     if (error) return { confirmed: false, error }
     this.replacement = undefined
@@ -539,6 +599,10 @@ export class OpenAIBroker {
     state.source.speech.hold(false)
     this.replacement = undefined
     this.cancellation = state.identity
+    for (const entry of this.obligations.values()) {
+      if (entry.owner === state.source && !entry.offer && !entry.uncertain)
+        void this.collect(entry).catch(() => undefined)
+    }
     return { restore: true }
   }
 
@@ -668,6 +732,7 @@ export class OpenAIBroker {
   async stop(requestID?: string) {
     const claims = [this.claim, this.candidate, this.retiring].filter((claim): claim is Claim => !!claim)
     if (requestID && requestID !== this.logical && !claims.some((claim) => claim.input.requestID === requestID)) return
+    for (const entry of this.obligations.values()) entry.abort.abort()
     for (const claim of claims) {
       claim.fenced = true
       claim.ending = true
@@ -697,6 +762,10 @@ export class OpenAIBroker {
 
   private authority(claim: Claim) {
     return this.claim === claim && !claim.warming && !claim.fenced && !claim.ending && this.current(claim)
+  }
+
+  private idle(claim: Claim) {
+    return this.authority(claim) && !claim.admissions.size && claim.speech.boundary().quiet
   }
 
   private assert(claim: Claim) {
@@ -1088,6 +1157,7 @@ export class OpenAIBroker {
     if (claim.images.receive(event)) return
     if (event.type === "error" && cancelled(event, claim.cancellations)) return
     const handled = claim.speech.event(event)
+    this.deliveries(claim)
     if (event.type === "response.done" && !handled) this.completed(claim, event.response)
     if (event.type === "error" && !handled)
       claim.failed(
@@ -1192,6 +1262,7 @@ export class OpenAIBroker {
     }
     if (claim.calls.size >= 64) return this.block(claim)
     claim.calls.set(id, digest)
+    claim.admissions.add(id)
     const work: Work = {
       id,
       name: event.name,
@@ -1206,6 +1277,7 @@ export class OpenAIBroker {
         if (!claim.blocked && this.authority(claim)) await this.work(claim, work)
       })
       .catch(() => this.block(claim))
+      .finally(() => claim.admissions.delete(id))
   }
 
   private block(claim: Claim) {
@@ -1234,6 +1306,7 @@ export class OpenAIBroker {
       this.output(claim, id, { status: "failed", error: "Unsupported voice work request. No work was started." })
       return
     }
+    if (this.obligations.size >= 64) throw new Error("Voice retained work allowance was exhausted before admission")
     const binding = claim.binding!
     const path = `/session/${encodeURIComponent(binding.id)}/calls`
     claim.speech.start(id)
@@ -1248,36 +1321,252 @@ export class OpenAIBroker {
         ...(event.itemID ? { itemID: event.itemID } : {}),
       }),
     })
-    const result = await this.result(claim, id, `${path}/${encodeURIComponent(id)}`, initial)
-    claim.speech.finish()
-    this.output(claim, id, result)
+    receipt(initial, claim, id)
+    const ref = await this.discover(claim, id, initial)
+    const entry = this.adopt(claim, ref)
+    claim.admissions.delete(id)
+    claim.narrating = ref.id
+    claim.speech.observe(id, initial.status)
+    await this.collect(entry)
   }
 
-  private async result(claim: Claim, id: string, path: string, initial: Record<string, unknown>) {
-    receipt(initial, claim, id)
-    claim.speech.observe(id, initial.status)
-    let result = initial
-    const deadline = Date.now() + 30 * 60_000
-    while (result.status === "accepted" || result.status === "running") {
-      this.assert(claim)
-      if (Date.now() >= deadline)
-        return {
-          status: "unknown",
-          error: "Work is still unresolved. Review the existing conversation; do not automatically repeat it.",
-        }
-      await delay(claim.abort.signal)
-      result = await this.backend(claim, path, { method: "GET" })
-      receipt(result, claim, id, initial)
-      claim.speech.observe(id, result.status)
+  private async discover(claim: Claim, id: string, initial: Record<string, unknown>) {
+    const binding = claim.binding!
+    const references = Obligations.registry(
+      await this.backend(claim, `/session/${encodeURIComponent(binding.id)}/obligations`, { method: "GET" }),
+    )
+    const ref = references.find((ref) => ref.originID === binding.id && ref.callID === id)
+    if (
+      !ref ||
+      ref.originGeneration !== binding.generation ||
+      ref.receiptID !== initial.id ||
+      ref.messageID !== initial.messageID ||
+      ref.createdAt !== initial.createdAt ||
+      ref.parentSessionID !== claim.input.sessionID ||
+      !sameDirectory(ref.directory, claim.config!.directory)
+    )
+      throw new Error("Voice work reference does not match its admission")
+    return ref
+  }
+
+  private adopt(claim: Claim, ref: Obligations.Reference) {
+    const prior = this.obligations.get(ref.id)
+    if (prior) {
+      if (JSON.stringify(prior.reference) !== JSON.stringify(ref)) throw new Error("Voice work reference changed")
+      return prior
     }
-    if (!["completed", "failed", "cancelled", "unknown"].includes(String(result.status)))
-      throw new Error("Invalid voice work result")
-    return result
+    if (this.obligations.size >= 64) throw new Error("Voice retained work allowance was exhausted")
+    const entry: Obligation = {
+      reference: Object.freeze({ ...ref }),
+      owner: claim,
+      abort: new AbortController(),
+      uncertain: false,
+      publication: Promise.resolve(),
+    }
+    this.obligations.set(ref.id, entry)
+    return entry
+  }
+
+  private async manifest(state: Replacement) {
+    const value = Obligations.manifest(
+      await this.backend(state.target, `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/obligations`, {
+        method: "GET",
+      }),
+    )
+    this.matching(state.identity)
+    if (
+      value.sourceID !== state.source.binding!.id ||
+      value.sourceGeneration !== state.source.binding!.generation ||
+      value.candidateID !== state.target.binding!.id ||
+      value.candidateGeneration !== state.target.binding!.generation
+    )
+      throw new Error("Voice retained manifest belongs to another handoff")
+    for (const ref of value.references) {
+      if (
+        ref.parentSessionID !== state.source.input.sessionID ||
+        !sameDirectory(ref.directory, state.source.config!.directory)
+      )
+        throw new Error("Voice retained work belongs to another scope")
+      const prior = this.obligations.get(ref.id)
+      if (prior && JSON.stringify(prior.reference) !== JSON.stringify(ref))
+        throw new Error("Voice retained work reference changed")
+    }
+    return value
+  }
+
+  private async retained(state: Replacement) {
+    if (state.source.admissions.size) throw new Error("Voice work admission is still pending")
+    const value = await this.manifest(state)
+    if (!state.manifest || value.manifestID !== state.manifest.manifestID || value.hash !== state.manifest.hash)
+      throw new Error("Voice retained work changed before activation")
+    return value
+  }
+
+  private collecting(entry: Obligation, claim: Claim, abort: AbortController) {
+    return entry.owner === claim && entry.abort === abort && !abort.signal.aborted && this.authority(claim)
+  }
+
+  private collect(entry: Obligation) {
+    if (entry.task) return entry.task
+    const claim = entry.owner
+    const abort = entry.abort
+    entry.task = this.poll(entry, claim, abort)
+      .catch((error: unknown) => {
+        if (abort.signal.aborted || entry.owner !== claim) return
+        entry.uncertain = true
+        this.block(claim)
+        throw error
+      })
+      .finally(() => {
+        if (entry.abort === abort) entry.task = undefined
+      })
+    return entry.task
+  }
+
+  private async poll(entry: Obligation, claim: Claim, abort: AbortController) {
+    const ref = entry.reference
+    const path = `/session/${encodeURIComponent(claim.binding!.id)}/obligations/${encodeURIComponent(ref.id)}`
+    const deadline = ref.deadline ?? ref.createdAt + 30 * 60_000
+    while (this.collecting(entry, claim, abort) && !entry.uncertain) {
+      const value = Obligations.observation(
+        await this.backend(claim, path, { method: "GET", signal: abort.signal }),
+        ref,
+      )
+      if (!this.collecting(entry, claim, abort)) return
+      entry.observation = value
+      if (value.delivery.offer) return
+      if (Date.now() >= deadline) {
+        entry.uncertain = true
+        claim.speech.finish()
+        claim.failed("Voice delivery deadline expired. The existing work remains in the conversation.")
+        return
+      }
+      if (value.receipt.status !== "accepted" && value.receipt.status !== "running") {
+        if (this.presentable(claim)) await this.presentation(entry, value)
+        return
+      }
+      claim.speech.observe(ref.originID === claim.binding!.id ? ref.callID : ref.id, value.receipt.status)
+      await delay(abort.signal)
+    }
+  }
+
+  private presentable(claim: Claim) {
+    return (
+      this.authority(claim) &&
+      !["quiesced", "committing", "committed", "unknown"].includes(this.replacement?.phase ?? "")
+    )
+  }
+
+  private async presentation(entry: Obligation, value: Obligations.Observation) {
+    const claim = entry.owner
+    const binding = claim.binding!
+    const item = `raya_result_${randomBytes(12).toString("hex")}`
+    const body = {
+      action: "offer",
+      version: 1,
+      generation: binding.generation,
+      offerID: `raya_offer_${randomBytes(12).toString("hex")}`,
+      providerCallID: binding.providerCallID,
+      itemID: item,
+      resultHash: value.resultHash,
+      deliveryEpoch: value.delivery.epoch + 1,
+    }
+    entry.item = item
+    // Persist the intent before provider dispatch. Unknown intent is never recreated.
+    entry.uncertain = true
+    const path = `/session/${encodeURIComponent(binding.id)}/obligations/${encodeURIComponent(entry.reference.id)}/delivery`
+    entry.offer = Obligations.offer(
+      await this.backend(claim, path, { method: "POST", body: JSON.stringify(body) }),
+      entry.reference,
+      body,
+      binding.id,
+    )
+    if (entry.offer.offer.targetID !== binding.id) throw new Error("Voice result offer belongs to another lane")
+    if (!this.presentable(claim) || entry.abort.signal.aborted) return
+    const remaining =
+      Math.min(
+        entry.offer.offer.offeredAt + 30_000,
+        entry.reference.deadline ?? entry.reference.createdAt + 30 * 60_000,
+      ) - Date.now()
+    if (remaining <= 0) return
+    entry.uncertain = false
+    const deadline = performance.now() + remaining
+    const ordinary = entry.reference.originID === binding.id && entry.reference.originGeneration === binding.generation
+    claim.speech.finish()
+    claim.transcript?.ignore(item)
+    const text = Obligations.envelope(value.receipt)
+    if (ordinary) claim.speech.result(item, entry.reference.callID, text, deadline)
+    if (!ordinary) claim.speech.semantic(item, text, deadline)
+    this.send(claim, {
+      type: "conversation.item.create",
+      event_id: item,
+      item: ordinary
+        ? { id: item, type: "function_call_output", call_id: entry.reference.callID, output: text }
+        : { id: item, type: "message", role: "user", content: [{ type: "input_text", text }] },
+    })
+  }
+
+  private deliveries(claim: Claim) {
+    for (const entry of this.obligations.values()) {
+      if (entry.owner !== claim || !entry.item || !entry.offer) continue
+      const value = claim.speech.delivery(entry.item)
+      if (value?.phase === "uncertain") entry.uncertain = true
+      if (value?.accepted && !entry.accepted) {
+        entry.accepted = true
+        entry.publication = entry.publication
+          .then(() => this.acknowledge(entry, claim, "accepted", value.accepted!))
+          .catch(() => {
+            entry.uncertain = true
+            this.block(claim)
+          })
+      }
+      if (value?.generated && !entry.generated) {
+        entry.generated = true
+        entry.publication = entry.publication
+          .then(() => this.acknowledge(entry, claim, "generated", value.generated!))
+          .catch(() => {
+            entry.uncertain = true
+            this.block(claim)
+          })
+      }
+    }
+  }
+
+  private async acknowledge(
+    entry: Obligation,
+    claim: Claim,
+    phase: "accepted" | "generated",
+    receipt: { eventID: string; responseID?: string },
+  ) {
+    if (entry.uncertain && phase === "generated") return
+    const offer = entry.offer!.offer
+    const body = {
+      action: "ack",
+      version: 1,
+      generation: offer.targetGeneration,
+      ackID: `raya_ack_${randomBytes(12).toString("hex")}`,
+      offerID: offer.offerID,
+      phase,
+      eventID: receipt.eventID,
+      providerCallID: offer.providerCallID,
+      itemID: offer.itemID,
+      ...(receipt.responseID ? { responseID: receipt.responseID } : {}),
+      resultHash: offer.resultHash,
+      deliveryEpoch: offer.deliveryEpoch,
+    }
+    const path = `/session/${encodeURIComponent(offer.targetID)}/obligations/${encodeURIComponent(entry.reference.id)}/delivery`
+    Obligations.acknowledgement(
+      await this.backend(claim, path, { method: "POST", body: JSON.stringify(body) }),
+      entry.reference,
+      body,
+      offer.targetID,
+    )
   }
 
   private output(claim: Claim, id: string, result: unknown) {
     const item = `raya_result_${randomBytes(12).toString("hex")}`
     const output = JSON.stringify(result)
+    claim.transcript?.ignore(item)
     claim.speech.result(item, id, output)
     this.send(claim, {
       type: "conversation.item.create",

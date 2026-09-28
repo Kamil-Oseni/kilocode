@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 19:16 EDT - canonical Live routing published
+
+Source `e456a2d58f` is committed and pushed. All 29 normal TypeScript push tasks passed (one fresh CLI task, 28 cached), followed by the cached JetBrains gate. The 22 CLI routing/contracts tests, eight result-transport tests, full CGO-zero Go suite/vet and focused checks below pass. Next implement missing-intent clarification/recovery and actual runtime permission journeys before MF UI activation. External MF remains undeployed; installed snapshot/default direct Live UI unchanged. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. Desktop remains stopped after Escape, MCP deferred and unrelated user edits protected.
+
 ## ChatGPT 2026-09-28 19:13 EDT - canonical Live delegation source checks
 
 Managed GPT-Live now persists bounded version-one caption/delegation evidence, dispatches once through the original canonical parent task and retains its full result in chat. Original provider delegation IDs remain separate from task IDs. One scope-owned collector persists each result offer before a single authenticated version-two delivery attempt; exact session/delegation/receipt acknowledgement confirms acceptance, never playback. Lost or contradictory responses remain unknown without replay. Stop aborts delivery, preserves observed acknowledgement truth and retains late task results. Network delivery runs outside the caption gate; cache ownership is bounded without evicting active work. Go now requires exact backend acceptance during active Live callbacks and includes the original provider session on captions/delegations.

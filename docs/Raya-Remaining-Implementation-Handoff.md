@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 19:16 EDT - canonical Live routing pushed
+
+Source `e456a2d58f` is pushed with all 29 normal TypeScript tasks passing (one fresh CLI task, 28 cached) and the cached JetBrains gate. Focused source/transport/Go checks below pass. Continue with missing-intent clarification/recovery and actual runtime permission/goal journeys before explicit MF UI activation. Exact append acceptance is not playback; unknown work/result attempts must never replay. External MF undeployed, installed snapshot/default direct Live unchanged. Full voice/OVR-01/EN-05/FUT-CU-01 stay In progress; desktop remains stopped after Escape, MCP deferred and user edits protected.
+
 ## ChatGPT 2026-09-28 19:13 EDT - canonical Live routing implemented; recovery before activation
 
 The current source connects canonical MF captions, original-parent task admission and exact result acceptance. `voice/mf-context.ts` owns bounded version-one caption fingerprints/cursors and imperfect context selection. `mf-live.ts` persists task intent before `openai.delegate`, polls retained canonical results and records an immutable version-two result offer before delivery. `mf-result.ts` validates exact keys, numeric loopback destination, original private capabilities and bounded exact receipt acknowledgements. `service.ts` owns one scope-bound collector, aborts it on Stop, runs network delivery outside the caption gate and commits acknowledgement truth under an uninterruptible local phase. Active ownership cannot be evicted to satisfy the 256-entry cache bound. No uncertain task/result attempt is automatically replayed after restart.

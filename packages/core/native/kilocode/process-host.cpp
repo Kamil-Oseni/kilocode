@@ -396,12 +396,14 @@ void launch(DWORD controller, uint64_t parent, const std::wstring& control, cons
   Handle process(child.hProcess);
   Handle thread(child.hThread);
   bool assigned = false;
+  std::string header;
+  ULONGLONG drainage = 0;
   try {
     const auto born = birth(process.value);
+    const std::string identity = "\"pid\":" + std::to_string(child.dwProcessId) + ",\"birth\":\"" + std::to_string(born) + "\"";
+    header = "{\"version\":1,\"token\":\"" + key + "\",\"proof\":\"windows-job\"," + identity;
     if (!AssignProcessToJobObject(job.value, process.value)) throw std::runtime_error("Native launch containment failed");
     assigned = true;
-    const std::string identity = "\"pid\":" + std::to_string(child.dwProcessId) + ",\"birth\":\"" + std::to_string(born) + "\"";
-    const std::string header = "{\"version\":1,\"token\":\"" + key + "\",\"proof\":\"windows-job\"," + identity;
     write(control + L".job", "{\"version\":2,\"token\":\"" + key + "\",\"proof\":\"windows-job\",\"assigned\":true}");
     write(control + L".launch", header + ",\"helper\":" + std::to_string(GetCurrentProcessId()) + ",\"helperBirth\":\"" +
       std::to_string(birth(GetCurrentProcess())) + "\",\"state\":\"suspended\"}");
@@ -428,6 +430,7 @@ void launch(DWORD controller, uint64_t parent, const std::wstring& control, cons
         if (!TerminateJobObject(job.value, 1)) throw std::runtime_error("Native launch stop failed");
         stopping = true;
         deadline = GetTickCount64() + 60000;
+        drainage = deadline;
       }
       if (!stopping && !resumed && exists(control + L".go")) {
         const auto admission = "{\"version\":1,\"token\":\"" + key + "\"," + identity + ",\"action\":\"resume\"}";
@@ -438,6 +441,7 @@ void launch(DWORD controller, uint64_t parent, const std::wstring& control, cons
           if (!TerminateJobObject(job.value, 1)) throw std::runtime_error("Native admission cancellation failed");
           stopping = true;
           deadline = GetTickCount64() + 60000;
+          drainage = deadline;
           continue;
         }
         if (ResumeThread(thread.value) != 1) throw std::runtime_error("Native launch resume unknown");
@@ -448,8 +452,23 @@ void launch(DWORD controller, uint64_t parent, const std::wstring& control, cons
       Sleep(10);
     }
   } catch (const std::exception&) {
-    if (!assigned && (!TerminateProcess(process.value, 1) || WaitForSingleObject(process.value, 2000) != WAIT_OBJECT_0))
-      throw std::runtime_error("Native unadmitted target termination unknown");
+    if (!assigned) {
+      if (!TerminateProcess(process.value, 1) || WaitForSingleObject(process.value, 2000) != WAIT_OBJECT_0)
+        throw std::runtime_error("Native unadmitted target termination unknown");
+      throw;
+    }
+    if (!TerminateJobObject(job.value, 1)) throw std::runtime_error("Native failed target termination unknown");
+    const ULONGLONG deadline = drainage ? drainage : GetTickCount64() + 60000;
+    while (true) {
+      JOBOBJECT_BASIC_ACCOUNTING_INFORMATION state{};
+      if (!QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation, &state, sizeof(state), nullptr))
+        throw std::runtime_error("Native failed target membership unknown");
+      if (!state.ActiveProcesses) break;
+      if (GetTickCount64() >= deadline) throw std::runtime_error("Native failed target drainage unknown");
+      Sleep(10);
+    }
+    write(control + L".drained", "{\"version\":2,\"token\":\"" + key + "\",\"proof\":\"windows-job\",\"empty\":true}");
+    write(control + L".exited", header + ",\"state\":\"exited\",\"outcome\":\"unknown\"}");
     throw;
   }
 }

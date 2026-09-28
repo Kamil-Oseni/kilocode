@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { spawn as child } from "node:child_process"
 import os from "node:os"
@@ -97,6 +97,44 @@ for (const mode of ["helper", "target", "job"] as const)
         expect(refused).toBeInstanceOf(Error)
         expect(await Bun.file(actor.control + ".go").exists()).toBe(false)
         expect(await Bun.file(path.join(actor.dir, "effect")).exists()).toBe(false)
+      } finally {
+        await actor.cleanup()
+      }
+    },
+    30000,
+  )
+
+for (const phase of ["admission", "publication"] as const)
+  live(
+    `drains assigned native targets after ${phase} failure without inventing success or replay`,
+    async () => {
+      const actor = await fixture(`await Bun.write("effect", "executed"); setInterval(() => {}, 1000)`)
+      try {
+        await wait(actor.control + ".launch")
+        const identity = await NativeProcess.suspended(actor.control, actor.token)
+        if (phase === "admission") await writeFile(actor.control + ".go", "invalid admission")
+        if (phase === "publication") {
+          await mkdir(actor.control + ".running.tmp")
+          await NativeProcess.resume(actor.control, actor.token, identity)
+        }
+        expect(await actor.closed).not.toBe(0)
+        expect(await BackgroundProcessRunner.drained(actor.control, actor.token)).toBe(true)
+        expect(JSON.parse(await readFile(actor.control + ".exited", "utf8"))).toEqual({
+          version: 1,
+          token: actor.token,
+          proof: "windows-job",
+          pid: identity.pid,
+          birth: identity.birth,
+          state: "exited",
+          outcome: "unknown",
+        })
+        expect((await sample(identity.pid)).status).toBe("gone")
+        if (phase === "admission") expect(await Bun.file(path.join(actor.dir, "effect")).exists()).toBe(false)
+        expect(actor.output()).toContain(
+          phase === "admission" ? "Native admission identity changed" : "Native receipt write failed",
+        )
+        await expect(NativeProcess.resume(actor.control, actor.token, identity)).rejects.toThrow()
+        expect(JSON.parse(await readFile(actor.control + ".exited", "utf8"))).toHaveProperty("outcome", "unknown")
       } finally {
         await actor.cleanup()
       }
@@ -226,7 +264,10 @@ for (const mode of ["stop", "initialstop", "stale", "substitution"] as const)
         if (mode === "stop" || mode === "initialstop")
           expect(await BackgroundProcessRunner.drained(actor.control, actor.token)).toBe(true)
         if (mode === "stale") expect(await Bun.file(actor.control + ".launch").exists()).toBe(false)
-        if (mode === "substitution") expect(await Bun.file(actor.control + ".drained").exists()).toBe(false)
+        if (mode === "substitution") {
+          expect(await BackgroundProcessRunner.drained(actor.control, actor.token)).toBe(true)
+          expect(JSON.parse(await readFile(actor.control + ".exited", "utf8"))).toHaveProperty("outcome", "unknown")
+        }
       } finally {
         await actor.cleanup()
       }

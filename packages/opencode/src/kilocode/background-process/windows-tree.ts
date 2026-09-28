@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { PowerShell, pwsh } from "@/kilocode/shell/shell"
 import { Process } from "@/util/process"
+import { NativeProcess } from "@opencode-ai/core/kilocode/process-host/index"
 
 const source = `
 using System;
@@ -115,17 +116,21 @@ function id(pid: number) {
 /** Birth and termination use the same kernel handle, so PID reuse cannot redirect termination. */
 export async function terminate(pid: number, birth: string) {
   if (!/^\d{1,20}$/.test(birth)) throw new Error("Invalid process birth identity")
+  if (NativeProcess.mode() === "native") return decode(await NativeProcess.terminate(id(pid), birth)).status
   return decode(await call(`[RayaProcess]::Inspect(${id(pid)}, '${birth}', $true) | ConvertTo-Json -Compress`)).status
 }
 
 export async function sample(pid: number) {
+  if (NativeProcess.mode() === "native") return decode(await NativeProcess.inspect(id(pid)))
   return decode(await call(`[RayaProcess]::Inspect(${id(pid)}, $null, $false) | ConvertTo-Json -Compress`))
 }
 
 /** Unknown births remain in the tree; callers must refuse when a relevant owner is unreadable. */
 export async function query() {
   const rows = Schema.decodeUnknownSync(Rows)(
-    await call("ConvertTo-Json -InputObject @([RayaProcess]::Query()) -Compress"),
+    NativeProcess.mode() === "native"
+      ? await NativeProcess.query()
+      : await call("ConvertTo-Json -InputObject @([RayaProcess]::Query()) -Compress"),
   )
   if (rows.length > 32768 || rows.some((row) => !Number.isSafeInteger(row.pid) || !Number.isSafeInteger(row.parent)))
     throw new Error("Invalid process snapshot")

@@ -15,6 +15,7 @@ import {
 import { currentBwrapTarget, ensureBwrapForTarget } from "./bwrap-helper"
 import { currentFfmpegTarget, ensureFfmpegForTarget } from "./ffmpeg-helper"
 import { fingerprint as repairFingerprint } from "../../opencode/src/kilocode/self-heal/build-input"
+import { ProcessHost } from "../../opencode/script/kilocode/process-host"
 
 const forceRebuild = process.argv.includes("--force")
 const compiledOnly = process.argv.includes("--compiled")
@@ -287,6 +288,10 @@ async function bundleKiloSandboxWorker() {
 }
 
 async function ensureLocalHelpers() {
+  if (process.platform === "win32") {
+    await ProcessHost.verify(targetBinDir, process.arch).catch(() => ProcessHost.prepare(targetBinDir, process.arch))
+  }
+  if (process.platform !== "win32") await ProcessHost.clear(targetBinDir)
   await ensureFfmpegForTarget(currentFfmpegTarget(), targetBinDir)
   if (process.env.KILO_SKIP_BUNDLED_BWRAP === "1") return
   if (await sanitizeSandboxResources(targetBinDir, true)) return
@@ -369,6 +374,7 @@ async function main() {
   await copyTreeSitterResources(sourceBinPath, targetBinPath)
   await copySandboxResources(sourceBinPath, targetBinPath)
   await copyKiloSandboxWorker(sourceBinPath, targetBinPath)
+  if (process.platform === "win32") await ProcessHost.stage(dirname(sourceBinPath), targetBinDir, process.arch)
   chmodSync(targetBinPath, 0o755)
   await ensureLocalHelpers()
 

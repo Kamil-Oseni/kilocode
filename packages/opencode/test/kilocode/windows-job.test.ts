@@ -49,7 +49,7 @@ for (const mode of ["stop", "guardian", "controller"] as const)
       const owner = controller?.pid ?? process.pid
       const owners = await Promise.all([sample(child.pid!), sample(owner)])
       if (!owners[0].birth || !owners[1].birth) throw new Error("Missing native fixture identity")
-      const guard = guardian({
+      const guard = await guardian({
         pid: child.pid!,
         birth: owners[0].birth,
         controller: owner,

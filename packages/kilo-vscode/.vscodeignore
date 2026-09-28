@@ -41,6 +41,10 @@ bin/raya-desktop-capture.ilk
 bin/raya-desktop-input.exe
 bin/raya-desktop-input.pdb
 bin/raya-desktop-input.ilk
+# Native process assets are included only after exact Windows x64 validation.
+bin/raya-process-host.exe
+bin/raya-process-host.pdb
+bin/raya-process-host.json
 # .cli-version is a local-source build marker written by local-bin.ts. It must
 # not ship in the VSIX, otherwise production installs are detected as local
 # builds and may inject a dev-only bwrap fallback (see ServerManager.localCli).

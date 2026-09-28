@@ -24,6 +24,7 @@ import { stageBubblewrap } from "./kilocode/bubblewrap"
 import { LanceDBRuntime } from "../src/kilocode/lancedb"
 import { KiloSandboxWorker } from "./kilocode/kilo-sandbox-worker"
 import { KiloSandboxNetwork } from "./kilocode/kilo-sandbox-network"
+import { ProcessHost } from "./kilocode/process-host"
 // kilocode_change end
 
 const singleFlag = process.argv.includes("--single")
@@ -366,6 +367,7 @@ for (const item of targets) {
   await copyTreeSitterWasms(path.resolve(dir, `dist/${name}/bin`))
   await copyKiloConsole(kiloConsoleDist, path.resolve(dir, `dist/${name}/bin`))
   await KiloSandboxWorker.copy(kiloSandboxWorker, path.resolve(dir, `dist/${name}/bin`))
+  if (item.os === "win32") await ProcessHost.prepare(path.resolve(dir, `dist/${name}/bin`), item.arch)
   if (item.os === "linux") {
     await KiloSandboxNetwork.copy(kiloSandboxNetwork, path.resolve(dir, `dist/${name}/bin`), item.arch)
   }

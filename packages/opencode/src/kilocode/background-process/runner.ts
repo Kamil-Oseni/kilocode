@@ -7,6 +7,7 @@ import path from "path"
 import { Shell } from "@opencode-ai/core/shell"
 import * as WindowsTree from "./windows-tree"
 import { guardian } from "./windows-job"
+import { NativeProcess } from "@opencode-ai/core/kilocode/process-host/index"
 
 export namespace BackgroundProcessRunner {
   const MARKER = "__background-process-runner"
@@ -251,7 +252,7 @@ export namespace BackgroundProcessRunner {
     const parent = owners[1]
     if (root.status !== "owned" || !root.birth || parent.status !== "owned" || !parent.birth)
       throw new Error("Native containment owner could not be verified")
-    const guard = guardian({
+    const guard = await guardian({
       pid: child.pid,
       birth: root.birth,
       controller: process.pid,
@@ -368,6 +369,7 @@ export namespace BackgroundProcessRunner {
   }
 
   async function run(input: Input) {
+    if (process.platform === "win32") await NativeProcess.check()
     process.stdout.on("error", () => process.stdout.destroy())
     await mkdir(path.dirname(input.log), { recursive: true, mode: 0o700 })
     const files = sidecars(input.control)

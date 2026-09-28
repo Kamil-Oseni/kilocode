@@ -8,6 +8,7 @@ import { rmSync, mkdirSync, existsSync, mkdtempSync, readFileSync, writeFileSync
 import { load, identity, digest } from "../../opencode/src/kilocode/self-heal/build-input"
 import { PackageVault } from "../src/services/package-vault"
 import { prune } from "./snapshot-retention"
+import { ProcessHost } from "../../opencode/script/kilocode/process-host"
 
 const mode = process.argv[2] ?? "install"
 const shouldInstall = mode === "install"
@@ -22,6 +23,7 @@ const inputSymbols = join(root, "bin", "raya-desktop-input.pdb")
 // Remove a prior candidate even if this build later fails or targets another platform.
 rmSync(capture, { force: true })
 rmSync(input, { force: true })
+await ProcessHost.clear(join(root, "bin"))
 const repair = await load(join(root, "..", ".."), process.argv[3] ?? process.env.RAYA_REPAIR_BUILD_INPUT)
 if ((mode === "repair") !== Boolean(repair))
   throw new Error("Repair packaging requires its captured build input and cannot install or release")
@@ -105,6 +107,9 @@ if (repair) {
 // The candidate is intentionally limited to native Windows x64 builds. It is never
 // copied from a prior package, cross-compiled implicitly, or included on ARM64.
 const includeCapture = packageTarget === "win32-x64"
+const includeProcess = packageTarget === "win32-x64"
+if (packageTarget.startsWith("win32-")) await ProcessHost.prepare(join(root, "bin"), packageTarget.slice(6))
+if (includeProcess) await ProcessHost.verify(join(root, "bin"), "x64")
 if (includeCapture) {
   if (process.platform !== "win32" || process.arch !== "x64")
     throw new Error("Windows x64 desktop capture packaging requires a Windows x64 build host")
@@ -160,7 +165,7 @@ try {
       throw new Error("Native capture default exclusion is missing")
     writeFileSync(
       ignore,
-      rules.reduce((text, rule) => text.replace(rule, `!${rule}`), source),
+      rules.reduce((text, rule) => text.replace(rule, `!${rule}`), ProcessHost.include(source)),
     )
   }
   await createVSIX({

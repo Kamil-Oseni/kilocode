@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { PowerShell } from "@/kilocode/shell/shell"
+import { NativeProcess } from "@opencode-ai/core/kilocode/process-host/index"
 
 const source = `
 using System;
@@ -100,14 +101,15 @@ public static class RayaJob {
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`
 
 /** A retained native job handle contains descendants before the shell opens its private command gate. */
-export function guardian(input: {
+export async function guardian(input: {
   pid: number
   birth: string
   controller: number
   parentBirth: string
   control: string
   token: string
-}): ChildProcess {
+}): Promise<ChildProcess> {
+  if (NativeProcess.mode() === "native") return NativeProcess.guard(input)
   if (
     ![input.pid, input.controller].every((pid) => Number.isSafeInteger(pid) && pid > 0) ||
     ![input.birth, input.parentBirth].every((birth) => /^\d{1,20}$/.test(birth)) ||

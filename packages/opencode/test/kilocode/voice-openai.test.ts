@@ -850,6 +850,61 @@ it.live(
 type Prompt = Parameters<SessionPrompt.Interface["prompt"]>[0]
 
 it.live(
+  "cancellation dispatch occurs once and never adopts old-owner receipts",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const state = yield* fixture(root, () =>
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+        )
+        const events: string[] = []
+        const cancel = state.deps.workers.cancel
+        // Observe calls while delegating every effect to the real worker cancellation service.
+        state.deps.workers.cancel = (sid, message) =>
+          Effect.sync(() => events.push(message)).pipe(Effect.andThen(cancel(sid, message)))
+        const call = yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        yield* Deferred.await(entered)
+        const first = yield* state.voice.cancel(
+          state.binding.id,
+          state.input.callID,
+          state.binding.generation,
+          secret,
+          root,
+        )
+        expect(first.status).toBe("cancelled")
+        expect(events).toEqual([call.messageID])
+        expect(
+          yield* state.voice.cancel(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        ).toEqual(first)
+        expect(events).toEqual([call.messageID])
+        const restarted = yield* make(state.deps)
+        expect(
+          yield* restarted.cancel(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        ).toEqual(first)
+        expect(events).toEqual([call.messageID])
+        const next = { ...state.input, callID: "second-call" }
+        const pending = yield* state.voice.submit(state.binding.id, next, secret, root)
+        expect(
+          (yield* restarted.cancel(state.binding.id, next.callID, state.binding.generation, secret, root)).status,
+        ).toBe("unknown")
+        expect(events).toEqual([call.messageID])
+        expect(
+          (yield* state.voice.cancel(state.binding.id, next.callID, state.binding.generation, secret, root)).status,
+        ).toBe("cancelled")
+        expect(events).toEqual([call.messageID, pending.messageID])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
   "abandoning a cancellation waiter does not abandon exact-message cleanup",
   () =>
     Effect.gen(function* () {

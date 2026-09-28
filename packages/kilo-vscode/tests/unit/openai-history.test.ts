@@ -121,3 +121,38 @@ test("synchronous transport failure clears pending acknowledgement before anothe
     new AbortController().signal,
   )
 })
+
+test("settling an acknowledged append cannot erase the next pending receipt", async () => {
+  const history = new OpenAIHistory()
+  const controller = new AbortController()
+  const events: Record<string, unknown>[] = []
+  const promises: Promise<void>[] = []
+  const context = { version: 1, sourceRevision: 1, sourceHash: "a".repeat(64), incomplete: false, items: [] }
+  const send = (event: Record<string, unknown>) => {
+    events.push(event)
+  }
+  try {
+    promises.push(history.append(context, send, () => undefined, controller.signal))
+    expect(history.receive({ type: "conversation.item.done", item: events[0].item })).toBe(true)
+    promises.push(
+      history.append(
+        { ...context, sourceRevision: 2, sourceHash: "b".repeat(64), incomplete: true },
+        send,
+        () => undefined,
+        controller.signal,
+      ),
+    )
+    const observed = promises[1].then(
+      () => true,
+      () => false,
+    )
+    await promises[0]
+    expect(events).toHaveLength(2)
+    expect(history.receive({ type: "conversation.item.done", item: events[1].item })).toBe(true)
+    expect(await observed).toBe(true)
+    expect(history.receive({ type: "conversation.item.done", item: events[0].item })).toBe(false)
+  } finally {
+    controller.abort()
+    await Promise.allSettled(promises)
+  }
+})

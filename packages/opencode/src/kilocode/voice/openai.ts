@@ -1107,22 +1107,23 @@ export const make = (deps: Deps) =>
               const stored = yield* load(id, secret, directory, generation)
               const entry = stored.calls[digest(callID)]
               if (!entry) return yield* refuse("missing", "Voice call not found.")
-              if (stored.owner !== owner) return receipt(stored, entry.receipt)
+              if (stored.owner !== owner) return { receipt: receipt(stored, entry.receipt), stopping: false }
               if (pending(entry.receipt)) {
                 entry.receipt = { ...entry.receipt, status: "cancelled", updatedAt: Date.now() }
                 yield* save(stored)
+                return { receipt: entry.receipt, stopping: true }
               }
-              return entry.receipt
+              return { receipt: entry.receipt, stopping: false }
             }),
           )
-          if (call.status === "cancelled") {
+          if (call.stopping) {
             // A disconnected HTTP waiter must not abandon a persisted cancellation request.
             const stopping = yield* deps.workers
-              .cancel(call.parentSessionID, call.messageID)
+              .cancel(call.receipt.parentSessionID, call.receipt.messageID)
               .pipe(Effect.interruptible, Effect.forkIn(scope))
             yield* restore(Fiber.join(stopping))
           }
-          return call
+          return call.receipt
         }),
       )
     const close = (id: string, generation: string, secret: string, directory: string) =>

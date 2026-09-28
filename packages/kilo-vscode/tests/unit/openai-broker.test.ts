@@ -87,6 +87,8 @@ function fixture(timeout = 15_000) {
     providers: 0,
     activated: 0,
     proof: undefined as Record<string, unknown> | undefined,
+    proofs: new Map<string, Record<string, unknown>>(),
+    handoff: "",
     activation: undefined as Record<string, unknown> | undefined,
   }
   const binding = {
@@ -239,6 +241,7 @@ function fixture(timeout = 15_000) {
       const target = { ...binding, id: "binding_2", generation: "generation_2", providerCallID: "rtc_provider_2" }
       const owner = url.pathname.includes("binding_2") ? target : binding
       if (url.pathname.endsWith("/handoff/candidate")) {
+        state.handoff = String(body.requestID)
         expect(capability).toBe(state.capability)
         expect(request.headers.get("X-Raya-Voice-Target-Key")).toMatch(/^[a-f0-9]{64}$/)
         expect(request.headers.get("X-Raya-Voice-Target-Key")).not.toBe(capability)
@@ -288,8 +291,30 @@ function fixture(timeout = 15_000) {
         })
       }
       if (url.pathname.endsWith("/handoff/ready") || url.pathname.endsWith("/handoff/rearm")) {
-        state.proof = { ...body, deadline: Date.now() + 30_000 }
-        return Response.json({ ...target, handoff: state.proof })
+        if (state.mode === "warm-ready-offline") return new Response("ambiguous service failure", { status: 503 })
+        if (state.mode === "warm-ready-refused") return new Response("definite refusal", { status: 409 })
+        const id = String(body.readyID)
+        const prior = state.proofs.get(id)
+        if (prior) {
+          for (const [key, value] of Object.entries(body)) expect(prior[key]).toEqual(value)
+          return Response.json(url.pathname.endsWith("/rearm") ? prior : { ...target, handoff: prior })
+        }
+        state.proof = {
+          ...body,
+          requestID: state.handoff,
+          sourceID: binding.id,
+          sourceGeneration: binding.generation,
+          candidateID: target.id,
+          candidateGeneration: target.generation,
+          ...(body.priorReadyID ? { rearmedAt: Date.now() } : { phase: "ready" }),
+          deadline: state.proof?.deadline ?? Date.now() + 30_000,
+          ...(state.mode === "warm-ready-changed" ? { sourceHash: "f".repeat(64) } : {}),
+          ...(state.mode === "warm-ready-expired" ? { deadline: Date.now() - 1 } : {}),
+        }
+        if (state.mode === "warm-rearm-deadline" && body.priorReadyID)
+          state.proof.deadline = Number(state.proof.deadline) + 1000
+        state.proofs.set(id, state.proof)
+        return Response.json(url.pathname.endsWith("/rearm") ? state.proof : { ...target, handoff: state.proof })
       }
       if (url.pathname.endsWith("/handoff/activate")) {
         state.activated++
@@ -384,6 +409,21 @@ function fixture(timeout = 15_000) {
         init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
       })
     return fetch(new URL(url.pathname + url.search, server.url), init).then(async (response) => {
+      const readiness = url.pathname.endsWith("/handoff/ready") || url.pathname.endsWith("/handoff/rearm")
+      const lost =
+        (state.mode === "warm-ready-lost" && url.pathname.endsWith("/ready")) ||
+        (state.mode === "warm-rearm-lost" && url.pathname.endsWith("/rearm"))
+      if (readiness && lost && !state.lost) {
+        state.lost = true
+        await response.body?.cancel()
+        throw new Error("Lost readiness response after actual loopback commit")
+      }
+      if (readiness && ["warm-ready-stop", "warm-ready-scope"].includes(state.mode)) {
+        state.reading = true
+        await state.gate.promise
+        await response.body?.cancel()
+        throw new Error("Readiness response lost across source invalidation")
+      }
       if (!url.pathname.endsWith("/spoken")) return response
       if (state.mode === "spoken-lag") {
         const deadline = performance.now() + timeout + 20
@@ -1658,6 +1698,139 @@ for (const change of ["stop", "scope", "duplicate"]) {
       expect((await cancelled).restore).toBe(change === "duplicate")
       if (duplicate) expect((await duplicate).restore).toBe(true)
       await stopped
+      expect(f.state.activated).toBe(0)
+    } finally {
+      f.state.gate.resolve()
+      await f.close()
+    }
+  })
+}
+
+for (const mode of ["warm-ready-lost", "warm-rearm-lost", "warm-rearm-deadline"]) {
+  test(`${mode} preserves exact immutable readiness input and the original readiness deadline`, async () => {
+    const f = fixture()
+    f.state.mode = mode
+    const handoff = {
+      version: 1 as const,
+      id: "handoff_1",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    try {
+      await f.start()
+      await f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      )
+      const first = await f.broker.prepared(handoff)
+      const deadline = f.state.proof!.deadline
+      if (mode !== "warm-ready-lost") {
+        f.state.sockets[0].send(
+          JSON.stringify({
+            type: "conversation.item.added",
+            previous_item_id: null,
+            item: { id: "catchup_user", type: "message", role: "user" },
+          }),
+        )
+        f.state.sockets[0].send(
+          JSON.stringify({
+            type: "conversation.item.input_audio_transcription.completed",
+            item_id: "catchup_user",
+            content_index: 0,
+            transcript: "A new source turn during warming",
+          }),
+        )
+        await until(() => f.state.spoken.some((row) => JSON.stringify(row.items).includes("catchup_user")))
+        if (mode === "warm-rearm-deadline")
+          await expect(f.broker.prepared(handoff)).rejects.toThrow("not confirmed exactly")
+        if (mode === "warm-rearm-lost") {
+          const updated = await f.broker.prepared(handoff)
+          expect(updated.readyID).not.toBe(first.readyID)
+          expect(updated.sourceHash).not.toBe(first.sourceHash)
+          expect(f.state.proof!.deadline).toBe(deadline)
+        }
+      }
+      const path = mode === "warm-ready-lost" ? "/handoff/ready" : "/handoff/rearm"
+      const attempts = f.state.requests.filter((row) => row.path.endsWith(path))
+      expect(attempts).toHaveLength(mode === "warm-rearm-deadline" ? 1 : 2)
+      if (attempts.length === 2) expect(JSON.stringify(attempts[1].body)).toBe(JSON.stringify(attempts[0].body))
+      expect(f.state.providers).toBe(2)
+      expect(f.state.activated).toBe(0)
+    } finally {
+      await f.close()
+    }
+  })
+}
+
+for (const mode of ["warm-ready-offline", "warm-ready-refused", "warm-ready-changed", "warm-ready-expired"]) {
+  test(`${mode} remains bounded and never activates on an unconfirmed readiness receipt`, async () => {
+    const f = fixture()
+    f.state.mode = mode
+    const handoff = {
+      version: 1 as const,
+      id: "handoff_1",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    try {
+      await f.start()
+      await f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      )
+      const err = await f.broker.prepared(handoff).then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      expect(err).toBeInstanceOf(Error)
+      const requests = f.state.requests.filter((row) => row.path.endsWith("/handoff/ready"))
+      expect(requests).toHaveLength(mode === "warm-ready-offline" ? 3 : 1)
+      if (requests.length > 1) expect(new Set(requests.map((row) => JSON.stringify(row.body))).size).toBe(1)
+      expect(f.state.activated).toBe(0)
+      expect((await f.broker.cancel(handoff)).restore).toBe(true)
+    } finally {
+      await f.close()
+    }
+  })
+}
+
+for (const mode of ["warm-ready-stop", "warm-ready-scope"]) {
+  test(`${mode} fences an ambiguous readiness response before any retry`, async () => {
+    const f = fixture()
+    f.state.mode = mode
+    const handoff = {
+      version: 1 as const,
+      id: "handoff_1",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    try {
+      await f.start()
+      await f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      )
+      const pending = f.broker.prepared(handoff)
+      const rejected = pending.then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      await until(() => f.state.reading)
+      const stopped = mode === "warm-ready-stop" ? f.broker.stop(input.requestID) : undefined
+      if (mode === "warm-ready-scope") f.state.current = false
+      f.state.gate.resolve()
+      expect(await rejected).toBeInstanceOf(Error)
+      await stopped
+      expect(f.state.requests.filter((row) => row.path.endsWith("/handoff/ready"))).toHaveLength(1)
       expect(f.state.activated).toBe(0)
     } finally {
       f.state.gate.resolve()

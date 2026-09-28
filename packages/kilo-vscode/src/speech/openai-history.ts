@@ -67,8 +67,11 @@ export class OpenAIHistory {
     const timeout = AbortSignal.timeout(20_000)
     const abort = AbortSignal.any([signal, timeout])
     await new Promise<void>((resolve, reject) => {
+      let done = false
       const fail = () => finish(new Error("Voice replacement context acknowledgement was not confirmed"))
       const finish = (error?: Error) => {
+        if (done) return
+        done = true
         abort.removeEventListener("abort", fail)
         this.pending = undefined
         if (error) return reject(error)
@@ -93,8 +96,6 @@ export class OpenAIHistory {
       } catch (error) {
         finish(error instanceof Error ? error : new Error("Voice replacement context transport failed"))
       }
-    }).finally(() => {
-      this.pending = undefined
     })
   }
 

@@ -90,6 +90,7 @@ type Replacement = {
   quiet?: number
   receipt?: Record<string, unknown>
   previous?: string
+  deadline?: number
   preparing?: Promise<{ version: 1; readyID: string; sourceRevision: number; sourceHash: string }>
 }
 
@@ -362,22 +363,12 @@ export class OpenAIBroker {
       sourceHash: checkpoint.fingerprint,
       readyID,
     }
-    const receipt = state.previous
-      ? await this.backend(state.target, `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/rearm`, {
-          method: "POST",
-          body: JSON.stringify({ ...body, priorReadyID: state.previous }),
-        })
-      : await this.backend(state.target, `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/ready`, {
-          method: "POST",
-          body: JSON.stringify(body),
-        })
+    const prior = state.previous
+    const receipt = await this.readiness(state, prior ? { ...body, priorReadyID: prior } : body)
     const proof = record(receipt.handoff) ?? receipt
-    if (
-      proof.readyID !== readyID ||
-      proof.sourceRevision !== checkpoint.revision ||
-      proof.sourceHash !== checkpoint.fingerprint
-    )
-      throw new Error("Voice replacement readiness was not confirmed exactly")
+    if (!prior && proof.phase !== "ready") throw new Error("Voice replacement readiness phase changed")
+    if (!readiness(proof, state, body, prior)) throw new Error("Voice replacement readiness was not confirmed exactly")
+    state.deadline ??= proof.deadline as number
     state.previous = readyID
     state.checkpoint = {
       revision: checkpoint.revision,
@@ -388,6 +379,35 @@ export class OpenAIBroker {
     }
     state.phase = "prepared"
     return readyID
+  }
+
+  private async readiness(state: Replacement, value: Record<string, unknown>) {
+    const body = JSON.stringify(Object.freeze({ ...value }))
+    const path = `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/${value.priorReadyID ? "rearm" : "ready"}`
+    const deadline = Math.min(Date.now() + 30_000, state.deadline ?? Infinity)
+    const signal = AbortSignal.any([state.source.abort.signal, state.target.abort.signal])
+    for (let attempt = 0; attempt < 3; attempt++) {
+      this.matching(state.identity)
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) throw new Error("Voice replacement readiness deadline expired")
+      const receipt = await this.backend(state.target, path, {
+        method: "POST",
+        body,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(Math.min(5000, remaining))]),
+      }).catch(async (error: unknown) => {
+        this.matching(state.identity)
+        if (error instanceof BackendError && error.status >= 400 && error.status < 500 && error.status !== 408)
+          throw error
+        if (attempt === 2 || Date.now() >= deadline) throw error
+        await delay(signal, Math.min(100, deadline - Date.now()))
+        return undefined
+      })
+      this.matching(state.identity)
+      if (!receipt) continue
+      if (Date.now() >= deadline) throw new Error("Voice replacement readiness deadline expired")
+      return receipt
+    }
+    throw new Error("Voice replacement readiness remains unconfirmed")
   }
 
   quiesce(handoff: Handoff, epoch: number) {
@@ -1373,6 +1393,7 @@ export class OpenAIBroker {
         ? AbortSignal.timeout(15_000)
         : AbortSignal.any([
             claim.abort.signal,
+            ...(init.signal ? [init.signal] : []),
             AbortSignal.timeout(path === "/reservation" ? this.reservationTimeout : 30_000),
           ]),
     })
@@ -1523,6 +1544,23 @@ function activation(receipt: Record<string, unknown>, state: Replacement, body: 
     receipt.sourceHash === body.sourceHash &&
     receipt.readyID === body.readyID &&
     Number.isFinite(receipt.activatedAt)
+  )
+}
+
+function readiness(value: Record<string, unknown>, state: Replacement, body: Record<string, unknown>, prior?: string) {
+  if (!Number.isSafeInteger(value.deadline) || (value.deadline as number) <= Date.now()) return false
+  if (state.deadline !== undefined && value.deadline !== state.deadline) return false
+  if (prior && (value.priorReadyID !== prior || !Number.isFinite(value.rearmedAt))) return false
+  return (
+    value.version === 1 &&
+    value.requestID === state.identity.id &&
+    value.sourceID === state.source.binding!.id &&
+    value.sourceGeneration === state.source.binding!.generation &&
+    value.candidateID === state.target.binding!.id &&
+    value.candidateGeneration === state.target.binding!.generation &&
+    value.readyID === body.readyID &&
+    value.sourceRevision === body.sourceRevision &&
+    value.sourceHash === body.sourceHash
   )
 }
 

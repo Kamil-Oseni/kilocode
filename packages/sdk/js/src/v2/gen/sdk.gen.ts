@@ -382,6 +382,16 @@ import type {
   KilocodeVoiceOpenaiCloseResponses,
   KilocodeVoiceOpenaiContextErrors,
   KilocodeVoiceOpenaiContextResponses,
+  KilocodeVoiceOpenaiHandoffActivateErrors,
+  KilocodeVoiceOpenaiHandoffActivateResponses,
+  KilocodeVoiceOpenaiHandoffCandidateErrors,
+  KilocodeVoiceOpenaiHandoffCandidateResponses,
+  KilocodeVoiceOpenaiHandoffContextErrors,
+  KilocodeVoiceOpenaiHandoffContextResponses,
+  KilocodeVoiceOpenaiHandoffReadyErrors,
+  KilocodeVoiceOpenaiHandoffReadyResponses,
+  KilocodeVoiceOpenaiHandoffReceiptErrors,
+  KilocodeVoiceOpenaiHandoffReceiptResponses,
   KilocodeVoiceOpenaiImageErrors,
   KilocodeVoiceOpenaiImageResponses,
   KilocodeVoiceOpenaiMeterErrors,
@@ -11804,6 +11814,247 @@ export class SessionImport extends HeyApiClient {
   }
 }
 
+export class Handoff extends HeyApiClient {
+  /**
+   * Prepare a non-admitting replacement under exact source authority
+   */
+  public candidate<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      "x-raya-voice-target-key": string
+      id: string
+      directory?: string
+      workspace?: string
+      version?: 1
+      generation?: string
+      requestID?: string
+      providerCallID?: string
+      reservationID?: string
+      transcriptionRequestID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "headers", key: "x-raya-voice-target-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "version" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "requestID" },
+            { in: "body", key: "providerCallID" },
+            { in: "body", key: "reservationID" },
+            { in: "body", key: "transcriptionRequestID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiHandoffCandidateResponses,
+      KilocodeVoiceOpenaiHandoffCandidateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/handoff/candidate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read the exact source speech checkpoint for replacement prefill
+   */
+  public context<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeVoiceOpenaiHandoffContextResponses,
+      KilocodeVoiceOpenaiHandoffContextErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/handoff/context",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Record bounded trusted broker readiness for an unchanged source checkpoint
+   */
+  public ready<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      version?: 1
+      generation?: string
+      sourceRevision?: number
+      sourceHash?: string
+      readyID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "version" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "sourceRevision" },
+            { in: "body", key: "sourceHash" },
+            { in: "body", key: "readyID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiHandoffReadyResponses,
+      KilocodeVoiceOpenaiHandoffReadyErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/handoff/ready",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Atomically transfer work authority and retain an exact activation receipt
+   */
+  public activate<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      version?: 1
+      generation?: string
+      requestID?: string
+      candidateID?: string
+      candidateGeneration?: string
+      sourceRevision?: number
+      sourceHash?: string
+      readyID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "version" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "requestID" },
+            { in: "body", key: "candidateID" },
+            { in: "body", key: "candidateGeneration" },
+            { in: "body", key: "sourceRevision" },
+            { in: "body", key: "sourceHash" },
+            { in: "body", key: "readyID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiHandoffActivateResponses,
+      KilocodeVoiceOpenaiHandoffActivateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/handoff/activate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Resolve an ambiguous activation without replaying work
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeVoiceOpenaiHandoffReceiptResponses,
+      KilocodeVoiceOpenaiHandoffReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/handoff/receipt",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Openai extends HeyApiClient {
   /**
    * Retain a bounded same-task spoken recovery snapshot
@@ -12317,6 +12568,11 @@ export class Openai extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _handoff?: Handoff
+  get handoff(): Handoff {
+    return (this._handoff ??= new Handoff({ client: this.client }))
   }
 }
 

@@ -40,6 +40,15 @@ try {
       checks.push(label)
       console.log(`Verified: ${label}`)
     }
+    const refuses = (action) => {
+      try {
+        action()
+        return false
+      } catch (error) {
+        if (!(error instanceof Error)) throw error
+        return true
+      }
+    }
     const until = async (condition) => {
       const start = Date.now()
       while (!condition()) {
@@ -48,7 +57,10 @@ try {
       }
     }
     const captures = []
+    const gains = []
     const peers = []
+    const meters = new Map()
+    const channels = new Map()
     const contexts = []
     const exchanges = []
     const events = { statuses: [], transcripts: [], errors: [], notices: [], aec: [] }
@@ -66,6 +78,7 @@ try {
       const oscillator = context.createOscillator()
       const gain = context.createGain()
       gain.gain.value = 0
+      gains.push(gain)
       oscillator.connect(gain).connect(destination)
       oscillator.start()
       captures.push(destination.stream)
@@ -78,8 +91,18 @@ try {
       exchanges.push(sdp)
       const peer = new RTCPeerConnection()
       peers.push(peer)
+      peer.ontrack = (event) => {
+        const context = new AudioContext()
+        contexts.push(context)
+        const meter = context.createAnalyser()
+        meter.fftSize = 256
+        context.createMediaStreamSource(event.streams[0] ?? new MediaStream([event.track])).connect(meter)
+        meters.set(peer, meter)
+        void context.resume()
+      }
       peer.ondatachannel = (event) => {
         channel = event.channel
+        channels.set(peer, event.channel)
       }
       const stream = capture()
       peer.addTrack(stream.getAudioTracks()[0], stream)
@@ -325,6 +348,224 @@ try {
         "unrelated cancellation errors remain fatal instead of being broadly ignored",
       )
       await voice.stop()
+
+      await voice.start({ sessionID: "session-warm", requestID: "source-warm" }, exchange)
+      const source = voice.operation
+      const sourcepeer = peers.at(-1)
+      gains[captures.indexOf(source.media)].gain.value = 0.1
+      await Promise.all(contexts.map((context) => context.resume()))
+      const signal = (peer) => {
+        const meter = meters.get(peer)
+        if (!meter) return false
+        const samples = new Float32Array(meter.fftSize)
+        meter.getFloatTimeDomainData(samples)
+        return samples.some((sample) => Math.abs(sample) > 0.005)
+      }
+      await until(() => signal(sourcepeer))
+      await until(() => channels.get(sourcepeer)?.readyState === "open")
+      const sourcechannel = channels.get(sourcepeer)
+      const handoff = {
+        version: 1,
+        id: "handoff-warm",
+        sessionID: "session-warm",
+        source: "source-warm",
+        target: "target-warm",
+      }
+      const beforeprepare = captures.length
+      const statuses = events.statuses.length
+      const prepared = await voice.prepare(handoff, exchange)
+      const candidate = voice.candidate
+      const candidatepeer = peers.at(-1)
+      await until(() => channels.get(candidatepeer)?.readyState === "open")
+      const candidatechannel = channels.get(candidatepeer)
+      check(
+        prepared.phase === "prepared" &&
+          prepared.id === handoff.id &&
+          prepared.sessionID === handoff.sessionID &&
+          Object.isFrozen(prepared),
+        "prepared receipt owns the entire immutable handoff identity",
+      )
+      check(
+        voice.operation === source && source.media.getAudioTracks()[0].enabled && sourcechannel.readyState === "open",
+        "source remains serving while candidate is prepared",
+      )
+      check(
+        captures.length === beforeprepare + 1 &&
+          candidate.media.getAudioTracks()[0] !== source.media.getAudioTracks()[0] &&
+          !candidate.media.getAudioTracks()[0].enabled,
+        "preparation clones microphone without reacquiring and keeps candidate input disabled",
+      )
+      check(
+        candidate.audio.muted && candidate.playback && events.statuses.length === statuses,
+        "candidate playback is admitted silently without changing visible status",
+      )
+      await until(() => meters.has(candidatepeer))
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      check(
+        signal(sourcepeer) && !signal(candidatepeer),
+        "real loopback source carries signal while prepared candidate carries silence",
+      )
+      await voice.prepare({ ...handoff, id: "other", target: "other-target" }, exchange).then(
+        () => {
+          throw new Error("second candidate admitted")
+        },
+        () => check(voice.candidate === candidate, "second candidate refuses without replacing prepared media"),
+      )
+      candidatechannel.send(
+        JSON.stringify({
+          type: "conversation.item.input_audio_transcription.completed",
+          item_id: "hidden",
+          transcript: "candidate text must stay hidden",
+        }),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      check(
+        !events.transcripts.some((item) => item.text === "candidate text must stay hidden"),
+        "candidate transcript never projects before cutover",
+      )
+      check(
+        refuses(() => voice.cutover({ ...handoff, id: "wrong" })) &&
+          voice.operation === source &&
+          source.media.getAudioTracks()[0].enabled,
+        "changed handoff identity refuses without touching source",
+      )
+      sourcechannel.send(JSON.stringify({ type: "input_audio_buffer.speech_started" }))
+      await until(() => source.speech)
+      check(
+        refuses(() => voice.cutover(handoff)) && voice.operation === source,
+        "source speech invalidates quiet cutover boundary",
+      )
+      sourcechannel.send(JSON.stringify({ type: "input_audio_buffer.speech_stopped" }))
+      await until(() => !source.speech)
+      check(
+        voice.mute(true) && !candidate.media.getAudioTracks()[0].enabled,
+        "mute during preparation disables source and retains silent candidate",
+      )
+      const receipt = voice.cutover(handoff)
+      check(
+        receipt.phase === "cutover" &&
+          voice.operation === candidate &&
+          !source.media.getAudioTracks()[0].enabled &&
+          source.audio.muted &&
+          !candidate.media.getAudioTracks()[0].enabled,
+        "cutover transfers ownership and preserves latest user mute",
+      )
+      check(
+        voice.cutover({ ...handoff }) === receipt,
+        "identical cutover returns exact receipt without repeating effects",
+      )
+      voice.mute(false)
+      await until(() => signal(candidatepeer) && !signal(sourcepeer))
+      check(
+        source.media.getAudioTracks()[0].readyState === "live",
+        "real cutover carries target signal and source silence before source retirement",
+      )
+      check(
+        !voice.retire(handoff.target) && voice.retire(handoff.source) && voice.retire(handoff.source),
+        "retirement refuses active target and is idempotent for source",
+      )
+      check(
+        source.media.getAudioTracks()[0].readyState === "ended" &&
+          candidate.media.getAudioTracks()[0].readyState === "live" &&
+          voice.mute(false),
+        "source retirement leaves independent candidate clone live and usable",
+      )
+      await until(() => signal(candidatepeer) && !signal(sourcepeer))
+      check(true, "real target carries signal after source retirement while old sender stays silent")
+      await voice.stop()
+      check(candidate.media.getAudioTracks()[0].readyState === "ended", "global stop ends replacement microphone")
+
+      await voice.start({ sessionID: "session-warm", requestID: "source-failure" }, exchange)
+      const retained = voice.operation
+      const failure = { ...handoff, id: "handoff-failure", source: "source-failure", target: "target-failure" }
+      await voice.prepare(failure, exchange)
+      const rejected = voice.candidate
+      await until(() => channels.get(peers.at(-1))?.readyState === "open")
+      const priorerrors = events.errors.length
+      channels.get(peers.at(-1)).send(JSON.stringify({ type: "response.created", response: { id: "unsolicited" } }))
+      await until(() => rejected.closed)
+      check(
+        voice.operation === retained &&
+          retained.media.getAudioTracks()[0].enabled &&
+          events.errors.length === priorerrors &&
+          rejected.media.getAudioTracks()[0].readyState === "ended",
+        "unsolicited candidate generation cleans only candidate and preserves active call",
+      )
+      check(
+        refuses(() => voice.cutover(failure)) && voice.operation === retained,
+        "failed preparation cannot be promoted by stale cutover",
+      )
+      let candidateanswer
+      const waiting = voice
+        .prepare(
+          { ...failure, id: "handoff-stop", target: "target-stop" },
+          () =>
+            new Promise((resolve) => {
+              candidateanswer = resolve
+            }),
+        )
+        .then(
+          () => "resolved",
+          () => "cancelled",
+        )
+      await until(() => !!candidateanswer)
+      const pendingcandidate = voice.candidate
+      await voice.stop()
+      check(
+        (await waiting) === "cancelled" &&
+          retained.media.getAudioTracks()[0].readyState === "ended" &&
+          pendingcandidate.media.getAudioTracks()[0].readyState === "ended",
+        "global stop cancels held candidate exchange and releases both independent tracks",
+      )
+      candidateanswer("late-invalid-answer")
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      check(!voice.operation && !voice.candidate, "late candidate answer cannot revive globally stopped voice")
+      await voice.start({ sessionID: "session-warm", requestID: "source-loss" }, exchange)
+      const lost = voice.operation
+      const lostpeer = peers.at(-1)
+      await until(() => channels.get(lostpeer)?.readyState === "open")
+      const lostchannel = channels.get(lostpeer)
+      const loss = { ...handoff, id: "handoff-loss", source: "source-loss", target: "target-loss" }
+      await voice.prepare(loss, exchange)
+      const orphan = voice.candidate
+      lostchannel.send(JSON.stringify({ type: "error", error: { code: "source_disconnected" } }))
+      await until(() => lost.closed)
+      check(
+        lost.media.getAudioTracks()[0].readyState === "ended" &&
+          orphan.media.getAudioTracks()[0].readyState === "ended" &&
+          !voice.operation &&
+          !voice.candidate,
+        "source failure releases both media roles without automatic promotion",
+      )
+      check(
+        refuses(() => voice.cutover(loss)),
+        "prepared receipt cannot authorize replacement after source failure",
+      )
+      await voice.start({ sessionID: "session-warm", requestID: "source-partial" }, exchange)
+      const partialsource = voice.operation
+      const partial = { ...handoff, id: "handoff-partial", source: "source-partial", target: "target-partial" }
+      await voice.prepare(partial, exchange)
+      const partialtarget = voice.candidate
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "muted")
+      Object.defineProperty(partialtarget.audio, "muted", {
+        get() {
+          return descriptor.get.call(this)
+        },
+        set(value) {
+          if (!value) throw new Error("Injected local output cutover failure")
+          descriptor.set.call(this, value)
+        },
+      })
+      check(
+        refuses(() => voice.cutover(partial)) &&
+          partialsource.media.getAudioTracks()[0].readyState === "ended" &&
+          partialtarget.media.getAudioTracks()[0].readyState === "ended",
+        "partial cutover failure stops both media effects without reviving source",
+      )
+      check(
+        refuses(() => voice.cutover(partial)) && !voice.operation && !voice.candidate && !voice.retiring,
+        "unknown cutover cannot automatically replay media activation",
+      )
       return checks
     } finally {
       await voice.stop()
@@ -334,7 +575,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 35)
+  assert.equal(result.length, 60)
   console.log(
     `OpenAI native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`,
   )

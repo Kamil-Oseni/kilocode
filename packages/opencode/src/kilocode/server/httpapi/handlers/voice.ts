@@ -4,6 +4,7 @@ import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { HttpServerRequest } from "effect/unstable/http"
 import * as Spoken from "@/kilocode/voice/openai-spoken"
+import { handoff } from "@/kilocode/voice/openai-protocol"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
@@ -144,6 +145,78 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     )
 
     return handlers
+      .handle("voiceOpenAIHandoffCandidate", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!handoff(raw, "candidate")) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.candidate(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            ctx.headers["x-raya-voice-target-key"],
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIHandoffContext", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.handoffContext(
+            ctx.params.id,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIHandoffReady", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!handoff(raw, "ready")) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.ready(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIHandoffActivate", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!handoff(raw, "activate")) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.activate(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIHandoffReceipt", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.handoffReceipt(
+            ctx.params.id,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error)))),
+      )
       .handle("voiceOpenAISpoken", (ctx) =>
         Effect.gen(function* () {
           // The API decoder strips excess keys; validate the original body before accepting server-owned fields.

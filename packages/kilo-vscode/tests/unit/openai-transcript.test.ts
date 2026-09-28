@@ -21,6 +21,82 @@ function final(id: string, text: string) {
   }
 }
 
+test("checkpoint publishes an exact empty receipt and freezes trusted provenance", async () => {
+  const f = fixture()
+  const empty = await f.collector.checkpoint()
+  expect(empty).toMatchObject({ version: 1, revision: 1, ready: true, items: [] })
+  expect(f.snapshots).toHaveLength(1)
+  const same = await f.collector.checkpoint()
+  expect(same.fingerprint).toBe(empty.fingerprint)
+  expect(same.revision).toBe(empty.revision)
+  f.collector.receive(link("item", null))
+  expect((await f.collector.checkpoint()).ready).toBe(false)
+  f.collector.receive(final("item", "Trusted text"))
+  const state = await f.collector.checkpoint()
+  expect(state.ready).toBe(true)
+  expect(state.items).toEqual([{ id: "item", previous: null, role: "user", state: "final", text: "Trusted text" }])
+  expect(state.fingerprint).not.toBe(empty.fingerprint)
+  expect(state.epoch).toBeGreaterThan(empty.epoch)
+  expect(Object.isFrozen(state)).toBe(true)
+  expect(Object.isFrozen(state.items)).toBe(true)
+  expect(Object.isFrozen(state.items[0])).toBe(true)
+})
+
+test("checkpoint refuses unresolved linkage, unheard audio and malformed identity", async () => {
+  const f = fixture()
+  f.collector.receive(final("child", "Unlinked text"))
+  expect((await f.collector.checkpoint()).ready).toBe(false)
+  f.collector.receive(link("child", null, "user"))
+  expect((await f.collector.checkpoint()).ready).toBe(true)
+  f.collector.receive(link("assistant", "child", "assistant"))
+  f.collector.receive({
+    type: "response.output_audio_transcript.done",
+    item_id: "assistant",
+    response_id: "response",
+    transcript: "Unheard words",
+  })
+  f.collector.receive({ type: "response.done", response: { id: "response", status: "completed" } })
+  const unheard = await f.collector.checkpoint()
+  expect(unheard.ready).toBe(false)
+  expect(JSON.stringify(unheard)).not.toContain("Unheard words")
+  f.collector.receive({ type: "output_audio_buffer.started", response_id: "response" })
+  f.collector.receive({ type: "output_audio_buffer.stopped", response_id: "response" })
+  expect((await f.collector.checkpoint()).ready).toBe(true)
+  f.collector.receive({ type: "conversation.item.truncated", item_id: "assistant" })
+  const omitted = await f.collector.checkpoint()
+  expect(omitted.ready).toBe(true)
+  expect(omitted.incomplete).toBe(true)
+  expect(omitted.fingerprint).not.toBe(unheard.fingerprint)
+  expect(JSON.stringify(omitted)).not.toContain("Unheard words")
+  f.collector.receive({ type: "response.done", response: { id: "bad id", status: "completed" } })
+  expect((await f.collector.checkpoint()).ready).toBe(false)
+})
+
+test("checkpoint refuses source activity during save and never fabricates failed persistence", async () => {
+  let release!: () => void
+  const saving = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const collector = new OpenAITranscript(async () => saving)
+  collector.receive(link("item", null))
+  collector.receive(final("item", "Original"))
+  const pending = collector.checkpoint()
+  await Promise.resolve()
+  collector.receive({ type: "conversation.item.deleted", item_id: "item" })
+  release()
+  const changed = await pending
+  expect(changed.ready).toBe(false)
+  expect(changed.items[0]?.state).toBe("omitted")
+  expect((await collector.checkpoint()).ready).toBe(true)
+  const failed = new OpenAITranscript(async () => {
+    throw new Error("Missing exact receipt")
+  })
+  await expect(failed.checkpoint()).rejects.toThrow("Missing exact receipt")
+  await expect(failed.checkpoint()).rejects.toThrow("Missing exact receipt")
+  await collector.close()
+  expect((await collector.checkpoint()).ready).toBe(false)
+})
+
 test("final transcription arrival does not reorder the provider item chain", async () => {
   const f = fixture()
   f.collector.receive(final("second", "Second spoken turn"))
@@ -177,6 +253,9 @@ test("bounded replay tracking stops admitting uncertain history while retaining 
   expect(f.latest().items.map((item) => item.id)).toEqual(prior)
   expect(f.latest().incomplete).toBe(true)
   expect(JSON.stringify(f.latest())).not.toContain("Resurrected")
+  const checkpoint = await f.collector.checkpoint()
+  expect(checkpoint.incomplete).toBe(true)
+  expect(checkpoint.ready).toBe(false)
 })
 
 test("clearance before transcripts and local interruption cannot be undone by later completions", async () => {
@@ -210,6 +289,9 @@ test("rolling history drops only an old prefix and preserves its original bounda
   f.collector.receive(final("item_0", "Late evicted text"))
   await f.collector.flush()
   expect(f.latest().items).toHaveLength(100)
+  const checkpoint = await f.collector.checkpoint()
+  expect(checkpoint.incomplete).toBe(true)
+  expect(checkpoint.ready).toBe(true)
 })
 
 test("serial snapshots coalesce behind an in-flight acknowledgement and shutdown waits for it", async () => {

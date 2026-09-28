@@ -287,6 +287,8 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
         })
       ).status,
     ).toBe(200)
+    expect((await request("POST", openai, otherInput)).status).toBe(409)
+    expect((await request("DELETE", `${openai}/${realtime.id}?generation=${realtime.generation}`)).status).toBe(200)
     const other = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", openai, otherInput)).json())
     expect((await request("DELETE", `/session/${parent.id}`)).status).toBe(200)
     expect((await request("GET", `/session/${parent.id}`)).status).toBe(404)

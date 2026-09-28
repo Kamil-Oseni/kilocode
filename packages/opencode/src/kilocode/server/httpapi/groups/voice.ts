@@ -23,6 +23,11 @@ import {
   OpenAIReservation,
   OpenAIReserve,
   OpenAIStart,
+  OpenAIHandoffCandidate,
+  OpenAIHandoffReady,
+  OpenAIHandoffActivate,
+  OpenAIHandoffContext,
+  OpenAIHandoffReceipt,
   VoiceID,
 } from "@/kilocode/voice/openai-protocol"
 
@@ -45,6 +50,11 @@ export const VoicePaths = {
   duration: `${root}/live/session/:id/duration`,
   spoken: `${root}/openai/session/:id/spoken`,
   context: `${root}/openai/session/:id/context`,
+  candidate: `${root}/openai/session/:id/handoff/candidate`,
+  checkpoint: `${root}/openai/session/:id/handoff/context`,
+  ready: `${root}/openai/session/:id/handoff/ready`,
+  activate: `${root}/openai/session/:id/handoff/activate`,
+  receipt: `${root}/openai/session/:id/handoff/receipt`,
 } as const
 
 const headers = { "x-raya-voice-key": Schema.optional(Schema.String) }
@@ -59,6 +69,79 @@ const generation = Schema.Struct({ ...WorkspaceRoutingQueryFields, generation: V
 
 export const VoiceApi = HttpApi.make("raya-voice").add(
   HttpApiGroup.make("raya-voice")
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIHandoffCandidate", VoicePaths.candidate, {
+        headers: { ...headers, "x-raya-voice-target-key": Schema.String },
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIHandoffCandidate,
+        success: OpenAIBinding,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.candidate",
+          summary: "Prepare a non-admitting replacement under exact source authority",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIHandoffContext", VoicePaths.checkpoint, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: OpenAIHandoffContext,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.context",
+          summary: "Read the exact source speech checkpoint for replacement prefill",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIHandoffReady", VoicePaths.ready, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIHandoffReady,
+        success: OpenAIBinding,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.ready",
+          summary: "Record bounded trusted broker readiness for an unchanged source checkpoint",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIHandoffActivate", VoicePaths.activate, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIHandoffActivate,
+        success: OpenAIHandoffReceipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.activate",
+          summary: "Atomically transfer work authority and retain an exact activation receipt",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIHandoffReceipt", VoicePaths.receipt, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: OpenAIHandoffReceipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.receipt",
+          summary: "Resolve an ambiguous activation without replaying work",
+        }),
+      ),
+    )
     .add(
       HttpApiEndpoint.post("voiceOpenAISpoken", VoicePaths.spoken, {
         headers,

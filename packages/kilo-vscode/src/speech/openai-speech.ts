@@ -27,6 +27,8 @@ export class OpenAISpeech {
   private turn = false
   private closed = false
   private uncertain = false
+  private epoch = 0
+  private fault = false
   private responses = new Set<string>()
   private playback = new Set<string>()
   private requests = new Map<string, Request>()
@@ -51,12 +53,39 @@ export class OpenAISpeech {
     return this.work?.background ?? false
   }
 
+  /** Audio eligibility only; backend work and call authority require separate checks. */
+  boundary() {
+    return Object.freeze({
+      version: 1 as const,
+      epoch: this.epoch,
+      quiet:
+        !this.closed &&
+        !this.fault &&
+        !this.uncertain &&
+        this.current() &&
+        !this.speaking &&
+        !this.turn &&
+        !this.request &&
+        !this.pending &&
+        !this.responses.size &&
+        !this.playback.size &&
+        !this.outputs.size,
+    })
+  }
+
+  private activity(fault = false) {
+    if (this.epoch < Number.MAX_SAFE_INTEGER) this.epoch++
+    else this.fault = true
+    if (fault) this.fault = true
+  }
+
   generating(id: string) {
     return this.responses.has(id)
   }
 
   start(id: string) {
     if (this.closed) return
+    this.activity(!identifier(id))
     this.finish()
     const work: Work = { id, started: this.time.now(), rung: 0, background: false }
     this.work = work
@@ -70,11 +99,13 @@ export class OpenAISpeech {
 
   observe(id: string, status: unknown) {
     if (this.work?.id !== id || (status !== "accepted" && status !== "running")) return
+    if (this.work.status !== status) this.activity()
     this.work.status = status
     this.flush()
   }
 
   finish() {
+    if (this.work) this.activity()
     for (const cancel of this.timers) cancel()
     this.timers = []
     this.work = undefined
@@ -82,20 +113,47 @@ export class OpenAISpeech {
 
   result(id: string, call: string, output: string) {
     if (this.closed) return
+    this.activity(!identifier(id) || !identifier(call))
     this.outputs.set(id, {
       call,
       hash: createHash("sha256").update(output).digest("hex"),
       cancel: this.time.after(() => {
         if (this.closed || !this.outputs.has(id)) return
         this.outputs.delete(id)
+        this.activity(true)
         if (this.current()) this.failed("Voice result delivery is unconfirmed. Review the result in the conversation.")
       }, 30_000),
     })
   }
 
+  private lifecycle(event: Record<string, unknown>) {
+    if (["input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped"].includes(String(event.type)))
+      this.activity(event.type === "input_audio_buffer.speech_stopped" && !this.speaking)
+    if (
+      ["output_audio_buffer.started", "output_audio_buffer.stopped", "output_audio_buffer.cleared"].includes(
+        String(event.type),
+      )
+    )
+      this.activity(
+        !identifier(event.response_id) ||
+          (event.type === "output_audio_buffer.stopped" && !this.playback.has(String(event.response_id))),
+      )
+    if (["response.created", "response.done"].includes(String(event.type))) {
+      const response = record(event.response)
+      this.activity(
+        !identifier(response?.id) ||
+          (event.type === "response.done" &&
+            (!this.responses.has(String(response?.id)) ||
+              !["completed", "failed", "cancelled", "incomplete"].includes(String(response?.status)))),
+      )
+    }
+    if (event.type === "error" && !cancelled(event, this.cancellations)) this.activity(true)
+  }
+
   /** Update gates first; the broker drains after processing completed work calls. */
   event(event: Record<string, unknown>) {
     if (this.closed) return false
+    this.lifecycle(event)
     this.audio(event)
     if (event.type === "conversation.item.done" || event.type === "conversation.item.created") {
       const item = record(event.item)
@@ -138,6 +196,7 @@ export class OpenAISpeech {
   }
 
   close() {
+    this.activity()
     this.closed = true
     this.finish()
     this.watchdog?.()
@@ -178,17 +237,20 @@ export class OpenAISpeech {
       typeof item.output !== "string" ||
       createHash("sha256").update(item.output).digest("hex") !== output.hash
     ) {
+      this.activity(true)
       output.cancel()
       this.outputs.delete(id)
       this.failed("Voice result acknowledgement did not match the work result. Review the conversation.")
       return
     }
     output.cancel()
+    this.activity()
     this.outputs.delete(id)
     this.pending = true
   }
 
   private create(kind: Request["kind"], guidance?: string) {
+    this.activity()
     const request: Request = { id: `raya_${randomBytes(12).toString("hex")}`, kind }
     this.request = request
     this.requests.set(request.id, request)
@@ -197,6 +259,7 @@ export class OpenAISpeech {
       if (this.closed || this.request !== request || request.response) return
       // An unacknowledged request may already be producing audio. Never retry it.
       this.uncertain = true
+      this.activity(true)
       if (this.current()) this.failed("Voice response delivery is unconfirmed. Work remains in the conversation.")
     }, 30_000)
     this.send({

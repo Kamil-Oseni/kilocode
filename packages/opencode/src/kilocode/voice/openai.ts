@@ -34,6 +34,12 @@ import {
   OpenAIImageInput,
   OpenAIReservation,
   OpenAIReserve,
+  OpenAIHandoffCandidate,
+  OpenAIHandoffReady,
+  OpenAIHandoffActivate,
+  OpenAIHandoffReceipt,
+  OpenAIHandoffContext,
+  handoff as validHandoff,
   VoiceID,
   VoiceKey,
 } from "./openai-protocol"
@@ -467,9 +473,44 @@ export const make = (deps: Deps) =>
     const active = (stored: Stored) => {
       if (stored.owner !== owner || stored.binding.status !== "active")
         return refuse("conflict", "Voice binding is closed or belongs to an earlier server owner.")
-      if (stored.binding.expiresAt <= Date.now()) return refuse("expired", "Voice binding expired.")
+      if (stored.binding.expiresAt <= Date.now() && stored.binding.handoff?.phase !== "retiring")
+        return refuse("expired", "Voice binding expired.")
       return Effect.void
     }
+    const entries = (stored: Stored) =>
+      Effect.gen(function* () {
+        const rows = yield* store.current(stored.binding.parentSessionID, owner, Date.now())
+        if (rows.length > 64) return yield* refuse("conflict", "Voice parent inspection limit reached.")
+        return yield* Effect.forEach(rows, (row) =>
+          store.inspect(row).pipe(
+            Effect.mapError(
+              () => new VoiceError({ code: "conflict", message: "Voice parent contains invalid retained authority." }),
+            ),
+            Effect.flatMap((entry) =>
+              entry.binding.directory === stored.binding.directory
+                ? Effect.succeed(entry)
+                : refuse("conflict", "Voice parent directory changed."),
+            ),
+          ),
+        )
+      })
+    const authority = (stored: Stored) =>
+      Effect.gen(function* () {
+        yield* active(stored)
+        if (stored.binding.handoff && stored.binding.handoff.phase !== "active")
+          return yield* refuse("conflict", "Voice binding does not admit new work.")
+        const current = yield* entries(stored)
+        if (
+          current.some(
+            (entry) =>
+              entry.binding.id !== stored.binding.id &&
+              (!entry.binding.handoff || entry.binding.handoff.phase === "active"),
+          )
+        )
+          return yield* refuse("conflict", "Another voice binding owns this parent.")
+      })
+    const group = <A, E, R>(stored: Stored, work: Effect.Effect<A, E, R>) =>
+      locked(`parent:${digest(JSON.stringify([stored.binding.directory, stored.binding.parentSessionID]))}`, work)
     const visible = (stored: Stored): Binding => ({
       ...stored.binding,
       status: stored.owner !== owner || stored.binding.expiresAt <= Date.now() ? "closed" : stored.binding.status,
@@ -733,6 +774,8 @@ export const make = (deps: Deps) =>
             const transcriptionAdmission = transcriptionID ? reservations.get(transcriptionID) : undefined
             const transcriptionProof = transcriptionInput ? reservation(transcriptionInput, secret, dir) : undefined
             if (prior) {
+              if (prior.binding.handoff?.phase === "candidate" || prior.binding.handoff?.phase === "ready")
+                return yield* refuse("conflict", "Prepared voice bindings require the handoff protocol.")
               if (
                 prior.requestID !== input.requestID ||
                 prior.transcriptionRequestID !== input.transcriptionRequestID ||
@@ -779,6 +822,9 @@ export const make = (deps: Deps) =>
                 expiresAt: now + 60 * 60 * 1000,
               },
             }
+            const current = yield* entries(stored)
+            if (current.some((entry) => !entry.binding.handoff || entry.binding.handoff.phase === "active"))
+              return yield* refuse("conflict", "Another voice binding owns this parent.")
             if (
               yield* store
                 .create(stored)
@@ -803,47 +849,54 @@ export const make = (deps: Deps) =>
             return visible(existing)
           }),
         )
-        const guarded = transcriptionID ? locked(`reservation:${transcriptionID}`, work) : work
+        const grouped = locked(`parent:${digest(JSON.stringify([dir, parent.id]))}`, work)
+        const guarded = transcriptionID ? locked(`reservation:${transcriptionID}`, grouped) : grouped
         return yield* locked(`reservation:${reservationID}`, guarded)
       })
     const stage = (id: string, input: typeof OpenAIImageInput.Type, secret: string, directory: string) =>
-      locked(
-        id,
-        Effect.gen(function* () {
-          const stored = yield* load(id, secret, directory, input.generation)
-          yield* active(stored)
-          if (!Schema.is(OpenAIImageInput)(input)) return yield* refuse("invalid", "Invalid image staging payload.")
-          const parent = yield* deps.sessions.get(stored.binding.parentSessionID)
-          if ((yield* canonical(parent.directory)) !== stored.binding.directory)
-            return yield* refuse("conflict", "Parent directory changed.")
-          const bytes = decode(input.mime, input.data)
-          if (!bytes)
-            return yield* refuse(
-              "invalid",
-              "Image must be canonical base64 with a matching JPEG, PNG or WebP signature, at most 256 KiB.",
-            )
-          const image: Image = {
-            data: input.data,
-            receipt: {
-              id: input.id,
-              mime: input.mime,
-              bytes: bytes.length,
-              sha256: createHash("sha256").update(bytes).digest("hex"),
-            },
-          }
-          const prior = stored.images?.[digest(input.id)]
-          if (prior) {
-            if (prior.data !== image.data || JSON.stringify(prior.receipt) !== JSON.stringify(image.receipt))
-              return yield* refuse("conflict", "Image ID already names different retained bytes.")
-            return prior.receipt
-          }
-          if (Object.keys(stored.images ?? {}).length >= 8)
-            return yield* refuse("conflict", "Voice binding image limit reached.")
-          stored.images = { ...stored.images, [digest(input.id)]: image }
-          yield* save(stored)
-          return image.receipt
-        }).pipe(Effect.uninterruptible),
-      )
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, input.generation)
+        return yield* group(
+          initial,
+          locked(
+            id,
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, input.generation)
+              yield* authority(stored)
+              if (!Schema.is(OpenAIImageInput)(input)) return yield* refuse("invalid", "Invalid image staging payload.")
+              const parent = yield* deps.sessions.get(stored.binding.parentSessionID)
+              if ((yield* canonical(parent.directory)) !== stored.binding.directory)
+                return yield* refuse("conflict", "Parent directory changed.")
+              const bytes = decode(input.mime, input.data)
+              if (!bytes)
+                return yield* refuse(
+                  "invalid",
+                  "Image must be canonical base64 with a matching JPEG, PNG or WebP signature, at most 256 KiB.",
+                )
+              const image: Image = {
+                data: input.data,
+                receipt: {
+                  id: input.id,
+                  mime: input.mime,
+                  bytes: bytes.length,
+                  sha256: createHash("sha256").update(bytes).digest("hex"),
+                },
+              }
+              const prior = stored.images?.[digest(input.id)]
+              if (prior) {
+                if (prior.data !== image.data || JSON.stringify(prior.receipt) !== JSON.stringify(image.receipt))
+                  return yield* refuse("conflict", "Image ID already names different retained bytes.")
+                return prior.receipt
+              }
+              if (Object.keys(stored.images ?? {}).length >= 8)
+                return yield* refuse("conflict", "Voice binding image limit reached.")
+              stored.images = { ...stored.images, [digest(input.id)]: image }
+              yield* save(stored)
+              return image.receipt
+            }).pipe(Effect.uninterruptible),
+          ),
+        )
+      })
     const meter = (id: string, input: typeof OpenAIUsageInput.Type, secret: string, directory: string) =>
       Effect.gen(function* () {
         if (!Schema.is(OpenAIUsageInput)(input)) return yield* refuse("invalid", "Invalid provider usage receipt.")
@@ -914,54 +967,65 @@ export const make = (deps: Deps) =>
         }),
       )
     const submit = (id: string, input: Input, secret: string, directory: string, cursor?: number) =>
-      locked(
-        id,
-        Effect.gen(function* () {
-          const stored = yield* load(id, secret, directory, input.generation)
-          yield* active(stored)
-          if (stored.binding.model !== (cursor === undefined ? "gpt-realtime-2.1" : "gpt-live-1"))
-            return yield* refuse("conflict", "Voice admission protocol does not match the binding.")
-          const prior = stored.calls[digest(input.callID)]
-          if (prior) {
-            if (
-              prior.input.arguments.request !== input.arguments.request ||
-              JSON.stringify(prior.input.arguments.images ?? []) !== JSON.stringify(input.arguments.images ?? []) ||
-              prior.input.function !== input.function ||
-              prior.input.responseID !== input.responseID ||
-              prior.input.itemID !== input.itemID
-            )
-              return yield* refuse("conflict", "Function call ID was reused with different input.")
-            return prior.receipt
-          }
-          if (cursor !== undefined && cursor <= (stored.liveCursor ?? 0))
-            return yield* refuse("conflict", "No new live request context is available.")
-          if (Object.keys(stored.calls).length >= 64)
-            return yield* refuse("conflict", "Voice binding call limit reached; start a new voice connection.")
-          if (Object.values(stored.calls).some((call) => pending(call.receipt)))
-            return yield* refuse("conflict", "Voice work is already running.")
-          const parent = yield* deps.sessions.get(stored.binding.parentSessionID)
-          if ((yield* canonical(parent.directory)) !== stored.binding.directory)
-            return yield* refuse("conflict", "Parent directory changed.")
-          const selected = yield* images(stored, input.arguments.images)
-          const now = Date.now()
-          const call: Call = {
-            id: crypto.randomUUID(),
-            callID: input.callID,
-            messageID: MessageID.ascending(),
-            parentSessionID: parent.id,
-            status: "accepted",
-            ...(selected.length ? { images: selected.map((image) => image.receipt) } : {}),
-            createdAt: now,
-            updatedAt: now,
-          }
-          stored.calls[digest(input.callID)] = { input, receipt: call }
-          if (cursor !== undefined) stored.liveCursor = cursor
-          // Persist before scheduling. A crash between these steps remains an unknown intent, never replayed.
-          yield* save(stored)
-          yield* run(id, input.callID).pipe(Effect.interruptible, Effect.forkIn(scope))
-          return call
-        }).pipe(Effect.uninterruptible),
-      )
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, input.generation)
+        return yield* group(
+          initial,
+          locked(
+            id,
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, input.generation)
+              yield* active(stored)
+              if (stored.binding.model !== (cursor === undefined ? "gpt-realtime-2.1" : "gpt-live-1"))
+                return yield* refuse("conflict", "Voice admission protocol does not match the binding.")
+              const prior = stored.calls[digest(input.callID)]
+              if (prior) {
+                if (
+                  prior.input.arguments.request !== input.arguments.request ||
+                  JSON.stringify(prior.input.arguments.images ?? []) !== JSON.stringify(input.arguments.images ?? []) ||
+                  prior.input.function !== input.function ||
+                  prior.input.responseID !== input.responseID ||
+                  prior.input.itemID !== input.itemID
+                )
+                  return yield* refuse("conflict", "Function call ID was reused with different input.")
+                return prior.receipt
+              }
+              yield* authority(stored)
+              if (cursor !== undefined && cursor <= (stored.liveCursor ?? 0))
+                return yield* refuse("conflict", "No new live request context is available.")
+              if (Object.keys(stored.calls).length >= 64)
+                return yield* refuse("conflict", "Voice binding call limit reached; start a new voice connection.")
+              if (
+                (yield* entries(stored)).some((entry) =>
+                  Object.values(entry.calls).some((call) => pending(call.receipt)),
+                )
+              )
+                return yield* refuse("conflict", "Voice work is already running.")
+              const parent = yield* deps.sessions.get(stored.binding.parentSessionID)
+              if ((yield* canonical(parent.directory)) !== stored.binding.directory)
+                return yield* refuse("conflict", "Parent directory changed.")
+              const selected = yield* images(stored, input.arguments.images)
+              const now = Date.now()
+              const call: Call = {
+                id: crypto.randomUUID(),
+                callID: input.callID,
+                messageID: MessageID.ascending(),
+                parentSessionID: parent.id,
+                status: "accepted",
+                ...(selected.length ? { images: selected.map((image) => image.receipt) } : {}),
+                createdAt: now,
+                updatedAt: now,
+              }
+              stored.calls[digest(input.callID)] = { input, receipt: call }
+              if (cursor !== undefined) stored.liveCursor = cursor
+              // Persist before scheduling. A crash between these steps remains an unknown intent, never replayed.
+              yield* save(stored)
+              yield* run(id, input.callID).pipe(Effect.interruptible, Effect.forkIn(scope))
+              return call
+            }).pipe(Effect.uninterruptible),
+          ),
+        )
+      })
     const delegate = (id: string, input: typeof LiveCall.Type, secret: string, directory: string) =>
       Effect.gen(function* () {
         if (!liveValid(input)) return yield* refuse("invalid", "Live delegation context is invalid or incomplete.")
@@ -1106,6 +1170,371 @@ export const make = (deps: Deps) =>
         if ((yield* canonical(session.directory)) !== stored.binding.directory)
           return yield* refuse("conflict", "Voice parent directory changed.")
       })
+    const checkpoint = (stored: Stored) => ({
+      sourceRevision: stored.spoken?.revision ?? 0,
+      sourceHash: digest(Spoken.fingerprint(stored.spoken ?? { revision: 0, items: [], incomplete: false })),
+    })
+    const related = (source: Stored, candidate: Stored) => {
+      const relation = candidate.binding.handoff
+      const prior = source.binding.handoff
+      if (
+        !relation ||
+        !prior ||
+        relation.sourceID !== source.binding.id ||
+        relation.sourceGeneration !== source.binding.generation ||
+        relation.candidateID !== candidate.binding.id ||
+        relation.candidateGeneration !== candidate.binding.generation ||
+        prior.sourceID !== relation.sourceID ||
+        prior.sourceGeneration !== relation.sourceGeneration ||
+        prior.candidateID !== relation.candidateID ||
+        prior.candidateGeneration !== relation.candidateGeneration ||
+        prior.requestID !== relation.requestID ||
+        source.owner !== owner ||
+        candidate.owner !== owner ||
+        source.binding.model !== candidate.binding.model ||
+        source.binding.directory !== candidate.binding.directory ||
+        source.binding.parentSessionID !== candidate.binding.parentSessionID
+      )
+        return refuse("conflict", "Voice handoff relation changed.")
+      return Effect.void
+    }
+    const candidate = (
+      id: string,
+      input: typeof OpenAIHandoffCandidate.Type,
+      secret: string,
+      target: string,
+      directory: string,
+    ) =>
+      Effect.gen(function* () {
+        if (!validHandoff(input, "candidate")) return yield* refuse("invalid", "Invalid handoff candidate.")
+        if (!Schema.is(VoiceKey)(target) || target.length !== 64 || target === secret)
+          return yield* refuse("unauthorized", "Handoff requires a distinct target capability.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        const dir = initial.binding.directory
+        if (
+          input.reservationID === initial.requestID ||
+          (input.transcriptionRequestID &&
+            (input.transcriptionRequestID === initial.transcriptionRequestID ||
+              input.transcriptionRequestID === input.reservationID))
+        )
+          return yield* refuse("conflict", "Handoff requires distinct reservation identities.")
+        const reservationID = digest(JSON.stringify([dir, input.reservationID]))
+        const transcriptionID = input.transcriptionRequestID
+          ? digest(JSON.stringify([dir, input.transcriptionRequestID]))
+          : undefined
+        const next = `rov_${digest(JSON.stringify([dir, input.providerCallID])).slice(0, 48)}`
+        if (next === id) return yield* refuse("conflict", "Handoff provider call must change.")
+        const work = group(
+          initial,
+          locked(
+            id,
+            locked(
+              next,
+              Effect.gen(function* () {
+                const source = yield* load(id, secret, directory, input.generation)
+                yield* authority(source)
+                yield* parent(source)
+                const existing = yield* load(next, target, directory).pipe(
+                  Effect.catchTag("VoiceError", (error) =>
+                    error.code === "missing" ? Effect.succeed(undefined) : Effect.fail(error),
+                  ),
+                )
+                if (existing) {
+                  yield* related(source, existing)
+                  if (
+                    existing.binding.handoff?.requestID !== input.requestID ||
+                    existing.requestID !== input.reservationID ||
+                    existing.transcriptionRequestID !== input.transcriptionRequestID
+                  )
+                    return yield* refuse("conflict", "Handoff request was reused with different input.")
+                  return visible(existing)
+                }
+                if (
+                  (yield* entries(source)).some(
+                    (entry) => entry.binding.id !== id && entry.binding.handoff?.phase !== "retiring",
+                  )
+                )
+                  return yield* refuse("conflict", "Another voice replacement is already prepared.")
+                const model = source.binding.model
+                if (input.transcriptionRequestID && model !== "gpt-realtime-2.1")
+                  return yield* refuse("invalid", "Transcription reservation requires a Realtime binding.")
+                const admission = reservations.get(reservationID)
+                const proof = reservation(
+                  { parentSessionID: source.binding.parentSessionID, requestID: input.reservationID, model },
+                  target,
+                  dir,
+                )
+                if (!admission || admission.fingerprint !== proof)
+                  return yield* refuse("conflict", "Reserve target voice budget before warming replacement.")
+                const transcription = transcriptionID ? reservations.get(transcriptionID) : undefined
+                if (
+                  transcriptionID &&
+                  (!transcription ||
+                    transcription.fingerprint !==
+                      reservation(
+                        {
+                          parentSessionID: source.binding.parentSessionID,
+                          requestID: input.transcriptionRequestID!,
+                          model: "gpt-live-transcribe",
+                        },
+                        target,
+                        dir,
+                      ))
+                )
+                  return yield* refuse("conflict", "Target transcription reservation changed.")
+                const now = Date.now()
+                const generation = crypto.randomUUID()
+                const relation = {
+                  version: 1 as const,
+                  requestID: input.requestID,
+                  sourceID: id,
+                  sourceGeneration: source.binding.generation,
+                  candidateID: next,
+                  candidateGeneration: generation,
+                }
+                const stored: Stored = {
+                  owner,
+                  hash: digest(target),
+                  requestID: input.reservationID,
+                  ...(input.transcriptionRequestID ? { transcriptionRequestID: input.transcriptionRequestID } : {}),
+                  calls: {},
+                  binding: {
+                    id: next,
+                    generation,
+                    parentSessionID: source.binding.parentSessionID,
+                    directory: dir,
+                    providerCallID: input.providerCallID,
+                    model,
+                    status: "active",
+                    createdAt: now,
+                    expiresAt: now + 3600000,
+                    handoff: { ...relation, phase: "candidate" },
+                  },
+                }
+                source.binding = { ...source.binding, handoff: { ...relation, phase: "active" } }
+                yield* store
+                  .pair(source, stored, true)
+                  .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
+                if (transcription) transcription.bound = true
+                if (model === "gpt-live-1") admission.bound = true
+                if (model !== "gpt-live-1") yield* releaseReservation(reservationID, admission)
+                return stored.binding
+              }).pipe(Effect.uninterruptible),
+            ),
+          ),
+        )
+        return yield* locked(
+          `reservation:${reservationID}`,
+          transcriptionID ? locked(`reservation:${transcriptionID}`, work) : work,
+        )
+      })
+    const handoffContext = (id: string, generation: string, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, generation)
+        const relation = initial.binding.handoff
+        if (
+          !relation ||
+          relation.sourceID === id ||
+          relation.candidateID !== id ||
+          (relation.phase !== "candidate" && relation.phase !== "ready")
+        )
+          return yield* refuse("conflict", "Voice binding has no warming handoff context.")
+        return yield* group(
+          initial,
+          locked(
+            relation.sourceID,
+            locked(
+              id,
+              Effect.gen(function* () {
+                const candidate = yield* load(id, secret, directory, generation)
+                yield* active(candidate)
+                if (candidate.binding.handoff?.phase !== "candidate" && candidate.binding.handoff?.phase !== "ready")
+                  return yield* refuse("conflict", "Voice replacement is no longer warming.")
+                const source = yield* read(relation.sourceID)
+                yield* related(source, candidate)
+                yield* authority(source)
+                yield* parent(source)
+                const ordered = source.spoken ? Spoken.ordered(source.spoken) : { items: [], incomplete: false }
+                const items: (typeof OpenAIHandoffContext.Type)["items"][number][] = []
+                let bytes = 0
+                let incomplete = ordered.incomplete
+                for (const item of ordered.items) {
+                  if (item.state !== "final") {
+                    incomplete = true
+                    continue
+                  }
+                  if (item.role === "other" || !item.text) continue
+                  items.push({ itemID: item.id, role: item.role, text: item.text })
+                  bytes += Buffer.byteLength(item.text, "utf8")
+                  while (bytes > 8192 || items.length > 128) {
+                    bytes -= Buffer.byteLength(items.shift()!.text, "utf8")
+                    incomplete = true
+                  }
+                }
+                return {
+                  version: 1 as const,
+                  sourceID: source.binding.id,
+                  sourceGeneration: source.binding.generation,
+                  ...checkpoint(source),
+                  items,
+                  incomplete,
+                }
+              }),
+            ),
+          ),
+        )
+      })
+    const ready = (id: string, input: typeof OpenAIHandoffReady.Type, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        if (!validHandoff(input, "ready")) return yield* refuse("invalid", "Invalid handoff readiness.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        const relation = initial.binding.handoff
+        if (
+          !relation ||
+          relation.sourceID === id ||
+          relation.candidateID !== id ||
+          (relation.phase !== "candidate" && relation.phase !== "ready")
+        )
+          return yield* refuse("conflict", "Voice binding is not a warming replacement.")
+        return yield* group(
+          initial,
+          locked(
+            relation.sourceID,
+            locked(
+              id,
+              Effect.gen(function* () {
+                const stored = yield* load(id, secret, directory, input.generation)
+                yield* active(stored)
+                const source = yield* read(relation.sourceID)
+                yield* related(source, stored)
+                yield* authority(source)
+                yield* parent(source)
+                const current = checkpoint(source)
+                if (
+                  current.sourceRevision !== input.sourceRevision ||
+                  current.sourceHash !== input.sourceHash ||
+                  source.spoken?.items.some((item) => item.state === "pending")
+                )
+                  return yield* refuse("conflict", "Voice source checkpoint changed or is unfinished.")
+                const prior = stored.binding.handoff!
+                if (prior.phase === "ready") {
+                  if (
+                    prior.readyID !== input.readyID ||
+                    prior.sourceRevision !== input.sourceRevision ||
+                    prior.sourceHash !== input.sourceHash
+                  )
+                    return yield* refuse("conflict", "Readiness identity was reused with different input.")
+                  if (prior.deadline! <= Date.now()) return yield* refuse("expired", "Voice readiness expired.")
+                  return stored.binding
+                }
+                if (prior.phase !== "candidate") return yield* refuse("conflict", "Voice replacement is not warming.")
+                stored.binding = {
+                  ...stored.binding,
+                  handoff: {
+                    ...prior,
+                    phase: "ready",
+                    sourceRevision: input.sourceRevision,
+                    sourceHash: input.sourceHash,
+                    readyID: input.readyID,
+                    deadline: Math.min(Date.now() + 30000, source.binding.expiresAt, stored.binding.expiresAt),
+                  },
+                }
+                yield* save(stored)
+                return stored.binding
+              }).pipe(Effect.uninterruptible),
+            ),
+          ),
+        )
+      })
+    const activate = (id: string, input: typeof OpenAIHandoffActivate.Type, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        if (!validHandoff(input, "activate")) return yield* refuse("invalid", "Invalid handoff activation.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        if (input.candidateID === id) return yield* refuse("conflict", "Handoff target must differ.")
+        return yield* group(
+          initial,
+          locked(
+            id,
+            locked(
+              input.candidateID,
+              Effect.gen(function* () {
+                const source = yield* load(id, secret, directory, input.generation)
+                if (source.owner !== owner)
+                  return yield* refuse("conflict", "Handoff belongs to an earlier backend owner.")
+                const prior = source.binding.handoff!
+                const match = (value: typeof OpenAIHandoffReceipt.Type) =>
+                  value.requestID === input.requestID &&
+                  value.sourceGeneration === input.generation &&
+                  value.candidateID === input.candidateID &&
+                  value.candidateGeneration === input.candidateGeneration &&
+                  value.readyID === input.readyID &&
+                  value.sourceRevision === input.sourceRevision &&
+                  value.sourceHash === input.sourceHash
+                if (prior?.receipt) {
+                  if (!match(prior.receipt))
+                    return yield* refuse("conflict", "Activation identity was reused with different input.")
+                  return prior.receipt
+                }
+                const candidate = yield* read(input.candidateID)
+                yield* related(source, candidate)
+                yield* authority(source)
+                yield* active(candidate)
+                yield* parent(source)
+                const prepared = candidate.binding.handoff!
+                const current = checkpoint(source)
+                if (
+                  prepared.phase !== "ready" ||
+                  prepared.deadline! <= Date.now() ||
+                  prepared.readyID !== input.readyID ||
+                  prepared.requestID !== input.requestID ||
+                  candidate.binding.generation !== input.candidateGeneration ||
+                  prepared.sourceRevision !== input.sourceRevision ||
+                  prepared.sourceHash !== input.sourceHash ||
+                  current.sourceRevision !== input.sourceRevision ||
+                  current.sourceHash !== input.sourceHash ||
+                  source.spoken?.items.some((item) => item.state === "pending") ||
+                  (yield* entries(source)).some((entry) =>
+                    Object.values(entry.calls).some((call) => pending(call.receipt)),
+                  )
+                )
+                  return yield* refuse(
+                    "conflict",
+                    "Voice handoff checkpoint is no longer ready or work remains pending.",
+                  )
+                const receipt: typeof OpenAIHandoffReceipt.Type = {
+                  version: 1,
+                  requestID: input.requestID,
+                  sourceID: id,
+                  sourceGeneration: input.generation,
+                  candidateID: input.candidateID,
+                  candidateGeneration: input.candidateGeneration,
+                  sourceRevision: input.sourceRevision,
+                  sourceHash: input.sourceHash,
+                  readyID: input.readyID,
+                  activatedAt: Date.now(),
+                }
+                source.binding = { ...source.binding, handoff: { ...prepared, phase: "retiring", receipt } }
+                candidate.binding = { ...candidate.binding, handoff: { ...prepared, phase: "active", receipt } }
+                yield* store
+                  .pair(source, candidate)
+                  .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
+                return receipt
+              }).pipe(Effect.uninterruptible),
+            ),
+          ),
+        )
+      })
+    const handoffReceipt = (id: string, generation: string, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          const stored = yield* load(id, secret, directory, generation)
+          const receipt = stored.binding.handoff?.receipt
+          if (!receipt || receipt.sourceID !== id)
+            return yield* refuse("missing", "Voice activation receipt is not available.")
+          return receipt
+        }),
+      )
     const spoken = (id: string, input: typeof Spoken.Input.Type, secret: string, directory: string) =>
       locked(
         id,
@@ -1124,6 +1553,27 @@ export const make = (deps: Deps) =>
             updatedAt: Date.now(),
           }
           const prior = stored.spoken
+          if (stored.binding.handoff?.phase === "candidate" || stored.binding.handoff?.phase === "ready")
+            return yield* refuse("conflict", "Warming voice bindings cannot publish speech.")
+          if (
+            stored.binding.handoff?.phase === "retiring" &&
+            (!prior ||
+              snapshot.items.length !== prior.items.length ||
+              snapshot.items.some((item, index) => {
+                const before = prior.items[index]!
+                return (
+                  item.id !== before.id ||
+                  item.previous !== before.previous ||
+                  item.role !== before.role ||
+                  !(
+                    (item.state === before.state && item.text === before.text) ||
+                    (item.state === "omitted" && item.text === undefined)
+                  )
+                )
+              }) ||
+              (prior.incomplete && !snapshot.incomplete))
+          )
+            return yield* refuse("conflict", "Retiring speech permits only terminal corrections.")
           if (prior && snapshot.revision === prior.revision) {
             if (Spoken.fingerprint(snapshot) !== Spoken.fingerprint(prior))
               return yield* refuse("conflict", "Spoken revision was reused with different content.")
@@ -1224,5 +1674,10 @@ export const make = (deps: Deps) =>
       close,
       spoken,
       context,
+      candidate,
+      handoffContext,
+      ready,
+      activate,
+      handoffReceipt,
     }
   })

@@ -5,7 +5,16 @@ import { RayaVoiceBindingTable as Table } from "@opencode-ai/core/kilocode/voice
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
 import type { Storage } from "@/storage/storage"
-import { OpenAIBinding, OpenAICall, OpenAICallInput, OpenAIImage, VoiceID, VoiceKey } from "./openai-protocol"
+import {
+  OpenAIBinding,
+  OpenAICall,
+  OpenAICallInput,
+  OpenAIHandoff,
+  OpenAIHandoffReceipt,
+  OpenAIImage,
+  VoiceID,
+  VoiceKey,
+} from "./openai-protocol"
 import { OpenAIUsage } from "./openai-usage"
 import { LiveDuration } from "./live-protocol"
 import { Snapshot } from "./openai-spoken"
@@ -71,7 +80,23 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
       .pipe(Effect.orDie)
   const remove = (id: string) => storage.remove(key(id)).pipe(Effect.orDie)
   const validate = (value: unknown, id: string, session?: string): Effect.Effect<Stored, BindingError> =>
-    Schema.is(Payload)(value) && value.binding.id === id && (!session || value.binding.parentSessionID === session)
+    Schema.is(Payload)(value) &&
+    value.binding.id === id &&
+    (!session || value.binding.parentSessionID === session) &&
+    (!value.binding.handoff ||
+      (Object.keys(value.binding.handoff).every((key) => Object.keys(OpenAIHandoff.fields).includes(key)) &&
+        (!value.binding.handoff.receipt ||
+          Object.keys(value.binding.handoff.receipt).every((key) =>
+            Object.keys(OpenAIHandoffReceipt.fields).includes(key),
+          )) &&
+        (value.binding.handoff.phase === "candidate" || value.binding.handoff.phase === "ready"
+          ? value.binding.handoff.candidateID === id &&
+            value.binding.handoff.candidateGeneration === value.binding.generation
+          : value.binding.handoff.receipt && value.binding.handoff.phase === "active"
+            ? value.binding.handoff.candidateID === id &&
+              value.binding.handoff.candidateGeneration === value.binding.generation
+            : value.binding.handoff.sourceID === id &&
+              value.binding.handoff.sourceGeneration === value.binding.generation)))
       ? Effect.succeed(value)
       : conflict()
   const inspect = (input: { id: string; sessionID: string; data: unknown }) =>
@@ -161,5 +186,63 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
       .all()
       .pipe(Effect.orDie)
   }
-  return { read, create, replace, latest, page, inspect, context }
+  const current = (session: string, owner: string, now: number) =>
+    db
+      .select({ id: Table.id, sessionID: Table.session_id, data: Table.data })
+      .from(Table)
+      .where(
+        and(
+          eq(Table.session_id, session),
+          sql`CASE WHEN json_valid(${Table.data}) THEN
+        (json_extract(${Table.data}, '$.owner') = ${owner} AND ((json_extract(${Table.data}, '$.binding.status') != 'closed'
+         AND json_extract(${Table.data}, '$.binding.expiresAt') > ${now}) OR EXISTS
+         (SELECT 1 FROM json_each(${Table.data}, '$.calls') WHERE json_extract(value, '$.receipt.status') IN ('accepted', 'running'))))
+        OR json_type(${Table.data}, '$.binding') IS NOT 'object'
+        OR json_type(${Table.data}, '$.owner') IS NOT 'text'
+        OR json_extract(${Table.data}, '$.owner') GLOB '*[^a-zA-Z0-9_-]*'
+        OR length(json_extract(${Table.data}, '$.owner')) NOT BETWEEN 1 AND 128
+        OR json_type(${Table.data}, '$.binding.status') IS NOT 'text'
+        OR json_extract(${Table.data}, '$.binding.status') NOT IN ('active', 'closing', 'closed')
+        OR json_type(${Table.data}, '$.binding.expiresAt') IS NULL
+        OR json_type(${Table.data}, '$.binding.expiresAt') NOT IN ('integer', 'real')
+        ELSE 1 END`,
+        ),
+      )
+      .orderBy(asc(Table.id))
+      .limit(65)
+      .all()
+      .pipe(Effect.orDie)
+  const pair = (source: Stored, candidate: Stored, creating = false) =>
+    db
+      .transaction((tx) =>
+        Effect.gen(function* () {
+          const saved = yield* tx
+            .update(Table)
+            .set({ data: source })
+            .where(and(eq(Table.id, source.binding.id), eq(Table.session_id, source.binding.parentSessionID)))
+            .returning({ id: Table.id })
+          if (saved.length !== 1) return yield* missing()
+          if (creating) {
+            const rows = yield* tx
+              .insert(Table)
+              .values({ id: candidate.binding.id, session_id: candidate.binding.parentSessionID, data: candidate })
+              .onConflictDoNothing()
+              .returning({ id: Table.id })
+            if (rows.length !== 1) return yield* conflict()
+            return
+          }
+          const rows = yield* tx
+            .update(Table)
+            .set({ data: candidate })
+            .where(and(eq(Table.id, candidate.binding.id), eq(Table.session_id, candidate.binding.parentSessionID)))
+            .returning({ id: Table.id })
+          if (rows.length !== 1) return yield* missing()
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          () => new BindingError({ code: "conflict", message: "Handoff transaction was not confirmed." }),
+        ),
+      )
+  return { read, create, replace, latest, page, inspect, context, current, pair }
 }

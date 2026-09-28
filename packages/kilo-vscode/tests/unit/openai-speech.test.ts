@@ -53,6 +53,64 @@ function fixture() {
   }
 }
 
+test("quiet boundary tracks audio ownership without stopping admitted work", () => {
+  const f = fixture()
+  const initial = f.speech.boundary()
+  expect(initial).toEqual({ version: 1, epoch: 0, quiet: true })
+  expect(Object.isFrozen(initial)).toBe(true)
+  f.speech.start("call")
+  expect(f.speech.boundary().quiet).toBe(true)
+  expect(f.speech.boundary().epoch).toBeGreaterThan(initial.epoch)
+  f.event({ type: "input_audio_buffer.speech_started" })
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.event({ type: "input_audio_buffer.speech_stopped" })
+  expect(f.speech.boundary().quiet).toBe(false) // Pending user turn still belongs to source.
+  f.event({ type: "response.created", response: { id: "turn" } })
+  f.event({ type: "output_audio_buffer.started", response_id: "turn" })
+  f.event({ type: "response.done", response: { id: "turn", status: "completed" } })
+  expect(f.speech.boundary().quiet).toBe(false) // Generation completion is not playback completion.
+  f.event({ type: "output_audio_buffer.stopped", response_id: "turn" })
+  expect(f.speech.boundary().quiet).toBe(true)
+  f.speech.result("retained", "call", "{}")
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.event({
+    type: "conversation.item.created",
+    item: { id: "retained", type: "function_call_output", call_id: "call", output: "{}" },
+  })
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.done()
+  expect(f.speech.boundary().quiet).toBe(true)
+  f.state.current = false
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.speech.close()
+  f.state.current = true
+  expect(f.speech.boundary().quiet).toBe(false)
+})
+
+test("malformed and unconfirmed states permanently refuse a quiet boundary", () => {
+  for (const event of [
+    { type: "response.created", response: { id: "bad id" } },
+    { type: "response.done", response: { id: "unknown", status: "completed" } },
+    { type: "output_audio_buffer.started", response_id: null },
+    { type: "output_audio_buffer.stopped", response_id: "unknown" },
+    { type: "input_audio_buffer.speech_stopped" },
+    { type: "error", error: { event_id: "unknown" } },
+  ]) {
+    const f = fixture()
+    f.event(event)
+    expect(f.speech.boundary().quiet).toBe(false)
+    f.event({ type: "response.created", response: { id: "later" } })
+    f.event({ type: "response.done", response: { id: "later", status: "completed" } })
+    expect(f.speech.boundary().quiet).toBe(false)
+    f.speech.close()
+  }
+  const f = fixture()
+  f.speech.result("missing", "call", "{}")
+  f.advance(30_000)
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.speech.close()
+})
+
 test("elapsed narration uses only admitted facts, coalesces delayed rungs and backgrounds at five seconds", () => {
   const f = fixture()
   f.speech.start("call_1")

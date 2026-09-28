@@ -27,10 +27,461 @@ import { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { OpenAITranscript } from "../../../kilo-vscode/src/speech/openai-transcript"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const secret = "a".repeat(64)
 const session = SessionID.make("ses_openai_voice_test")
+
+const warming = (state: Effect.Success<ReturnType<typeof fixture>>, root: string) =>
+  Effect.gen(function* () {
+    const target = "b".repeat(64)
+    const input = {
+      version: 1 as const,
+      generation: state.binding.generation,
+      requestID: "handoff-one",
+      providerCallID: "replacement-one",
+      reservationID: "replacement-budget",
+    }
+    yield* state.voice.reserve(
+      { parentSessionID: session, requestID: input.reservationID, model: state.binding.model },
+      target,
+      root,
+    )
+    const binding = yield* state.voice.candidate(state.binding.id, input, secret, target, root)
+    const context = yield* state.voice.handoffContext(binding.id, binding.generation, target, root)
+    const ready = {
+      version: 1 as const,
+      generation: binding.generation,
+      readyID: "prefill-one",
+      sourceRevision: context.sourceRevision,
+      sourceHash: context.sourceHash,
+    }
+    const activate = {
+      ...ready,
+      generation: state.binding.generation,
+      requestID: input.requestID,
+      candidateID: binding.id,
+      candidateGeneration: binding.generation,
+    }
+    return { target, input, binding, context, ready, activate }
+  })
+
+it.live(
+  "warm authority refuses malformed expiry and bounded parent overflow without staging input",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const saved = yield* retained(state.binding.id)
+        const db = state.deps.database.db
+        const invalid = { ...saved, binding: { ...saved.binding, id: "invalid-expiry", expiresAt: "tomorrow" } }
+        yield* db
+          .insert(Table)
+          .values({ id: invalid.binding.id, session_id: session, data: invalid })
+          .run()
+          .pipe(Effect.orDie)
+        const input = { generation: state.binding.generation, id: "safe-image", mime: "image/png" as const, data: png }
+        expect(Exit.isFailure(yield* state.voice.stage(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect((yield* retained(state.binding.id)).images).toBeUndefined()
+        yield* db.delete(Table).where(eq(Table.id, invalid.binding.id)).run().pipe(Effect.orDie)
+        const rows = Array.from({ length: 65 }, (_, index) => {
+          const id = `overflow-${index}`
+          return { id, session_id: session, data: { ...saved, binding: { ...saved.binding, id } } }
+        })
+        yield* db.insert(Table).values(rows).run().pipe(Effect.orDie)
+        expect(Exit.isFailure(yield* state.voice.stage(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect((yield* retained(state.binding.id)).images).toBeUndefined()
+        expect(state.calls).toEqual([])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "warm handoff binds the real host checkpoint, denies candidate work, and resolves exact activation receipts",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const collector = new OpenAITranscript(async (snapshot) => {
+          await Effect.runPromise(
+            state.voice.spoken(
+              state.binding.id,
+              {
+                ...snapshot,
+                generation: state.binding.generation,
+                providerCallID: state.binding.providerCallID,
+              },
+              secret,
+              root,
+            ),
+          )
+        })
+        collector.receive({
+          type: "conversation.item.added",
+          event_id: "create-one",
+          previous_item_id: null,
+          item: { id: "user-one", type: "message", role: "user", content: [{ type: "input_audio" }] },
+        })
+        collector.receive({
+          type: "conversation.item.input_audio_transcription.completed",
+          event_id: "transcript-one",
+          item_id: "user-one",
+          content_index: 0,
+          transcript: "I want to learn the violin.",
+        })
+        const checkpoint = yield* Effect.promise(() => collector.checkpoint())
+        expect(checkpoint.ready).toBe(true)
+        const next = yield* warming(state, root)
+        expect(next.context.sourceRevision).toBe(checkpoint.revision)
+        expect(next.context.sourceHash).toBe(checkpoint.fingerprint)
+        expect(next.context.items).toEqual([{ itemID: "user-one", role: "user", text: "I want to learn the violin." }])
+        expect(yield* state.voice.candidate(state.binding.id, next.input, secret, next.target, root)).toEqual(
+          next.binding,
+        )
+        for (const changed of [
+          { ...next.input, requestID: "conflict" },
+          { ...next.input, requestID: "bad\n" },
+          { ...next.input, extra: true },
+        ])
+          expect(
+            Exit.isFailure(
+              yield* state.voice.candidate(state.binding.id, changed, secret, next.target, root).pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice.candidate(state.binding.id, next.input, secret, secret, root).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        for (const phase of ["candidate", "ready"]) {
+          if (phase === "ready") yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+          expect(
+            Exit.isFailure(
+              yield* state.voice
+                .submit(next.binding.id, { ...state.input, generation: next.binding.generation }, next.target, root)
+                .pipe(Effect.exit),
+            ),
+          ).toBe(true)
+          expect(
+            Exit.isFailure(
+              yield* state.voice
+                .stage(
+                  next.binding.id,
+                  { generation: next.binding.generation, id: "image", mime: "image/png", data: png },
+                  next.target,
+                  root,
+                )
+                .pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        }
+        const prepared = yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        expect(yield* state.voice.ready(next.binding.id, next.ready, next.target, root)).toEqual(prepared)
+        const receipt = yield* state.voice.activate(state.binding.id, next.activate, secret, root)
+        expect(yield* state.voice.activate(state.binding.id, next.activate, secret, root)).toEqual(receipt)
+        expect(yield* state.voice.handoffReceipt(state.binding.id, state.binding.generation, secret, root)).toEqual(
+          receipt,
+        )
+        expect((yield* retained(state.binding.id)).binding.handoff?.phase).toBe("retiring")
+        expect((yield* retained(next.binding.id)).binding.handoff?.phase).toBe("active")
+        const third = "c".repeat(64)
+        const input = {
+          version: 1 as const,
+          generation: next.binding.generation,
+          requestID: "handoff-three",
+          providerCallID: "provider-three",
+          reservationID: "budget-three",
+        }
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: input.reservationID, model: next.binding.model },
+          third,
+          root,
+        )
+        const binding = yield* state.voice.candidate(next.binding.id, input, next.target, third, root)
+        const context = yield* state.voice.handoffContext(binding.id, binding.generation, third, root)
+        const ready = {
+          version: 1 as const,
+          generation: binding.generation,
+          readyID: "prefill-three",
+          sourceRevision: context.sourceRevision,
+          sourceHash: context.sourceHash,
+        }
+        yield* state.voice.ready(binding.id, ready, third, root)
+        yield* state.voice.activate(
+          next.binding.id,
+          {
+            ...ready,
+            generation: next.binding.generation,
+            requestID: input.requestID,
+            candidateID: binding.id,
+            candidateGeneration: binding.generation,
+          },
+          next.target,
+          root,
+        )
+        expect(yield* state.voice.activate(state.binding.id, next.activate, secret, root)).toEqual(receipt)
+        const started = Date.now()
+        for (const request of [
+          state.voice.handoffContext(next.binding.id, next.binding.generation, next.target, root).pipe(Effect.asVoid),
+          state.voice.ready(next.binding.id, next.ready, next.target, root).pipe(Effect.asVoid),
+        ])
+          expect(yield* request.pipe(Effect.flip, Effect.timeout("1 second"))).toMatchObject({
+            _tag: "VoiceError",
+            code: "conflict",
+          })
+        expect(Date.now() - started).toBeLessThan(1000)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .activate(state.binding.id, { ...next.activate, readyID: "other" }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .submit(state.binding.id, { ...state.input, callID: "retired" }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const saved = (yield* retained(state.binding.id)).spoken!
+        yield* state.voice.spoken(
+          state.binding.id,
+          {
+            version: 1,
+            generation: state.binding.generation,
+            providerCallID: state.binding.providerCallID,
+            revision: saved.revision + 1,
+            incomplete: true,
+            items: saved.items.map((item) => ({
+              id: item.id,
+              previous: item.previous,
+              role: item.role,
+              state: "omitted" as const,
+            })),
+          },
+          secret,
+          root,
+        )
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .spoken(
+                state.binding.id,
+                {
+                  version: 1,
+                  generation: state.binding.generation,
+                  providerCallID: state.binding.providerCallID,
+                  revision: saved.revision + 2,
+                  incomplete: true,
+                  items: [{ id: "new", previous: null, role: "user", state: "final", text: "new work" }],
+                },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+        expect(yield* state.voice.handoffReceipt(state.binding.id, state.binding.generation, secret, root)).toEqual(
+          receipt,
+        )
+        const reopened = yield* make(state.deps)
+        expect(yield* reopened.handoffReceipt(state.binding.id, state.binding.generation, secret, root)).toEqual(
+          receipt,
+        )
+        expect(
+          Exit.isFailure(yield* reopened.activate(state.binding.id, next.activate, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(yield* reopened.ready(next.binding.id, next.ready, next.target, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(state.calls).toEqual([])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "warm handoff transactions roll back both creation and activation under real SQLite failures",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        const call = yield* settled(
+          state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        )
+        const before = yield* retained(state.binding.id)
+        const db = state.deps.database.db
+        yield* db
+          .run(
+            sql`CREATE TRIGGER refuse_candidate BEFORE INSERT ON raya_voice_binding BEGIN SELECT RAISE(ABORT, 'candidate denied'); END`,
+          )
+          .pipe(Effect.orDie)
+        expect(Exit.isFailure(yield* warming(state, root).pipe(Effect.exit))).toBe(true)
+        expect(yield* retained(state.binding.id)).toEqual(before)
+        expect(yield* db.select().from(Table).pipe(Effect.orDie)).toHaveLength(1)
+        yield* db.run(sql`DROP TRIGGER refuse_candidate`).pipe(Effect.orDie)
+        const next = yield* warming(state, root)
+        yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        const source = yield* retained(state.binding.id)
+        const target = yield* retained(next.binding.id)
+        yield* db
+          .run(
+            sql`CREATE TRIGGER refuse_activation BEFORE UPDATE ON raya_voice_binding WHEN json_extract(OLD.data, '$.binding.handoff.phase') = 'ready' BEGIN SELECT RAISE(ABORT, 'activation denied'); END`,
+          )
+          .pipe(Effect.orDie)
+        expect(
+          Exit.isFailure(yield* state.voice.activate(state.binding.id, next.activate, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(yield* retained(state.binding.id)).toEqual(source)
+        expect(yield* retained(next.binding.id)).toEqual(target)
+        yield* db.run(sql`DROP TRIGGER refuse_activation`).pipe(Effect.orDie)
+        yield* state.voice.activate(state.binding.id, next.activate, secret, root)
+        expect(yield* state.voice.submit(state.binding.id, state.input, secret, root)).toEqual(call)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .submit(state.binding.id, { ...state.input, arguments: { request: "changed" } }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(state.calls).toHaveLength(1)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "warm handoff refuses changed checkpoints, unfinished work, expired readiness and rival ordinary starts",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const next = yield* warming(state, root)
+        yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        const rival = { ...state.start, requestID: "rival-budget", providerCallID: "rival-provider" }
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: rival.requestID, model: state.binding.model },
+          secret,
+          root,
+        )
+        expect(Exit.isFailure(yield* state.voice.start(rival, secret, root).pipe(Effect.exit))).toBe(true)
+        yield* state.voice.spoken(
+          state.binding.id,
+          {
+            version: 1,
+            generation: state.binding.generation,
+            providerCallID: state.binding.providerCallID,
+            revision: 1,
+            items: [{ id: "later", previous: null, role: "user", state: "final", text: "A changed turn." }],
+          },
+          secret,
+          root,
+        )
+        expect(
+          Exit.isFailure(yield* state.voice.activate(state.binding.id, next.activate, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(yield* state.voice.ready(next.binding.id, next.ready, next.target, root).pipe(Effect.exit)),
+        ).toBe(true)
+        yield* state.voice.close(next.binding.id, next.binding.generation, next.target, root)
+        const again = {
+          ...next.input,
+          requestID: "handoff-two",
+          reservationID: "budget-two",
+          providerCallID: "replacement-two",
+        }
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: again.reservationID, model: state.binding.model },
+          next.target,
+          root,
+        )
+        const binding = yield* state.voice.candidate(state.binding.id, again, secret, next.target, root)
+        const context = yield* state.voice.handoffContext(binding.id, binding.generation, next.target, root)
+        const ready = {
+          ...next.ready,
+          generation: binding.generation,
+          sourceHash: context.sourceHash,
+          sourceRevision: context.sourceRevision,
+        }
+        yield* state.voice.ready(binding.id, ready, next.target, root)
+        const input = {
+          ...ready,
+          generation: state.binding.generation,
+          requestID: again.requestID,
+          candidateID: binding.id,
+          candidateGeneration: binding.generation,
+        }
+        const saved = yield* retained(binding.id)
+        yield* replace({
+          ...saved,
+          binding: { ...saved.binding, handoff: { ...saved.binding.handoff!, deadline: Date.now() - 1 } },
+        })
+        expect(
+          Exit.isFailure(yield* state.voice.activate(state.binding.id, input, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(Exit.isFailure(yield* state.voice.ready(binding.id, ready, next.target, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        const source = yield* retained(state.binding.id)
+        yield* replace({
+          ...source,
+          calls: {
+            pending: {
+              input: state.input,
+              receipt: {
+                id: "pending",
+                callID: state.input.callID,
+                messageID: MessageID.ascending(),
+                parentSessionID: session,
+                status: "accepted",
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              },
+            },
+          },
+        })
+        yield* replace(saved)
+        expect(
+          Exit.isFailure(yield* state.voice.activate(state.binding.id, input, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(state.calls).toEqual([])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
 
 it.live(
   "spoken full snapshots enforce exact revisions, monotone items and shared binding writes",
@@ -1032,6 +1483,22 @@ it.live(
                 .pipe(Effect.exit),
             ),
           ).toBe(true)
+        const value = yield* retained(state.binding.id)
+        const id = createHash("sha256").update("image-0").digest("hex")
+        yield* replace({ ...value, images: { ...value.images, [id]: { ...value.images![id], data: "corrupted" } } })
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .submit(
+                state.binding.id,
+                { ...state.input, arguments: { request: "Check", images: ["image-0"] } },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
         yield* state.voice.reserve(
           { parentSessionID: session, requestID: state.start.requestID, model: "gpt-realtime-2.1" },
           secret,
@@ -1044,21 +1511,6 @@ it.live(
               .submit(
                 second.id,
                 { ...state.input, generation: second.generation, arguments: { request: "Check", images: ["image-0"] } },
-                secret,
-                root,
-              )
-              .pipe(Effect.exit),
-          ),
-        ).toBe(true)
-        const value = yield* retained(state.binding.id)
-        const id = createHash("sha256").update("image-0").digest("hex")
-        yield* replace({ ...value, images: { ...value.images, [id]: { ...value.images![id], data: "corrupted" } } })
-        expect(
-          Exit.isFailure(
-            yield* state.voice
-              .submit(
-                state.binding.id,
-                { ...state.input, arguments: { request: "Check", images: ["image-0"] } },
                 secret,
                 root,
               )
@@ -1520,6 +1972,7 @@ it.live(
             yield* Effect.fail(new VoiceError({ code: "conflict", message: "Lost aggregate acknowledgement." }))
           })
         const state = yield* fixture(root, undefined, undefined, admissions, undefined, settlements)
+        yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
         const requestID = "transcription_guarded_start"
         const transcriptionRequestID = "transcription_guarded_total"
         yield* state.voice.reserve({ parentSessionID: session, requestID, model: "gpt-realtime-2.1" }, secret, root)

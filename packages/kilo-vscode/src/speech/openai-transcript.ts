@@ -35,8 +35,58 @@ export class OpenAITranscript {
   private saved = ""
   private task?: Promise<void>
   private error?: Error
+  private epoch = 0
+  private fault = false
 
   constructor(private readonly save: (snapshot: Snapshot) => Promise<void>) {}
+
+  /** Trusted host checkpoint. IDs and predecessor provenance never belong in model prefill. */
+  async checkpoint() {
+    const epoch = this.epoch
+    this.publish()
+    await this.flush()
+    const state = JSON.parse(this.saved || '{"items":[],"incomplete":true}') as Pick<Snapshot, "items" | "incomplete">
+    const items = Object.freeze(state.items.map((item) => Object.freeze(item)))
+    return Object.freeze({
+      version: 1 as const,
+      revision: this.revision,
+      epoch: this.epoch,
+      fingerprint: createHash("sha256")
+        .update(
+          JSON.stringify({
+            revision: this.revision,
+            incomplete: state.incomplete,
+            items: items.map((item) => ({
+              id: item.id,
+              previous: item.previous,
+              role: item.role,
+              state: item.state,
+              ...(item.text !== undefined ? { text: item.text } : {}),
+            })),
+          }),
+        )
+        .digest("hex"),
+      ready:
+        epoch === this.epoch &&
+        this.revision > 0 &&
+        !this.closed &&
+        !this.halted &&
+        !this.fault &&
+        this.entries.size === this.order.length &&
+        items.every((item) => item.state !== "pending"),
+      incomplete: state.incomplete,
+      items,
+    })
+  }
+
+  private activity(fault = false) {
+    if (this.epoch < Number.MAX_SAFE_INTEGER) this.epoch++
+    else this.fault = true
+    if (fault) {
+      this.fault = true
+      this.incomplete = true
+    }
+  }
 
   static context(value: Record<string, unknown>) {
     if (
@@ -116,6 +166,7 @@ export class OpenAITranscript {
       ].includes(String(event.type))
     )
       return
+    this.lifecycle(event)
     if (id(event.event_id)) {
       const digest = createHash("sha256").update(JSON.stringify(event)).digest("hex")
       const prior = this.events.get(event.event_id)
@@ -142,6 +193,34 @@ export class OpenAITranscript {
     this.playback(event)
     this.changes(event)
     this.publish()
+  }
+
+  private lifecycle(event: Record<string, unknown>) {
+    const response = object(event.response)
+    this.activity(
+      (["conversation.item.added", "conversation.item.created", "conversation.item.done"].includes(
+        String(event.type),
+      ) &&
+        !id(object(event.item)?.id)) ||
+        ([
+          "input_audio_buffer.committed",
+          "conversation.item.input_audio_transcription.completed",
+          "conversation.item.input_audio_transcription.failed",
+          "conversation.item.truncated",
+          "conversation.item.deleted",
+        ].includes(String(event.type)) &&
+          !id(event.item_id)) ||
+        ([
+          "response.output_audio_transcript.done",
+          "output_audio_buffer.started",
+          "output_audio_buffer.stopped",
+          "output_audio_buffer.cleared",
+        ].includes(String(event.type)) &&
+          !id(event.response_id)) ||
+        (event.type === "response.done" &&
+          (!id(response?.id) ||
+            !["completed", "failed", "cancelled", "incomplete"].includes(String(response?.status)))),
+    )
   }
 
   private linkage(event: Record<string, unknown>) {
@@ -247,6 +326,7 @@ export class OpenAITranscript {
 
   interrupt(value: unknown) {
     if (!id(value) || this.closed) return
+    this.activity()
     const state = this.response(value)
     if (state) state.omitted = true
     for (const entry of this.entries.values()) if (entry.response === value) this.omit(entry)
@@ -254,6 +334,7 @@ export class OpenAITranscript {
   }
 
   invalidate() {
+    this.activity()
     this.incomplete = true
     for (const response of this.responses.values())
       if (!response.completed || !response.started || !response.stopped) response.omitted = true

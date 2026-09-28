@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 06:39 EDT - private relative-acquisition race passes
+
+A separate headless fixture exercises `NtCreateFile` with an already-open parent and single-component child names, two plain witness-creation controls, a wrong-file-ID substitution refusal and two deterministic post-pin junction mutations (with/without `OBJ_DONT_REPARSE`). Actual MSVC `/W4 /WX` compilation and the focused test pass: 28 native outcomes, 1 test/51 assertions. Both mutations succeeded before witness creation; both subsequent creation attempts refused with Windows 1921, without a witness in the independently held outside target. That target retained its identity and stayed empty before cleanup. Exact witness/reparse finalizers passed. The first probe failed on the harness metadata handle's missing read-attributes access; that prerequisite was corrected without adding file-data write authority or weakening gates. Core package typecheck, scoped untyped lint, formatting and diff checks pass.
+
+This proves a single controlled relative-acquisition edge on this host, not a production directory lease. The fixture is private and not packaged. Next extend the experiment across a complete handle-relative chain, preopened ancestor substitution, namespace mapping and physical-identity checks, then launch/Job/controller-loss/restart before production integration. The installed runtime remains `a7a33998a7`; full goal/EN-05/FUT-CU-01 stay In progress. No desktop capture/input/activation/reload after Escape; MCP remains deferred and French Study/user edits remain protected.
+
 ## ChatGPT 2026-09-28 06:27 EDT - cleanup snapshot installed and artifacts verified
 
 Source `a7a33998a7` is pushed through normal 29 TypeScript checks and unchanged JetBrains cache. Scoped untyped lint has zero errors/warnings; extension ESLint, formatting, Knip, annotation/facade/marker/Markdown and diff guards pass. Sequential low-memory snapshot validation, production bundle, native helper builds/self-tests and refused-target input round trip pass. SDK regeneration leaves tracked sources unchanged. The CLI was rebuilt, not reused: 233,581,056 bytes, version `0.0.0-main-202609281020`, with version/models/sandbox-worker smoke tests passing.

@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 06:39 EDT - one relative-acquisition edge proved; full chain next
+
+Private `directory-acquisition-fixture.cpp` and focused test pass 28 native outcomes/51 assertions after `/W4 /WX` compilation. Plain relative witness controls pass; wrong-ID substitution refuses before effects. Both deterministic junction installations between leaf pinning and witness creation succeed, followed by creation refusal 1921 and no effects in the independently held outside target. Metadata identity queries required read-attributes access; the initial harness failure was corrected without data-write authority or relaxed gates. Exact cleanup passes. This is one acquisition-edge experiment, not a production fence or installed process proof.
+
+Next implement a private full handle-relative ancestor-chain acquisition/substitution and namespace experiment, then launch/Job/controller-loss/restart before production integration. Keep the installed runtime at `7.4.23-snapshot+a7a33998a7.kamil-oseni.1790590724443`; no snapshot rebuild is needed for these excluded experimental files. Full goal/EN-05/FUT-CU-01 and installed-host gates remain In progress. No desktop control/capture/activation/reload after Escape; MCP stays deferred and French Study/user edits stay protected.
+
 ## ChatGPT 2026-09-28 06:27 EDT - cleanup snapshot installed; next acquisition proof
 
 Published runtime source `a7a33998a7`; installed `7.4.23-snapshot+a7a33998a7.kamil-oseni.1790590724443`. Normal push checks pass all 29 TypeScript tasks and unchanged JetBrains cache. Sequential snapshot types/lint/bundle/native self-tests/input round trip/package/install pass. SDK regeneration leaves tracked output unchanged; CLI is freshly rebuilt with version/models/sandbox-worker smoke checks. Retained VSIX digest `455e2580d16d38c386bb35d358ae80745affe257a7cfdff6d374bef007c72e4e`, 604,571,262 bytes; installed five EXEs/semantic PDB match built files, with full hashes in progress. Installed private native file snapshot/move/identity/removal/absent acknowledgement passes. Process lifecycle stays v1. This proves installed artifacts, not open-host loading.

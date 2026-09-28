@@ -217,7 +217,7 @@ func TestLivePreservesTranscriptAndDelegationMetadataWithoutVoiceTurns(t *testin
 		t.Fatal(err)
 	}
 	caption := observed(t, value, "transcript.input.delta")
-	if caption.Item != "caption_1" || caption.Text != "hello" || caption.Stable || caption.Turn != "" || caption.Data["event_id"] != "caption_1" || caption.Data["start_ms"] != float64(1) || caption.Data["end_ms"] != float64(20) {
+	if caption.Session != "live_fixture" || caption.Item != "caption_1" || caption.Text != "hello" || caption.Stable || caption.Turn != "" || caption.Data["event_id"] != "caption_1" || caption.Data["start_ms"] != float64(1) || caption.Data["end_ms"] != float64(20) {
 		t.Fatal("raw transcript provenance was changed or declared complete")
 	}
 	if caption.Data["client_event_id"] != "context_original" || caption.Data["type"] != "session.input_transcript.delta" || caption.Data["delta"] != "hello" {
@@ -227,7 +227,7 @@ func TestLivePreservesTranscriptAndDelegationMetadataWithoutVoiceTurns(t *testin
 		t.Fatal(err)
 	}
 	delegation := observed(t, value, "session.delegation.created")
-	if delegation.Item != "del_1" || delegation.Turn != "" || delegation.Data["offset_ms"] != float64(25) || delegation.Data["delegation"].(map[string]any)["target"] != "client" {
+	if delegation.Session != "live_fixture" || delegation.Item != "del_1" || delegation.Turn != "" || delegation.Data["offset_ms"] != float64(25) || delegation.Data["delegation"].(map[string]any)["target"] != "client" {
 		t.Fatal("delegation metadata lost its exact identity/timeline")
 	}
 	if err := send(conn, map[string]any{"type": "response.event", "event_id": "backend_1", "event": map[string]any{"type": "response.done"}}); err != nil {

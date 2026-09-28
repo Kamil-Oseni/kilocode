@@ -447,7 +447,7 @@ func (s *session) handle(msg message) bool {
 			}
 			data["client_event_id"] = msg.ClientID
 		}
-		s.emit(engine.Event{Type: kind, Item: msg.EventID, Text: msg.Delta, Data: data})
+		s.emit(engine.Event{Type: kind, Session: s.remote, Item: msg.EventID, Text: msg.Delta, Data: data})
 	case "session.delegation.created":
 		if s.cfg.Delegation != "client" || !identifier(msg.EventID) || !identifier(msg.Delegation.ID) || msg.Delegation.Type != "delegation" || msg.Delegation.Target != "client" || msg.Offset == nil || *msg.Offset < 0 || *msg.Offset > 24*60*60*1000 {
 			s.fail("invalid GPT-Live delegation metadata")
@@ -473,7 +473,7 @@ func (s *session) handle(msg message) bool {
 		}
 		s.delegations[msg.Delegation.ID] = delegation{event: msg.EventID, offset: *msg.Offset}
 		s.mu.Unlock()
-		s.emit(engine.Event{Type: msg.Type, Item: msg.Delegation.ID, Data: map[string]any{"event_id": msg.EventID, "offset_ms": *msg.Offset, "delegation": map[string]any{"id": msg.Delegation.ID, "type": msg.Delegation.Type, "target": msg.Delegation.Target}}})
+		s.emit(engine.Event{Type: msg.Type, Session: s.remote, Item: msg.Delegation.ID, Data: map[string]any{"event_id": msg.EventID, "offset_ms": *msg.Offset, "delegation": map[string]any{"id": msg.Delegation.ID, "type": msg.Delegation.Type, "target": msg.Delegation.Target}}})
 	case "error":
 		s.fail("OpenAI rejected or could not complete a GPT-Live operation")
 		return false

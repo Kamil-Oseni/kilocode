@@ -119,7 +119,7 @@ func routes(manager *app.Manager, key control.Key) http.Handler {
 			write(writer, http.StatusBadRequest, map[string]string{"error": "Invalid delegation result contract"})
 			return
 		}
-		if err := decoder.Decode(new(json.RawMessage)); err != io.EOF || input.Version != 1 {
+		if err := decoder.Decode(new(json.RawMessage)); err != io.EOF || (input.Version != 1 && input.Version != 2) {
 			write(writer, http.StatusBadRequest, map[string]string{"error": "Unsupported delegation result contract"})
 			return
 		}
@@ -129,6 +129,17 @@ func routes(manager *app.Manager, key control.Key) http.Handler {
 				status = http.StatusUnauthorized
 			}
 			write(writer, status, map[string]string{"error": "Delegation result was refused or acceptance remains unconfirmed"})
+			return
+		}
+		if input.Version == 2 {
+			write(writer, http.StatusAccepted, struct {
+				Version      int    `json:"version"`
+				SessionID    string `json:"sessionID"`
+				DelegationID string `json:"delegationID"`
+				ReceiptID    string `json:"receiptID"`
+				Accepted     bool   `json:"accepted"`
+				Played       bool   `json:"played"`
+			}{Version: 2, SessionID: request.PathValue("id"), DelegationID: input.DelegationID, ReceiptID: input.ReceiptID, Accepted: true, Played: false})
 			return
 		}
 		write(writer, http.StatusAccepted, map[string]any{"accepted": true, "played": false})

@@ -127,6 +127,53 @@ func setupInput(provider, backend string) wire.Start {
 		Engine: engine.Config{Provider: "openai-live", Endpoint: "ws" + strings.TrimPrefix(provider, "http") + "/v1/live/sessions", Key: "setup-key", Model: "gpt-live-1", Delegation: "client", MaximumSeconds: 10}}
 }
 
+func TestManagerLiveBackendRefusalFencesActiveMedia(t *testing.T) {
+	for _, body := range []string{"false", "", "true false"} {
+		t.Run(body, func(t *testing.T) {
+			provider, count := setupProvider(t, true)
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("X-Raya-Voice-Capability") != mediaAuth {
+					t.Error("callback capability changed")
+				}
+				_, _ = w.Write([]byte(body))
+			}))
+			defer backend.Close()
+			manager := NewManager(&formatted{media: newFakeRoom()})
+			input := setupInput(provider.URL, backend.URL)
+			started, err := manager.Start(context.Background(), input, mediaAuth)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close(started.ID, mediaAuth)
+			deadline := time.After(2 * time.Second)
+			for {
+				status, found, err := manager.Status(input.ID, mediaAuth)
+				if err != nil || !found {
+					t.Fatal("failed callback lost ownership")
+				}
+				if status.Failure != nil {
+					if status.Failure.Code != "backend_delivery" {
+						t.Fatalf("unexpected failure: %#v", status.Failure)
+					}
+					break
+				}
+				select {
+				case <-deadline:
+					t.Fatal("HTTP success without backend acceptance left Live active")
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+			item := engine.ContextItem{ID: "after_refusal", Kind: "guidance", Text: "Continue", TTLMS: 1200, Created: time.Now()}
+			if manager.Inject(context.Background(), input.ID, mediaAuth, item) == nil {
+				t.Fatal("refused callback left an input authority")
+			}
+			if count.Load() != 1 {
+				t.Fatal("refused callback replayed provider setup")
+			}
+		})
+	}
+}
+
 func TestManagerFailedLiveJoinSettlesExactSetupReceipt(t *testing.T) {
 	for _, mode := range []string{"confirmed", "false", "missing", "malformed", "503", "lostfinal"} {
 		t.Run(mode, func(t *testing.T) {

@@ -202,7 +202,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		if provider == "openai-live" {
 			capability = token
 		}
-		backend = HTTPBackend{URL: input.BackendURL, Auth: input.BackendAuth, Directory: input.Directory, Control: capability}
+		backend = HTTPBackend{URL: input.BackendURL, Auth: input.BackendAuth, Directory: input.Directory, Control: capability, Strict: provider == "openai-live"}
 	}
 	claim.session = func() *Session {
 		if provider == "openai-live" {

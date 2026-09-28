@@ -97,7 +97,10 @@ func TestResultRouteStrictVersionAndCapability(t *testing.T) {
 	}{
 		{body: `{"version":1}`, status: http.StatusUnauthorized},
 		{body: `{"version":1}`, key: routeToken, token: routeToken, origin: "https://example.com", status: http.StatusForbidden},
-		{body: `{"version":2}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
+		{body: `{"version":3}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
+		{body: `{"version":2}`, key: routeToken, token: routeToken, status: http.StatusConflict},
+		{body: `{"version":2,"unknown":true}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
+		{body: `{"version":2} {}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
 		{body: `{"version":1,"unknown":true}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
 		{body: `{"version":1} {}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
 		{body: `{"version":1,"delegationID":"del","receiptID":"receipt","kind":"commentary","content":"result","ttl":1000,"created":"2026-09-28T00:00:00Z"}`, key: routeToken, token: routeToken, status: http.StatusConflict},

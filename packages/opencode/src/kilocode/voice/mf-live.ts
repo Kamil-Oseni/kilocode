@@ -1,15 +1,18 @@
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type * as OpenAI from "./openai"
-import { OpenAIBinding, OpenAIReservation } from "./openai-protocol"
-import { LiveDuration } from "./live-protocol"
+import { OpenAIBinding, OpenAIReservation, OpenAICall } from "./openai-protocol"
+import { LiveDuration, LiveCall } from "./live-protocol"
+import * as Context from "./mf-context"
+import * as Result from "./mf-result"
 import type { Envelope, Info } from "./protocol"
 
 export type Service = Pick<
   Effect.Success<ReturnType<typeof OpenAI.make>>,
-  "start" | "settle" | "duration" | "close" | "reserve" | "release"
+  "start" | "settle" | "duration" | "close" | "reserve" | "release" | "delegate" | "get"
 >
 export type State = {
+  version?: 1
   secret: string
   phase?: "reserving" | "reserved" | "binding" | "bound" | "failed"
   admission?: typeof OpenAIReservation.Type
@@ -20,9 +23,21 @@ export type State = {
   usage?: typeof LiveDuration.Type
   running?: typeof LiveDuration.Type
   setup?: { provider: string; started: { event_id: string; model: "gpt-live-1" }; final?: Final }
+  captions?: Context.State
+  tasks?: Record<string, Task>
+}
+type Task = {
+  id: string
+  selection: (typeof LiveCall.Type)["context"]
+  fingerprint: string
+  phase: "intent" | "admitted" | "offered" | "accepted" | "unknown" | "failed"
+  call?: typeof OpenAICall.Type
+  deadline: number
+  offer?: typeof Result.Result.Type
+  ack?: Awaited<ReturnType<typeof Result.send>>
 }
 type Final = { event_id: string; model: "gpt-live-1"; reason: string; usage: { seconds: number } }
-type Entry = { info: typeof Info.Type; directory: string; live?: State }
+type Entry = { info: typeof Info.Type; directory: string; mediaKey?: string; live?: State }
 
 export const reserve = Effect.fn("RayaVoice.Live.reserve")(function* (
   entry: Entry,
@@ -63,16 +78,17 @@ export const reserve = Effect.fn("RayaVoice.Live.reserve")(function* (
   return true
 })
 
-/** MF transport events have authority only under their own callback capability.
- * Caption text remains imperfect evidence; this foundation admits no Live work. */
+/** Captions are imperfect task context, never complete turns or heard-audio proof. */
 export const event = Effect.fn("RayaVoice.Live.event")(function* (
   entry: Entry,
   input: typeof Envelope.Type,
   service: Service | undefined,
   save: () => Effect.Effect<void>,
+  stopped: () => boolean = () => false,
 ) {
   const state = entry.live
   if (!state || !service || !/^[a-f0-9]{64}$/.test(state.secret) || !entry.directory) return false
+  if (!registry(entry)) return false
   if (!Number.isSafeInteger(input.seq) || input.seq < 1 || input.event.seq !== input.seq) return false
   const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex")
   if (input.seq === state.last) return hash === state.hash && state.accepted === true
@@ -85,7 +101,7 @@ export const event = Effect.fn("RayaVoice.Live.event")(function* (
   if (state.phase === "failed" && input.event.type !== "session.setup.closed") return false
   const accepted = yield* input.event.type === "session.setup.closed"
     ? settlement(entry, input, service, save).pipe(Effect.catch(() => Effect.succeed(false)))
-    : dispatch(entry, input, service, save)
+    : dispatch(entry, input, service, save, stopped)
   if (accepted || input.event.type === "session.delegation.created" || input.event.type === "delegation.request") {
     state.last = input.seq
     state.hash = hash
@@ -225,21 +241,254 @@ const dispatch = Effect.fn("RayaVoice.Live.dispatch")(function* (
   input: typeof Envelope.Type,
   service: Service,
   save: () => Effect.Effect<void>,
+  stopped: () => boolean,
 ) {
   const state = entry.live!
   if (input.event.type === "session.started") return yield* started(entry, input, service, save)
   if (!state.binding) return false
   if (input.event.type === "session.closed") return yield* closed(entry, input, service)
   if (entry.info.status === "closed" || entry.info.status === "failed") return false
-  if (input.event.type === "session.delegation.created" || input.event.type === "delegation.request") {
-    // Never route Live provider IDs through the legacy read-only child prompt.
-    entry.info = { ...entry.info, status: "failed" }
-    return false
+  if (input.event.type === "session.delegation.created") return yield* delegate(entry, input, service, save, stopped)
+  if (["transcript.input.delta", "transcript.output.delta"].includes(input.event.type)) {
+    if (input.event.session !== state.binding.providerCallID || stopped()) return false
+    if (
+      input.event.item !== input.event.data?.event_id ||
+      input.event.text !== input.event.data?.delta ||
+      input.event.data?.completeTurn !== false
+    )
+      return false
+    state.captions ??= Context.create()
+    state.version = 1
+    return Context.receive(state.captions, input.event.type, input.event.data ?? {})
   }
+  if (input.event.type === "delegation.request") return false
   if (input.event.type === "session.usage.updated") return running(state, input)
   if (input.event.type === "engine.error") entry.info = { ...entry.info, status: "failed" }
   return true
 })
+
+const delegate = Effect.fn("RayaVoice.Live.delegate")(function* (
+  entry: Entry,
+  input: typeof Envelope.Type,
+  service: Service,
+  save: () => Effect.Effect<void>,
+  stopped: () => boolean,
+) {
+  const state = entry.live!
+  if (stopped() || !entry.mediaKey || input.event.session !== state.binding!.providerCallID) return false
+  const data = input.event.data ?? {}
+  const delegation = Context.object(data.delegation)
+  if (
+    !delegation ||
+    !Context.identity(delegation.id) ||
+    input.event.item !== delegation.id ||
+    !Context.offset(data.offset_ms)
+  )
+    return false
+  state.captions ??= Context.create()
+  state.version = 1
+  if (!Context.receive(state.captions, input.event.type, data)) return false
+  state.tasks ??= {}
+  const key = createHash("sha256").update(delegation.id).digest("hex")
+  const fingerprint = createHash("sha256").update(JSON.stringify(data)).digest("hex")
+  const prior = state.tasks[key]
+  if (prior) return prior.fingerprint === fingerprint
+  if (Object.keys(state.tasks).length >= 64) return false
+  const selection = Context.select(state.captions, delegation.id, data.offset_ms)
+  if (!selection) return false
+  const task: Task = { id: delegation.id, selection, fingerprint, phase: "intent", deadline: Date.now() + 30 * 60_000 }
+  state.tasks[key] = task
+  yield* save()
+  if (stopped()) {
+    task.phase = "unknown"
+    yield* save()
+    return false
+  }
+  const call = yield* service
+    .delegate(
+      state.binding!.id,
+      { generation: state.binding!.generation, context: selection },
+      state.secret,
+      entry.directory,
+    )
+    .pipe(Effect.catch(() => Effect.succeed(undefined)))
+  if (!call || call.parentSessionID !== entry.info.parentSessionID) {
+    task.phase = "unknown"
+    yield* save()
+    return false
+  }
+  task.call = call
+  task.phase = "admitted"
+  yield* save()
+  return true
+})
+
+export function pending(entry: Entry) {
+  return !!entry.mediaKey && Object.values(entry.live?.tasks ?? {}).some((task) => task.phase === "admitted")
+}
+
+export const poll = Effect.fn("RayaVoice.Live.poll")(function* (
+  entry: Entry,
+  service: Service,
+  save: () => Effect.Effect<void>,
+  stopped: () => boolean,
+) {
+  const state = entry.live!
+  if (stopped() || entry.info.status !== "active" || !entry.mediaKey || !state.binding) return
+  for (const task of Object.values(state.tasks ?? {})) {
+    if (stopped()) return
+    if (task.phase !== "admitted" || !task.call) continue
+    if (Date.now() >= task.deadline) {
+      task.phase = "unknown"
+      yield* save()
+      continue
+    }
+    const call = yield* service
+      .get(state.binding.id, task.call.callID, state.binding.generation, state.secret, entry.directory)
+      .pipe(Effect.catch(() => Effect.succeed(undefined)))
+    if (!call || call.id !== task.call.id || call.parentSessionID !== entry.info.parentSessionID) {
+      task.phase = "unknown"
+      yield* save()
+      continue
+    }
+    if (["accepted", "running"].includes(call.status)) continue
+    if (stopped() || Date.now() >= task.deadline) return
+    task.call = call
+    const content = excerpt(call, task, entry)
+    task.offer = {
+      version: 2,
+      delegationID: task.id,
+      receiptID: `result_${crypto.randomUUID()}`,
+      kind: "delegation.result",
+      content,
+      ttl: 5000,
+      created: new Date().toISOString(),
+    }
+    task.phase = "offered"
+    yield* save()
+    if (stopped()) {
+      task.phase = "unknown"
+      yield* save()
+      return
+    }
+    return {
+      task,
+      offer: task.offer,
+      url: entry.info.mediaURL,
+      id: entry.info.id,
+      key: entry.mediaKey,
+      token: entry.info.controlToken,
+      provider: state.binding.providerCallID,
+    }
+  }
+})
+
+export const deliver = Effect.fn("RayaVoice.Live.deliver")(function* (
+  plan: NonNullable<Effect.Success<ReturnType<typeof poll>>>,
+  signal: AbortSignal,
+  stopped: () => boolean,
+) {
+  return yield* Effect.tryPromise({
+    try: () => {
+      if (stopped() || signal.aborted) throw new Result.ResultError("refused")
+      return Result.send(plan.url, plan.id, plan.key!, plan.token, plan.offer, signal)
+    },
+    catch: (error) => error,
+  }).pipe(
+    Effect.map((ack) => ({ phase: "accepted" as const, ack })),
+    Effect.catch((error) =>
+      Effect.succeed(
+        error instanceof Result.ResultError && error.status === "refused"
+          ? { phase: "failed" as const }
+          : { phase: "unknown" as const },
+      ),
+    ),
+  )
+})
+
+export const delivered = Effect.fn("RayaVoice.Live.delivered")(function* (
+  entry: Entry,
+  plan: NonNullable<Effect.Success<ReturnType<typeof poll>>>,
+  outcome: Effect.Success<ReturnType<typeof deliver>>,
+  save: () => Effect.Effect<void>,
+  stopped: () => boolean,
+) {
+  const task = Object.values(entry.live?.tasks ?? {}).find((task) => task === plan.task)
+  if (
+    !task ||
+    !["offered", "unknown"].includes(task.phase) ||
+    task.offer !== plan.offer ||
+    entry.info.id !== plan.id ||
+    entry.live?.binding?.providerCallID !== plan.provider
+  )
+    return
+  if ("ack" in outcome) task.ack = outcome.ack
+  task.phase = "ack" in outcome ? "accepted" : stopped() ? "unknown" : outcome.phase
+  yield* save()
+})
+
+function excerpt(call: typeof OpenAICall.Type, task: Task, entry: Entry) {
+  if (call.status !== "completed")
+    return call.status === "cancelled"
+      ? "The task was cancelled. Details are available in chat."
+      : "The task could not finish. Details are available in chat."
+  const text = call.result?.text?.trim() || "The task completed. Details are available in chat."
+  const ids = [
+    task.id,
+    call.id,
+    call.callID,
+    call.messageID,
+    call.result?.assistantMessageID,
+    entry.live?.binding?.id,
+    entry.live?.binding?.generation,
+    entry.live?.binding?.providerCallID,
+    entry.info.id,
+    entry.info.parentSessionID,
+    entry.live?.secret,
+    entry.info.controlToken,
+    entry.mediaKey,
+    ...task.selection.fragments.flatMap((item) => [item.id, item.client]),
+  ]
+  if (ids.some((id) => id && text.includes(id))) return "The task completed. Details are available in chat."
+  const content = Buffer.from(text, "utf8").toString("utf8").trim()
+  let output = ""
+  for (const point of content) {
+    if (Buffer.byteLength(output + point, "utf8") > 500) break
+    output += point
+  }
+  return output || "The task finished. Details are available in chat."
+}
+
+function registry(entry: Entry) {
+  const state = entry.live!
+  if (state.version !== 1) return state.version === undefined && !state.captions && !state.tasks
+  if (state.captions && !Context.valid(state.captions)) return false
+  if (!state.tasks) return true
+  const tasks = Context.object(state.tasks)
+  if (!tasks || Object.keys(tasks).length > 64) return false
+  return Object.entries(tasks).every(([key, value]) => {
+    const task = Context.object(value)
+    if (
+      !task ||
+      !Context.identity(task.id) ||
+      key !== createHash("sha256").update(task.id).digest("hex") ||
+      typeof task.fingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(task.fingerprint) ||
+      !["intent", "admitted", "offered", "accepted", "unknown", "failed"].includes(String(task.phase)) ||
+      typeof task.deadline !== "number" ||
+      !Number.isSafeInteger(task.deadline) ||
+      task.deadline < 0 ||
+      !Schema.is(LiveCall)({ generation: state.binding?.generation, context: task.selection })
+    )
+      return false
+    if (task.call && (!Schema.is(OpenAICall)(task.call) || task.call.parentSessionID !== entry.info.parentSessionID))
+      return false
+    if (task.offer && !Schema.is(Result.Result)(task.offer)) return false
+    if (["admitted", "offered", "accepted"].includes(String(task.phase)) && !task.call) return false
+    if (["offered", "accepted"].includes(String(task.phase)) && !task.offer) return false
+    return true
+  })
+}
 
 const started = Effect.fn("RayaVoice.Live.started")(function* (
   entry: Entry,

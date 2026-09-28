@@ -150,7 +150,7 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
       Effect.forkScoped,
     )
 
-    const voice = RayaVoice.make({ sessions, prompts, storage, openai })
+    const voice = RayaVoice.make({ sessions, prompts, storage, openai, scope })
     return handlers
       .handle("voiceOpenAIObligations", (ctx) =>
         Effect.gen(function* () {

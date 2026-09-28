@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import path from "node:path"
 import { createHash } from "node:crypto"
-import { Effect, Exit, Scope } from "effect"
+import { Deferred, Effect, Exit, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -144,10 +144,11 @@ const settled = (read: Effect.Effect<typeof OpenAICall.Type, unknown>) =>
     return yield* Effect.die("voice receipt did not settle")
   })
 
-function frontend(state: Effect.Success<ReturnType<typeof fixture>>) {
+function frontend(state: Effect.Success<ReturnType<typeof fixture>>, scope?: Scope.Scope) {
   return RayaVoice.make({
     storage: state.storage,
     openai: state.voice,
+    scope,
     sessions: {
       create: () => Effect.die("legacy child must not be created"),
       get: (id) =>
@@ -196,6 +197,320 @@ it.live("MF Live refuses an insufficient canonical duration before returning pro
       expect(saved.live.binding).toBeUndefined()
       expect(saved.info.maximumSeconds).toBeUndefined()
       expect(state.calls).toHaveLength(0)
+    }).pipe(
+      Effect.provide([
+        Storage.layerFromDir(path.join(root, "mf-storage")),
+        Database.layerFromPath(path.join(root, "mf.sqlite")),
+      ]),
+    )
+  }).pipe(Effect.scoped),
+)
+
+for (const mode of ["accepted", "unknown", "stopped", "private", "held"] as const) {
+  it.live(
+    `MF canonical delegation keeps original scope and one ${mode} result attempt`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        return yield* Effect.gen(function* () {
+          const scope = yield* Scope.Scope
+          const gate = yield* Deferred.make<void>()
+          const entered = yield* Deferred.make<void>()
+          let release: (() => void) | undefined
+          const held = new Promise<void>((resolve) => {
+            release = resolve
+          })
+          const bodies: Record<string, unknown>[] = []
+          const server = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(request) {
+              const body = (await request.json()) as Record<string, unknown>
+              bodies.push(body)
+              if (mode === "held") {
+                await Effect.runPromise(Deferred.succeed(entered, undefined))
+                await held
+              }
+              const id = new URL(request.url).pathname.split("/")[3]
+              return Response.json({
+                version: 2,
+                sessionID: mode === "unknown" ? "foreign_media_owner" : id,
+                delegationID: body.delegationID,
+                receiptID: body.receiptID,
+                accepted: true,
+                played: false,
+              })
+            },
+          })
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              server.stop(true)
+              release?.()
+            }),
+          )
+          const state = yield* fixture(root, "gpt-live-1", (input) => {
+            if (mode === "private") {
+              const result = answer(input)
+              return Effect.succeed({
+                ...result,
+                parts: [
+                  {
+                    id: PartID.ascending(),
+                    messageID: result.info.id,
+                    sessionID: session,
+                    type: "text" as const,
+                    text: "Completed original_task_id for caption_user",
+                  },
+                ],
+              })
+            }
+            return mode === "stopped"
+              ? Deferred.await(gate).pipe(Effect.map(() => answer(input)))
+              : Effect.succeed(answer(input))
+          })
+          yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+          const mf = frontend(state, scope)
+          const info = yield* mf.start(
+            {
+              version: 2,
+              engine: "openai-live",
+              parentSessionID: session,
+              mediaURL: `http://127.0.0.1:${server.port}`,
+            },
+            "q".repeat(43),
+          )
+          const provider = "provider_route_fixture"
+          const envelope = (
+            seq: number,
+            type: string,
+            data: Record<string, unknown>,
+            item?: string,
+            text?: string,
+          ) => ({
+            session: info.id,
+            seq,
+            event: {
+              seq,
+              type,
+              session: provider,
+              at: new Date().toISOString(),
+              data,
+              ...(item ? { item } : {}),
+              ...(text !== undefined ? { text } : {}),
+            },
+          })
+          expect(yield* mf.event(envelope(1, "session.started", { model: "gpt-live-1" }), info.controlToken)).toBe(true)
+          const caption = (seq: number, id: string, text: string, client?: string) =>
+            envelope(
+              seq,
+              "transcript.input.delta",
+              {
+                type: "session.input_transcript.delta",
+                event_id: id,
+                delta: text,
+                start_ms: seq * 10,
+                end_ms: seq * 10 + 5,
+                completeTurn: false,
+                ...(client ? { client_event_id: client } : {}),
+              },
+              id,
+              text,
+            )
+          expect(
+            yield* mf.event(caption(2, "caption_client", "Context only", "client_result"), info.controlToken),
+          ).toBe(true)
+          const delegation = (seq: number, id: string) =>
+            envelope(
+              seq,
+              "session.delegation.created",
+              { event_id: `event_${id}`, offset_ms: 100, delegation: { id, type: "delegation", target: "client" } },
+              id,
+            )
+          expect(yield* mf.event(delegation(3, "client_only"), info.controlToken)).toBe(false)
+          expect(state.calls).toHaveLength(0)
+          expect(yield* mf.event(caption(4, "caption_user", "Please summarize the file"), info.controlToken)).toBe(true)
+          const wrong = caption(5, "caption_next", "Read-only please")
+          expect(
+            yield* mf.event({ ...wrong, event: { ...wrong.event, session: "foreign_provider" } }, info.controlToken),
+          ).toBe(false)
+          expect(yield* mf.event(wrong, info.controlToken)).toBe(true)
+          const request = delegation(6, "original_task_id")
+          expect(yield* mf.event(request, info.controlToken)).toBe(true)
+          expect(yield* mf.event(request, info.controlToken)).toBe(true)
+          expect(
+            yield* mf.event(
+              {
+                ...request,
+                seq: 7,
+                event: {
+                  ...request.event,
+                  seq: 7,
+                  data: mode === "held" ? request.event.data : { ...request.event.data, offset_ms: 101 },
+                },
+              },
+              info.controlToken,
+            ),
+          ).toBe(mode === "held")
+          if (mode === "stopped") {
+            yield* mf.close(info.id)
+            yield* Deferred.succeed(gate, undefined)
+          }
+          if (mode === "held") {
+            yield* Deferred.await(entered)
+            expect(
+              yield* mf
+                .event(caption(8, "caption_while_result_pending", "One more detail"), info.controlToken)
+                .pipe(Effect.timeout("150 millis")),
+            ).toBe(true)
+            expect(yield* mf.close(info.id).pipe(Effect.timeout("150 millis"))).toBe(true)
+            expect(bodies).toHaveLength(1)
+            release?.()
+          }
+          const read = () =>
+            state.storage.read<{
+              live: {
+                secret: string
+                binding: { id: string; generation: string }
+                tasks: Record<
+                  string,
+                  {
+                    id: string
+                    phase: string
+                    call?: typeof OpenAICall.Type
+                    offer?: { content: string }
+                    ack?: { played: boolean }
+                  }
+                >
+              }
+            }>(["raya_voice", info.id])
+          for (const _ of Array.from({ length: 200 })) {
+            const saved = yield* read()
+            const task = Object.values(saved.live.tasks)[0]
+            if (mode === "stopped" || mode === "held") {
+              if (task.call) {
+                const call = yield* state.voice.get(
+                  saved.live.binding.id,
+                  task.call.callID,
+                  saved.live.binding.generation,
+                  saved.live.secret,
+                  root,
+                )
+                if (call.status === "completed") break
+              }
+            } else if (task.phase === (mode === "private" ? "accepted" : mode)) break
+            yield* Effect.sleep("10 millis")
+          }
+          const saved = yield* read()
+          const task = Object.values(saved.live.tasks)[0]
+          expect(task.id).toBe("original_task_id")
+          expect(task.call?.parentSessionID).toBe(session)
+          expect(state.calls).toHaveLength(1)
+          expect(state.calls[0].sessionID).toBe(session)
+          const part = state.calls[0].parts[0]
+          if (part.type !== "text") throw new Error("Expected canonical task prompt")
+          expect(part.text).toContain("imperfect transcript evidence")
+          expect(part.text).toContain("Please summarize the file")
+          if (mode === "stopped" || mode === "held") {
+            expect(bodies).toHaveLength(mode === "held" ? 1 : 0)
+            expect(
+              (yield* state.voice.get(
+                saved.live.binding.id,
+                task.call!.callID,
+                saved.live.binding.generation,
+                saved.live.secret,
+                root,
+              )).status,
+            ).toBe("completed")
+          } else {
+            expect(task.phase).toBe(mode === "private" ? "accepted" : mode)
+            expect(bodies).toHaveLength(1)
+            expect(bodies[0].delegationID).toBe("original_task_id")
+            expect(Buffer.byteLength(String(bodies[0].content), "utf8")).toBeLessThanOrEqual(500)
+            expect(bodies[0].content).toBe(
+              mode === "private" ? "The task completed. Details are available in chat." : "Verified Live result",
+            )
+            if (mode === "accepted" || mode === "private") expect(task.ack?.played).toBe(false)
+            yield* frontend(state, scope).event(
+              { ...request, seq: 8, event: { ...request.event, seq: 8 } },
+              info.controlToken,
+            )
+            yield* Effect.sleep("120 millis")
+            expect(bodies).toHaveLength(1)
+          }
+          yield* mf.close(info.id)
+        }).pipe(
+          Effect.provide([
+            Storage.layerFromDir(path.join(root, "mf-storage")),
+            Database.layerFromPath(path.join(root, "mf.sqlite")),
+          ]),
+        )
+      }).pipe(Effect.scoped),
+    30_000,
+  )
+}
+
+it.live("MF restored unknown ledger versions refuse captions and never resume task delivery", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    return yield* Effect.gen(function* () {
+      const state = yield* fixture(root)
+      yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+      const scope = yield* Scope.Scope
+      const mf = frontend(state, scope)
+      const info = yield* mf.start(
+        { version: 2, engine: "openai-live", parentSessionID: session, mediaURL: "http://127.0.0.1:1" },
+        "q".repeat(43),
+      )
+      expect(
+        yield* mf.event(
+          {
+            session: info.id,
+            seq: 1,
+            event: {
+              seq: 1,
+              type: "session.started",
+              session: "provider_restore_fixture",
+              at: new Date().toISOString(),
+              data: { model: "gpt-live-1" },
+            },
+          },
+          info.controlToken,
+        ),
+      ).toBe(true)
+      const caption = (seq: number) => ({
+        session: info.id,
+        seq,
+        event: {
+          seq,
+          type: "transcript.input.delta",
+          session: "provider_restore_fixture",
+          item: `caption_${seq}`,
+          text: "Read the current file",
+          at: new Date().toISOString(),
+          data: {
+            type: "session.input_transcript.delta",
+            event_id: `caption_${seq}`,
+            delta: "Read the current file",
+            start_ms: seq * 10,
+            end_ms: seq * 10 + 5,
+            completeTurn: false,
+          },
+        },
+      })
+      expect(yield* frontend(state, scope).event(caption(2), info.controlToken)).toBe(true)
+      const stored = yield* state.storage.read<{ live: { version: number; captions: { version: number } } }>([
+        "raya_voice",
+        info.id,
+      ])
+      yield* state.storage.write(["raya_voice", info.id], {
+        ...stored,
+        live: { ...stored.live, captions: { ...stored.live.captions, version: 99 } },
+      })
+      expect(yield* frontend(state, scope).event(caption(3), info.controlToken)).toBe(false)
+      yield* state.storage.write(["raya_voice", info.id], { ...stored, live: { ...stored.live, version: 99 } })
+      expect(yield* frontend(state, scope).event(caption(3), info.controlToken)).toBe(false)
+      expect(state.calls).toHaveLength(0)
+      yield* mf.close(info.id)
     }).pipe(
       Effect.provide([
         Storage.layerFromDir(path.join(root, "mf-storage")),

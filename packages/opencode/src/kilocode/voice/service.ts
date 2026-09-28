@@ -1,5 +1,5 @@
 // raya_change - Async voice plane: session admission, transcript truth, and reactive delegation.
-import { Effect, Option, Schema, Semaphore } from "effect"
+import { Effect, Fiber, Option, Schema, Semaphore, type Scope } from "effect"
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import { AccessToken } from "livekit-server-sdk"
 import type { Session } from "@/session/session"
@@ -39,6 +39,7 @@ type Deps = {
   }
   inject?: (url: string, id: string, key: string, token: string, item: typeof ContextItem.Type) => Promise<void>
   openai?: Live.Service
+  scope?: Scope.Scope
 }
 
 const key = (id: VoiceSessionID) => ["raya_voice", id]
@@ -52,6 +53,31 @@ export namespace RayaVoice {
 
   export function make(deps: Deps) {
     const entries = new Map<VoiceSessionID, Entry>()
+    const stopped = new Set<VoiceSessionID>()
+    const jobs = new Map<VoiceSessionID, Fiber.Fiber<void, never>>()
+    const busy = new Set<VoiceSessionID>()
+    const controllers = new Map<VoiceSessionID, AbortController>()
+    let opening = 0
+    const capacity = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Effect.acquireUseRelease(
+        Effect.gen(function* () {
+          for (const [id, entry] of entries) {
+            if (entries.size + opening < 256) break
+            if (["closed", "failed"].includes(entry.info.status) && !busy.has(id) && !jobs.has(id)) {
+              entries.delete(id)
+              stopped.delete(id)
+            }
+          }
+          if (entries.size + opening >= 256)
+            return yield* new InputError({ message: "Voice session ownership capacity is full." })
+          opening++
+        }),
+        () => effect,
+        () =>
+          Effect.sync(() => {
+            opening--
+          }),
+      )
     const gates = new Map<VoiceSessionID, { semaphore: ReturnType<typeof Semaphore.makeUnsafe>; refs: number }>()
     const locked = <A, E, R>(id: VoiceSessionID, effect: Effect.Effect<A, E, R>) =>
       Effect.acquireUseRelease(
@@ -136,7 +162,7 @@ export namespace RayaVoice {
         delegateID: delegate.id,
         transcript: new VoiceReconstructor(),
         directory: parent.directory,
-        ...(live ? { live: { secret: randomBytes(32).toString("hex") } } : {}),
+        ...(live ? { live: { version: 1, secret: randomBytes(32).toString("hex") } } : {}),
       })
       yield* persist(entries.get(id)!)
       if (live && !(yield* Live.reserve(entries.get(id)!, deps.openai!, () => persist(entries.get(id)!))))
@@ -175,8 +201,16 @@ export namespace RayaVoice {
           !timingSafeEqual(Buffer.from(proof), Buffer.from(entry.info.controlToken))
         )
           return false
-        const accepted = yield* Live.event(entry, input, deps.openai, () => persist(entry))
+        if (input.event.type === "session.delegation.created" && !deps.scope) return false
+        const accepted = yield* Live.event(
+          entry,
+          input,
+          deps.openai,
+          () => persist(entry),
+          () => stopped.has(input.session),
+        )
         yield* persist(entry)
+        if (accepted && Live.pending(entry)) yield* collect(entry)
         return accepted
       }
       if (entry.info.status === "closed" || entry.info.status === "failed") return true
@@ -202,6 +236,9 @@ export namespace RayaVoice {
       const entry = yield* resolve(id)
       if (!entry) return false
       entry.info = { ...entry.info, status: "closed" }
+      for (const task of Object.values(entry.live?.tasks ?? {})) {
+        if (task.phase === "offered" && !task.ack) task.phase = "unknown"
+      }
       if (entry.live?.binding && deps.openai)
         yield* deps.openai.close(
           entry.live.binding.id,
@@ -212,6 +249,58 @@ export namespace RayaVoice {
       if (!entry.live) yield* deps.prompts.cancel(entry.delegateID)
       yield* persist(entry)
       return true
+    })
+
+    const collect = Effect.fn("RayaVoice.collect")(function* (entry: Entry) {
+      if (!deps.scope || !deps.openai || busy.has(entry.info.id) || stopped.has(entry.info.id)) return
+      const id = entry.info.id
+      const service = deps.openai
+      const controller = new AbortController()
+      controllers.set(id, controller)
+      busy.add(id)
+      const job = yield* Effect.gen(function* () {
+        while (!stopped.has(id) && Live.pending(entry) && entry.info.status === "active") {
+          const plan = yield* locked(
+            id,
+            Live.poll(
+              entry,
+              service,
+              () => persist(entry),
+              () => stopped.has(id),
+            ),
+          )
+          if (plan) {
+            yield* Effect.uninterruptibleMask((restore) =>
+              restore(Live.deliver(plan, controller.signal, () => stopped.has(id))).pipe(
+                Effect.flatMap((outcome) =>
+                  locked(
+                    id,
+                    Live.delivered(
+                      entry,
+                      plan,
+                      outcome,
+                      () => persist(entry),
+                      () => stopped.has(id),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          }
+          if (Live.pending(entry)) yield* Effect.sleep("100 millis")
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            jobs.delete(id)
+            busy.delete(id)
+            controller.abort()
+            controllers.delete(id)
+          }),
+        ),
+        Effect.forkIn(deps.scope),
+      )
+      if (busy.has(id)) jobs.set(id, job)
     })
 
     const persist = (entry: Entry) =>
@@ -232,6 +321,7 @@ export namespace RayaVoice {
         Effect.orDie,
       )
       if (!stored?.delegateID) return
+      if (entries.size + opening >= 256) return
       const saved = stored.info.controlToken
       const controlToken = saved && /^[A-Za-z0-9_-]{43}$/.test(saved) ? saved : capability()
       const entry: Entry = {
@@ -311,10 +401,26 @@ export namespace RayaVoice {
     })
 
     return {
-      start,
+      start: (input: typeof Start.Type, key?: string) => capacity(start(input, key)),
       get: (id: VoiceSessionID) => locked(id, get(id)),
       event: (input: typeof Envelope.Type, proof?: string) => locked(input.session, event(input, proof)),
-      close: (id: VoiceSessionID) => locked(id, close(id)),
+      close: (id: VoiceSessionID) =>
+        Effect.sync(() => {
+          stopped.add(id)
+          controllers.get(id)?.abort()
+        }).pipe(
+          Effect.andThen(locked(id, close(id))),
+          Effect.tap(() => {
+            const job = jobs.get(id)
+            return (job ? Fiber.interrupt(job) : Effect.void).pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  stopped.delete(id)
+                }),
+              ),
+            )
+          }),
+        ),
     }
   }
 }

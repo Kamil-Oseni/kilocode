@@ -69,7 +69,7 @@ export function transaction(services: Services) {
           return yield* new ReviewConflict({
             message: "The workers in this review changed. Refresh before continuing.",
           })
-        for (const item of groups) yield* services.state.assertNotBusy(item.owner.sessionID)
+        for (const item of groups) yield* run(item.owner, services.state.assertNotBusy(item.owner.sessionID))
         const session = yield* services.sessions.get(input.sessionID).pipe(Effect.orDie)
         let prepared:
           | { proof: Proof; work: { owner: Owner; patches: Snapshot.Patch[]; expected: Snapshot.Patch[] }[] }

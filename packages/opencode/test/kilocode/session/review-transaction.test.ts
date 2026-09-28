@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { Effect, Exit } from "effect"
+import { Deferred, Effect, Exit, Fiber } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -11,6 +11,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Session } from "@/session/session"
 import { SessionRevert } from "@/session/revert"
 import { SessionSummary } from "@/session/summary"
+import { SessionRunState } from "@/session/run-state"
 import type { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
@@ -32,13 +33,14 @@ const env = LayerNode.compile(
     CrossSpawnSpawner.node,
     Project.node,
     Database.node,
+    SessionRunState.node,
   ]),
 )
 const it = testEffect(env)
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
 it.live(
-  "restores two real worker workspaces and refuses invalid later checkpoints or stale bytes before changing either",
+  "restores two real worker workspaces and refuses busy workers, invalid checkpoints, and stale bytes",
   provideTmpdirProject(
     (dir) =>
       Effect.gen(function* () {
@@ -47,6 +49,7 @@ it.live(
         const revert = yield* SessionRevert.Service
         const snap = yield* Snapshot.Service
         const storage = yield* Storage.Service
+        const state = yield* SessionRunState.Service
         const parent = yield* sessions.create({})
         const own = path.join(dir, "notes.txt")
         yield* Effect.promise(() => fs.writeFile(own, "parent untouched\r\n"))
@@ -164,14 +167,70 @@ it.live(
         ).toBe(true)
         expect(yield* bytes()).toEqual([workers[0].after, "manual beta\r\n"])
         yield* Effect.promise(() => fs.writeFile(second.file, second.after))
+        const hold = Effect.fn("ReviewTransactionTest.hold")(function* () {
+          const ready = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const message = (yield* sessions.messages({ sessionID: second.session.id })).find(
+            (message) => message.info.role === "assistant",
+          )
+          if (!message) throw new Error("Missing worker message")
+          const fiber = yield* state
+            .ensureRunning(
+              second.session.id,
+              Effect.succeed(message),
+              Effect.gen(function* () {
+                yield* Deferred.succeed(ready, undefined)
+                yield* Deferred.await(release)
+                return message
+              }),
+            )
+            .pipe(provideInstance(path.dirname(second.file)), Effect.forkChild)
+          yield* Deferred.await(ready)
+          expect((yield* state.inspect(second.session.id)).phase).toBe("idle")
+          expect((yield* state.inspect(second.session.id).pipe(provideInstance(path.dirname(second.file)))).phase).toBe(
+            "running",
+          )
+          return { fiber, release }
+        })
+        const active = yield* hold()
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              revert.discardChanges({ sessionID: parent.id, expected, requestID: "active-worker-undo" }),
+            ),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(revert.keepChanges({ sessionID: parent.id, expected, requestID: "active-worker-keep" })),
+          ),
+        ).toBe(true)
+        expect(yield* bytes()).toEqual(workers.map((worker) => worker.after))
+        yield* Deferred.succeed(active.release, undefined)
+        yield* Fiber.join(active.fiber)
         yield* revert.discardChanges({ sessionID: parent.id, expected, requestID: "two-owner-undo" })
         expect(yield* bytes()).toEqual(workers.map((worker) => worker.before))
         expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent untouched\r\n")
         expect(yield* summary.diff({ sessionID: parent.id })).toEqual([])
+        const [key] = yield* storage.list(["review_receipt", parent.id])
+        if (!key) throw new Error("Missing successful Undo receipt")
+        const receipt = yield* storage.read<Record<string, unknown>>(key)
+        yield* storage.replace(key, { ...receipt, complete: false })
+        const retry = yield* hold()
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(revert.discardChanges({ sessionID: parent.id, expected, requestID: "two-owner-undo" })),
+          ),
+        ).toBe(true)
+        expect(yield* bytes()).toEqual(workers.map((worker) => worker.before))
+        expect((yield* storage.read<{ complete: boolean }>(key)).complete).toBe(false)
+        yield* Deferred.succeed(retry.release, undefined)
+        yield* Fiber.join(retry.fiber)
         yield* revert.discardChanges({ sessionID: parent.id, expected, requestID: "two-owner-undo" })
+        expect((yield* storage.read<{ complete: boolean }>(key)).complete).toBe(true)
         expect(yield* bytes()).toEqual(workers.map((worker) => worker.before))
       }),
     { git: true },
   ),
-  60_000,
+  180_000,
 )

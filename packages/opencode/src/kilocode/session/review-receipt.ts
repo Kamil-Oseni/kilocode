@@ -133,7 +133,7 @@ export function recovery(services: Services) {
         Effect.catchCause(() => Effect.succeed(undefined)),
       )
       if (!owner || !same(saved, owner)) return false
-      const idle = yield* services.state.assertNotBusy(saved.sessionID).pipe(
+      const idle = yield* run(owner, services.state.assertNotBusy(saved.sessionID)).pipe(
         Effect.as(true),
         Effect.catchCause(() => Effect.succeed(false)),
       )

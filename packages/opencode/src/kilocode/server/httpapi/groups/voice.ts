@@ -11,6 +11,7 @@ import {
   WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import * as Spoken from "@/kilocode/voice/openai-spoken"
 import { Envelope, Start, State, VoiceSessionID } from "@/kilocode/voice/protocol"
 import {
   OpenAIBinding,
@@ -42,6 +43,8 @@ export const VoicePaths = {
   cancel: `${root}/openai/session/:id/calls/:callID/cancel`,
   live: `${root}/live/session/:id/calls`,
   duration: `${root}/live/session/:id/duration`,
+  spoken: `${root}/openai/session/:id/spoken`,
+  context: `${root}/openai/session/:id/context`,
 } as const
 
 const headers = { "x-raya-voice-key": Schema.optional(Schema.String) }
@@ -56,6 +59,35 @@ const generation = Schema.Struct({ ...WorkspaceRoutingQueryFields, generation: V
 
 export const VoiceApi = HttpApi.make("raya-voice").add(
   HttpApiGroup.make("raya-voice")
+    .add(
+      HttpApiEndpoint.post("voiceOpenAISpoken", VoicePaths.spoken, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: Spoken.Input,
+        success: Spoken.Receipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.spoken",
+          summary: "Retain a bounded same-task spoken recovery snapshot",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIContext", VoicePaths.context, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: Spoken.Context,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.context",
+          summary: "Recover recent speech for the exact active Raya task without replaying work",
+        }),
+      ),
+    )
     .add(
       HttpApiEndpoint.post("voiceLiveCall", VoicePaths.live, {
         headers,

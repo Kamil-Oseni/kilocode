@@ -14,6 +14,7 @@ import { RayaVoiceBindingTable as Table } from "@opencode-ai/core/kilocode/voice
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { NotFoundError } from "@/storage/storage"
 import * as Store from "@/kilocode/voice/openai-store"
+import * as Spoken from "@/kilocode/voice/openai-spoken"
 import { Storage } from "@/storage/storage"
 import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
@@ -30,6 +31,217 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const secret = "a".repeat(64)
 const session = SessionID.make("ses_openai_voice_test")
+
+it.live(
+  "spoken full snapshots enforce exact revisions, monotone items and shared binding writes",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const input: typeof Spoken.Input.Type = {
+          generation: state.binding.generation,
+          providerCallID: state.binding.providerCallID,
+          version: 1,
+          revision: 1,
+          items: [
+            { id: "first", previous: null, role: "user", state: "final", text: "I am learning violin." },
+            { id: "second", previous: "first", role: "assistant", state: "pending" },
+            { id: "third", previous: "second", role: "user", state: "final", text: "My budget is 500 CAD." },
+          ],
+        }
+        const first = yield* state.voice.spoken(state.binding.id, input, secret, root)
+        expect(yield* state.voice.spoken(state.binding.id, input, secret, root)).toEqual(first)
+        for (const changed of [
+          { ...input, revision: 3 },
+          { ...input, items: input.items.slice(1) },
+          { ...input, providerCallID: "wrong" },
+          { ...input, generation: "wrong" },
+          { ...input, updatedAt: Date.now() + 1 },
+          { ...input, revision: 2, items: [input.items[0]!, input.items[2]!] },
+          { ...input, revision: 2, items: [{ ...input.items[0]!, text: "different" }, ...input.items.slice(1)] },
+        ])
+          expect(
+            Exit.isFailure(yield* state.voice.spoken(state.binding.id, changed, secret, root).pipe(Effect.exit)),
+          ).toBe(true)
+        const next = {
+          ...input,
+          revision: 2,
+          items: input.items.map((item) => (item.id === "second" ? { ...item, state: "omitted" as const } : item)),
+        }
+        const writes = yield* Effect.all(
+          [
+            state.voice.spoken(state.binding.id, next, secret, root),
+            state.voice.spoken(state.binding.id, next, secret, root),
+            state.voice.stage(
+              state.binding.id,
+              { generation: input.generation, id: "spoken-image", mime: "image/png", data: png },
+              secret,
+              root,
+            ),
+          ],
+          { concurrency: "unbounded" },
+        )
+        expect(writes[0]).toEqual(writes[1])
+        expect(Object.values((yield* retained(state.binding.id)).images ?? {}).map((item) => item.receipt.id)).toEqual([
+          "spoken-image",
+        ])
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .spoken(
+                state.binding.id,
+                {
+                  ...next,
+                  revision: 3,
+                  items: next.items.map((item) =>
+                    item.id === "second" ? { ...item, state: "final" as const, text: "unheard" } : item,
+                  ),
+                },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const deleted = {
+          ...next,
+          revision: 3,
+          incomplete: true,
+          items: next.items.map((item) =>
+            item.id === "first"
+              ? { id: item.id, previous: item.previous, role: item.role, state: "omitted" as const }
+              : item,
+          ),
+        }
+        yield* state.voice.spoken(state.binding.id, deleted, secret, root)
+        for (const text of [input.items[0]!.text, "replacement"])
+          expect(
+            Exit.isFailure(
+              yield* state.voice
+                .spoken(
+                  state.binding.id,
+                  { ...deleted, revision: 4, items: [{ ...input.items[0]!, text }, ...deleted.items.slice(1)] },
+                  secret,
+                  root,
+                )
+                .pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        const rolled = { ...deleted, revision: 4, items: deleted.items.slice(1) }
+        yield* state.voice.spoken(state.binding.id, rolled, secret, root)
+        expect((yield* retained(state.binding.id)).spoken?.items).toEqual(rolled.items)
+        expect(state.calls).toHaveLength(0)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "new active voice capability recovers only bounded recent same-task speech without adopting old owner",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const other = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        yield* state.voice.spoken(
+          state.binding.id,
+          {
+            generation: state.binding.generation,
+            providerCallID: state.binding.providerCallID,
+            version: 1,
+            revision: 1,
+            items: [
+              { id: "second", previous: "first", role: "user", state: "final", text: "500 CAD" },
+              { id: "first", previous: null, role: "user", state: "final", text: "Learn violin" },
+              { id: "unheard", previous: "second", role: "assistant", state: "omitted" },
+            ],
+          },
+          secret,
+          root,
+        )
+        const saved = yield* retained(state.binding.id)
+        yield* state.voice.spoken(
+          state.binding.id,
+          {
+            generation: state.binding.generation,
+            providerCallID: state.binding.providerCallID,
+            version: 1,
+            revision: 2,
+            incomplete: true,
+            items: saved.spoken!.items.map((item) =>
+              item.id === "first"
+                ? { id: item.id, previous: item.previous, role: item.role, state: "omitted" as const }
+                : item,
+            ),
+          },
+          secret,
+          root,
+        )
+        const voice = yield* make(state.deps)
+        const requestID = crypto.randomUUID()
+        const key = "b".repeat(64)
+        yield* voice.reserve({ parentSessionID: session, requestID, model: "gpt-realtime-2.1" }, key, root)
+        const binding = yield* voice.start(
+          { parentSessionID: session, requestID, providerCallID: crypto.randomUUID() },
+          key,
+          root,
+        )
+        expect(yield* voice.context(binding.id, binding.generation, key, root)).toEqual({
+          version: 1,
+          incomplete: true,
+          items: [{ bindingID: state.binding.id, itemID: "second", role: "user", text: "500 CAD" }],
+        })
+        for (const request of [
+          voice.context(binding.id, binding.generation, secret, root),
+          voice.context(binding.id, "wrong", key, root),
+          voice.context(binding.id, binding.generation, key, other),
+          voice.context(state.binding.id, state.binding.generation, secret, root),
+        ])
+          expect(Exit.isFailure(yield* request.pipe(Effect.exit))).toBe(true)
+        saved.spoken = (yield* retained(state.binding.id)).spoken
+        saved.spoken = { ...saved.spoken!, updatedAt: Date.now() + 10_000 }
+        yield* replace(saved)
+        expect(yield* voice.context(binding.id, binding.generation, key, root)).toEqual({
+          version: 1,
+          items: [],
+          incomplete: true,
+        })
+        expect((yield* retained(binding.id)).spoken).toBeUndefined()
+        saved.spoken = {
+          version: 1,
+          revision: 1,
+          updatedAt: Date.now(),
+          incomplete: false,
+          items: [0, 1, 2].map((index) => ({
+            id: `large${index}`,
+            previous: index ? `large${index - 1}` : null,
+            role: "user" as const,
+            state: "final" as const,
+            text: `${index}`.repeat(4096),
+          })),
+        }
+        yield* replace(saved)
+        const tail = yield* voice.context(binding.id, binding.generation, key, root)
+        expect(tail.incomplete).toBe(true)
+        expect(tail.items.map((item) => item.itemID)).toEqual(["large1", "large2"])
+        expect(tail.items.at(-1)?.text).toBe("2".repeat(4096))
+        expect(state.calls).toHaveLength(0)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
 type Prompt = Parameters<SessionPrompt.Interface["prompt"]>[0]
 
 it.live(

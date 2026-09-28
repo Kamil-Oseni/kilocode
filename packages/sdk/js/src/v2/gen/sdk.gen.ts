@@ -380,6 +380,8 @@ import type {
   KilocodeVoiceOpenaiCancelResponses,
   KilocodeVoiceOpenaiCloseErrors,
   KilocodeVoiceOpenaiCloseResponses,
+  KilocodeVoiceOpenaiContextErrors,
+  KilocodeVoiceOpenaiContextResponses,
   KilocodeVoiceOpenaiImageErrors,
   KilocodeVoiceOpenaiImageResponses,
   KilocodeVoiceOpenaiMeterErrors,
@@ -390,6 +392,8 @@ import type {
   KilocodeVoiceOpenaiReserveResponses,
   KilocodeVoiceOpenaiResultErrors,
   KilocodeVoiceOpenaiResultResponses,
+  KilocodeVoiceOpenaiSpokenErrors,
+  KilocodeVoiceOpenaiSpokenResponses,
   KilocodeVoiceOpenaiStartErrors,
   KilocodeVoiceOpenaiStartResponses,
   KilocodeVoiceOpenaiUsageErrors,
@@ -11800,120 +11804,104 @@ export class SessionImport extends HeyApiClient {
   }
 }
 
-export class Live extends HeyApiClient {
-  /**
-   * Admit one immutable Live delegation using observed transcript context
-   */
-  public call<ThrowOnError extends boolean = false>(
-    parameters: {
-      "x-raya-voice-key"?: string
-      id: string
-      directory?: string
-      workspace?: string
-      generation?: string
-      context?: {
-        version: 1
-        delegation: string
-        offset: number
-        fragments: Array<{
-          id: string
-          speaker: "user" | "assistant"
-          text: string
-          start: number
-          end: number
-          sequence: number
-          client?: string
-        }>
-        incomplete: true
-        omitted: boolean
-      }
-      images?: Array<string>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "headers", key: "x-raya-voice-key" },
-            { in: "path", key: "id" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "generation" },
-            { in: "body", key: "context" },
-            { in: "body", key: "images" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      KilocodeVoiceLiveCallResponses,
-      KilocodeVoiceLiveCallErrors,
-      ThrowOnError
-    >({
-      url: "/kilocode/voice/live/session/{id}/calls",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Retain final provider-reported Live voice duration
-   */
-  public duration<ThrowOnError extends boolean = false>(
-    parameters: {
-      "x-raya-voice-key"?: string
-      id: string
-      directory?: string
-      workspace?: string
-      generation?: string
-      receipt?: {
-        id: string
-        model: "gpt-live-1"
-        seconds: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "headers", key: "x-raya-voice-key" },
-            { in: "path", key: "id" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "generation" },
-            { in: "body", key: "receipt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      KilocodeVoiceLiveDurationResponses,
-      KilocodeVoiceLiveDurationErrors,
-      ThrowOnError
-    >({
-      url: "/kilocode/voice/live/session/{id}/duration",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
 export class Openai extends HeyApiClient {
+  /**
+   * Retain a bounded same-task spoken recovery snapshot
+   */
+  public spoken<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation?: string
+      providerCallID?: string
+      version?: 1
+      revision?: number
+      items?: Array<{
+        id: string
+        previous: string
+        role: "user" | "assistant" | "other"
+        state: "pending" | "final" | "omitted"
+        text?: string
+      }>
+      incomplete?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "providerCallID" },
+            { in: "body", key: "version" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "items" },
+            { in: "body", key: "incomplete" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiSpokenResponses,
+      KilocodeVoiceOpenaiSpokenErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/spoken",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Recover recent speech for the exact active Raya task without replaying work
+   */
+  public context<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeVoiceOpenaiContextResponses,
+      KilocodeVoiceOpenaiContextErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/context",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * Reserve goal budget before starting a billable OpenAI voice session
    */
@@ -12332,6 +12320,119 @@ export class Openai extends HeyApiClient {
   }
 }
 
+export class Live extends HeyApiClient {
+  /**
+   * Admit one immutable Live delegation using observed transcript context
+   */
+  public call<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation?: string
+      context?: {
+        version: 1
+        delegation: string
+        offset: number
+        fragments: Array<{
+          id: string
+          speaker: "user" | "assistant"
+          text: string
+          start: number
+          end: number
+          sequence: number
+          client?: string
+        }>
+        incomplete: true
+        omitted: boolean
+      }
+      images?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "context" },
+            { in: "body", key: "images" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceLiveCallResponses,
+      KilocodeVoiceLiveCallErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/live/session/{id}/calls",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Retain final provider-reported Live voice duration
+   */
+  public duration<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation?: string
+      receipt?: {
+        id: string
+        model: "gpt-live-1"
+        seconds: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "receipt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceLiveDurationResponses,
+      KilocodeVoiceLiveDurationErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/live/session/{id}/duration",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Voice extends HeyApiClient {
   /**
    * Start a realtime voice session
@@ -12491,14 +12592,14 @@ export class Voice extends HeyApiClient {
     })
   }
 
-  private _live?: Live
-  get live(): Live {
-    return (this._live ??= new Live({ client: this.client }))
-  }
-
   private _openai?: Openai
   get openai(): Openai {
     return (this._openai ??= new Openai({ client: this.client }))
+  }
+
+  private _live?: Live
+  get live(): Live {
+    return (this._live ??= new Live({ client: this.client }))
   }
 }
 

@@ -48630,6 +48630,328 @@
         ]
       }
     },
+    "/kilocode/voice/openai/session/{id}/spoken": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.spoken",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["version", "revision", "updatedAt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Retain a bounded same-task spoken recovery snapshot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "providerCallID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "pattern": "^\\S+$"
+                  },
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "previous": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["user", "assistant", "other"]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": ["pending", "final", "omitted"]
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 4096
+                        }
+                      },
+                      "required": ["id", "previous", "role", "state"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 128
+                  },
+                  "incomplete": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["generation", "providerCallID", "version", "revision", "items"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.spoken({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/context": {
+      "get": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.context",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "generation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bindingID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "itemID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": ["user", "assistant"]
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["bindingID", "itemID", "role", "text"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 128
+                    },
+                    "incomplete": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["version", "items", "incomplete"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Recover recent speech for the exact active Raya task without replaying work",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.context({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/voice/live/session/{id}/calls": {
       "post": {
         "tags": ["raya-voice"],

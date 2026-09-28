@@ -21,6 +21,7 @@ import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as Store from "./openai-store"
+import * as Spoken from "./openai-spoken"
 import { Storage } from "@/storage/storage"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
 import { mutate } from "@/kilocode/task/mutation"
@@ -1099,5 +1100,129 @@ export const make = (deps: Deps) =>
           ),
         )
       })
-    return { reserve, release, start, stage, meter, usage, reconcile, submit, delegate, duration, get, cancel, close }
+    const parent = (stored: Stored) =>
+      Effect.gen(function* () {
+        const session = yield* deps.sessions.get(stored.binding.parentSessionID)
+        if ((yield* canonical(session.directory)) !== stored.binding.directory)
+          return yield* refuse("conflict", "Voice parent directory changed.")
+      })
+    const spoken = (id: string, input: typeof Spoken.Input.Type, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          if (!Spoken.valid(input)) return yield* refuse("invalid", "Invalid spoken recovery snapshot.")
+          const stored = yield* load(id, secret, directory, input.generation)
+          yield* active(stored)
+          yield* parent(stored)
+          if (input.providerCallID !== stored.binding.providerCallID)
+            return yield* refuse("conflict", "Spoken provider call changed.")
+          const snapshot: typeof Spoken.Snapshot.Type = {
+            version: 1,
+            revision: input.revision,
+            items: input.items,
+            incomplete: input.incomplete ?? false,
+            updatedAt: Date.now(),
+          }
+          const prior = stored.spoken
+          if (prior && snapshot.revision === prior.revision) {
+            if (Spoken.fingerprint(snapshot) !== Spoken.fingerprint(prior))
+              return yield* refuse("conflict", "Spoken revision was reused with different content.")
+            return { version: 1 as const, revision: prior.revision, updatedAt: prior.updatedAt }
+          }
+          if (snapshot.revision !== (prior?.revision ?? 0) + 1 || (prior && !Spoken.follows(prior, snapshot)))
+            return yield* refuse("conflict", "Spoken snapshot does not follow its retained revision.")
+          stored.spoken = snapshot
+          yield* save(stored)
+          return { version: 1 as const, revision: snapshot.revision, updatedAt: snapshot.updatedAt }
+        }).pipe(Effect.uninterruptible),
+      )
+    const context = (id: string, generation: string, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          const stored = yield* load(id, secret, directory, generation)
+          yield* active(stored)
+          yield* parent(stored)
+          const rows = yield* store.context(stored.binding.parentSessionID, id, stored.binding.createdAt)
+          const result: { version: 1; items: (typeof Spoken.Context.Type)["items"][number][]; incomplete: boolean } = {
+            version: 1,
+            items: [],
+            incomplete: rows.length > 8,
+          }
+          const now = Date.now()
+          let size = 0
+          for (const row of rows.slice(0, 8).toReversed()) {
+            const parsed = yield* store.inspect(row).pipe(Effect.exit)
+            if (Exit.isFailure(parsed)) {
+              result.incomplete = true
+              continue
+            }
+            const prior = parsed.value
+            const snapshot = prior.spoken
+            if (
+              prior.binding.directory !== stored.binding.directory ||
+              !Number.isFinite(prior.binding.createdAt) ||
+              prior.binding.createdAt < 0 ||
+              prior.binding.createdAt > stored.binding.createdAt ||
+              !snapshot ||
+              snapshot.updatedAt < prior.binding.createdAt ||
+              snapshot.updatedAt > now ||
+              snapshot.updatedAt + 3600000 <= now ||
+              !Spoken.valid({
+                generation: prior.binding.generation,
+                providerCallID: prior.binding.providerCallID,
+                version: snapshot.version,
+                revision: snapshot.revision,
+                items: snapshot.items,
+                incomplete: snapshot.incomplete,
+              })
+            ) {
+              result.incomplete = true
+              continue
+            }
+            const ordered = Spoken.ordered(snapshot)
+            result.incomplete ||= ordered.incomplete
+            for (const item of ordered.items) {
+              if (item.state !== "final") {
+                result.incomplete = true
+                continue
+              }
+              if (item.role === "other") continue
+              if (!item.text) {
+                result.incomplete = true
+                continue
+              }
+              const bytes = Buffer.byteLength(item.text, "utf8")
+              result.items.push({ bindingID: prior.binding.id, itemID: item.id, role: item.role, text: item.text })
+              size += bytes
+              while (size > 8192 || result.items.length > 128) {
+                size -= Buffer.byteLength(result.items.shift()!.text, "utf8")
+                result.incomplete = true
+              }
+            }
+          }
+          // A slow historical read cannot authorize recovery after Stop, expiry, or parent deletion.
+          const current = yield* load(id, secret, directory, generation)
+          yield* active(current)
+          yield* parent(current)
+          return result
+        }),
+      )
+    return {
+      reserve,
+      release,
+      start,
+      stage,
+      meter,
+      usage,
+      reconcile,
+      submit,
+      delegate,
+      duration,
+      get,
+      cancel,
+      close,
+      spoken,
+      context,
+    }
   })

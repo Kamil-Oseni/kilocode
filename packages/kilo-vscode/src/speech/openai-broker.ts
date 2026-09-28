@@ -1,5 +1,6 @@
 import { OpenAISpeech } from "./openai-speech"
 import { OpenAIPrefill } from "./openai-prefill"
+import { OpenAITranscript } from "./openai-transcript"
 import { OpenAIUsage } from "./openai-usage"
 import type { VoiceUsage } from "../shared/voice-usage"
 import { OpenAIImages } from "./openai-images"
@@ -52,6 +53,7 @@ type Claim = {
   uncertain: boolean
   paid: boolean
   speech: OpenAISpeech
+  transcript?: OpenAITranscript
   usage?: OpenAIUsage
   images: OpenAIImages
   cancellations: Set<string>
@@ -176,6 +178,7 @@ export class OpenAIBroker {
     if (!identifier(responseID) || !identifier(eventID) || claim.speech.output !== responseID) return
     if (claim.cancellations.has(eventID)) return
     claim.cancellations.add(eventID)
+    claim.transcript?.interrupt(responseID)
     if (claim.cancellations.size > 32) claim.cancellations.delete(claim.cancellations.values().next().value!)
     if (claim.speech.generating(responseID))
       this.send(claim, { type: "response.cancel", response_id: responseID, event_id: eventID })
@@ -346,6 +349,42 @@ export class OpenAIBroker {
     claim.binding = admission(binding, claim)
     claim.reservation = undefined
     claim.transcription = undefined
+    claim.uncertain = false
+    const history = await this.backend(claim, `/session/${encodeURIComponent(claim.binding.id)}/context`, {
+      method: "GET",
+    })
+    const spoken = new OpenAIPrefill(OpenAITranscript.context(history))
+    const notice = { failed: false }
+    claim.transcript = new OpenAITranscript(async (snapshot) => {
+      try {
+        if (this.claim !== claim || (claim.cancelled && !claim.ending) || !claim.binding)
+          throw new Error("Spoken context lost its call owner")
+        const receipt = await this.backend(
+          claim,
+          `/session/${encodeURIComponent(claim.binding.id)}/spoken`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...snapshot,
+              generation: claim.binding.generation,
+              providerCallID: claim.binding.providerCallID,
+            }),
+          },
+          true,
+        )
+        if (receipt.version !== 1 || receipt.revision !== snapshot.revision || !Number.isSafeInteger(receipt.updatedAt))
+          throw new Error("Spoken context persistence was not confirmed exactly")
+      } catch {
+        if (!notice.failed) {
+          notice.failed = true
+          claim.failed(
+            "Recent spoken context could not be saved. Review this conversation before reconnecting; work was not repeated.",
+          )
+        }
+        throw new Error("Spoken context persistence was not confirmed")
+      }
+    })
+    for (const item of [prefill, spoken]) claim.transcript.ignore(item.create().item.id)
     claim.usage = new OpenAIUsage(
       claim.abort.signal,
       (receipt, reservationID) =>
@@ -357,7 +396,7 @@ export class OpenAIBroker {
     )
     claim.uncertain = false
     this.assert(claim)
-    await this.sideband(claim, prefill)
+    await this.sideband(claim, [prefill, spoken])
     this.assert(claim)
     claim.timer = setInterval(() => this.validate(claim), 1000)
     claim.timer.unref()
@@ -373,7 +412,7 @@ export class OpenAIBroker {
     return false
   }
 
-  private sideband(claim: Claim, prefill: OpenAIPrefill) {
+  private sideband(claim: Claim, prefills: OpenAIPrefill[]) {
     const socket = this.connect(`wss://api.openai.com/v1/realtime?call_id=${encodeURIComponent(claim.remote!)}`, {
       headers: { Authorization: `Bearer ${claim.config!.key}` },
       handshakeTimeout: 15_000,
@@ -384,6 +423,7 @@ export class OpenAIBroker {
     return new Promise<void>((resolve, reject) => {
       let ready = false
       let seeded = false
+      const confirmed = new Set<OpenAIPrefill>()
       let settled = false
       const timer = setTimeout(() => finish(new Error("OpenAI voice context or control did not become ready.")), 20_000)
       const abort = () => finish(new Error("Voice setup was cancelled."))
@@ -425,15 +465,19 @@ export class OpenAIBroker {
         const event = object(data.toString(), 524_288)
         if (!event) return
         if (ready) return this.event(claim, event)
+        claim.transcript?.receive(event)
         if (!seeded && event.type === "session.updated" && configured(event.session)) {
           seeded = true
-          this.send(claim, prefill.create())
+          for (const prefill of prefills) this.send(claim, prefill.create())
           return
         }
         if (event.type === "error")
           return finish(new Error("OpenAI rejected voice configuration or saved task context."))
         try {
-          if (seeded && prefill.receive(event)) finish()
+          if (seeded) {
+            for (const prefill of prefills) if (prefill.receive(event)) confirmed.add(prefill)
+            if (confirmed.size === prefills.length) finish()
+          }
         } catch (error) {
           finish(error instanceof Error ? error : new Error("Saved voice context could not be confirmed."))
         }
@@ -535,6 +579,7 @@ export class OpenAIBroker {
 
   private event(claim: Claim, event: Record<string, unknown>) {
     if (!this.observed(claim, event)) return
+    claim.transcript?.receive(event)
     if (claim.ending) return
     if (claim.images.receive(event)) return
     if (event.type === "error" && cancelled(event, claim.cancellations)) return
@@ -741,6 +786,7 @@ export class OpenAIBroker {
 
   private async cleanup(claim: Claim): Promise<string | undefined> {
     claim.ending = true
+    claim.transcript?.invalidate()
     claim.speech.close()
     clearInterval(claim.timer)
     clearTimeout(claim.limit)
@@ -752,11 +798,15 @@ export class OpenAIBroker {
           )
         : true
     const usage = claim.ready && hangup && claim.binding ? await claim.usage?.settle(this.settlementTimeout) : undefined
+    const spoken = await claim.transcript?.close().then(
+      () => true,
+      () => false,
+    )
     claim.cancelled = true
     claim.abort.abort()
     claim.socket?.terminate()
     const results = await Promise.allSettled([
-      ...(claim.binding && hangup && usage !== false
+      ...(claim.binding && hangup && usage !== false && spoken !== false
         ? [
             this.backend(claim, `/session/${encodeURIComponent(claim.binding.id)}`, { method: "DELETE" }, true).then(
               (binding) => {
@@ -792,15 +842,28 @@ export class OpenAIBroker {
             )
         : []),
     ])
+    const error = this.release(claim, hangup, usage, spoken, results)
+    if (error) return error
+    if (this.claim === claim) this.claim = undefined
+  }
+
+  private release(
+    claim: Claim,
+    hangup: boolean,
+    usage: boolean | undefined,
+    spoken: boolean | undefined,
+    results: PromiseSettledResult<unknown>[],
+  ) {
     if (!hangup)
       return "OpenAI call release remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
     if (usage === false)
       return "Voice usage settlement remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
+    if (spoken === false)
+      return "Spoken context persistence remains unconfirmed. Restart Raya before reconnecting; work was not repeated."
     if (claim.uncertain)
       return "Voice admission remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
     if (results.some((result) => result.status === "rejected"))
       return "Voice cleanup remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
-    if (this.claim === claim) this.claim = undefined
   }
 
   private async hangup(claim: Claim) {

@@ -28800,6 +28800,117 @@ export type MemoryPurgeResponses = {
 
 export type MemoryPurgeResponse = MemoryPurgeResponses[keyof MemoryPurgeResponses]
 
+export type KilocodeVoiceOpenaiSpokenData = {
+  body?: {
+    generation: string
+    providerCallID: string
+    version: 1
+    revision: number
+    items: Array<{
+      id: string
+      previous: string
+      role: "user" | "assistant" | "other"
+      state: "pending" | "final" | "omitted"
+      text?: string
+    }>
+    incomplete?: boolean
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/spoken"
+}
+
+export type KilocodeVoiceOpenaiSpokenErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiSpokenError = KilocodeVoiceOpenaiSpokenErrors[keyof KilocodeVoiceOpenaiSpokenErrors]
+
+export type KilocodeVoiceOpenaiSpokenResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    revision: number
+    updatedAt: number
+  }
+}
+
+export type KilocodeVoiceOpenaiSpokenResponse =
+  KilocodeVoiceOpenaiSpokenResponses[keyof KilocodeVoiceOpenaiSpokenResponses]
+
+export type KilocodeVoiceOpenaiContextData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/context"
+}
+
+export type KilocodeVoiceOpenaiContextErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiContextError = KilocodeVoiceOpenaiContextErrors[keyof KilocodeVoiceOpenaiContextErrors]
+
+export type KilocodeVoiceOpenaiContextResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    items: Array<{
+      bindingID: string
+      itemID: string
+      role: "user" | "assistant"
+      text: string
+    }>
+    incomplete: boolean
+  }
+}
+
+export type KilocodeVoiceOpenaiContextResponse =
+  KilocodeVoiceOpenaiContextResponses[keyof KilocodeVoiceOpenaiContextResponses]
+
 export type KilocodeVoiceLiveCallData = {
   body?: {
     generation: string

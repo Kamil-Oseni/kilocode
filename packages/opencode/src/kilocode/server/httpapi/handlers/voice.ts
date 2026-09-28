@@ -2,6 +2,8 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { HttpServerRequest } from "effect/unstable/http"
+import * as Spoken from "@/kilocode/voice/openai-spoken"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
@@ -142,6 +144,36 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     )
 
     return handlers
+      .handle("voiceOpenAISpoken", (ctx) =>
+        Effect.gen(function* () {
+          // The API decoder strips excess keys; validate the original body before accepting server-owned fields.
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!Spoken.valid(raw)) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.spoken(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIContext", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.context(
+            ctx.params.id,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
       .handle("voiceLiveCall", (ctx) =>
         Effect.gen(function* () {
           return yield* openai.delegate(

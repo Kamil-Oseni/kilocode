@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { and, asc, desc, eq, gt, lte } from "drizzle-orm"
+import { and, asc, desc, eq, gt, lte, ne, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaVoiceBindingTable as Table } from "@opencode-ai/core/kilocode/voice.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -8,6 +8,7 @@ import type { Storage } from "@/storage/storage"
 import { OpenAIBinding, OpenAICall, OpenAICallInput, OpenAIImage, VoiceID, VoiceKey } from "./openai-protocol"
 import { OpenAIUsage } from "./openai-usage"
 import { LiveDuration } from "./live-protocol"
+import { Snapshot } from "./openai-spoken"
 
 const Payload = Schema.Struct({
   binding: OpenAIBinding,
@@ -22,6 +23,7 @@ const Payload = Schema.Struct({
     Schema.Record(Schema.String, Schema.String.check(Schema.isPattern(/^voice:[a-f0-9]{64}$/))),
   ),
   duration: Schema.optional(LiveDuration),
+  spoken: Schema.optional(Snapshot),
   liveCursor: Schema.optional(
     Schema.Number.check(
       Schema.isInt(),
@@ -41,6 +43,7 @@ export type Stored = {
   usage?: Record<string, typeof OpenAIUsage.Type>
   usageReservations?: Record<string, string>
   duration?: typeof LiveDuration.Type
+  spoken?: typeof Snapshot.Type
   liveCursor?: number
 }
 
@@ -146,5 +149,17 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
       if (rows.length !== 1) return yield* missing()
       return undefined
     })
-  return { read, create, replace, latest, page, inspect }
+  const context = (session: string, id: string, before: number) => {
+    // CASE prevents invalid retained JSON from aborting the entire indexed parent query.
+    const timestamp = sql<number>`CASE WHEN json_valid(${Table.data}) THEN json_extract(${Table.data}, '$.binding.createdAt') ELSE 0 END`
+    return db
+      .select({ id: Table.id, sessionID: Table.session_id, data: Table.data })
+      .from(Table)
+      .where(and(eq(Table.session_id, session), ne(Table.id, id), lte(timestamp, before)))
+      .orderBy(desc(timestamp), desc(Table.id))
+      .limit(9)
+      .all()
+      .pipe(Effect.orDie)
+  }
+  return { read, create, replace, latest, page, inspect, context }
 }

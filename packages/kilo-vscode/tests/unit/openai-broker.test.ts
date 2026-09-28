@@ -74,6 +74,8 @@ function fixture() {
     form: undefined as Record<string, unknown> | undefined,
     order: [] as string[],
     usage: undefined as VoiceUsage | undefined,
+    history: [] as { bindingID: string; itemID: string; role: "user" | "assistant"; text: string }[],
+    spoken: [] as Record<string, unknown>[],
   }
   const binding = {
     id: "binding_1",
@@ -117,6 +119,22 @@ function fixture() {
       status: done ? "completed" : "running",
       ...(done ? { result: { text: `Verified ${id}`, assistantMessageID: `assistant_${id}`, evidence: [] } } : {}),
     })
+  }
+  const history = (url: URL, body: Record<string, unknown>) => {
+    if (url.pathname.endsWith("/context")) {
+      expect(url.searchParams.get("generation")).toBe(binding.generation)
+      return Response.json({ version: 1, items: state.history, incomplete: false })
+    }
+    if (url.pathname.endsWith("/spoken")) {
+      expect(body.generation).toBe(binding.generation)
+      expect(body.providerCallID).toBe(binding.providerCallID)
+      state.spoken.push(body)
+      return Response.json({
+        version: 1,
+        revision: state.mode === "spoken-receipt" ? 999 : body.revision,
+        updatedAt: Date.now(),
+      })
+    }
   }
   const server = Bun.serve<undefined>({
     port: 0,
@@ -172,6 +190,8 @@ function fixture() {
       if (url.pathname.endsWith("/session"))
         return Response.json({ ...binding, parentSessionID: state.mode === "binding" ? "unrelated" : input.sessionID })
       if (url.pathname.endsWith("/usage")) return Response.json(body.receipt)
+      const spoken = history(url, body)
+      if (spoken) return spoken
       if (url.pathname.endsWith("/images")) {
         expect(body.generation).toBe(binding.generation)
         const bytes = Buffer.from(String(body.data), "base64")
@@ -334,11 +354,15 @@ test("saved task context requires exact completed acknowledgement and cannot rep
     })
     await Bun.sleep(30)
     expect(f.state.ready).toEqual([])
-    expect(f.state.events.filter((event) => String(event.event_id).startsWith("raya_context_"))).toHaveLength(1)
+    expect(f.state.events.filter((event) => String(event.event_id).startsWith("raya_context_"))).toHaveLength(2)
     expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
     expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
     expect(item.content).toEqual([{ type: "input_text", text: f.state.context }])
     f.send({ type: "conversation.item.done", item })
+    await Bun.sleep(20)
+    expect(f.state.ready).toEqual([])
+    const spoken = f.state.events.filter((event) => String(event.event_id).startsWith("raya_context_"))[1]!.item
+    f.send({ type: "conversation.item.done", item: spoken })
     await start
     expect(f.state.ready).toEqual([sdp])
     f.send({ type: "conversation.item.done", item })
@@ -403,6 +427,73 @@ async function until(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("recovered speech uses a separate acknowledged historical prefill without provenance or replay", async () => {
+  const f = fixture()
+  f.state.history.push({
+    bindingID: "private_binding",
+    itemID: "private_item",
+    role: "user",
+    text: "Prior spoken request",
+  })
+  try {
+    await f.start()
+    const items = f.state.events.filter((event) => event.type === "conversation.item.create")
+    expect(items).toHaveLength(2)
+    const encoded = JSON.stringify(items)
+    expect(encoded).toContain("Prior spoken request")
+    expect(encoded).not.toContain("private_binding")
+    expect(encoded).not.toContain("private_item")
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(0)
+    expect(f.state.spoken).toHaveLength(0)
+  } finally {
+    await f.close()
+  }
+})
+
+test("trusted final transcripts persist in predecessor order and finish before binding closure", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    f.send({ type: "conversation.item.input_audio_transcription.completed", item_id: "second", transcript: "Second" })
+    f.send({ type: "input_audio_buffer.committed", item_id: "second", previous_item_id: "first" })
+    f.send({ type: "input_audio_buffer.committed", item_id: "first", previous_item_id: null })
+    f.send({ type: "conversation.item.input_audio_transcription.completed", item_id: "first", transcript: "First" })
+    await until(
+      () =>
+        Array.isArray(f.state.spoken.at(-1)?.items) &&
+        (f.state.spoken.at(-1)!.items as { text?: string }[]).at(-1)?.text === "Second",
+    )
+    expect(await f.broker.stop(input.requestID)).toBeUndefined()
+    expect(f.state.spoken.at(-1)?.items).toEqual([
+      { id: "first", previous: null, role: "user", state: "final", text: "First" },
+      { id: "second", previous: "first", role: "user", state: "final", text: "Second" },
+    ])
+    const written = f.state.requests.findLastIndex((request) => request.path.endsWith("/spoken"))
+    const closed = f.state.requests.findIndex((request) => request.method === "DELETE")
+    expect(written).toBeLessThan(closed)
+    expect(closed).toBeGreaterThan(0)
+  } finally {
+    await f.close()
+  }
+})
+
+test("unconfirmed spoken persistence cannot close the binding as successfully settled", async () => {
+  const f = fixture()
+  f.state.mode = "spoken-receipt"
+  try {
+    await f.start()
+    f.send({ type: "input_audio_buffer.committed", item_id: "first", previous_item_id: null })
+    f.send({ type: "conversation.item.input_audio_transcription.completed", item_id: "first", transcript: "First" })
+    await until(() => f.state.spoken.length > 0)
+    await until(() => f.state.errors.some((error) => error.includes("Recent spoken context could not be saved")))
+    expect(f.state.errors.filter((error) => error.includes("Recent spoken context could not be saved"))).toHaveLength(1)
+    expect(await f.broker.stop(input.requestID)).toContain("Spoken context persistence remains unconfirmed")
+    expect(f.state.requests.filter((request) => request.method === "DELETE")).toHaveLength(0)
+  } finally {
+    await f.close()
+  }
+})
 
 test("slow admitted work backgrounds without replay and final speech waits for user and playback", async () => {
   const f = fixture()

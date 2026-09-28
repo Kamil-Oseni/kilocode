@@ -187,8 +187,8 @@ export class DesktopAutomationService implements vscode.Disposable {
       this.driver,
       connection,
       () => {
-        void this.pause("Raya desktop control paused because continuous capture stopped unexpectedly.").catch((error) =>
-          console.error("[Raya] Failed to persist desktop pause after capture loss", error),
+        void this.pause("Raya desktop control paused because desktop observation stopped unexpectedly.").catch(
+          (error) => console.error("[Raya] Failed to persist desktop pause after observation loss", error),
         )
       },
       () => !!this.hotkey?.isReady,

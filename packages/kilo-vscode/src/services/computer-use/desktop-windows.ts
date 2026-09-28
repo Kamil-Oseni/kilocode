@@ -1517,7 +1517,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
     if (!input && process.platform !== "win32") throw new Error("Windows desktop control is available only on Windows")
     this.runner = input ?? runner()
     this.semantic = new DesktopSemanticWorker(semantic ?? runner())
-    this.nativeSemantic = nativeSemantic ? new NativeSemanticHost(nativeSemantic.binary) : undefined
+    this.nativeSemantic = nativeSemantic
+      ? new NativeSemanticHost(nativeSemantic.binary, 15_000, ["--serve-v1"], (error) => this.worker?.fail(error))
+      : undefined
     this.probe = probe
   }
 

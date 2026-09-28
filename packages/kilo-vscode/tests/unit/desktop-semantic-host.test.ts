@@ -24,7 +24,10 @@ async function stopped(pid: number) {
 test("semantic host keeps one real child warm and retires it on cancellation", async () => {
   const dir = mkdtempSync(join(tmpdir(), "raya-semantic-host-"))
   const witness = join(dir, "pid")
-  const host = new NativeSemanticHost(process.execPath, 2_000, [fixture, "normal", witness])
+  const failures: Error[] = []
+  const host = new NativeSemanticHost(process.execPath, 2_000, [fixture, "normal", witness], (error) =>
+    failures.push(error),
+  )
   try {
     const first = await host.read(target)
     const pid = Number(readFileSync(witness, "utf8"))
@@ -40,6 +43,7 @@ test("semantic host keeps one real child warm and retires it on cancellation", a
     expect(replacement).not.toBe(pid)
     host.cancel()
     await stopped(replacement)
+    expect(failures).toHaveLength(0)
   } finally {
     host.cancel()
     rmSync(dir, { recursive: true, force: true })
@@ -49,7 +53,10 @@ test("semantic host keeps one real child warm and retires it on cancellation", a
 test("semantic timeout kills the real blocked child and discards its generation", async () => {
   const dir = mkdtempSync(join(tmpdir(), "raya-semantic-timeout-"))
   const witness = join(dir, "pid")
-  const host = new NativeSemanticHost(process.execPath, 500, [fixture, "hang", witness])
+  const failures: Error[] = []
+  const host = new NativeSemanticHost(process.execPath, 500, [fixture, "hang", witness], (error) =>
+    failures.push(error),
+  )
   try {
     await host.read(target)
     const pid = Number(readFileSync(witness, "utf8"))
@@ -57,15 +64,46 @@ test("semantic timeout kills the real blocked child and discards its generation"
     await expect(host.read(target)).rejects.toThrow(/already active/)
     await expect(pending).rejects.toThrow(/timed out/)
     await stopped(pid)
+    expect(failures).toHaveLength(1)
+    expect(failures[0].message).toContain("timed out")
     expect((await host.read(target)).semantics.status).toBe("available")
     const replacement = Number(readFileSync(witness, "utf8"))
     host.cancel()
     await stopped(replacement)
+    expect(failures).toHaveLength(1)
   } finally {
     host.cancel()
     rmSync(dir, { recursive: true, force: true })
   }
 }, 15_000)
+
+test("idle semantic worker loss reports once and does not poison its replacement", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "raya-semantic-loss-"))
+  const witness = join(dir, "pid")
+  const failures: Error[] = []
+  const host = new NativeSemanticHost(process.execPath, 2_000, [fixture, "normal", witness], (error) =>
+    failures.push(error),
+  )
+  try {
+    const first = await host.read(target)
+    const pid = Number(readFileSync(witness, "utf8"))
+    process.kill(pid)
+    await stopped(pid)
+    const until = performance.now() + 2_000
+    while (!failures.length && performance.now() < until) await Bun.sleep(10)
+    expect(failures).toHaveLength(1)
+    expect(failures[0].message).toContain("exited")
+    const next = await host.read(target)
+    expect(next.generation).toBeGreaterThan(first.generation)
+    const replacement = Number(readFileSync(witness, "utf8"))
+    host.cancel()
+    await stopped(replacement)
+    expect(failures).toHaveLength(1)
+  } finally {
+    host.cancel()
+    rmSync(dir, { recursive: true, force: true })
+  }
+}, 10_000)
 
 for (const mode of ["overflow", "wrong", "malformed", "refused"]) {
   test(`semantic host refuses real child ${mode} output without disclosing it`, async () => {

@@ -30,6 +30,7 @@ export class NativeSemanticHost {
     private readonly binary: string,
     private readonly timeout = 15_000,
     private readonly args: string[] = ["--serve-v1"],
+    private readonly failed?: (error: Error) => void,
   ) {
     if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 15_000)
       throw new Error("Desktop semantic deadline is invalid")
@@ -79,7 +80,7 @@ export class NativeSemanticHost {
   }
 
   cancel(): void {
-    this.fail(new Error("Desktop semantic read was cancelled"))
+    this.fail(new Error("Desktop semantic read was cancelled"), false)
   }
 
   private start(): Promise<ChildProcess> {
@@ -107,8 +108,7 @@ export class NativeSemanticHost {
     })
     child.on("close", () => {
       if (this.child === child) {
-        this.child = undefined
-        this.fail(new Error("Desktop semantic worker exited"))
+        this.fail(new Error("Desktop semantic worker exited"), true, true)
       }
     })
     return readiness
@@ -177,7 +177,7 @@ export class NativeSemanticHost {
     pending.resolve({ ...result, age: age.upper })
   }
 
-  private fail(error: Error): void {
+  private fail(error: Error, report = true, closed = false): void {
     this.generation += 1
     const pending = this.pending
     const child = this.child
@@ -194,7 +194,7 @@ export class NativeSemanticHost {
       clearTimeout(pending.timer)
       pending.reject(error)
     }
-    if (child) {
+    if (child && !closed) {
       const done = new Promise<boolean>((resolve) => {
         const timer = setTimeout(() => resolve(false), 1_000)
         child.once("close", () => {
@@ -205,6 +205,13 @@ export class NativeSemanticHost {
       })
       this.retiring = { child, done }
       child.kill()
+    }
+    if (report && (pending || child || readiness)) {
+      try {
+        this.failed?.(error)
+      } catch {
+        console.error("[Raya] Desktop semantic failure listener failed")
+      }
     }
   }
 }

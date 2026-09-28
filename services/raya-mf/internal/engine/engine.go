@@ -31,6 +31,8 @@ type Descriptor struct {
 }
 
 type Frame struct {
+	Turn  string
+	Final bool
 	Epoch uint64
 	Seq   uint64
 	Start uint64

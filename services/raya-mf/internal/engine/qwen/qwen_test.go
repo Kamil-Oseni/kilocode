@@ -155,6 +155,110 @@ func TestNewResponseWhileCancellationUnknownFailsClosed(t *testing.T) {
 	}
 }
 
+func TestProviderAudioCompletionSealsOwnedFinalBoundary(t *testing.T) {
+	for _, ending := range []string{"response.audio.done", "response.done", "cancelled"} {
+		t.Run(ending, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			clock := media.NewClock(24000)
+			ticks := make(chan time.Time)
+			go clock.RunWithTicks(ctx, ticks)
+			session := &Session{ctx: ctx, cancel: cancel, clock: clock, events: make(chan engine.Event, 16)}
+			created := message{Type: "response.created"}
+			created.Response.ID = "response"
+			session.handle(created)
+			session.handle(message{Type: "response.audio.delta", ResponseID: "response", ItemID: "item", Delta: base64.StdEncoding.EncodeToString(make([]byte, 960*2))})
+			done := message{Type: ending, ResponseID: "response", ItemID: "item"}
+			done.Response.ID = "response"
+			done.Response.Status = "completed"
+			if ending == "cancelled" {
+				done.Type = "response.done"
+				done.Response.Status = "cancelled"
+			}
+			session.handle(done)
+			if ending != "cancelled" && !session.spoken["item"].sealed {
+				t.Fatal("provider completion did not seal its exact owned item")
+			}
+			for index := range 2 {
+				select {
+				case ticks <- time.Unix(0, int64(index)*20_000_000):
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				select {
+				case frame := <-clock.Output():
+					if ending == "cancelled" {
+						if frame.Item != "" || frame.Final || frame.Epoch != 2 {
+							t.Fatal("native cancellation left attributed/final audio queued")
+						}
+						continue
+					}
+					if frame.Item != "item" || frame.Turn != "response" || frame.Start != uint64(index*480) || frame.End != uint64((index+1)*480) || frame.Final != (index == 1) {
+						t.Fatalf("owned boundary frame = %+v", frame)
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+			if ending == "response.audio.done" {
+				session.handle(done)
+				select {
+				case ticks <- time.Unix(0, 40_000_000):
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				select {
+				case frame := <-clock.Output():
+					if frame.Item != "" || frame.Final {
+						t.Fatal("duplicate provider completion replayed a source final")
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+		})
+	}
+}
+
+func TestEmptyResponseIsExplicitAndCannotBeReplayed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session := &Session{ctx: ctx, cancel: cancel, clock: media.NewClock(24000), events: make(chan engine.Event, 8)}
+	created := message{Type: "response.created"}
+	created.Response.ID = "response"
+	session.handle(created)
+	<-session.Events()
+	done := message{Type: "response.done"}
+	done.Response.ID = "response"
+	done.Response.Status = "completed"
+	session.handle(done)
+	if event := <-session.Events(); event.Turn != "response" || event.Data["audioEmpty"] != true {
+		t.Fatal("known empty completion lost its source identity")
+	}
+	session.handle(done)
+	if event := <-session.Events(); event.Data["audioEmpty"] != false {
+		t.Fatal("duplicate completion invented an empty boundary")
+	}
+}
+
+func TestLateAudioAfterSourceSealClosesSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	clock := media.NewClock(24000)
+	go clock.RunWithTicks(ctx, make(chan time.Time))
+	session := &Session{ctx: ctx, cancel: cancel, clock: clock, events: make(chan engine.Event, 8)}
+	created := message{Type: "response.created"}
+	created.Response.ID = "response"
+	session.handle(created)
+	audio := message{Type: "response.audio.delta", ResponseID: "response", ItemID: "item", Delta: base64.StdEncoding.EncodeToString(make([]byte, 960))}
+	session.handle(audio)
+	session.handle(message{Type: "response.audio.done", ResponseID: "response", ItemID: "item"})
+	session.handle(audio)
+	if ctx.Err() == nil {
+		t.Fatal("late audio escaped an acknowledged final source boundary")
+	}
+}
+
 func TestOversizedVendorAudioFailsInsteadOfQuietLoss(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

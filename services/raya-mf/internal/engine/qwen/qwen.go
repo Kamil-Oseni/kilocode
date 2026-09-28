@@ -114,6 +114,7 @@ type Session struct {
 	last       string
 	pending    string
 	responses  map[string]bool
+	spoken     map[string]utterance
 	itemsMu    sync.RWMutex
 	items      []engine.ContextItem
 	wait       sync.WaitGroup
@@ -122,6 +123,11 @@ type Session struct {
 	output     atomic.Uint64
 	interrupts atomic.Uint64
 	once       sync.Once
+}
+
+type utterance struct {
+	turn   string
+	sealed bool
 }
 
 func (s *Session) PushAudio(ctx context.Context, pcm []byte) error {
@@ -341,18 +347,47 @@ func (s *Session) handle(msg message) {
 			s.emit(engine.Event{Type: "audio.dropped", Item: msg.ItemID, Data: map[string]any{"reason": "stale or unbound response"}})
 			return
 		}
+		if s.spoken == nil {
+			s.spoken = make(map[string]utterance)
+		}
+		prior, exists := s.spoken[msg.ItemID]
+		if (exists && (prior.turn != msg.ResponseID || prior.sealed)) || (!exists && len(s.spoken) >= 256) {
+			s.audioMu.Unlock()
+			s.emit(engine.Event{Type: "engine.error", Text: "qwen audio item identity is sealed or exhausted"})
+			s.cancel()
+			return
+		}
 		pcm, err := base64.StdEncoding.DecodeString(msg.Delta)
 		if err != nil {
 			s.audioMu.Unlock()
 			s.emit(engine.Event{Type: "engine.error", Text: "invalid qwen audio: " + err.Error()})
+			s.cancel()
 			return
 		}
 		s.output.Add(uint64(len(pcm)))
-		accepted := s.clock.Submit(media.Chunk{Item: msg.ItemID, PCM: pcm})
+		accepted := s.clock.Submit(media.Chunk{Item: msg.ItemID, Turn: msg.ResponseID, PCM: pcm})
+		if accepted {
+			s.spoken[msg.ItemID] = utterance{turn: msg.ResponseID}
+		}
 		s.audioMu.Unlock()
 		if !accepted {
 			s.emit(engine.Event{Type: "audio.dropped", Item: msg.ItemID, Data: map[string]any{"bytes": len(pcm)}})
 			s.emit(engine.Event{Type: "engine.error", Text: "qwen audio exceeded bounded media allowance"})
+			s.cancel()
+		}
+	case "response.audio.done":
+		ctx, cancel := context.WithTimeout(s.ctx, 2*engine.FramePeriod)
+		defer cancel()
+		s.audioMu.Lock()
+		entry, exists := s.spoken[msg.ItemID]
+		known := exists && entry.turn == msg.ResponseID && !s.responses[msg.ResponseID]
+		var err error
+		if known {
+			err = s.seal(ctx, msg.ItemID, msg.ResponseID)
+		}
+		s.audioMu.Unlock()
+		if err != nil {
+			s.emit(engine.Event{Type: "engine.error", Text: "qwen source audio boundary could not be sealed"})
 			s.cancel()
 		}
 	case "response.function_call_arguments.done":
@@ -361,7 +396,28 @@ func (s *Session) handle(msg message) {
 			"name": msg.Name,
 		}})
 	case "response.done":
+		ctx, cancel := context.WithTimeout(s.ctx, 2*engine.FramePeriod)
+		defer cancel()
 		s.audioMu.Lock()
+		var err error
+		empty := msg.Response.ID != "" && msg.Response.ID == s.active && !s.responses[s.active] && msg.Response.Status == "completed"
+		if msg.Response.ID != "" && (msg.Response.ID == s.active || msg.Response.ID == s.pending) && msg.Response.Status == "cancelled" {
+			err = s.clock.Drop(ctx, "")
+		}
+		if msg.Response.ID == s.active && !s.responses[s.active] && msg.Response.Status == "completed" {
+			for item, entry := range s.spoken {
+				if entry.turn != msg.Response.ID {
+					continue
+				}
+				empty = false
+				if entry.sealed {
+					continue
+				}
+				if err = s.seal(ctx, item, msg.Response.ID); err != nil {
+					break
+				}
+			}
+		}
 		if msg.Response.ID == s.active {
 			s.responses[s.active] = true
 			s.active = ""
@@ -370,12 +426,34 @@ func (s *Session) handle(msg message) {
 			s.pending = ""
 		}
 		s.audioMu.Unlock()
-		s.emit(engine.Event{Type: "response.done", Turn: msg.Response.ID, Data: map[string]any{"status": msg.Response.Status}})
+		if err != nil {
+			s.emit(engine.Event{Type: "engine.error", Text: "qwen completed audio boundary could not be sealed"})
+			s.cancel()
+			return
+		}
+		s.emit(engine.Event{Type: "response.done", Turn: msg.Response.ID, Data: map[string]any{"status": msg.Response.Status, "audioEmpty": empty}})
 	case "error":
 		err := errors.New(first(msg.Error.Message, msg.Message))
 		s.readyOnce.Do(func() { s.ready <- err })
 		s.emit(engine.Event{Type: "engine.error", Text: err.Error()})
 	}
+}
+
+// Caller holds audioMu. A source boundary never acknowledges playback.
+func (s *Session) seal(ctx context.Context, item, turn string) error {
+	entry, exists := s.spoken[item]
+	if !exists || entry.turn != turn {
+		return errors.New("unknown qwen audio item")
+	}
+	if entry.sealed {
+		return nil
+	}
+	if err := s.clock.Seal(ctx, item, turn); err != nil {
+		return err
+	}
+	entry.sealed = true
+	s.spoken[item] = entry
+	return nil
 }
 
 func (s *Session) emit(event engine.Event) {

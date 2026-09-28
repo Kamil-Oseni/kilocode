@@ -18,11 +18,13 @@ var ErrCapacity = errors.New("media clock cancellation allowance exhausted")
 
 type Chunk struct {
 	Item  string
+	Turn  string
 	PCM   []byte
 	Epoch uint64
 	start uint64
 	owned bool
 	slots int
+	final bool
 }
 type Loss struct {
 	DroppedBytes  uint64
@@ -32,7 +34,15 @@ type Loss struct {
 }
 type discard struct {
 	item string
+	turn string
+	seal bool
 	ack  chan error
+}
+type boundary struct {
+	turn  string
+	epoch uint64
+	end   uint64
+	err   error
 }
 type Clock struct {
 	rate      int
@@ -47,6 +57,9 @@ type Clock struct {
 	inbound   uint64
 	pending   int
 	offsets   map[string]uint64
+	turns     map[string]string
+	epochs    map[string]uint64
+	sealed    map[string]boundary
 	blocked   map[string]bool
 	epoch     atomic.Uint64
 	started   atomic.Bool
@@ -63,7 +76,7 @@ func NewClock(rate int) *Clock {
 	if rate >= 8000 && rate <= 96000 && rate%50 == 0 {
 		size = rate * 2 / 50
 	}
-	c := &Clock{rate: rate, size: size, input: make(chan Chunk, 6), output: make(chan engine.Frame, 1), control: make(chan discard, 8), done: make(chan struct{}), offsets: make(map[string]uint64), blocked: make(map[string]bool)}
+	c := &Clock{rate: rate, size: size, input: make(chan Chunk, 6), output: make(chan engine.Frame, 1), control: make(chan discard, 8), done: make(chan struct{}), offsets: make(map[string]uint64), turns: make(map[string]string), epochs: make(map[string]uint64), sealed: make(map[string]boundary), blocked: make(map[string]bool)}
 	c.epoch.Store(1)
 	return c
 }
@@ -132,7 +145,22 @@ func (c *Clock) Drop(ctx context.Context, item string) error {
 	if item != "" && !identifier(item) {
 		return errors.New("invalid media item")
 	}
-	command := discard{item, make(chan error, 1)}
+	return c.request(ctx, discard{item: item, ack: make(chan error, 1)})
+}
+
+// Seal acknowledges a generated source boundary, never a heard/playback receipt.
+// Turn must already be bound by the item's PCM; no identity is inferred.
+func (c *Clock) Seal(ctx context.Context, item, turn string) error {
+	if !identifier(item) || !identifier(turn) {
+		return errors.New("invalid media source boundary")
+	}
+	return c.request(ctx, discard{item: item, turn: turn, seal: true, ack: make(chan error, 1)})
+}
+
+func (c *Clock) request(ctx context.Context, command discard) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -162,16 +190,22 @@ func (c *Clock) Drop(ctx context.Context, item string) error {
 
 // Under mu. Even rejected overflow advances original generated sample offsets.
 func (c *Clock) admit(chunk Chunk) (Chunk, bool) {
-	if c.size == 0 || !identifier(chunk.Item) || len(chunk.PCM) == 0 || len(chunk.PCM)%2 != 0 {
+	if c.size == 0 || !identifier(chunk.Item) || (chunk.Turn != "" && !identifier(chunk.Turn)) || len(chunk.PCM) == 0 || len(chunk.PCM)%2 != 0 {
 		c.invalid.Add(1)
 		c.bytes.Add(uint64(len(chunk.PCM)))
 		return chunk, false
 	}
-	if c.blocked[chunk.Item] || (chunk.Epoch != 0 && chunk.Epoch != c.epoch.Load()) {
+	_, sealed := c.sealed[chunk.Item]
+	if sealed || c.blocked[chunk.Item] || (chunk.Epoch != 0 && chunk.Epoch != c.epoch.Load()) {
 		c.bytes.Add(uint64(len(chunk.PCM)))
 		return chunk, false
 	}
 	prior, exists := c.offsets[chunk.Item]
+	if exists && c.turns[chunk.Item] != chunk.Turn {
+		c.invalid.Add(1)
+		c.bytes.Add(uint64(len(chunk.PCM)))
+		return chunk, false
+	}
 	if (!exists && len(c.offsets) >= identities) || uint64(len(chunk.PCM)/2) > ^uint64(0)-prior {
 		c.invalid.Add(1)
 		c.bytes.Add(uint64(len(chunk.PCM)))
@@ -179,6 +213,8 @@ func (c *Clock) admit(chunk Chunk) (Chunk, bool) {
 	}
 	chunk.start = prior
 	c.offsets[chunk.Item] = prior + uint64(len(chunk.PCM)/2)
+	c.turns[chunk.Item] = chunk.Turn
+	c.epochs[chunk.Item] = c.epoch.Load()
 	chunk.Epoch = c.epoch.Load()
 	if len(chunk.PCM) > c.size*queued {
 		c.bytes.Add(uint64(len(chunk.PCM)))
@@ -318,8 +354,7 @@ func (c *Clock) run(ctx context.Context, ticks <-chan time.Time) {
 		command.ack <- nil
 		return true
 	}
-	var seq uint64
-	emit := func(at time.Time) bool {
+	collect := func() {
 		for range cap(c.input) {
 			select {
 			case chunk, open := <-input:
@@ -334,6 +369,62 @@ func (c *Clock) run(ctx context.Context, ticks <-chan time.Time) {
 			default:
 			}
 		}
+	}
+	seal := func(command discard) {
+		c.mu.Lock()
+		end, exists := c.offsets[command.item]
+		if !exists || c.turns[command.item] != command.turn || c.blocked[command.item] || c.epochs[command.item] != c.epoch.Load() {
+			c.mu.Unlock()
+			command.ack <- errors.New("unknown or stale media source boundary")
+			return
+		}
+		if prior, exists := c.sealed[command.item]; exists {
+			c.mu.Unlock()
+			command.ack <- prior.err
+			return
+		}
+		state := boundary{turn: command.turn, epoch: c.epoch.Load(), end: end}
+		// Fence new input before collecting already-owned ingress, so an ACK
+		// cannot race a late chunk into an earlier final frame.
+		c.sealed[command.item] = state
+		c.mu.Unlock()
+		collect()
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		last := -1
+		for index, chunk := range queue {
+			if chunk.Item == command.item {
+				last = index
+			}
+		}
+		if last >= 0 {
+			tail := &queue[last]
+			if tail.start+uint64(len(tail.PCM)/2) != state.end {
+				state.err = errors.New("media source tail was dropped")
+			} else {
+				tail.final = true
+			}
+		} else if c.pending >= queued {
+			state.err = ErrCapacity
+		} else {
+			// This fixed silent tick carries metadata only: the zero sample span
+			// must never contribute to a heard-PCM cursor or receipt.
+			queue = append(queue, Chunk{Item: command.item, Turn: state.turn, Epoch: state.epoch, start: state.end, slots: 1, final: true})
+			c.pending++
+		}
+		c.sealed[command.item] = state
+		command.ack <- state.err
+	}
+	apply := func(command discard) bool {
+		if command.seal {
+			seal(command)
+			return true
+		}
+		return drop(command)
+	}
+	var seq uint64
+	emit := func(at time.Time) bool {
+		collect()
 		if seq == ^uint64(0) {
 			return false
 		}
@@ -342,9 +433,10 @@ func (c *Clock) run(ctx context.Context, ticks <-chan time.Time) {
 		used := 0
 		if len(queue) > 0 {
 			frame.Item = queue[0].Item
+			frame.Turn = queue[0].Turn
 			frame.Start = queue[0].start
 		}
-		for len(queue) > 0 && queue[0].Item == frame.Item && used < c.size {
+		for len(queue) > 0 && queue[0].Item == frame.Item && queue[0].Turn == frame.Turn && used < c.size {
 			chunk := &queue[0]
 			if chunk.start != frame.Start+uint64(used/2) {
 				break
@@ -362,14 +454,18 @@ func (c *Clock) run(ctx context.Context, ticks <-chan time.Time) {
 			c.buffered.Store(uint64(bytes))
 			c.mu.Unlock()
 			if len(chunk.PCM) == 0 {
+				frame.Final = chunk.final
 				queue[0] = Chunk{}
 				queue = queue[1:]
+				if frame.Final {
+					break
+				}
 			}
 		}
 		if used < c.size {
 			c.underruns.Add(1)
 		}
-		if used > 0 {
+		if used > 0 || frame.Final {
 			frame.End = frame.Start + uint64(used/2)
 		}
 		c.buffered.Store(uint64(bytes))
@@ -395,7 +491,7 @@ func (c *Clock) run(ctx context.Context, ticks <-chan time.Time) {
 		}
 		select {
 		case command := <-c.control:
-			if !drop(command) {
+			if !apply(command) {
 				return
 			}
 			continue
@@ -414,7 +510,7 @@ func (c *Clock) run(ctx context.Context, ticks <-chan time.Time) {
 		case <-ctx.Done():
 			return
 		case command := <-c.control:
-			if !drop(command) {
+			if !apply(command) {
 				return
 			}
 		case chunk, ok := <-input:

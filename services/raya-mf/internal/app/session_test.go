@@ -367,6 +367,131 @@ type blockedRoom struct {
 	release chan struct{}
 }
 
+func TestSealedSourceBoundaryRequiresExactFinalClientReceipt(t *testing.T) {
+	for _, change := range []string{"exact", "receipt-first", "turn", "seq", "end", "epoch", "version", "unsealed", "new-turn"} {
+		t.Run(change, func(t *testing.T) {
+			media := newFakeRoom()
+			voice := newFakeEngine()
+			backend := &fakeBackend{events: make(chan wire.Envelope, 8)}
+			s := NewSession(context.Background(), "sealed", voice, media, backend, "client-sealed")
+			defer s.Close()
+			voice.events <- engine.Event{Type: "response.created", Turn: "response"}
+			<-backend.events
+			frame := engine.Frame{Item: "assistant", Turn: "response", PCM: make([]byte, 960), Rate: 24000, Epoch: 1, Seq: 1, End: 480}
+			if !s.publish(frame) {
+				t.Fatal("source PCM was refused")
+			}
+			<-media.sent
+			<-media.published
+			frame.Seq, frame.Start, frame.Final = 2, 480, change != "unsealed"
+			if change == "unsealed" {
+				frame.End = 960
+			}
+			if !s.publish(frame) {
+				t.Fatal("source terminal boundary was refused")
+			}
+			packet := <-media.sent
+			var span wire.Span
+			if err := json.Unmarshal(packet.Body, &span); err != nil || span.Version != 3 || span.Turn != "response" || span.Final != frame.Final || span.Seq != 2 || span.End != frame.End {
+				t.Fatalf("terminal span = %#v / %v", span, err)
+			}
+			<-media.published
+			if change != "receipt-first" {
+				voice.events <- engine.Event{Type: "response.done", Turn: "response"}
+				<-backend.events
+			}
+			if !s.speaking.Load() {
+				t.Fatal("source seal alone proved client playback")
+			}
+			value := wire.Playout{Version: 3, Session: "sealed", Item: "assistant", Turn: "response", Final: true, Epoch: 1, Seq: 2, Samples: 480, Rate: 24000}
+			switch change {
+			case "turn":
+				value.Turn = "other"
+			case "seq":
+				value.Seq = 1
+			case "end":
+				value.Samples = 479
+			case "epoch":
+				value.Epoch = 2
+			case "version":
+				value.Version = 2
+			case "unsealed":
+				value.Samples = 960
+			case "new-turn":
+				voice.events <- engine.Event{Type: "response.created", Turn: "next"}
+				<-backend.events
+			}
+			raw, _ := json.Marshal(value)
+			s.report(room.Data{Identity: "client-sealed", Body: raw})
+			if change == "receipt-first" {
+				if !s.speaking.Load() {
+					t.Fatal("receipt settled a still-generating response")
+				}
+				voice.events <- engine.Event{Type: "response.done", Turn: "response"}
+				<-backend.events
+			}
+			settled := change == "exact" || change == "receipt-first"
+			if s.speaking.Load() == settled {
+				t.Fatalf("settled=%v speaking=%v", settled, s.speaking.Load())
+			}
+		})
+	}
+}
+
+func TestTerminalBoundaryCannotInventPriorPCM(t *testing.T) {
+	media := newFakeRoom()
+	s := NewSession(context.Background(), "unknown", newFakeEngine(), media, nil)
+	defer s.Close()
+	if s.publish(engine.Frame{Item: "unknown", Turn: "response", Final: true, PCM: make([]byte, 960), Rate: 24000, Epoch: 1, Seq: 1}) {
+		t.Fatal("terminal marker without known PCM was accepted")
+	}
+	if status := finished(t, s); status.Failure == nil || status.Failure.Code != "playout_metadata" {
+		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestExplicitEmptyResponseCannotSettleUnknownOrNewOutput(t *testing.T) {
+	for _, kind := range []string{"fresh", "unknown", "confirmed", "stale", "absent", "false"} {
+		t.Run(kind, func(t *testing.T) {
+			media := newFakeRoom()
+			voice := newFakeEngine()
+			backend := &fakeBackend{events: make(chan wire.Envelope, 8)}
+			s := NewSession(context.Background(), "empty", voice, media, backend, "client-empty")
+			defer s.Close()
+			if kind == "unknown" || kind == "confirmed" {
+				if !s.publish(engine.Frame{Item: "prior", Turn: "prior-response", Final: true, PCM: make([]byte, 960), Rate: 24000, Epoch: 1, Seq: 1, End: 480}) {
+					t.Fatal("prior final PCM refused")
+				}
+				<-media.sent
+				<-media.published
+				if kind == "confirmed" {
+					reported(t, s, wire.Playout{Version: 3, Session: "empty", Item: "prior", Turn: "prior-response", Final: true, Epoch: 1, Seq: 1, Samples: 480, Rate: 24000})
+				}
+			}
+			voice.events <- engine.Event{Type: "response.created", Turn: "empty-response"}
+			<-backend.events
+			turn := "empty-response"
+			if kind == "stale" {
+				voice.events <- engine.Event{Type: "response.created", Turn: "next"}
+				<-backend.events
+			}
+			data := map[string]any{"audioEmpty": true}
+			if kind == "absent" {
+				data = nil
+			}
+			if kind == "false" {
+				data["audioEmpty"] = false
+			}
+			voice.events <- engine.Event{Type: "response.done", Turn: turn, Data: data}
+			<-backend.events
+			settled := kind == "fresh" || kind == "confirmed"
+			if s.speaking.Load() == settled {
+				t.Fatalf("%s settled=%v speaking=%v", kind, settled, s.speaking.Load())
+			}
+		})
+	}
+}
+
 func (f *blockedRoom) Flush(ctx context.Context, item string) error {
 	close(f.entered)
 	select {

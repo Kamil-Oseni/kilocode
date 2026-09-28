@@ -176,12 +176,20 @@ func (s *Session) publish(frame engine.Frame) bool {
 		s.published = wire.Span{}
 	}
 	if frame.Item != "" && s.published.Item != "" &&
-		(frame.Start != s.published.End || frame.Rate != s.published.Rate) {
+		(frame.Start != s.published.End || frame.Rate != s.published.Rate || frame.Turn != s.published.Turn || s.published.Final) {
 		s.fail("playout_metadata")
 		return false
 	}
-	span := wire.Span{Version: 2, Session: s.id, Item: frame.Item, Epoch: frame.Epoch, Seq: frame.Seq,
-		Start: frame.Start, End: frame.End, Rate: frame.Rate}
+	if frame.Final && frame.Start == frame.End && (s.published.Item == "" || frame.End != s.published.End) {
+		s.fail("playout_metadata")
+		return false
+	}
+	version := 2
+	if frame.Turn != "" {
+		version = 3
+	}
+	span := wire.Span{Version: version, Session: s.id, Item: frame.Item, Epoch: frame.Epoch, Seq: frame.Seq,
+		Start: frame.Start, End: frame.End, Rate: frame.Rate, Turn: frame.Turn, Final: frame.Final}
 	ctx, cancel := context.WithTimeout(s.ctx, engine.FramePeriod)
 	defer cancel()
 	if frame.Item != "" {
@@ -215,9 +223,19 @@ func validFrame(frame engine.Frame) bool {
 		return false
 	}
 	if frame.Item == "" {
-		return frame.Start == 0 && frame.End == 0
+		return frame.Start == 0 && frame.End == 0 && frame.Turn == "" && !frame.Final
 	}
-	return len(frame.Item) <= 256 && frame.End > frame.Start && frame.End <= 1<<53-1 &&
+	if len(frame.Turn) > 256 || (frame.Final && frame.Turn == "") {
+		return false
+	}
+	if frame.Final && frame.Start == frame.End {
+		for _, value := range frame.PCM {
+			if value != 0 {
+				return false
+			}
+		}
+	}
+	return len(frame.Item) <= 256 && (frame.End > frame.Start || (frame.Final && frame.End == frame.Start)) && frame.End <= 1<<53-1 &&
 		frame.End-frame.Start <= uint64(len(frame.PCM)/2)
 }
 
@@ -235,17 +253,33 @@ func (s *Session) report(data room.Data) {
 	s.heardMu.Lock()
 	defer s.heardMu.Unlock()
 	span, exists := s.spans[heard.Seq]
-	if !exists || heard.Version != 2 || heard.Session != s.id || heard.Item != s.published.Item ||
+	if !exists || heard.Version != span.Version || heard.Session != s.id || heard.Item != s.published.Item ||
 		heard.Epoch != s.published.Epoch || heard.Epoch <= s.fenced || heard.Item != span.Item ||
 		heard.Epoch != span.Epoch || heard.Rate != span.Rate || heard.Samples < span.Start ||
 		heard.Samples > span.End || heard.Jitter < 0 || heard.Jitter > 2000 ||
+		heard.Turn != span.Turn || heard.Turn != s.published.Turn ||
+		(heard.Final && (!span.Final || heard.Samples != span.End || heard.Seq != s.published.Seq)) ||
 		(s.proof && (heard.Seq < s.heard.Seq || heard.Samples < s.heard.Samples)) {
 		return
 	}
 	s.heard = heard
 	s.proof = true
-	// A receipt bounds heard audio, but the clock may still hold a future tail.
-	// Without a sealed end marker it cannot prove that playback has drained.
+	s.settle()
+}
+
+// Called under heardMu: only the exact sealed source boundary and client receipt
+// can settle the latest response, never generation completion alone.
+func (s *Session) settle() {
+	if !s.generating.Load() && s.final() && s.published.Turn == s.turn {
+		s.speaking.Store(false)
+	}
+}
+
+func (s *Session) final() bool {
+	return s.proof && s.heard.Version == 3 && s.heard.Final && s.published.Final &&
+		s.published.Turn != "" && s.heard.Turn == s.published.Turn && s.heard.Seq == s.published.Seq &&
+		s.heard.Samples == s.published.End && s.heard.Item == s.published.Item &&
+		s.heard.Epoch == s.published.Epoch && s.heard.Rate == s.published.Rate
 }
 
 func (s *Session) events() {
@@ -274,6 +308,11 @@ func (s *Session) events() {
 				s.heardMu.Lock()
 				if event.Turn != "" && event.Turn == s.turn {
 					s.generating.Store(false)
+					s.settle()
+					empty, known := event.Data["audioEmpty"].(bool)
+					if event.Type == "response.done" && known && empty && (s.published.Item == "" || s.final()) {
+						s.speaking.Store(false)
+					}
 				}
 				s.heardMu.Unlock()
 			}

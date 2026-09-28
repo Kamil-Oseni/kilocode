@@ -35,6 +35,8 @@ type Inject struct {
 }
 
 type Playout struct {
+	Turn    string `json:"turn,omitempty"`
+	Final   bool   `json:"final,omitempty"`
 	Version int    `json:"version"`
 	Epoch   uint64 `json:"epoch"`
 	Seq     uint64 `json:"seq"`
@@ -47,6 +49,8 @@ type Playout struct {
 
 // Span identifies published source samples, never proof that a client heard them.
 type Span struct {
+	Turn    string `json:"turn,omitempty"`
+	Final   bool   `json:"final,omitempty"`
 	Version int    `json:"version"`
 	Session string `json:"session"`
 	Item    string `json:"item"`

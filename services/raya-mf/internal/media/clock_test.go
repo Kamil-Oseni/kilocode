@@ -345,3 +345,206 @@ func TestClockCancellationRefusalAndExhaustionNeverForgetFences(t *testing.T) {
 		t.Fatal("exhausted clock restarted")
 	}
 }
+
+func TestClockSealBeforePartialTailIsExactAndIdempotent(t *testing.T) {
+	clock, ticks := running(t)
+	if !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: bytes.Repeat([]byte{1, 2}, 480)}) || !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: bytes.Repeat([]byte{3, 4}, 240)}) {
+		t.Fatal("source PCM rejected")
+	}
+	for range 2 {
+		if err := clock.Seal(context.Background(), "item", "turn"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{5, 6}}) {
+		t.Fatal("sealed item accepted late PCM")
+	}
+	if err := clock.Seal(context.Background(), "item", "other"); err == nil {
+		t.Fatal("seal accepted a different turn")
+	}
+	tick(t, ticks, time.Time{})
+	first := frame(t, clock)
+	if first.Final || first.Turn != "turn" || first.Start != 0 || first.End != 480 {
+		t.Fatal("seal finalized before the source tail")
+	}
+	tick(t, ticks, time.Unix(0, 20_000_000))
+	tail := frame(t, clock)
+	if !tail.Final || tail.Item != "item" || tail.Turn != "turn" || tail.Start != 480 || tail.End != 720 || tail.Epoch != 1 || !bytes.Equal(tail.PCM[:480], bytes.Repeat([]byte{3, 4}, 240)) || !bytes.Equal(tail.PCM[480:], make([]byte, 480)) {
+		t.Fatal("partial final frame lost source span or padded silence")
+	}
+	if err := clock.Seal(context.Background(), "item", "turn"); err != nil {
+		t.Fatal(err)
+	}
+	tick(t, ticks, time.Unix(0, 40_000_000))
+	if value := frame(t, clock); value.Item != "" || value.Turn != "" || value.Final {
+		t.Fatal("duplicate seal repeated a source boundary")
+	}
+}
+
+func TestClockSealAfterTailEmitsOnlyZeroSpanSourceMarker(t *testing.T) {
+	clock, ticks := running(t)
+	if !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: bytes.Repeat([]byte{1, 2}, 480)}) {
+		t.Fatal("source PCM rejected")
+	}
+	tick(t, ticks, time.Time{})
+	if frame(t, clock).Final {
+		t.Fatal("unsealed source fabricated a final boundary")
+	}
+	for range 2 {
+		if err := clock.Seal(context.Background(), "item", "turn"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tick(t, ticks, time.Unix(0, 20_000_000))
+	marker := frame(t, clock)
+	if !marker.Final || marker.Item != "item" || marker.Turn != "turn" || marker.Start != 480 || marker.End != 480 || marker.Seq != 2 || marker.Epoch != 1 || len(marker.PCM) != 960 || !bytes.Equal(marker.PCM, make([]byte, 960)) {
+		t.Fatal("terminal marker claimed new PCM or lost its exact source identity")
+	}
+	tick(t, ticks, time.Unix(0, 40_000_000))
+	if frame(t, clock).Final {
+		t.Fatal("duplicate seal queued another terminal marker")
+	}
+}
+
+func TestClockSealRefusesUnknownIdentityAndCancelledRequest(t *testing.T) {
+	clock, ticks := running(t)
+	if !clock.Submit(Chunk{Item: "legacy", PCM: []byte{1, 2}}) || !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{3, 4}}) {
+		t.Fatal("source PCM rejected")
+	}
+	for _, pair := range [][2]string{{"unknown", "turn"}, {"legacy", "turn"}, {"item", "other"}, {"item", ""}, {"item", "界"}} {
+		if err := clock.Seal(context.Background(), pair[0], pair[1]); err == nil {
+			t.Fatal("seal accepted unknown item or turn")
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := clock.Seal(ctx, "item", "turn"); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled seal request was applied")
+	}
+	if clock.Submit(Chunk{Item: "item", Turn: "other", PCM: []byte{5, 6}}) || !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{5, 6}}) {
+		t.Fatal("item turn was rebound or cancelled request sealed it")
+	}
+	for index := range 2 {
+		tick(t, ticks, time.Unix(0, int64(index)*20_000_000))
+		if frame(t, clock).Final {
+			t.Fatal("refused seal fabricated final metadata")
+		}
+	}
+}
+
+func TestClockDropInvalidatesQueuedFinalAndLateSeal(t *testing.T) {
+	clock, ticks := running(t)
+	if !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{1, 2}}) {
+		t.Fatal("source PCM rejected")
+	}
+	if err := clock.Seal(context.Background(), "item", "turn"); err != nil {
+		t.Fatal(err)
+	}
+	tick(t, ticks, time.Time{})
+	wait(t, func() bool { count, _ := clock.Stats(); return count == 1 })
+	if err := clock.Drop(context.Background(), "item"); err != nil {
+		t.Fatal(err)
+	}
+	if err := clock.Seal(context.Background(), "item", "turn"); err == nil {
+		t.Fatal("cancelled source restored its final marker")
+	}
+	select {
+	case <-clock.Output():
+		t.Fatal("cancelled final remained buffered after Drop ACK")
+	default:
+	}
+	tick(t, ticks, time.Unix(0, 20_000_000))
+	value := frame(t, clock)
+	if value.Final || value.Item != "" || value.Epoch != 2 {
+		t.Fatal("cancelled boundary reappeared in new epoch")
+	}
+}
+
+func TestClockSealAndDropRaceAlwaysLeavesSourceFenced(t *testing.T) {
+	for range 16 {
+		clock, ticks := running(t)
+		if !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{1, 2}}) {
+			t.Fatal("source PCM rejected")
+		}
+		start := make(chan struct{})
+		sealed := make(chan error, 1)
+		dropped := make(chan error, 1)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		go func() { <-start; sealed <- clock.Seal(ctx, "item", "turn") }()
+		go func() { <-start; dropped <- clock.Drop(ctx, "item") }()
+		close(start)
+		err := <-dropped
+		<-sealed // Either applied before Drop, or refused after its epoch fence.
+		cancel()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{3, 4}}) {
+			t.Fatal("concurrent seal/drop restored the cancelled source")
+		}
+		tick(t, ticks, time.Time{})
+		if value := frame(t, clock); value.Final || value.Item != "" || value.Epoch != 2 {
+			t.Fatal("concurrent seal/drop emitted stale source final")
+		}
+	}
+}
+
+func TestClockSealCapacityAndDroppedTailRefuseFalseFinal(t *testing.T) {
+	clock, ticks := running(t)
+	if !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: []byte{1, 2}}) {
+		t.Fatal("source PCM rejected")
+	}
+	tick(t, ticks, time.Time{})
+	frame(t, clock)
+	for index := range queued {
+		if !clock.Submit(Chunk{Item: fmt.Sprintf("other_%d", index), Turn: "other", PCM: []byte{1, 2}}) {
+			t.Fatal("bounded other source rejected")
+		}
+	}
+	for range 2 {
+		if err := clock.Seal(context.Background(), "item", "turn"); !errors.Is(err, ErrCapacity) {
+			t.Fatal("terminal marker bypassed full shared tick budget")
+		}
+	}
+	for index := range queued + 1 {
+		tick(t, ticks, time.Unix(0, int64(index+1)*20_000_000))
+		if frame(t, clock).Final {
+			t.Fatal("refused terminal marker emitted anyway")
+		}
+	}
+	if !clock.Submit(Chunk{Item: "gap", Turn: "gapturn", PCM: []byte{1, 2}}) || clock.Submit(Chunk{Item: "gap", Turn: "gapturn", PCM: make([]byte, clock.size*6)}) {
+		t.Fatal("overflow fixture did not establish a dropped source tail")
+	}
+	if err := clock.Seal(context.Background(), "gap", "gapturn"); err == nil {
+		t.Fatal("seal closed a dropped generated tail with a false final")
+	}
+	tick(t, ticks, time.Unix(0, 160_000_000))
+	if value := frame(t, clock); value.Final || value.End != 1 {
+		t.Fatal("dropped tail became a trusted source boundary")
+	}
+}
+
+func TestClockSlowConsumerFinalRetainsGapAndIsNeverReplayed(t *testing.T) {
+	clock, ticks := running(t)
+	if !clock.Submit(Chunk{Item: "item", Turn: "turn", PCM: make([]byte, clock.size*2)}) {
+		t.Fatal("source PCM rejected")
+	}
+	if err := clock.Seal(context.Background(), "item", "turn"); err != nil {
+		t.Fatal(err)
+	}
+	tick(t, ticks, time.Time{})
+	wait(t, func() bool { count, _ := clock.Stats(); return count == 1 })
+	tick(t, ticks, time.Unix(0, 20_000_000))
+	wait(t, func() bool { return clock.Loss().DroppedFrames == 1 })
+	tail := frame(t, clock)
+	if !tail.Final || tail.Seq != 2 || tail.Start != 480 || tail.End != 960 || clock.Loss().DroppedBytes != 960 {
+		t.Fatal("slow-consumer loss erased the missing source span")
+	}
+	if err := clock.Seal(context.Background(), "item", "turn"); err != nil {
+		t.Fatal(err)
+	}
+	tick(t, ticks, time.Unix(0, 40_000_000))
+	if frame(t, clock).Final {
+		t.Fatal("duplicate final replayed after earlier source loss")
+	}
+}

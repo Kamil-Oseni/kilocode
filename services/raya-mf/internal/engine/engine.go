@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -108,6 +109,59 @@ type Session interface {
 // It grants no media or work authority and never infers usage from local time.
 type Terminal interface {
 	Usage() (Usage, error)
+}
+
+type Startup struct {
+	Session string
+	EventID string
+	Model   string
+	At      time.Time
+}
+
+// Preparation exposes exact observed configuration and current local readiness.
+type Preparation interface {
+	Startup() (Startup, error)
+	Active() bool
+}
+
+// OpenError retains immutable setup observations after failed provider admission.
+// Attempted is not a billing claim; Released does not confirm provider usage.
+type OpenError struct {
+	err       error
+	attempted bool
+	released  bool
+	startup   *Startup
+	usage     *Usage
+}
+
+func NewOpenError(err error, attempted, released bool, startup *Startup, usage *Usage) *OpenError {
+	result := &OpenError{err: err, attempted: attempted, released: released}
+	if startup != nil {
+		copy := *startup
+		result.startup = &copy
+	}
+	if usage != nil {
+		copy := *usage
+		result.usage = &copy
+	}
+	return result
+}
+
+func (e *OpenError) Error() string   { return e.err.Error() }
+func (e *OpenError) Unwrap() error   { return e.err }
+func (e *OpenError) Attempted() bool { return e.attempted }
+func (e *OpenError) Released() bool  { return e.released }
+func (e *OpenError) Startup() (Startup, error) {
+	if e.startup == nil {
+		return Startup{}, errors.New("provider startup receipt is unconfirmed")
+	}
+	return *e.startup, nil
+}
+func (e *OpenError) Usage() (Usage, error) {
+	if e.usage == nil {
+		return Usage{}, errors.New("final provider usage receipt is unconfirmed")
+	}
+	return *e.usage, nil
 }
 
 // Delegator resolves only original client-delegation IDs observed by this session.

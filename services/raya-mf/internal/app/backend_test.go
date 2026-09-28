@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -79,5 +80,39 @@ func TestBackendDirect(t *testing.T) {
 	}
 	if hits.Load() != 1 {
 		t.Fatalf("expected one direct callback, got %d", hits.Load())
+	}
+}
+
+func TestBackendReceiptAcknowledgement(t *testing.T) {
+	for _, body := range []string{"true", " \ntrue\t", "false", "", "null", "{}", `"true"`, "true false", "true" + strings.Repeat(" ", 33)} {
+		t.Run(fmt.Sprintf("body=%q", body), func(t *testing.T) {
+			var hits atomic.Int32
+			source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				if r.Header.Get("X-Raya-Voice-Capability") != "synthetic-receipt-capability" {
+					t.Error("receipt lost its private callback capability")
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, body)
+			}))
+			defer source.Close()
+			err := (HTTPBackend{URL: source.URL, Control: "synthetic-receipt-capability", Strict: true}).Event(context.Background(), wire.Envelope{Session: "setup"})
+			valid := body == "true" || body == " \ntrue\t"
+			if (err == nil) != valid || hits.Load() != 1 {
+				t.Fatalf("receipt acknowledgement mismatch: valid=%t err=%v hits=%d", valid, err, hits.Load())
+			}
+		})
+	}
+	if err := (HTTPBackend{Strict: true}).Event(context.Background(), wire.Envelope{}); err == nil {
+		t.Fatal("missing destination confirmed a receipt")
+	}
+	var hits atomic.Int32
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		fmt.Fprint(w, "true")
+	}))
+	defer source.Close()
+	if err := (HTTPBackend{URL: source.URL, Strict: true}).Event(context.Background(), wire.Envelope{}); err == nil || hits.Load() != 0 {
+		t.Fatal("receipt without a capability sent a callback")
 	}
 }

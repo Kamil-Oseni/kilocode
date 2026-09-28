@@ -17,7 +17,10 @@ import { Storage } from "@/storage/storage"
 import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
 import * as Workers from "@/kilocode/session/task-worker"
-import { make } from "@/kilocode/voice/openai"
+import { make, VoiceError } from "@/kilocode/voice/openai"
+import { RayaGoal } from "@/kilocode/goal"
+import * as GoalCharges from "@/kilocode/goal/charges"
+import { pricing } from "@/kilocode/voice/live-protocol"
 import type { OpenAICall } from "@/kilocode/voice/openai-protocol"
 import type { SessionPrompt } from "@/session/prompt"
 import { MessageV2 } from "@/session/message-v2"
@@ -61,6 +64,7 @@ const fixture = (
   model: "gpt-live-1" | "gpt-realtime-2.1" = "gpt-live-1",
   work: SessionPrompt.Interface["prompt"] = (input) => Effect.succeed(answer(input)),
   amount = 1,
+  policy?: Pick<Parameters<typeof make>[0], "admissions" | "charges" | "completions">,
 ) =>
   Effect.gen(function* () {
     const storage = yield* Storage.Service
@@ -83,6 +87,7 @@ const fixture = (
       requestCancel: (_, id) => runner.requestCancel(id),
     })
     const calls: Prompt[] = []
+    const leases: string[] = []
     const voice = yield* make({
       storage,
       database,
@@ -100,7 +105,12 @@ const fixture = (
           }),
       },
       workers,
-      admissions: () => Effect.succeed({ amount, dispatch: Effect.void, finish: Effect.void, release: Effect.void }),
+      admissions: (_, id) =>
+        Effect.sync(() => {
+          leases.push(id)
+          return { amount, dispatch: Effect.void, finish: Effect.void, release: Effect.void }
+        }),
+      ...policy,
       prompts: {
         prompt: (input: Prompt) =>
           runner.ensureRunning(
@@ -121,7 +131,7 @@ const fixture = (
     }
     yield* voice.reserve({ parentSessionID: start.parentSessionID, requestID: start.requestID, model }, secret, root)
     const binding = yield* voice.start(start, secret, root)
-    return { voice, binding, start, calls, database, storage }
+    return { voice, binding, start, calls, leases, database, storage }
   })
 
 const settled = (read: Effect.Effect<typeof OpenAICall.Type, unknown>) =>
@@ -186,6 +196,275 @@ it.live("MF Live refuses an insufficient canonical duration before returning pro
       expect(saved.live.binding).toBeUndefined()
       expect(saved.info.maximumSeconds).toBeUndefined()
       expect(state.calls).toHaveLength(0)
+    }).pipe(
+      Effect.provide([
+        Storage.layerFromDir(path.join(root, "mf-storage")),
+        Database.layerFromPath(path.join(root, "mf.sqlite")),
+      ]),
+    )
+  }).pipe(Effect.scoped),
+)
+
+it.live("MF setup settlement meters once after a real verified goal completes without renewing authority", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    return yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      let rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: (id: SessionID) =>
+          Effect.gen(function* () {
+            const row = yield* database.db
+              .select()
+              .from(SessionTable)
+              .where(eq(SessionTable.id, id))
+              .get()
+              .pipe(Effect.orDie)
+            if (!row) return yield* Effect.fail(new NotFoundError({ message: "Test parent missing" }))
+            return Session.fromRow(row)
+          }),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      const charges = yield* GoalCharges.make({ storage, sessions })
+      const scope = yield* Scope.Scope
+      const error = (err: Error) => new VoiceError({ code: "conflict", message: err.message })
+      const state = yield* fixture(root, "gpt-live-1", (input) => Effect.succeed(answer(input)), 1, {
+        admissions: (id, token) =>
+          charges.claim(id, "USD", token).pipe(
+            Effect.map((lease) => ({
+              amount: lease.amount,
+              dispatch: lease.dispatch.pipe(Effect.mapError(error)),
+              finish: lease.finish.pipe(Effect.mapError(error)),
+              release: lease.release.pipe(Effect.orDie),
+            })),
+            Effect.mapError(error),
+            Effect.provideService(Scope.Scope, scope),
+          ),
+        completions: (id, token) => charges.complete(id, "USD", token).pipe(Effect.mapError(error)),
+        charges: (input) => {
+          const price = pricing({ id: input.id, model: "gpt-live-1", seconds: input.seconds })
+          return goals
+            .charged(input.sessionID, {
+              id: input.id,
+              kind: "gpt-live",
+              provider: "OpenAI",
+              service: "GPT-Live 1",
+              source: price.source,
+              origin: { sessionID: input.sessionID, callID: input.callID },
+              at: input.at,
+              quantity: price.quantity,
+              unit: price.unit,
+              coverage: "recorded",
+              amount: price.amount,
+              currency: price.currency,
+            })
+            .pipe(Effect.asVoid, Effect.mapError(error))
+        },
+      })
+      yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+      yield* goals.create(session, "Verify the command and finish", undefined, undefined, undefined, undefined, {
+        chargeCosts: [{ currency: "USD", limit: 2, reservation: 1 }],
+      })
+      const mf = frontend(state)
+      const info = yield* mf.start(
+        { version: 2, engine: "openai-live", parentSessionID: session, mediaURL: "http://127.0.0.1:1" },
+        "q".repeat(43),
+      )
+      const user = MessageID.ascending()
+      const result = answer({ sessionID: session, messageID: user, parts: [] })
+      const part: MessageV2.ToolPart = {
+        id: PartID.ascending(),
+        messageID: result.info.id,
+        sessionID: session,
+        type: "tool",
+        callID: crypto.randomUUID(),
+        tool: "bash",
+        state: {
+          status: "completed",
+          input: { command: "test fixture" },
+          output: "all checks passed",
+          title: "verification",
+          metadata: { exit: 0 },
+          time: { start: Date.now(), end: Date.now() },
+        },
+      }
+      rows = [
+        {
+          info: {
+            id: user,
+            sessionID: session,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "code",
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+          },
+          parts: [],
+        },
+        { ...result, parts: [part] },
+      ]
+      const completed = yield* goals.update(session, {
+        status: "complete",
+        summary: "The required command passed.",
+        audit: {
+          requirements: [
+            {
+              requirement: "The test command passes",
+              passed: true,
+              evidence: [{ callID: part.callID, summary: "The recorded completed bash tool exited with code 0." }],
+            },
+          ],
+        },
+      })
+      expect(completed.status).toBe("complete")
+      expect(completed.audit?.requirements[0].passed).toBe(true)
+      expect(yield* mf.close(info.id)).toBe(true)
+      const event = {
+        session: info.id,
+        seq: 1,
+        event: {
+          seq: 1,
+          type: "session.setup.closed",
+          session: "provider_completed_goal",
+          at: new Date().toISOString(),
+          data: {
+            version: 1,
+            started: { event_id: "started_completed_goal", model: "gpt-live-1" },
+            final: {
+              event_id: "final_completed_goal",
+              model: "gpt-live-1",
+              reason: "close_requested",
+              usage: { seconds: 0.5 },
+            },
+          },
+        },
+      }
+      expect(yield* mf.event(event, info.controlToken)).toBe(true)
+      expect(yield* mf.event(event, info.controlToken)).toBe(true)
+      expect(yield* frontend(state).event(event, info.controlToken)).toBe(true)
+      expect(yield* mf.event({ ...event, seq: 2, event: { ...event.event, seq: 2 } }, info.controlToken)).toBe(true)
+      const saved = yield* goals.get(session)
+      expect(saved?.status).toBe("complete")
+      expect(saved?.createdAt).toBe(completed.createdAt)
+      expect(saved?.charges).toHaveLength(1)
+      expect(saved?.charges?.[0]).toMatchObject({ coverage: "recorded", quantity: 0.5, currency: "USD" })
+      const binding = yield* storage.read<{
+        live: { secret: string; binding: { id: string; generation: string; status: string } }
+      }>(["raya_voice", info.id])
+      expect(binding.live.binding.status).toBe("closed")
+      expect(
+        Exit.isFailure(
+          yield* state.voice
+            .delegate(
+              binding.live.binding.id,
+              context(binding.live.binding.generation, "forbidden_completed_goal", 1),
+              binding.live.secret,
+              root,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(state.calls).toHaveLength(0)
+      expect((yield* goals.get(session))?.status).toBe("complete")
+    }).pipe(
+      Effect.provide([
+        Storage.layerFromDir(path.join(root, "mf-storage")),
+        Database.layerFromPath(path.join(root, "mf.sqlite")),
+      ]),
+    )
+  }).pipe(Effect.scoped),
+)
+
+it.live("MF setup receipts settle after Stop without activating work and preserve unknown final usage", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    return yield* Effect.gen(function* () {
+      const state = yield* fixture(root)
+      yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+      const mf = frontend(state)
+      const info = yield* mf.start(
+        { version: 2, engine: "openai-live", parentSessionID: session, mediaURL: "http://127.0.0.1:1" },
+        "q".repeat(43),
+      )
+      expect(yield* mf.close(info.id)).toBe(true)
+      expect(state.leases).toHaveLength(2)
+      const event = {
+        session: info.id,
+        seq: 1,
+        event: {
+          seq: 1,
+          type: "session.setup.closed",
+          session: "provider_setup_fixture",
+          at: new Date().toISOString(),
+          data: { version: 1, started: { event_id: "started_setup_fixture", model: "gpt-live-1" } },
+        },
+      }
+      expect(yield* mf.event(event, "wrong")).toBe(false)
+      expect(yield* mf.event(event, info.controlToken)).toBe(true)
+      expect(yield* mf.event(event, info.controlToken)).toBe(true)
+      const saved = yield* state.storage.read<{
+        live: { binding: { id: string; generation: string; status: string }; usage?: unknown }
+      }>(["raya_voice", info.id])
+      expect(saved.live.binding.status).toBe("closed")
+      expect(saved.live.usage).toBeUndefined()
+      expect((yield* mf.get(info.id))?.info.status).toBe("closed")
+      expect(
+        yield* mf.event(
+          { ...event, seq: 2, event: { ...event.event, seq: 2, session: "foreign_provider" } },
+          info.controlToken,
+        ),
+      ).toBe(false)
+      const final = {
+        ...event,
+        seq: 3,
+        event: {
+          ...event.event,
+          seq: 3,
+          data: {
+            ...event.event.data,
+            final: {
+              event_id: "final_setup_fixture",
+              model: "gpt-live-1",
+              reason: "close_requested",
+              usage: { seconds: 0.5 },
+            },
+          },
+        },
+      }
+      expect(yield* mf.event(final, info.controlToken)).toBe(true)
+      expect(yield* mf.event(final, info.controlToken)).toBe(true)
+      expect(yield* frontend(state).event(final, info.controlToken)).toBe(true)
+      const recorded = yield* state.storage.read<{ live: { usage: { seconds: number } } }>(["raya_voice", info.id])
+      expect(recorded.live.usage.seconds).toBe(0.5)
+      expect(
+        yield* mf.event(
+          { ...final, seq: 4, event: { ...final.event, seq: 4, data: event.event.data } },
+          info.controlToken,
+        ),
+      ).toBe(false)
+      expect(
+        yield* mf.event(
+          { ...final, seq: 4, event: { ...final.event, seq: 4, data: { ...final.event.data, surprise: true } } },
+          info.controlToken,
+        ),
+      ).toBe(false)
+      expect(state.calls).toHaveLength(0)
+      expect(state.leases).toHaveLength(2)
+      const stored = yield* state.storage.read<{ live: { secret: string } }>(["raya_voice", info.id])
+      expect(
+        Exit.isFailure(
+          yield* state.voice
+            .delegate(
+              saved.live.binding.id,
+              context(saved.live.binding.generation, "forbidden_setup_work", 1),
+              stored.live.secret,
+              root,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
     }).pipe(
       Effect.provide([
         Storage.layerFromDir(path.join(root, "mf-storage")),

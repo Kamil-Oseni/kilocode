@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	urlpkg "net/url"
 	"strings"
@@ -24,11 +25,18 @@ type HTTPBackend struct {
 	Control   string
 	Directory string
 	Client    *http.Client
+	Strict    bool
 }
 
 func (b HTTPBackend) Event(ctx context.Context, event wire.Envelope) error {
 	if b.URL == "" {
+		if b.Strict {
+			return fmt.Errorf("voice receipt has no configured backend")
+		}
 		return nil
+	}
+	if b.Strict && b.Control == "" {
+		return fmt.Errorf("voice receipt has no callback capability")
 	}
 	raw, err := json.Marshal(event)
 	if err != nil {
@@ -65,6 +73,12 @@ func (b HTTPBackend) Event(ctx context.Context, event wire.Envelope) error {
 	defer res.Body.Close()
 	if res.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("voice event status %d", res.StatusCode)
+	}
+	if b.Strict {
+		body, err := io.ReadAll(io.LimitReader(res.Body, 33))
+		if err != nil || len(body) > 32 || string(bytes.TrimSpace(body)) != "true" {
+			return fmt.Errorf("voice receipt acceptance is unconfirmed")
+		}
 	}
 	return nil
 }

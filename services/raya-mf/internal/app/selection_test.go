@@ -156,7 +156,7 @@ func TestManagerRoutesLiveThroughActualSocketAndExactInputFormat(t *testing.T) {
 			manager.engine = opening{open: func(context.Context) (engine.Session, error) {
 				return nil, errors.New("Live silently fell back to Qwen")
 			}}
-			cfg := engine.Config{Provider: provider, Model: "gpt-live-1", Key: "local-fixture", Voice: "marin", Endpoint: "ws" + strings.TrimPrefix(server.URL, "http") + "/v1/live/sessions"}
+			cfg := engine.Config{Provider: provider, Model: "gpt-live-1", Key: "local-fixture", Voice: "marin", Endpoint: "ws" + strings.TrimPrefix(server.URL, "http") + "/v1/live/sessions", MaximumSeconds: 10}
 			started, err := manager.Start(ctx, wire.Start{Version: 2, ID: "rvs_live", Engine: cfg}, mediaAuth)
 			if err != nil {
 				t.Fatal(err)

@@ -822,7 +822,7 @@ export const make = (deps: Deps) =>
         )
       })
 
-    const start = (input: typeof OpenAIStart.Type, secret: string, directory: string) =>
+    const bind = (input: typeof OpenAIStart.Type, secret: string, directory: string, accounting = false) =>
       Effect.gen(function* () {
         if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
         const dir = yield* canonical(directory)
@@ -831,6 +831,8 @@ export const make = (deps: Deps) =>
           return yield* refuse("conflict", "Parent session belongs to another directory.")
         const id = `rov_${digest(JSON.stringify([dir, input.providerCallID])).slice(0, 48)}`
         const model = input.model ?? "gpt-realtime-2.1"
+        if (accounting && (model !== "gpt-live-1" || input.transcriptionRequestID))
+          return yield* refuse("invalid", "Only Live setup receipts can create accounting bindings.")
         const reservationInput = { parentSessionID: parent.id, requestID: input.requestID, model }
         const reservationID = digest(JSON.stringify([dir, input.requestID]))
         if (
@@ -904,13 +906,16 @@ export const make = (deps: Deps) =>
                 directory: dir,
                 providerCallID: input.providerCallID,
                 model,
-                status: "active",
+                status: accounting ? "closed" : "active",
                 createdAt: now,
                 expiresAt: now + 60 * 60 * 1000,
               },
             }
             const current = yield* entries(stored)
-            if (current.some((entry) => !entry.binding.handoff || entry.binding.handoff.phase === "active"))
+            if (
+              !accounting &&
+              current.some((entry) => !entry.binding.handoff || entry.binding.handoff.phase === "active")
+            )
               return yield* refuse("conflict", "Another voice binding owns this parent.")
             if (
               yield* store
@@ -940,6 +945,9 @@ export const make = (deps: Deps) =>
         const guarded = transcriptionID ? locked(`reservation:${transcriptionID}`, grouped) : grouped
         return yield* locked(`reservation:${reservationID}`, guarded)
       })
+    const start = (input: typeof OpenAIStart.Type, secret: string, directory: string) => bind(input, secret, directory)
+    const settle = (input: typeof OpenAIStart.Type, secret: string, directory: string) =>
+      bind(input, secret, directory, true)
     const stage = (id: string, input: typeof OpenAIImageInput.Type, secret: string, directory: string) =>
       Effect.gen(function* () {
         const initial = yield* load(id, secret, directory, input.generation)
@@ -2195,6 +2203,7 @@ export const make = (deps: Deps) =>
       reserve,
       release,
       start,
+      settle,
       stage,
       meter,
       usage,

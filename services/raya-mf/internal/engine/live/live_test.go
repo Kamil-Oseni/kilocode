@@ -619,6 +619,9 @@ func TestLiveReservedLifetimeFencesInputAndClosesBeforeCap(t *testing.T) {
 	if value.PushAudio(context.Background(), make([]byte, 960)) == nil {
 		t.Fatal("budget expiry left paid input active")
 	}
+	if value.(engine.Preparation).Active() {
+		t.Fatal("expired budget retained UI admission authority")
+	}
 	if err := value.(engine.Delegator).Result(context.Background(), engine.Result{DelegationID: "unknown", ReceiptID: "late", Kind: "thinking", Content: "late"}); err == nil {
 		t.Fatal("budget expiry left paid context active")
 	}
@@ -647,6 +650,138 @@ func TestLiveClientBudgetInvalidRefusesBeforeDial(t *testing.T) {
 	case conn := <-f.conn:
 		_ = conn.CloseNow()
 		t.Fatal("invalid lifetime dialed provider before rejection")
+	default:
+	}
+}
+
+func TestLiveOpenCancellationRetainsLateStartupAndFinalReceipts(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := serve(t, func(value, answer map[string]any) map[string]any {
+		if value["type"] == "session.start" {
+			cancel()
+			<-time.After(20 * time.Millisecond)
+		}
+		return answer
+	})
+	value, err := (Engine{}).Open(ctx, f.config())
+	if value != nil || !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled Open admitted a voice owner", err)
+	}
+	var failure *engine.OpenError
+	if !errors.As(err, &failure) || !failure.Attempted() || !failure.Released() {
+		t.Fatal("paid setup lost exact local ownership disposition", err)
+	}
+	start, err := failure.Startup()
+	if err != nil || start.Session != "live_fixture" || start.EventID != "started_fixture" || start.Model != "gpt-live-1" || start.At.IsZero() {
+		t.Fatal("late exact startup receipt was discarded", start, err)
+	}
+	usage, err := failure.Usage()
+	if err != nil || usage.EventID != "closed_fixture" || usage.Session != start.Session || usage.Seconds != 0.02 {
+		t.Fatal("cancelled setup discarded final usage", usage, err)
+	}
+	start.EventID = "mutated"
+	usage.EventID = "mutated"
+	retained, _ := failure.Startup()
+	final, _ := failure.Usage()
+	if retained.EventID != "started_fixture" || final.EventID != "closed_fixture" {
+		t.Fatal("error accessor exposed mutable receipt state")
+	}
+}
+
+func TestLiveOpenDeadlineRetainsExactReceiptsAfterTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	f := serve(t, func(value, answer map[string]any) map[string]any {
+		if value["type"] == "session.start" {
+			<-time.After(120 * time.Millisecond)
+		}
+		return answer
+	})
+	value, err := (Engine{}).Open(ctx, f.config())
+	if value != nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("timed out Open admitted provider", err)
+	}
+	var failure *engine.OpenError
+	if !errors.As(err, &failure) || !failure.Attempted() || !failure.Released() {
+		t.Fatal("timeout lost local cleanup disposition", err)
+	}
+	start, err := failure.Startup()
+	if err != nil || start.EventID != "started_fixture" {
+		t.Fatal("timeout erased late startup ACK", err)
+	}
+	usage, err := failure.Usage()
+	if err != nil || usage.Session != start.Session || usage.EventID != "closed_fixture" {
+		t.Fatal("timeout erased exact terminal ACK", err)
+	}
+}
+
+func TestLiveOpenUnknownFinalRemainsTypedUnconfirmed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := serve(t, func(value, answer map[string]any) map[string]any {
+		if value["type"] == "session.start" {
+			cancel()
+			<-time.After(20 * time.Millisecond)
+		}
+		if value["type"] == "session.close" {
+			return nil
+		}
+		return answer
+	})
+	value, err := (Engine{}).Open(ctx, f.config())
+	if value != nil || !errors.Is(err, errFinal) {
+		t.Fatal("unknown paid finalization became clean Open failure", err)
+	}
+	var failure *engine.OpenError
+	if !errors.As(err, &failure) || !failure.Attempted() || !failure.Released() {
+		t.Fatal("typed failure confused local release with final provider ACK", err)
+	}
+	if start, err := failure.Startup(); err != nil || start.Session != "live_fixture" {
+		t.Fatal("unknown finalization lost trusted startup", start, err)
+	}
+	if _, err := failure.Usage(); err == nil {
+		t.Fatal("missing terminal ACK fabricated usage")
+	}
+}
+
+func TestLivePrevalidationTypedReleaseNeverDials(t *testing.T) {
+	f := serve(t, nil)
+	f.delegation = "client"
+	for _, change := range []func(*engine.Config){
+		func(cfg *engine.Config) { cfg.Key = "" },
+		func(cfg *engine.Config) { cfg.Model = "gpt-realtime" },
+		func(cfg *engine.Config) { cfg.Mode = "unknown" },
+		func(cfg *engine.Config) { cfg.Delegation = "responses" },
+		func(cfg *engine.Config) { cfg.MaximumSeconds = 0 },
+		func(cfg *engine.Config) { cfg.Voice = "invalid voice" },
+		func(cfg *engine.Config) { cfg.Instructions = string([]byte{0xff}) },
+		func(cfg *engine.Config) { cfg.Endpoint += "?model=gpt-live-1" },
+	} {
+		cfg := f.config()
+		cfg.MaximumSeconds = 10
+		change(&cfg)
+		value, err := (Engine{}).Open(context.Background(), cfg)
+		var failure *engine.OpenError
+		if value != nil || !errors.As(err, &failure) || failure.Attempted() || !failure.Released() {
+			t.Fatal("prevalidation refusal lost certain no-provider disposition", err)
+		}
+		if _, err := failure.Startup(); err == nil {
+			t.Fatal("prevalidation fabricated startup")
+		}
+		if _, err := failure.Usage(); err == nil {
+			t.Fatal("prevalidation fabricated usage")
+		}
+	}
+	select {
+	case conn := <-f.conn:
+		_ = conn.CloseNow()
+		t.Fatal("prevalidation opened actual loopback provider")
+	default:
+	}
+	select {
+	case wire := <-f.writes:
+		t.Fatal("prevalidation sent actual provider command", wire)
 	default:
 	}
 }

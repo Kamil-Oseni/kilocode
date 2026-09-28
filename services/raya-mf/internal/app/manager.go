@@ -104,7 +104,10 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	if id == "" {
 		id = identifier()
 	}
-	run, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	run, cancel, err := lifetime(ctx, input.Engine, provider == "openai-live")
+	if err != nil {
+		return wire.Started{}, err
+	}
 	stop := context.AfterFunc(ctx, cancel)
 	defer stop()
 	expired := false
@@ -135,6 +138,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	}
 	m.sessions[id] = claim
 	m.mu.Unlock()
+	reporter := setup{id: id, backend: HTTPBackend{URL: input.BackendURL, Auth: input.BackendAuth, Directory: input.Directory, Control: token}}
 	defer close(claim.ready)
 	defer func() {
 		if claim.session == nil {
@@ -146,13 +150,16 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	}()
 	voice, err := selected.Open(run, input.Engine)
 	if err != nil {
+		if provider == "openai-live" {
+			claim.closed = reporter.failed(nil, err)
+		}
 		expiry.Lock()
 		timedout := expired
 		expiry.Unlock()
-		if timedout {
-			return wire.Started{}, errors.Join(ErrSetupTimeout, err)
+		if timedout || errors.Is(run.Err(), context.DeadlineExceeded) {
+			return wire.Started{}, errors.Join(ErrSetupTimeout, err, cleanup(claim.closed))
 		}
-		return wire.Started{}, err
+		return wire.Started{}, errors.Join(err, cleanup(claim.closed))
 	}
 	media, err := func() (room.Room, error) {
 		if factory, ok := m.rooms.(room.AudioAuthority); ok {
@@ -164,11 +171,15 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		return m.rooms.Join(run, input.LiveKitURL, input.LiveKitToken, input.Room)
 	}()
 	if err != nil {
-		claim.closed = voice.Close()
+		if provider == "openai-live" {
+			claim.closed = reporter.failed(voice, err)
+		} else {
+			claim.closed = voice.Close()
+		}
 		expiry.Lock()
 		timedout := expired
 		expiry.Unlock()
-		if timedout {
+		if timedout || errors.Is(run.Err(), context.DeadlineExceeded) {
 			return wire.Started{}, errors.Join(ErrSetupTimeout, err, cleanup(claim.closed))
 		}
 		return wire.Started{}, errors.Join(err, cleanup(claim.closed))
@@ -176,9 +187,13 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	timer.Stop()
 	stop()
 	m.mu.Lock()
-	if claim.stopped || ctx.Err() != nil || run.Err() != nil {
+	if claim.stopped || ctx.Err() != nil || run.Err() != nil || (provider == "openai-live" && !active(voice)) {
 		m.mu.Unlock()
-		claim.closed = errors.Join(media.Close(), voice.Close())
+		if provider == "openai-live" {
+			claim.closed = errors.Join(media.Close(), reporter.failed(voice, context.Canceled))
+		} else {
+			claim.closed = errors.Join(media.Close(), voice.Close())
+		}
 		return wire.Started{}, errors.Join(context.Canceled, cleanup(claim.closed))
 	}
 	var backend Backend
@@ -195,6 +210,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		}
 		return NewSession(run, id, voice, media, backend, "client-"+id)
 	}()
+	context.AfterFunc(claim.session.ctx, cancel)
 	m.mu.Unlock()
 	return wire.Started{ID: id, Descriptor: selected.Descriptor(), StartedAt: time.Now()}, nil
 }

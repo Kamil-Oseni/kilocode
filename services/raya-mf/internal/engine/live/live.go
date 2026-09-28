@@ -38,26 +38,29 @@ func (Engine) Descriptor() engine.Descriptor {
 }
 
 func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, engine.NewOpenError(err, false, true, nil, nil)
+	}
 	if cfg.Key == "" || len(cfg.Key) > 1024 || strings.ContainsAny(cfg.Key, "\r\n") {
-		return nil, errors.New("a trusted server OpenAI project key is required")
+		return nil, engine.NewOpenError(errors.New("a trusted server OpenAI project key is required"), false, true, nil, nil)
 	}
 	if cfg.Model == "" {
 		cfg.Model = "gpt-live-1"
 	}
 	if cfg.Model != "gpt-live-1" || (cfg.Mode != "" && cfg.Mode != "hands-free") {
-		return nil, errors.New("this engine requires continuous GPT-Live1 audio")
+		return nil, engine.NewOpenError(errors.New("this engine requires continuous GPT-Live1 audio"), false, true, nil, nil)
 	}
 	if cfg.Delegation != "" && cfg.Delegation != "client" {
-		return nil, errors.New("GPT-Live supports only explicit client delegation")
+		return nil, engine.NewOpenError(errors.New("GPT-Live supports only explicit client delegation"), false, true, nil, nil)
 	}
 	if math.IsNaN(cfg.MaximumSeconds) || math.IsInf(cfg.MaximumSeconds, 0) || cfg.MaximumSeconds < 0 || cfg.MaximumSeconds > 86400 || cfg.MaximumSeconds > 0 && cfg.MaximumSeconds <= reserve.Seconds()+0.1 || cfg.Delegation == "client" && cfg.MaximumSeconds == 0 {
-		return nil, errors.New("GPT-Live client delegation requires a finite reserved lifetime greater than 1.4 seconds and at most 86400 seconds")
+		return nil, engine.NewOpenError(errors.New("GPT-Live client delegation requires a finite reserved lifetime greater than 1.4 seconds and at most 86400 seconds"), false, true, nil, nil)
 	}
 	if cfg.Voice == "" {
 		cfg.Voice = "marin"
 	}
 	if !identifier(cfg.Voice) || !utf8.ValidString(cfg.Instructions) || len(cfg.Instructions) > 32768 {
-		return nil, errors.New("invalid GPT-Live startup configuration")
+		return nil, engine.NewOpenError(errors.New("invalid GPT-Live startup configuration"), false, true, nil, nil)
 	}
 	raw := cfg.Endpoint
 	if raw == "" {
@@ -65,11 +68,11 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	}
 	uri, err := url.Parse(raw)
 	if err != nil || !address(uri) {
-		return nil, errors.New("GPT-Live requires its primary session endpoint without query parameters")
+		return nil, engine.NewOpenError(errors.New("GPT-Live requires its primary session endpoint without query parameters"), false, true, nil, nil)
 	}
 	id, err := random()
 	if err != nil {
-		return nil, err
+		return nil, engine.NewOpenError(err, false, true, nil, nil)
 	}
 	// Start the wall budget before Dial. Fence capture early enough to leave a
 	// bounded finalization allowance; final usage still requires its exact ACK.
@@ -90,7 +93,7 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	header := http.Header{"Authorization": {"Bearer " + cfg.Key}}
 	conn, _, err := websocket.Dial(open, uri.String(), &websocket.DialOptions{HTTPHeader: header, HTTPClient: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}})
 	if err != nil {
-		return nil, fmt.Errorf("connect GPT-Live: %w", err)
+		return nil, engine.NewOpenError(fmt.Errorf("connect GPT-Live: %w", err), true, false, nil, nil)
 	}
 	conn.SetReadLimit(32768)
 	cfg.Key = ""
@@ -112,18 +115,21 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 		authority = map[string]string{"type": "client"}
 	}
 	if err := s.write(open, map[string]any{"type": "session.start", "event_id": s.start, "session": map[string]any{"model": cfg.Model, "instructions": cfg.Instructions, "store": false, "delegation": authority, "audio": map[string]any{"format": map[string]any{"type": "audio/pcm", "rate": 24000}, "output": map[string]any{"voice": cfg.Voice}}}}); err != nil {
-		return nil, errors.Join(err, s.Close())
+		return nil, s.failure(err)
 	}
 	select {
 	case err := <-s.ready:
 		if err != nil {
-			return nil, errors.Join(err, s.Close())
+			return nil, s.failure(err)
 		}
 	case <-open.Done():
-		return nil, errors.Join(open.Err(), s.Close())
+		return nil, s.failure(open.Err())
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, errors.Join(err, s.Close())
+		return nil, s.failure(err)
+	}
+	if !s.Active() {
+		return nil, s.failure(errors.New("GPT-Live ended before local admission"))
 	}
 	owned = true
 	return s, nil
@@ -154,6 +160,7 @@ type session struct {
 	started     atomic.Bool
 	closed      atomic.Bool
 	confirmed   atomic.Bool
+	released    atomic.Bool
 	gate        chan struct{}
 	eventMu     sync.Mutex
 	finished    bool
@@ -167,6 +174,7 @@ type session struct {
 	commands    map[string]*command
 	order       []string
 	receipt     *engine.Usage
+	startup     *engine.Startup
 	delegations map[string]delegation
 }
 
@@ -221,6 +229,23 @@ func (s *session) Usage() (engine.Usage, error) {
 	}
 	return *s.receipt, nil
 }
+func (s *session) Startup() (engine.Startup, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.startup == nil {
+		return engine.Startup{}, errors.New("GPT-Live startup receipt is unconfirmed")
+	}
+	return *s.startup, nil
+}
+func (s *session) Active() bool {
+	return s.started.Load() && !s.closed.Load() && s.parent.Err() == nil
+}
+func (s *session) failure(err error) error {
+	err = errors.Join(err, s.Close())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return engine.NewOpenError(err, true, s.released.Load(), s.startup, s.receipt)
+}
 func (s *session) begin() {
 	s.once.Do(func() {
 		s.closed.Store(true)
@@ -233,7 +258,9 @@ func (s *session) close() {
 	defer s.budget()
 	ctx, cancel := context.WithTimeout(context.Background(), closing)
 	defer cancel()
-	if s.started.Load() && !s.confirmed.Load() {
+	// Even an unconfirmed startup can have reached the provider. Keep the owned
+	// reader alive for the bounded close so a late exact startup/final ACK survives.
+	if !s.confirmed.Load() {
 		id, err := random()
 		if err == nil {
 			s.mu.Lock()
@@ -257,16 +284,20 @@ func (s *session) close() {
 		s.err = errors.Join(s.err, errFinal)
 	}
 	s.cancel()
+	released := true
 	if err := s.conn.CloseNow(); err != nil {
 		s.err = errors.Join(s.err, err)
+		released = false
 	}
 	for _, done := range []<-chan struct{}{s.reader, s.ticker} {
 		select {
 		case <-done:
 		case <-time.After(100 * time.Millisecond):
+			released = false
 			s.err = errors.Join(s.err, errors.New("GPT-Live local owner did not terminate"))
 		}
 	}
+	s.released.Store(released)
 }
 
 func (s *session) write(ctx context.Context, value map[string]any) error {
@@ -327,6 +358,9 @@ func (s *session) handle(msg message) bool {
 			return false
 		}
 		s.remote = msg.Session.ID
+		s.mu.Lock()
+		s.startup = &engine.Startup{Session: s.remote, EventID: msg.EventID, Model: s.cfg.Model, At: time.Now()}
+		s.mu.Unlock()
 		s.started.Store(true)
 		s.resolve(nil)
 		s.emit(engine.Event{Type: "session.started", Session: s.remote, Data: map[string]any{"eventID": msg.EventID, "model": s.cfg.Model, "localStream": s.stream}})

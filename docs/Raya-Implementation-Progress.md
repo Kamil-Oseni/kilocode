@@ -1,5 +1,15 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 18:43 EDT - failed Live setup retains exact receipts
+
+The setup-recovery source slice now preserves immutable provider startup/final receipts and distinguishes definite pre-connection refusal from uncertain paid connection effects. One reserved deadline covers provider Open and room Join; cancellation, expiry or inactive provider state refuses readiness. Failed setup reports version-one `session.setup.closed` through the original private authenticated callback. Only exact backend `true` acknowledgement and confirmed provider/local cleanup release ownership. Missing startup/final receipts, malformed/refused callback responses or unknown cleanup retain the claim without redial or replay.
+
+The canonical backend persists immutable setup intent before creating a closed accounting binding. It accepts exact final duration after Stop or verified goal completion without activating work, renewing task authority or charging duplicate receipts. Changed provider/startup/final identities and unknown binding states refuse. Missing final usage remains unknown rather than measured zero. Normal `session.started` stays subject to ordinary admission.
+
+Evidence: the full CGO-zero Go suite and vet pass, including 18 actual Live socket tests, failed-Join/held-Join/cancellation tests and strict HTTP receipt acknowledgement cases. All 38 canonical voice tests and 16 CLI Live/failure/destination/API tests pass. The new completed-goal journey uses actual RayaGoal and GoalCharges implementations and the real completion-audit validator with controlled completed-tool evidence; it proves charge-once settlement and continued denial of work, not an installed task or provider execution. Scoped ordinary lint, Prettier, gofmt and upstream/Effect guards pass. An initial fixture scope type error was corrected using the test-owned scope; the focused rerun and final CLI typecheck pass. Normal publication gates follow. Type-aware tsgolint remains disabled; heavy checks run serially without heap changes.
+
+Next connect original-task caption evidence, permission-governed delegation and exact original-ID result delivery. Default direct Live UI remains unchanged; external MF is undeployed and the installed snapshot is unchanged. Production CGO/container, provider/SFU/browser/acoustic, playback receipts, interruption/restart/disconnect and prolonged-resource gates remain open. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. Desktop remains stopped after Escape; MCP deferred; French Study and unrelated user edits protected.
+
 ## ChatGPT 2026-09-28 18:12 EDT - reserved Live bridge source published
 
 Source `a65c6667ee` is committed and pushed. Normal push gates passed all 29 TypeScript tasks from a fresh cache and the JetBrains generated-client/typecheck gate (two executed Gradle tasks, 20 up-to-date). Focused tests, scoped ordinary lint, knip, Go suite/vet, generated SDK and extension bundle checks below pass. No installed-host or external MF deployment claim; default direct Live UI and installed snapshot remain unchanged. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress.

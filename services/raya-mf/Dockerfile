@@ -9,7 +9,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 go build -trimpath -o /out/raya-mf ./cmd/raya-mf
+RUN GOMAXPROCS=2 CGO_ENABLED=1 go test -p 1 ./... \
+  && GOMAXPROCS=2 CGO_ENABLED=1 go build -p 1 -trimpath -o /out/raya-mf ./cmd/raya-mf
 
 FROM debian:bookworm-slim
 RUN apt-get update \

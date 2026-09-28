@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 16:40 EDT - direct RTP sender checked; real codec/SFU gates next
+
+Current source replaces queued/timed LiveKit PCM output with synchronous Opus and one owned direct RTP writer. New non-CGO `sender.go`/`track.go` own bounded packets/deadlines, immutable negotiated target, exact +960 RTP ticks/frame and no replay after uncertainty. The CGO adapter uses exact 960-byte/24 kHz frames, copied codec output, serialized encoding, local-only flush barriers and at most one asynchronous cleanup owner. Close never declares transport termination on a deadline.
+
+Evidence: eight sender/five binding tests and final full CGO-zero Go suite/vet, formatting/diff checks pass. Actual Pion binding/SSRC/payload rewriting and wire serialization use controlled sinks, not network acceptance. Two actual libopus tests and the full CGO container test-before-build gate are added but unrun. Docker/WSL/native compiler/pkg-config are unavailable; the CGO adapter is not build-verified here. External service undeployed, installed snapshot unchanged (`7.4.23-snapshot+6da111269a.kamil-oseni.1790623040925`). Markdown/publication checks follow.
+
+Next: run the container CGO test/build gate, then establish exact frame attribution through a real SFU/browser encoded-receiver/decoder/render/device-output probe. Do not put arbitrary tokens in Opus padding; RFC padding must be zero. Browser v3 exact receipts remain absent; metadata or AudioContext elapsed samples are not playback. Test actual SDK teardown under stalled transport, microphone/interruption/restart/disconnect and prolonged resources; implement OpenAI MF adapter/routing through the full frame-clock architecture. Full voice/OVR-01/EN-05/FUT-CU-01 stay In progress. Desktop stopped after Escape, MCP deferred; preserve French Study and user edits.
+
 ## ChatGPT 2026-09-28 16:25 EDT - sealed-boundary source pushed; direct RTP transport next
 
 Runtime source `a201467248` is pushed through normal cached TypeScript/JetBrains gates. Full CGO-zero Go tests/vet and formatting/diff/Markdown checks pass. Begin with the direct RTP transport and real SFU/browser attribution probe described below. No service deployment or installed-host playback proof; full voice, OVR-01, EN-05 and FUT-CU-01 remain In progress. Preserve user edits and the desktop stop.

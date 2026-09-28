@@ -1,5 +1,15 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 16:40 EDT - direct RTP transport checked; production codec gate unrun
+
+The Go LiveKit adapter now encodes each exact 24 kHz mono PCM16 20 ms frame synchronously into one bounded owned Opus packet and sends it through a single owned RTP writer. The SDK PCM helper, private queue, resampler and second timer are removed. Payloads are capped at 1,275 bytes; randomized sequence/timestamp starts advance by 960 ticks per admitted frame at the 48 kHz RTP clock. Concurrent writes refuse. A deadline/error stops future writes without replay; Close reports unknown until actual writer termination rather than pretending to drain it.
+
+An owned actual Pion track pins one negotiated binding and serializes binding changes with publication. Unbound writes, changed ownership, rebinds and post-Close input refuse; Close fences immediately even during a stalled write. Pion supplies negotiated SSRC/payload type. The adapter copies reused encoder memory, serializes codec access and retains at most one cleanup owner. Local flush is only a publication barrier: sent RTP, SFU/browser jitter buffers and device output are not declared flushed or heard.
+
+Checks: eight sender and five binding tests pass, including actual pinned Pion binding/wire serialization with controlled sinks, blocked writes, cancellation, Close/Send races and no replay. Final full CGO-zero Go suite, vet, formatting and diff checks pass. These source/transport-boundary checks are not WebRTC network, SFU, browser or acoustic acceptance. Two actual libopus codec tests and a full CGO container test-before-build gate are added with bounded concurrency, but unrun: Docker, WSL and the native compiler/pkg-config toolchain are unavailable here. The CGO adapter changes are not build-verified on this host. No deployment or extension installation occurred; installed snapshot remains `7.4.23-snapshot+6da111269a.kamil-oseni.1790623040925`.
+
+Next: publish, run the CGO container gate and real SFU/browser frame-attribution probe, then implement authoritative decoded/render/device-output receipts and OpenAI MF routing. SDK teardown and resource cleanup need real stalled-transport tests. Never derive playback from metadata arrival, generation completion or elapsed AudioContext time. Full voice, OVR-01, EN-05 and FUT-CU-01 remain In progress; desktop stopped after Escape, MCP deferred and French Study/user edits protected.
+
 ## ChatGPT 2026-09-28 16:25 EDT - sealed-boundary source published
 
 Runtime source `a201467248` is committed and pushed through the normal 29 cached TypeScript checks and cached JetBrains gate. The full CGO-zero Go suite, vet, formatting, diff check and 484-file Markdown table guard pass. The external Go service remains undeployed and the installed desktop snapshot unchanged. Next replace the SDK's queued PCM transport, prove frame attribution through the real SFU/browser path and implement exact playback receipts; full voice and installed-host gates remain open.

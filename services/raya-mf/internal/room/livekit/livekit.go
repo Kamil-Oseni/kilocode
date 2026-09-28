@@ -13,10 +13,12 @@ import (
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room"
 	"github.com/livekit/media-sdk"
+	"github.com/livekit/media-sdk/opus"
 	lkproto "github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	lksdk "github.com/livekit/server-sdk-go/v2"
 	lkmedia "github.com/livekit/server-sdk-go/v2/pkg/media"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -99,7 +101,7 @@ func (Factory) JoinAuthorized(ctx context.Context, url, token, _ string, client 
 		joined.Disconnect()
 		return nil, errors.New("unexpected media participant identity")
 	}
-	track, err := lkmedia.NewPCMLocalTrack(24000, 1, logger.GetLogger())
+	track, err := newTrack()
 	if err != nil {
 		joined.Disconnect()
 		return nil, err
@@ -112,20 +114,50 @@ func (Factory) JoinAuthorized(ctx context.Context, url, token, _ string, client 
 		joined.Disconnect()
 		return nil, err
 	}
+	output := &encoded{}
+	codec, err := opus.Encode(output, 1, logger.GetLogger())
+	if err != nil {
+		_ = track.Close()
+		joined.Disconnect()
+		return nil, err
+	}
+	sender, err := newSender(func(packet *rtp.Packet) error {
+		if !track.IsBound() {
+			return errors.New("voice RTP track is not bound")
+		}
+		return track.WriteRTP(packet)
+	})
+	if err != nil {
+		_ = codec.Close()
+		_ = track.Close()
+		joined.Disconnect()
+		return nil, err
+	}
 	return &Room{
 		room:     joined,
 		track:    track,
+		codec:    codec,
+		encoded:  output,
+		sender:   sender,
 		writer:   writer,
 		input:    input,
 		data:     data,
 		remote:   remote,
 		remoteMu: &remoteMu,
+		done:     make(chan struct{}),
 	}, nil
 }
 
 type Room struct {
 	room     *lksdk.Room
-	track    *lkmedia.PCMLocalTrack
+	track    *track
+	codec    media.PCM16Writer
+	encoded  *encoded
+	sender   *sender
+	mu       sync.Mutex
+	closed   bool
+	err      error
+	done     chan struct{}
 	writer   *writer
 	input    chan engine.Frame
 	data     chan room.Data
@@ -142,15 +174,36 @@ func (r *Room) Data() <-chan room.Data {
 	return r.data
 }
 
-func (r *Room) Publish(_ context.Context, frame engine.Frame) error {
-	if len(frame.PCM)%2 != 0 {
-		return errors.New("PCM16 frame has an odd byte length")
+func (r *Room) Publish(ctx context.Context, frame engine.Frame) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !r.mu.TryLock() {
+		return errors.New("voice publication is already active")
+	}
+	defer r.mu.Unlock()
+	if r.closed || !r.track.IsBound() {
+		return errors.New("voice RTP track is closed or unbound")
+	}
+	if frame.Rate != 24000 || len(frame.PCM) != 960 {
+		return errors.New("voice publication requires one 20 ms mono PCM16 frame at 24 kHz")
 	}
 	samples := make(media.PCM16Sample, len(frame.PCM)/2)
 	for index := range samples {
 		samples[index] = int16(binary.LittleEndian.Uint16(frame.PCM[index*2:]))
 	}
-	return r.track.WriteSample(samples)
+	r.encoded.packet = nil
+	if err := r.codec.WriteSample(samples); err != nil {
+		r.closed = true
+		r.halt()
+		return errors.New("voice frame encoding failed")
+	}
+	if err := r.sender.Send(ctx, r.encoded.packet); err != nil {
+		r.closed = true
+		r.halt()
+		return err
+	}
+	return nil
 }
 
 func (r *Room) Send(_ context.Context, data room.Data) error {
@@ -159,26 +212,78 @@ func (r *Room) Send(_ context.Context, data room.Data) error {
 	return r.room.LocalParticipant.PublishDataPacket(packet, lksdk.WithDataPublishReliable(true))
 }
 
-func (r *Room) Flush(context.Context, string) error {
-	r.track.ClearQueue()
-	return nil
+func (r *Room) Flush(ctx context.Context, _ string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !r.mu.TryLock() {
+		return errors.New("voice publication has not drained")
+	}
+	defer r.mu.Unlock()
+	if r.closed {
+		return errors.New("voice transport is closed")
+	}
+	// There is no local PCM queue. This is a local publication barrier only;
+	// already-sent RTP and the remote jitter buffer still need exact receipts.
+	return r.sender.Idle()
 }
 
 func (r *Room) Close() error {
-	var err error
+	r.halt()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*engine.FramePeriod)
+	defer cancel()
+	select {
+	case <-r.done:
+		return r.err
+	case <-ctx.Done():
+		return errors.Join(errUnknown, ctx.Err())
+	}
+}
+
+func (r *Room) halt() {
 	r.once.Do(func() {
-		r.writer.Close()
-		r.remoteMu.Lock()
-		for sid, decoded := range r.remote {
-			err = errors.Join(err, decoded.Close())
-			delete(r.remote, sid)
-		}
-		r.remoteMu.Unlock()
-		r.track.ClearQueue()
-		err = errors.Join(err, r.track.Close())
-		r.room.Disconnect()
+		// Fence input/output immediately. At most one retained cleanup owner
+		// may block inside the SDK; a deadline never reports it as drained.
+		_ = r.track.Close()
+		_ = r.writer.Close()
+		go func() {
+			defer close(r.done)
+			r.room.Disconnect()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*engine.FramePeriod)
+			defer cancel()
+			r.err = r.sender.Close(ctx)
+			r.remoteMu.Lock()
+			for sid, decoded := range r.remote {
+				r.err = errors.Join(r.err, decoded.Close())
+				delete(r.remote, sid)
+			}
+			r.remoteMu.Unlock()
+			r.mu.Lock()
+			r.closed = true
+			r.err = errors.Join(r.err, r.codec.Close())
+			r.mu.Unlock()
+		}()
 	})
-	return err
+}
+
+// The SDK encoder writes synchronously into this bounded sink. No sample
+// provider, private PCM queue, resampler or independent timer is installed.
+type encoded struct {
+	packet []byte
+}
+
+func (*encoded) String() string  { return "raya-opus" }
+func (*encoded) SampleRate() int { return 24000 }
+func (e *encoded) WriteSample(sample opus.Sample) error {
+	if len(sample) == 0 || len(sample) > 1275 || e.packet != nil {
+		return errors.New("invalid or duplicate encoded voice packet")
+	}
+	e.packet = append([]byte(nil), sample...)
+	return nil
+}
+func (e *encoded) Close() error {
+	e.packet = nil
+	return nil
 }
 
 type writer struct {

@@ -311,3 +311,237 @@ test("quiesce hold suppresses narration while provider activity invalidates the 
   f.speech.hold(false)
   expect(f.speech.boundary().quiet).toBe(false)
 })
+
+test("inherited narration restores the original elapsed timeline without replaying prior holding statements", () => {
+  const source = fixture()
+  source.speech.start("source_provider_call")
+  source.speech.observe("source_provider_call", "running")
+  source.advance(1200)
+  source.done()
+  const checkpoint = source.speech.narration()!
+  expect(Object.isFrozen(checkpoint)).toBe(true)
+  expect(checkpoint).toMatchObject({ version: 1, started: 0, rung: 2, background: false, status: "running" })
+  expect(JSON.stringify(checkpoint)).not.toContain("source_provider_call")
+  const target = fixture()
+  target.state.now = 2000
+  target.speech.hold(true)
+  target.speech.restore("local_work", checkpoint)
+  expect(target.speech.narration()).toEqual(checkpoint)
+  target.speech.hold(false)
+  target.speech.flush()
+  expect(target.state.events).toHaveLength(0)
+  target.advance(499)
+  expect(target.state.events).toHaveLength(0)
+  target.advance(1)
+  expect(target.state.events).toHaveLength(1)
+  expect(JSON.stringify(target.state.events[0])).toContain("without repeating earlier acknowledgements")
+  target.done()
+  target.advance(2500)
+  expect(target.speech.background).toBe(true)
+  const next = fixture()
+  next.state.now = 6000
+  next.speech.restore("next_local_work", target.speech.narration()!)
+  expect(next.state.events).toHaveLength(0)
+  expect(next.speech.background).toBe(true)
+})
+
+test("malformed inherited narration fails closed without importing private provenance", () => {
+  for (const value of [
+    { version: 1, started: 100, rung: 0, background: false },
+    { version: 1, started: 0, rung: 2, background: false },
+    { version: 1, started: 0, rung: 0, background: false, status: "complete" },
+    { version: 1, started: 0, rung: 0, background: false, providerCallID: "private" },
+  ]) {
+    const f = fixture()
+    expect(() => f.speech.restore("local", value as Parameters<OpenAISpeech["restore"]>[1])).toThrow("timing boundary")
+    expect(f.speech.boundary().quiet).toBe(false)
+    expect(f.state.events).toHaveLength(0)
+  }
+})
+
+function semantic(id: string, text: string) {
+  return {
+    type: "conversation.item.done",
+    item: { id, type: "message", role: "user", content: [{ type: "input_text", text }] },
+  }
+}
+
+test("inherited results refuse mismatched or unordered response completion without repeat", () => {
+  for (const ordered of [true, false]) {
+    const f = fixture()
+    f.speech.semantic("local", "Verified result", 30_000)
+    f.event(semantic("local", "Verified result"))
+    const response = f.state.events[0].response as Record<string, unknown>
+    if (ordered) f.event({ type: "response.created", response: { id: "bound", metadata: response.metadata } })
+    f.event({
+      type: "response.done",
+      response: { id: ordered ? "wrong" : "bound", metadata: response.metadata, status: "completed", output: [] },
+    })
+    expect(f.speech.delivery("local")!.phase).toBe("uncertain")
+    expect(f.speech.boundary().quiet).toBe(false)
+    f.event({ type: "response.created", response: { id: "bound", metadata: response.metadata } })
+    f.event({ type: "output_audio_buffer.started", response_id: "bound" })
+    f.event({
+      type: "response.done",
+      response: { id: "bound", metadata: response.metadata, status: "completed", output: [] },
+    })
+    f.event({ type: "output_audio_buffer.stopped", response_id: "bound" })
+    f.advance(30_000)
+    expect(f.speech.delivery("local")!.phase).toBe("uncertain")
+    expect(f.state.events).toHaveLength(1)
+  }
+})
+
+test("inherited semantic result ACK creates one tools-disabled continuation and keeps generation separate from provider settlement", () => {
+  const f = fixture()
+  f.speech.semantic("local_result", "Verified canonical result", 30_000)
+  expect(f.speech.delivery("local_result")).toEqual({ phase: "pending", deadline: 30_000, providerSettled: false })
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.event(semantic("other", "Verified canonical result"))
+  expect(f.state.events).toHaveLength(0)
+  f.event(semantic("local_result", "Verified canonical result"))
+  expect(f.state.events).toHaveLength(1)
+  const request = f.state.events[0]
+  const response = request.response as Record<string, unknown>
+  expect(response).toMatchObject({ tools: [], tool_choice: "none" })
+  expect(f.speech.delivery("local_result")!.phase).toBe("accepted")
+  f.event(semantic("local_result", "Verified canonical result"))
+  expect(f.state.events).toHaveLength(1)
+  f.event({ type: "response.created", response: { id: "generated", metadata: response.metadata } })
+  f.event({ type: "output_audio_buffer.started", response_id: "generated" })
+  f.event({
+    type: "response.done",
+    response: { id: "generated", metadata: response.metadata, status: "completed", output: [] },
+  })
+  expect(f.speech.delivery("local_result")).toEqual({ phase: "generated", deadline: 30_000, providerSettled: false })
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.event({ type: "output_audio_buffer.stopped", response_id: "generated" })
+  expect(f.speech.delivery("local_result")).toEqual({ phase: "generated", deadline: 30_000, providerSettled: true })
+  expect(Object.isFrozen(f.speech.delivery("local_result"))).toBe(true)
+  expect(f.speech.boundary().quiet).toBe(true)
+  expect("played" in f.speech.delivery("local_result")!).toBe(false)
+  f.advance(60_000)
+  expect(f.state.events).toHaveLength(1)
+})
+
+for (const change of ["role", "type", "text", "content"]) {
+  test(`inherited semantic ACK refuses changed ${change} and never requests speech`, () => {
+    const f = fixture()
+    f.speech.semantic("local", "exact", 5000)
+    const event = semantic("local", "exact")
+    if (change === "role") event.item.role = "assistant"
+    if (change === "type") event.item.type = "function_call_output"
+    if (change === "text") event.item.content[0].text = "changed"
+    if (change === "content") event.item.content.push({ type: "input_text", text: "extra" })
+    f.event(event)
+    expect(f.speech.delivery("local")!.phase).toBe("uncertain")
+    expect(f.state.events).toHaveLength(0)
+    expect(f.speech.boundary().quiet).toBe(false)
+  })
+}
+
+test("inherited semantic deadlines survive elapsed time and unknown response creation is never retried", () => {
+  const f = fixture()
+  f.state.now = 4500
+  f.speech.semantic("local", "exact", 5000)
+  f.advance(499)
+  expect(f.speech.delivery("local")!.phase).toBe("pending")
+  f.advance(1)
+  expect(f.speech.delivery("local")!.phase).toBe("uncertain")
+  f.event(semantic("local", "exact"))
+  expect(f.state.events).toHaveLength(0)
+  const next = fixture()
+  next.speech.semantic("local", "exact", 5000)
+  next.event(semantic("local", "exact"))
+  next.advance(30_000)
+  expect(next.speech.delivery("local")!.phase).toBe("uncertain")
+  next.advance(60_000)
+  expect(next.state.events).toHaveLength(1)
+})
+
+test("a user's interruption makes inherited result presentation uncertain without replay", () => {
+  const f = fixture()
+  f.speech.semantic("local", "exact", 5000)
+  f.event(semantic("local", "exact"))
+  const response = f.state.events[0].response as Record<string, unknown>
+  f.event({ type: "response.created", response: { id: "generated", metadata: response.metadata } })
+  f.event({ type: "output_audio_buffer.started", response_id: "generated" })
+  f.event({ type: "input_audio_buffer.speech_started" })
+  expect(f.speech.delivery("local")!.phase).toBe("uncertain")
+  f.event({ type: "output_audio_buffer.cleared", response_id: "generated" })
+  f.event({ type: "response.done", response: { id: "generated", metadata: response.metadata, status: "completed" } })
+  expect(f.speech.delivery("local")!.phase).toBe("uncertain")
+  expect(f.speech.delivery("local")!.providerSettled).toBe(false)
+  expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+})
+
+test("duplicate or stale inherited narration cannot rewind progress, repeat speech or restart timers", () => {
+  const f = fixture()
+  const initial = { version: 1 as const, started: 0, rung: 0, background: false, status: "accepted" as const }
+  f.speech.restore("local_work", initial)
+  const epoch = f.speech.boundary().epoch
+  f.speech.restore("local_work", initial)
+  expect(f.speech.boundary().epoch).toBe(epoch)
+  f.advance(1200)
+  f.done()
+  expect(f.speech.narration()!.rung).toBe(2)
+  const count = f.state.events.length
+  f.speech.restore("local_work", initial)
+  expect(f.speech.narration()!.rung).toBe(2)
+  expect(f.state.events).toHaveLength(count)
+  f.advance(1300)
+  f.done()
+  expect(f.state.events).toHaveLength(count + 1)
+  f.advance(2500)
+  f.done()
+  const terminal = f.speech.narration()!
+  f.speech.restore("local_work", initial)
+  expect(f.speech.narration()).toEqual(terminal)
+  expect(f.state.events).toHaveLength(count + 2)
+  const settled = f.speech.boundary().epoch
+  f.speech.restore("local_work", terminal)
+  expect(f.speech.boundary().epoch).toBe(settled)
+  f.advance(1000)
+  expect(() => f.speech.restore("local_work", { ...terminal, started: 1 })).toThrow("timing identity")
+  expect(f.speech.boundary().quiet).toBe(false)
+})
+
+test("inherited results reject pending ordinary output collisions without losing its acknowledgement", () => {
+  const f = fixture()
+  f.speech.result("existing", "call", "{}")
+  expect(() => f.speech.semantic("existing", "result", 5000)).toThrow("delivery boundary")
+  expect(f.speech.delivery("existing")).toBeUndefined()
+  f.event({
+    type: "conversation.item.created",
+    item: { id: "existing", type: "function_call_output", call_id: "call", output: "{}" },
+  })
+  expect(f.state.events).toHaveLength(1)
+  f.done()
+  f.advance(30_000)
+  expect(f.state.errors).toEqual([])
+  expect(f.speech.boundary().quiet).toBe(false)
+})
+
+test("inherited results require meaningful UTF-8 text within the byte limit", () => {
+  for (const text of ["", " \n\t", "界".repeat(5462)]) {
+    const f = fixture()
+    expect(() => f.speech.semantic("local", text, 5000)).toThrow("delivery boundary")
+    expect(f.speech.delivery("local")).toBeUndefined()
+    expect(f.state.events).toEqual([])
+  }
+})
+
+test("a newer inherited narration snapshot merges only forward without scheduling duplicate timers", () => {
+  const f = fixture()
+  f.speech.hold(true)
+  f.speech.restore("local", { version: 1, started: 0, rung: 0, background: false, status: "accepted" })
+  f.advance(2500)
+  f.speech.restore("local", { version: 1, started: 0, rung: 3, background: false, status: "running" })
+  expect(f.speech.narration()).toMatchObject({ rung: 3, status: "running" })
+  f.speech.hold(false)
+  f.speech.flush()
+  expect(f.state.events).toHaveLength(0)
+  f.advance(2500)
+  expect(f.state.events).toHaveLength(1)
+  expect(f.speech.background).toBe(true)
+})

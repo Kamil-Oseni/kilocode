@@ -48630,6 +48630,2142 @@
         ]
       }
     },
+    "/kilocode/voice/openai/session/{id}/obligations": {
+      "get": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.obligations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "generation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "references": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "originID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "originGeneration": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "callID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "receiptID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg"
+                          },
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "directory": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32768
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "deadline": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "id",
+                          "originID",
+                          "originGeneration",
+                          "callID",
+                          "receiptID",
+                          "messageID",
+                          "parentSessionID",
+                          "directory",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": ["version", "references"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List bounded canonical work references for the authorized voice binding",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.obligations({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/handoff/obligations": {
+      "get": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.handoff.manifest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "generation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "manifestID": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "hash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceID": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "sourceGeneration": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "candidateID": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "candidateGeneration": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "references": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "originID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "originGeneration": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "callID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "receiptID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg"
+                          },
+                          "parentSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "directory": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32768
+                          },
+                          "createdAt": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "deadline": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "id",
+                          "originID",
+                          "originGeneration",
+                          "callID",
+                          "receiptID",
+                          "messageID",
+                          "parentSessionID",
+                          "directory",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "manifestID",
+                    "hash",
+                    "sourceID",
+                    "sourceGeneration",
+                    "candidateID",
+                    "candidateGeneration",
+                    "references"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Inspect bounded canonical work references before replacement",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.handoff.manifest({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/handoff/activate-retained": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.handoff.transfer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "manifest": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "manifestID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "hash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sourceID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "references": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "originID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "originGeneration": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "callID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "receiptID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "parentSessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "directory": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32768
+                              },
+                              "createdAt": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "deadline": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "id",
+                              "originID",
+                              "originGeneration",
+                              "callID",
+                              "receiptID",
+                              "messageID",
+                              "parentSessionID",
+                              "directory",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 64
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "manifestID",
+                        "hash",
+                        "sourceID",
+                        "sourceGeneration",
+                        "candidateID",
+                        "candidateGeneration",
+                        "references"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "activation": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "requestID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "readyID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceRevision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sourceHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "activatedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "requestID",
+                        "sourceID",
+                        "sourceGeneration",
+                        "candidateID",
+                        "candidateGeneration",
+                        "readyID",
+                        "sourceRevision",
+                        "sourceHash",
+                        "activatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["version", "manifest", "activation"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Atomically transfer authority and canonical work references without resubmitting jobs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "candidateID": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "candidateGeneration": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "sourceRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sourceHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "readyID": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "manifestID": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "manifestHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "version",
+                  "generation",
+                  "requestID",
+                  "candidateID",
+                  "candidateGeneration",
+                  "sourceRevision",
+                  "sourceHash",
+                  "readyID",
+                  "manifestID",
+                  "manifestHash"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.handoff.transfer({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/handoff/retained-receipt": {
+      "get": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.handoff.transferReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "generation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "manifest": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "manifestID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "hash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sourceID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "references": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "originID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "originGeneration": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "callID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "receiptID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "parentSessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "directory": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32768
+                              },
+                              "createdAt": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "deadline": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "id",
+                              "originID",
+                              "originGeneration",
+                              "callID",
+                              "receiptID",
+                              "messageID",
+                              "parentSessionID",
+                              "directory",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 64
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "manifestID",
+                        "hash",
+                        "sourceID",
+                        "sourceGeneration",
+                        "candidateID",
+                        "candidateGeneration",
+                        "references"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "activation": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "requestID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "candidateGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "readyID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "sourceRevision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sourceHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "activatedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "requestID",
+                        "sourceID",
+                        "sourceGeneration",
+                        "candidateID",
+                        "candidateGeneration",
+                        "readyID",
+                        "sourceRevision",
+                        "sourceHash",
+                        "activatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["version", "manifest", "activation"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve an uncertain retained-work transfer from its durable receipt",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.handoff.transferReceipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/obligations/{obligationID}": {
+      "get": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.obligation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "obligationID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "generation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "reference": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "originID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "originGeneration": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "callID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "parentSessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "directory": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32768
+                        },
+                        "createdAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "deadline": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "id",
+                        "originID",
+                        "originGeneration",
+                        "callID",
+                        "receiptID",
+                        "messageID",
+                        "parentSessionID",
+                        "directory",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "delivery": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "reference": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "originID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "originGeneration": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "callID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "receiptID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "parentSessionID": {
+                              "type": "string",
+                              "pattern": "^ses"
+                            },
+                            "directory": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32768
+                            },
+                            "createdAt": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "deadline": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "id",
+                            "originID",
+                            "originGeneration",
+                            "callID",
+                            "receiptID",
+                            "messageID",
+                            "parentSessionID",
+                            "directory",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "epoch": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": ["pending", "offered", "accepted", "generated", "played", "omitted"]
+                        },
+                        "offer": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "offerID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "targetID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "targetGeneration": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "providerCallID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256,
+                              "pattern": "^\\S+$"
+                            },
+                            "itemID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "responseID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "resultHash": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "deliveryEpoch": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offeredAt": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "offerID",
+                            "targetID",
+                            "targetGeneration",
+                            "providerCallID",
+                            "itemID",
+                            "resultHash",
+                            "deliveryEpoch",
+                            "offeredAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "acks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "generation": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "ackID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "offerID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "phase": {
+                                "type": "string",
+                                "enum": ["accepted", "generated", "played", "omitted"]
+                              },
+                              "eventID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "providerCallID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "pattern": "^\\S+$"
+                              },
+                              "itemID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "responseID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "resultHash": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "deliveryEpoch": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "targetID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "reference": {
+                                "type": "object",
+                                "properties": {
+                                  "version": {
+                                    "type": "number",
+                                    "enum": [1]
+                                  },
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "originID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "originGeneration": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "callID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "receiptID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "parentSessionID": {
+                                    "type": "string",
+                                    "pattern": "^ses"
+                                  },
+                                  "directory": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32768
+                                  },
+                                  "createdAt": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "deadline": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "version",
+                                  "id",
+                                  "originID",
+                                  "originGeneration",
+                                  "callID",
+                                  "receiptID",
+                                  "messageID",
+                                  "parentSessionID",
+                                  "directory",
+                                  "createdAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "acknowledgedAt": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "generation",
+                              "ackID",
+                              "offerID",
+                              "phase",
+                              "eventID",
+                              "providerCallID",
+                              "itemID",
+                              "resultHash",
+                              "deliveryEpoch",
+                              "targetID",
+                              "reference",
+                              "acknowledgedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 16
+                        }
+                      },
+                      "required": ["version", "reference", "epoch", "phase", "acks"],
+                      "additionalProperties": false
+                    },
+                    "receipt": {
+                      "$ref": "#/components/schemas/OpenAIVoiceCall"
+                    },
+                    "resultHash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": ["version", "reference", "delivery", "receipt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Observe an authorized canonical work receipt without repeating execution",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.obligation({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/obligations/{obligationID}/delivery": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.obligation.delivery",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "obligationID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "reference": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "originID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "originGeneration": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "callID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "receiptID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "parentSessionID": {
+                              "type": "string",
+                              "pattern": "^ses"
+                            },
+                            "directory": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32768
+                            },
+                            "createdAt": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "deadline": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "id",
+                            "originID",
+                            "originGeneration",
+                            "callID",
+                            "receiptID",
+                            "messageID",
+                            "parentSessionID",
+                            "directory",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "offer": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "offerID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "targetID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "targetGeneration": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "providerCallID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256,
+                              "pattern": "^\\S+$"
+                            },
+                            "itemID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "responseID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "resultHash": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "deliveryEpoch": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offeredAt": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "offerID",
+                            "targetID",
+                            "targetGeneration",
+                            "providerCallID",
+                            "itemID",
+                            "resultHash",
+                            "deliveryEpoch",
+                            "offeredAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["version", "reference", "offer"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "generation": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "ackID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "offerID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": ["accepted", "generated", "played", "omitted"]
+                        },
+                        "eventID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "providerCallID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "pattern": "^\\S+$"
+                        },
+                        "itemID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "responseID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "resultHash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "deliveryEpoch": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "targetID": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "reference": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "originID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "originGeneration": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "callID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "receiptID": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "parentSessionID": {
+                              "type": "string",
+                              "pattern": "^ses"
+                            },
+                            "directory": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32768
+                            },
+                            "createdAt": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "deadline": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "id",
+                            "originID",
+                            "originGeneration",
+                            "callID",
+                            "receiptID",
+                            "messageID",
+                            "parentSessionID",
+                            "directory",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "acknowledgedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "generation",
+                        "ackID",
+                        "offerID",
+                        "phase",
+                        "eventID",
+                        "providerCallID",
+                        "itemID",
+                        "resultHash",
+                        "deliveryEpoch",
+                        "targetID",
+                        "reference",
+                        "acknowledgedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Record an exact presentation offer or acknowledgement without replay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["offer"]
+                      },
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "generation": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "offerID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "providerCallID": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                        "pattern": "^\\S+$"
+                      },
+                      "itemID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "responseID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "resultHash": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "deliveryEpoch": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "version",
+                      "generation",
+                      "offerID",
+                      "providerCallID",
+                      "itemID",
+                      "resultHash",
+                      "deliveryEpoch"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["ack"]
+                      },
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "generation": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "ackID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "offerID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "phase": {
+                        "type": "string",
+                        "enum": ["accepted", "generated", "played", "omitted"]
+                      },
+                      "eventID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "providerCallID": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                        "pattern": "^\\S+$"
+                      },
+                      "itemID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "responseID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "resultHash": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "deliveryEpoch": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "version",
+                      "generation",
+                      "ackID",
+                      "offerID",
+                      "phase",
+                      "eventID",
+                      "providerCallID",
+                      "itemID",
+                      "resultHash",
+                      "deliveryEpoch"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.obligation.delivery({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/openai/session/{id}/obligations/{obligationID}/cancel": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.obligation.cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "obligationID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAIVoiceCall",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIVoiceCall"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Cancel one authorized canonical job using its exact execution receipt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  }
+                },
+                "required": ["generation"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.obligation.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/voice/openai/session/{id}/handoff/candidate": {
       "post": {
         "tags": ["raya-voice"],
@@ -89280,6 +91416,167 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OpenAIVoiceImage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "mime": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png", "image/webp"]
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 262144
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": ["id", "mime", "bytes", "sha256"],
+        "additionalProperties": false
+      },
+      "OpenAIVoiceCall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "callID": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "parentSessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["accepted", "running", "completed", "failed", "cancelled", "unknown"]
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenAIVoiceImage"
+            },
+            "maxItems": 4
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 12000
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "messageID": {
+                      "type": "string",
+                      "pattern": "^msg"
+                    },
+                    "partID": {
+                      "type": "string",
+                      "pattern": "^prt"
+                    },
+                    "tool": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "running", "completed", "error"]
+                    }
+                  },
+                  "required": ["messageID", "partID", "tool", "status"],
+                  "additionalProperties": false
+                },
+                "maxItems": 64
+              }
+            },
+            "required": ["text", "assistantMessageID", "evidence"],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "callID", "messageID", "parentSessionID", "status", "createdAt", "updatedAt"],
+        "additionalProperties": false
+      },
       "OpenAIVoiceBinding": {
         "type": "object",
         "properties": {
@@ -89487,167 +91784,6 @@
           "createdAt",
           "expiresAt"
         ],
-        "additionalProperties": false
-      },
-      "OpenAIVoiceImage": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
-          },
-          "mime": {
-            "type": "string",
-            "enum": ["image/jpeg", "image/png", "image/webp"]
-          },
-          "bytes": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 262144
-          },
-          "sha256": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          }
-        },
-        "required": ["id", "mime", "bytes", "sha256"],
-        "additionalProperties": false
-      },
-      "OpenAIVoiceCall": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
-          },
-          "callID": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
-          },
-          "messageID": {
-            "type": "string",
-            "pattern": "^msg"
-          },
-          "parentSessionID": {
-            "type": "string",
-            "pattern": "^ses"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["accepted", "running", "completed", "failed", "cancelled", "unknown"]
-          },
-          "createdAt": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["NaN"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["-Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "updatedAt": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["NaN"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["-Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "images": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OpenAIVoiceImage"
-            },
-            "maxItems": 4
-          },
-          "result": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string",
-                "maxLength": 12000
-              },
-              "assistantMessageID": {
-                "type": "string",
-                "pattern": "^msg"
-              },
-              "evidence": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "messageID": {
-                      "type": "string",
-                      "pattern": "^msg"
-                    },
-                    "partID": {
-                      "type": "string",
-                      "pattern": "^prt"
-                    },
-                    "tool": {
-                      "type": "string",
-                      "maxLength": 128
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["pending", "running", "completed", "error"]
-                    }
-                  },
-                  "required": ["messageID", "partID", "tool", "status"],
-                  "additionalProperties": false
-                },
-                "maxItems": 64
-              }
-            },
-            "required": ["text", "assistantMessageID", "evidence"],
-            "additionalProperties": false
-          },
-          "error": {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "maxLength": 64
-              },
-              "message": {
-                "type": "string",
-                "maxLength": 500
-              }
-            },
-            "required": ["code", "message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "callID", "messageID", "parentSessionID", "status", "createdAt", "updatedAt"],
         "additionalProperties": false
       },
       "OpenAIVoiceReserve": {

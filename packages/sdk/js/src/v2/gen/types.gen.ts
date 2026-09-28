@@ -7071,6 +7071,38 @@ export type MemoryApiServerError = {
   }
 }
 
+export type OpenAiVoiceImage = {
+  id: string
+  mime: "image/jpeg" | "image/png" | "image/webp"
+  bytes: number
+  sha256: string
+}
+
+export type OpenAiVoiceCall = {
+  id: string
+  callID: string
+  messageID: string
+  parentSessionID: string
+  status: "accepted" | "running" | "completed" | "failed" | "cancelled" | "unknown"
+  createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  images?: Array<OpenAiVoiceImage>
+  result?: {
+    text: string
+    assistantMessageID: string
+    evidence: Array<{
+      messageID: string
+      partID: string
+      tool: string
+      status: "pending" | "running" | "completed" | "error"
+    }>
+  }
+  error?: {
+    code: string
+    message: string
+  }
+}
+
 export type OpenAiVoiceBinding = {
   id: string
   generation: string
@@ -7105,38 +7137,6 @@ export type OpenAiVoiceBinding = {
       readyID: string
       activatedAt: number
     }
-  }
-}
-
-export type OpenAiVoiceImage = {
-  id: string
-  mime: "image/jpeg" | "image/png" | "image/webp"
-  bytes: number
-  sha256: string
-}
-
-export type OpenAiVoiceCall = {
-  id: string
-  callID: string
-  messageID: string
-  parentSessionID: string
-  status: "accepted" | "running" | "completed" | "failed" | "cancelled" | "unknown"
-  createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  images?: Array<OpenAiVoiceImage>
-  result?: {
-    text: string
-    assistantMessageID: string
-    evidence: Array<{
-      messageID: string
-      partID: string
-      tool: string
-      status: "pending" | "running" | "completed" | "error"
-    }>
-  }
-  error?: {
-    code: string
-    message: string
   }
 }
 
@@ -28824,6 +28824,591 @@ export type MemoryPurgeResponses = {
 }
 
 export type MemoryPurgeResponse = MemoryPurgeResponses[keyof MemoryPurgeResponses]
+
+export type KilocodeVoiceOpenaiObligationsData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/obligations"
+}
+
+export type KilocodeVoiceOpenaiObligationsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiObligationsError =
+  KilocodeVoiceOpenaiObligationsErrors[keyof KilocodeVoiceOpenaiObligationsErrors]
+
+export type KilocodeVoiceOpenaiObligationsResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    references: Array<{
+      version: 1
+      id: string
+      originID: string
+      originGeneration: string
+      callID: string
+      receiptID: string
+      messageID: string
+      parentSessionID: string
+      directory: string
+      createdAt: number
+      deadline?: number
+    }>
+  }
+}
+
+export type KilocodeVoiceOpenaiObligationsResponse =
+  KilocodeVoiceOpenaiObligationsResponses[keyof KilocodeVoiceOpenaiObligationsResponses]
+
+export type KilocodeVoiceOpenaiHandoffManifestData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/handoff/obligations"
+}
+
+export type KilocodeVoiceOpenaiHandoffManifestErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiHandoffManifestError =
+  KilocodeVoiceOpenaiHandoffManifestErrors[keyof KilocodeVoiceOpenaiHandoffManifestErrors]
+
+export type KilocodeVoiceOpenaiHandoffManifestResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    manifestID: string
+    hash: string
+    sourceID: string
+    sourceGeneration: string
+    candidateID: string
+    candidateGeneration: string
+    references: Array<{
+      version: 1
+      id: string
+      originID: string
+      originGeneration: string
+      callID: string
+      receiptID: string
+      messageID: string
+      parentSessionID: string
+      directory: string
+      createdAt: number
+      deadline?: number
+    }>
+  }
+}
+
+export type KilocodeVoiceOpenaiHandoffManifestResponse =
+  KilocodeVoiceOpenaiHandoffManifestResponses[keyof KilocodeVoiceOpenaiHandoffManifestResponses]
+
+export type KilocodeVoiceOpenaiHandoffTransferData = {
+  body?: {
+    version: 1
+    generation: string
+    requestID: string
+    candidateID: string
+    candidateGeneration: string
+    sourceRevision: number
+    sourceHash: string
+    readyID: string
+    manifestID: string
+    manifestHash: string
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/handoff/activate-retained"
+}
+
+export type KilocodeVoiceOpenaiHandoffTransferErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiHandoffTransferError =
+  KilocodeVoiceOpenaiHandoffTransferErrors[keyof KilocodeVoiceOpenaiHandoffTransferErrors]
+
+export type KilocodeVoiceOpenaiHandoffTransferResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    manifest: {
+      version: 1
+      manifestID: string
+      hash: string
+      sourceID: string
+      sourceGeneration: string
+      candidateID: string
+      candidateGeneration: string
+      references: Array<{
+        version: 1
+        id: string
+        originID: string
+        originGeneration: string
+        callID: string
+        receiptID: string
+        messageID: string
+        parentSessionID: string
+        directory: string
+        createdAt: number
+        deadline?: number
+      }>
+    }
+    activation: {
+      version: 1
+      requestID: string
+      sourceID: string
+      sourceGeneration: string
+      candidateID: string
+      candidateGeneration: string
+      readyID: string
+      sourceRevision: number
+      sourceHash: string
+      activatedAt: number
+    }
+  }
+}
+
+export type KilocodeVoiceOpenaiHandoffTransferResponse =
+  KilocodeVoiceOpenaiHandoffTransferResponses[keyof KilocodeVoiceOpenaiHandoffTransferResponses]
+
+export type KilocodeVoiceOpenaiHandoffTransferReceiptData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/handoff/retained-receipt"
+}
+
+export type KilocodeVoiceOpenaiHandoffTransferReceiptErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiHandoffTransferReceiptError =
+  KilocodeVoiceOpenaiHandoffTransferReceiptErrors[keyof KilocodeVoiceOpenaiHandoffTransferReceiptErrors]
+
+export type KilocodeVoiceOpenaiHandoffTransferReceiptResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    manifest: {
+      version: 1
+      manifestID: string
+      hash: string
+      sourceID: string
+      sourceGeneration: string
+      candidateID: string
+      candidateGeneration: string
+      references: Array<{
+        version: 1
+        id: string
+        originID: string
+        originGeneration: string
+        callID: string
+        receiptID: string
+        messageID: string
+        parentSessionID: string
+        directory: string
+        createdAt: number
+        deadline?: number
+      }>
+    }
+    activation: {
+      version: 1
+      requestID: string
+      sourceID: string
+      sourceGeneration: string
+      candidateID: string
+      candidateGeneration: string
+      readyID: string
+      sourceRevision: number
+      sourceHash: string
+      activatedAt: number
+    }
+  }
+}
+
+export type KilocodeVoiceOpenaiHandoffTransferReceiptResponse =
+  KilocodeVoiceOpenaiHandoffTransferReceiptResponses[keyof KilocodeVoiceOpenaiHandoffTransferReceiptResponses]
+
+export type KilocodeVoiceOpenaiObligationData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+    obligationID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/obligations/{obligationID}"
+}
+
+export type KilocodeVoiceOpenaiObligationErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiObligationError =
+  KilocodeVoiceOpenaiObligationErrors[keyof KilocodeVoiceOpenaiObligationErrors]
+
+export type KilocodeVoiceOpenaiObligationResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    reference: {
+      version: 1
+      id: string
+      originID: string
+      originGeneration: string
+      callID: string
+      receiptID: string
+      messageID: string
+      parentSessionID: string
+      directory: string
+      createdAt: number
+      deadline?: number
+    }
+    delivery: {
+      version: 1
+      reference: {
+        version: 1
+        id: string
+        originID: string
+        originGeneration: string
+        callID: string
+        receiptID: string
+        messageID: string
+        parentSessionID: string
+        directory: string
+        createdAt: number
+        deadline?: number
+      }
+      epoch: number
+      phase: "pending" | "offered" | "accepted" | "generated" | "played" | "omitted"
+      offer?: {
+        version: 1
+        offerID: string
+        targetID: string
+        targetGeneration: string
+        providerCallID: string
+        itemID: string
+        responseID?: string
+        resultHash: string
+        deliveryEpoch: number
+        offeredAt: number
+      }
+      acks: Array<{
+        version: 1
+        generation: string
+        ackID: string
+        offerID: string
+        phase: "accepted" | "generated" | "played" | "omitted"
+        eventID: string
+        providerCallID: string
+        itemID: string
+        responseID?: string
+        resultHash: string
+        deliveryEpoch: number
+        targetID: string
+        reference: {
+          version: 1
+          id: string
+          originID: string
+          originGeneration: string
+          callID: string
+          receiptID: string
+          messageID: string
+          parentSessionID: string
+          directory: string
+          createdAt: number
+          deadline?: number
+        }
+        acknowledgedAt: number
+      }>
+    }
+    receipt: OpenAiVoiceCall
+    resultHash?: string
+  }
+}
+
+export type KilocodeVoiceOpenaiObligationResponse =
+  KilocodeVoiceOpenaiObligationResponses[keyof KilocodeVoiceOpenaiObligationResponses]
+
+export type KilocodeVoiceOpenaiObligationDeliveryData = {
+  body?:
+    | {
+        action: "offer"
+        version: 1
+        generation: string
+        offerID: string
+        providerCallID: string
+        itemID: string
+        responseID?: string
+        resultHash: string
+        deliveryEpoch: number
+      }
+    | {
+        action: "ack"
+        version: 1
+        generation: string
+        ackID: string
+        offerID: string
+        phase: "accepted" | "generated" | "played" | "omitted"
+        eventID: string
+        providerCallID: string
+        itemID: string
+        responseID?: string
+        resultHash: string
+        deliveryEpoch: number
+      }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+    obligationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/obligations/{obligationID}/delivery"
+}
+
+export type KilocodeVoiceOpenaiObligationDeliveryErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiObligationDeliveryError =
+  KilocodeVoiceOpenaiObligationDeliveryErrors[keyof KilocodeVoiceOpenaiObligationDeliveryErrors]
+
+export type KilocodeVoiceOpenaiObligationDeliveryResponses = {
+  /**
+   * Success
+   */
+  200:
+    | {
+        version: 1
+        reference: {
+          version: 1
+          id: string
+          originID: string
+          originGeneration: string
+          callID: string
+          receiptID: string
+          messageID: string
+          parentSessionID: string
+          directory: string
+          createdAt: number
+          deadline?: number
+        }
+        offer: {
+          version: 1
+          offerID: string
+          targetID: string
+          targetGeneration: string
+          providerCallID: string
+          itemID: string
+          responseID?: string
+          resultHash: string
+          deliveryEpoch: number
+          offeredAt: number
+        }
+      }
+    | {
+        version: 1
+        generation: string
+        ackID: string
+        offerID: string
+        phase: "accepted" | "generated" | "played" | "omitted"
+        eventID: string
+        providerCallID: string
+        itemID: string
+        responseID?: string
+        resultHash: string
+        deliveryEpoch: number
+        targetID: string
+        reference: {
+          version: 1
+          id: string
+          originID: string
+          originGeneration: string
+          callID: string
+          receiptID: string
+          messageID: string
+          parentSessionID: string
+          directory: string
+          createdAt: number
+          deadline?: number
+        }
+        acknowledgedAt: number
+      }
+}
+
+export type KilocodeVoiceOpenaiObligationDeliveryResponse =
+  KilocodeVoiceOpenaiObligationDeliveryResponses[keyof KilocodeVoiceOpenaiObligationDeliveryResponses]
+
+export type KilocodeVoiceOpenaiObligationCancelData = {
+  body?: {
+    generation: string
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+    obligationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/obligations/{obligationID}/cancel"
+}
+
+export type KilocodeVoiceOpenaiObligationCancelErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiObligationCancelError =
+  KilocodeVoiceOpenaiObligationCancelErrors[keyof KilocodeVoiceOpenaiObligationCancelErrors]
+
+export type KilocodeVoiceOpenaiObligationCancelResponses = {
+  /**
+   * OpenAIVoiceCall
+   */
+  200: OpenAiVoiceCall
+}
+
+export type KilocodeVoiceOpenaiObligationCancelResponse =
+  KilocodeVoiceOpenaiObligationCancelResponses[keyof KilocodeVoiceOpenaiObligationCancelResponses]
 
 export type KilocodeVoiceOpenaiHandoffCandidateData = {
   body?: {

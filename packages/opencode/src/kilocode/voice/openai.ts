@@ -22,6 +22,7 @@ import type { SessionPrompt } from "@/session/prompt"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as Store from "./openai-store"
 import * as Spoken from "./openai-spoken"
+import * as Obligations from "./openai-obligations"
 import { Storage } from "@/storage/storage"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
 import { mutate } from "@/kilocode/task/mutation"
@@ -39,6 +40,7 @@ import {
   OpenAIHandoffRearm,
   OpenAIHandoffRearmReceipt,
   OpenAIHandoffActivate,
+  OpenAIHandoffTransfer,
   OpenAIHandoffReceipt,
   OpenAIHandoffContext,
   handoff as validHandoff,
@@ -513,6 +515,89 @@ export const make = (deps: Deps) =>
       })
     const group = <A, E, R>(stored: Stored, work: Effect.Effect<A, E, R>) =>
       locked(`parent:${digest(JSON.stringify([stored.binding.directory, stored.binding.parentSessionID]))}`, work)
+    const locks = <A, E, R>(ids: string[], work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      [...new Set(ids)].sort().reduceRight((next, id) => locked(id, next), work)
+    const reference = (stored: Stored, call: Call): typeof Obligations.Reference.Type => ({
+      version: 1,
+      id: `rob_${digest(JSON.stringify([stored.binding.id, stored.binding.generation, call.id])).slice(0, 48)}`,
+      originID: stored.binding.id,
+      originGeneration: stored.binding.generation,
+      callID: call.callID,
+      receiptID: call.id,
+      messageID: call.messageID,
+      parentSessionID: stored.binding.parentSessionID,
+      directory: stored.binding.directory,
+      createdAt: call.createdAt,
+    })
+    const origins = (stored: Stored) => (stored.obligations ?? []).map((ref) => ref.originID)
+    const origin = (target: Stored, ref: typeof Obligations.Reference.Type) =>
+      Effect.gen(function* () {
+        const source = yield* read(ref.originID)
+        const call = source.calls[digest(ref.callID)]
+        const delivery = source.deliveries?.[ref.id]
+        if (
+          !call ||
+          !delivery ||
+          source.owner !== target.owner ||
+          ref.originGeneration !== source.binding.generation ||
+          ref.parentSessionID !== target.binding.parentSessionID ||
+          ref.directory !== target.binding.directory ||
+          source.binding.directory !== target.binding.directory ||
+          call.receipt.id !== ref.receiptID ||
+          call.receipt.messageID !== ref.messageID ||
+          JSON.stringify(delivery.reference) !== JSON.stringify(ref) ||
+          JSON.stringify(reference(source, call.receipt)) !== JSON.stringify(ref)
+        )
+          return yield* refuse("conflict", "Retained work provenance changed.")
+        return { source, call: call.receipt, delivery }
+      })
+    const selected = (stored: Stored, id: string) => {
+      const own = stored.deliveries?.[id]?.reference
+      const inherited = stored.obligations?.find((ref) => ref.id === id)
+      return own ?? inherited
+    }
+    const outstanding = (stored: Stored) =>
+      Effect.gen(function* () {
+        const refs = new Map<string, typeof Obligations.Reference.Type>()
+        for (const ref of [
+          ...Object.values(stored.deliveries ?? {}).map((delivery) => delivery.reference),
+          ...(stored.obligations ?? []),
+        ]) {
+          const value = yield* origin(stored, ref)
+          if (value.delivery.phase === "played" || value.delivery.phase === "omitted") continue
+          const prior = refs.get(ref.id)
+          if (prior && JSON.stringify(prior) !== JSON.stringify(ref))
+            return yield* refuse("conflict", "Retained work identities conflict.")
+          refs.set(ref.id, ref)
+          if (refs.size > 64) return yield* refuse("conflict", "Retained work allowance was exhausted.")
+        }
+        return [...refs.values()].sort((a, b) => a.id.localeCompare(b.id))
+      })
+    const snapshot = (source: Stored, candidate: Stored) =>
+      Effect.gen(function* () {
+        const references = yield* outstanding(source)
+        const ids = new Set(references.map((ref) => ref.id))
+        for (const entry of yield* entries(source)) {
+          for (const call of Object.values(entry.calls)) {
+            if (pending(call.receipt) && !ids.has(reference(entry, call.receipt).id))
+              return yield* refuse("conflict", "Pending work has no transferable delivery record.")
+          }
+        }
+        const states = []
+        for (const ref of references) {
+          const value = yield* origin(source, ref)
+          states.push({ reference: ref, epoch: value.delivery.epoch, offer: value.delivery.offer ?? null })
+        }
+        const relation = {
+          version: 1 as const,
+          sourceID: source.binding.id,
+          sourceGeneration: source.binding.generation,
+          candidateID: candidate.binding.id,
+          candidateGeneration: candidate.binding.generation,
+        }
+        const hash = digest(JSON.stringify({ ...relation, states }))
+        return { ...relation, manifestID: `rom_${hash.slice(0, 48)}`, hash, references }
+      })
     const visible = (stored: Stored): Binding => ({
       ...stored.binding,
       status: stored.owner !== owner || stored.binding.expiresAt <= Date.now() ? "closed" : stored.binding.status,
@@ -997,6 +1082,8 @@ export const make = (deps: Deps) =>
                 return yield* refuse("conflict", "No new live request context is available.")
               if (Object.keys(stored.calls).length >= 64)
                 return yield* refuse("conflict", "Voice binding call limit reached; start a new voice connection.")
+              if ((yield* outstanding(stored)).length >= 64)
+                return yield* refuse("conflict", "Retained work delivery allowance was exhausted.")
               if (
                 (yield* entries(stored)).some((entry) =>
                   Object.values(entry.calls).some((call) => pending(call.receipt)),
@@ -1019,6 +1106,17 @@ export const make = (deps: Deps) =>
                 updatedAt: now,
               }
               stored.calls[digest(input.callID)] = { input, receipt: call }
+              const ref = reference(stored, call)
+              stored.deliveries = {
+                ...stored.deliveries,
+                [ref.id]: {
+                  version: 1,
+                  reference: ref,
+                  epoch: 0,
+                  phase: "pending",
+                  acks: [],
+                },
+              }
               if (cursor !== undefined) stored.liveCursor = cursor
               // Persist before scheduling. A crash between these steps remains an unknown intent, never replayed.
               yield* save(stored)
@@ -1109,6 +1207,8 @@ export const make = (deps: Deps) =>
               if (!entry) return yield* refuse("missing", "Voice call not found.")
               if (stored.owner !== owner) return { receipt: receipt(stored, entry.receipt), stopping: false }
               if (pending(entry.receipt)) {
+                if (stored.binding.handoff?.phase === "retiring")
+                  return yield* refuse("conflict", "Retained work cancellation belongs to the active replacement.")
                 entry.receipt = { ...entry.receipt, status: "cancelled", updatedAt: Date.now() }
                 yield* save(stored)
                 return { receipt: entry.receipt, stopping: true }
@@ -1640,6 +1740,334 @@ export const make = (deps: Deps) =>
           return receipt
         }),
       )
+    const manifest = (id: string, generation: string, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, generation)
+        const relation = initial.binding.handoff
+        if (
+          !relation ||
+          relation.sourceID === id ||
+          relation.candidateID !== id ||
+          (relation.phase !== "candidate" && relation.phase !== "ready")
+        )
+          return yield* refuse("conflict", "Voice binding has no retained work preparation.")
+        const initialsource = yield* read(relation.sourceID)
+        return yield* group(
+          initial,
+          locks(
+            [id, relation.sourceID, ...origins(initialsource)],
+            Effect.gen(function* () {
+              const target = yield* load(id, secret, directory, generation)
+              yield* active(target)
+              const source = yield* read(relation.sourceID)
+              yield* related(source, target)
+              yield* authority(source)
+              yield* parent(source)
+              return yield* snapshot(source, target)
+            }),
+          ),
+        )
+      })
+    const activateRetained = (
+      id: string,
+      input: typeof OpenAIHandoffTransfer.Type,
+      secret: string,
+      directory: string,
+    ) =>
+      Effect.gen(function* () {
+        if (!validHandoff(input, "transfer")) return yield* refuse("invalid", "Invalid retained work activation.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        if (input.candidateID === id) return yield* refuse("conflict", "Handoff target must differ.")
+        return yield* group(
+          initial,
+          locks(
+            [id, input.candidateID, ...origins(initial)],
+            Effect.gen(function* () {
+              const source = yield* load(id, secret, directory, input.generation)
+              if (source.owner !== owner)
+                return yield* refuse("conflict", "Handoff belongs to an earlier backend owner.")
+              const saved = source.transfer
+              if (saved) {
+                const value = saved.activation
+                if (
+                  saved.manifest.manifestID !== input.manifestID ||
+                  saved.manifest.hash !== input.manifestHash ||
+                  value.requestID !== input.requestID ||
+                  value.sourceGeneration !== input.generation ||
+                  value.candidateID !== input.candidateID ||
+                  value.candidateGeneration !== input.candidateGeneration ||
+                  value.readyID !== input.readyID ||
+                  value.sourceRevision !== input.sourceRevision ||
+                  value.sourceHash !== input.sourceHash
+                )
+                  return yield* refuse("conflict", "Retained activation identity was reused with different input.")
+                return saved
+              }
+              if (source.binding.handoff?.receipt)
+                return yield* refuse("conflict", "Voice authority was already committed without retained work.")
+              const candidate = yield* read(input.candidateID)
+              yield* related(source, candidate)
+              yield* authority(source)
+              yield* active(candidate)
+              yield* parent(source)
+              const prepared = candidate.binding.handoff!
+              const current = checkpoint(source)
+              if (
+                prepared.phase !== "ready" ||
+                prepared.deadline! <= Date.now() ||
+                prepared.readyID !== input.readyID ||
+                prepared.requestID !== input.requestID ||
+                candidate.binding.generation !== input.candidateGeneration ||
+                prepared.sourceRevision !== input.sourceRevision ||
+                prepared.sourceHash !== input.sourceHash ||
+                current.sourceRevision !== input.sourceRevision ||
+                current.sourceHash !== input.sourceHash ||
+                source.spoken?.items.some((item) => item.state === "pending")
+              )
+                return yield* refuse("conflict", "Voice retained work checkpoint is no longer ready.")
+              const manifest = yield* snapshot(source, candidate)
+              if (manifest.manifestID !== input.manifestID || manifest.hash !== input.manifestHash)
+                return yield* refuse("conflict", "Retained work manifest changed before activation.")
+              const activation: typeof OpenAIHandoffReceipt.Type = {
+                version: 1,
+                requestID: input.requestID,
+                sourceID: id,
+                sourceGeneration: input.generation,
+                candidateID: input.candidateID,
+                candidateGeneration: input.candidateGeneration,
+                sourceRevision: input.sourceRevision,
+                sourceHash: input.sourceHash,
+                readyID: input.readyID,
+                activatedAt: Date.now(),
+              }
+              const receipt: typeof Obligations.TransferReceipt.Type = { version: 1, manifest, activation }
+              source.binding = { ...source.binding, handoff: { ...prepared, phase: "retiring", receipt: activation } }
+              source.transfer = receipt
+              candidate.binding = {
+                ...candidate.binding,
+                handoff: { ...prepared, phase: "active", receipt: activation },
+              }
+              candidate.obligations = manifest.references
+              yield* store
+                .pair(source, candidate)
+                .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
+              return receipt
+            }).pipe(Effect.uninterruptible),
+          ),
+        )
+      })
+    const transferReceipt = (id: string, generation: string, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          const stored = yield* load(id, secret, directory, generation)
+          if (!stored.transfer || stored.transfer.activation.sourceID !== id)
+            return yield* refuse("missing", "Retained activation receipt is not available.")
+          return stored.transfer
+        }),
+      )
+    const obligations = (id: string, generation: string, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, generation)
+        return yield* group(
+          initial,
+          locks(
+            [id, ...origins(initial)],
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, generation)
+              return { version: 1 as const, references: yield* outstanding(stored) }
+            }),
+          ),
+        )
+      })
+    const obligation = (id: string, obligationID: string, generation: string, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, generation)
+        const ref = selected(initial, obligationID)
+        if (!ref) return yield* refuse("missing", "Retained work obligation was not found.")
+        return yield* locks(
+          [id, ref.originID],
+          Effect.gen(function* () {
+            const stored = yield* load(id, secret, directory, generation)
+            const current = selected(stored, obligationID)
+            if (!current || JSON.stringify(current) !== JSON.stringify(ref))
+              return yield* refuse("conflict", "Retained work reference changed.")
+            const value = yield* origin(stored, ref)
+            const call = receipt(value.source, value.call)
+            return {
+              version: 1 as const,
+              reference: ref,
+              delivery: value.delivery,
+              receipt: call,
+              ...(!pending(call) ? { resultHash: digest(JSON.stringify(call)) } : {}),
+            }
+          }),
+        )
+      })
+    const delivery = (
+      id: string,
+      obligationID: string,
+      input: typeof Obligations.DeliveryInput.Type,
+      secret: string,
+      directory: string,
+    ) =>
+      Effect.gen(function* () {
+        if (!Obligations.validInput(input)) return yield* refuse("invalid", "Invalid retained result delivery.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        const ref = selected(initial, obligationID)
+        if (!ref) return yield* refuse("missing", "Retained work obligation was not found.")
+        return yield* group(
+          initial,
+          locks(
+            [id, ref.originID],
+            Effect.gen(function* () {
+              const target = yield* load(id, secret, directory, input.generation)
+              if (target.owner !== owner)
+                return yield* refuse("conflict", "Retained delivery belongs to an earlier backend owner.")
+              const current = selected(target, obligationID)
+              if (!current || JSON.stringify(current) !== JSON.stringify(ref))
+                return yield* refuse("conflict", "Retained work reference changed.")
+              const value = yield* origin(target, ref)
+              const prior = value.delivery
+              const match = (offer: typeof Obligations.Offer.Type, response = offer.responseID) =>
+                offer.offerID === input.offerID &&
+                offer.targetID === id &&
+                offer.targetGeneration === input.generation &&
+                offer.providerCallID === input.providerCallID &&
+                offer.itemID === input.itemID &&
+                response === input.responseID &&
+                offer.resultHash === input.resultHash &&
+                offer.deliveryEpoch === input.deliveryEpoch
+              if (input.action === "offer") {
+                if (prior.offer) {
+                  if (!match(prior.offer))
+                    return yield* refuse("conflict", "A retained result offer is already recorded.")
+                  return { version: 1 as const, reference: ref, offer: prior.offer }
+                }
+                yield* authority(target)
+                yield* parent(target)
+                if (
+                  pending(value.call) ||
+                  input.resultHash !== digest(JSON.stringify(value.call)) ||
+                  input.providerCallID !== target.binding.providerCallID ||
+                  input.deliveryEpoch !== prior.epoch + 1
+                )
+                  return yield* refuse("conflict", "Retained result is not ready for an exact delivery offer.")
+                const offer: typeof Obligations.Offer.Type = {
+                  version: 1,
+                  offerID: input.offerID,
+                  targetID: id,
+                  targetGeneration: input.generation,
+                  providerCallID: input.providerCallID,
+                  itemID: input.itemID,
+                  responseID: input.responseID,
+                  resultHash: input.resultHash,
+                  deliveryEpoch: input.deliveryEpoch,
+                  offeredAt: Date.now(),
+                }
+                value.source.deliveries = {
+                  ...value.source.deliveries,
+                  [ref.id]: { ...prior, epoch: input.deliveryEpoch, phase: "offered", offer },
+                }
+                yield* save(value.source)
+                return { version: 1 as const, reference: ref, offer }
+              }
+              const duplicate = prior.acks.find((ack) => ack.ackID === input.ackID)
+              if (duplicate) {
+                if (
+                  !prior.offer ||
+                  !match(prior.offer, duplicate.responseID) ||
+                  duplicate.phase !== input.phase ||
+                  duplicate.eventID !== input.eventID
+                )
+                  return yield* refuse("conflict", "Delivery acknowledgement identity was reused with different input.")
+                return duplicate
+              }
+              // The exact original presentation lane may settle after retirement, but cannot create new work or an offer.
+              yield* parent(target)
+              const generated = prior.acks.find((ack) => ack.phase === "generated")
+              const response =
+                input.phase === "generated" ? input.responseID : (generated?.responseID ?? prior.offer?.responseID)
+              if (
+                !prior.offer ||
+                !match(prior.offer, response) ||
+                (prior.phase !== "offered" && prior.phase !== "accepted" && prior.phase !== "generated") ||
+                (input.phase === "accepted" && prior.phase !== "offered") ||
+                (input.phase === "generated" &&
+                  (prior.phase !== "accepted" ||
+                    !input.responseID ||
+                    (prior.offer.responseID !== undefined && prior.offer.responseID !== input.responseID))) ||
+                (input.phase === "played" && prior.phase !== "generated") ||
+                prior.acks.length >= 16
+              )
+                return yield* refuse("conflict", "Delivery acknowledgement does not follow its retained offer.")
+              const ack: typeof Obligations.AckReceipt.Type = {
+                version: 1,
+                generation: input.generation,
+                ackID: input.ackID,
+                offerID: input.offerID,
+                phase: input.phase,
+                eventID: input.eventID,
+                providerCallID: input.providerCallID,
+                itemID: input.itemID,
+                responseID: input.responseID,
+                resultHash: input.resultHash,
+                deliveryEpoch: input.deliveryEpoch,
+                targetID: id,
+                reference: ref,
+                acknowledgedAt: Date.now(),
+              }
+              value.source.deliveries = {
+                ...value.source.deliveries,
+                [ref.id]: { ...prior, phase: input.phase, acks: [...prior.acks, ack] },
+              }
+              yield* save(value.source)
+              return ack
+            }).pipe(Effect.uninterruptible),
+          ),
+        )
+      })
+    const cancelObligation = (
+      id: string,
+      obligationID: string,
+      generation: string,
+      secret: string,
+      directory: string,
+    ) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const initial = yield* load(id, secret, directory, generation)
+          const ref = selected(initial, obligationID)
+          if (!ref) return yield* refuse("missing", "Retained work obligation was not found.")
+          const result = yield* group(
+            initial,
+            locks(
+              [id, ref.originID],
+              Effect.gen(function* () {
+                const target = yield* load(id, secret, directory, generation)
+                yield* authority(target)
+                yield* parent(target)
+                const current = selected(target, obligationID)
+                if (!current || JSON.stringify(current) !== JSON.stringify(ref))
+                  return yield* refuse("conflict", "Retained work reference changed.")
+                const value = yield* origin(target, ref)
+                if (!pending(value.call)) return { receipt: value.call, stopping: false }
+                const call = { ...value.call, status: "cancelled" as const, updatedAt: Date.now() }
+                value.source.calls[digest(ref.callID)] = { ...value.source.calls[digest(ref.callID)]!, receipt: call }
+                yield* save(value.source)
+                return { receipt: call, stopping: true }
+              }),
+            ),
+          )
+          if (result.stopping) {
+            const stopping = yield* deps.workers
+              .cancel(ref.parentSessionID, ref.messageID)
+              .pipe(Effect.interruptible, Effect.forkIn(scope))
+            yield* restore(Fiber.join(stopping))
+          }
+          return result.receipt
+        }),
+      )
     const spoken = (id: string, input: typeof Spoken.Input.Type, secret: string, directory: string) =>
       locked(
         id,
@@ -1785,5 +2213,12 @@ export const make = (deps: Deps) =>
       ready,
       activate,
       handoffReceipt,
+      manifest,
+      activateRetained,
+      transferReceipt,
+      obligation,
+      obligations,
+      delivery,
+      cancelObligation,
     }
   })

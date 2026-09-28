@@ -12,6 +12,7 @@ import {
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 import * as Spoken from "@/kilocode/voice/openai-spoken"
+import * as Obligations from "@/kilocode/voice/openai-obligations"
 import { Envelope, Start, State, VoiceSessionID } from "@/kilocode/voice/protocol"
 import {
   OpenAIBinding,
@@ -28,6 +29,7 @@ import {
   OpenAIHandoffRearm,
   OpenAIHandoffRearmReceipt,
   OpenAIHandoffActivate,
+  OpenAIHandoffTransfer,
   OpenAIHandoffContext,
   OpenAIHandoffReceipt,
   VoiceID,
@@ -58,6 +60,13 @@ export const VoicePaths = {
   rearm: `${root}/openai/session/:id/handoff/rearm`,
   activate: `${root}/openai/session/:id/handoff/activate`,
   receipt: `${root}/openai/session/:id/handoff/receipt`,
+  manifest: `${root}/openai/session/:id/handoff/obligations`,
+  transfer: `${root}/openai/session/:id/handoff/activate-retained`,
+  transferred: `${root}/openai/session/:id/handoff/retained-receipt`,
+  obligation: `${root}/openai/session/:id/obligations/:obligationID`,
+  obligations: `${root}/openai/session/:id/obligations`,
+  delivery: `${root}/openai/session/:id/obligations/:obligationID/delivery`,
+  cancellation: `${root}/openai/session/:id/obligations/:obligationID/cancel`,
 } as const
 
 const headers = { "x-raya-voice-key": Schema.optional(Schema.String) }
@@ -72,6 +81,107 @@ const generation = Schema.Struct({ ...WorkspaceRoutingQueryFields, generation: V
 
 export const VoiceApi = HttpApi.make("raya-voice").add(
   HttpApiGroup.make("raya-voice")
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIObligations", VoicePaths.obligations, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: Obligations.Registry,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.obligations",
+          summary: "List bounded canonical work references for the authorized voice binding",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIHandoffManifest", VoicePaths.manifest, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: Obligations.Manifest,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.manifest",
+          summary: "Inspect bounded canonical work references before replacement",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIHandoffTransfer", VoicePaths.transfer, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIHandoffTransfer,
+        success: Obligations.TransferReceipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.transfer",
+          summary: "Atomically transfer authority and canonical work references without resubmitting jobs",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIHandoffTransferReceipt", VoicePaths.transferred, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: Obligations.TransferReceipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.transferReceipt",
+          summary: "Resolve an uncertain retained-work transfer from its durable receipt",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIObligation", VoicePaths.obligation, {
+        headers,
+        params: { id: VoiceID, obligationID: VoiceID },
+        query: generation,
+        success: Obligations.Observation,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.obligation",
+          summary: "Observe an authorized canonical work receipt without repeating execution",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIObligationDelivery", VoicePaths.delivery, {
+        headers,
+        params: { id: VoiceID, obligationID: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: Obligations.DeliveryInput,
+        success: Obligations.DeliveryReceipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.obligation.delivery",
+          summary: "Record an exact presentation offer or acknowledgement without replay",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIObligationCancel", VoicePaths.cancellation, {
+        headers,
+        params: { id: VoiceID, obligationID: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIGeneration,
+        success: OpenAICall,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.obligation.cancel",
+          summary: "Cancel one authorized canonical job using its exact execution receipt",
+        }),
+      ),
+    )
     .add(
       HttpApiEndpoint.post("voiceOpenAIHandoffCandidate", VoicePaths.candidate, {
         headers: { ...headers, "x-raya-voice-target-key": Schema.String },

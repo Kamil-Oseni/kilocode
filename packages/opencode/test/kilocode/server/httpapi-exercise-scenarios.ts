@@ -7,6 +7,7 @@ import { array, check, isRecord, object } from "../../server/httpapi-exercise/as
 import { http, route } from "../../server/httpapi-exercise/dsl"
 import type { Scenario, ScenarioContext } from "../../server/httpapi-exercise/types"
 import { anacondaDesktopScenarios } from "../anaconda-desktop/httpapi-exercise-scenarios"
+import { obligations } from "./httpapi-voice-obligations-scenarios"
 
 function directory(ctx: ScenarioContext) {
   if (!ctx.directory) throw new Error("scenario needs a project directory")
@@ -75,6 +76,7 @@ const edit = {
 
 export const kiloScenarios: Scenario[] = [
   ...anacondaDesktopScenarios,
+  ...obligations,
   http.protected
     .post("/kilocode/voice/openai/session", "voice.openai.start")
     .at((ctx) => ({

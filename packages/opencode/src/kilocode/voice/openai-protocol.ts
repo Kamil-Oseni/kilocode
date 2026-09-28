@@ -101,6 +101,11 @@ export const OpenAIHandoffActivate = Schema.Struct({
   candidateGeneration: VoiceID,
   ...Checkpoint,
 })
+export const OpenAIHandoffTransfer = Schema.Struct({
+  ...OpenAIHandoffActivate.fields,
+  manifestID: VoiceID,
+  manifestHash: VoiceKey,
+})
 export const OpenAIHandoffContext = Schema.Struct({
   version: Schema.Literal(1),
   sourceID: VoiceID,
@@ -113,7 +118,7 @@ export const OpenAIHandoffContext = Schema.Struct({
   incomplete: Schema.Boolean,
 })
 /** HTTP decoders may strip unknown properties; validate the original privileged body too. */
-export function handoff(input: unknown, kind: "candidate" | "ready" | "activate" | "rearm") {
+export function handoff(input: unknown, kind: "candidate" | "ready" | "activate" | "rearm" | "transfer") {
   const valid =
     kind === "candidate"
       ? Schema.is(OpenAIHandoffCandidate)(input)
@@ -121,7 +126,9 @@ export function handoff(input: unknown, kind: "candidate" | "ready" | "activate"
         ? Schema.is(OpenAIHandoffReady)(input)
         : kind === "rearm"
           ? Schema.is(OpenAIHandoffRearm)(input)
-          : Schema.is(OpenAIHandoffActivate)(input)
+          : kind === "transfer"
+            ? Schema.is(OpenAIHandoffTransfer)(input)
+            : Schema.is(OpenAIHandoffActivate)(input)
   if (!valid || typeof input !== "object" || input === null) return false
   const fields =
     kind === "candidate"
@@ -130,7 +137,9 @@ export function handoff(input: unknown, kind: "candidate" | "ready" | "activate"
         ? OpenAIHandoffReady.fields
         : kind === "rearm"
           ? OpenAIHandoffRearm.fields
-          : OpenAIHandoffActivate.fields
+          : kind === "transfer"
+            ? OpenAIHandoffTransfer.fields
+            : OpenAIHandoffActivate.fields
   return (
     Object.keys(input).every((key) => Object.keys(fields).includes(key)) &&
     Object.values(input).every((value) => typeof value !== "string" || value.trim() === value)

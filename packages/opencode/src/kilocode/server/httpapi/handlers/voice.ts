@@ -4,7 +4,8 @@ import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { HttpServerRequest } from "effect/unstable/http"
 import * as Spoken from "@/kilocode/voice/openai-spoken"
-import { handoff } from "@/kilocode/voice/openai-protocol"
+import * as Obligations from "@/kilocode/voice/openai-obligations"
+import { handoff, OpenAIGeneration } from "@/kilocode/voice/openai-protocol"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
@@ -145,6 +146,100 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     )
 
     return handlers
+      .handle("voiceOpenAIObligations", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.obligations(
+            ctx.params.id,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error)))),
+      )
+      .handle("voiceOpenAIHandoffManifest", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.manifest(
+            ctx.params.id,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIHandoffTransfer", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!handoff(raw, "transfer")) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.activateRetained(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIHandoffTransferReceipt", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.transferReceipt(
+            ctx.params.id,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error)))),
+      )
+      .handle("voiceOpenAIObligation", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.obligation(
+            ctx.params.id,
+            ctx.params.obligationID,
+            ctx.query.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error)))),
+      )
+      .handle("voiceOpenAIObligationDelivery", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!Obligations.validInput(raw)) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.delivery(
+            ctx.params.id,
+            ctx.params.obligationID,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIObligationCancel", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!Obligations.strict(OpenAIGeneration, raw)) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.cancelObligation(
+            ctx.params.id,
+            ctx.params.obligationID,
+            ctx.payload.generation,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
       .handle("voiceOpenAIHandoffCandidate", (ctx) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest

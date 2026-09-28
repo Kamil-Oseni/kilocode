@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import { createHash } from "node:crypto"
 import { and, asc, desc, eq, gt, lte, ne, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaVoiceBindingTable as Table } from "@opencode-ai/core/kilocode/voice.sql"
@@ -19,6 +20,7 @@ import {
 import { OpenAIUsage } from "./openai-usage"
 import { LiveDuration } from "./live-protocol"
 import { Snapshot } from "./openai-spoken"
+import * as Obligations from "./openai-obligations"
 
 const Payload = Schema.Struct({
   binding: OpenAIBinding,
@@ -35,6 +37,9 @@ const Payload = Schema.Struct({
   duration: Schema.optional(LiveDuration),
   spoken: Schema.optional(Snapshot),
   rearms: Schema.optional(Schema.Array(OpenAIHandoffRearmReceipt).check(Schema.isMaxLength(16))),
+  obligations: Schema.optional(Schema.Array(Obligations.Reference).check(Schema.isMaxLength(64))),
+  deliveries: Schema.optional(Schema.Record(Schema.String, Obligations.Delivery)),
+  transfer: Schema.optional(Obligations.TransferReceipt),
   liveCursor: Schema.optional(
     Schema.Number.check(
       Schema.isInt(),
@@ -56,6 +61,9 @@ export type Stored = {
   duration?: typeof LiveDuration.Type
   spoken?: typeof Snapshot.Type
   rearms?: readonly (typeof OpenAIHandoffRearmReceipt.Type)[]
+  obligations?: readonly (typeof Obligations.Reference.Type)[]
+  deliveries?: Record<string, typeof Obligations.Delivery.Type>
+  transfer?: typeof Obligations.TransferReceipt.Type
   liveCursor?: number
 }
 
@@ -86,6 +94,44 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
     Schema.is(Payload)(value) &&
     value.binding.id === id &&
     (!session || value.binding.parentSessionID === session) &&
+    (!value.obligations ||
+      (new Set(value.obligations.map((reference) => reference.id)).size === value.obligations.length &&
+        value.obligations.every(
+          (reference) =>
+            Obligations.strict(Obligations.Reference, reference) &&
+            reference.parentSessionID === value.binding.parentSessionID &&
+            reference.directory === value.binding.directory,
+        ))) &&
+    (!value.deliveries ||
+      (Object.keys(value.deliveries).length <= 64 &&
+        Object.entries(value.deliveries).every(([key, delivery]) => {
+          if (!Obligations.validDelivery(delivery)) return false
+          const reference = delivery.reference
+          const call = value.calls[createHash("sha256").update(reference.callID).digest("hex")]?.receipt
+          return (
+            key === reference.id &&
+            reference.originID === id &&
+            reference.originGeneration === value.binding.generation &&
+            reference.parentSessionID === value.binding.parentSessionID &&
+            reference.directory === value.binding.directory &&
+            call?.id === reference.receiptID &&
+            call.messageID === reference.messageID &&
+            call.createdAt === reference.createdAt
+          )
+        }))) &&
+    (!value.transfer ||
+      (Obligations.validTransfer(value.transfer) &&
+        (value.transfer.activation.sourceID === id
+          ? value.transfer.activation.sourceGeneration === value.binding.generation
+          : value.transfer.activation.candidateID === id &&
+            value.transfer.activation.candidateGeneration === value.binding.generation) &&
+        new Set(value.transfer.manifest.references.map((reference) => reference.id)).size ===
+          value.transfer.manifest.references.length &&
+        value.transfer.manifest.references.every(
+          (reference) =>
+            reference.parentSessionID === value.binding.parentSessionID &&
+            reference.directory === value.binding.directory,
+        ))) &&
     (!value.rearms ||
       (new Set(value.rearms.map((receipt) => receipt.readyID)).size === value.rearms.length &&
         value.rearms.every(

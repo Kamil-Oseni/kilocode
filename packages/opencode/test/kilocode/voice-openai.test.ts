@@ -15,6 +15,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { NotFoundError } from "@/storage/storage"
 import * as Store from "@/kilocode/voice/openai-store"
 import * as Spoken from "@/kilocode/voice/openai-spoken"
+import * as Obligations from "@/kilocode/voice/openai-obligations"
 import { Storage } from "@/storage/storage"
 import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
@@ -66,6 +67,463 @@ const warming = (state: Effect.Success<ReturnType<typeof fixture>>, root: string
     }
     return { target, input, binding, context, ready, activate }
   })
+
+it.live(
+  "retained activation keeps the original running job across source closure and late target delivery",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const state = yield* fixture(root, (input) =>
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(answer(input))),
+        )
+        const call = yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        yield* Deferred.await(entered)
+        const next = yield* warming(state, root)
+        yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        expect(
+          yield* state.voice.activate(state.binding.id, next.activate, secret, root).pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const manifest = yield* state.voice.manifest(next.binding.id, next.binding.generation, next.target, root)
+        expect(manifest.references).toHaveLength(1)
+        expect(manifest.references[0]!.createdAt).toBe(call.createdAt)
+        const input = { ...next.activate, manifestID: manifest.manifestID, manifestHash: manifest.hash }
+        const receipt = yield* state.voice.activateRetained(state.binding.id, input, secret, root)
+        expect(yield* state.voice.activateRetained(state.binding.id, input, secret, root)).toEqual(receipt)
+        yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+        const ref = manifest.references[0]!
+        expect(
+          (yield* state.voice.obligations(state.binding.id, state.binding.generation, secret, root)).references,
+        ).toEqual([ref])
+        expect(
+          (yield* state.voice.obligations(next.binding.id, next.binding.generation, next.target, root)).references,
+        ).toEqual([ref])
+        const before = yield* state.voice.obligation(
+          next.binding.id,
+          ref.id,
+          next.binding.generation,
+          next.target,
+          root,
+        )
+        expect(before.receipt.status).toBe("running")
+        yield* Deferred.succeed(release, undefined)
+        const final = yield* settled(
+          state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        )
+        const result = yield* state.voice.obligation(
+          next.binding.id,
+          ref.id,
+          next.binding.generation,
+          next.target,
+          root,
+        )
+        expect(result.receipt).toEqual(final)
+        expect(result.receipt.status).toBe("completed")
+        expect(state.calls).toHaveLength(1)
+        const offer = {
+          version: 1 as const,
+          action: "offer" as const,
+          generation: next.binding.generation,
+          offerID: "retained-offer",
+          providerCallID: next.binding.providerCallID,
+          itemID: "semantic-result",
+          resultHash: result.resultHash!,
+          deliveryEpoch: 1,
+        }
+        expect(Obligations.validInput({ ...offer, constructor: "unexpected" })).toBe(false)
+        expect(
+          yield* state.voice
+            .delivery(next.binding.id, ref.id, { ...offer, providerCallID: "forged-provider" }, next.target, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const offered = yield* state.voice.delivery(next.binding.id, ref.id, offer, next.target, root)
+        expect(yield* state.voice.delivery(next.binding.id, ref.id, offer, next.target, root)).toEqual(offered)
+        const accepted = {
+          ...offer,
+          action: "ack" as const,
+          ackID: "accepted-result",
+          phase: "accepted" as const,
+          eventID: "provider-created",
+        }
+        expect(
+          yield* state.voice
+            .delivery(
+              next.binding.id,
+              ref.id,
+              { ...accepted, ackID: "premature-playback", phase: "played", eventID: "premature-stopped" },
+              next.target,
+              root,
+            )
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const ack = yield* state.voice.delivery(next.binding.id, ref.id, accepted, next.target, root)
+        expect(
+          yield* state.voice
+            .delivery(
+              next.binding.id,
+              ref.id,
+              { ...accepted, ackID: "accepted-playback", phase: "played", eventID: "accepted-stopped" },
+              next.target,
+              root,
+            )
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        expect(
+          yield* state.voice
+            .delivery(
+              next.binding.id,
+              ref.id,
+              { ...accepted, ackID: "missing-response", phase: "generated", eventID: "generated-event" },
+              next.target,
+              root,
+            )
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const generated = {
+          ...accepted,
+          ackID: "generated-result",
+          phase: "generated" as const,
+          eventID: "provider-generated",
+          responseID: "target-narration",
+        }
+        const generation = yield* state.voice.delivery(next.binding.id, ref.id, generated, next.target, root)
+        expect(
+          yield* state.voice
+            .delivery(
+              next.binding.id,
+              ref.id,
+              {
+                ...generated,
+                ackID: "wrong-playback",
+                phase: "played",
+                eventID: "wrong-stopped",
+                responseID: "wrong-response",
+              },
+              next.target,
+              root,
+            )
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        yield* state.voice.delivery(
+          next.binding.id,
+          ref.id,
+          { ...generated, ackID: "played-result", phase: "played", eventID: "client-playback-confirmed" },
+          next.target,
+          root,
+        )
+        expect(yield* state.voice.delivery(next.binding.id, ref.id, accepted, next.target, root)).toEqual(ack)
+        expect(yield* state.voice.delivery(next.binding.id, ref.id, generated, next.target, root)).toEqual(generation)
+        expect(
+          (yield* state.voice.obligations(next.binding.id, next.binding.generation, next.target, root)).references,
+        ).toEqual([])
+        expect(
+          yield* state.voice
+            .delivery(next.binding.id, ref.id, { ...accepted, eventID: "changed" }, next.target, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const restarted = yield* make(state.deps)
+        expect(yield* restarted.transferReceipt(state.binding.id, state.binding.generation, secret, root)).toEqual(
+          receipt,
+        )
+        expect(
+          (yield* restarted.obligation(next.binding.id, ref.id, next.binding.generation, next.target, root)).receipt,
+        ).toEqual(final)
+        expect(
+          yield* restarted.delivery(next.binding.id, ref.id, accepted, next.target, root).pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        expect(
+          yield* restarted.activateRetained(state.binding.id, input, secret, root).pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const saved = yield* retained(state.binding.id)
+        const prior = saved.deliveries![ref.id]!
+        yield* state.deps.database.db
+          .update(Table)
+          .set({
+            data: {
+              ...saved,
+              deliveries: {
+                ...saved.deliveries,
+                [ref.id]: { ...prior, phase: "accepted", acks: [...prior.acks].reverse() },
+              },
+            },
+          })
+          .where(eq(Table.id, state.binding.id))
+          .run()
+          .pipe(Effect.orDie)
+        expect(
+          yield* state.voice
+            .obligation(next.binding.id, ref.id, next.binding.generation, next.target, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "retained offered results forward across two handoffs and late original acknowledgements never authorize replay",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        yield* settled(state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root))
+        const saved = yield* retained(state.binding.id)
+        const ref = Object.values(saved.deliveries!)[0]!.reference
+        const result = yield* state.voice.obligation(state.binding.id, ref.id, state.binding.generation, secret, root)
+        const offer = {
+          version: 1 as const,
+          action: "offer" as const,
+          generation: state.binding.generation,
+          offerID: "source-offer",
+          providerCallID: state.binding.providerCallID,
+          itemID: "source-semantic",
+          resultHash: result.resultHash!,
+          deliveryEpoch: 1,
+        }
+        yield* state.voice.delivery(state.binding.id, ref.id, offer, secret, root)
+        const next = yield* warming(state, root)
+        yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        const manifest = yield* state.voice.manifest(next.binding.id, next.binding.generation, next.target, root)
+        const input = { ...next.activate, manifestID: manifest.manifestID, manifestHash: manifest.hash }
+        const first = yield* state.voice.activateRetained(state.binding.id, input, secret, root)
+        const ack = {
+          ...offer,
+          action: "ack" as const,
+          ackID: "late-acceptance",
+          phase: "accepted" as const,
+          eventID: "original-provider-event",
+        }
+        const accepted = yield* state.voice.delivery(state.binding.id, ref.id, ack, secret, root)
+        expect(
+          (yield* state.voice.obligation(next.binding.id, ref.id, next.binding.generation, next.target, root)).delivery
+            .phase,
+        ).toBe("accepted")
+        expect(
+          yield* state.voice
+            .delivery(
+              next.binding.id,
+              ref.id,
+              { ...offer, generation: next.binding.generation, providerCallID: next.binding.providerCallID },
+              next.target,
+              root,
+            )
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const key = "c".repeat(64)
+        const preparing = {
+          version: 1 as const,
+          generation: next.binding.generation,
+          requestID: "second-transfer",
+          providerCallID: "third-provider",
+          reservationID: "third-budget",
+        }
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: preparing.reservationID, model: next.binding.model },
+          key,
+          root,
+        )
+        const third = yield* state.voice.candidate(next.binding.id, preparing, next.target, key, root)
+        const context = yield* state.voice.handoffContext(third.id, third.generation, key, root)
+        const ready = {
+          version: 1 as const,
+          generation: third.generation,
+          readyID: "third-ready",
+          sourceRevision: context.sourceRevision,
+          sourceHash: context.sourceHash,
+        }
+        yield* state.voice.ready(third.id, ready, key, root)
+        const onward = yield* state.voice.manifest(third.id, third.generation, key, root)
+        expect(onward.references).toEqual([ref])
+        yield* state.voice.activateRetained(
+          next.binding.id,
+          {
+            ...ready,
+            generation: next.binding.generation,
+            requestID: preparing.requestID,
+            candidateID: third.id,
+            candidateGeneration: third.generation,
+            manifestID: onward.manifestID,
+            manifestHash: onward.hash,
+          },
+          next.target,
+          root,
+        )
+        expect(yield* state.voice.activateRetained(state.binding.id, input, secret, root)).toEqual(first)
+        expect(yield* state.voice.delivery(state.binding.id, ref.id, ack, secret, root)).toEqual(accepted)
+        const generated = {
+          ...ack,
+          ackID: "late-generation",
+          phase: "generated" as const,
+          eventID: "original-generated",
+          responseID: "original-response",
+        }
+        yield* state.voice.delivery(state.binding.id, ref.id, generated, secret, root)
+        yield* state.voice.delivery(
+          state.binding.id,
+          ref.id,
+          { ...generated, ackID: "late-playback", phase: "played", eventID: "original-client-playback-confirmed" },
+          secret,
+          root,
+        )
+        expect((yield* state.voice.obligation(third.id, ref.id, third.generation, key, root)).delivery.phase).toBe(
+          "played",
+        )
+        expect(
+          yield* state.voice
+            .delivery(
+              third.id,
+              ref.id,
+              { ...offer, generation: third.generation, providerCallID: third.providerCallID },
+              key,
+              root,
+            )
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        expect(state.calls).toHaveLength(1)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "retained target cancellation is exact, old-owner jobs remain unknown and legacy deliveries are never guessed",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const state = yield* fixture(root, () =>
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+        )
+        const events: string[] = []
+        const cancel = state.deps.workers.cancel
+        state.deps.workers.cancel = (sid, message) =>
+          Effect.sync(() => events.push(message)).pipe(Effect.andThen(cancel(sid, message)))
+        const call = yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        yield* Deferred.await(entered)
+        const next = yield* warming(state, root)
+        yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        const manifest = yield* state.voice.manifest(next.binding.id, next.binding.generation, next.target, root)
+        const ref = manifest.references[0]!
+        yield* state.voice.activateRetained(
+          state.binding.id,
+          { ...next.activate, manifestID: manifest.manifestID, manifestHash: manifest.hash },
+          secret,
+          root,
+        )
+        expect(
+          yield* state.voice
+            .cancel(state.binding.id, state.input.callID, state.binding.generation, secret, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        const restarted = yield* make(state.deps)
+        expect(
+          (yield* restarted.obligation(next.binding.id, ref.id, next.binding.generation, next.target, root)).receipt
+            .status,
+        ).toBe("unknown")
+        expect(
+          yield* restarted
+            .cancelObligation(next.binding.id, ref.id, next.binding.generation, next.target, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        expect(events).toEqual([])
+        const cancelled = yield* state.voice.cancelObligation(
+          next.binding.id,
+          ref.id,
+          next.binding.generation,
+          next.target,
+          root,
+        )
+        expect(cancelled.status).toBe("cancelled")
+        expect(events).toEqual([call.messageID])
+        expect(
+          yield* state.voice.cancelObligation(next.binding.id, ref.id, next.binding.generation, next.target, root),
+        ).toEqual(cancelled)
+        expect(events).toEqual([call.messageID])
+        const legacy = yield* retained(state.binding.id)
+        yield* Store.make(state.deps.database, state.deps.storage).replace({ ...legacy, deliveries: undefined })
+        expect(
+          yield* state.voice
+            .obligation(next.binding.id, ref.id, next.binding.generation, next.target, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        expect(state.calls).toHaveLength(1)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "retained manifest is stable when work finishes and paired SQLite failure transfers nothing",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const state = yield* fixture(root, (input) =>
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(answer(input))),
+        )
+        yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        yield* Deferred.await(entered)
+        const next = yield* warming(state, root)
+        yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        const manifest = yield* state.voice.manifest(next.binding.id, next.binding.generation, next.target, root)
+        yield* Deferred.succeed(release, undefined)
+        yield* settled(state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root))
+        expect(yield* state.voice.manifest(next.binding.id, next.binding.generation, next.target, root)).toEqual(
+          manifest,
+        )
+        const input = { ...next.activate, manifestID: manifest.manifestID, manifestHash: manifest.hash }
+        const source = yield* retained(state.binding.id)
+        const target = yield* retained(next.binding.id)
+        const db = state.deps.database.db
+        yield* db
+          .run(
+            sql`CREATE TRIGGER refuse_transfer BEFORE UPDATE ON raya_voice_binding WHEN json_extract(OLD.data, '$.binding.handoff.phase') = 'ready' BEGIN SELECT RAISE(ABORT, 'transfer denied'); END`,
+          )
+          .pipe(Effect.orDie)
+        expect(
+          Exit.isFailure(yield* state.voice.activateRetained(state.binding.id, input, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(yield* retained(state.binding.id)).toEqual(source)
+        expect(yield* retained(next.binding.id)).toEqual(target)
+        yield* db.run(sql`DROP TRIGGER refuse_transfer`).pipe(Effect.orDie)
+        expect(
+          yield* state.voice
+            .activateRetained(state.binding.id, { ...input, manifestHash: "0".repeat(64) }, secret, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ code: "conflict" })
+        yield* state.voice.activateRetained(state.binding.id, input, secret, root)
+        expect(state.calls).toHaveLength(1)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
 
 it.live(
   "warm readiness rearming is durable CAS with a fixed deadline and real SQLite rollback",

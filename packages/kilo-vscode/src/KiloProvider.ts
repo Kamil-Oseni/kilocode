@@ -217,6 +217,7 @@ import {
 import { detail as selfHealRollbackDetail, rollback as rollbackSelfHeal } from "./self-heal/rollback"
 import { cleanup as cleanupSelfHeal, detail as selfHealCleanupDetail } from "./self-heal/cleanup"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
+import { VoiceOrigin } from "./speech/voice-origin"
 import {
   buildIndexingSettingsMessage,
   validIndexingSetting,
@@ -369,6 +370,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly instanceId = crypto.randomUUID()
 
   private webview: vscode.Webview | null = null
+  private readonly voiceOrigin = new VoiceOrigin()
+  private readonly voicePage = new VoiceOrigin()
+  private voiceCurrent = () => false
   private currentSession: Session | null = null
   /** Remembers the last selected session so /new can stay in the same worktree after clearSession. */
   private contextSessionID: string | undefined
@@ -1117,7 +1121,33 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.initializeConnection()
   }
 
+  private async intercept(message: Parameters<typeof interceptMessage>[0], current: () => boolean) {
+    if (!current()) return null
+    const intercepted = await interceptMessage(message, {
+      workspaceDir: (sid) => this.getWorkspaceDirectory(sid ?? this.currentSession?.id),
+      post: (message) => {
+        if (current()) this.postMessage(message)
+      },
+      error: getErrorMessage,
+      before: this.onBeforeMessage,
+    })
+    return current() ? intercepted : null
+  }
+
+  private renew(webview: vscode.Webview): void {
+    this.voiceCurrent = this.voicePage.bind(webview)
+    void this.speech
+      ?.openaiReset()
+      .catch((err: unknown) => console.warn("[Raya] Voice cleanup after webview reload failed:", err))
+  }
+
   private setupWebviewMessageHandler(webview: vscode.Webview): void {
+    const current = this.voiceOrigin.bind(webview)
+    this.voiceCurrent = this.voicePage.bind(webview)
+    if (this.webviewMessageDisposable)
+      void this.speech
+        ?.openaiReset()
+        .catch((err: unknown) => console.warn("[Raya] Voice cleanup after webview replacement failed:", err))
     this.webviewMessageDisposable?.dispose()
     this.setFocusTarget("other")
     this.autocompleteConfigDisposable?.dispose()
@@ -1133,12 +1163,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.telemetryStateDisposable?.dispose()
     this.telemetryStateDisposable = watchTelemetryState((msg) => this.postMessage(msg))
     this.webviewMessageDisposable = webview.onDidReceiveMessage(async (message) => {
-      const intercepted = await interceptMessage(message, {
-        workspaceDir: (sid) => this.getWorkspaceDirectory(sid ?? this.currentSession?.id),
-        post: (m) => this.postMessage(m),
-        error: getErrorMessage,
-        before: this.onBeforeMessage,
-      })
+      const voice = this.voiceCurrent
+      const intercepted = await this.intercept(message, current)
       if (intercepted === null) return
       message = intercepted
 
@@ -1148,7 +1174,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           client: this.client,
           connection: this.connectionService,
           dir: this.getWorkspaceDirectory(this.currentSession?.id),
-          post: (msg) => this.postMessage(msg),
+          post: (msg) => {
+            if (current() && voice()) this.postMessage(msg)
+          },
           browserSettings: () => this.sendBrowserSettings(),
           exportTranscript: (sessionID) => this.handleExportSessionTranscript(sessionID),
           copy: (text) => vscode.env.clipboard.writeText(text),
@@ -1162,13 +1190,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           childSteer: (message) => this.steerChild(message),
           speech: this.speech, // raya_change - Milestone H
           voiceScope: (sid) => {
-            if (!this.trackedSessionIds.has(sid) || this.routeSessionDirectory(sid) === null || !this.client) return
+            if (
+              !current() ||
+              !voice() ||
+              !this.trackedSessionIds.has(sid) ||
+              this.routeSessionDirectory(sid) === null ||
+              !this.client
+            )
+              return
             const directory = this.getWorkspaceDirectory(sid)
             const generation = this.connectionGeneration
             const client = this.client
             return {
               directory,
               current: () =>
+                current() &&
+                voice() &&
                 this.client === client &&
                 this.connectionGeneration === generation &&
                 this.trackedSessionIds.has(sid) &&
@@ -1237,6 +1274,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (this.handleCheckpointMessage(message)) return // raya_change - revert/redo/discard routing
       switch (message.type) {
         case "webviewReady":
+          this.renew(webview)
           console.log("[Raya] Provider: ✅ webviewReady received")
           this.isWebviewReady = true
           this.visibleTaskStreams.clear()
@@ -6756,6 +6794,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Does NOT kill the server — that's the connection service's job.
    */
   dispose(): void {
+    this.voiceOrigin.clear()
+    this.voicePage.clear()
     this.routineRefresh.dispose()
     this.deliveries.clear()
     if (this.opts.focusContext) {

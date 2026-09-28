@@ -36,6 +36,8 @@ import {
   OpenAIReserve,
   OpenAIHandoffCandidate,
   OpenAIHandoffReady,
+  OpenAIHandoffRearm,
+  OpenAIHandoffRearmReceipt,
   OpenAIHandoffActivate,
   OpenAIHandoffReceipt,
   OpenAIHandoffContext,
@@ -1446,6 +1448,108 @@ export const make = (deps: Deps) =>
           ),
         )
       })
+    const rearm = (id: string, input: typeof OpenAIHandoffRearm.Type, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        if (!validHandoff(input, "rearm") || input.priorReadyID === input.readyID)
+          return yield* refuse("invalid", "Invalid handoff rearming.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        const relation = initial.binding.handoff
+        const recorded = initial.rearms?.find((receipt) => receipt.readyID === input.readyID)
+        // A completed retry is a read; it must never acquire a later relation's source lock.
+        if (recorded)
+          return yield* locked(
+            id,
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, input.generation)
+              if (stored.owner !== owner)
+                return yield* refuse("conflict", "Handoff belongs to an earlier backend owner.")
+              const receipt = stored.rearms?.find((value) => value.readyID === input.readyID)
+              if (
+                !receipt ||
+                receipt.priorReadyID !== input.priorReadyID ||
+                receipt.sourceRevision !== input.sourceRevision ||
+                receipt.sourceHash !== input.sourceHash
+              )
+                return yield* refuse("conflict", "Rearming identity was reused with different input.")
+              return receipt
+            }),
+          )
+        if (!relation || relation.sourceID === id || relation.candidateID !== id || relation.phase !== "ready")
+          return yield* refuse("conflict", "Voice replacement is not ready for rearming.")
+        return yield* group(
+          initial,
+          locked(
+            relation.sourceID,
+            locked(
+              id,
+              Effect.gen(function* () {
+                const stored = yield* load(id, secret, directory, input.generation)
+                if (stored.owner !== owner)
+                  return yield* refuse("conflict", "Handoff belongs to an earlier backend owner.")
+                const duplicate = stored.rearms?.find((receipt) => receipt.readyID === input.readyID)
+                if (duplicate) {
+                  if (
+                    duplicate.priorReadyID !== input.priorReadyID ||
+                    duplicate.sourceRevision !== input.sourceRevision ||
+                    duplicate.sourceHash !== input.sourceHash
+                  )
+                    return yield* refuse("conflict", "Rearming identity was reused with different input.")
+                  return duplicate
+                }
+                yield* active(stored)
+                const source = yield* read(relation.sourceID)
+                yield* related(source, stored)
+                yield* authority(source)
+                yield* parent(source)
+                const prior = stored.binding.handoff!
+                if (
+                  prior.phase !== "ready" ||
+                  prior.readyID !== input.priorReadyID ||
+                  input.readyID === prior.readyID ||
+                  stored.rearms?.some((receipt) => receipt.priorReadyID === input.readyID)
+                )
+                  return yield* refuse("conflict", "Voice readiness changed before rearming.")
+                if (prior.deadline! <= Date.now()) return yield* refuse("expired", "Voice readiness expired.")
+                if ((stored.rearms?.length ?? 0) >= 16)
+                  return yield* refuse("conflict", "Voice rearming limit reached.")
+                const current = checkpoint(source)
+                if (
+                  current.sourceRevision !== input.sourceRevision ||
+                  current.sourceHash !== input.sourceHash ||
+                  source.spoken?.items.some((item) => item.state === "pending")
+                )
+                  return yield* refuse("conflict", "Voice source checkpoint changed or is unfinished.")
+                const receipt: typeof OpenAIHandoffRearmReceipt.Type = {
+                  version: 1,
+                  requestID: prior.requestID,
+                  sourceID: prior.sourceID,
+                  sourceGeneration: prior.sourceGeneration,
+                  candidateID: id,
+                  candidateGeneration: input.generation,
+                  priorReadyID: input.priorReadyID,
+                  readyID: input.readyID,
+                  sourceRevision: input.sourceRevision,
+                  sourceHash: input.sourceHash,
+                  deadline: prior.deadline!,
+                  rearmedAt: Date.now(),
+                }
+                stored.binding = {
+                  ...stored.binding,
+                  handoff: {
+                    ...prior,
+                    readyID: input.readyID,
+                    sourceRevision: input.sourceRevision,
+                    sourceHash: input.sourceHash,
+                  },
+                }
+                stored.rearms = [...(stored.rearms ?? []), receipt]
+                yield* save(stored)
+                return receipt
+              }).pipe(Effect.uninterruptible),
+            ),
+          ),
+        )
+      })
     const activate = (id: string, input: typeof OpenAIHandoffActivate.Type, secret: string, directory: string) =>
       Effect.gen(function* () {
         if (!validHandoff(input, "activate")) return yield* refuse("invalid", "Invalid handoff activation.")
@@ -1676,6 +1780,7 @@ export const make = (deps: Deps) =>
       context,
       candidate,
       handoffContext,
+      rearm,
       ready,
       activate,
       handoffReceipt,

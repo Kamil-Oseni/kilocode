@@ -73,6 +73,26 @@ export const OpenAIHandoffCandidate = Schema.Struct({
   transcriptionRequestID: Schema.optional(VoiceID),
 })
 export const OpenAIHandoffReady = Schema.Struct({ version: Schema.Literal(1), generation: VoiceID, ...Checkpoint })
+export const OpenAIHandoffRearm = Schema.Struct({
+  ...OpenAIHandoffReady.fields,
+  priorReadyID: VoiceID,
+})
+export const OpenAIHandoffRearmReceipt = Schema.Struct({
+  ...Relation,
+  ...Checkpoint,
+  priorReadyID: VoiceID,
+  deadline: Schema.Finite,
+  rearmedAt: Schema.Finite,
+}).check(
+  Schema.makeFilter((value) =>
+    value.priorReadyID === value.readyID ||
+    value.sourceID === value.candidateID ||
+    value.sourceGeneration === value.candidateGeneration ||
+    Object.values(value).some((field) => typeof field === "string" && field.trim() !== field)
+      ? "Rearm identities must be strict and distinct"
+      : undefined,
+  ),
+)
 export const OpenAIHandoffActivate = Schema.Struct({
   version: Schema.Literal(1),
   generation: VoiceID,
@@ -93,20 +113,24 @@ export const OpenAIHandoffContext = Schema.Struct({
   incomplete: Schema.Boolean,
 })
 /** HTTP decoders may strip unknown properties; validate the original privileged body too. */
-export function handoff(input: unknown, kind: "candidate" | "ready" | "activate") {
+export function handoff(input: unknown, kind: "candidate" | "ready" | "activate" | "rearm") {
   const valid =
     kind === "candidate"
       ? Schema.is(OpenAIHandoffCandidate)(input)
       : kind === "ready"
         ? Schema.is(OpenAIHandoffReady)(input)
-        : Schema.is(OpenAIHandoffActivate)(input)
+        : kind === "rearm"
+          ? Schema.is(OpenAIHandoffRearm)(input)
+          : Schema.is(OpenAIHandoffActivate)(input)
   if (!valid || typeof input !== "object" || input === null) return false
   const fields =
     kind === "candidate"
       ? OpenAIHandoffCandidate.fields
       : kind === "ready"
         ? OpenAIHandoffReady.fields
-        : OpenAIHandoffActivate.fields
+        : kind === "rearm"
+          ? OpenAIHandoffRearm.fields
+          : OpenAIHandoffActivate.fields
   return (
     Object.keys(input).every((key) => Object.keys(fields).includes(key)) &&
     Object.values(input).every((value) => typeof value !== "string" || value.trim() === value)

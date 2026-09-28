@@ -1,5 +1,6 @@
 import type { InstallMarketplaceItemOptions, MarketplaceFilters, MarketplaceItem } from "../marketplace"
 import type { Output } from "../../../../src/shared/routine-output"
+import type { HandoffEvent } from "../../../../src/shared/voice-handoff"
 import type { FileAttachment } from "./parts"
 import type { MessageLoadMode } from "./sessions"
 import type { PermissionFileDiff } from "./permissions"
@@ -2084,6 +2085,7 @@ export interface FocusTimerActionMessage {
 }
 
 export type WebviewMessage =
+  | HandoffEvent
   | import("../../../../src/shared/chief-notes-messages").ChiefNotesRequest
   | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }
   | RequestAdminMessage

@@ -5,6 +5,7 @@ import { prewarmSpeechCapture } from "../speech-to-text/capture"
 import type { SpeechService } from "../speech/service" // raya_change - Milestone H configured speech service
 import type { SpeechSettings } from "../speech/settings" // raya_change - Milestone H
 import type { SpeechKey } from "../shared/speech"
+import { route as routeHandoff } from "./voice-handoff"
 
 type Msg = {
   type: string
@@ -214,6 +215,7 @@ async function begin(message: Msg, ctx: Ctx) {
 }
 
 async function routeOpenAI(message: Msg, ctx: Ctx) {
+  if (await routeHandoff(message, ctx)) return true
   if (await liveMic(message, ctx)) return true
   if (await live(message, ctx)) return true
   if (await routeImage(message, ctx)) return true

@@ -334,3 +334,24 @@ test("recovered prefill is bounded historical role/text only and cannot leak pro
     ],
   })
 })
+
+test("sealed retirement preserves the exact committed checkpoint", async () => {
+  const f = fixture()
+  f.collector.receive(link("user", null))
+  f.collector.receive(final("user", "Saved user turn"))
+  const checkpoint = await f.collector.checkpoint()
+  const count = f.snapshots.length
+  await f.collector.close(true)
+  expect(f.snapshots).toHaveLength(count)
+  expect(f.latest().revision).toBe(checkpoint.revision)
+  expect(f.latest().items[0].text).toBe("Saved user turn")
+})
+
+test("sealed retirement still flushes actual late transcript publication", async () => {
+  const f = fixture()
+  await f.collector.checkpoint()
+  f.collector.receive(link("late", null))
+  f.collector.receive(final("late", "Actual late turn"))
+  await f.collector.close(true)
+  expect(f.latest().items).toMatchObject([{ id: "late", state: "final", text: "Actual late turn" }])
+})

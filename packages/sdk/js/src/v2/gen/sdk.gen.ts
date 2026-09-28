@@ -390,6 +390,8 @@ import type {
   KilocodeVoiceOpenaiHandoffContextResponses,
   KilocodeVoiceOpenaiHandoffReadyErrors,
   KilocodeVoiceOpenaiHandoffReadyResponses,
+  KilocodeVoiceOpenaiHandoffRearmErrors,
+  KilocodeVoiceOpenaiHandoffRearmResponses,
   KilocodeVoiceOpenaiHandoffReceiptErrors,
   KilocodeVoiceOpenaiHandoffReceiptResponses,
   KilocodeVoiceOpenaiImageErrors,
@@ -11949,6 +11951,59 @@ export class Handoff extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/voice/openai/session/{id}/handoff/ready",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Compare and replace readiness without extending the warming deadline
+   */
+  public rearm<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      version?: 1
+      generation?: string
+      sourceRevision?: number
+      sourceHash?: string
+      readyID?: string
+      priorReadyID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "version" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "sourceRevision" },
+            { in: "body", key: "sourceHash" },
+            { in: "body", key: "readyID" },
+            { in: "body", key: "priorReadyID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiHandoffRearmResponses,
+      KilocodeVoiceOpenaiHandoffRearmErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/handoff/rearm",
       ...options,
       ...params,
       headers: {

@@ -21,6 +21,7 @@ import { OpenAIBroker } from "./openai-broker"
 import { loadVoiceContext } from "./openai-context"
 import type { SpeechKey } from "../shared/speech"
 import type { AdminVoiceSignal } from "../shared/admin"
+import { valid, quiet, type Handoff, type HandoffQuiet } from "../shared/voice-handoff"
 
 type Post = (message: unknown) => void
 const healthKey = "raya.voice.health.v1"
@@ -292,6 +293,7 @@ export class SpeechService implements vscode.Disposable {
           directory: input.directory,
           current,
           context: context.text,
+          warm: (handoff) => post({ type: "speechOpenAIHandoffPrepare", handoff }),
           usage: (usage) => {
             if (usage.incomplete) this.incomplete()
             if (!usage.incomplete && usage.pending === 0 && usage.unrecorded === 0) this.healthy()
@@ -428,11 +430,75 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async openaiStop(requestId: string, post: Post) {
+    const openai = this.openai.stop(requestId)
+    const live = this.live.stop(requestId)
     await stopLiveCapture(requestId)
-    const errors = await Promise.all([this.openai.stop(requestId), this.live.stop(requestId)])
+    const errors = await Promise.all([openai, live])
     const error = errors.find((value) => value !== undefined)
     if (error) this.incomplete()
     post(error ? { type: "speechOpenAIError", requestId, error } : { type: "speechOpenAIStopped", requestId })
+  }
+
+  async openaiReset() {
+    // Invoke both stops before awaiting: obsolete webview ownership is fenced immediately.
+    const openai = this.openai.stop()
+    const live = this.live.stop()
+    const errors = await Promise.all([openai, live])
+    if (errors.some(Boolean)) {
+      this.incomplete()
+      console.error("[Raya] Voice reset cleanup remains unconfirmed.")
+    }
+  }
+
+  async openaiPrepare(handoff: Handoff, sdp: string, post: Post) {
+    if (this.closed || !valid(handoff) || this.live.active || this.realtime.active)
+      throw new Error("Voice replacement belongs to an unavailable call")
+    await this.openai.prepare(
+      handoff,
+      sdp,
+      (answer) => post({ type: "speechOpenAIHandoffAnswer", handoff, sdp: answer }),
+      (error) => {
+        post({ type: "speechOpenAIHandoffNotice", handoff, reason: "unavailable" })
+        post({ type: "speechOpenAIError", requestId: handoff.target, error })
+      },
+    )
+  }
+
+  openaiPrepared(handoff: Handoff) {
+    return this.openai.prepared(handoff)
+  }
+
+  async openaiQuiesce(value: HandoffQuiet) {
+    if (!quiet(value)) throw new Error("Voice replacement quiet acknowledgement changed")
+    this.openai.quiesce(
+      { version: value.version, id: value.id, sessionID: value.sessionID, source: value.source, target: value.target },
+      value.epoch,
+    )
+  }
+
+  openaiCommit(handoff: Handoff) {
+    return this.openai.commit(handoff)
+  }
+
+  openaiCutover(handoff: Handoff) {
+    return this.openai.cutover(handoff)
+  }
+
+  async openaiRetire(handoff: Handoff, confirmed: boolean) {
+    if (!confirmed) throw new Error("Voice source media retirement was not confirmed")
+    const result = await this.openai.retire(handoff)
+    if (!result.confirmed) {
+      this.incomplete()
+      throw new Error(result.error ?? "Voice source retirement remains unconfirmed")
+    }
+  }
+
+  openaiCancel(handoff: Handoff) {
+    return this.openai.cancel(handoff)
+  }
+
+  openaiState(handoff: Handoff) {
+    return this.openai.state(handoff)
   }
   // raya_change end
 

@@ -11,6 +11,7 @@ import {
   OpenAICallInput,
   OpenAIHandoff,
   OpenAIHandoffReceipt,
+  OpenAIHandoffRearmReceipt,
   OpenAIImage,
   VoiceID,
   VoiceKey,
@@ -33,6 +34,7 @@ const Payload = Schema.Struct({
   ),
   duration: Schema.optional(LiveDuration),
   spoken: Schema.optional(Snapshot),
+  rearms: Schema.optional(Schema.Array(OpenAIHandoffRearmReceipt).check(Schema.isMaxLength(16))),
   liveCursor: Schema.optional(
     Schema.Number.check(
       Schema.isInt(),
@@ -53,6 +55,7 @@ export type Stored = {
   usageReservations?: Record<string, string>
   duration?: typeof LiveDuration.Type
   spoken?: typeof Snapshot.Type
+  rearms?: readonly (typeof OpenAIHandoffRearmReceipt.Type)[]
   liveCursor?: number
 }
 
@@ -83,6 +86,14 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
     Schema.is(Payload)(value) &&
     value.binding.id === id &&
     (!session || value.binding.parentSessionID === session) &&
+    (!value.rearms ||
+      (new Set(value.rearms.map((receipt) => receipt.readyID)).size === value.rearms.length &&
+        value.rearms.every(
+          (receipt) =>
+            receipt.candidateID === id &&
+            receipt.candidateGeneration === value.binding.generation &&
+            Object.keys(receipt).every((key) => Object.keys(OpenAIHandoffRearmReceipt.fields).includes(key)),
+        ))) &&
     (!value.binding.handoff ||
       (Object.keys(value.binding.handoff).every((key) => Object.keys(OpenAIHandoff.fields).includes(key)) &&
         (!value.binding.handoff.receipt ||

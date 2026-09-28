@@ -1,5 +1,5 @@
 import { cancelled, owned } from "../../../src/shared/voice-interruption"
-import { valid, type Handoff, type HandoffAck } from "../../../src/shared/voice-handoff"
+import { valid, quiet, same, type Handoff, type HandoffAck, type HandoffQuiet } from "../../../src/shared/voice-handoff"
 import { NativeProjection } from "./native-projection"
 import type { RealtimeTranscript } from "./realtime-voice"
 
@@ -44,6 +44,8 @@ export class OpenAIVoice {
   private receipt: HandoffAck | undefined
   private retired: string | undefined
   private muted = false
+  private epoch = 0
+  private fence: HandoffQuiet | undefined
 
   constructor(private readonly sink: Sink) {}
 
@@ -64,6 +66,8 @@ export class OpenAIVoice {
     this.receipt = undefined
     this.retired = undefined
     this.muted = false
+    this.epoch = 0
+    this.fence = undefined
     this.sink.status("connecting")
     const cancelled = new Promise<never>((_resolve, reject) => {
       operation.cancel = reject
@@ -106,6 +110,7 @@ export class OpenAIVoice {
     }
     this.handoff = Object.freeze({ ...handoff })
     this.receipt = undefined
+    this.fence = undefined
     this.candidate = operation
     const cancellation = new Promise<never>((_resolve, reject) => {
       operation.cancel = reject
@@ -123,23 +128,79 @@ export class OpenAIVoice {
     }
   }
 
-  cutover(handoff: Handoff): HandoffAck {
+  quiesce(handoff: Handoff): HandoffQuiet {
     if (!valid(handoff) || !this.matches(handoff)) throw new Error("Voice replacement identity changed.")
-    if (this.receipt && this.operation?.requestID === handoff.target && !this.operation.closed) return this.receipt
     const source = this.operation
     const target = this.candidate
     if (
       !source ||
       !target ||
-      source.requestID !== handoff.source ||
-      target.requestID !== handoff.target ||
       !this.healthy(source) ||
       !this.healthy(target) ||
       !target.playback ||
       source.output ||
       source.clearing ||
-      source.speech
+      source.speech ||
+      this.epoch === Number.MAX_SAFE_INTEGER
     )
+      throw new Error("Voice replacement is not ready at a quiet boundary.")
+    if (this.fence?.epoch === this.epoch) return this.fence
+    try {
+      for (const track of source.media!.getAudioTracks()) track.enabled = false
+      source.audio!.muted = true
+      this.fence = Object.freeze({ ...this.handoff!, phase: "quiesced", epoch: this.epoch })
+      return this.fence
+    } catch {
+      const message = "Voice input pause was not confirmed. End voice before reconnecting."
+      this.fail(source, message)
+      throw new Error(message)
+    }
+  }
+
+  async cancel(handoff: Handoff, restore: boolean) {
+    if (!valid(handoff) || !this.matches(handoff)) return false
+    const source = this.operation
+    if (restore && !this.receipt && source?.requestID === handoff.source && this.healthy(source)) {
+      const candidate = this.candidate
+      if (candidate) {
+        candidate.closed = true
+        candidate.cancel?.(new Error("Voice replacement cancelled."))
+        if (!this.release(candidate)) return false
+        this.candidate = undefined
+      }
+      for (const track of source.media!.getAudioTracks()) track.enabled = !this.muted
+      source.audio!.muted = false
+      this.fence = undefined
+      this.handoff = undefined
+      return true
+    }
+    await this.stop()
+    return !restore
+  }
+
+  discard(handoff: Handoff) {
+    if (!valid(handoff) || !this.matches(handoff) || this.receipt) return false
+    const candidate = this.candidate
+    if (!candidate) return true
+    candidate.closed = true
+    candidate.cancel?.(new Error("Voice replacement cancelled."))
+    if (!this.release(candidate)) return false
+    this.candidate = undefined
+    return true
+  }
+
+  cutover(handoff: HandoffQuiet): HandoffAck {
+    if (!quiet(handoff) || !this.matches(handoff)) throw new Error("Voice replacement identity changed.")
+    if (
+      this.receipt &&
+      this.operation?.requestID === handoff.target &&
+      !this.operation.closed &&
+      this.fence?.epoch === handoff.epoch
+    )
+      return this.receipt
+    const source = this.operation
+    const target = this.candidate
+    if (!source || !target || !this.eligible(source, target, handoff))
       throw new Error("Voice replacement is not ready at a quiet boundary.")
     try {
       for (const track of source.media!.getAudioTracks()) track.enabled = false
@@ -157,6 +218,23 @@ export class OpenAIVoice {
       this.fail(this.operation!, message)
       throw new Error(message)
     }
+  }
+
+  private eligible(source: Operation, target: Operation, handoff: HandoffQuiet) {
+    return (
+      source.requestID === handoff.source &&
+      target.requestID === handoff.target &&
+      this.healthy(source) &&
+      this.healthy(target) &&
+      target.playback &&
+      !source.output &&
+      !source.clearing &&
+      !source.speech &&
+      !!this.fence &&
+      same(this.fence, handoff) &&
+      this.fence.epoch === handoff.epoch &&
+      handoff.epoch === this.epoch
+    )
   }
 
   retire(source: string) {
@@ -200,6 +278,7 @@ export class OpenAIVoice {
     const operation = this.operation
     if (
       !operation ||
+      (this.fence && operation.requestID === this.fence.source) ||
       !this.current(operation) ||
       operation.channel?.readyState !== "open" ||
       !/^[a-zA-Z0-9_-]{1,100}$/.test(id)
@@ -217,6 +296,7 @@ export class OpenAIVoice {
     if (!tracks.length || tracks.some((track) => track.readyState !== "live")) return false
     for (const track of tracks) track.enabled = !value
     this.muted = value
+    if (this.fence && operation.requestID === this.fence.source) for (const track of tracks) track.enabled = false
     return true
   }
 
@@ -264,6 +344,7 @@ export class OpenAIVoice {
     this.receipt = undefined
     this.retired = undefined
     this.muted = false
+    this.fence = undefined
     this.sink.aec(false)
     this.sink.status("off")
   }
@@ -383,6 +464,22 @@ export class OpenAIVoice {
         this.fail(operation, "Voice replacement produced activity before cutover. Your current call is still active.")
       return
     }
+    if (
+      operation === this.operation &&
+      [
+        "input_audio_buffer.speech_started",
+        "input_audio_buffer.speech_stopped",
+        "output_audio_buffer.started",
+        "output_audio_buffer.stopped",
+        "output_audio_buffer.cleared",
+        "response.created",
+        "conversation.item.created",
+        "conversation.item.input_audio_transcription.completed",
+        "response.output_audio_transcript.done",
+      ].includes(packet.type)
+    ) {
+      if (this.epoch < Number.MAX_SAFE_INTEGER) this.epoch++
+    }
     if (packet.type === "error") {
       if (cancelled(packet, operation.cancellations) || owned(packet, operation.images)) return
       this.fail(operation, "OpenAI reported a voice error. Reconnect or continue typing.")
@@ -415,7 +512,7 @@ export class OpenAIVoice {
       if (id === operation.interrupted) return
       operation.output = id
       if (operation.clearing) return
-      if (operation.audio) operation.audio.muted = false
+      if (operation.audio && operation.requestID !== this.fence?.source) operation.audio.muted = false
       this.sink.status("speaking")
       return
     }
@@ -431,7 +528,7 @@ export class OpenAIVoice {
       return
     }
     if (!cleared || !operation.output) return
-    if (operation.audio) operation.audio.muted = false
+    if (operation.audio && operation.requestID !== this.fence?.source) operation.audio.muted = false
     this.sink.status("speaking")
   }
 

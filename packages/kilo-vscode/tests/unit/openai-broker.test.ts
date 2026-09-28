@@ -5,6 +5,7 @@ import WebSocket from "ws"
 import { OpenAIBroker } from "../../src/speech/openai-broker"
 import { OPENAI_VOICE_MODEL } from "../../src/shared/speech"
 import type { VoiceUsage } from "../../src/shared/voice-usage"
+import { route } from "../../src/services/voice-handoff"
 
 const sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 const input = { requestID: "request_1", sessionID: "session_1", sdp }
@@ -81,6 +82,12 @@ function fixture(timeout = 15_000) {
     reading: false,
     delayed: 0,
     gate: Promise.withResolvers<void>(),
+    sockets: [] as ServerWebSocket<undefined>[],
+    controls: [] as WebSocket[],
+    providers: 0,
+    activated: 0,
+    proof: undefined as Record<string, unknown> | undefined,
+    activation: undefined as Record<string, unknown> | undefined,
   }
   const binding = {
     id: "binding_1",
@@ -125,21 +132,23 @@ function fixture(timeout = 15_000) {
       ...(done ? { result: { text: `Verified ${id}`, assistantMessageID: `assistant_${id}`, evidence: [] } } : {}),
     })
   }
-  const history = (url: URL, body: Record<string, unknown>) => {
+  const history = (url: URL, body: Record<string, unknown>, owner = binding) => {
     if (url.pathname.endsWith("/context")) {
       expect(url.searchParams.get("generation")).toBe(binding.generation)
       return Response.json({ version: 1, items: state.history, incomplete: false })
     }
     if (url.pathname.endsWith("/spoken")) {
-      expect(body.generation).toBe(binding.generation)
-      expect(body.providerCallID).toBe(binding.providerCallID)
+      expect(body.generation).toBe(owner.generation)
+      expect(body.providerCallID).toBe(owner.providerCallID)
       state.spoken.push(body)
       if (state.mode === "spoken-refused") return new Response("snapshot refused", { status: 409 })
       if (state.mode === "spoken-unavailable") return new Response("temporarily unavailable", { status: 503 })
       const revision = Number(body.revision)
       const encoded = JSON.stringify(body)
-      if (state.committed.has(revision)) expect(encoded).toBe(state.committed.get(revision))
-      else state.committed.set(revision, encoded)
+      if (owner.id === binding.id) {
+        if (state.committed.has(revision)) expect(encoded).toBe(state.committed.get(revision))
+        else state.committed.set(revision, encoded)
+      }
       if (state.mode === "spoken-malformed")
         return new Response("{malformed", { headers: { "content-type": "application/json" } })
       if (state.mode === "spoken-body") {
@@ -176,7 +185,9 @@ function fixture(timeout = 15_000) {
       const url = new URL(request.url)
       if (url.pathname === "/v1/realtime") {
         expect(request.headers.get("authorization")).toBe("Bearer openai-only")
-        expect(url.searchParams.get("call_id")).toBe(binding.providerCallID)
+        if (state.mode.startsWith("warm"))
+          expect(["rtc_provider_1", "rtc_provider_2"]).toContain(url.searchParams.get("call_id"))
+        else expect(url.searchParams.get("call_id")).toBe(binding.providerCallID)
         if (server.upgrade(request)) return
         return new Response("upgrade failed", { status: 400 })
       }
@@ -188,13 +199,14 @@ function fixture(timeout = 15_000) {
         expect(form.get("sdp")).toBe(sdp)
         state.form = JSON.parse(String(form.get("session"))) as Record<string, unknown>
         if (state.mode === "rejected") return new Response("denied", { status: 401 })
+        const id = state.mode.startsWith("warm") ? `rtc_provider_${++state.providers}` : "rtc_provider_1"
         return new Response(sdp, {
           status: 201,
           headers: {
             Location:
               state.mode === "location"
                 ? "https://untrusted.invalid/v1/realtime/calls/rtc_provider_1"
-                : "/v1/realtime/calls/rtc_provider_1",
+                : `/v1/realtime/calls/${id}`,
           },
         })
       }
@@ -211,19 +223,95 @@ function fixture(timeout = 15_000) {
         directory: url.searchParams.get("directory"),
       })
       state.order.push(url.pathname)
-      if (url.pathname.endsWith("/hangup")) return new Response(null, { status: state.mode === "cleanup" ? 503 : 200 })
+      if (url.pathname.endsWith("/hangup")) {
+        if (state.mode === "warm-cancel" && url.pathname.includes("rtc_provider_2")) {
+          state.reading = true
+          await state.gate.promise
+        }
+        return new Response(null, { status: state.mode === "cleanup" ? 503 : 200 })
+      }
       expect(request.headers.get("authorization")).toBe("Basic backend-only")
       expect(url.searchParams.get("directory")).toBe("C:/project")
       const capability = request.headers.get("X-Raya-Voice-Key")
       expect(capability).toMatch(/^[a-f0-9]{64}$/)
       if (!state.capability) state.capability = capability!
-      expect(capability).toBe(state.capability)
-      const admitted = admission(state.mode, url.pathname, request.method, body, binding)
+      if (!state.mode.startsWith("warm")) expect(capability).toBe(state.capability)
+      const target = { ...binding, id: "binding_2", generation: "generation_2", providerCallID: "rtc_provider_2" }
+      const owner = url.pathname.includes("binding_2") ? target : binding
+      if (url.pathname.endsWith("/handoff/candidate")) {
+        expect(capability).toBe(state.capability)
+        expect(request.headers.get("X-Raya-Voice-Target-Key")).toMatch(/^[a-f0-9]{64}$/)
+        expect(request.headers.get("X-Raya-Voice-Target-Key")).not.toBe(capability)
+        return Response.json({
+          ...target,
+          handoff: {
+            version: 1,
+            requestID: body.requestID,
+            sourceID: binding.id,
+            sourceGeneration: binding.generation,
+            candidateID: target.id,
+            candidateGeneration: target.generation,
+            phase: "candidate",
+          },
+        })
+      }
+      if (url.pathname.endsWith("/handoff/context")) {
+        const spoken = state.spoken.filter((row) => row.providerCallID === binding.providerCallID).at(-1)!
+        const items = spoken.items as {
+          id: string
+          previous: string | null
+          role: "user" | "assistant"
+          state: string
+          text?: string
+        }[]
+        const canonical = {
+          revision: spoken.revision,
+          incomplete: spoken.incomplete,
+          items: items.map((item) => ({
+            id: item.id,
+            previous: item.previous,
+            role: item.role,
+            state: item.state,
+            ...(item.text !== undefined ? { text: item.text } : {}),
+          })),
+        }
+        return Response.json({
+          version: 1,
+          sourceID: binding.id,
+          sourceGeneration: binding.generation,
+          sourceRevision: spoken.revision,
+          sourceHash: createHash("sha256").update(JSON.stringify(canonical)).digest("hex"),
+          incomplete: spoken.incomplete,
+          items: items
+            .filter((item) => item.state === "final")
+            .map((item) => ({ itemID: item.id, role: item.role, text: item.text })),
+        })
+      }
+      if (url.pathname.endsWith("/handoff/ready") || url.pathname.endsWith("/handoff/rearm")) {
+        state.proof = { ...body, deadline: Date.now() + 30_000 }
+        return Response.json({ ...target, handoff: state.proof })
+      }
+      if (url.pathname.endsWith("/handoff/activate")) {
+        state.activated++
+        state.activation = {
+          ...body,
+          version: 1,
+          sourceID: binding.id,
+          sourceGeneration: binding.generation,
+          activatedAt: Date.now(),
+        }
+        if (state.mode === "warm-lost") return new Response("lost acknowledgement", { status: 503 })
+        return Response.json(state.activation)
+      }
+      if (url.pathname.endsWith("/handoff/receipt")) return Response.json(state.activation)
+      if (url.pathname.endsWith("/spoken") && owner.id === target.id && !state.activated)
+        return new Response("candidate spoken publication forbidden", { status: 409 })
+      const admitted = admission(state.mode, url.pathname, request.method, body, owner)
       if (admitted) return admitted
       if (url.pathname.endsWith("/session"))
         return Response.json({ ...binding, parentSessionID: state.mode === "binding" ? "unrelated" : input.sessionID })
       if (url.pathname.endsWith("/usage")) return Response.json(body.receipt)
-      const spoken = history(url, body)
+      const spoken = history(url, body, owner)
       if (spoken) return spoken
       if (url.pathname.endsWith("/images")) {
         expect(body.generation).toBe(binding.generation)
@@ -241,14 +329,26 @@ function fixture(timeout = 15_000) {
     websocket: {
       open(socket) {
         state.socket = socket
+        state.sockets.push(socket)
       },
       message(socket, value) {
         const event = JSON.parse(String(value)) as Record<string, unknown>
         state.events.push(event)
+        if (
+          state.mode === "warm-setup" &&
+          event.type === "session.update" &&
+          (event.session as { tools: unknown[] }).tools.length === 0
+        ) {
+          socket.send(JSON.stringify({ type: "error", error: { code: "configuration_refused" } }))
+          return
+        }
         if (event.type === "session.update" && state.mode !== "unconfirmed-config")
           socket.send(JSON.stringify({ type: "session.updated", session: event.session }))
         const item = event.item as Record<string, unknown> | undefined
-        if (event.type === "conversation.item.create" && String(item?.id).startsWith("raya_context_")) {
+        if (
+          event.type === "conversation.item.create" &&
+          (String(item?.id).startsWith("raya_context_") || String(item?.id).startsWith("raya_semantic_"))
+        ) {
           if (state.mode === "context-rejected") {
             socket.send(JSON.stringify({ type: "error", error: { event_id: event.event_id, code: "invalid_request" } }))
             return
@@ -331,6 +431,7 @@ function fixture(timeout = 15_000) {
       const path = new URL(url)
       const socket = new WebSocket(`ws://127.0.0.1:${server.port}${path.pathname}${path.search}`, options)
       state.control = socket
+      state.controls.push(socket)
       return socket
     },
     80,
@@ -377,6 +478,10 @@ function fixture(timeout = 15_000) {
     complete,
     close: async () => {
       await broker.dispose()
+      if (state.mode.startsWith("warm")) {
+        for (const socket of state.sockets) socket.terminate()
+        await until(() => server.pendingWebSockets === 0)
+      }
       await server.stop(true)
     },
   }
@@ -1370,3 +1475,193 @@ test("voice readiness requires acknowledged semantic turn detection and interrup
     await f.close()
   }
 })
+
+for (const mode of ["warm", "warm-lost"]) {
+  test(`${mode} routes the real two-call handoff through durable receipt, media ACK and sealed retirement`, async () => {
+    const f = fixture()
+    f.state.mode = mode
+    const handoff = {
+      version: 1 as const,
+      id: "handoff_1",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    const posts: unknown[] = []
+    const speech = {
+      openaiState: (value: typeof handoff) => f.broker.state(value),
+      openaiPrepare: (value: typeof handoff, offer: string, post: (value: unknown) => void) =>
+        f.broker.prepare(
+          value,
+          offer,
+          (sdp) => post({ type: "speechOpenAIHandoffAnswer", handoff: value, sdp }),
+          (error) => f.state.errors.push(error),
+        ),
+      openaiPrepared: (value: typeof handoff) => f.broker.prepared(value),
+      openaiQuiesce: async (value: typeof handoff & { phase: "quiesced"; epoch: number }) => {
+        f.broker.quiesce(handoff, value.epoch)
+      },
+      openaiCommit: (value: typeof handoff) => f.broker.commit(value),
+      openaiCutover: (value: typeof handoff) => f.broker.cutover(value),
+      openaiRetire: async (value: typeof handoff, confirmed: boolean) => {
+        expect(confirmed).toBe(true)
+        const result = await f.broker.retire(value)
+        expect(result.confirmed).toBe(true)
+      },
+      openaiCancel: (value: typeof handoff) => f.broker.cancel(value),
+    }
+    const ctx = {
+      speech,
+      post: (value: unknown) => posts.push(value),
+      voiceScope: () => ({ directory: "C:/project", current: () => f.state.current }),
+    }
+    try {
+      await f.start()
+      await route({ type: "speechOpenAIHandoffOffer", handoff, sdp }, ctx)
+      expect(f.state.providers).toBe(2)
+      expect(f.broker.state(handoff).phase).toBe("preparing")
+      await route({ type: "speechOpenAIHandoffPrepared", ack: { ...handoff, phase: "prepared" } }, ctx)
+      expect(f.broker.state(handoff).phase).toBe("prepared")
+      const quiet = { ...handoff, phase: "quiesced" as const, epoch: 12 }
+      await route({ type: "speechOpenAIHandoffQuiesced", quiet }, ctx)
+      expect(f.broker.state(handoff).phase).toBe("committed")
+      expect(f.state.activated).toBe(1)
+      expect(f.state.requests.filter((item) => item.path.endsWith("/handoff/receipt"))).toHaveLength(
+        mode === "warm-lost" ? 1 : 0,
+      )
+      const count = posts.length
+      await route({ type: "speechOpenAIHandoffQuiesced", quiet }, ctx)
+      expect(posts).toHaveLength(count)
+      expect(f.state.activated).toBe(1)
+      await route({ type: "speechOpenAIHandoffCutoverAck", ack: { ...handoff, phase: "cutover" } }, ctx)
+      expect(f.broker.state(handoff).phase).toBe("cutover")
+      const revision = f.state.spoken.filter((row) => row.providerCallID === "rtc_provider_1").at(-1)!.revision
+      f.state.controls[0].terminate()
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      await route({ type: "speechOpenAIHandoffRetired", handoff, confirmed: true }, ctx)
+      expect(f.broker.state(handoff).phase).toBe("retired")
+      expect(f.broker.active).toBe(true)
+      expect(f.state.errors).toEqual([])
+      expect(f.state.spoken.filter((row) => row.providerCallID === "rtc_provider_1").at(-1)!.revision).toBe(revision)
+      expect(posts.map((value) => (value as { type: string }).type)).toEqual([
+        "speechOpenAIHandoffAnswer",
+        "speechOpenAIHandoffQuiesce",
+        "speechOpenAIHandoffCutover",
+        "speechOpenAIHandoffRetire",
+      ])
+      await f.broker.stop(input.requestID)
+      expect(f.broker.active).toBe(false)
+    } finally {
+      await f.close()
+    }
+  })
+}
+
+for (const fault of ["response", "disconnect", "stop"]) {
+  test(`candidate ${fault} before commit refuses activation and cannot revive stopping ownership`, async () => {
+    const f = fixture()
+    f.state.mode = "warm"
+    const handoff = {
+      version: 1 as const,
+      id: "handoff_bad",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    try {
+      await f.start()
+      await f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      )
+      await f.broker.prepared(handoff)
+      f.broker.quiesce(handoff, 7)
+      if (fault === "response")
+        f.state.sockets[1].send(JSON.stringify({ type: "response.created", response: { id: "unsolicited" } }))
+      if (fault === "disconnect") f.state.controls[1].terminate()
+      if (fault === "stop") {
+        const stopped = f.broker.stop(input.requestID)
+        await expect(f.broker.cancel(handoff)).rejects.toThrow()
+        await stopped
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      await expect(f.broker.commit(handoff)).rejects.toThrow()
+      expect(f.state.activated).toBe(0)
+      if (fault !== "stop") {
+        expect((await f.broker.cancel(handoff)).restore).toBe(fault !== "response")
+        expect(f.broker.active).toBe(true)
+      }
+    } finally {
+      await f.close()
+    }
+  })
+}
+
+test("a definitively failed candidate setup reconciles cached cleanup and preserves the source", async () => {
+  const f = fixture()
+  f.state.mode = "warm-setup"
+  const handoff = {
+    version: 1 as const,
+    id: "setup_failure",
+    sessionID: input.sessionID,
+    source: input.requestID,
+    target: "request_2",
+  }
+  try {
+    await f.start()
+    await expect(
+      f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      ),
+    ).rejects.toThrow("configuration")
+    expect((await f.broker.cancel(handoff)).restore).toBe(true)
+    expect(f.broker.active).toBe(true)
+    expect(f.state.activated).toBe(0)
+    expect(f.state.requests.some((row) => row.path.includes("binding_2") && row.path.endsWith("/spoken"))).toBe(false)
+    expect(f.state.requests.some((row) => row.path.endsWith("binding_2") && row.method === "DELETE")).toBe(true)
+  } finally {
+    await f.close()
+  }
+})
+
+for (const change of ["stop", "scope", "duplicate"]) {
+  test(`candidate cancellation during ${change} cleanup never revives revoked source ownership`, async () => {
+    const f = fixture()
+    f.state.mode = "warm-cancel"
+    const handoff = {
+      version: 1 as const,
+      id: "cancel_race",
+      sessionID: input.sessionID,
+      source: input.requestID,
+      target: "request_2",
+    }
+    try {
+      await f.start()
+      await f.broker.prepare(
+        handoff,
+        sdp,
+        () => undefined,
+        (error) => f.state.errors.push(error),
+      )
+      await f.broker.prepared(handoff)
+      const cancelled = f.broker.cancel(handoff)
+      await until(() => f.state.reading)
+      const stopped = change === "stop" ? f.broker.stop(input.requestID) : undefined
+      const duplicate = change === "duplicate" ? f.broker.cancel(handoff) : undefined
+      if (change === "scope") f.state.current = false
+      f.state.gate.resolve()
+      expect((await cancelled).restore).toBe(change === "duplicate")
+      if (duplicate) expect((await duplicate).restore).toBe(true)
+      await stopped
+      expect(f.state.activated).toBe(0)
+    } finally {
+      f.state.gate.resolve()
+      await f.close()
+    }
+  })
+}

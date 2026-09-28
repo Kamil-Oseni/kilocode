@@ -191,6 +191,22 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
           Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
         ),
       )
+      .handle("voiceOpenAIHandoffRearm", (ctx) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const raw = yield* request.json.pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          if (!handoff(raw, "rearm")) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+          return yield* openai.rearm(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
       .handle("voiceOpenAIHandoffActivate", (ctx) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest

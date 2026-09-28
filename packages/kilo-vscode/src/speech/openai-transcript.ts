@@ -342,8 +342,8 @@ export class OpenAITranscript {
     this.publish()
   }
 
-  async close() {
-    this.invalidate()
+  async close(sealed = false) {
+    if (!sealed) this.invalidate()
     this.closed = true
     await this.flush()
   }

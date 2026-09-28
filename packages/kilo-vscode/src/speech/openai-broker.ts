@@ -9,6 +9,8 @@ import { createHash, randomBytes } from "node:crypto"
 import WebSocket from "ws"
 import { OPENAI_VOICE_MODEL } from "../shared/speech"
 import { sameDirectory } from "../kilo-provider-utils"
+import { valid, type Handoff } from "../shared/voice-handoff"
+import { OpenAIHistory } from "./openai-history"
 
 type Config = {
   key: string
@@ -19,6 +21,7 @@ type Config = {
   current: () => boolean
   context: string
   usage?: (state: VoiceUsage) => void
+  warm?: (handoff: Handoff) => void
 }
 
 type Binding = {
@@ -55,6 +58,8 @@ type Claim = {
   speech: OpenAISpeech
   transcript?: OpenAITranscript
   usage?: OpenAIUsage
+  observed?: VoiceUsage
+  expires?: number
   images: OpenAIImages
   cancellations: Set<string>
   config?: Config
@@ -68,6 +73,24 @@ type Claim = {
   closing?: Promise<string | undefined>
   opening: Promise<void>
   failed: (error: string) => void
+  warming: boolean
+  fenced: boolean
+  configured: boolean
+  buffered: Record<string, unknown>[]
+  warm?: ReturnType<typeof setTimeout>
+}
+
+type Replacement = {
+  identity: Handoff
+  source: Claim
+  target: Claim
+  history: OpenAIHistory
+  phase: "preparing" | "prepared" | "quiesced" | "committing" | "committed" | "cutover" | "unknown"
+  checkpoint?: { revision: number; fingerprint: string; epoch: number; boundary: number; readyID: string }
+  quiet?: number
+  receipt?: Record<string, unknown>
+  previous?: string
+  preparing?: Promise<{ version: 1; readyID: string; sourceRevision: number; sourceHash: string }>
 }
 
 const origin = "https://api.openai.com"
@@ -117,7 +140,14 @@ class ReceiptError extends Error {}
 /** Provider credentials and work dispatch never enter the webview. */
 export class OpenAIBroker {
   private claim?: Claim
+  private candidate?: Claim
+  private retiring?: Claim
+  private replacement?: Replacement
+  private finished?: Handoff
+  private cancellation?: Handoff
   private disposed = false
+  private logical?: string
+  private totals: VoiceUsage = empty()
 
   constructor(
     private readonly request: typeof fetch = fetch,
@@ -131,7 +161,7 @@ export class OpenAIBroker {
   }
 
   get active() {
-    return !!this.claim
+    return !!this.claim || !!this.candidate || !!this.retiring
   }
 
   async start(
@@ -140,7 +170,7 @@ export class OpenAIBroker {
     ready: (sdp: string) => void,
     failed: (error: string) => void,
   ) {
-    if (this.disposed || this.claim) {
+    if (this.disposed || this.active) {
       failed("Voice already owns a starting, active, or unresolved call. End it before reconnecting.")
       return
     }
@@ -148,6 +178,21 @@ export class OpenAIBroker {
       failed("The voice connection request is invalid. End voice and try again.")
       return
     }
+    const claim = this.create(input, failed)
+    this.finished = undefined
+    this.cancellation = undefined
+    this.logical = input.requestID
+    this.totals = empty()
+    this.claim = claim
+    claim.opening = this.open(claim, load, ready).catch(async (error: unknown) => {
+      const cancelled = claim.cancelled
+      const cleanup = await this.close(claim)
+      if (!cancelled || cleanup) failed(cleanup ?? message(error))
+    })
+    await claim.opening
+  }
+
+  private create(input: Input, failed: (error: string) => void) {
     const claim: Claim = {
       input,
       capability: randomBytes(32).toString("hex"),
@@ -166,24 +211,400 @@ export class OpenAIBroker {
       paid: false,
       speech: new OpenAISpeech(
         (event) => this.send(claim, event),
-        () => this.current(claim) && !claim.blocked,
+        () => this.current(claim) && !claim.blocked && !claim.warming,
         failed,
       ),
       opening: Promise.resolve(),
       failed,
+      warming: false,
+      fenced: false,
+      configured: false,
+      buffered: [],
     }
-    this.claim = claim
-    claim.opening = this.open(claim, load, ready).catch(async (error: unknown) => {
-      const cancelled = claim.cancelled
-      const cleanup = await this.close(claim)
-      if (!cancelled || cleanup) failed(cleanup ?? message(error))
+    return claim
+  }
+
+  async prepare(handoff: Handoff, offer: string, ready: (answer: string) => void, failed: (error: string) => void) {
+    const source = this.claim
+    if (
+      !valid(handoff) ||
+      !source ||
+      !this.authority(source) ||
+      !source.ready ||
+      source.input.requestID !== handoff.source ||
+      source.input.sessionID !== handoff.sessionID ||
+      this.candidate ||
+      this.retiring ||
+      this.replacement ||
+      !sdp(offer)
+    )
+      throw new Error("Voice replacement does not match an available active call")
+    const target = this.create({ requestID: handoff.target, sessionID: handoff.sessionID, sdp: offer }, failed)
+    target.warming = true
+    this.candidate = target
+    this.finished = undefined
+    this.replacement = {
+      identity: Object.freeze({ ...handoff }),
+      source,
+      target,
+      history: new OpenAIHistory(),
+      phase: "preparing",
+    }
+    target.opening = this.open(target, async () => ({ ...source.config! }), ready).catch(async (error: unknown) => {
+      const cleanup = await this.close(target)
+      failed(cleanup ?? message(error))
+      throw error
     })
-    await claim.opening
+    await target.opening
+  }
+
+  private matching(handoff: Handoff, cleanup = false) {
+    const state = this.replacement
+    if (
+      !valid(handoff) ||
+      !state ||
+      state.identity.id !== handoff.id ||
+      state.identity.sessionID !== handoff.sessionID ||
+      state.identity.source !== handoff.source ||
+      state.identity.target !== handoff.target
+    )
+      throw new Error("Voice replacement identity changed")
+    if (!this.source(state) || (!cleanup && !this.connected(state.target)))
+      throw new Error("Voice replacement scope is no longer available")
+    if (!cleanup && (state.target.fenced || state.target.socket?.readyState !== WebSocket.OPEN))
+      throw new Error("Voice replacement candidate lost its safe boundary")
+    return state
+  }
+
+  private source(state: Replacement) {
+    if (state.phase === "cutover") return true
+    return this.current(state.source) && !state.source.ending && !state.source.cancelled
+  }
+
+  async prepared(handoff: Handoff) {
+    const state = this.matching(handoff)
+    state.preparing ??= this.preparation(handoff).finally(() => {
+      state.preparing = undefined
+    })
+    return state.preparing
+  }
+
+  private async preparation(handoff: Handoff) {
+    const deadline = performance.now() + 60_000
+    const state = this.matching(handoff)
+    if (!["preparing", "prepared"].includes(state.phase) || !state.target.ready || !this.current(state.target))
+      throw new Error("Voice replacement is not ready for context preparation")
+    const signal = AbortSignal.any([state.source.abort.signal, state.target.abort.signal])
+    for (;;) {
+      this.matching(handoff)
+      if (performance.now() >= deadline) throw new Error("Voice replacement did not reach a quiet boundary in time")
+      const checkpoint = await state.source.transcript!.checkpoint()
+      const boundary = state.source.speech.boundary()
+      if (!checkpoint.ready || !boundary.quiet || !this.authority(state.source)) {
+        await delay(signal, 100)
+        continue
+      }
+      if (state.phase === "prepared" && state.checkpoint && unchanged(checkpoint, state.checkpoint, boundary))
+        return Object.freeze({
+          version: 1 as const,
+          readyID: state.checkpoint.readyID,
+          sourceRevision: checkpoint.revision,
+          sourceHash: checkpoint.fingerprint,
+        })
+      const context = await this.backend(
+        state.target,
+        `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/context`,
+        { method: "GET" },
+      )
+      if (
+        context.sourceID !== state.source.binding!.id ||
+        context.sourceGeneration !== state.source.binding!.generation
+      )
+        throw new Error("Voice replacement source identity changed")
+      if (context.sourceRevision !== checkpoint.revision || context.sourceHash !== checkpoint.fingerprint) continue
+      await state.history.append(
+        context,
+        (event) => {
+          if (!this.write(state.target, event)) throw new Error("Voice replacement context transport closed")
+        },
+        (id) => state.target.transcript!.ignore(id),
+        state.target.abort.signal,
+      )
+      this.matching(handoff)
+      const latest = await state.source.transcript!.checkpoint()
+      if (!unchanged(latest, { ...checkpoint, boundary: boundary.epoch }, state.source.speech.boundary())) continue
+      const readyID = await this.arm(state, checkpoint, boundary.epoch)
+      const confirmed = await state.source.transcript!.checkpoint()
+      if (
+        !confirmed.ready ||
+        confirmed.epoch !== checkpoint.epoch ||
+        state.source.speech.boundary().epoch !== boundary.epoch
+      )
+        continue
+      return Object.freeze({
+        version: 1 as const,
+        readyID,
+        sourceRevision: checkpoint.revision,
+        sourceHash: checkpoint.fingerprint,
+      })
+    }
+  }
+  private async arm(
+    state: Replacement,
+    checkpoint: Awaited<ReturnType<OpenAITranscript["checkpoint"]>>,
+    epoch: number,
+  ) {
+    const readyID = `raya_ready_${randomBytes(12).toString("hex")}`
+    const body = {
+      version: 1,
+      generation: state.target.binding!.generation,
+      sourceRevision: checkpoint.revision,
+      sourceHash: checkpoint.fingerprint,
+      readyID,
+    }
+    const receipt = state.previous
+      ? await this.backend(state.target, `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/rearm`, {
+          method: "POST",
+          body: JSON.stringify({ ...body, priorReadyID: state.previous }),
+        })
+      : await this.backend(state.target, `/session/${encodeURIComponent(state.target.binding!.id)}/handoff/ready`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        })
+    const proof = record(receipt.handoff) ?? receipt
+    if (
+      proof.readyID !== readyID ||
+      proof.sourceRevision !== checkpoint.revision ||
+      proof.sourceHash !== checkpoint.fingerprint
+    )
+      throw new Error("Voice replacement readiness was not confirmed exactly")
+    state.previous = readyID
+    state.checkpoint = {
+      revision: checkpoint.revision,
+      fingerprint: checkpoint.fingerprint,
+      epoch: checkpoint.epoch,
+      boundary: epoch,
+      readyID,
+    }
+    state.phase = "prepared"
+    return readyID
+  }
+
+  quiesce(handoff: Handoff, epoch: number) {
+    const state = this.matching(handoff)
+    if (state.phase === "quiesced" && state.quiet === epoch) return
+    if (
+      state.phase !== "prepared" ||
+      !state.checkpoint ||
+      !Number.isSafeInteger(epoch) ||
+      epoch < 0 ||
+      !state.source.speech.boundary().quiet ||
+      state.source.speech.boundary().epoch !== state.checkpoint.boundary
+    )
+      throw new Error("Voice replacement quiet boundary changed")
+    state.source.fenced = true
+    state.source.speech.hold(true)
+    state.checkpoint.boundary = state.source.speech.boundary().epoch
+    state.quiet = epoch
+    state.phase = "quiesced"
+  }
+
+  async commit(handoff: Handoff) {
+    const state = this.matching(handoff)
+    if (state.receipt && state.target.configured && ["committed", "cutover"].includes(state.phase)) return state.receipt
+    if (state.phase !== "quiesced" || !state.checkpoint || state.quiet === undefined)
+      throw new Error("Voice replacement has no confirmed quiet boundary")
+    if (!state.target.configured) {
+      await this.configure(state.target)
+      this.matching(handoff)
+      state.target.configured = true
+    }
+    const checkpoint = await state.source.transcript!.checkpoint()
+    const boundary = state.source.speech.boundary()
+    this.matching(handoff)
+    if (
+      !checkpoint.ready ||
+      !boundary.quiet ||
+      checkpoint.fingerprint !== state.checkpoint.fingerprint ||
+      checkpoint.epoch !== state.checkpoint.epoch ||
+      boundary.epoch !== state.checkpoint.boundary
+    )
+      throw new Error("Voice replacement source changed before activation")
+    const body = {
+      version: 1,
+      generation: state.source.binding!.generation,
+      requestID: handoff.id,
+      candidateID: state.target.binding!.id,
+      candidateGeneration: state.target.binding!.generation,
+      sourceRevision: checkpoint.revision,
+      sourceHash: checkpoint.fingerprint,
+      readyID: state.checkpoint.readyID,
+    }
+    state.phase = "committing"
+    const path = `/session/${encodeURIComponent(state.source.binding!.id)}/handoff`
+    const receipt = await this.backend(state.source, `${path}/activate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }).catch(async (error: unknown) => {
+      if (error instanceof BackendError && error.status >= 400 && error.status < 500 && error.status !== 408) {
+        state.phase = "quiesced"
+        throw error
+      }
+      state.phase = "unknown"
+      return this.backend(state.source, `${path}/receipt`, { method: "GET" })
+    })
+    if (!activation(receipt, state, body)) {
+      state.phase = "unknown"
+      throw new Error("Voice replacement activation receipt changed")
+    }
+    state.receipt = Object.freeze({ ...receipt })
+    this.matching(handoff)
+    state.phase = "committed"
+    const latest = await state.source.transcript!.checkpoint()
+    if (!latest.ready || latest.epoch !== checkpoint.epoch || state.source.speech.boundary().epoch !== boundary.epoch) {
+      state.phase = "unknown"
+      throw new Error("Voice source changed after authority committed")
+    }
+    return state.receipt
+  }
+
+  async cutover(handoff: Handoff) {
+    if (this.finished && valid(handoff) && this.equal(this.finished, handoff)) return
+    const state = this.matching(handoff)
+    if (state.phase === "cutover") return
+    if (
+      state.phase !== "committed" ||
+      !state.receipt ||
+      !state.target.configured ||
+      state.quiet === undefined ||
+      this.claim !== state.source ||
+      this.candidate !== state.target
+    )
+      throw new Error("Voice replacement media acknowledgement changed")
+    this.retiring = state.source
+    this.claim = state.target
+    this.candidate = undefined
+    state.target.warming = false
+    state.phase = "cutover"
+    // Work authority becomes available only after configuration, durable authority and media acknowledgement.
+    for (const event of state.target.buffered.splice(0)) this.event(state.target, event)
+  }
+
+  async retire(handoff: Handoff) {
+    if (this.finished && valid(handoff) && this.equal(this.finished, handoff)) return { confirmed: true }
+    const state = this.matching(handoff)
+    if (state.phase !== "cutover" || (this.retiring !== state.source && !state.source.closing))
+      throw new Error("Voice source retirement does not match the committed replacement")
+    const error = await this.close(state.source)
+    if (error) return { confirmed: false, error }
+    this.replacement = undefined
+    this.finished = state.identity
+    this.schedule(state.target)
+    return { confirmed: true }
+  }
+
+  async cancel(handoff: Handoff): Promise<{ restore: boolean; error?: string }> {
+    if (this.restored(handoff)) return { restore: true }
+    const state = this.matching(handoff, true)
+    if (["committing", "committed", "cutover", "unknown"].includes(state.phase))
+      return { restore: false, error: "Voice replacement ownership is unresolved. End voice before reconnecting." }
+    const error = await this.close(state.target)
+    if (error) return { restore: false, error }
+    if (this.restored(handoff)) return { restore: true }
+    if (this.replacement !== state || !this.source(state))
+      return { restore: false, error: "Voice replacement source is no longer available" }
+    if (state.source.fenced && !state.source.speech.boundary().quiet)
+      return { restore: false, error: "Voice changed while replacement was paused. End voice before reconnecting." }
+    state.source.fenced = false
+    state.source.speech.hold(false)
+    this.replacement = undefined
+    this.cancellation = state.identity
+    return { restore: true }
+  }
+
+  private restored(handoff: Handoff) {
+    return (
+      !!this.cancellation &&
+      valid(handoff) &&
+      this.equal(this.cancellation, handoff) &&
+      !this.replacement &&
+      this.claim?.input.requestID === handoff.source &&
+      this.authority(this.claim)
+    )
+  }
+
+  state(handoff: Handoff) {
+    if (this.finished && valid(handoff) && this.equal(this.finished, handoff))
+      return Object.freeze({ ...this.finished, phase: "retired" as const })
+    const state = this.matching(handoff, true)
+    return Object.freeze({
+      ...state.identity,
+      phase: state.phase,
+      ...(state.quiet === undefined ? {} : { epoch: state.quiet }),
+    })
+  }
+
+  private equal(a: Handoff, b: Handoff) {
+    return a.id === b.id && a.sessionID === b.sessionID && a.source === b.source && a.target === b.target
+  }
+
+  private configure(claim: Claim) {
+    return new Promise<void>((resolve, reject) => {
+      const socket = claim.socket!
+      let done = false
+      const finish = (error?: Error) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        socket.off("message", receive)
+        socket.off("close", close)
+        claim.abort.signal.removeEventListener("abort", close)
+        if (error) {
+          claim.fenced = true
+          return reject(error)
+        }
+        resolve()
+      }
+      const close = () => finish(new Error("Voice replacement control disconnected"))
+      const receive = (data: WebSocket.RawData) => {
+        const event = object(data.toString(), 524_288)
+        if (event?.type === "session.updated" && configured(event.session)) finish()
+        if (event?.type === "error") finish(new Error("Voice replacement control was refused"))
+      }
+      const timer = setTimeout(() => finish(new Error("Voice replacement control acknowledgement timed out")), 20_000)
+      socket.on("message", receive)
+      socket.once("close", close)
+      claim.abort.signal.addEventListener("abort", close, { once: true })
+      if (claim.abort.signal.aborted) return close()
+      if (
+        !this.write(claim, {
+          type: "session.update",
+          session: {
+            type: "realtime",
+            instructions,
+            tools: [tool],
+            tool_choice: "auto",
+            audio: {
+              input: {
+                transcription: { model: "gpt-live-transcribe", delay: "low" },
+                turn_detection: {
+                  type: "semantic_vad",
+                  eagerness: "auto",
+                  interrupt_response: false,
+                  create_response: false,
+                },
+              },
+            },
+          },
+        })
+      )
+        close()
+    })
   }
 
   interrupt(requestID: string, responseID: string, eventID: string) {
     const claim = this.claim
-    if (!claim || claim.input.requestID !== requestID || !this.current(claim)) return
+    if (!claim || claim.input.requestID !== requestID || !this.authority(claim)) return
     if (!identifier(responseID) || !identifier(eventID) || claim.speech.output !== responseID) return
     if (claim.cancellations.has(eventID)) return
     claim.cancellations.add(eventID)
@@ -196,7 +617,7 @@ export class OpenAIBroker {
 
   async share(requestID: string, imageID: string, data: string) {
     const claim = this.claim
-    if (!claim || claim.input.requestID !== requestID || !this.current(claim) || !claim.binding)
+    if (!claim || claim.input.requestID !== requestID || !this.authority(claim) || !claim.binding)
       return { status: "failed" as const, error: "Start voice in this conversation before sharing an image." }
     return claim.images.share(
       imageID,
@@ -225,15 +646,20 @@ export class OpenAIBroker {
   }
 
   async stop(requestID?: string) {
-    const claim = this.claim
-    if (!claim || (requestID && claim.input.requestID !== requestID)) return
-    claim.ending = true
-    if (!claim.ready) {
-      claim.cancelled = true
-      claim.abort.abort()
+    const claims = [this.claim, this.candidate, this.retiring].filter((claim): claim is Claim => !!claim)
+    if (requestID && requestID !== this.logical && !claims.some((claim) => claim.input.requestID === requestID)) return
+    for (const claim of claims) {
+      claim.fenced = true
+      claim.ending = true
+      if (!claim.ready) {
+        claim.cancelled = true
+        claim.abort.abort()
+      }
     }
-    await claim.opening
-    return this.close(claim)
+    await Promise.allSettled(claims.map((claim) => claim.opening))
+    const errors = await Promise.all(claims.map((claim) => this.close(claim)))
+    if (!this.active) this.replacement = undefined
+    return errors.find((error) => error !== undefined)
   }
 
   async dispose() {
@@ -242,7 +668,15 @@ export class OpenAIBroker {
   }
 
   private current(claim: Claim) {
-    return this.claim === claim && !claim.cancelled && !claim.abort.signal.aborted && !!claim.config?.current()
+    return this.owns(claim) && !claim.cancelled && !claim.abort.signal.aborted && !!claim.config?.current()
+  }
+
+  private owns(claim: Claim) {
+    return this.claim === claim || this.candidate === claim || this.retiring === claim
+  }
+
+  private authority(claim: Claim) {
+    return this.claim === claim && !claim.warming && !claim.fenced && !claim.ending && this.current(claim)
   }
 
   private assert(claim: Claim) {
@@ -346,27 +780,46 @@ export class OpenAIBroker {
     this.assert(claim)
     // A missing acknowledgment may still have created the binding. Preserve ownership.
     claim.uncertain = true
-    const binding = await this.backend(claim, "/session", {
-      method: "POST",
-      body: JSON.stringify({
-        parentSessionID: claim.input.sessionID,
-        providerCallID: claim.remote,
-        requestID: claim.input.requestID,
-        transcriptionRequestID: transcription.requestID,
-      }),
-    })
+    const replacement = claim.warming ? this.replacement : undefined
+    const source = replacement?.source
+    const binding = await this.backend(
+      source ?? claim,
+      source ? `/session/${encodeURIComponent(source.binding!.id)}/handoff/candidate` : "/session",
+      {
+        method: "POST",
+        ...(source ? { headers: { "X-Raya-Voice-Target-Key": claim.capability } } : {}),
+        body: JSON.stringify(
+          source
+            ? {
+                version: 1,
+                generation: source.binding!.generation,
+                requestID: replacement!.identity.id,
+                providerCallID: claim.remote,
+                reservationID: claim.input.requestID,
+                transcriptionRequestID: transcription.requestID,
+              }
+            : {
+                parentSessionID: claim.input.sessionID,
+                providerCallID: claim.remote,
+                requestID: claim.input.requestID,
+                transcriptionRequestID: transcription.requestID,
+              },
+        ),
+      },
+    )
     claim.binding = admission(binding, claim)
+    relation(binding, claim, replacement)
     claim.reservation = undefined
     claim.transcription = undefined
     claim.uncertain = false
-    const history = await this.backend(claim, `/session/${encodeURIComponent(claim.binding.id)}/context`, {
-      method: "GET",
-    })
+    const history = claim.warming
+      ? { version: 1, incomplete: false, items: [] }
+      : await this.backend(claim, `/session/${encodeURIComponent(claim.binding.id)}/context`, { method: "GET" })
     const spoken = new OpenAIPrefill(OpenAITranscript.context(history))
     const notice = { failed: false }
     claim.transcript = new OpenAITranscript(async (snapshot) => {
       try {
-        if (this.claim !== claim || (claim.cancelled && !claim.ending) || !claim.binding)
+        if (!this.owns(claim) || (claim.cancelled && !claim.ending) || !claim.binding)
           throw new Error("Spoken context lost its call owner")
         await this.persist(claim, snapshot)
       } catch {
@@ -387,7 +840,15 @@ export class OpenAIBroker {
           method: "POST",
           body: JSON.stringify({ generation: claim.binding!.generation, receipt, reservationID }),
         }),
-      (state) => claim.config?.usage?.(state),
+      (state) => {
+        claim.observed = state
+        claim.config?.usage?.(
+          sum([
+            this.totals,
+            ...[this.claim, this.candidate, this.retiring].flatMap((item) => (item?.observed ? [item.observed] : [])),
+          ]),
+        )
+      },
     )
     claim.uncertain = false
     this.assert(claim)
@@ -396,7 +857,29 @@ export class OpenAIBroker {
     claim.timer = setInterval(() => this.validate(claim), 1000)
     claim.timer.unref()
     claim.ready = true
+    claim.expires = performance.now() + Math.min(3600, admittedTranscription.maximumSeconds) * 1000
+    if (!claim.warming) this.schedule(claim)
     ready(answer)
+  }
+
+  private schedule(claim: Claim) {
+    const cfg = claim.config
+    if (cfg?.warm && claim.expires !== undefined) {
+      claim.warm = setTimeout(
+        () => {
+          if (!this.authority(claim) || this.replacement) return
+          cfg.warm!({
+            version: 1,
+            id: `raya_handoff_${randomBytes(12).toString("hex")}`,
+            sessionID: claim.input.sessionID,
+            source: claim.input.requestID,
+            target: `raya_voice_${randomBytes(12).toString("hex")}`,
+          })
+        },
+        Math.max(0, claim.expires - performance.now() - 180_000),
+      )
+      claim.warm.unref()
+    }
   }
 
   private validate(claim: Claim) {
@@ -439,8 +922,8 @@ export class OpenAIBroker {
           session: {
             type: "realtime",
             instructions,
-            tools: [tool],
-            tool_choice: "auto",
+            tools: claim.warming ? [] : [tool],
+            tool_choice: claim.warming ? "none" : "auto",
             audio: {
               input: {
                 transcription: { model: "gpt-live-transcribe", delay: "low" },
@@ -461,7 +944,7 @@ export class OpenAIBroker {
         if (!event) return
         if (ready) return this.event(claim, event)
         claim.transcript?.receive(event)
-        if (!seeded && event.type === "session.updated" && configured(event.session)) {
+        if (!seeded && event.type === "session.updated" && configured(event.session, claim.warming)) {
           seeded = true
           for (const prefill of prefills) this.send(claim, prefill.create())
           return
@@ -479,10 +962,15 @@ export class OpenAIBroker {
       })
       const failure = () => {
         if (claim.ending) return
-        if (!ready) finish(new Error("OpenAI voice control disconnected during setup."))
-        if (ready && this.claim === claim && !claim.cancelled) {
-          claim.failed("OpenAI voice control disconnected. End voice and review ongoing work before reconnecting.")
+        if (this.sealed(claim)) {
           void this.close(claim).then((error) => error && claim.failed(error))
+          return
+        }
+        if (!ready) finish(new Error("OpenAI voice control disconnected during setup."))
+        if (ready && this.owns(claim) && !claim.cancelled) {
+          if (claim.warming) claim.fenced = true
+          claim.failed("OpenAI voice control disconnected. End voice and review ongoing work before reconnecting.")
+          if (!claim.warming) void this.close(claim).then((error) => error && claim.failed(error))
         }
       }
       socket.on("error", failure)
@@ -512,7 +1000,7 @@ export class OpenAIBroker {
   }
 
   private async respond(claim: Claim, event: Record<string, unknown>) {
-    if (claim.ending) return
+    if (claim.ending || !this.authority(claim)) return
     const id = event.event_id
     if (!identifier(id) || claim.responses.has(id) || claim.responses.size >= 64) return this.block(claim)
     const reservation = { parentSessionID: claim.input.sessionID, requestID: id, model } satisfies Reservation
@@ -573,6 +1061,7 @@ export class OpenAIBroker {
   }
 
   private event(claim: Claim, event: Record<string, unknown>) {
+    if (claim.warming) return this.warming(claim, event)
     if (!this.observed(claim, event)) return
     claim.transcript?.receive(event)
     if (claim.ending) return
@@ -591,6 +1080,39 @@ export class OpenAIBroker {
         response: {},
       })
     claim.speech.flush()
+  }
+
+  private warming(claim: Claim, event: Record<string, unknown>) {
+    claim.usage?.receive(event)
+    if (this.replacement?.history.receive(event)) return
+    if (
+      this.replacement?.phase === "committed" &&
+      !["response.created", "response.done", "output_audio_buffer.started"].includes(String(event.type))
+    ) {
+      if (
+        claim.buffered.length < 32 &&
+        Buffer.byteLength(JSON.stringify([...claim.buffered, event]), "utf8") <= 65_536
+      ) {
+        claim.buffered.push(event)
+        return
+      }
+      claim.fenced = true
+      claim.failed("Voice replacement activity could not be retained safely")
+      return
+    }
+    if (
+      [
+        "response.created",
+        "response.done",
+        "input_audio_buffer.speech_started",
+        "output_audio_buffer.started",
+      ].includes(String(event.type))
+    ) {
+      if (!claim.fenced) {
+        claim.fenced = true
+        claim.failed("Voice replacement became active too early. Your current call is still available.")
+      }
+    }
   }
 
   private observed(claim: Claim, event: Record<string, unknown>) {
@@ -640,7 +1162,7 @@ export class OpenAIBroker {
   }
 
   private queue(claim: Claim, event: Record<string, unknown>) {
-    if (claim.blocked || claim.ending || !this.validate(claim)) return
+    if (claim.blocked || claim.ending || !this.authority(claim)) return
     if (!identifier(event.call_id) || typeof event.arguments !== "string" || event.arguments.length > 16_000) return
     const id = event.call_id
     const digest = createHash("sha256").update(event.arguments).digest("hex")
@@ -661,7 +1183,7 @@ export class OpenAIBroker {
     // Wait for the prior retained result before admitting another backend call.
     claim.queue = claim.queue
       .then(async () => {
-        if (!claim.blocked && this.validate(claim)) await this.work(claim, work)
+        if (!claim.blocked && this.authority(claim)) await this.work(claim, work)
       })
       .catch(() => this.block(claim))
   }
@@ -763,7 +1285,7 @@ export class OpenAIBroker {
     const signal = AbortSignal.timeout(this.persistenceTimeout)
     const owner = (retry = false) => {
       if (
-        this.claim !== claim ||
+        !this.owns(claim) ||
         claim.config !== cfg ||
         claim.binding !== binding ||
         ((!ending || retry) && !cfg.current()) ||
@@ -845,6 +1367,7 @@ export class OpenAIBroker {
         Authorization: cfg.authorization,
         "Content-Type": "application/json",
         "X-Raya-Voice-Key": claim.capability,
+        ...Object.fromEntries(new Headers(init.headers)),
       },
       signal: cleanup
         ? AbortSignal.timeout(15_000)
@@ -867,12 +1390,22 @@ export class OpenAIBroker {
     return claim.closing
   }
 
+  private sealed(claim: Claim) {
+    return this.retiring === claim && this.replacement?.phase === "cutover"
+  }
+
+  private async settle(claim: Claim, hangup: boolean) {
+    if (!claim.ready || !hangup || !claim.binding) return
+    return claim.usage?.settle(this.settlementTimeout)
+  }
+
   private async cleanup(claim: Claim): Promise<string | undefined> {
     claim.ending = true
-    claim.transcript?.invalidate()
+    if (!claim.warming && !this.sealed(claim)) claim.transcript?.invalidate()
     claim.speech.close()
     clearInterval(claim.timer)
     clearTimeout(claim.limit)
+    clearTimeout(claim.warm)
     const hangup =
       claim.remote && claim.config
         ? await this.hangup(claim).then(
@@ -880,8 +1413,8 @@ export class OpenAIBroker {
             () => false,
           )
         : true
-    const usage = claim.ready && hangup && claim.binding ? await claim.usage?.settle(this.settlementTimeout) : undefined
-    const spoken = await claim.transcript?.close().then(
+    const usage = await this.settle(claim, hangup)
+    const spoken = await claim.transcript?.close(claim.warming || this.sealed(claim)).then(
       () => true,
       () => false,
     )
@@ -927,7 +1460,10 @@ export class OpenAIBroker {
     ])
     const error = this.release(claim, hangup, usage, spoken, results)
     if (error) return error
+    if (claim.observed) this.totals = sum([this.totals, claim.observed])
     if (this.claim === claim) this.claim = undefined
+    if (this.candidate === claim) this.candidate = undefined
+    if (this.retiring === claim) this.retiring = undefined
   }
 
   private release(
@@ -959,6 +1495,52 @@ export class OpenAIBroker {
     await response.body?.cancel()
     if (!response.ok) throw new Error("OpenAI call release was not confirmed")
   }
+}
+
+function unchanged(
+  checkpoint: Awaited<ReturnType<OpenAITranscript["checkpoint"]>>,
+  prior: { fingerprint: string; epoch: number; boundary: number },
+  boundary: ReturnType<OpenAISpeech["boundary"]>,
+) {
+  return (
+    checkpoint.ready &&
+    boundary.quiet &&
+    checkpoint.fingerprint === prior.fingerprint &&
+    checkpoint.epoch === prior.epoch &&
+    boundary.epoch === prior.boundary
+  )
+}
+
+function activation(receipt: Record<string, unknown>, state: Replacement, body: Record<string, unknown>) {
+  return (
+    receipt.version === 1 &&
+    receipt.requestID === state.identity.id &&
+    receipt.sourceID === state.source.binding!.id &&
+    receipt.sourceGeneration === body.generation &&
+    receipt.candidateID === body.candidateID &&
+    receipt.candidateGeneration === body.candidateGeneration &&
+    receipt.sourceRevision === body.sourceRevision &&
+    receipt.sourceHash === body.sourceHash &&
+    receipt.readyID === body.readyID &&
+    Number.isFinite(receipt.activatedAt)
+  )
+}
+
+function relation(value: Record<string, unknown>, target: Claim, state?: Replacement) {
+  if (!state) return
+  const source = state.source
+  const handoff = state.identity
+  const row = record(value.handoff)
+  if (
+    row?.version !== 1 ||
+    row.requestID !== handoff.id ||
+    row.sourceID !== source.binding!.id ||
+    row.sourceGeneration !== source.binding!.generation ||
+    row.candidateID !== target.binding!.id ||
+    row.candidateGeneration !== target.binding!.generation ||
+    row.phase !== "candidate"
+  )
+    throw new Error("Voice replacement backend relation changed")
 }
 
 function identifier(value: unknown): value is string {
@@ -1021,22 +1603,48 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
 }
 
-function configured(value: unknown) {
+function configured(value: unknown, warming = false) {
   if (!value || typeof value !== "object") return false
   const session = value as Record<string, unknown>
   if (session.instructions !== instructions) return false
+  return (
+    detection(session.audio) &&
+    Array.isArray(session.tools) &&
+    (warming
+      ? session.tools.length === 0 && session.tool_choice === "none"
+      : session.tools.length === 1 &&
+        session.tool_choice === "auto" &&
+        JSON.stringify(canonical(session.tools[0])) === JSON.stringify(canonical(tool)))
+  )
+}
+
+function detection(value: unknown) {
+  const session = { audio: value }
   if (!session.audio || typeof session.audio !== "object") return false
   const audio = session.audio as Record<string, unknown>
   if (!audio.input || typeof audio.input !== "object") return false
   const input = audio.input as Record<string, unknown>
   if (!input.turn_detection || typeof input.turn_detection !== "object") return false
   const turn = input.turn_detection as Record<string, unknown>
+  const transcription = record(input.transcription)
   return (
     turn.type === "semantic_vad" &&
+    turn.eagerness === "auto" &&
     turn.create_response === false &&
     turn.interrupt_response === false &&
-    Array.isArray(session.tools) &&
-    session.tools.some((item) => item && typeof item === "object" && item.name === "raya_work")
+    transcription?.model === "gpt-live-transcribe" &&
+    transcription.delay === "low"
+  )
+}
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  const row = record(value)
+  if (!row) return value
+  return Object.fromEntries(
+    Object.keys(row)
+      .sort()
+      .map((key) => [key, canonical(row[key])]),
   )
 }
 
@@ -1133,7 +1741,44 @@ async function drain(reader: ReadableStreamDefaultReader<Uint8Array>, failed: bo
   }
 }
 
-function delay(signal: AbortSignal) {
+function empty(): VoiceUsage {
+  return {
+    responses: 0,
+    transcriptions: 0,
+    input: 0,
+    output: 0,
+    missing: 0,
+    invalid: 0,
+    recorded: 0,
+    unrecorded: 0,
+    pending: 0,
+    incomplete: false,
+  }
+}
+
+function sum(rows: VoiceUsage[]) {
+  const value = empty()
+  for (const row of rows) {
+    for (const key of [
+      "responses",
+      "transcriptions",
+      "input",
+      "output",
+      "missing",
+      "invalid",
+      "recorded",
+      "unrecorded",
+      "pending",
+    ] as const)
+      value[key] += row[key]
+    value.incomplete ||= row.incomplete
+    if (row.seconds !== undefined) value.seconds = (value.seconds ?? 0) + row.seconds
+    if (row.durations !== undefined) value.durations = (value.durations ?? 0) + row.durations
+  }
+  return value
+}
+
+function delay(signal: AbortSignal, ms = 1500) {
   return new Promise<void>((resolve, reject) => {
     const abort = () => {
       clearTimeout(timer)
@@ -1142,7 +1787,7 @@ function delay(signal: AbortSignal) {
     const timer = setTimeout(() => {
       signal.removeEventListener("abort", abort)
       resolve()
-    }, 1500)
+    }, ms)
     if (signal.aborted) return abort()
     signal.addEventListener("abort", abort, { once: true })
   })

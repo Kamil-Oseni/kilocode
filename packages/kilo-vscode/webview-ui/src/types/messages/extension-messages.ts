@@ -1,4 +1,5 @@
 import type { LiveUsage } from "../../../../src/shared/live-usage"
+import type { HandoffCommand } from "../../../../src/shared/voice-handoff"
 import type { VoiceUsage } from "../../../../src/shared/voice-usage"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../../../src/diff/sources/types"
@@ -1999,6 +2000,7 @@ export interface FocusTimerResultMessage {
 }
 
 export type ExtensionMessage =
+  | HandoffCommand
   | ChiefNotesResult
   | ChiefNotesAvailable
   | { type: "speechLiveStarted"; requestId: string }

@@ -29,6 +29,7 @@ export class OpenAISpeech {
   private uncertain = false
   private epoch = 0
   private fault = false
+  private held = false
   private responses = new Set<string>()
   private playback = new Set<string>()
   private requests = new Map<string, Request>()
@@ -77,6 +78,13 @@ export class OpenAISpeech {
     if (this.epoch < Number.MAX_SAFE_INTEGER) this.epoch++
     else this.fault = true
     if (fault) this.fault = true
+  }
+
+  /** Pause new presentation requests without hiding observed provider activity. */
+  hold(value: boolean) {
+    if (this.closed || this.held === value) return
+    this.held = value
+    this.activity()
   }
 
   generating(id: string) {
@@ -174,6 +182,7 @@ export class OpenAISpeech {
     if (work && rung === 4) work.background = true
     if (
       this.closed ||
+      this.held ||
       this.uncertain ||
       !this.current() ||
       this.request ||

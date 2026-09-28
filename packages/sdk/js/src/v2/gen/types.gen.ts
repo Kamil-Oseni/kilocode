@@ -28981,6 +28981,69 @@ export type KilocodeVoiceOpenaiHandoffReadyResponses = {
 export type KilocodeVoiceOpenaiHandoffReadyResponse =
   KilocodeVoiceOpenaiHandoffReadyResponses[keyof KilocodeVoiceOpenaiHandoffReadyResponses]
 
+export type KilocodeVoiceOpenaiHandoffRearmData = {
+  body?: {
+    version: 1
+    generation: string
+    sourceRevision: number
+    sourceHash: string
+    readyID: string
+    priorReadyID: string
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/handoff/rearm"
+}
+
+export type KilocodeVoiceOpenaiHandoffRearmErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiHandoffRearmError =
+  KilocodeVoiceOpenaiHandoffRearmErrors[keyof KilocodeVoiceOpenaiHandoffRearmErrors]
+
+export type KilocodeVoiceOpenaiHandoffRearmResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    requestID: string
+    sourceID: string
+    sourceGeneration: string
+    candidateID: string
+    candidateGeneration: string
+    sourceRevision: number
+    sourceHash: string
+    readyID: string
+    priorReadyID: string
+    deadline: number
+    rearmedAt: number
+  }
+}
+
+export type KilocodeVoiceOpenaiHandoffRearmResponse =
+  KilocodeVoiceOpenaiHandoffRearmResponses[keyof KilocodeVoiceOpenaiHandoffRearmResponses]
+
 export type KilocodeVoiceOpenaiHandoffActivateData = {
   body?: {
     version: 1

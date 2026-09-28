@@ -25,6 +25,8 @@ import {
   OpenAIStart,
   OpenAIHandoffCandidate,
   OpenAIHandoffReady,
+  OpenAIHandoffRearm,
+  OpenAIHandoffRearmReceipt,
   OpenAIHandoffActivate,
   OpenAIHandoffContext,
   OpenAIHandoffReceipt,
@@ -53,6 +55,7 @@ export const VoicePaths = {
   candidate: `${root}/openai/session/:id/handoff/candidate`,
   checkpoint: `${root}/openai/session/:id/handoff/context`,
   ready: `${root}/openai/session/:id/handoff/ready`,
+  rearm: `${root}/openai/session/:id/handoff/rearm`,
   activate: `${root}/openai/session/:id/handoff/activate`,
   receipt: `${root}/openai/session/:id/handoff/receipt`,
 } as const
@@ -110,6 +113,21 @@ export const VoiceApi = HttpApi.make("raya-voice").add(
         OpenApi.annotations({
           identifier: "kilocode.voice.openai.handoff.ready",
           summary: "Record bounded trusted broker readiness for an unchanged source checkpoint",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIHandoffRearm", VoicePaths.rearm, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIHandoffRearm,
+        success: OpenAIHandoffRearmReceipt,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.handoff.rearm",
+          summary: "Compare and replace readiness without extending the warming deadline",
         }),
       ),
     )

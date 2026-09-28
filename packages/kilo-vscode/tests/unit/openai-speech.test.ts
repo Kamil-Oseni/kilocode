@@ -294,3 +294,20 @@ test("malformed response and playback IDs cannot own or release the speech lane"
   expect(f.state.events).toHaveLength(2)
   f.speech.close()
 })
+
+test("quiesce hold suppresses narration while provider activity invalidates the epoch", () => {
+  const f = fixture()
+  f.speech.start("call")
+  const prior = f.speech.boundary()
+  f.speech.hold(true)
+  expect(f.speech.boundary().epoch).toBeGreaterThan(prior.epoch)
+  expect(f.speech.boundary().quiet).toBe(true)
+  f.advance(30_000)
+  expect(f.state.events).toHaveLength(0)
+  const held = f.speech.boundary().epoch
+  f.event({ type: "input_audio_buffer.speech_started" })
+  expect(f.speech.boundary().epoch).toBeGreaterThan(held)
+  expect(f.speech.boundary().quiet).toBe(false)
+  f.speech.hold(false)
+  expect(f.speech.boundary().quiet).toBe(false)
+})

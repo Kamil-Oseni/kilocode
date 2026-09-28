@@ -68,6 +68,160 @@ const warming = (state: Effect.Success<ReturnType<typeof fixture>>, root: string
   })
 
 it.live(
+  "warm readiness rearming is durable CAS with a fixed deadline and real SQLite rollback",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const next = yield* warming(state, root)
+        const prepared = yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        yield* state.voice.spoken(
+          state.binding.id,
+          {
+            version: 1,
+            generation: state.binding.generation,
+            providerCallID: state.binding.providerCallID,
+            revision: 1,
+            items: [{ id: "delta", previous: null, role: "user", state: "final", text: "A new turn" }],
+          },
+          secret,
+          root,
+        )
+        const context = yield* state.voice.handoffContext(next.binding.id, next.binding.generation, next.target, root)
+        const input = {
+          ...next.ready,
+          priorReadyID: next.ready.readyID,
+          readyID: "prefill-two",
+          sourceRevision: context.sourceRevision,
+          sourceHash: context.sourceHash,
+        }
+        const conflict = <A, E>(request: Effect.Effect<A, E>) =>
+          request.pipe(
+            Effect.flip,
+            Effect.map((err) => {
+              expect(err).toMatchObject({ _tag: "VoiceError", code: "conflict" })
+            }),
+          )
+        yield* conflict(state.voice.rearm(next.binding.id, { ...input, priorReadyID: "wrong" }, next.target, root))
+        yield* conflict(
+          state.voice.rearm(next.binding.id, { ...input, sourceHash: next.ready.sourceHash }, next.target, root),
+        )
+        expect(
+          yield* state.voice
+            .rearm(next.binding.id, { ...input, readyID: "bad\n" }, next.target, root)
+            .pipe(Effect.flip),
+        ).toMatchObject({ _tag: "VoiceError", code: "invalid" })
+        const before = yield* retained(next.binding.id)
+        const db = state.deps.database.db
+        yield* db
+          .run(
+            sql`CREATE TRIGGER refuse_rearm BEFORE UPDATE ON raya_voice_binding WHEN json_extract(OLD.data, '$.binding.handoff.phase') = 'ready' BEGIN SELECT RAISE(ABORT, 'rearm denied'); END`,
+          )
+          .pipe(Effect.orDie)
+        expect(
+          Exit.isFailure(yield* state.voice.rearm(next.binding.id, input, next.target, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(yield* retained(next.binding.id)).toEqual(before)
+        yield* db.run(sql`DROP TRIGGER refuse_rearm`).pipe(Effect.orDie)
+        const receipt = yield* state.voice.rearm(next.binding.id, input, next.target, root)
+        expect(receipt.deadline).toBe(prepared.handoff!.deadline!)
+        expect(yield* state.voice.rearm(next.binding.id, input, next.target, root)).toEqual(receipt)
+        yield* conflict(state.voice.rearm(next.binding.id, { ...input, sourceRevision: 2 }, next.target, root))
+        yield* conflict(state.voice.activate(state.binding.id, next.activate, secret, root))
+        yield* conflict(state.voice.ready(next.binding.id, next.ready, next.target, root))
+        const latest = { ...input, priorReadyID: input.readyID, readyID: "prefill-three" }
+        const second = yield* state.voice.rearm(next.binding.id, latest, next.target, root)
+        expect(second.deadline).toBe(receipt.deadline)
+        expect(yield* state.voice.rearm(next.binding.id, input, next.target, root)).toEqual(receipt)
+        yield* conflict(
+          state.voice.rearm(
+            next.binding.id,
+            { ...latest, priorReadyID: latest.readyID, readyID: next.ready.readyID },
+            next.target,
+            root,
+          ),
+        )
+        yield* state.voice.activate(
+          state.binding.id,
+          {
+            ...next.activate,
+            readyID: latest.readyID,
+            sourceRevision: latest.sourceRevision,
+            sourceHash: latest.sourceHash,
+          },
+          secret,
+          root,
+        )
+        expect(yield* state.voice.rearm(next.binding.id, input, next.target, root)).toEqual(receipt)
+        const restarted = yield* make(state.deps)
+        yield* conflict(restarted.rearm(next.binding.id, input, next.target, root))
+        expect(state.calls).toEqual([])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "warm readiness rearming bounds receipts, refuses expired CAS and fails closed on malformed history",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const next = yield* warming(state, root)
+        const prepared = yield* state.voice.ready(next.binding.id, next.ready, next.target, root)
+        const inputs = Array.from({ length: 17 }, (_, index) => ({
+          ...next.ready,
+          priorReadyID: index === 0 ? next.ready.readyID : `ack-${index - 1}`,
+          readyID: `ack-${index}`,
+        }))
+        const first = yield* state.voice.rearm(next.binding.id, inputs[0]!, next.target, root)
+        for (const input of inputs.slice(1, 16)) {
+          const receipt = yield* state.voice.rearm(next.binding.id, input, next.target, root)
+          expect(receipt.deadline).toBe(prepared.handoff!.deadline!)
+        }
+        expect(
+          yield* state.voice.rearm(next.binding.id, inputs[16]!, next.target, root).pipe(Effect.flip),
+        ).toMatchObject({ _tag: "VoiceError", code: "conflict" })
+        const saved = yield* retained(next.binding.id)
+        expect(saved.rearms).toHaveLength(16)
+        const store = Store.make(state.deps.database, state.deps.storage)
+        yield* store.replace({
+          ...saved,
+          binding: { ...saved.binding, handoff: { ...saved.binding.handoff!, deadline: Date.now() - 1 } },
+        })
+        expect(yield* state.voice.rearm(next.binding.id, inputs[0]!, next.target, root)).toEqual(first)
+        expect(
+          yield* state.voice.rearm(next.binding.id, inputs[16]!, next.target, root).pipe(Effect.flip),
+        ).toMatchObject({ _tag: "VoiceError", code: "expired" })
+        const invalid = { ...saved, rearms: [{ ...first, readyID: "invalid\n" }] }
+        yield* state.deps.database.db
+          .update(Table)
+          .set({ data: invalid })
+          .where(eq(Table.id, next.binding.id))
+          .run()
+          .pipe(Effect.orDie)
+        expect(
+          yield* state.voice.rearm(next.binding.id, inputs[0]!, next.target, root).pipe(Effect.flip),
+        ).toMatchObject({ _tag: "VoiceError", code: "conflict" })
+        expect(state.calls).toEqual([])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
   "warm authority refuses malformed expiry and bounded parent overflow without staging input",
   () =>
     Effect.gen(function* () {

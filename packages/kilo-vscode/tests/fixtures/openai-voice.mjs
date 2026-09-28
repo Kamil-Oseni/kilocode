@@ -9,7 +9,13 @@ import { chromium } from "@playwright/test"
 const directory = await mkdtemp(join(tmpdir(), "raya-openai-voice-"))
 const output = join(directory, "voice.js")
 await build({
-  entryPoints: [resolve("webview-ui/src/context/openai-voice.ts")],
+  stdin: {
+    contents:
+      'export { OpenAIVoice } from "./webview-ui/src/context/openai-voice"; export { createHandoff } from "./webview-ui/src/context/voice-handoff"; export { createVoiceRecovery } from "./webview-ui/src/context/voice-recovery"; export { createRoot } from "solid-js";',
+    resolveDir: resolve("."),
+    sourcefile: "voice-entry.ts",
+    loader: "ts",
+  },
   outfile: output,
   bundle: true,
   platform: "browser",
@@ -432,16 +438,17 @@ try {
       sourcechannel.send(JSON.stringify({ type: "input_audio_buffer.speech_started" }))
       await until(() => source.speech)
       check(
-        refuses(() => voice.cutover(handoff)) && voice.operation === source,
+        refuses(() => voice.quiesce(handoff)) && voice.operation === source,
         "source speech invalidates quiet cutover boundary",
       )
       sourcechannel.send(JSON.stringify({ type: "input_audio_buffer.speech_stopped" }))
       await until(() => !source.speech)
+      const boundary = voice.quiesce(handoff)
       check(
         voice.mute(true) && !candidate.media.getAudioTracks()[0].enabled,
         "mute during preparation disables source and retains silent candidate",
       )
-      const receipt = voice.cutover(handoff)
+      const receipt = voice.cutover(boundary)
       check(
         receipt.phase === "cutover" &&
           voice.operation === candidate &&
@@ -451,7 +458,7 @@ try {
         "cutover transfers ownership and preserves latest user mute",
       )
       check(
-        voice.cutover({ ...handoff }) === receipt,
+        voice.cutover({ ...boundary }) === receipt,
         "identical cutover returns exact receipt without repeating effects",
       )
       voice.mute(false)
@@ -546,6 +553,7 @@ try {
       const partial = { ...handoff, id: "handoff-partial", source: "source-partial", target: "target-partial" }
       await voice.prepare(partial, exchange)
       const partialtarget = voice.candidate
+      const partialquiet = voice.quiesce(partial)
       const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "muted")
       Object.defineProperty(partialtarget.audio, "muted", {
         get() {
@@ -557,15 +565,212 @@ try {
         },
       })
       check(
-        refuses(() => voice.cutover(partial)) &&
+        refuses(() => voice.cutover(partialquiet)) &&
           partialsource.media.getAudioTracks()[0].readyState === "ended" &&
           partialtarget.media.getAudioTracks()[0].readyState === "ended",
         "partial cutover failure stops both media effects without reviving source",
       )
       check(
-        refuses(() => voice.cutover(partial)) && !voice.operation && !voice.candidate && !voice.retiring,
+        refuses(() => voice.cutover(partialquiet)) && !voice.operation && !voice.candidate && !voice.retiring,
         "unknown cutover cannot automatically replay media activation",
       )
+      let owner = { id: "bridge-source", session: "session-bridge", engine: "realtime" }
+      let generation = 1
+      let busy = false
+      let hold = false
+      const bridgeevents = []
+      const hoststops = []
+      let disposal
+      const recovery = Voice.createRoot((dispose) => {
+        disposal = dispose
+        return Voice.createVoiceRecovery(
+          () => "session-bridge",
+          () => voice.stop(),
+          () => {
+            throw new Error("Local cleanup failed")
+          },
+        )
+      })
+      const stopbridge = () => {
+        bridge.close()
+        const held = [voice.operation, voice.candidate, voice.retiring].filter(Boolean)
+        owner = undefined
+        recovery.close()
+        hoststops.push(
+          held.every((operation) => operation.media.getAudioTracks().every((track) => track.readyState === "ended")),
+        )
+      }
+      const bridge = Voice.createHandoff({
+        media: voice,
+        current: () => owner,
+        session: () => "session-bridge",
+        generation: () => generation,
+        busy: () => busy,
+        switched: (identity) => {
+          owner = { ...owner, id: identity.target }
+          recovery.bind(owner)
+        },
+        ended: stopbridge,
+        post: (event) => {
+          bridgeevents.push(event)
+          if (event.type === "speechOpenAIHandoffOffer" && !hold)
+            void exchange(event.sdp).then((sdp) =>
+              bridge.receive({ type: "speechOpenAIHandoffAnswer", handoff: event.handoff, sdp }),
+            )
+        },
+      })
+      recovery.bind(owner)
+      await voice.start({ sessionID: owner.session, requestID: owner.id }, exchange)
+      const identity = {
+        version: 1,
+        id: "bridge-handoff",
+        sessionID: owner.session,
+        source: owner.id,
+        target: "bridge-target",
+      }
+      bridge.receive({ type: "speechOpenAIHandoffPrepare", handoff: identity })
+      await until(() => bridgeevents.some((event) => event.type === "speechOpenAIHandoffPrepared"))
+      check(
+        owner.id === identity.source && voice.operation.requestID === identity.source,
+        "bridge preserves source UI owner through candidate preparation",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffQuiesce", handoff: { ...identity, id: "foreign" } })
+      check(voice.operation.media.getAudioTracks()[0].enabled, "stale bridge identity cannot quiesce active microphone")
+      bridge.receive({ type: "speechOpenAIHandoffQuiesce", handoff: identity })
+      const token = bridgeevents.find((event) => event.type === "speechOpenAIHandoffQuiesced").quiet
+      check(
+        !voice.operation.media.getAudioTracks()[0].enabled && token.phase === "quiesced",
+        "bridge disables source input before emitting exact quiescence acknowledgement",
+      )
+      voice.mute(false)
+      check(
+        !voice.operation.media.getAudioTracks()[0].enabled,
+        "unmute intent cannot reopen quiesced source before authority decision",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffCutover", quiet: { ...token, epoch: token.epoch + 1 } })
+      check(owner.id === identity.source, "changed quiescence epoch cannot switch media or UI ownership")
+      bridge.receive({ type: "speechOpenAIHandoffCutover", quiet: token })
+      check(
+        owner.id === identity.target && bridgeevents.at(-1).type === "speechOpenAIHandoffCutoverAck",
+        "bridge switches UI routing before posting exact media cutover acknowledgement",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffCutover", quiet: token })
+      check(
+        bridgeevents.at(-1).ack.target === identity.target,
+        "duplicate bridge cutover returns correlated target acknowledgement",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffRetire", handoff: identity })
+      check(
+        bridgeevents.at(-1).confirmed && voice.operation.media.getAudioTracks()[0].readyState === "live",
+        "bridge retires source separately while active target remains live",
+      )
+      const promoted = voice.operation
+      bridge.receive({ type: "speechOpenAIHandoffNotice", handoff: identity, reason: "unavailable" })
+      check(
+        !owner && promoted.media.getAudioTracks()[0].readyState === "ended" && hoststops.at(-1),
+        "matching promoted notice after retirement closes active target locally before host Stop",
+      )
+      bridge.close()
+      await voice.stop()
+      owner = { id: "bridge-cancel", session: "session-bridge", engine: "realtime" }
+      recovery.bind(owner)
+      generation++
+      await voice.start({ sessionID: owner.session, requestID: owner.id }, exchange)
+      const denied = { ...identity, id: "bridge-denied", source: owner.id, target: "bridge-denied-target" }
+      bridge.receive({ type: "speechOpenAIHandoffPrepare", handoff: denied })
+      await until(() =>
+        bridgeevents.some((event) => event.type === "speechOpenAIHandoffPrepared" && event.ack.id === denied.id),
+      )
+      busy = true
+      bridge.receive({ type: "speechOpenAIHandoffQuiesce", handoff: denied })
+      check(
+        bridgeevents.at(-1).reason === "activity" && voice.operation.media.getAudioTracks()[0].enabled,
+        "pending image or control state refuses quiescence without silencing source",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffCancel", handoff: denied, restore: true })
+      await until(() => !voice.candidate)
+      check(
+        voice.operation.requestID === denied.source && voice.operation.media.getAudioTracks()[0].enabled,
+        "definite host refusal restores only matching original source",
+      )
+      busy = false
+      const notice = { ...denied, id: "bridge-notice", target: "bridge-notice-target" }
+      bridge.receive({ type: "speechOpenAIHandoffPrepare", handoff: notice })
+      await until(() =>
+        bridgeevents.some((event) => event.type === "speechOpenAIHandoffPrepared" && event.ack.id === notice.id),
+      )
+      bridge.receive({ type: "speechOpenAIHandoffNotice", handoff: notice, reason: "unavailable" })
+      check(
+        bridgeevents.at(-1).reason === "unavailable" &&
+          !voice.candidate &&
+          voice.operation.media.getAudioTracks()[0].enabled,
+        "host candidate notice releases candidate and requests reconciliation while source stays active",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffCancel", handoff: notice, restore: true })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      bridge.close()
+      await voice.stop()
+      owner = { id: "bridge-activity", session: "session-bridge", engine: "realtime" }
+      recovery.bind(owner)
+      generation++
+      busy = false
+      await voice.start({ sessionID: owner.session, requestID: owner.id }, exchange)
+      const activitysource = voice.operation
+      const activitypeer = peers.at(-1)
+      await until(() => channels.get(activitypeer)?.readyState === "open")
+      const activity = {
+        ...identity,
+        id: "bridge-activity-handoff",
+        source: owner.id,
+        target: "bridge-activity-target",
+      }
+      bridge.receive({ type: "speechOpenAIHandoffPrepare", handoff: activity })
+      await until(() =>
+        bridgeevents.some((event) => event.type === "speechOpenAIHandoffPrepared" && event.ack.id === activity.id),
+      )
+      const activitytarget = voice.candidate
+      bridge.receive({ type: "speechOpenAIHandoffQuiesce", handoff: activity })
+      const activityquiet = bridgeevents.at(-1).quiet
+      channels.get(activitypeer).send(JSON.stringify({ type: "input_audio_buffer.speech_started" }))
+      await until(() => activitysource.speech)
+      voice.mute(false)
+      check(
+        !activitysource.media.getAudioTracks()[0].enabled,
+        "late source activity invalidates token without releasing physical input fence",
+      )
+      bridge.receive({ type: "speechOpenAIHandoffCutover", quiet: activityquiet })
+      await until(() => activitysource.media.getAudioTracks()[0].readyState === "ended")
+      check(
+        !owner && activitytarget.media.getAudioTracks()[0].readyState === "ended",
+        "late source activity after quiescence closes both roles instead of uncertain cutover",
+      )
+      check(hoststops.at(-1), "actual recovery callback closes all local media before host Stop publication")
+      bridge.close()
+      await voice.stop()
+      owner = { id: "bridge-stale", session: "session-bridge", engine: "realtime" }
+      recovery.bind(owner)
+      generation++
+      hold = true
+      await voice.start({ sessionID: owner.session, requestID: owner.id }, exchange)
+      const stale = { ...identity, id: "bridge-stale-handoff", source: owner.id, target: "bridge-stale-target" }
+      bridge.receive({ type: "speechOpenAIHandoffPrepare", handoff: stale })
+      await until(() =>
+        bridgeevents.some((event) => event.type === "speechOpenAIHandoffOffer" && event.handoff.id === stale.id),
+      )
+      generation++
+      bridge.receive({ type: "speechOpenAIHandoffAnswer", handoff: stale, sdp: "late-invalid-answer" })
+      check(
+        !bridgeevents.some((event) => event.type === "speechOpenAIHandoffPrepared" && event.ack.id === stale.id),
+        "changed local generation rejects late candidate answer and readiness acknowledgement",
+      )
+      bridge.close()
+      await until(() => !voice.candidate)
+      check(
+        voice.operation.media.getAudioTracks()[0].enabled,
+        "cancelling stale candidate preparation preserves still-owned source",
+      )
+      await voice.stop()
+      disposal()
       return checks
     } finally {
       await voice.stop()
@@ -575,7 +780,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 60)
+  assert.equal(result.length, 77)
   console.log(
     `OpenAI native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`,
   )

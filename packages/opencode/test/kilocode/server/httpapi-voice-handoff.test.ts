@@ -2,7 +2,12 @@ import { expect, test } from "bun:test"
 import { ConfigProvider, Layer, Schema } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import * as HttpApiServer from "@/server/routes/instance/httpapi/server"
-import { OpenAIBinding, OpenAIHandoffContext, OpenAIHandoffReceipt } from "@/kilocode/voice/openai-protocol"
+import {
+  OpenAIBinding,
+  OpenAIHandoffContext,
+  OpenAIHandoffReceipt,
+  OpenAIHandoffRearmReceipt,
+} from "@/kilocode/voice/openai-protocol"
 import { SessionID } from "@/session/schema"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 import { resetDatabase } from "../../fixture/db"
@@ -120,6 +125,20 @@ test("handoff HTTP routes keep source and target capabilities separate and rejec
       ).status,
     ).toBe(400)
     expect((await request("POST", `${base}/${candidate.id}/handoff/ready`, ready, target)).status).toBe(200)
+    const rearm = { ...ready, priorReadyID: ready.readyID, readyID: "prefill-second" }
+    const rearming = `${base}/${candidate.id}/handoff/rearm`
+    expect((await request("POST", rearming, rearm)).status).toBe(401)
+    for (const invalid of [
+      { ...rearm, version: 2 },
+      { ...rearm, deadline: 99 },
+      { ...rearm, priorReadyID: "bad\n" },
+    ])
+      expect((await request("POST", rearming, invalid, target)).status).toBe(400)
+    const rearmed = await request("POST", rearming, rearm, target)
+    expect(rearmed.status).toBe(200)
+    const confirmation = Schema.decodeUnknownSync(OpenAIHandoffRearmReceipt)(await rearmed.json())
+    expect(await (await request("POST", rearming, rearm, target)).json()).toEqual(confirmation)
+    expect((await request("POST", rearming, { ...rearm, sourceRevision: 1 }, target)).status).toBe(409)
     expect(
       (
         await request(
@@ -137,6 +156,7 @@ test("handoff HTTP routes keep source and target capabilities separate and rejec
     ).toBe(409)
     const activate = {
       ...ready,
+      readyID: rearm.readyID,
       generation: source.generation,
       requestID: preparing.requestID,
       candidateID: candidate.id,

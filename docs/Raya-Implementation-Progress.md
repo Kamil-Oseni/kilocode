@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 18:47 EDT - setup recovery source published
+
+Source `f6c5a21ccd` is committed and pushed. Normal push checks passed all 29 TypeScript tasks (one fresh CLI task, 28 cached) and the cached JetBrains gate. The completed-goal charge test, 38 canonical voice tests, 16 CLI voice-contract tests, full CGO-zero Go suite/vet and focused lint/format/architecture checks below pass. The handoff now includes exact canonical delegation/result source boundaries and adverse tests for the next slice. External MF remains undeployed; default direct Live routing and the installed snapshot are unchanged. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress; desktop remains stopped after Escape and MCP deferred.
+
 ## ChatGPT 2026-09-28 18:43 EDT - failed Live setup retains exact receipts
 
 The setup-recovery source slice now preserves immutable provider startup/final receipts and distinguishes definite pre-connection refusal from uncertain paid connection effects. One reserved deadline covers provider Open and room Join; cancellation, expiry or inactive provider state refuses readiness. Failed setup reports version-one `session.setup.closed` through the original private authenticated callback. Only exact backend `true` acknowledgement and confirmed provider/local cleanup release ownership. Missing startup/final receipts, malformed/refused callback responses or unknown cleanup retain the claim without redial or replay.

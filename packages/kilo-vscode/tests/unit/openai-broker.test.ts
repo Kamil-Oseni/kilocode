@@ -47,7 +47,7 @@ function admission(
 
 // Real loopback HTTP + WebSocket transports; only the remote provider and backend
 // boundary are fixtures. The production broker performs admission and dispatch.
-function fixture() {
+function fixture(timeout = 15_000) {
   const state = {
     mode: "normal",
     current: true,
@@ -76,6 +76,11 @@ function fixture() {
     usage: undefined as VoiceUsage | undefined,
     history: [] as { bindingID: string; itemID: string; role: "user" | "assistant"; text: string }[],
     spoken: [] as Record<string, unknown>[],
+    committed: new Map<number, string>(),
+    lost: false,
+    reading: false,
+    delayed: 0,
+    gate: Promise.withResolvers<void>(),
   }
   const binding = {
     id: "binding_1",
@@ -129,6 +134,34 @@ function fixture() {
       expect(body.generation).toBe(binding.generation)
       expect(body.providerCallID).toBe(binding.providerCallID)
       state.spoken.push(body)
+      if (state.mode === "spoken-refused") return new Response("snapshot refused", { status: 409 })
+      if (state.mode === "spoken-unavailable") return new Response("temporarily unavailable", { status: 503 })
+      const revision = Number(body.revision)
+      const encoded = JSON.stringify(body)
+      if (state.committed.has(revision)) expect(encoded).toBe(state.committed.get(revision))
+      else state.committed.set(revision, encoded)
+      if (state.mode === "spoken-malformed")
+        return new Response("{malformed", { headers: { "content-type": "application/json" } })
+      if (state.mode === "spoken-body") {
+        state.reading = true
+        let cancelled = false
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(Buffer.from(" "))
+              await state.gate.promise
+              if (cancelled) return
+              controller.enqueue(
+                Buffer.from(JSON.stringify({ version: 1, revision: body.revision, updatedAt: Date.now() })),
+              )
+              controller.close()
+            },
+            cancel() {
+              cancelled = true
+            },
+          }),
+        )
+      }
       return Response.json({
         version: 1,
         revision: state.mode === "spoken-receipt" ? 999 : body.revision,
@@ -250,7 +283,46 @@ function fixture() {
       return new Promise<Response>((_, reject) => {
         init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
       })
-    return fetch(new URL(url.pathname + url.search, server.url), init)
+    return fetch(new URL(url.pathname + url.search, server.url), init).then(async (response) => {
+      if (!url.pathname.endsWith("/spoken")) return response
+      if (state.mode === "spoken-lag") {
+        const deadline = performance.now() + timeout + 20
+        while (performance.now() < deadline) state.delayed++
+      }
+      if (
+        ["spoken-cancel-refused", "spoken-cancel-limit", "spoken-hang-refused", "spoken-hang-limit"].includes(
+          state.mode,
+        )
+      ) {
+        await response.body?.cancel()
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(Buffer.alloc(state.mode.endsWith("limit") ? 262_145 : 1))
+            },
+            cancel() {
+              if (state.mode.startsWith("spoken-hang")) return Promise.withResolvers<void>().promise
+              throw new Error("Synthetic stream cancellation failure")
+            },
+          }),
+          { status: state.mode.endsWith("refused") ? 409 : 200 },
+        )
+      }
+      if (state.mode === "spoken-timeout") {
+        await response.body?.cancel()
+        return new Promise<Response>((_, reject) => {
+          if (init?.signal?.aborted) return reject(init.signal.reason)
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+        })
+      }
+      if ((state.mode === "spoken-lost" || state.mode === "spoken-stale") && !state.lost) {
+        state.lost = true
+        await response.body?.cancel()
+        if (state.mode === "spoken-stale") state.current = false
+        throw new Error("Synthetic lost response after actual loopback commit")
+      }
+      return response
+    })
   }
   const broker = new OpenAIBroker(
     request,
@@ -263,6 +335,7 @@ function fixture() {
     },
     80,
     80,
+    timeout,
   )
   const send = (value: unknown) => state.socket!.send(JSON.stringify(value))
   const begin = async (id: string) => {
@@ -490,10 +563,130 @@ test("unconfirmed spoken persistence cannot close the binding as successfully se
     expect(f.state.errors.filter((error) => error.includes("Recent spoken context could not be saved"))).toHaveLength(1)
     expect(await f.broker.stop(input.requestID)).toContain("Spoken context persistence remains unconfirmed")
     expect(f.state.requests.filter((request) => request.method === "DELETE")).toHaveLength(0)
+    expect(f.state.spoken).toHaveLength(1)
   } finally {
     await f.close()
   }
 })
+
+test("a lost spoken acknowledgement retries the exact committed snapshot without advancing its revision", async () => {
+  const f = fixture()
+  f.state.mode = "spoken-lost"
+  try {
+    await f.start()
+    f.send({ type: "input_audio_buffer.committed", item_id: "first", previous_item_id: null })
+    f.send({ type: "conversation.item.input_audio_transcription.completed", item_id: "first", transcript: "First" })
+    await until(() => f.state.spoken.length >= 2)
+    expect(f.state.spoken[1]).toEqual(f.state.spoken[0])
+    const revision = Number(f.state.spoken[0]!.revision)
+    expect(f.state.spoken.filter((snapshot) => snapshot.revision === revision)).toHaveLength(2)
+    expect(f.state.committed.get(revision)).toBe(JSON.stringify(f.state.spoken[0]))
+    expect(await f.broker.stop(input.requestID)).toBeUndefined()
+    expect(f.state.errors).toEqual([])
+    expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(true)
+  } finally {
+    await f.close()
+  }
+})
+
+test("spoken persistence rejects invalid deadline options before creating a timer", () => {
+  for (const timeout of [-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 15_001])
+    expect(() => new OpenAIBroker(undefined, undefined, undefined, undefined, timeout)).toThrow(RangeError)
+})
+
+test("stale ending cleanup may publish once but never retries an uncertain acknowledgement", async () => {
+  const f = fixture()
+  f.state.mode = "spoken-lost"
+  try {
+    await f.start()
+    f.state.current = false
+    await until(() => f.state.errors.some((error) => error.includes("Recent spoken context could not be saved")))
+    expect(f.state.spoken).toHaveLength(1)
+    expect(await f.broker.stop(input.requestID)).toContain("Spoken context persistence remains unconfirmed")
+    expect(f.state.requests.some((request) => request.path.endsWith("/hangup"))).toBe(true)
+    expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+for (const mode of ["spoken-lost", "spoken-body"]) {
+  for (const action of ["stop", "change"]) {
+    test(`${action} during ${mode} preserves owned ending flush or rejects a changed generation`, async () => {
+      const f = fixture()
+      f.state.mode = mode
+      try {
+        await f.start()
+        f.send({ type: "input_audio_buffer.committed", item_id: "first", previous_item_id: null })
+        f.send({ type: "conversation.item.input_audio_transcription.completed", item_id: "first", transcript: "First" })
+        await until(() => (mode === "spoken-lost" ? f.state.lost : f.state.reading))
+        if (action === "change") f.state.current = false
+        const stopped = action === "stop" ? f.broker.stop(input.requestID) : undefined
+        f.state.gate.resolve()
+        if (stopped) {
+          expect(await stopped).toBeUndefined()
+          expect(f.state.errors).toEqual([])
+          expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(true)
+        } else {
+          await until(() => f.state.errors.some((error) => error.includes("Recent spoken context could not be saved")))
+          expect(f.state.spoken).toHaveLength(1)
+          expect(await f.broker.stop(input.requestID)).toContain("Spoken context persistence remains unconfirmed")
+          expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
+        }
+      } finally {
+        f.state.gate.resolve()
+        await f.close()
+      }
+    })
+  }
+}
+
+for (const mode of [
+  "spoken-refused",
+  "spoken-stale",
+  "spoken-timeout",
+  "spoken-unavailable",
+  "spoken-malformed",
+  "spoken-cancel-refused",
+  "spoken-cancel-limit",
+  "spoken-lag",
+  "spoken-hang-refused",
+  "spoken-hang-limit",
+]) {
+  test(`${mode} stops spoken retries at its definitive fence or fixed deadline`, async () => {
+    const f = fixture(180)
+    f.state.mode = mode
+    try {
+      await f.start()
+      const started = performance.now()
+      f.send({ type: "input_audio_buffer.committed", item_id: "first", previous_item_id: null })
+      f.send({ type: "conversation.item.input_audio_transcription.completed", item_id: "first", transcript: "First" })
+      await until(() => f.state.errors.some((error) => error.includes("Recent spoken context could not be saved")))
+      expect(performance.now() - started).toBeLessThan(650)
+      expect(f.state.spoken.length).toBeLessThanOrEqual(3)
+      if (
+        [
+          "spoken-refused",
+          "spoken-stale",
+          "spoken-malformed",
+          "spoken-cancel-refused",
+          "spoken-cancel-limit",
+          "spoken-lag",
+          "spoken-hang-refused",
+          "spoken-hang-limit",
+        ].includes(mode)
+      )
+        expect(f.state.spoken).toHaveLength(1)
+      expect(await f.broker.stop(input.requestID)).toContain("Spoken context persistence remains unconfirmed")
+      expect(f.state.errors.filter((error) => error.includes("Recent spoken context could not be saved"))).toHaveLength(
+        1,
+      )
+      expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
+    } finally {
+      await f.close()
+    }
+  })
+}
 
 test("slow admitted work backgrounds without replay and final speech waits for user and playback", async () => {
   const f = fixture()

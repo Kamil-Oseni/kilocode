@@ -91,6 +91,8 @@ test("a known synthetic context boundary can bridge live speech without copying 
   const f = fixture()
   f.collector.ignore("context")
   f.collector.receive({ type: "conversation.item.done", item: { id: "context", type: "message", role: "user" } })
+  await f.collector.flush()
+  expect(f.snapshots).toEqual([])
   f.collector.receive(link("live", "context"))
   f.collector.receive(final("live", "Live speech"))
   await f.collector.flush()
@@ -98,6 +100,19 @@ test("a known synthetic context boundary can bridge live speech without copying 
     incomplete: true,
     items: [{ id: "live", previous: "context", text: "Live speech" }],
   })
+})
+
+test("synthetic context with a provider predecessor remains a metadata bridge", async () => {
+  const f = fixture()
+  f.collector.ignore("context")
+  f.collector.receive(link("context", null))
+  f.collector.receive(link("live", "context"))
+  f.collector.receive(final("live", "Live speech"))
+  await f.collector.flush()
+  expect(f.latest().items).toEqual([
+    { id: "context", previous: null, role: "other", state: "omitted" },
+    { id: "live", previous: "context", role: "user", text: "Live speech", state: "final" },
+  ])
 })
 
 test("conflicting event reuse tombstones a finalized user transcript without replacement", async () => {

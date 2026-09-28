@@ -67,6 +67,10 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     count: 6,
     reason: "listener and shared terminal archive AppRuntime integration test",
   },
+  "kilocode/fixtures/voice-spoken-server.ts": {
+    count: 4,
+    reason: "fresh-process production listener and shared SQLite receipt inspection for real transport loss",
+  },
   "kilocode/server/httpapi-child-steer.test.ts": {
     count: 11,
     reason: "real HTTP child steering test spans routed app instances, run ownership, and durable session messages",

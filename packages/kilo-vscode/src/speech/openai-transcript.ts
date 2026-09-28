@@ -94,6 +94,9 @@ export class OpenAITranscript {
 
   receive(event: Record<string, unknown>) {
     if (this.closed) return
+    const item = object(event.item)
+    if (id(item?.id) && this.ignored.has(item.id) && event.previous_item_id !== null && !id(event.previous_item_id))
+      return
     if (
       ![
         "conversation.item.added",

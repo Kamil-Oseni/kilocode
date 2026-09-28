@@ -104,10 +104,15 @@ const tool = {
 }
 
 class BackendError extends Error {
-  constructor(readonly status: number) {
-    super(`Raya voice work could not be confirmed (${status}). Review the conversation before retrying.`)
+  constructor(
+    readonly status: number,
+    cause?: unknown,
+  ) {
+    super(`Raya voice work could not be confirmed (${status}). Review the conversation before retrying.`, { cause })
   }
 }
+
+class ReceiptError extends Error {}
 
 /** Provider credentials and work dispatch never enter the webview. */
 export class OpenAIBroker {
@@ -119,7 +124,11 @@ export class OpenAIBroker {
     private readonly connect = (url: string, options: WebSocket.ClientOptions) => new WebSocket(url, options),
     private readonly reservationTimeout = 30_000,
     private readonly settlementTimeout = 5000,
-  ) {}
+    private readonly persistenceTimeout = 15_000,
+  ) {
+    if (!Number.isSafeInteger(persistenceTimeout) || persistenceTimeout < 1 || persistenceTimeout > 15_000)
+      throw new RangeError("Spoken persistence deadline must be between 1 and 15000 milliseconds")
+  }
 
   get active() {
     return !!this.claim
@@ -359,21 +368,7 @@ export class OpenAIBroker {
       try {
         if (this.claim !== claim || (claim.cancelled && !claim.ending) || !claim.binding)
           throw new Error("Spoken context lost its call owner")
-        const receipt = await this.backend(
-          claim,
-          `/session/${encodeURIComponent(claim.binding.id)}/spoken`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              ...snapshot,
-              generation: claim.binding.generation,
-              providerCallID: claim.binding.providerCallID,
-            }),
-          },
-          true,
-        )
-        if (receipt.version !== 1 || receipt.revision !== snapshot.revision || !Number.isSafeInteger(receipt.updatedAt))
-          throw new Error("Spoken context persistence was not confirmed exactly")
+        await this.persist(claim, snapshot)
       } catch {
         if (!notice.failed) {
           notice.failed = true
@@ -749,6 +744,94 @@ export class OpenAIBroker {
     })
   }
 
+  private async persist(claim: Claim, snapshot: Parameters<ConstructorParameters<typeof OpenAITranscript>[0]>[0]) {
+    const cfg = claim.config!
+    const binding = claim.binding!
+    const ending = claim.ending
+    const body = JSON.stringify({ ...snapshot, generation: binding.generation, providerCallID: binding.providerCallID })
+    const headers = Object.freeze({
+      Authorization: cfg.authorization,
+      "Content-Type": "application/json",
+      "X-Raya-Voice-Key": claim.capability,
+    })
+    const url = new URL(
+      `${cfg.backend.replace(/\/$/, "")}/kilocode/voice/openai/session/${encodeURIComponent(binding.id)}/spoken`,
+    )
+    url.searchParams.set("directory", cfg.directory)
+    url.searchParams.set("generation", binding.generation)
+    const deadline = performance.now() + this.persistenceTimeout
+    const signal = AbortSignal.timeout(this.persistenceTimeout)
+    const owner = (retry = false) => {
+      if (
+        this.claim !== claim ||
+        claim.config !== cfg ||
+        claim.binding !== binding ||
+        ((!ending || retry) && !cfg.current()) ||
+        (!claim.ending && (claim.cancelled || claim.abort.signal.aborted))
+      )
+        throw new Error("Spoken context lost its call owner")
+      if (performance.now() >= deadline) throw new Error("Spoken context persistence deadline expired")
+      signal.throwIfAborted()
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      owner(attempt > 0)
+      const remaining = Math.max(1, Math.ceil(deadline - performance.now()))
+      const timeout = AbortSignal.timeout(
+        Math.min(5000, Math.max(1, Math.ceil(this.persistenceTimeout / 3)), remaining),
+      )
+      const signals = [signal, timeout, ...(!claim.ending ? [claim.abort.signal] : [])]
+      const state: { failure?: Error } = {}
+      const combined = AbortSignal.any(signals)
+      const encoded = await guard(this.publication(url, body, headers, combined, state), combined, state).catch(
+        async (error: unknown) => {
+          if (error instanceof ReceiptError || (error instanceof BackendError && error.status < 500)) throw error
+          owner(true)
+          if (attempt === 2) throw error
+          await new Promise<void>((resolve) => setTimeout(resolve, Math.min(50, remaining)))
+          return undefined
+        },
+      )
+      owner(attempt > 0)
+      if (encoded === undefined) continue
+      const receipt = object(encoded)
+      if (
+        !receipt ||
+        receipt.version !== 1 ||
+        receipt.revision !== snapshot.revision ||
+        !Number.isSafeInteger(receipt.updatedAt)
+      )
+        throw new ReceiptError("Spoken context persistence was not confirmed exactly")
+      return
+    }
+    throw new Error("Spoken context persistence was not confirmed")
+  }
+
+  private async publication(
+    url: URL,
+    body: string,
+    headers: Readonly<Record<string, string>>,
+    signal: AbortSignal,
+    state: { failure?: Error },
+  ) {
+    const response = await this.request(url, {
+      method: "POST",
+      body,
+      redirect: "error",
+      signal,
+      headers,
+    })
+    if (!response.ok) {
+      state.failure = new BackendError(response.status)
+      await response.body?.cancel().catch((cause: unknown) => {
+        throw new BackendError(response.status, cause)
+      })
+      throw new BackendError(response.status)
+    }
+    return bounded(response, (error) => {
+      state.failure = error
+    })
+  }
+
   private async backend(claim: Claim, path: string, init: RequestInit, cleanup = false) {
     const cfg = claim.config!
     if (!cleanup) this.assert(claim)
@@ -1000,21 +1083,52 @@ function message(error: unknown) {
     : "Voice setup could not be confirmed. Check the connection and review ongoing work before retrying."
 }
 
-async function bounded(response: Response) {
+async function bounded(response: Response, refusal?: (error: ReceiptError) => void) {
   const reader = response.body?.getReader()
-  if (!reader) throw new Error("Empty voice response")
+  if (!reader) throw new ReceiptError("Empty voice response")
   const chunks: Uint8Array[] = []
   let size = 0
+  let failed = false
   try {
     for (;;) {
       const item = await reader.read()
       if (item.done) return Buffer.concat(chunks).toString("utf8")
       size += item.value.byteLength
-      if (size > limit) throw new Error("Voice response limit exceeded")
+      if (size > limit) throw new ReceiptError("Voice response limit exceeded")
       chunks.push(item.value)
     }
+  } catch (error) {
+    failed = true
+    if (error instanceof ReceiptError) refusal?.(error)
+    throw error
   } finally {
+    await drain(reader, failed)
+  }
+}
+
+async function guard<T>(task: Promise<T>, signal: AbortSignal, state: { failure?: Error }) {
+  const gate: { reject?: (error: unknown) => void } = {}
+  const pending = new Promise<T>((_, reject) => {
+    gate.reject = reject
+  })
+  const abort = () => gate.reject!(state.failure ?? signal.reason)
+  signal.addEventListener("abort", abort, { once: true })
+  if (signal.aborted) abort()
+  try {
+    // Both branches remain observed even when a transport ignores cancellation.
+    return await Promise.race([task, pending])
+  } finally {
+    signal.removeEventListener("abort", abort)
+  }
+}
+
+async function drain(reader: ReadableStreamDefaultReader<Uint8Array>, failed: boolean) {
+  try {
     await reader.cancel()
+  } catch (error) {
+    // A known read/receipt failure remains authoritative if cancellation also fails.
+    if (!failed) throw error
+  } finally {
     reader.releaseLock()
   }
 }

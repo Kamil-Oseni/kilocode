@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { Global } from "@opencode-ai/core/global"
+import { NativeProcess } from "@opencode-ai/core/kilocode/process-host/index"
 import type { InstanceContext } from "@/project/instance-context"
 import { ReviewConflict } from "./review-revision"
 import { root } from "./review-workspace"
@@ -64,7 +65,7 @@ export interface Interface {
     terminal?: string,
   ) => Effect.Effect<{ identity: Reservation; release: Effect.Effect<void> }>
   readonly retire: (identity: Reservation) => Effect.Effect<void>
-  readonly forget: (identity: Reservation) => Effect.Effect<void>
+  readonly forget: (identity: Reservation, expected?: NativeProcess.Receipt) => Effect.Effect<void>
   readonly register: (ctx: InstanceContext, sessionID: string) => Effect.Effect<Effect.Effect<void>>
   readonly review: (
     directories: readonly string[],
@@ -130,11 +131,24 @@ export const node = LayerNode.make({
             if (current) await fs.unlink(file)
           }),
         )
-      const forget = (identity: Reservation) =>
+      const forget = (identity: Reservation, expected?: NativeProcess.Receipt) =>
         locked(
           Effect.promise(async () => {
             const actor = validate(identity)
             const file = path.join(receipts, `${actor.token}.json`)
+            if (expected) {
+              const saved = decode(
+                JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(expected.data, "base64"))),
+                {
+                  onExcessProperty: "error",
+                },
+              )
+              if (!same(saved, actor)) throw new Error("Workspace release receipt ownership changed")
+              if (await optional(path.join(directory, `${actor.token}.json`)))
+                throw new Error("Workspace reservation remains occupied")
+              await NativeProcess.remove(file, expected)
+              return
+            }
             const receipt = await optional(file)
             if (!receipt) return
             if (!same(receipt, actor)) throw new Error("Workspace release receipt ownership changed")

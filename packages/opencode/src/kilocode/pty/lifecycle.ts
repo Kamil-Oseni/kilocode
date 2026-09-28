@@ -16,6 +16,7 @@ import { acquire, authorize } from "@/kilocode/background-process/lifecycle"
 import { ReviewGate } from "@/kilocode/session/review-gate"
 import { WorkspaceOccupancy } from "@/kilocode/session/workspace-occupancy"
 import { root } from "@/kilocode/session/review-workspace"
+import * as cleanup from "./cleanup"
 
 const Physical = Schema.Struct({ real: Schema.String, dev: Schema.String, ino: Schema.String })
 const Identity = Schema.Struct({
@@ -81,9 +82,10 @@ export const node = LayerNode.make({
       const gate = yield* ReviewGate.Service
       const occupancy = yield* WorkspaceOccupancy.Service
       const directory = path.join(global.state, "core-pty-v1")
+      const journals = path.join(global.state, "core-pty-cleanup-v1")
       const file = (token: string) => path.join(directory, `${token}.json`)
-      const read = async (token: string) => {
-        const value = decode(await bounded(file(token)), { onExcessProperty: "error" })
+      const validate = (raw: unknown, token: string) => {
+        const value = decode(raw, { onExcessProperty: "error" })
         if (
           !/^[a-f0-9-]{36}$/.test(token) ||
           value.token !== token ||
@@ -99,6 +101,15 @@ export const node = LayerNode.make({
         )
           throw new Error("Terminal authority receipt is inconsistent")
         return value
+      }
+      const read = async (token: string) => {
+        if (!/^[a-f0-9-]{36}$/.test(token)) throw new Error("Invalid terminal authority identity")
+        if (process.platform !== "win32") return validate(await bounded(file(token)), token)
+        const receipt = await NativeProcess.receipt(file(token))
+        if (!receipt) throw new Error("Terminal authority receipt disappeared")
+        const bytes = Buffer.from(receipt.data, "base64")
+        if (bytes.length > 16_384) throw new Error("Terminal authority receipt exceeds its limit")
+        return validate(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), token)
       }
       const publish = async (actor: Actor, previous?: Actor) => {
         const source = JSON.stringify(actor)
@@ -145,23 +156,74 @@ export const node = LayerNode.make({
               throw new Error("Terminal session owner changed")
           }
         })
-      const retire = (actor: Actor, proof?: KiloPtyLifecycle.Proof, progress = { removed: false }) =>
+      type Progress = { removed: boolean; saved?: NonNullable<Awaited<ReturnType<typeof cleanup.read>>> }
+      const reconcile = (saved: NonNullable<Awaited<ReturnType<typeof cleanup.read>>>, progress?: Progress) =>
+        Effect.gen(function* () {
+          const actor = validate(saved.journal.actor, saved.journal.token)
+          if (actor.phase !== "admitted" || !actor.identity) throw new Error("Terminal cleanup admission is uncertain")
+          const identity = actor.identity
+          yield* verify(actor)
+          cleanup.validate(saved, actor, identity, actor.reservation)
+          const helper = yield* attempt(() => NativeProcess.inspect(identity.helper))
+          if (
+            !helper ||
+            typeof helper !== "object" ||
+            !("status" in helper) ||
+            (helper.status !== "gone" &&
+              !(
+                helper.status === "owned" &&
+                "birth" in helper &&
+                typeof helper.birth === "string" &&
+                helper.birth !== identity.helperBirth
+              ))
+          )
+            throw new Error("Terminal cleanup helper drainage is uncertain")
+          yield* attempt(() =>
+            cleanup.remove({
+              directory: journals,
+              control: actor.control,
+              saved,
+              occupancy: path.join(global.state, "workspace-occupancy-v1", `${actor.reservation.token}.json`),
+              release: path.join(global.state, "workspace-occupancy-released-v1", `${actor.reservation.token}.json`),
+            }),
+          )
+          yield* occupancy.forget(actor.reservation, saved.journal.release)
+          if (progress) {
+            progress.saved = saved
+            progress.removed = true
+          }
+          yield* attempt(() => cleanup.forget(journals, saved))
+        })
+      const recover = (sessionID?: string, physical?: typeof Physical.Type) =>
+        Effect.gen(function* () {
+          const tokens = yield* attempt(() => cleanup.tokens(journals))
+          for (const token of tokens) {
+            const saved = yield* attempt(() => cleanup.read(journals, token))
+            if (!saved) throw new Error("Terminal cleanup journal disappeared")
+            const actor = validate(saved.journal.actor, token)
+            if (sessionID !== undefined && actor.sessionID !== sessionID) continue
+            if (physical && !same(actor.owner, physical)) throw new Error("Terminal cleanup owner changed")
+            yield* gate.withWorkspaces([actor.owner.real, actor.scope.real, actor.target.real])(reconcile(saved))
+          }
+        })
+      const retire = (actor: Actor, proof?: KiloPtyLifecycle.Proof, progress: Progress = { removed: false }) =>
         Effect.gen(function* () {
           if (proof && !same(proof, { version: 2, token: actor.token, proof: "windows-job", empty: true }))
             throw new Error("Terminal drainage proof does not match its owner")
           yield* verify(actor)
+          const journal = yield* attempt(() => cleanup.read(journals, actor.token))
+          if (journal) {
+            if (!same(journal.journal.actor, actor)) throw new Error("Terminal cleanup owner changed")
+            if (progress.saved && !same(journal, progress.saved))
+              throw new Error("Terminal cleanup journal was replaced")
+            yield* reconcile(journal, progress)
+            progress.removed = true
+            return
+          }
           if (progress.removed) {
-            const exists = yield* attempt(async () =>
-              fs.lstat(file(actor.token)).then(
-                () => true,
-                (err: NodeJS.ErrnoException) => {
-                  if (err.code === "ENOENT") return false
-                  throw err
-                },
-              ),
-            )
-            if (exists) throw new Error("A retired terminal authority receipt was replaced")
-            yield* occupancy.forget(actor.reservation)
+            yield* attempt(() => cleanup.empty(actor.control))
+            const saved = progress.saved
+            if (saved) yield* attempt(() => cleanup.forget(journals, saved))
             return
           }
           const saved = yield* attempt(() => read(actor.token))
@@ -191,13 +253,24 @@ export const node = LayerNode.make({
           )
             throw new Error("Terminal helper drainage is uncertain")
           yield* occupancy.retire(actor.reservation)
-          yield* attempt(() => fs.unlink(file(actor.token)))
+          const captured = yield* attempt(() =>
+            cleanup.prepare({
+              directory: journals,
+              token: actor.token,
+              control: actor.control,
+              actor,
+              identity,
+              release: path.join(global.state, "workspace-occupancy-released-v1", `${actor.reservation.token}.json`),
+              reservation: actor.reservation,
+            }),
+          )
+          yield* reconcile(captured, progress)
           progress.removed = true
-          yield* occupancy.forget(actor.reservation)
         })
       const admission: KiloPtyLifecycle.Interface["admission"] = (request, body) =>
         locked(
           Effect.gen(function* () {
+            yield* recover()
             const owner = yield* attempt(() => inspect(request.location.directory))
             const found = yield* project.fromDirectory(request.location.directory)
             const workspace = root(request.location.directory, found.sandbox)
@@ -251,7 +324,7 @@ export const node = LayerNode.make({
                 }
                 let dispatched = false
                 let published = false
-                const progress = { removed: false }
+                const progress: Progress = { removed: false }
                 return yield* Effect.gen(function* () {
                   yield* attempt(() => publish(actor))
                   published = true
@@ -306,6 +379,7 @@ export const node = LayerNode.make({
         locked(
           Effect.gen(function* () {
             const physical = yield* attempt(() => inspect(owner))
+            yield* recover(sessionID, physical)
             yield* attempt(() => fs.mkdir(directory, { recursive: true, mode: 0o700 }))
             const entries = yield* attempt(() => fs.opendir(directory))
             const tokens = yield* attempt(async () => {

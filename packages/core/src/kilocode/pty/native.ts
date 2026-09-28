@@ -12,6 +12,7 @@ export class NativePty {
   private proc?: Proc
   private identity?: Identity
   private result?: Result
+  private cached?: Readonly<{ proof: Proof; result: Result }>
   private gone = false
   private ready = false
   private ended = false
@@ -215,9 +216,10 @@ export class NativePty {
     if (this.retired) return this.retired
     const task = (async () => {
       if (!this.gone) throw new Error("Native PTY helper has not exited")
-      const proof = await receipt(`${this.lease.control}.drained`)
+      const proof = this.cached?.proof ?? (await receipt(`${this.lease.control}.drained`))
       if (!drained(proof, this.lease.token)) throw new Error("Native PTY tree drain unknown")
-      const result = await this.evidence()
+      const result = this.cached?.result ?? Object.freeze(await this.evidence())
+      this.cached ??= Object.freeze({ proof: Object.freeze(proof), result })
       await this.retire(proof)
       this.result = result
       this.ended = true

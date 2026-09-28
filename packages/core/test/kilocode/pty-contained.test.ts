@@ -122,6 +122,43 @@ async function fixture(paused = false) {
 }
 
 suite("contained core PTY lifecycle", () => {
+  test("refuses a preexisting resume publication without overwriting or starting work", async () => {
+    const cfg = await fixture(true)
+    const output = path.join(cfg.dir, "unexpected.txt")
+    try {
+      await cfg.run(async (pty, run) => {
+        const pending = run(
+          pty.create({
+            command,
+            args: [
+              "-NoProfile",
+              "-Command",
+              `[IO.File]::WriteAllText('${output.replaceAll("'", "''")}', 'unexpected')`,
+            ],
+            cwd: cfg.dir,
+          }),
+        ).then(
+          () => false,
+          () => true,
+        )
+        await wait(() => !!cfg.entries[0]?.identity)
+        const row = cfg.entries[0]!
+        const file = `${row.control}.go.tmp`
+        await writeFile(file, "unowned publication", { flag: "wx" })
+        cfg.resume()
+        expect(await pending).toBe(true)
+        await wait(() => row.retired)
+        expect(await readFile(file, "utf8")).toBe("unowned publication")
+        expect(await Bun.file(`${row.control}.go`).exists()).toBe(false)
+        expect(await Bun.file(output).exists()).toBe(false)
+        expect(await NativeProcess.inspect(row.identity!.pid)).toMatchObject({ status: "gone" })
+        expect(await NativeProcess.inspect(row.identity!.helper)).toMatchObject({ status: "gone" })
+      })
+    } finally {
+      await cfg.close()
+    }
+  }, 90000)
+
   test("attempts every owned actor when the first durable retirement refuses", async () => {
     const cfg = await fixture()
     const owner = SessionSchema.ID.make("ses_drain_all_owned")
@@ -141,6 +178,7 @@ suite("contained core PTY lifecycle", () => {
           )
         }
         const row = cfg.entries[0]!
+        const contained = Registry.sessions.get(actors[0]!.id)!.containment!
         const file = `${row.control}.owner`
         const saved = await readFile(file)
         await rm(file)
@@ -155,11 +193,15 @@ suite("contained core PTY lifecycle", () => {
           }
           expect(cfg.entries.slice(1).every((entry) => entry.retired)).toBe(true)
           expect(await NativeProcess.inspect(actors[0]!.pid)).toMatchObject({ status: "gone" })
+          expect(contained.outcome).toBeUndefined()
+          await rm(`${row.control}.drained`)
+          await rm(`${row.control}.exited`)
         } finally {
           await rm(file, { recursive: true })
           await writeFile(file, saved, { mode: 0o600 })
         }
         await run(pty.stopOwner(owner))
+        expect(contained.outcome).toBe("cancelled")
         expect(Registry.sessions.has(actors[0]!.id)).toBe(false)
         expect(row.retired).toBe(true)
       })

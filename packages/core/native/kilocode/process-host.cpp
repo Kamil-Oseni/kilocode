@@ -2,7 +2,10 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <wincrypt.h>
+#include <bcrypt.h>
+#include <winternl.h>
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <string>
 #include <stdexcept>
@@ -16,6 +19,156 @@ struct Handle {
   Handle(const Handle&) = delete;
   Handle& operator=(const Handle&) = delete;
 };
+
+uint64_t number(const wchar_t* text);
+
+struct Algorithm {
+  BCRYPT_ALG_HANDLE value = nullptr;
+  Algorithm() {
+    if (BCryptOpenAlgorithmProvider(&value, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0)
+      throw std::runtime_error("Native receipt hashing unavailable");
+  }
+  ~Algorithm() { if (value) BCryptCloseAlgorithmProvider(value, 0); }
+  Algorithm(const Algorithm&) = delete;
+  Algorithm& operator=(const Algorithm&) = delete;
+};
+
+std::string digest(const std::vector<BYTE>& data) {
+  Algorithm algorithm;
+  BYTE bytes[32]{};
+  BYTE empty = 0;
+  if (BCryptHash(algorithm.value, nullptr, 0, data.empty() ? &empty : const_cast<BYTE*>(data.data()), static_cast<ULONG>(data.size()),
+      bytes, sizeof(bytes)) < 0) throw std::runtime_error("Native receipt hashing failed");
+  std::string result;
+  const char* hex = "0123456789abcdef";
+  for (const auto value : bytes) {
+    result += hex[value >> 4];
+    result += hex[value & 15];
+  }
+  return result;
+}
+
+// Snapshot and removal use the same exact non-reparse file handle. No pathname
+// unlink follows a separate content check; unknown outcomes retain the journal.
+void receipt(const std::wstring& file, const wchar_t* volume = nullptr, const wchar_t* index = nullptr,
+    const wchar_t* expected = nullptr, const wchar_t* target = nullptr) {
+  if (file.size() < 4 || file.size() > 4096 || file[1] != L':' || file[2] != L'\\' ||
+      !((file[0] >= L'A' && file[0] <= L'Z') || (file[0] >= L'a' && file[0] <= L'z')) ||
+      file.find(L':', 2) != std::wstring::npos)
+    throw std::runtime_error("Native receipt namespace unsupported");
+  const bool remove = expected != nullptr;
+  const auto serial = remove ? number(volume) : 0;
+  const auto identity = remove ? number(index) : 0;
+  const std::wstring hash = remove ? expected : L"";
+  if (remove && (serial > MAXDWORD || !identity || hash.size() != 64 ||
+      hash.find_first_not_of(L"0123456789abcdef") != std::wstring::npos))
+    throw std::runtime_error("Native receipt cleanup identity invalid");
+  {
+    Handle handle(CreateFileW(file.c_str(), GENERIC_READ | (remove ? DELETE : 0), FILE_SHARE_READ,
+      nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    if (handle.value == INVALID_HANDLE_VALUE) {
+      const auto error = GetLastError();
+      if (!target && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)) {
+        std::printf("{\"version\":1,\"state\":\"absent\"}\n");
+        return;
+      }
+      throw std::runtime_error("Native receipt handle unavailable");
+    }
+    BY_HANDLE_FILE_INFORMATION info{};
+    DWORD flags = 0;
+    std::vector<wchar_t> canonical(4101);
+    if (!GetHandleInformation(handle.value, &flags) || (flags & HANDLE_FLAG_INHERIT) ||
+        GetFileType(handle.value) != FILE_TYPE_DISK || !GetFileInformationByHandle(handle.value, &info) ||
+        (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) || info.nNumberOfLinks != 1)
+      throw std::runtime_error("Native receipt file is unsafe");
+    const DWORD length = GetFinalPathNameByHandleW(handle.value, canonical.data(), static_cast<DWORD>(canonical.size()),
+      FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    const auto path = L"\\\\?\\" + file;
+    if (!length || length >= canonical.size() || _wcsicmp(canonical.data(), path.c_str()) != 0)
+      throw std::runtime_error("Native receipt path changed");
+    const auto id = (static_cast<uint64_t>(info.nFileIndexHigh) << 32) | info.nFileIndexLow;
+    const auto size = (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+    if (!id || size > 131072 || (remove && (info.dwVolumeSerialNumber != serial || id != identity)))
+      throw std::runtime_error("Native receipt file identity changed or exceeded bound");
+    std::vector<BYTE> data(static_cast<size_t>(size) + 1);
+    DWORD count = 0;
+    if (!ReadFile(handle.value, data.data(), static_cast<DWORD>(size), &count, nullptr) || count != size)
+      throw std::runtime_error("Native receipt read incomplete");
+    data.resize(static_cast<size_t>(size));
+    const auto sum = digest(data);
+    if (remove) {
+      if (std::wstring(sum.begin(), sum.end()) != hash) throw std::runtime_error("Native receipt content changed");
+      if (target) {
+        const auto split = file.find_last_of(L'\\');
+        const std::wstring destination(target);
+        const auto parent = file.substr(0, split + 1);
+        const auto leaf = destination.substr(split + 1);
+        if (destination.size() <= split + 1 || destination.size() > 4096 ||
+            _wcsicmp(destination.substr(0, split + 1).c_str(), parent.c_str()) != 0 ||
+            leaf == L"." || leaf == L".." || leaf.find_first_of(L"\\/:\0", 0, 4) != std::wstring::npos)
+          throw std::runtime_error("Native receipt publication namespace invalid");
+        if (leaf.back() == L'.' || leaf.back() == L' ' || leaf.find_first_of(L"<>\"|?*") != std::wstring::npos)
+          throw std::runtime_error("Native receipt publication name invalid");
+        for (const auto value : leaf) if (value < 32) throw std::runtime_error("Native receipt publication name invalid");
+        auto stem = leaf.substr(0, leaf.find(L'.'));
+        while (!stem.empty() && (stem.back() == L' ' || stem.back() == L'.')) stem.pop_back();
+        for (const auto name : {L"CON", L"PRN", L"AUX", L"NUL", L"CONIN$", L"CONOUT$"})
+          if (_wcsicmp(stem.c_str(), name) == 0) throw std::runtime_error("Native receipt publication name reserved");
+        if (stem.size() == 4 && (_wcsnicmp(stem.c_str(), L"COM", 3) == 0 || _wcsnicmp(stem.c_str(), L"LPT", 3) == 0) &&
+            ((stem[3] >= L'1' && stem[3] <= L'9') || stem[3] == L'\u00b9' || stem[3] == L'\u00b2' || stem[3] == L'\u00b3'))
+          throw std::runtime_error("Native receipt publication name reserved");
+        Handle directory(CreateFileW(parent.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+          FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+          FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+        BY_HANDLE_FILE_INFORMATION folder{};
+        if (directory.value == INVALID_HANDLE_VALUE || !GetFileInformationByHandle(directory.value, &folder) ||
+            !(folder.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (folder.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+          throw std::runtime_error("Native receipt publication directory unsafe");
+        const DWORD depth = GetFinalPathNameByHandleW(directory.value, canonical.data(), static_cast<DWORD>(canonical.size()),
+          FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        const auto normalized = L"\\\\?\\" + parent.substr(0, parent.size() > 3 ? parent.size() - 1 : parent.size());
+        if (!depth || depth >= canonical.size() || _wcsicmp(canonical.data(), normalized.c_str()) != 0)
+          throw std::runtime_error("Native receipt publication directory changed");
+        const DWORD current = GetFinalPathNameByHandleW(handle.value, canonical.data(), static_cast<DWORD>(canonical.size()),
+          FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        if (!current || current >= canonical.size() || _wcsicmp(canonical.data(), path.c_str()) != 0)
+          throw std::runtime_error("Native receipt publication source changed");
+        const auto bound = offsetof(FILE_RENAME_INFO, FileName) + leaf.size() * sizeof(wchar_t);
+        std::vector<BYTE> buffer(bound);
+        const auto rename = reinterpret_cast<FILE_RENAME_INFO*>(buffer.data());
+        rename->ReplaceIfExists = FALSE;
+        rename->RootDirectory = directory.value;
+        rename->FileNameLength = static_cast<DWORD>(leaf.size() * sizeof(wchar_t));
+        CopyMemory(rename->FileName, leaf.data(), rename->FileNameLength);
+        using Rename = NTSTATUS (NTAPI*)(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+        const auto publish = reinterpret_cast<Rename>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetInformationFile"));
+        IO_STATUS_BLOCK status{};
+        if (!publish || publish(handle.value, &status, rename, static_cast<ULONG>(bound),
+            static_cast<FILE_INFORMATION_CLASS>(10)) < 0)
+          throw std::runtime_error("Native receipt publication unknown");
+      } else {
+        FILE_DISPOSITION_INFO disposition{TRUE};
+        if (!SetFileInformationByHandle(handle.value, FileDispositionInfo, &disposition, sizeof(disposition)))
+          throw std::runtime_error("Native receipt removal unknown");
+      }
+    } else {
+      std::string encoded;
+      if (!data.empty()) {
+        DWORD bound = 0;
+        if (!CryptBinaryToStringA(data.data(), static_cast<DWORD>(data.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+            nullptr, &bound)) throw std::runtime_error("Native receipt encoding failed");
+        std::vector<char> buffer(bound);
+        if (!CryptBinaryToStringA(data.data(), static_cast<DWORD>(data.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+            buffer.data(), &bound)) throw std::runtime_error("Native receipt encoding failed");
+        encoded = buffer.data();
+      }
+      std::printf("{\"version\":1,\"volume\":\"%lu\",\"index\":\"%llu\",\"digest\":\"%s\",\"data\":\"%s\"}\n",
+        info.dwVolumeSerialNumber, static_cast<unsigned long long>(id), sum.c_str(), encoded.c_str());
+      return;
+    }
+  }
+  std::printf("{\"version\":1,\"state\":\"%s\"}\n", target ? "moved" : "removed");
+}
 
 struct Basic {
   LONG exit;
@@ -199,7 +352,7 @@ struct Envelope {
 
 void launch(DWORD controller, uint64_t parent, const std::wstring& control, const std::string& key) {
   Handle owner(pin(controller, parent, SYNCHRONIZE | PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION));
-  for (const auto suffix : {L".go", L".job", L".launch", L".drained", L".running", L".exited"})
+  for (const auto suffix : {L".go", L".go.tmp", L".job", L".launch", L".drained", L".running", L".exited"})
     if (exists(control + suffix)) throw std::runtime_error("Native launch identity already used");
   const DWORD length = GetEnvironmentVariableW(L"RAYA_PTY_LAUNCH", nullptr, 0);
   if (!length || length > 16385) throw std::runtime_error("Native launch envelope unavailable or oversized");
@@ -348,6 +501,14 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--pty-lifecycle-protocol") {
       std::printf("{\"version\":1,\"operation\":\"pty-lifecycle\",\"proof\":\"windows-job\",\"targetExit\":true}\n");
+      return 0;
+    }
+    if (argc == 3 && std::wstring(argv[1]) == L"file-receipt-v1") { receipt(argv[2]); return 0; }
+    if (argc == 7 && std::wstring(argv[1]) == L"file-move-v1") {
+      receipt(argv[2], argv[3], argv[4], argv[5], argv[6]); return 0;
+    }
+    if (argc == 6 && std::wstring(argv[1]) == L"file-remove-v1") {
+      receipt(argv[2], argv[3], argv[4], argv[5]);
       return 0;
     }
     if (argc == 6 && std::wstring(argv[1]) == L"pty-launch") {

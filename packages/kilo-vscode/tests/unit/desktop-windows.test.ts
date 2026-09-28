@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { WindowsDesktopDriver as Driver } from "../../src/services/computer-use/desktop-windows"
 import type { DesktopNativeDispatch } from "../../src/services/computer-use/desktop-session"
-import type { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
+import { DesktopCaptureWorker } from "../../src/services/computer-use/desktop-capture-worker"
 
 // Existing script fixtures explicitly supply both independently owned command boundaries.
 class WindowsDesktopDriver extends Driver {
@@ -56,6 +56,100 @@ process.stdin.on("data",chunk=>{
 }
 
 describe("Windows native desktop driver", () => {
+  for (const mode of ["identity", "epoch", "semantic identity", "pixels", "expiry", "visual pixels"] as const) {
+    it(`refuses a warm join after ${mode} changes before publication`, async () => {
+      const target = { windowID: "0x123", location: "pid:5;title:Editor;bounds:0,0,20,10" }
+      const identity = "A".repeat(64)
+      const base = {
+        ...target,
+        width: 20,
+        height: 10,
+        mime: "image/png" as const,
+        data: "same pixels",
+        sourceSequence: 1,
+        sourceEpoch: 1,
+        sourceIdentity: identity,
+        timing: { acquisitionMs: 0, preparationMs: 0, totalMs: 0 },
+      }
+      let release: ((value: typeof base) => void) | undefined
+      let captures = 0
+      const worker = new DesktopCaptureWorker(
+        async () => {
+          if (++captures === 1) return base
+          return new Promise<typeof base>((resolve) => {
+            release = resolve
+          })
+        },
+        () => undefined,
+        (error) => {
+          throw error
+        },
+      )
+      const advance = async () => {
+        for (let index = 0; index < 200 && !release; index++) await Bun.sleep(1)
+        expect(release).toBeDefined()
+        release?.({
+          ...base,
+          sourceSequence: 2,
+          sourceIdentity: mode === "identity" ? "B".repeat(64) : identity,
+          sourceEpoch: mode === "epoch" ? 2 : 1,
+          data: mode.includes("pixels") ? "changed pixels" : base.data,
+        })
+        for (let index = 0; index < 100 && worker.latest()?.sequence !== 2; index++) await Bun.sleep(1)
+        expect(worker.latest()?.sequence).toBe(2)
+      }
+      let probes = 0
+      const input = {
+        run: async () => {
+          if (++probes === 2) {
+            if (mode.includes("pixels")) await advance()
+            if (mode === "expiry") {
+              await Bun.sleep(140)
+              expect(worker.renew(1, { ...target, width: 20, height: 10, epoch: 1, identity })).toBe(true)
+            }
+          }
+          return JSON.stringify({ ...target, identity: worker.latest()?.sourceIdentity })
+        },
+        cancel: () => undefined,
+      }
+      class JoinedDriver extends Driver {
+        override async observeSemantics() {
+          if (mode === "identity" || mode === "epoch") await advance()
+          return {
+            ...target,
+            identity: mode === "semantic identity" ? "B".repeat(64) : identity,
+            semantics: {
+              source: "windows_ui_automation" as const,
+              status: "unavailable" as const,
+              viewport: { x: 0, y: 0, width: 20, height: 10 },
+              controls: [],
+              truncated: false,
+            },
+            semanticsMs: 0,
+            validUntil: performance.now() + 125,
+          }
+        }
+      }
+      const driver = new JoinedDriver(input)
+      Reflect.set(driver, "worker", worker)
+      if (mode.includes("pixels") || mode === "expiry")
+        Reflect.set(driver, "scope", { windowID: target.windowID, identity })
+      worker.start()
+      try {
+        for (let index = 0; index < 100 && !worker.latest(); index++) await Bun.sleep(1)
+        expect(worker.latest()).toBeDefined()
+        await expect(driver.observe(mode === "visual pixels" ? { semantics: false } : undefined)).rejects.toThrow(
+          mode.includes("pixels")
+            ? /pixels changed/
+            : mode === "expiry"
+              ? /accessibility observation became stale/
+              : /identity changed/,
+        )
+      } finally {
+        driver.stopCapture()
+      }
+    })
+  }
   it("refuses a retired warm scene when Stop occurs during current-window verification", async () => {
     const frame = {
       windowID: "0x123",

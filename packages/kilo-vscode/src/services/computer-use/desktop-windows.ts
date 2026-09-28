@@ -1614,7 +1614,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       if (scene && (await this.matches(scene))) {
         const frame = await this.scoped(scene.frame, scope)
         this.check(revision)
-        this.worker?.consume(scene)
+        this.worker?.consume(this.joined(scene))
         return frame
       }
     }
@@ -1630,10 +1630,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
       const result = await this.observeSemantics(target)
       const scene = this.worker?.latest()
       if (scene) {
-        if (scene.version !== candidate.version)
-          throw new Error("Desktop pixels changed while correlating accessibility controls")
-        if (scene.frame.windowID !== target.windowID || scene.frame.location !== target.location)
-          throw new Error("Foreground window changed while correlating desktop pixels and controls")
+        this.joined(candidate)
+        if (result.identity !== undefined && result.identity !== scene.sourceIdentity)
+          throw new Error("Desktop process identity changed while correlating accessibility controls")
         if (!(await this.matches(scene)))
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
         this.freshness(result.validUntil)
@@ -1654,7 +1653,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
           scope,
         )
         this.check(revision)
-        this.worker?.consume(scene)
+        const latest = this.joined(scene)
+        this.freshness(result.validUntil)
+        this.worker?.consume(latest)
         return frame
       }
     }
@@ -1816,6 +1817,21 @@ export class WindowsDesktopDriver implements DesktopDriver {
 
   private warm(options?: { fresh?: boolean }): CapturedScene | undefined {
     return options?.fresh ? undefined : this.worker?.latest()
+  }
+
+  private joined(scene: CapturedScene): CapturedScene {
+    const latest = this.worker?.latest()
+    if (!latest) throw new Error("Desktop scene became stale while validating observation")
+    if (latest.version !== scene.version)
+      throw new Error("Desktop pixels changed while correlating accessibility controls")
+    if (
+      latest.sourceEpoch !== scene.sourceEpoch ||
+      latest.sourceIdentity !== scene.sourceIdentity ||
+      latest.frame.windowID !== scene.frame.windowID ||
+      latest.frame.location !== scene.frame.location
+    )
+      throw new Error("Desktop target identity changed while correlating observation")
+    return latest
   }
 
   async observeSemantics(target: { windowID: string; location: string; identity?: string }) {

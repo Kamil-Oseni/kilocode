@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process"
+import { createHash } from "node:crypto"
 import { request } from "./request"
 import { readFileSync, statSync } from "node:fs"
-import { open, stat, writeFile } from "node:fs/promises"
+import { open, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -104,6 +105,78 @@ export function protocol() {
 
 export function lifecycle() {
   return call(["--pty-lifecycle-protocol"])
+}
+
+export type Receipt = Readonly<{ version: 1; volume: string; index: string; digest: string; data: string }>
+
+function snapshot(value: unknown): Receipt {
+  const row = record(value, ["version", "volume", "index", "digest", "data"], "Native file receipt invalid")
+  if (
+    row.version !== 1 ||
+    typeof row.volume !== "string" ||
+    !/^\d{1,10}$/.test(row.volume) ||
+    BigInt(row.volume) > 0xffffffffn ||
+    typeof row.index !== "string" ||
+    !/^\d{1,20}$/.test(row.index) ||
+    BigInt(row.index) === 0n ||
+    BigInt(row.index) > 0xffffffffffffffffn ||
+    typeof row.digest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(row.digest) ||
+    typeof row.data !== "string" ||
+    row.data.length > 174_764 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(row.data)
+  )
+    throw new Error("Native file receipt invalid")
+  const bytes = Buffer.from(row.data, "base64")
+  if (
+    bytes.length > 131_072 ||
+    bytes.toString("base64") !== row.data ||
+    createHash("sha256").update(bytes).digest("hex") !== row.digest
+  )
+    throw new Error("Native file receipt content invalid")
+  return Object.freeze({ version: 1, volume: row.volume, index: row.index, digest: row.digest, data: row.data })
+}
+
+function location(file: string) {
+  if (!path.isAbsolute(file) || file.length > 4096 || file.includes("\0"))
+    throw new Error("Native file receipt path invalid")
+  return file
+}
+
+/** Private metadata snapshots never enter model context or telemetry. */
+export async function receipt(file: string): Promise<Receipt | undefined> {
+  const value = await request(await ready(), ["file-receipt-v1", location(file)], 196_608)
+  if (typeof value === "object" && value !== null && "state" in value) {
+    const row = record(value, ["version", "state"], "Native file receipt response invalid")
+    if (row.version !== 1 || row.state !== "absent") throw new Error("Native file receipt response invalid")
+    return undefined
+  }
+  return snapshot(value)
+}
+
+/** Exact handle deletion cannot remove a replacement after the snapshot check. */
+export async function remove(file: string, expected: Receipt): Promise<void> {
+  const saved = snapshot(expected)
+  const value = await request(
+    await ready(),
+    ["file-remove-v1", location(file), saved.volume, saved.index, saved.digest],
+    4096,
+  )
+  const row = record(value, ["version", "state"], "Native file removal response invalid")
+  if (row.version !== 1 || (row.state !== "absent" && row.state !== "removed"))
+    throw new Error("Native file removal response invalid")
+}
+
+/** Publish private metadata without replacing a destination or following a changed source. */
+export async function move(file: string, expected: Receipt, target: string): Promise<void> {
+  const saved = snapshot(expected)
+  const value = await request(
+    await ready(),
+    ["file-move-v1", location(file), saved.volume, saved.index, saved.digest, location(target)],
+    4096,
+  )
+  const row = record(value, ["version", "state"], "Native file publication response invalid")
+  if (row.version !== 1 || row.state !== "moved") throw new Error("Native file publication response invalid")
 }
 
 /** Validate a native candidate before admitting even the private gated shell. */
@@ -294,11 +367,19 @@ export async function resume(
   const target = owners[0]
   if (typeof target !== "object" || target === null || !("parent" in target) || target.parent !== identity.helper)
     throw new Error("Native launch parent changed")
-  await writeFile(
-    `${control}.go`,
-    JSON.stringify({ version: 1, token, pid: identity.pid, birth: identity.birth, action: "resume" }),
-    { flag: "wx", mode: 0o600 },
-  )
+  const temp = `${control}.go.tmp`
+  const file = await open(temp, "wx", 0o600)
+  try {
+    await file.writeFile(
+      JSON.stringify({ version: 1, token, pid: identity.pid, birth: identity.birth, action: "resume" }),
+    )
+    await file.sync()
+  } finally {
+    await file.close()
+  }
+  const saved = await receipt(temp)
+  if (!saved) throw new Error("Native resume publication disappeared")
+  await move(temp, saved, `${control}.go`)
 }
 
 export * as NativeProcess from "./index"

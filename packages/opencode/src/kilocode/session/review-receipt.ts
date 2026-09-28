@@ -14,19 +14,8 @@ import { ReviewConflict, verify, workspace } from "./review-revision"
 import { project } from "./review-patches"
 import { active, append, read as undone } from "./review-undo"
 import { resolve, run, same } from "./review-workspace"
+import { Owner, Witness, repair } from "./review-recovery"
 
-const Owner = Schema.Struct({
-  sessionID: SessionID,
-  directory: Schema.String,
-  root: Schema.String,
-  projectID: Schema.String,
-  real: Schema.String,
-  dev: Schema.String,
-  ino: Schema.String,
-  cwdReal: Schema.String,
-  cwdDev: Schema.String,
-  cwdIno: Schema.String,
-})
 const Events = Schema.Array(Schema.Struct({ file: Schema.String, generation: Schema.String }))
 const Proof = Schema.Union([
   Schema.Struct({
@@ -42,6 +31,7 @@ const Proof = Schema.Union([
     files: Schema.Array(Schema.String),
     revert: Schema.Boolean,
     events: Events,
+    recovery: Schema.optional(Witness),
   }),
   Schema.Struct({
     action: Schema.Literal("undo"),
@@ -67,6 +57,7 @@ type Services = {
   summary: SessionSummary.Interface
   state: SessionRunState.Interface
   gather: (sessionID: SessionID, idle?: boolean) => Effect.Effect<SessionV1.WithParts[], Session.BusyError>
+  publish?: (sessionID: SessionID, diffs: Snapshot.FileDiff[]) => Effect.Effect<void>
 }
 
 /** Build durable postconditions and reconcile them without replaying a review mutation. */
@@ -127,7 +118,11 @@ export function recovery(services: Services) {
 
   const reconcile = Effect.fn("ReviewReceipt.reconcile")(function* (sessionID: SessionID, proof: Proof) {
     const owners =
-      proof.action === "keep" ? proof.owners : "groups" in proof ? proof.groups.map((group) => group.owner) : undefined
+      proof.action === "keep"
+        ? proof.owners
+        : "groups" in proof
+          ? (proof.recovery?.owners ?? proof.groups.map((group) => group.owner))
+          : undefined
     for (const saved of owners ?? []) {
       const owner = yield* resolve(services.sessions, saved.sessionID).pipe(
         Effect.catchCause(() => Effect.succeed(undefined)),
@@ -147,7 +142,7 @@ export function recovery(services: Services) {
       })
     }
     const session = yield* services.sessions.get(sessionID).pipe(Effect.orDie)
-    if (proof.revert && session.revert) return false
+    if (proof.revert && session.revert && !("groups" in proof && proof.recovery)) return false
     if ("groups" in proof) {
       for (const group of proof.groups) {
         const owner = yield* resolve(services.sessions, group.owner.sessionID).pipe(
@@ -162,6 +157,40 @@ export function recovery(services: Services) {
           return false
       }
     } else if (proof.patches.length && !(yield* services.snap.matches(proof.patches))) return false
+    if ("groups" in proof && proof.recovery) {
+      const fixed = yield* repair(services, sessionID, proof.files, proof.events, proof.recovery)
+      if (!fixed) return false
+      // Recheck exact physical owners and targets at the metadata commit boundary.
+      for (const group of proof.groups) {
+        const owner = yield* resolve(services.sessions, group.owner.sessionID).pipe(
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        )
+        if (
+          !owner ||
+          !same(group.owner, owner) ||
+          !(yield* run(owner, services.snap.matches(group.patches)).pipe(
+            Effect.catchCause(() => Effect.succeed(false)),
+          ))
+        )
+          return false
+      }
+      const checked = yield* repair(services, sessionID, proof.files, proof.events, proof.recovery)
+      if (!checked) return false
+      yield* append(services.storage, sessionID, session.directory, proof.events)
+      yield* services.storage.write(["session_diff", sessionID], checked.diffs).pipe(Effect.orDie)
+      if (checked.clear) yield* services.sessions.clearRevert(sessionID)
+      if (services.publish) yield* services.publish(sessionID, checked.diffs)
+      yield* Effect.promise(() => RayaRevertNote.record(sessionID, proof.files))
+      for (const group of proof.groups)
+        if (group.owner.sessionID !== sessionID)
+          yield* Effect.promise(() =>
+            RayaRevertNote.record(
+              group.owner.sessionID,
+              group.patches.flatMap((patch) => patch.files),
+            ),
+          )
+      return true
+    }
     const normalize = (file: string) => canonical(file, session.directory)
     const gone = new Set(proof.files.map(normalize))
     const raw = yield* services.storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID]).pipe(

@@ -363,7 +363,15 @@ const layer = Layer.effect(
     })
 
     // kilocode_change start - read/modify/write kept boundaries and workspace restores must not overlap
-    const receipts = recovery({ sessions, snap, storage, summary, state, gather })
+    const receipts = recovery({
+      sessions,
+      snap,
+      storage,
+      summary,
+      state,
+      gather,
+      publish: (sessionID, diff) => events.publish(Session.Event.Diff, { sessionID, diff }),
+    })
     const transactions = transaction({
       sessions,
       snap,

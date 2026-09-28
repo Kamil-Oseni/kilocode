@@ -10,11 +10,12 @@ import * as Project from "@/project/project"
 import type { ReviewGate } from "./review-gate"
 import { boundaries, canonical } from "./review-boundaries"
 import { active, append, read } from "./review-undo"
-import { group, identity, run, type Owner } from "./review-workspace"
+import { group, identity, resolve, run, type Owner } from "./review-workspace"
 import { KiloSessionRevert } from "./revert"
 import { RayaRevertNote } from "./revert-note"
 import { receipt, type Proof } from "./review-receipt"
 import { ReviewConflict, verify, workspace } from "./review-revision"
+import { capture } from "./review-recovery"
 
 type Input = {
   sessionID: SessionID
@@ -62,9 +63,28 @@ export function transaction(services: Services) {
       return yield* new ReviewConflict({
         message: "Refresh all workers' changes before reviewing work across workspaces.",
       })
-    return yield* services.gate.withWorkspaces(prior.flatMap((item) => [item.owner.directory, item.owner.root]))(
+    const ancestry = Effect.gen(function* () {
+      const owners: Owner[] = []
+      const visited = new Set<SessionID>([input.sessionID])
+      let parent = (yield* services.sessions.get(input.sessionID).pipe(Effect.orDie)).parentID
+      while (parent && !visited.has(parent)) {
+        visited.add(parent)
+        owners.push(yield* resolve(services.sessions, parent))
+        parent = (yield* services.sessions.get(parent).pipe(Effect.orDie)).parentID
+      }
+      return owners
+    })
+    const ancestors = yield* ancestry
+    return yield* services.gate.withWorkspaces(
+      [...prior.map((item) => item.owner), ...ancestors].flatMap((owner) => [owner.directory, owner.root]),
+    )(
       Effect.gen(function* () {
         const groups = yield* collect(input.sessionID)
+        const inherited = yield* ancestry
+        if (stamp(ancestors) !== stamp(inherited))
+          return yield* new ReviewConflict({
+            message: "The review's inherited workspace changed. Refresh before continuing.",
+          })
         if (stamp(prior.map((item) => item.owner)) !== stamp(groups.map((item) => item.owner)))
           return yield* new ReviewConflict({
             message: "The workers in this review changed. Refresh before continuing.",
@@ -134,6 +154,12 @@ export function transaction(services: Services) {
                   files: plan.patches.flatMap((patch) => patch.files),
                   revert: !!session.revert,
                   events: plan.events,
+                  recovery: yield* capture(
+                    services,
+                    input.sessionID,
+                    plan.patches.flatMap((patch) => patch.files),
+                    [...groups.map((item) => item.owner), ...inherited].map(identity),
+                  ),
                 }
           prepared = { proof, work }
           return proof

@@ -7,6 +7,7 @@ import * as Spoken from "@/kilocode/voice/openai-spoken"
 import * as Obligations from "@/kilocode/voice/openai-obligations"
 import { handoff, OpenAIGeneration } from "@/kilocode/voice/openai-protocol"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
+import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
 import { Storage } from "@/storage/storage"
@@ -26,6 +27,11 @@ const failure = (error: OpenAIVoice.VoiceError) => {
   if (error.code === "missing") return new HttpApiError.NotFound({})
   if (error.code === "invalid") return new HttpApiError.BadRequest({})
   return new HttpApiError.Conflict({})
+}
+
+const refusal = (error: OpenAIVoice.VoiceError) => {
+  if (error.code === "unauthorized" || error.code === "missing") return new HttpApiError.NotFound({})
+  return new InvalidRequestError({ message: "Voice operation was refused or could not be confirmed." })
 }
 
 type Usage = {
@@ -76,7 +82,6 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     const sessions = yield* Session.Service
     const prompts = yield* SessionPrompt.Service
     const storage = yield* Storage.Service
-    const voice = RayaVoice.make({ sessions, prompts, storage })
     const workers = yield* TaskWorker.Service
     const database = yield* Database.Service
     const goals = RayaGoal.make({ sessions, storage })
@@ -145,6 +150,7 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
       Effect.forkScoped,
     )
 
+    const voice = RayaVoice.make({ sessions, prompts, storage, openai })
     return handlers
       .handle("voiceOpenAIObligations", (ctx) =>
         Effect.gen(function* () {
@@ -495,6 +501,7 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
         voice.start(ctx.payload, ctx.headers["x-raya-media-key"]).pipe(
           Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
           Effect.catchTag("RayaVoice.InputError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+          Effect.catchTag("VoiceError", (error) => Effect.fail(refusal(error))),
         ),
       )
       .handle("voiceState", (ctx: { params: { voiceSessionID: VoiceSessionID } }) =>
@@ -505,20 +512,18 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
           ),
       )
       .handle("voiceEvent", (ctx: { payload: typeof Envelope.Type }) =>
-        voice
-          .event(ctx.payload)
-          .pipe(
-            Effect.flatMap((accepted) =>
-              accepted ? Effect.succeed(true) : Effect.fail(new HttpApiError.NotFound({})),
-            ),
-          ),
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          return yield* voice.event(ctx.payload, request.headers["x-raya-voice-capability"])
+        }).pipe(
+          Effect.flatMap((accepted) => (accepted ? Effect.succeed(true) : Effect.fail(new HttpApiError.NotFound({})))),
+        ),
       )
       .handle("voiceClose", (ctx: { params: { voiceSessionID: VoiceSessionID } }) =>
-        voice
-          .close(ctx.params.voiceSessionID)
-          .pipe(
-            Effect.flatMap((closed) => (closed ? Effect.succeed(true) : Effect.fail(new HttpApiError.NotFound({})))),
-          ),
+        voice.close(ctx.params.voiceSessionID).pipe(
+          Effect.flatMap((closed) => (closed ? Effect.succeed(true) : Effect.fail(new HttpApiError.NotFound({})))),
+          Effect.catchTag("VoiceError", (error) => Effect.fail(refusal(error))),
+        ),
       )
   }),
 )

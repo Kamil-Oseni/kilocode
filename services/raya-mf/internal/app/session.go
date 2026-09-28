@@ -95,6 +95,17 @@ func (s *Session) Inject(ctx context.Context, item engine.ContextItem) error {
 	return nil
 }
 
+func (s *Session) Result(ctx context.Context, result engine.Result) error {
+	if s.ctx.Err() != nil {
+		return context.Canceled
+	}
+	delegator, ok := s.engine.(engine.Delegator)
+	if !ok {
+		return errors.New("selected voice engine does not support client delegation results")
+	}
+	return delegator.Result(ctx, result)
+}
+
 func (s *Session) Stats() engine.Stats {
 	return s.engine.Stats()
 }

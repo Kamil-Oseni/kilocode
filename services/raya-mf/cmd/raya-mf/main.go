@@ -2,9 +2,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/app"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/control" // kilocode_change
+	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
 	lkroom "github.com/Kilo-Org/kilocode/services/raya-mf/internal/room/livekit"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
 )
@@ -96,6 +99,39 @@ func routes(manager *app.Manager, key control.Key) http.Handler {
 			return
 		}
 		write(writer, http.StatusAccepted, map[string]any{"accepted": true})
+	})
+	mux.HandleFunc("POST /v1/sessions/{id}/result", func(writer http.ResponseWriter, request *http.Request) {
+		token, ok := control.Authorize(writer, request, key)
+		if !ok {
+			return
+		}
+		body, ok := control.Read(writer, request)
+		if !ok {
+			return
+		}
+		var input struct {
+			Version int `json:"version"`
+			engine.Result
+		}
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			write(writer, http.StatusBadRequest, map[string]string{"error": "Invalid delegation result contract"})
+			return
+		}
+		if err := decoder.Decode(new(json.RawMessage)); err != io.EOF || input.Version != 1 {
+			write(writer, http.StatusBadRequest, map[string]string{"error": "Unsupported delegation result contract"})
+			return
+		}
+		if err := manager.Result(request.Context(), request.PathValue("id"), token, input.Result); err != nil {
+			status := http.StatusConflict
+			if errors.Is(err, app.ErrAuthorization) {
+				status = http.StatusUnauthorized
+			}
+			write(writer, status, map[string]string{"error": "Delegation result was refused or acceptance remains unconfirmed"})
+			return
+		}
+		write(writer, http.StatusAccepted, map[string]any{"accepted": true, "played": false})
 	})
 	mux.HandleFunc("DELETE /v1/sessions/{id}", func(writer http.ResponseWriter, request *http.Request) {
 		token, ok := control.Authorize(writer, request, key)

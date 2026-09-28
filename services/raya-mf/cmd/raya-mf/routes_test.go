@@ -83,3 +83,43 @@ func TestRoutesRejectBrowserAndUnauthenticatedControl(t *testing.T) {
 		t.Fatalf("authenticated missing session status = %d", missingSession.StatusCode)
 	}
 }
+
+func TestResultRouteStrictVersionAndCapability(t *testing.T) {
+	key, err := control.ParseKey(routeToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(routes(app.NewManager(nil), key))
+	defer server.Close()
+	for _, test := range []struct {
+		body, origin, key, token string
+		status                   int
+	}{
+		{body: `{"version":1}`, status: http.StatusUnauthorized},
+		{body: `{"version":1}`, key: routeToken, token: routeToken, origin: "https://example.com", status: http.StatusForbidden},
+		{body: `{"version":2}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
+		{body: `{"version":1,"unknown":true}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
+		{body: `{"version":1} {}`, key: routeToken, token: routeToken, status: http.StatusBadRequest},
+		{body: `{"version":1,"delegationID":"del","receiptID":"receipt","kind":"commentary","content":"result","ttl":1000,"created":"2026-09-28T00:00:00Z"}`, key: routeToken, token: routeToken, status: http.StatusConflict},
+	} {
+		request, err := http.NewRequest(http.MethodPost, server.URL+"/v1/sessions/missing/result", strings.NewReader(test.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("X-Raya-Media-Key", test.key)
+		if test.token != "" {
+			request.Header.Set("Authorization", "Bearer "+test.token)
+		}
+		if test.origin != "" {
+			request.Header.Set("Origin", test.origin)
+		}
+		response, err := server.Client().Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != test.status {
+			t.Fatalf("result route status %d want %d", response.StatusCode, test.status)
+		}
+	}
+}

@@ -30397,6 +30397,8 @@ export type KilocodeVoiceOpenaiCloseResponse =
 
 export type KilocodeVoiceStartData = {
   body?: {
+    version?: 2
+    engine?: "qwen-realtime" | "openai-live"
     parentSessionID: string
     mediaURL: string
     room?: string
@@ -30438,7 +30440,8 @@ export type KilocodeVoiceStartResponses = {
     mediaToken: string
     controlToken: string
     mediaURL: string
-    engine: "qwen-realtime"
+    engine: "qwen-realtime" | "openai-live"
+    maximumSeconds?: number
     acceptsTruncation: boolean
     status: "starting" | "active" | "closed" | "failed"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -30520,7 +30523,8 @@ export type KilocodeVoiceStateResponses = {
       mediaToken: string
       controlToken: string
       mediaURL: string
-      engine: "qwen-realtime"
+      engine: "qwen-realtime" | "openai-live"
+      maximumSeconds?: number
       acceptsTruncation: boolean
       status: "starting" | "active" | "closed" | "failed"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

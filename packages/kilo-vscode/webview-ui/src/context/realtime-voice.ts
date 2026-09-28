@@ -5,7 +5,7 @@ export type RealtimeConnection = {
   id: string
   livekitURL: string
   clientToken: string
-  engine: "qwen-realtime"
+  engine: "qwen-realtime" | "openai-live"
   acceptsTruncation: boolean
 }
 

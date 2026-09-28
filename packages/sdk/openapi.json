@@ -53614,7 +53614,12 @@
                     },
                     "engine": {
                       "type": "string",
-                      "enum": ["qwen-realtime"]
+                      "enum": ["qwen-realtime", "openai-live"]
+                    },
+                    "maximumSeconds": {
+                      "type": "number",
+                      "exclusiveMinimum": 1.4,
+                      "maximum": 86400
                     },
                     "acceptsTruncation": {
                       "type": "boolean"
@@ -53703,6 +53708,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [2]
+                  },
+                  "engine": {
+                    "type": "string",
+                    "enum": ["qwen-realtime", "openai-live"]
+                  },
                   "parentSessionID": {
                     "type": "string",
                     "pattern": "^ses"
@@ -53796,7 +53809,12 @@
                         },
                         "engine": {
                           "type": "string",
-                          "enum": ["qwen-realtime"]
+                          "enum": ["qwen-realtime", "openai-live"]
+                        },
+                        "maximumSeconds": {
+                          "type": "number",
+                          "exclusiveMinimum": 1.4,
+                          "maximum": 86400
                         },
                         "acceptsTruncation": {
                           "type": "boolean"

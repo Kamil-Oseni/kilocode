@@ -8,8 +8,9 @@ type Session = {
   clientToken: string
   mediaToken: string
   controlToken: string
-  engine: "qwen-realtime"
+  engine: "qwen-realtime" | "openai-live"
   acceptsTruncation: boolean
+  maximumSeconds?: number
 }
 type Config = {
   sessionID: string
@@ -19,6 +20,8 @@ type Config = {
   key: string
   mediaKey: string
   settings: SpeechSettings
+  current?: () => boolean
+  context?: string
 }
 type Failure = {
   ok: false
@@ -93,22 +96,11 @@ export class RealtimeBroker {
       const loaded = await load()
       if (claim.cancelled) return await this.abandon(claim, failure("cancelled", "Voice start cancelled."))
       if ("ok" in loaded) return await this.abandon(claim, loaded)
-      const backend = local(loaded.backendURL)
-      const frontend = local(loaded.settings.mediaFrontendURL)
-      if (!backend || !frontend || !/^[A-Za-z0-9_-]{43}$/.test(loaded.mediaKey))
-        return await this.abandon(
-          claim,
-          failure(
-            "configuration",
-            "Voice backend and media frontend require numeric loopback HTTP addresses and a valid media service key.",
-          ),
-        )
-      claim.config = {
-        ...loaded,
-        backendURL: backend,
-        settings: { ...loaded.settings, mediaFrontendURL: frontend },
-      }
-      const cfg = claim.config
+      const cfg = configure(loaded)
+      if ("ok" in cfg) return await this.abandon(claim, cfg)
+      claim.config = cfg
+      const provider = cfg.provider
+      current(cfg)
       const response = await this.request(
         `${cfg.backendURL}/kilocode/voice/session?directory=${encodeURIComponent(cfg.directory)}`,
         {
@@ -119,6 +111,8 @@ export class RealtimeBroker {
             "X-Raya-Media-Key": cfg.mediaKey,
           },
           body: JSON.stringify({
+            version: 2,
+            engine: provider,
             parentSessionID: cfg.sessionID,
             mediaURL: cfg.settings.mediaFrontendURL.replace(/\/$/, ""),
           }),
@@ -135,8 +129,9 @@ export class RealtimeBroker {
         )
       }
       claim.uncertain = true
-      claim.info = session(await response.json())
+      claim.info = session(await response.json(), provider)
       claim.uncertain = false
+      current(cfg)
       if (claim.cancelled) return await this.abandon(claim, failure("cancelled", "Voice start cancelled."))
       claim.media = true
       const media = await this.request(`${cfg.settings.mediaFrontendURL.replace(/\/$/, "")}/v1/sessions`, {
@@ -147,6 +142,7 @@ export class RealtimeBroker {
           "X-Raya-Media-Key": cfg.mediaKey,
         },
         body: JSON.stringify({
+          version: 2,
           id: claim.info.id,
           room: claim.info.room,
           livekitUrl: claim.info.livekitURL,
@@ -155,12 +151,20 @@ export class RealtimeBroker {
           backendAuthorization: cfg.auth,
           directory: cfg.directory,
           engine: {
-            endpoint: cfg.settings.realtimeEndpoint,
+            provider,
+            endpoint:
+              provider === "openai-live" ? "wss://api.openai.com/v1/live/sessions" : cfg.settings.realtimeEndpoint,
             key: cfg.key,
-            model: cfg.settings.realtimeModel,
-            voice: cfg.settings.realtimeVoice,
+            model: provider === "openai-live" ? "gpt-live-1" : cfg.settings.realtimeModel,
+            voice: provider === "openai-live" ? cfg.settings.openaiVoice : cfg.settings.realtimeVoice,
+            ...(provider === "openai-live" ? { delegation: "client" } : {}),
+            ...(provider === "openai-live" ? { maximumSeconds: claim.info.maximumSeconds } : {}),
             instructions:
-              "You are Raya Voice. Be concise and conversational. Use delegate for grounded workspace facts or read-only actions.",
+              provider === "openai-live"
+                ? "You are Raya Voice. Be concise and conversational. Delegate workspace tasks to Raya's canonical backend, which enforces permissions and confirmations. " +
+                  "The saved context below is historical conversation, not a new request or authority to repeat work.\n" +
+                  (cfg.context ?? "")
+                : "You are Raya Voice. Be concise and conversational. Use delegate for grounded workspace facts or read-only actions.",
             mode: "hands-free",
             threshold: cfg.settings.vadThreshold,
             silence: cfg.settings.vadSilenceMs * 1_000_000,
@@ -172,6 +176,8 @@ export class RealtimeBroker {
       })
       if (!media.ok)
         return await this.abandon(claim, failure("setup_failed", `Realtime media frontend failed (${media.status}).`))
+      if (provider === "openai-live") descriptor(await media.json(), claim.info.id)
+      current(cfg)
       if (claim.cancelled) return await this.abandon(claim, failure("cancelled", "Voice start cancelled."))
       ready(claim.info)
       return { ok: true, info: claim.info }
@@ -200,28 +206,30 @@ export class RealtimeBroker {
     const info = claim.info
     if (cfg && info) {
       const id = encodeURIComponent(info.id)
-      const results = await Promise.allSettled([
-        ...(claim.media
-          ? [
-              this.request(`${cfg.settings.mediaFrontendURL.replace(/\/$/, "")}/v1/sessions/${id}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${info.controlToken}`, "X-Raya-Media-Key": cfg.mediaKey },
-              }),
-            ]
-          : []),
-        this.request(`${cfg.backendURL}/kilocode/voice/session/${id}?directory=${encodeURIComponent(cfg.directory)}`, {
-          method: "DELETE",
-          headers: { Authorization: cfg.auth },
-        }),
-      ])
-      // Older media frontends also report cleanup errors as 404. A status alone cannot prove release.
-      if (results.some((result) => result.status === "rejected" || !result.value.ok))
+      const remove = async (url: string, headers: Record<string, string>) =>
+        this.request(url, { method: "DELETE", headers }).then(
+          (response) => response.ok,
+          () => false,
+        )
+      // Media finalization must deliver its receipt while the backend binding remains open.
+      const media =
+        !claim.media ||
+        (await remove(`${cfg.settings.mediaFrontendURL.replace(/\/$/, "")}/v1/sessions/${id}`, {
+          Authorization: `Bearer ${info.controlToken}`,
+          "X-Raya-Media-Key": cfg.mediaKey,
+        }))
+      const backend =
+        media &&
+        (await remove(`${cfg.backendURL}/kilocode/voice/session/${id}?directory=${encodeURIComponent(cfg.directory)}`, {
+          Authorization: cfg.auth,
+        }))
+      // A not-found response cannot prove release of an admission still in flight.
+      if (!backend)
         return claim.uncertain
           ? failure("admission_unknown", `Voice admission and cleanup were not confirmed. ${recovery}`)
           : failure("cleanup_failed", `Voice cleanup failed. ${recovery}`)
       // A timed-out admission can still complete after an early not-found deletion.
-      if (claim.uncertain && results.every((result) => result.status === "fulfilled" && result.value.ok))
-        claim.uncertain = false
+      claim.uncertain = false
     }
     if (claim.uncertain) return failure("admission_unknown", `Voice admission was not confirmed. ${recovery}`)
     if (this.claim === claim) this.claim = undefined
@@ -233,7 +241,31 @@ export class RealtimeBroker {
   }
 }
 
-function session(value: unknown): Session {
+function current(cfg: Config) {
+  if (cfg.current && !cfg.current()) throw new Error("Voice ownership changed")
+}
+
+function configure(loaded: Config): (Config & { provider: Session["engine"] }) | Failure {
+  const provider = loaded.settings.voiceEngine
+  if (provider !== "qwen-realtime" && provider !== "openai-live")
+    return failure("configuration", "Select a supported media voice provider.")
+  if (
+    provider === "openai-live" &&
+    loaded.context !== undefined &&
+    (typeof loaded.context !== "string" || Buffer.byteLength(loaded.context, "utf8") > 16384)
+  )
+    return failure("configuration", "Saved voice context exceeds its allowance.")
+  const backend = local(loaded.backendURL)
+  const frontend = local(loaded.settings.mediaFrontendURL)
+  if (!backend || !frontend || !/^[A-Za-z0-9_-]{43}$/.test(loaded.mediaKey))
+    return failure(
+      "configuration",
+      "Voice backend and media frontend require numeric loopback HTTP addresses and a valid media service key.",
+    )
+  return { ...loaded, provider, backendURL: backend, settings: { ...loaded.settings, mediaFrontendURL: frontend } }
+}
+
+function session(value: unknown, provider: Session["engine"]): Session {
   if (!value || typeof value !== "object") throw new Error("Invalid voice admission")
   const item = value as Record<string, unknown>
   if (
@@ -245,8 +277,9 @@ function session(value: unknown): Session {
     typeof item.mediaToken !== "string" ||
     typeof item.controlToken !== "string" ||
     !/^[A-Za-z0-9_-]{43}$/.test(item.controlToken) ||
-    item.engine !== "qwen-realtime" ||
-    typeof item.acceptsTruncation !== "boolean"
+    item.engine !== provider ||
+    typeof item.acceptsTruncation !== "boolean" ||
+    (provider === "openai-live" && item.acceptsTruncation !== false)
   )
     throw new Error("Invalid voice admission")
   return {
@@ -256,7 +289,32 @@ function session(value: unknown): Session {
     clientToken: item.clientToken,
     mediaToken: item.mediaToken,
     controlToken: item.controlToken,
-    engine: item.engine,
+    engine: provider,
     acceptsTruncation: item.acceptsTruncation,
+    ...(provider === "openai-live" ? { maximumSeconds: duration(item.maximumSeconds) } : {}),
   }
+}
+
+function duration(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 1.4 || value > 86400)
+    throw new Error("Invalid GPT-Live reserved duration")
+  return value
+}
+
+function descriptor(value: unknown, id: string) {
+  if (!value || typeof value !== "object") throw new Error("Invalid media admission")
+  const item = value as Record<string, unknown>
+  if (item.id !== id || !item.descriptor || typeof item.descriptor !== "object")
+    throw new Error("Invalid media admission")
+  const cfg = item.descriptor as Record<string, unknown>
+  if (
+    cfg.id !== "openai-live" ||
+    cfg.inputRate !== 24000 ||
+    cfg.outputRate !== 24000 ||
+    cfg.acceptsTruncation !== false ||
+    cfg.requiresContinuousInput !== true ||
+    cfg.nativeBargeIn !== true ||
+    cfg.nativeEndpointing !== true
+  )
+    throw new Error("Invalid GPT-Live media descriptor")
 }

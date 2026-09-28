@@ -13106,6 +13106,8 @@ export class Voice extends HeyApiClient {
       "x-raya-media-key": string
       directory?: string
       workspace?: string
+      version?: 2
+      engine?: "qwen-realtime" | "openai-live"
       parentSessionID?: string
       mediaURL?: string
       room?: string
@@ -13120,6 +13122,8 @@ export class Voice extends HeyApiClient {
             { in: "headers", key: "x-raya-media-key" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "version" },
+            { in: "body", key: "engine" },
             { in: "body", key: "parentSessionID" },
             { in: "body", key: "mediaURL" },
             { in: "body", key: "room" },

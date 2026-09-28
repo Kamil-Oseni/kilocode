@@ -112,14 +112,7 @@ async function routeSpeechMessage(message: Msg, ctx: Ctx): Promise<boolean> {
     return true
   }
   if (await routeKey(message, ctx)) return true
-  if (message.type === "speechRealtimeStart") {
-    if (message.sessionID)
-      await ctx.speech?.realtimeStart(
-        { sessionID: message.sessionID, directory: ctx.dir, connection: ctx.connection },
-        ctx.post,
-      )
-    return true
-  }
+  if (await realtime(message, ctx)) return true
   if (message.type === "speechRealtimeStop") {
     await ctx.speech?.realtimeStop(ctx.post)
     return true
@@ -185,6 +178,22 @@ async function live(message: Msg, ctx: Ctx) {
       status: "failed",
       error: "Voice control was not understood. End voice and reconnect if needed.",
     })
+  return true
+}
+
+async function realtime(message: Msg, ctx: Ctx) {
+  if (message.type !== "speechRealtimeStart") return false
+  const scope = token(message.sessionID) ? ctx.voiceScope?.(message.sessionID) : undefined
+  if (message.sessionID)
+    await ctx.speech?.realtimeStart(
+      {
+        sessionID: message.sessionID,
+        directory: scope?.directory ?? ctx.dir,
+        connection: ctx.connection,
+        current: scope?.current,
+      },
+      ctx.post,
+    )
   return true
 }
 

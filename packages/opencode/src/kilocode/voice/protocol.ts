@@ -6,6 +6,8 @@ export const VoiceSessionID = Schema.String.pipe(Schema.brand("RayaVoiceSessionI
 export type VoiceSessionID = typeof VoiceSessionID.Type
 
 export const Start = Schema.Struct({
+  version: Schema.optional(Schema.Literal(2)),
+  engine: Schema.optional(Schema.Literals(["qwen-realtime", "openai-live"])),
   parentSessionID: SessionID,
   mediaURL: Schema.String,
   room: Schema.optional(Schema.String),
@@ -20,7 +22,8 @@ export const Info = Schema.Struct({
   mediaToken: Schema.String,
   controlToken: Schema.String,
   mediaURL: Schema.String,
-  engine: Schema.Literal("qwen-realtime"),
+  engine: Schema.Literals(["qwen-realtime", "openai-live"]),
+  maximumSeconds: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(1.4), Schema.isLessThanOrEqualTo(86_400))),
   acceptsTruncation: Schema.Boolean,
   status: Schema.Literals(["starting", "active", "closed", "failed"]),
   createdAt: Schema.Number,

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,6 +27,7 @@ import (
 const endpoint = "wss://api.openai.com/v1/live/sessions"
 const startup = 5 * time.Second
 const closing = time.Second
+const reserve = closing + 300*time.Millisecond
 
 var errFinal = errors.New("GPT-Live final session usage is unconfirmed")
 
@@ -45,10 +47,16 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	if cfg.Model != "gpt-live-1" || (cfg.Mode != "" && cfg.Mode != "hands-free") {
 		return nil, errors.New("this engine requires continuous GPT-Live1 audio")
 	}
+	if cfg.Delegation != "" && cfg.Delegation != "client" {
+		return nil, errors.New("GPT-Live supports only explicit client delegation")
+	}
+	if math.IsNaN(cfg.MaximumSeconds) || math.IsInf(cfg.MaximumSeconds, 0) || cfg.MaximumSeconds < 0 || cfg.MaximumSeconds > 86400 || cfg.MaximumSeconds > 0 && cfg.MaximumSeconds <= reserve.Seconds()+0.1 || cfg.Delegation == "client" && cfg.MaximumSeconds == 0 {
+		return nil, errors.New("GPT-Live client delegation requires a finite reserved lifetime greater than 1.4 seconds and at most 86400 seconds")
+	}
 	if cfg.Voice == "" {
 		cfg.Voice = "marin"
 	}
-	if !identifier(cfg.Voice) || !utf8.ValidString(cfg.Instructions) || len(cfg.Instructions) > 16384 {
+	if !identifier(cfg.Voice) || !utf8.ValidString(cfg.Instructions) || len(cfg.Instructions) > 32768 {
 		return nil, errors.New("invalid GPT-Live startup configuration")
 	}
 	raw := cfg.Endpoint
@@ -63,6 +71,20 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	if err != nil {
 		return nil, err
 	}
+	// Start the wall budget before Dial. Fence capture early enough to leave a
+	// bounded finalization allowance; final usage still requires its exact ACK.
+	budget, release := context.WithCancel(ctx)
+	if cfg.MaximumSeconds > 0 {
+		release()
+		budget, release = context.WithTimeout(ctx, time.Duration(cfg.MaximumSeconds*float64(time.Second))-reserve)
+	}
+	ctx = budget
+	owned := false
+	defer func() {
+		if !owned {
+			release()
+		}
+	}()
 	open, cancel := context.WithTimeout(ctx, startup)
 	defer cancel()
 	header := http.Header{"Authorization": {"Bearer " + cfg.Key}}
@@ -74,7 +96,7 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	cfg.Key = ""
 	control, stop := context.WithCancel(context.WithoutCancel(ctx))
 	audio, mute := context.WithCancel(ctx)
-	s := &session{cfg: cfg, conn: conn, ctx: control, cancel: stop, mute: mute, parent: ctx, clock: media.NewClock(24000), events: make(chan engine.Event, 64), ready: make(chan error, 1), final: make(chan struct{}), end: make(chan struct{}), reader: make(chan struct{}), ticker: make(chan struct{}), gate: make(chan struct{}, 1), start: "start_" + id, stream: "local_" + id, commands: make(map[string]*command)}
+	s := &session{cfg: cfg, conn: conn, ctx: control, cancel: stop, mute: mute, budget: release, parent: ctx, clock: media.NewClock(24000), events: make(chan engine.Event, 64), ready: make(chan error, 1), final: make(chan struct{}), end: make(chan struct{}), reader: make(chan struct{}), ticker: make(chan struct{}), gate: make(chan struct{}, 1), start: "start_" + id, stream: "local_" + id, commands: make(map[string]*command), delegations: make(map[string]delegation)}
 	s.gate <- struct{}{}
 	go func() { defer close(s.ticker); s.clock.Run(audio) }()
 	go s.read()
@@ -85,7 +107,11 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 		case <-s.end:
 		}
 	}()
-	if err := s.write(open, map[string]any{"type": "session.start", "event_id": s.start, "session": map[string]any{"model": cfg.Model, "instructions": cfg.Instructions, "store": false, "delegation": nil, "audio": map[string]any{"format": map[string]any{"type": "audio/pcm", "rate": 24000}, "output": map[string]any{"voice": cfg.Voice}}}}); err != nil {
+	var authority any
+	if cfg.Delegation == "client" {
+		authority = map[string]string{"type": "client"}
+	}
+	if err := s.write(open, map[string]any{"type": "session.start", "event_id": s.start, "session": map[string]any{"model": cfg.Model, "instructions": cfg.Instructions, "store": false, "delegation": authority, "audio": map[string]any{"format": map[string]any{"type": "audio/pcm", "rate": 24000}, "output": map[string]any{"voice": cfg.Voice}}}}); err != nil {
 		return nil, errors.Join(err, s.Close())
 	}
 	select {
@@ -96,46 +122,57 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	case <-open.Done():
 		return nil, errors.Join(open.Err(), s.Close())
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, s.Close())
+	}
+	owned = true
 	return s, nil
 }
 
 type session struct {
-	cfg       engine.Config
-	conn      *websocket.Conn
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mute      context.CancelFunc
-	parent    context.Context
-	clock     *media.Clock
-	events    chan engine.Event
-	ready     chan error
-	final     chan struct{}
-	end       chan struct{}
-	reader    chan struct{}
-	ticker    chan struct{}
-	start     string
-	stream    string
-	remote    string
-	closeID   string
-	once      sync.Once
-	readyOnce sync.Once
-	finalOnce sync.Once
-	started   atomic.Bool
-	closed    atomic.Bool
-	confirmed atomic.Bool
-	gate      chan struct{}
-	eventMu   sync.Mutex
-	finished  bool
-	err       error
-	seq       atomic.Uint64
-	input     atomic.Uint64
-	output    atomic.Uint64
-	partial   atomic.Uint64
-	carry     []byte
-	mu        sync.Mutex
-	commands  map[string]*command
-	order     []string
-	receipt   *engine.Usage
+	cfg         engine.Config
+	conn        *websocket.Conn
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mute        context.CancelFunc
+	budget      context.CancelFunc
+	parent      context.Context
+	clock       *media.Clock
+	events      chan engine.Event
+	ready       chan error
+	final       chan struct{}
+	end         chan struct{}
+	reader      chan struct{}
+	ticker      chan struct{}
+	start       string
+	stream      string
+	remote      string
+	closeID     string
+	once        sync.Once
+	readyOnce   sync.Once
+	finalOnce   sync.Once
+	started     atomic.Bool
+	closed      atomic.Bool
+	confirmed   atomic.Bool
+	gate        chan struct{}
+	eventMu     sync.Mutex
+	finished    bool
+	err         error
+	seq         atomic.Uint64
+	input       atomic.Uint64
+	output      atomic.Uint64
+	partial     atomic.Uint64
+	carry       []byte
+	mu          sync.Mutex
+	commands    map[string]*command
+	order       []string
+	receipt     *engine.Usage
+	delegations map[string]delegation
+}
+
+type delegation struct {
+	event  string
+	offset float64
 }
 
 func (s *session) PushAudio(ctx context.Context, pcm []byte) error {
@@ -193,6 +230,7 @@ func (s *session) begin() {
 }
 func (s *session) close() {
 	defer close(s.end)
+	defer s.budget()
 	ctx, cancel := context.WithTimeout(context.Background(), closing)
 	defer cancel()
 	if s.started.Load() && !s.confirmed.Load() {
@@ -284,14 +322,14 @@ func (s *session) read() {
 
 func (s *session) handle(msg message) bool {
 	if msg.Type == "session.started" {
-		if s.started.Load() || !identifier(msg.EventID) || (msg.ClientID != "" && msg.ClientID != s.start) || !identifier(msg.Session.ID) || msg.Session.Model != s.cfg.Model || (msg.Session.Store != nil && *msg.Session.Store) || (msg.Session.Status != "" && msg.Session.Status != "active") || msg.Session.Audio.Format.Type != "audio/pcm" || msg.Session.Audio.Format.Rate != 24000 || msg.Session.Audio.Output.Voice != s.cfg.Voice || !policy(msg.Session.Delegation) {
+		if s.started.Load() || !identifier(msg.EventID) || (msg.ClientID != "" && msg.ClientID != s.start) || !identifier(msg.Session.ID) || msg.Session.Model != s.cfg.Model || (msg.Session.Store != nil && *msg.Session.Store) || (msg.Session.Status != "" && msg.Session.Status != "active") || msg.Session.Audio.Format.Type != "audio/pcm" || msg.Session.Audio.Format.Rate != 24000 || msg.Session.Audio.Output.Voice != s.cfg.Voice || !policy(msg.Session.Delegation) || s.cfg.Delegation == "client" && (len(msg.Session.Delegation) == 0 || string(msg.Session.Delegation) == "null") {
 			s.fail("GPT-Live resolved startup configuration was not confirmed")
 			return false
 		}
 		s.remote = msg.Session.ID
 		s.started.Store(true)
 		s.resolve(nil)
-		s.emit(engine.Event{Type: "session.started", Session: s.remote, Data: map[string]any{"eventID": msg.EventID, "localStream": s.stream}})
+		s.emit(engine.Event{Type: "session.started", Session: s.remote, Data: map[string]any{"eventID": msg.EventID, "model": s.cfg.Model, "localStream": s.stream}})
 		return true
 	}
 	if !s.started.Load() {
@@ -377,10 +415,30 @@ func (s *session) handle(msg message) bool {
 		}
 		s.emit(engine.Event{Type: kind, Item: msg.EventID, Text: msg.Delta, Data: data})
 	case "session.delegation.created":
-		if !identifier(msg.EventID) || !identifier(msg.Delegation.ID) || msg.Delegation.Type != "delegation" || msg.Delegation.Target != "client" || msg.Offset == nil || *msg.Offset < 0 || *msg.Offset > 24*60*60*1000 {
+		if s.cfg.Delegation != "client" || !identifier(msg.EventID) || !identifier(msg.Delegation.ID) || msg.Delegation.Type != "delegation" || msg.Delegation.Target != "client" || msg.Offset == nil || *msg.Offset < 0 || *msg.Offset > 24*60*60*1000 {
 			s.fail("invalid GPT-Live delegation metadata")
 			return false
 		}
+		s.mu.Lock()
+		prior, exists := s.delegations[msg.Delegation.ID]
+		for id, known := range s.delegations {
+			if id != msg.Delegation.ID && known.event == msg.EventID {
+				s.mu.Unlock()
+				s.fail("GPT-Live delegation server event identity was reused")
+				return false
+			}
+		}
+		if exists && (prior.event != msg.EventID || prior.offset != *msg.Offset) || !exists && len(s.delegations) >= 256 {
+			s.mu.Unlock()
+			s.fail("GPT-Live delegation identity was reused or allowance exhausted")
+			return false
+		}
+		if exists {
+			s.mu.Unlock()
+			return true
+		}
+		s.delegations[msg.Delegation.ID] = delegation{event: msg.EventID, offset: *msg.Offset}
+		s.mu.Unlock()
 		s.emit(engine.Event{Type: msg.Type, Item: msg.Delegation.ID, Data: map[string]any{"event_id": msg.EventID, "offset_ms": *msg.Offset, "delegation": map[string]any{"id": msg.Delegation.ID, "type": msg.Delegation.Type, "target": msg.Delegation.Target}}})
 	case "error":
 		s.fail("OpenAI rejected or could not complete a GPT-Live operation")

@@ -21,6 +21,7 @@ type Backend interface {
 type HTTPBackend struct {
 	URL       string
 	Auth      string
+	Control   string
 	Directory string
 	Client    *http.Client
 }
@@ -44,6 +45,9 @@ func (b HTTPBackend) Event(ctx context.Context, event wire.Envelope) error {
 	req.Header.Set("Content-Type", "application/json")
 	if b.Auth != "" {
 		req.Header.Set("Authorization", b.Auth)
+	}
+	if b.Control != "" {
+		req.Header.Set("X-Raya-Voice-Capability", b.Control)
 	}
 	client := b.Client
 	if client == nil {

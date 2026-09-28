@@ -1,6 +1,6 @@
 // raya_change - Async voice plane: session admission, transcript truth, and reactive delegation.
 import { Effect, Option, Schema, Semaphore } from "effect"
-import { randomBytes } from "node:crypto"
+import { randomBytes, timingSafeEqual } from "node:crypto"
 import { AccessToken } from "livekit-server-sdk"
 import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
@@ -9,6 +9,7 @@ import { VoiceReconstructor } from "./reconstructor"
 import { ContextItem, Failure, type Envelope, type Info, type Start, type State, VoiceSessionID } from "./protocol"
 import { post } from "./transport"
 import { local } from "./destination"
+import * as Live from "./mf-live"
 
 type Entry = {
   info: typeof Info.Type
@@ -16,11 +17,15 @@ type Entry = {
   delegateID: (typeof Info.Type)["parentSessionID"]
   transcript: VoiceReconstructor
   failure?: typeof Failure.Type
+  directory: string
+  live?: Live.State
 }
 
 type Stored = Omit<typeof State.Type, "info"> & {
   info: Omit<typeof Info.Type, "controlToken"> & { controlToken?: string }
   delegateID: Entry["delegateID"]
+  directory?: string
+  live?: Live.State
 }
 
 type Deps = {
@@ -33,6 +38,7 @@ type Deps = {
     secret: string
   }
   inject?: (url: string, id: string, key: string, token: string, item: typeof ContextItem.Type) => Promise<void>
+  openai?: Live.Service
 }
 
 const key = (id: VoiceSessionID) => ["raya_voice", id]
@@ -91,16 +97,21 @@ export namespace RayaVoice {
         return yield* new InputError({ message: "Voice media frontend must use a numeric loopback HTTP address." })
       const serviceKey = mediaKey(key)
       if (!serviceKey) return yield* new InputError({ message: "Voice media frontend requires a valid service key." })
+      const live = input.engine === "openai-live"
+      if (live && (input.version !== 2 || !deps.openai))
+        return yield* new InputError({ message: "Canonical Live media binding is unavailable." })
       const parent = yield* deps.sessions.get(input.parentSessionID)
       const id = VoiceSessionID.make(`rvs_${crypto.randomUUID()}`)
       const room = input.room ?? id
-      const delegate = yield* deps.sessions.create({
-        parentID: parent.id,
-        title: `Voice delegate ${new Date().toISOString()}`,
-        agent: "voice",
-        model: parent.model,
-        metadata: { rayaVoiceSessionID: id },
-      })
+      const delegate = live
+        ? parent
+        : yield* deps.sessions.create({
+            parentID: parent.id,
+            title: `Voice delegate ${new Date().toISOString()}`,
+            agent: "voice",
+            model: parent.model,
+            metadata: { rayaVoiceSessionID: id },
+          })
       const [clientToken, mediaToken] = yield* Effect.all(
         [token(`client-${id}`, room, true), token(`media-${id}`, room, true)],
         { concurrency: "unbounded" },
@@ -114,27 +125,37 @@ export namespace RayaVoice {
         mediaToken,
         controlToken: capability(),
         mediaURL,
-        engine: "qwen-realtime" as const,
+        engine: live ? ("openai-live" as const) : ("qwen-realtime" as const),
         acceptsTruncation: false,
         status: "starting" as const,
         createdAt: Date.now(),
       }
-      entries.set(id, { info, mediaKey: serviceKey, delegateID: delegate.id, transcript: new VoiceReconstructor() })
+      entries.set(id, {
+        info,
+        mediaKey: serviceKey,
+        delegateID: delegate.id,
+        transcript: new VoiceReconstructor(),
+        directory: parent.directory,
+        ...(live ? { live: { secret: randomBytes(32).toString("hex") } } : {}),
+      })
       yield* persist(entries.get(id)!)
-      yield* deps.prompts
-        .prompt({
-          sessionID: delegate.id,
-          parts: [
-            {
-              type: "text",
-              text:
-                "<system-reminder>Warm the voice delegation prefix. Use no tools and reply only READY. " +
-                "Future turns must remain concise, grounded, read-only, and suitable for speech.</system-reminder>",
-            },
-          ],
-        })
-        .pipe(Effect.timeout("2 seconds"), Effect.ignore, Effect.forkDetach)
-      return info
+      if (live && !(yield* Live.reserve(entries.get(id)!, deps.openai!, () => persist(entries.get(id)!))))
+        return yield* new InputError({ message: "Live media provider admission was not confirmed." })
+      if (!live)
+        yield* deps.prompts
+          .prompt({
+            sessionID: delegate.id,
+            parts: [
+              {
+                type: "text",
+                text:
+                  "<system-reminder>Warm the voice delegation prefix. Use no tools and reply only READY. " +
+                  "Future turns must remain concise, grounded, read-only, and suitable for speech.</system-reminder>",
+              },
+            ],
+          })
+          .pipe(Effect.timeout("2 seconds"), Effect.ignore, Effect.forkDetach)
+      return entries.get(id)!.info
     })
 
     const get = Effect.fn("RayaVoice.get")(function* (id: VoiceSessionID) {
@@ -143,9 +164,21 @@ export namespace RayaVoice {
       return state(entry)
     })
 
-    const event = Effect.fn("RayaVoice.event")(function* (input: typeof Envelope.Type) {
+    const event = Effect.fn("RayaVoice.event")(function* (input: typeof Envelope.Type, proof?: string) {
       const entry = yield* resolve(input.session)
       if (!entry) return false
+      if (entry.info.engine === "openai-live") {
+        if (
+          !proof ||
+          !/^[A-Za-z0-9_-]{43}$/.test(proof) ||
+          proof.length !== entry.info.controlToken.length ||
+          !timingSafeEqual(Buffer.from(proof), Buffer.from(entry.info.controlToken))
+        )
+          return false
+        const accepted = yield* Live.event(entry, input, deps.openai, () => persist(entry))
+        yield* persist(entry)
+        return accepted
+      }
       if (entry.info.status === "closed" || entry.info.status === "failed") return true
       entry.transcript.ingest(input.seq, input.event)
       if (input.event.type === "session.updated") entry.info = { ...entry.info, status: "active" }
@@ -169,13 +202,27 @@ export namespace RayaVoice {
       const entry = yield* resolve(id)
       if (!entry) return false
       entry.info = { ...entry.info, status: "closed" }
-      yield* deps.prompts.cancel(entry.delegateID)
+      if (entry.live?.binding && deps.openai)
+        yield* deps.openai.close(
+          entry.live.binding.id,
+          entry.live.binding.generation,
+          entry.live.secret,
+          entry.directory,
+        )
+      if (!entry.live) yield* deps.prompts.cancel(entry.delegateID)
       yield* persist(entry)
       return true
     })
 
     const persist = (entry: Entry) =>
-      deps.storage.write(key(entry.info.id), { ...state(entry), delegateID: entry.delegateID }).pipe(Effect.orDie)
+      deps.storage
+        .write(key(entry.info.id), {
+          ...state(entry),
+          delegateID: entry.delegateID,
+          directory: entry.directory,
+          ...(entry.live ? { live: entry.live } : {}),
+        })
+        .pipe(Effect.orDie)
 
     const resolve = Effect.fn("RayaVoice.resolve")(function* (id: VoiceSessionID) {
       const active = entries.get(id)
@@ -193,6 +240,8 @@ export namespace RayaVoice {
         delegateID: stored.delegateID,
         transcript: new VoiceReconstructor(stored),
         failure: stored.failure,
+        directory: stored.directory ?? "",
+        live: stored.live,
       }
       entries.set(id, entry)
       if (stored.info.controlToken !== controlToken) yield* persist(entry)
@@ -264,7 +313,7 @@ export namespace RayaVoice {
     return {
       start,
       get: (id: VoiceSessionID) => locked(id, get(id)),
-      event: (input: typeof Envelope.Type) => locked(input.session, event(input)),
+      event: (input: typeof Envelope.Type, proof?: string) => locked(input.session, event(input, proof)),
       close: (id: VoiceSessionID) => locked(id, close(id)),
     }
   }

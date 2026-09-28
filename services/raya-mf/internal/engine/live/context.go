@@ -14,16 +14,28 @@ import (
 var errAppend = errors.New("GPT-Live context acceptance is unconfirmed; do not replay")
 
 type command struct {
-	item     engine.ContextItem
-	wire     string
-	kind     string
-	done     chan struct{}
-	timer    *time.Timer
-	finished bool
-	err      error
+	item       engine.ContextItem
+	wire       string
+	kind       string
+	done       chan struct{}
+	timer      *time.Timer
+	finished   bool
+	err        error
+	delegation string
 }
 
 func (s *session) Inject(ctx context.Context, item engine.ContextItem) error {
+	return s.append(ctx, item, "")
+}
+
+func (s *session) Result(ctx context.Context, result engine.Result) error {
+	if !identifier(result.DelegationID) || (result.Kind != "delegation.result" && result.Kind != "commentary" && result.Kind != "thinking") {
+		return errors.New("invalid GPT-Live delegation result")
+	}
+	return s.append(ctx, engine.ContextItem{ID: result.ReceiptID, Kind: result.Kind, Text: result.Content, TTLMS: result.TTLMS, Created: result.Created}, result.DelegationID)
+}
+
+func (s *session) append(ctx context.Context, item engine.ContextItem, original string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -36,6 +48,13 @@ func (s *session) Inject(ctx context.Context, item engine.ContextItem) error {
 		return errors.New("invalid or oversized GPT-Live context")
 	}
 	s.mu.Lock()
+	if original != "" {
+		_, exists := s.delegations[original]
+		if s.cfg.Delegation != "client" || !exists {
+			s.mu.Unlock()
+			return errors.New("GPT-Live result does not match an original client delegation")
+		}
+	}
 	prior := s.commands[item.ID]
 	if item.Created.IsZero() {
 		item.Created = time.Now()
@@ -45,7 +64,7 @@ func (s *session) Inject(ctx context.Context, item engine.ContextItem) error {
 	}
 	item.Created = item.Created.UTC()
 	if prior != nil {
-		match := same(prior.item, item)
+		match := same(prior.item, item) && prior.delegation == original
 		s.mu.Unlock()
 		if !match {
 			return errors.New("GPT-Live context identity was reused")
@@ -68,7 +87,7 @@ func (s *session) Inject(ctx context.Context, item engine.ContextItem) error {
 	if item.Kind == "commentary" || item.Kind == "delegation.result" {
 		kind = "session.commentary.append"
 	}
-	entry := &command{item: item, wire: "context_" + id, kind: kind, done: make(chan struct{})}
+	entry := &command{item: item, wire: "context_" + id, kind: kind, delegation: original, done: make(chan struct{})}
 	s.commands[item.ID] = entry
 	s.order = append(s.order, item.ID)
 	end := time.Now().Add(startup)
@@ -89,7 +108,11 @@ func (s *session) Inject(ctx context.Context, item engine.ContextItem) error {
 	// private receipt identity in the local record, not speakable content.
 	send, cancel := context.WithDeadline(ctx, end)
 	defer cancel()
-	if err := s.send(send, map[string]any{"type": kind, "event_id": entry.wire, "delegation_id": nil, "content": item.Text}, func() bool {
+	var target any
+	if original != "" {
+		target = original
+	}
+	if err := s.send(send, map[string]any{"type": kind, "event_id": entry.wire, "delegation_id": target, "content": item.Text}, func() bool {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return !entry.finished && time.Now().Before(end)
@@ -184,7 +207,7 @@ func (s *session) Snapshot(context.Context) (engine.Snapshot, error) {
 	items := make([]engine.ContextItem, 0, len(s.commands))
 	for _, id := range s.order {
 		entry := s.commands[id]
-		if entry.finished && entry.err == nil {
+		if entry.finished && entry.err == nil && entry.delegation == "" {
 			items = append(items, entry.item)
 		}
 	}

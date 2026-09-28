@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,10 +19,11 @@ import (
 )
 
 type fixture struct {
-	server *httptest.Server
-	conn   chan *websocket.Conn
-	writes chan map[string]any
-	modify func(map[string]any, map[string]any) map[string]any
+	delegation string
+	server     *httptest.Server
+	conn       chan *websocket.Conn
+	writes     chan map[string]any
+	modify     func(map[string]any, map[string]any) map[string]any
 }
 
 func serve(t *testing.T, modify func(map[string]any, map[string]any) map[string]any) *fixture {
@@ -101,7 +103,11 @@ func send(conn *websocket.Conn, value map[string]any) error {
 	return conn.Write(ctx, websocket.MessageText, raw)
 }
 func (f *fixture) config() engine.Config {
-	return engine.Config{Endpoint: "ws" + strings.TrimPrefix(f.server.URL, "http") + "/v1/live/sessions", Key: "loopback-key"}
+	maximum := float64(0)
+	if f.delegation == "client" {
+		maximum = 60
+	}
+	return engine.Config{Endpoint: "ws" + strings.TrimPrefix(f.server.URL, "http") + "/v1/live/sessions", Key: "loopback-key", Delegation: f.delegation, MaximumSeconds: maximum}
 }
 func opened(t *testing.T, f *fixture) (engine.Session, *websocket.Conn) {
 	t.Helper()
@@ -205,6 +211,7 @@ func TestLivePrimaryStartupContinuousPCMAndLocalSourceOnly(t *testing.T) {
 
 func TestLivePreservesTranscriptAndDelegationMetadataWithoutVoiceTurns(t *testing.T) {
 	f := serve(t, nil)
+	f.delegation = "client"
 	value, conn := opened(t, f)
 	if err := send(conn, map[string]any{"type": "session.input_transcript.delta", "event_id": "caption_1", "client_event_id": "context_original", "delta": "hello", "start_ms": 1, "end_ms": 20}); err != nil {
 		t.Fatal(err)
@@ -491,5 +498,155 @@ func TestLiveContradictoryDelegationAndMalformedOutputFailClosed(t *testing.T) {
 		}
 		cancel()
 		_ = conn.CloseNow()
+	}
+}
+
+func TestLiveDelegationResultExactOriginalAndImmutableReceipts(t *testing.T) {
+	f := serve(t, nil)
+	f.delegation = "client"
+	value, conn := opened(t, f)
+	start := written(t, f, "session.start")
+	if start["session"].(map[string]any)["delegation"].(map[string]any)["type"] != "client" {
+		t.Fatal("client delegation was not explicitly configured")
+	}
+	result := engine.Result{DelegationID: "del_original", ReceiptID: "receipt_original", Kind: "delegation.result", Content: "The task is complete.", TTLMS: 1000}
+	delegator := value.(engine.Delegator)
+	if delegator.Result(context.Background(), result) == nil {
+		t.Fatal("unobserved original delegation admitted")
+	}
+	if err := send(conn, map[string]any{"type": "session.delegation.created", "event_id": "delegate_original", "offset_ms": 25, "delegation": map[string]any{"id": "del_original", "type": "delegation", "target": "client"}}); err != nil {
+		t.Fatal(err)
+	}
+	observed(t, value, "session.delegation.created")
+	if err := delegator.Result(context.Background(), result); err != nil {
+		t.Fatal(err)
+	}
+	wire := written(t, f, "session.commentary.append")
+	if wire["delegation_id"] != result.DelegationID || wire["content"] != result.Content || wire["event_id"] == result.ReceiptID || len(wire) != 4 {
+		t.Fatal("result lost original provider identity or exposed private receipt", wire)
+	}
+	observed(t, value, "context.injected")
+	if err := delegator.Result(context.Background(), result); err != nil {
+		t.Fatal("exact result retry lost accepted receipt", err)
+	}
+	changed := result
+	changed.ReceiptID = "another_receipt"
+	changed.Kind = "thinking"
+	changed.Content = "A quiet progress update."
+	if err := delegator.Result(context.Background(), changed); err != nil {
+		t.Fatal("original delegation refused a distinct explicit update", err)
+	}
+	update := written(t, f, "session.thinking.append")
+	if update["delegation_id"] != result.DelegationID || update["content"] != changed.Content {
+		t.Fatal("quiet update lost original identity")
+	}
+	observed(t, value, "context.injected")
+	if err := send(conn, map[string]any{"type": "session.delegation.created", "event_id": "delegate_second", "offset_ms": 30, "delegation": map[string]any{"id": "del_second", "type": "delegation", "target": "client"}}); err != nil {
+		t.Fatal(err)
+	}
+	observed(t, value, "session.delegation.created")
+	changed = result
+	changed.DelegationID = "del_second"
+	if delegator.Result(context.Background(), changed) == nil {
+		t.Fatal("local receipt identity moved between provider delegations")
+	}
+	changed = result
+	changed.Content = "different"
+	if delegator.Result(context.Background(), changed) == nil {
+		t.Fatal("same receipt admitted changed content")
+	}
+	snapshot, err := value.Snapshot(context.Background())
+	if err != nil || len(snapshot.Items) != 0 {
+		t.Fatal("original delegation results leaked into replayable snapshot")
+	}
+	select {
+	case extra := <-f.writes:
+		t.Fatal("retry/changed result sent another append", extra)
+	case <-time.After(25 * time.Millisecond):
+	}
+}
+
+func TestLiveDelegationResultUnknownAckCannotReplayOrChangeReceipt(t *testing.T) {
+	f := serve(t, func(value, answer map[string]any) map[string]any {
+		if value["type"] == "session.commentary.append" {
+			answer["client_event_id"] = "wrong_result"
+		}
+		return answer
+	})
+	f.delegation = "client"
+	value, conn := opened(t, f)
+	written(t, f, "session.start")
+	if err := send(conn, map[string]any{"type": "session.delegation.created", "event_id": "delegate_unknown", "offset_ms": 1, "delegation": map[string]any{"id": "del_unknown", "type": "delegation", "target": "client"}}); err != nil {
+		t.Fatal(err)
+	}
+	observed(t, value, "session.delegation.created")
+	result := engine.Result{DelegationID: "del_unknown", ReceiptID: "receipt_unknown", Kind: "commentary", Content: "A result", Created: time.Now(), TTLMS: 25}
+	if err := value.(engine.Delegator).Result(context.Background(), result); !errors.Is(err, errAppend) {
+		t.Fatal("wrong result ACK admitted acceptance", err)
+	}
+	written(t, f, "session.commentary.append")
+	if err := value.(engine.Delegator).Result(context.Background(), result); !errors.Is(err, errAppend) {
+		t.Fatal("unknown result replayed", err)
+	}
+	result.ReceiptID = "replacement_receipt"
+	if value.(engine.Delegator).Result(context.Background(), result) == nil {
+		t.Fatal("unknown side effect gained replacement identity")
+	}
+	select {
+	case extra := <-f.writes:
+		t.Fatal("unknown result sent again", extra)
+	case <-time.After(25 * time.Millisecond):
+	}
+}
+
+func TestLiveReservedLifetimeFencesInputAndClosesBeforeCap(t *testing.T) {
+	f := serve(t, nil)
+	f.delegation = "client"
+	cfg := f.config()
+	cfg.MaximumSeconds = 1.6
+	began := time.Now()
+	value, err := (Engine{}).Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn := <-f.conn
+	defer conn.CloseNow()
+	written(t, f, "session.start")
+	written(t, f, "session.close")
+	if elapsed := time.Since(began); elapsed > 800*time.Millisecond {
+		t.Fatal("reserved lifetime did not fence before finalization allowance", elapsed)
+	}
+	if value.PushAudio(context.Background(), make([]byte, 960)) == nil {
+		t.Fatal("budget expiry left paid input active")
+	}
+	if err := value.(engine.Delegator).Result(context.Background(), engine.Result{DelegationID: "unknown", ReceiptID: "late", Kind: "thinking", Content: "late"}); err == nil {
+		t.Fatal("budget expiry left paid context active")
+	}
+	if err := value.Close(); err != nil {
+		t.Fatal("budget stop lost actual terminal ACK", err)
+	}
+	if elapsed := time.Since(began); elapsed >= time.Duration(cfg.MaximumSeconds*float64(time.Second)) {
+		t.Fatal("provider cleanup exceeded reserved cap", elapsed)
+	}
+	if _, err := value.(engine.Terminal).Usage(); err != nil {
+		t.Fatal("budget expiry fabricated/omitted terminal receipt", err)
+	}
+}
+
+func TestLiveClientBudgetInvalidRefusesBeforeDial(t *testing.T) {
+	f := serve(t, nil)
+	f.delegation = "client"
+	for _, maximum := range []float64{0, -1, 1.4, 86401, math.Inf(1), math.NaN()} {
+		cfg := f.config()
+		cfg.MaximumSeconds = maximum
+		if value, err := (Engine{}).Open(context.Background(), cfg); value != nil || err == nil {
+			t.Fatal("invalid client lifetime admitted provider connection", maximum)
+		}
+	}
+	select {
+	case conn := <-f.conn:
+		_ = conn.CloseNow()
+		t.Fatal("invalid lifetime dialed provider before rejection")
+	default:
 	}
 }

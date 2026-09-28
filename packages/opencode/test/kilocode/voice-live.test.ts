@@ -24,6 +24,8 @@ import { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { RayaVoice } from "@/kilocode/voice/service"
+import * as Session from "@/session/session"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const secret = "a".repeat(64)
@@ -58,6 +60,7 @@ const fixture = (
   root: string,
   model: "gpt-live-1" | "gpt-realtime-2.1" = "gpt-live-1",
   work: SessionPrompt.Interface["prompt"] = (input) => Effect.succeed(answer(input)),
+  amount = 1,
 ) =>
   Effect.gen(function* () {
     const storage = yield* Storage.Service
@@ -97,6 +100,7 @@ const fixture = (
           }),
       },
       workers,
+      admissions: () => Effect.succeed({ amount, dispatch: Effect.void, finish: Effect.void, release: Effect.void }),
       prompts: {
         prompt: (input: Prompt) =>
           runner.ensureRunning(
@@ -115,6 +119,7 @@ const fixture = (
       requestID: crypto.randomUUID(),
       model,
     }
+    yield* voice.reserve({ parentSessionID: start.parentSessionID, requestID: start.requestID, model }, secret, root)
     const binding = yield* voice.start(start, secret, root)
     return { voice, binding, start, calls, database, storage }
   })
@@ -128,6 +133,184 @@ const settled = (read: Effect.Effect<typeof OpenAICall.Type, unknown>) =>
     }
     return yield* Effect.die("voice receipt did not settle")
   })
+
+function frontend(state: Effect.Success<ReturnType<typeof fixture>>) {
+  return RayaVoice.make({
+    storage: state.storage,
+    openai: state.voice,
+    sessions: {
+      create: () => Effect.die("legacy child must not be created"),
+      get: (id) =>
+        Effect.gen(function* () {
+          const row = yield* state.database.db
+            .select()
+            .from(SessionTable)
+            .where(eq(SessionTable.id, id))
+            .get()
+            .pipe(Effect.orDie)
+          if (!row) return yield* Effect.fail(new NotFoundError({ message: "Test parent missing" }))
+          return Session.fromRow(row)
+        }),
+    },
+    prompts: {
+      prompt: () => Effect.die("legacy delegation must not run"),
+      cancel: () => Effect.die("canonical work must not be cancelled"),
+    },
+  })
+}
+
+it.live("MF Live refuses an insufficient canonical duration before returning provider credentials", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    return yield* Effect.gen(function* () {
+      const state = yield* fixture(root, "gpt-live-1", (input) => Effect.succeed(answer(input)), 0.0000001)
+      yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+      const mf = frontend(state)
+      const exit = yield* mf
+        .start(
+          { version: 2, engine: "openai-live", parentSessionID: session, mediaURL: "http://127.0.0.1:1" },
+          "q".repeat(43),
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(exit.cause.toString()).toContain("Live media provider admission was not confirmed")
+      const keys = yield* state.storage.list(["raya_voice"])
+      expect(keys).toHaveLength(1)
+      const saved = yield* state.storage.read<{
+        info: { maximumSeconds?: number }
+        live: { phase: string; admission: { maximumSeconds: number }; binding?: unknown }
+      }>(keys[0])
+      expect(saved.live.phase).toBe("reserved")
+      expect(saved.live.admission.maximumSeconds).toBe(0)
+      expect(saved.live.binding).toBeUndefined()
+      expect(saved.info.maximumSeconds).toBeUndefined()
+      expect(state.calls).toHaveLength(0)
+    }).pipe(
+      Effect.provide([
+        Storage.layerFromDir(path.join(root, "mf-storage")),
+        Database.layerFromPath(path.join(root, "mf.sqlite")),
+      ]),
+    )
+  }).pipe(Effect.scoped),
+)
+
+it.live("MF Live binds canonical provider identity and meters exact final usage without admitting legacy work", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    return yield* Effect.gen(function* () {
+      const state = yield* fixture(root)
+      yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+      const mf = frontend(state)
+      const info = yield* mf.start(
+        { version: 2, engine: "openai-live", parentSessionID: session, mediaURL: "http://127.0.0.1:1" },
+        "q".repeat(43),
+      )
+      const id = info.id
+      const cap = info.controlToken
+      const admitted = yield* state.storage.read<{
+        live: { phase: string; admission: { requestID: string; status: string; maximumSeconds: number } }
+      }>(["raya_voice", id])
+      expect(admitted.live.phase).toBe("reserved")
+      expect(admitted.live.admission.requestID).toBe(id)
+      expect(admitted.live.admission.status).toBe("reserved")
+      expect(info.maximumSeconds).toBe(admitted.live.admission.maximumSeconds)
+      expect(info.maximumSeconds).toBeGreaterThan(1.4)
+      expect(info.maximumSeconds).toBeLessThanOrEqual(86_400)
+      const started = {
+        session: id,
+        seq: 1,
+        event: {
+          seq: 1,
+          type: "session.started",
+          session: "provider_mf_fixture",
+          at: new Date().toISOString(),
+          data: { model: "gpt-live-1" },
+        },
+      }
+      expect(yield* mf.event(started, "wrong")).toBe(false)
+      expect(yield* mf.event(started, cap)).toBe(true)
+      expect(yield* mf.event(started, cap)).toBe(true)
+      const saved = yield* state.storage.read<{
+        live: { secret: string; binding: { id: string; generation: string; providerCallID: string } }
+      }>(["raya_voice", id])
+      expect(saved.live.binding.providerCallID).toBe("provider_mf_fixture")
+      const exposed = yield* mf.get(id)
+      expect(JSON.stringify(exposed)).not.toContain(saved.live.secret)
+      expect(
+        yield* mf.event(
+          {
+            session: id,
+            seq: 2,
+            event: {
+              seq: 2,
+              type: "session.usage.updated",
+              session: "provider_mf_fixture",
+              at: new Date().toISOString(),
+              data: { event_id: "running_fixture", usage: { seconds: 0.75 } },
+            },
+          },
+          cap,
+        ),
+      ).toBe(true)
+      const observed = yield* state.storage.read<{ live: { running?: { seconds: number }; usage?: unknown } }>([
+        "raya_voice",
+        id,
+      ])
+      expect(observed.live.running?.seconds).toBe(0.75)
+      expect(observed.live.usage).toBeUndefined()
+      expect(
+        yield* mf.event(
+          { session: id, seq: 3, event: { seq: 3, type: "session.delegation.created", at: new Date().toISOString() } },
+          cap,
+        ),
+      ).toBe(false)
+      expect(state.calls).toHaveLength(0)
+      expect(yield* mf.close(id)).toBe(true)
+      const closed = {
+        session: id,
+        seq: 5,
+        event: {
+          seq: 5,
+          type: "session.closed",
+          session: "provider_mf_fixture",
+          at: new Date().toISOString(),
+          data: {
+            event_id: "provider_final_fixture",
+            model: "gpt-live-1",
+            reason: "close_requested",
+            usage: { seconds: 1.25 },
+          },
+        },
+      }
+      expect(yield* mf.event({ ...closed, event: { ...closed.event, session: "another-provider" } }, cap)).toBe(false)
+      expect(yield* mf.event(closed, cap)).toBe(true)
+      expect(yield* mf.event(closed, cap)).toBe(true)
+      expect(
+        yield* state.voice.duration(
+          saved.live.binding.id,
+          {
+            generation: saved.live.binding.generation,
+            receipt: { id: "provider_final_fixture", model: "gpt-live-1", seconds: 1.25 },
+          },
+          saved.live.secret,
+          root,
+        ),
+      ).toEqual({ id: "provider_final_fixture", model: "gpt-live-1", seconds: 1.25 })
+      expect(
+        yield* mf.event(
+          { ...closed, event: { ...closed.event, data: { ...closed.event.data, usage: { seconds: 99 } } } },
+          cap,
+        ),
+      ).toBe(false)
+    }).pipe(
+      Effect.provide([
+        Storage.layerFromDir(path.join(root, "mf-storage")),
+        Database.layerFromPath(path.join(root, "mf.sqlite")),
+      ]),
+    )
+  }).pipe(Effect.scoped),
+)
 
 function context(generation: string, key: string, sequence: number, text = "Please summarize the current file") {
   return {

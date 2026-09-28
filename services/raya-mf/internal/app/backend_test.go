@@ -31,7 +31,7 @@ func TestBackendRedirect(t *testing.T) {
 						return
 					}
 					received.Add(1)
-					if r.Method != http.MethodPost || r.URL.Path != "/kilocode/voice/events" || r.Header.Get("Authorization") != "Basic synthetic-secret" || r.URL.Query().Get("directory") != "workspace with spaces" {
+					if r.Method != http.MethodPost || r.URL.Path != "/kilocode/voice/events" || r.Header.Get("Authorization") != "Basic synthetic-secret" || r.Header.Get("X-Raya-Voice-Capability") != "synthetic-voice-capability" || r.URL.Query().Get("directory") != "workspace with spaces" {
 						t.Error("configured callback request lost its identity")
 					}
 					var event wire.Envelope
@@ -50,7 +50,7 @@ func TestBackendRedirect(t *testing.T) {
 					redirects.Add(1)
 					return nil
 				}}
-				backend := HTTPBackend{URL: source.URL, Auth: "Basic synthetic-secret", Directory: "workspace with spaces", Client: client}
+				backend := HTTPBackend{URL: source.URL, Auth: "Basic synthetic-secret", Control: "synthetic-voice-capability", Directory: "workspace with spaces", Client: client}
 				err := backend.Event(context.Background(), wire.Envelope{Session: "synthetic-session", Seq: 7})
 				if err == nil || err.Error() != fmt.Sprintf("voice event status %d", status) {
 					t.Fatalf("expected status-only redirect refusal, got %v", err)

@@ -9,15 +9,17 @@ import (
 const FramePeriod = 20 * time.Millisecond
 
 type Config struct {
-	Provider     string `json:"provider,omitempty"`
-	Endpoint     string
-	Key          string
-	Model        string
-	Voice        string
-	Instructions string
-	Mode         string
-	Threshold    float64
-	Silence      time.Duration
+	Provider       string  `json:"provider,omitempty"`
+	Delegation     string  `json:"delegation,omitempty"`
+	MaximumSeconds float64 `json:"maximumSeconds,omitempty"`
+	Endpoint       string
+	Key            string
+	Model          string
+	Voice          string
+	Instructions   string
+	Mode           string
+	Threshold      float64
+	Silence        time.Duration
 }
 
 type Descriptor struct {
@@ -106,6 +108,21 @@ type Session interface {
 // It grants no media or work authority and never infers usage from local time.
 type Terminal interface {
 	Usage() (Usage, error)
+}
+
+// Delegator resolves only original client-delegation IDs observed by this session.
+// Successful acceptance does not imply spoken output or completed playback.
+type Delegator interface {
+	Result(context.Context, Result) error
+}
+
+type Result struct {
+	DelegationID string    `json:"delegationID"`
+	ReceiptID    string    `json:"receiptID"`
+	Kind         string    `json:"kind"`
+	Content      string    `json:"content"`
+	TTLMS        int64     `json:"ttl"`
+	Created      time.Time `json:"created"`
 }
 
 type Usage struct {

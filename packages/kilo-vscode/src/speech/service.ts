@@ -159,7 +159,7 @@ export class SpeechService implements vscode.Disposable {
 
   // raya_change start - extension-host broker keeps Qwen and LiveKit service credentials out of the webview
   async realtimeStart(
-    input: { sessionID: string; directory: string; connection: KiloConnectionService },
+    input: { sessionID: string; directory: string; connection: KiloConnectionService; current?: () => boolean },
     post: Post,
   ): Promise<void> {
     const failed = (error: string) => {
@@ -179,7 +179,7 @@ export class SpeechService implements vscode.Disposable {
       async () => {
         const settings = await this.settings.load()
         const fallback = voiceFallback(settings)
-        if (settings.voiceEngine !== "qwen-realtime") {
+        if (settings.voiceEngine !== "qwen-realtime" && settings.voiceEngine !== "openai-live") {
           return {
             ok: false,
             code: "configuration",
@@ -187,9 +187,17 @@ export class SpeechService implements vscode.Disposable {
             fallback,
           }
         }
-        const key = await this.settings.key("realtime")
+        if (settings.voiceEngine === "openai-live" && !input.current?.()) {
+          return { ok: false, code: "configuration", error: "Reopen the original task before starting voice." }
+        }
+        const key = await this.settings.key(settings.voiceEngine === "openai-live" ? "openai" : "realtime")
         if (!key) {
-          return { ok: false, code: "configuration", error: "Add the Qwen realtime key in Speech settings.", fallback }
+          return {
+            ok: false,
+            code: "configuration",
+            error: "Add the selected voice provider's key in Speech settings.",
+            fallback,
+          }
         }
         const mediaKey = process.env.RAYA_MF_TOKEN?.trim()
         if (!mediaKey || !/^[A-Za-z0-9_-]{43}$/.test(mediaKey)) {
@@ -200,9 +208,17 @@ export class SpeechService implements vscode.Disposable {
             fallback,
           }
         }
-        await input.connection.getClientAsync(input.directory)
+        const client = await input.connection.getClientAsync(input.directory)
         const server = input.connection.getServerConfig()
         if (!server) throw new Error("Raya backend is not connected")
+        const current = () =>
+          !this.closed && (input.current?.() ?? true) && input.connection.getServerConfig() === server
+        if (!current()) throw new Error("The voice connection or workspace changed.")
+        const context =
+          settings.voiceEngine === "openai-live"
+            ? await loadVoiceContext(client, input.sessionID, input.directory, AbortSignal.timeout(15_000), current)
+            : undefined
+        if (!current()) throw new Error("The voice connection or workspace changed.")
         return {
           sessionID: input.sessionID,
           directory: input.directory,
@@ -211,6 +227,8 @@ export class SpeechService implements vscode.Disposable {
           key,
           mediaKey,
           settings,
+          current,
+          context: context?.text,
         }
       },
       (info) => {

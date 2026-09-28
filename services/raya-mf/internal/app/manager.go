@@ -183,7 +183,11 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	}
 	var backend Backend
 	if input.BackendURL != "" {
-		backend = HTTPBackend{URL: input.BackendURL, Auth: input.BackendAuth, Directory: input.Directory}
+		capability := ""
+		if provider == "openai-live" {
+			capability = token
+		}
+		backend = HTTPBackend{URL: input.BackendURL, Auth: input.BackendAuth, Directory: input.Directory, Control: capability}
 	}
 	claim.session = func() *Session {
 		if provider == "openai-live" {
@@ -209,6 +213,22 @@ func (m *Manager) Inject(ctx context.Context, id string, token string, item engi
 	session := claim.session
 	m.mu.RUnlock()
 	return session.Inject(ctx, item)
+}
+
+func (m *Manager) Result(ctx context.Context, id string, token string, result engine.Result) error {
+	m.mu.RLock()
+	claim := m.sessions[id]
+	if claim == nil || claim.session == nil || claim.stopped {
+		m.mu.RUnlock()
+		return errors.New("voice session is not active")
+	}
+	if !authorized(claim, token) {
+		m.mu.RUnlock()
+		return ErrAuthorization
+	}
+	session := claim.session
+	m.mu.RUnlock()
+	return session.Result(ctx, result)
 }
 
 func (m *Manager) Status(id string, token string) (wire.Status, bool, error) {

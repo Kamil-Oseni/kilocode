@@ -34,8 +34,22 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
           clientToken: "client-secret",
           mediaToken: "media-secret",
           controlToken: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY",
-          engine: "qwen-realtime",
+          engine: JSON.parse(await request.clone().text()).engine ?? "qwen-realtime",
           acceptsTruncation: false,
+          maximumSeconds: 60,
+        })
+      if (request.method === "POST" && new URL(request.url).pathname === "/v1/sessions")
+        return Response.json({
+          id: "rvs_test",
+          descriptor: {
+            id: "openai-live",
+            inputRate: 24000,
+            outputRate: 24000,
+            acceptsTruncation: false,
+            nativeBargeIn: true,
+            nativeEndpointing: true,
+            requiresContinuousInput: true,
+          },
         })
       return Response.json({ ok: true })
     },
@@ -294,7 +308,8 @@ test("failed cleanup retains ownership and concurrent stop returns the same fail
       ),
     ).toMatchObject({ ok: false, code: "busy" })
     expect(await broker.stop()).toEqual(first)
-    expect(site.calls.filter((call) => call.method === "DELETE")).toHaveLength(2)
+    expect(site.calls.filter((call) => call.method === "DELETE")).toHaveLength(1)
+    expect(site.calls.some((call) => call.method === "DELETE" && call.path.startsWith("/kilocode/"))).toBe(false)
   } finally {
     site.close()
   }
@@ -327,7 +342,7 @@ test("lost backend admission acknowledgement retains uncertainty and does not re
   }
 })
 
-test("lost media acknowledgement cleans known backend but a not-found deletion cannot prove absent pending work", async () => {
+test("lost media acknowledgement keeps backend open when media deletion cannot confirm absent pending work", async () => {
   const resume = gate()
   const site = fixture(async (request) => {
     if (new URL(request.url).pathname.startsWith("/v1/sessions")) {
@@ -343,7 +358,8 @@ test("lost media acknowledgement cleans known backend but a not-found deletion c
       () => {},
     )
     expect(result).toMatchObject({ ok: false, code: "admission_unknown" })
-    expect(site.calls.filter((call) => call.method === "DELETE")).toHaveLength(2)
+    expect(site.calls.filter((call) => call.method === "DELETE")).toHaveLength(1)
+    expect(site.calls.some((call) => call.method === "DELETE" && call.path.startsWith("/kilocode/"))).toBe(false)
     expect(
       await broker.start(
         async () => site.config,
@@ -383,6 +399,254 @@ test("dispose during settings lookup suppresses setup and permanently closes the
     ).toMatchObject({ ok: false, code: "cancelled" })
   } finally {
     resume.release()
+    site.close()
+  }
+})
+
+test("Live media uses explicit v2 provider and verified native 24k descriptor", async () => {
+  const site = fixture()
+  const broker = new RealtimeBroker()
+  const ready: string[] = []
+  try {
+    const result = await broker.start(
+      async () => ({
+        ...site.config,
+        context: "Saved synthetic conversation",
+        settings: {
+          ...site.config.settings,
+          voiceEngine: "openai-live",
+          openaiVoice: "marin",
+        },
+      }),
+      (info) => ready.push(info.engine),
+    )
+    expect(result).toMatchObject({ ok: true, info: { engine: "openai-live", acceptsTruncation: false } })
+    expect(ready).toEqual(["openai-live"])
+    expect(JSON.parse(site.calls[0]!.body)).toMatchObject({
+      version: 2,
+      engine: "openai-live",
+      parentSessionID: "ses_test",
+    })
+    const body = JSON.parse(site.calls[1]!.body)
+    expect(body).toMatchObject({
+      version: 2,
+      engine: {
+        provider: "openai-live",
+        endpoint: "wss://api.openai.com/v1/live/sessions",
+        model: "gpt-live-1",
+        voice: "marin",
+        delegation: "client",
+        maximumSeconds: 60,
+        mode: "hands-free",
+        key: "engine-secret",
+      },
+    })
+    expect(site.calls[1]!.body).not.toContain("dashscope")
+    expect(body.engine.instructions).toContain("historical conversation, not a new request")
+    expect(body.engine.instructions).toContain("Saved synthetic conversation")
+    expect(await broker.stop()).toBeUndefined()
+    expect(site.calls.slice(-2).map((call) => call.path)).toEqual([
+      "/v1/sessions/rvs_test",
+      "/kilocode/voice/session/rvs_test",
+    ])
+  } finally {
+    site.close()
+  }
+})
+
+test("oversized saved Live context refuses before sending credentials", async () => {
+  const site = fixture()
+  const broker = new RealtimeBroker()
+  try {
+    expect(
+      await broker.start(
+        async () => ({
+          ...site.config,
+          context: "é".repeat(8193),
+          settings: {
+            ...site.config.settings,
+            voiceEngine: "openai-live",
+          },
+        }),
+        () => {},
+      ),
+    ).toMatchObject({ ok: false, code: "configuration" })
+    expect(site.calls).toEqual([])
+    expect(broker.active).toBe(false)
+  } finally {
+    site.close()
+  }
+})
+
+test("Live media refuses mismatched descriptors before publishing ready", async () => {
+  for (const change of [
+    { id: "qwen-realtime" },
+    { inputRate: 16000 },
+    { outputRate: 48000 },
+    { acceptsTruncation: true },
+    { requiresContinuousInput: false },
+    { nativeBargeIn: false },
+    { nativeEndpointing: false },
+  ]) {
+    const site = fixture(async (request) => {
+      if (request.method === "POST" && new URL(request.url).pathname === "/v1/sessions")
+        return Response.json({
+          id: "rvs_test",
+          descriptor: {
+            id: "openai-live",
+            inputRate: 24000,
+            outputRate: 24000,
+            acceptsTruncation: false,
+            requiresContinuousInput: true,
+            nativeBargeIn: true,
+            nativeEndpointing: true,
+            ...change,
+          },
+        })
+      return undefined
+    })
+    const broker = new RealtimeBroker()
+    const ready: string[] = []
+    try {
+      expect(
+        await broker.start(
+          async () => ({ ...site.config, settings: { ...site.config.settings, voiceEngine: "openai-live" } }),
+          (info) => ready.push(info.id),
+        ),
+      ).toMatchObject({ ok: false, code: "setup_failed" })
+      expect(ready).toEqual([])
+      expect(site.calls.filter((call) => call.method === "DELETE").map((call) => call.path)).toEqual([
+        "/v1/sessions/rvs_test",
+        "/kilocode/voice/session/rvs_test",
+      ])
+    } finally {
+      site.close()
+    }
+  }
+})
+
+test("Live media refuses a backend provider mismatch without sending provider credentials", async () => {
+  const site = fixture(async (request) => {
+    if (request.method === "POST" && new URL(request.url).pathname === "/kilocode/voice/session")
+      return Response.json({
+        id: "rvs_test",
+        room: "synthetic",
+        livekitURL: "ws://127.0.0.1:7880",
+        clientToken: "client-secret",
+        mediaToken: "media-secret",
+        controlToken: "A".repeat(43),
+        engine: "qwen-realtime",
+        acceptsTruncation: false,
+      })
+    return undefined
+  })
+  const broker = new RealtimeBroker()
+  try {
+    expect(
+      await broker.start(
+        async () => ({ ...site.config, settings: { ...site.config.settings, voiceEngine: "openai-live" } }),
+        () => {},
+      ),
+    ).toMatchObject({ ok: false, code: "admission_unknown" })
+    expect(site.calls).toHaveLength(1)
+    expect(broker.active).toBe(true)
+  } finally {
+    site.close()
+  }
+})
+
+test("Live reserved duration is required before any media or provider admission", async () => {
+  for (const maximum of [undefined, null, "60", -1, 0, 1.4, 86400.1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const site = fixture(async (request) => {
+      if (request.method === "POST" && new URL(request.url).pathname === "/kilocode/voice/session")
+        return Response.json({
+          id: "rvs_test",
+          room: "synthetic",
+          livekitURL: "ws://127.0.0.1:7880",
+          clientToken: "client-secret",
+          mediaToken: "media-secret",
+          controlToken: "A".repeat(43),
+          engine: "openai-live",
+          acceptsTruncation: false,
+          ...(maximum === undefined ? {} : { maximumSeconds: maximum }),
+        })
+      return undefined
+    })
+    const broker = new RealtimeBroker()
+    try {
+      expect(
+        await broker.start(
+          async () => ({ ...site.config, settings: { ...site.config.settings, voiceEngine: "openai-live" } }),
+          () => {
+            throw new Error("budget refusal must not publish ready")
+          },
+        ),
+      ).toMatchObject({ ok: false, code: "admission_unknown" })
+      expect(site.calls).toHaveLength(1)
+      expect(site.calls.some((call) => call.path === "/v1/sessions")).toBe(false)
+      expect(broker.active).toBe(true)
+    } finally {
+      site.close()
+    }
+  }
+})
+
+test("broker retains backend until media finalization completes", async () => {
+  const entered = gate()
+  const resume = gate()
+  const site = fixture(async (request) => {
+    if (request.method === "DELETE" && new URL(request.url).pathname === "/v1/sessions/rvs_test") {
+      entered.release()
+      await resume.wait
+    }
+    return undefined
+  })
+  const broker = new RealtimeBroker()
+  try {
+    expect(
+      await broker.start(
+        async () => site.config,
+        () => {},
+      ),
+    ).toMatchObject({ ok: true })
+    const stop = broker.stop()
+    await entered.wait
+    expect(site.calls.some((call) => call.method === "DELETE" && call.path.startsWith("/kilocode/"))).toBe(false)
+    resume.release()
+    expect(await stop).toBeUndefined()
+    expect(site.calls.slice(-2).map((call) => call.path)).toEqual([
+      "/v1/sessions/rvs_test",
+      "/kilocode/voice/session/rvs_test",
+    ])
+  } finally {
+    resume.release()
+    site.close()
+  }
+})
+
+test("stale ownership after MF admission closes captured resources and suppresses ready", async () => {
+  let current = true
+  const site = fixture(async (request) => {
+    if (request.method === "POST" && new URL(request.url).pathname === "/v1/sessions") current = false
+    return undefined
+  })
+  const broker = new RealtimeBroker()
+  const ready: string[] = []
+  try {
+    expect(
+      await broker.start(
+        async () => ({ ...site.config, current: () => current }),
+        (info) => ready.push(info.id),
+      ),
+    ).toMatchObject({ ok: false, code: "setup_failed" })
+    expect(ready).toEqual([])
+    expect(site.calls.slice(-2).map((call) => call.path)).toEqual([
+      "/v1/sessions/rvs_test",
+      "/kilocode/voice/session/rvs_test",
+    ])
+    expect(site.calls.at(-1)?.auth).toBe(site.config.auth)
+    expect(broker.active).toBe(false)
+  } finally {
     site.close()
   }
 })

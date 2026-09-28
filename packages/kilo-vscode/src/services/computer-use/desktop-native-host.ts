@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { createHash, randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
+import { DesktopCaptureClock } from "./desktop-capture-clock"
 import {
   NativeFrameParser,
   type NativeBarrier,
@@ -86,6 +87,9 @@ function command(value: BarrierRequest, frame: NativeFrame): Buffer {
 }
 
 export class NativeCaptureHost {
+  private readonly clock = new DesktopCaptureClock()
+  private calibration: { request: string; start: number } | undefined
+  private calibrated = -Infinity
   private process: ChildProcess | undefined
   private parser: NativeFrameParser | undefined
   private frame: (NativeFrame & { receivedAt: number }) | undefined
@@ -107,6 +111,7 @@ export class NativeCaptureHost {
     private readonly renewed?: (frame: NativeUnchanged) => void,
     private readonly dir?: string,
     private readonly reset?: (reset: NativeReset) => void,
+    private readonly measured: () => boolean = () => false,
   ) {}
 
   start(): void {
@@ -148,6 +153,11 @@ export class NativeCaptureHost {
   }
 
   private accept(result: NativePacket): void {
+    const now = performance.now()
+    if (result.type === "clock") {
+      this.synchronize(result, now)
+      return
+    }
     if (result.type === "error")
       throw new Error(`Native desktop capture stopped: ${result.code}${result.fault ? ` (${result.fault})` : ""}`)
     if (result.type === "barrier") {
@@ -179,17 +189,58 @@ export class NativeCaptureHost {
     if (result.type === "unchanged") {
       if (!same(this.frame, result.frame)) throw new Error("Native desktop continuity has no matching image")
       this.frame!.receivedAt = performance.now()
+      this.calibrate(result.frame.clock !== undefined, now)
       this.renewed?.(result.frame)
       return
     }
-    if (result.frame.barrier) this.confirm(result.frame)
+    if (result.frame.barrier) this.confirm({ ...result.frame, receivedAtMs: now })
     this.frame?.data.fill(0)
-    this.frame = { ...result.frame, receivedAt: performance.now() }
+    this.calibrate(result.frame.clock !== undefined, now)
+    this.frame = { ...result.frame, receivedAt: now, receivedAtMs: now }
     if (this.waiting && result.frame.sequence > this.waiting.after) {
       const waiting = this.waiting
       this.waiting = undefined
-      waiting.resolve({ ...result.frame, data: Buffer.from(result.frame.data) })
+      waiting.resolve({ ...this.frame, data: Buffer.from(result.frame.data) })
     }
+  }
+
+  private synchronize(result: Extract<NativePacket, { type: "clock" }>, now: number) {
+    const pending = this.calibration
+    if (!pending || result.request !== pending.request) return
+    if (now - pending.start > 1_500) {
+      this.calibration = undefined
+      this.clock.clear()
+      return
+    }
+    this.clock.calibrate(result.tick, result.frequency, pending.start, now)
+    this.calibration = undefined
+    this.calibrated = now
+  }
+
+  private calibrate(enabled: boolean, now: number) {
+    if (!enabled || !this.measured() || !this.process?.stdin) return
+    if (this.calibration) {
+      if (now - this.calibration.start > 1_500) {
+        this.calibration = undefined
+        this.clock.clear()
+      }
+      return
+    }
+    if (now - this.calibrated < 500) return
+    const request = randomUUID().replaceAll("-", "")
+    const data = Buffer.alloc(148)
+    data.write("RCC1", 0, "ascii")
+    data.writeUInt32LE(data.length, 4)
+    data.write(request, 52, 32, "ascii")
+    const generation = this.generation
+    this.calibration = { request, start: performance.now() }
+    this.process.stdin.write(data, (error) => {
+      if (error) this.fail(error, generation)
+    })
+  }
+
+  acquisition(clock: NativeFrame["clock"], now: number) {
+    return clock ? this.clock.bounds(clock, now) : undefined
   }
 
   private confirm(frame: NativeFrame): void {
@@ -294,6 +345,9 @@ export class NativeCaptureHost {
   }
 
   stop(): void {
+    this.clock.clear()
+    this.calibration = undefined
+    this.calibrated = -Infinity
     this.generation++
     if (this.barrier) {
       clearTimeout(this.barrier.timer)

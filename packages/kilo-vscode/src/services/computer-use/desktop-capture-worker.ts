@@ -8,6 +8,24 @@ export type CapturedScene = {
   sequence: number
   version: number
   capturedAt: number
+  origin: {
+    requested?: number
+    received: number
+    accepted: number
+    acquisition?: { lower: number; upper: number; uncertainty: number }
+  }
+}
+
+export type CaptureEvent = {
+  kind: "frame" | "continuity" | "consumer" | "start" | "stop" | "failure"
+  at: number
+  requested?: number
+  received?: number
+  accepted?: number
+  acquisition?: { lower: number; upper: number; uncertainty: number }
+  acquisitionMs?: number
+  preparationMs?: number
+  unchanged?: 1
 }
 
 export type CaptureSample = {
@@ -34,6 +52,10 @@ function valid(frame: DesktopFrame & { sourceSequence?: number; sourceEpoch?: nu
   )
 }
 
+function receipt(received: number, accepted: number) {
+  return Number.isFinite(received) && received >= 0 && received <= accepted
+}
+
 export class DesktopCaptureWorker {
   private generation = 0
   private sequence = 0
@@ -45,10 +67,18 @@ export class DesktopCaptureWorker {
   private wake: (() => void) | undefined
   private running = false
   private readonly listeners = new Set<(sample: CaptureSample) => void>()
+  private readonly events = new Set<(event: CaptureEvent) => void>()
 
   constructor(
     private readonly capture: () => Promise<
-      (DesktopFrame & { sourceSequence?: number; sourceEpoch?: number; sourceIdentity?: string }) | undefined
+      | (DesktopFrame & {
+          sourceSequence?: number
+          sourceEpoch?: number
+          sourceIdentity?: string
+          sourceReceivedAtMs?: number
+          sourceAcquisition?: CaptureEvent["acquisition"]
+        })
+      | undefined
     >,
     private readonly cancel: () => void,
     private readonly failed: (error: unknown) => void,
@@ -57,6 +87,7 @@ export class DesktopCaptureWorker {
   start(): void {
     if (this.running) return
     this.running = true
+    this.emit({ kind: "start", at: performance.now() })
     const generation = ++this.generation
     const cadence = new DesktopCadence(1_000)
     void this.loop(generation, cadence)
@@ -68,9 +99,36 @@ export class DesktopCaptureWorker {
     return () => this.listeners.delete(listener)
   }
 
+  onEvent(listener: (event: CaptureEvent) => void): () => void {
+    this.events.add(listener)
+    return () => this.events.delete(listener)
+  }
+
+  private emit(event: CaptureEvent) {
+    for (const listener of this.events) {
+      try {
+        listener(Object.freeze(event))
+      } catch {
+        console.error("[Raya] Desktop timing listener failed")
+      }
+    }
+  }
+
+  consume(scene: CapturedScene) {
+    if (!this.running || this.scene?.sequence !== scene.sequence) return
+    this.emit({ kind: "consumer", at: performance.now(), ...scene.origin })
+  }
+
+  fail(error: unknown) {
+    this.emit({ kind: "failure", at: performance.now() })
+    this.stop()
+    this.failed(error)
+  }
+
   stop(): void {
     this.listeners.clear()
     if (!this.running && !this.scene) return
+    this.emit({ kind: "stop", at: performance.now() })
     this.running = false
     this.generation += 1
     this.revision += 1
@@ -85,6 +143,7 @@ export class DesktopCaptureWorker {
 
   dispose(): void {
     this.stop()
+    this.events.clear()
   }
 
   invalidate(): void {
@@ -105,6 +164,7 @@ export class DesktopCaptureWorker {
     target: Pick<DesktopFrame, "windowID" | "location" | "width" | "height"> & {
       epoch?: number
       identity?: string
+      acquisition?: CaptureEvent["acquisition"]
     },
   ): boolean {
     const scene = this.scene
@@ -121,17 +181,24 @@ export class DesktopCaptureWorker {
       scene.frame.height !== target.height
     )
       return false
-    this.scene = { ...scene, sequence: ++this.sequence, capturedAt: performance.now() }
+    const now = performance.now()
+    this.scene = {
+      ...scene,
+      sequence: ++this.sequence,
+      capturedAt: now,
+      origin: { received: now, accepted: now, acquisition: target.acquisition },
+    }
+    this.emit({ kind: "continuity", at: now, ...this.scene.origin })
     return true
   }
 
   private async loop(generation: number, cadence: DesktopCadence): Promise<void> {
     while (this.running && generation === this.generation) {
       const revision = this.revision
+      const requested = performance.now()
       const frame = await this.capture().catch((error: unknown) => {
         if (generation !== this.generation) return
-        this.stop()
-        this.failed(error)
+        this.fail(error)
       })
       if (!this.running || generation !== this.generation) return
       if (revision !== this.revision) continue
@@ -146,12 +213,13 @@ export class DesktopCaptureWorker {
         this.timer = undefined
         continue
       }
-      if (!valid(frame)) {
-        this.stop()
-        this.failed(new Error("Continuous desktop capture exceeded its scene or memory bounds"))
+      const { sourceSequence, sourceEpoch, sourceIdentity, sourceReceivedAtMs, sourceAcquisition, ...visual } = frame
+      const accepted = performance.now()
+      const received = sourceReceivedAtMs ?? accepted
+      if (!valid(frame) || !receipt(received, accepted)) {
+        this.fail(new Error("Continuous desktop capture exceeded its scene, clock or memory bounds"))
         return
       }
-      const { sourceSequence, sourceEpoch, sourceIdentity, ...visual } = frame
       const previous = this.scene?.frame
       const updated = changed(previous, visual)
       this.token = sourceSequence
@@ -162,7 +230,16 @@ export class DesktopCaptureWorker {
         sequence: ++this.sequence,
         version: updated ? ++this.version : this.version,
         capturedAt: performance.now(),
+        origin: { ...(requested <= received ? { requested } : {}), received, accepted, acquisition: sourceAcquisition },
       }
+      this.emit({
+        kind: "frame",
+        at: accepted,
+        ...this.scene.origin,
+        acquisitionMs: frame.timing.acquisitionMs,
+        preparationMs: frame.timing.preparationMs,
+        ...(!updated ? { unchanged: 1 as const } : {}),
+      })
       if (this.listeners.size) {
         const sample = Object.freeze({
           capturedAtMs: this.scene.capturedAt,

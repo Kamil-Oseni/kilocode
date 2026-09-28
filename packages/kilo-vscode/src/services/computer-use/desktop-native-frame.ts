@@ -1,4 +1,5 @@
 import { CAPTURE } from "./desktop-session"
+import { parse as parseClock, type CaptureClock } from "./desktop-capture-clock"
 
 const HEADER = 4_096
 const LIMIT = HEADER + CAPTURE.bytes + 8
@@ -6,6 +7,8 @@ const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const UTF8 = new TextDecoder("utf-8", { fatal: true })
 
 export type NativeFrame = {
+  clock?: CaptureClock
+  receivedAtMs?: number
   sequence: number
   epoch?: number
   identity?: string
@@ -34,6 +37,7 @@ export type NativeBarrier = Omit<NativeProof, "presentQpc"> & {
 }
 
 export type NativeUnchanged = Pick<NativeFrame, "sequence" | "windowID" | "location" | "width" | "height"> & {
+  clock?: CaptureClock
   base: number
   epoch?: number
   identity?: string
@@ -42,6 +46,7 @@ export type NativeUnchanged = Pick<NativeFrame, "sequence" | "windowID" | "locat
 export type NativeReset = { epoch: number; reason: "target_changed" | "display_changed" }
 
 export type NativePacket =
+  | { type: "clock"; request: string; tick: string; frequency: string }
   | { type: "frame"; frame: NativeFrame }
   | { type: "unchanged"; frame: NativeUnchanged }
   | { type: "barrier"; barrier: NativeBarrier }
@@ -152,6 +157,7 @@ function unchanged(value: Record<string, unknown>, data: Buffer): NativePacket {
   if (value.v !== 1 && value.v !== 3) throw new Error("Native desktop unchanged protocol version is invalid")
   if (data.length) throw new Error("Native desktop unchanged packet contains an image")
   const frame = {
+    ...clock(value),
     ...dimensions(value),
     ...identity(value),
     ...fingerprint(value),
@@ -192,6 +198,7 @@ function pixels(value: Record<string, unknown>, data: Buffer): NativePacket {
   return {
     type: "frame",
     frame: {
+      ...clock(value),
       ...dimensions(value),
       ...(value.v === 3 ? { epoch: generation(value) } : {}),
       ...identity(value),
@@ -202,6 +209,12 @@ function pixels(value: Record<string, unknown>, data: Buffer): NativePacket {
       preparationMs: number(value.preparationMs, "preparation timing", 120_000),
     },
   }
+}
+
+function clock(value: Record<string, unknown>): { clock?: CaptureClock } {
+  if (value.clock === undefined) return {}
+  if (value.v !== 3) throw new Error("Native desktop source clock is invalid")
+  return { clock: parseClock(value.clock) }
 }
 
 function generation(value: Record<string, unknown>): number {
@@ -219,6 +232,20 @@ function reset(value: Record<string, unknown>, data: Buffer): NativePacket {
 function packet(header: unknown, data: Buffer): NativePacket {
   const value = record(header)
   if (value.v !== 1 && value.v !== 2 && value.v !== 3) throw new Error("Native desktop protocol version is unsupported")
+  if (value.type === "clock") {
+    if (
+      value.v !== 3 ||
+      data.length ||
+      typeof value.request !== "string" ||
+      !/^[0-9a-f]{32}$/.test(value.request) ||
+      typeof value.tick !== "string" ||
+      !/^[1-9]\d{0,18}$/.test(value.tick) ||
+      typeof value.frequency !== "string" ||
+      !/^[1-9]\d{0,18}$/.test(value.frequency)
+    )
+      throw new Error("Native desktop clock response is invalid")
+    return { type: "clock", request: value.request, tick: value.tick, frequency: value.frequency }
+  }
   if (value.type === "reset") return reset(value, data)
   if (value.type === "barrier") return refusal(value, data)
   if (value.type === "error") return failure(value, data)
@@ -301,7 +328,7 @@ export class NativeFrameParser {
   }
 
   private accept(result: NativePacket): void {
-    if (result.type === "error" || result.type === "barrier") return
+    if (result.type === "error" || result.type === "barrier" || result.type === "clock") return
     if (result.type === "reset") {
       this.acceptReset(result.reset)
       return

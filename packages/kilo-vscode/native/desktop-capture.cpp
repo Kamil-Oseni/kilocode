@@ -679,6 +679,29 @@ static bool exact(const Target& original, uint64_t handle, uint32_t pid, const R
   return fingerprint(window, pid) == identity;
 }
 
+static uint64_t counter() {
+  LARGE_INTEGER value{};
+  if (!QueryPerformanceCounter(&value) || value.QuadPart <= 0)
+    throw Failure("capture_failed", "capture clock is unavailable");
+  return uint64_t(value.QuadPart);
+}
+
+static uint64_t frequency() {
+  LARGE_INTEGER value{};
+  if (!QueryPerformanceFrequency(&value) || value.QuadPart <= 0)
+    throw Failure("capture_failed", "capture clock frequency is unavailable");
+  return uint64_t(value.QuadPart);
+}
+
+static std::string clock(uint64_t acquisition, uint64_t prepared) {
+  if (!acquisition || prepared < acquisition)
+    throw Failure("capture_failed", "capture clock ordering is invalid");
+  std::ostringstream value;
+  value << ",\"clock\":{\"version\":1,\"acquisition\":\"" << acquisition
+        << "\",\"prepared\":\"" << prepared << "\",\"frequency\":\"" << frequency() << "\"}";
+  return value.str();
+}
+
 static std::optional<Barrier> receive(HANDLE input, const Target& original, uint64_t base, uint64_t& last,
                                       HANDLE pipe, bool multi) {
   DWORD available = 0;
@@ -691,6 +714,18 @@ static std::optional<Barrier> receive(HANDLE input, const Target& original, uint
   DWORD received = 0;
   if (!ReadFile(input, data, kBarrierBytes, &received, nullptr) || received != kBarrierBytes)
     throw Failure("capture_failed", "capture barrier command incomplete");
+  if (!std::memcmp(data, "RCC1", 4) && word(data + 4) == kBarrierBytes) {
+    const std::string request(reinterpret_cast<const char*>(data + 52), 32);
+    if (!std::all_of(request.begin(), request.end(), [](char c) {
+          return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        })) throw Failure("invalid_argument", "capture clock nonce is invalid");
+    const auto tick = counter();
+    std::ostringstream header;
+    header << "{\"v\":3,\"type\":\"clock\",\"request\":" << quoted(request)
+           << ",\"tick\":\"" << tick << "\",\"frequency\":\"" << frequency() << "\"}";
+    packet(pipe, header.str(), nullptr, 0);
+    return std::nullopt;
+  }
   if (std::memcmp(data, "RCB2", 4) || word(data + 4) != kBarrierBytes)
     throw Failure("invalid_argument", "capture barrier version or length invalid");
   const uint64_t scene = wide(data + 8);
@@ -929,6 +964,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
   Output* owner = nullptr;
   LONGLONG stamp = 0;
   uint64_t base = 0;
+  uint64_t acquisitionBase = 0;
   std::optional<Barrier> barrier;
   auto emitted = Clock::now();
   while (!InterlockedCompareExchange(&stopped, 0, 0)) {
@@ -940,6 +976,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
     }
     samebarrier(original, barrier, pipe, foreground);
     auto begin = Clock::now();
+    const auto acquisition = counter();
     bool changed = false;
     for (auto& item : outputs) {
       if (InterlockedCompareExchange(&stopped, 0, 0)) break;
@@ -1018,7 +1055,8 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
              << ",\"location\":" << quoted(original.location);
       if (!original.identity.empty()) header << ",\"identity\":" << quoted(original.identity);
       header
-             << ",\"width\":" << width << ",\"height\":" << height << '}';
+             << ",\"width\":" << width << ",\"height\":" << height
+             << clock(acquisitionBase, counter()) << '}';
       packet(pipe, header.str(), nullptr, 0);
       emitted = Clock::now();
       continue;
@@ -1052,6 +1090,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
     sameidentity(original);
     std::ostringstream header;
     base = ++sequence;
+    acquisitionBase = acquisition;
     header << std::fixed << std::setprecision(3)
            << "{\"v\":3,\"type\":\"frame\",\"epoch\":" << epoch
            << ",\"sequence\":" << base
@@ -1062,6 +1101,7 @@ static void bound(HANDLE pipe, ForegroundWatch& watch, uint64_t& sequence, uint6
            << ",\"width\":" << width << ",\"height\":" << height
            << ",\"mime\":\"image/png\",\"acquisitionMs\":" << ms(begin, acquired)
            << ",\"preparationMs\":" << ms(acquired, prepared);
+    header << clock(acquisition, counter());
     if (barrier)
       header << ",\"request\":" << quoted(barrier->request) << ",\"scene\":" << barrier->scene
              << ",\"source\":" << barrier->source << ",\"receiptQpc\":\"" << barrier->receipt
@@ -1132,6 +1172,9 @@ int wmain(int argc, wchar_t** argv) {
       return 3;
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--self-test") {
+      const auto tick = counter();
+      if (clock(tick, counter()).find("\"version\":1") == std::string::npos)
+        throw Failure("capture_failed", "capture clock self-test failed");
       {
         HWND instance = CreateWindowExW(0, L"STATIC", L"Raya instance self-test", 0,
                                        0, 0, 1, 1, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);

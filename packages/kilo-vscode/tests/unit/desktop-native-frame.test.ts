@@ -36,6 +36,24 @@ function encode(header: Record<string, unknown>, image = png) {
 }
 
 describe("bounded native desktop frame protocol", () => {
+  it("keeps calibrated clock packets separate from image sequencing and rejects reversed source stamps", () => {
+    const parser = new NativeFrameParser()
+    const clock = { version: 1, acquisition: "100", prepared: "110", frequency: "1000" }
+    const first = parser.push(encode({ ...target, v: 3, epoch: 1, clock }))
+    expect(first[0]).toMatchObject({ type: "frame", frame: { clock } })
+    expect(
+      parser.push(
+        encode({ v: 3, type: "clock", request: "a".repeat(32), tick: "115", frequency: "1000" }, Buffer.alloc(0)),
+      )[0],
+    ).toMatchObject({ type: "clock", tick: "115" })
+    expect(parser.push(encode({ ...unchanged, v: 3, epoch: 1, clock }, Buffer.alloc(0)))[0]).toMatchObject({
+      type: "unchanged",
+      frame: { clock },
+    })
+    expect(() =>
+      new NativeFrameParser().push(encode({ ...target, v: 3, epoch: 1, clock: { ...clock, prepared: "99" } })),
+    ).toThrow()
+  })
   const proof = {
     request: "a".repeat(32),
     scene: 7,

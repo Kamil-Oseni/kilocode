@@ -61,7 +61,7 @@ export class DesktopAutomationService implements vscode.Disposable {
         const result = controller.signal.aborted ? null : timing
         const content = {
           format: "raya.desktop-capture-timing",
-          version: 1,
+          version: 2,
           status: controller.signal.aborted ? "cancelled" : result === null ? "unavailable" : "complete",
           ...(result === null ? {} : { timing: result }),
         }

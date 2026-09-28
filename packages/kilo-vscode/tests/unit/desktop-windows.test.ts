@@ -48,7 +48,7 @@ process.stdin.on("data",chunk=>{
 }
 
 describe("Windows native desktop driver", () => {
-  it("observes only an existing capture and cancels timing when capture stops", async () => {
+  it("observes only an existing capture without restarting it after Stop, and erases an aborted diagnostic", async () => {
     let captures = 0
     const background = {
       run: async () => {
@@ -63,10 +63,14 @@ describe("Windows native desktop driver", () => {
     driver.startCapture((error) => {
       throw error
     })
-    const pending = driver.captureTiming()
+    const controller = new AbortController()
+    const pending = driver.captureTiming(controller.signal)
     for (let index = 0; index < 100 && captures < 1; index++) await Bun.sleep(2)
     expect(captures).toBe(1)
     driver.stopCapture()
+    await Bun.sleep(5)
+    expect(captures).toBe(1)
+    controller.abort()
     expect(await pending).toBeNull()
   })
 

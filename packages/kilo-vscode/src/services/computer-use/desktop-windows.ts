@@ -11,9 +11,11 @@ import {
   type DesktopSemantics,
   type DesktopWindow,
 } from "./desktop-session"
-import { DesktopCaptureWorker, type CapturedScene } from "./desktop-capture-worker"
+import { DesktopCaptureWorker, type CapturedScene, type CaptureEvent } from "./desktop-capture-worker"
 import { observeCapture } from "./desktop-capture-metrics"
+import { DesktopCaptureClock, parse as parseClock } from "./desktop-capture-clock"
 import { NativeCaptureHost } from "./desktop-native-host"
+import type { NativeFrame } from "./desktop-native-frame"
 import {
   NativeInputDispatchError,
   NativeInputHost,
@@ -714,6 +716,7 @@ $image = New-Object Drawing.Bitmap $width, $height
 $graphics = [Drawing.Graphics]::FromImage($image)
 $stream = New-Object RayaBoundedStream ${CAPTURE.bytes}
 $mime = "image/png"
+$acquisitionClock = [Diagnostics.Stopwatch]::GetTimestamp()
 $acquisition = [Diagnostics.Stopwatch]::StartNew()
 try {
   if ($width -eq $window.Width -and $height -eq $window.Height) {
@@ -776,6 +779,7 @@ try {
     }
   }
   $preparation.Stop()
+  $preparedClock = [Diagnostics.Stopwatch]::GetTimestamp()
   $semantics = $null
   $semanticsMs = $null
   if ($collectSemantics) {
@@ -811,6 +815,7 @@ try {
     change = if ($unchanged) { 'unchanged' } else { 'keyframe' }
     acquisitionMs = $acquisition.Elapsed.TotalMilliseconds
     preparationMs = $preparation.Elapsed.TotalMilliseconds
+    clock = [ordered]@{ version = 1; acquisition = [string]$acquisitionClock; prepared = [string]$preparedClock; frequency = [string][Diagnostics.Stopwatch]::Frequency }
   }
   if ($semantics) { $result['semantics'] = $semantics }
   if ($null -ne $semanticsMs) { $result['semanticsMs'] = $semanticsMs }
@@ -1445,6 +1450,33 @@ export class WindowsDesktopDriver implements DesktopDriver {
   private last: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
   private worker: DesktopCaptureWorker | undefined
   private timing: ReturnType<typeof observeCapture> | undefined
+  private readonly measurements = new Set<(event: CaptureEvent) => void>()
+
+  onEvent(listener: (event: CaptureEvent) => void) {
+    this.measurements.add(listener)
+    if (this.worker) listener({ kind: "start", at: performance.now() })
+    return () => this.measurements.delete(listener)
+  }
+
+  private measure(event: CaptureEvent) {
+    for (const listener of this.measurements) {
+      try {
+        listener(event)
+      } catch {
+        console.error("[Raya] Capture timing listener failed")
+      }
+    }
+  }
+
+  private consumed(host: NativeCaptureHost, frame: NativeFrame) {
+    if (frame.receivedAtMs === undefined) return
+    this.measure({
+      kind: "consumer",
+      at: performance.now(),
+      received: frame.receivedAtMs,
+      acquisition: host.acquisition(frame.clock, frame.receivedAtMs),
+    })
+  }
   private host: NativeCaptureHost | undefined
   private inputHost: NativeInputHost | undefined
   private inputStop: Promise<void> | undefined
@@ -1558,7 +1590,11 @@ export class WindowsDesktopDriver implements DesktopDriver {
     const scope = this.scope
     if (options?.semantics === false) {
       const scene = this.warm(options)
-      if (scene && (await this.matches(scene))) return this.scoped(scene.frame, scope)
+      if (scene && (await this.matches(scene))) {
+        const frame = await this.scoped(scene.frame, scope)
+        this.worker?.consume(scene)
+        return frame
+      }
     }
     const candidate = options?.semantics === false ? undefined : this.warm(options)
     if (candidate) {
@@ -1573,7 +1609,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
         if (!(await this.matches(scene)))
           throw new Error("Foreground window changed while correlating desktop pixels and controls")
-        return this.scoped(
+        const frame = await this.scoped(
           {
             ...scene.frame,
             semantics: result.semantics,
@@ -1589,6 +1625,8 @@ export class WindowsDesktopDriver implements DesktopDriver {
           },
           scope,
         )
+        this.worker?.consume(scene)
+        return frame
       }
     }
     const started = performance.now()
@@ -1666,6 +1704,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
         const encoding = performance.now()
         const data = frame.data.toString("base64")
         const preparationMs = frame.preparationMs + performance.now() - encoding
+        this.consumed(host, frame)
         return {
           windowID: frame.windowID,
           location: frame.location,
@@ -1748,8 +1787,6 @@ export class WindowsDesktopDriver implements DesktopDriver {
   startCapture(failed: (error: unknown) => void, target?: { windowID: string; identity: string }): void {
     if (this.worker) return
     const fail = (error: unknown) => {
-      this.timing?.cancel()
-      this.timing = undefined
       failed(error)
     }
     this.scope = target
@@ -1758,19 +1795,20 @@ export class WindowsDesktopDriver implements DesktopDriver {
         this.binary,
         (error) => {
           if (this.host === host) this.host = undefined
-          this.worker?.stop()
+          this.worker?.fail(error)
           this.worker = undefined
-          fail(error)
         },
         this.args,
         (result) => {
-          this.worker?.renew(result.base, result)
+          const now = performance.now()
+          this.worker?.renew(result.base, { ...result, acquisition: host.acquisition(result.clock, now) })
         },
         this.receiptDir,
         () => {
           this.worker?.invalidate()
           this.last = undefined
         },
+        () => this.measurements.size > 0,
       )
       let sequence = 0
       this.worker = new DesktopCaptureWorker(
@@ -1782,6 +1820,8 @@ export class WindowsDesktopDriver implements DesktopDriver {
           result.data.fill(0)
           const preparationMs = result.preparationMs + performance.now() - started
           return {
+            sourceReceivedAtMs: result.receivedAtMs,
+            sourceAcquisition: host.acquisition(result.clock, result.receivedAtMs ?? performance.now()),
             windowID: result.windowID,
             location: result.location,
             width: result.width,
@@ -1801,19 +1841,22 @@ export class WindowsDesktopDriver implements DesktopDriver {
         () => host.stop(),
         fail,
       )
+      this.worker.onEvent((event) => this.measure(event))
       try {
         host.start()
         this.host = host
       } catch (error) {
-        this.worker.stop()
+        this.worker.fail(error)
         this.worker = undefined
-        fail(error)
         return
       }
       this.worker.start()
       return
     }
     const source = this.background ?? runner()
+    const clock = new DesktopCaptureClock()
+    let calibrated = -Infinity
+    let active = true
     const script = target ? selectedPixels(target) : pixels
     let prior: Pick<DesktopFrame, "windowID" | "location" | "width" | "height" | "mime" | "data"> | undefined
     const discard = () => {
@@ -1823,8 +1866,26 @@ export class WindowsDesktopDriver implements DesktopDriver {
     }
     this.worker = new DesktopCaptureWorker(
       async () => {
+        if (this.measurements.size && performance.now() - calibrated >= 500) {
+          const sent = performance.now()
+          await source
+            .run(
+              "[ordered]@{ tick = [string][Diagnostics.Stopwatch]::GetTimestamp(); frequency = [string][Diagnostics.Stopwatch]::Frequency } | ConvertTo-Json -Compress",
+            )
+            .then((value) => {
+              const receipt = object(value)
+              const received = performance.now()
+              if (typeof receipt.tick !== "string" || typeof receipt.frequency !== "string")
+                throw new Error("Capture clock calibration response is invalid")
+              clock.calibrate(receipt.tick, receipt.frequency, sent, received)
+              calibrated = received
+            })
+            .catch(() => clock.clear())
+        }
+        if (!active) return undefined
         const started = performance.now()
         const result = object(await source.run(script))
+        const received = performance.now()
         if (target && result.discard === true && Object.keys(result).length === 1) return discard()
         if (result.discard !== undefined) throw new Error("Selected desktop capture refusal is invalid")
         if (target && (result.windowID !== target.windowID || result.identity !== target.identity)) return discard()
@@ -1837,14 +1898,22 @@ export class WindowsDesktopDriver implements DesktopDriver {
           mime: next.mime,
           data: next.data,
         }
-        return next
+        const stamp = parseClock(result.clock)
+        return {
+          ...next,
+          sourceReceivedAtMs: received,
+          sourceAcquisition: stamp ? clock.bounds(stamp, received) : undefined,
+        }
       },
       () => {
+        active = false
+        clock.clear()
         prior = undefined
         source.cancel()
       },
       fail,
     )
+    this.worker.onEvent((event) => this.measure(event))
     this.worker.start()
   }
 
@@ -1852,7 +1921,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
   async captureTiming(signal?: AbortSignal) {
     if (!this.worker) return null
     this.timing?.cancel()
-    const timing = observeCapture(this.worker, signal)
+    const timing = observeCapture(this, signal)
     this.timing = timing
     return timing.result.finally(() => {
       if (this.timing === timing) this.timing = undefined
@@ -1860,8 +1929,6 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   stopCapture(): void {
-    this.timing?.cancel()
-    this.timing = undefined
     this.scope = undefined
     this.host = undefined
     this.worker?.stop()

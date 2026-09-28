@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-27 22:11 EDT - capture source validation and restart ownership fence
+
+Native identity helper is committed locally as `1c28064ae8`; push awaits settled integration checks. Capture validation passes separate suites 46/480 (metrics/worker/clock/parser/lifecycle), 20/96 (native host) and 45/300 (Windows driver), final extension/webview types, and native `/W4` build/self-test/fault receipt. The initial combined run had two timing failures; the reset test now checks inside the actual reset callback and the Windows compiler fixture has a 15-second allowance. Do not relabel that original run green. Final scoped lint has zero errors/warnings; formatting and diff checks pass. Numeric-only v2 diagnostics separate request, receipt and consumer time from conservatively calibrated acquisition-age bounds, including uncertainty/coverage; quiet frames preserve original image acquisition. Source remains uninstalled, so no continuous performance gain is proven. Next optimize continuous visual capture separately from cancellable semantic observation tied to exact scene identity.
+
+Original-owner restart/adoption checks now retain immutable ownership through promotion and consult both owner tombstones before launch; a focused storage test passes 1/11 with no dispatch and unchanged saved manifest. Archive full native stop still requires guardian tests, exact proof migration, unknown-state retention and final CLI check. Next push coherent validated checkpoints, package/install settled source and verify loaded dummy identity. Installed snapshot remains `a17a7ef2d8`; all installed benchmark/recovery/resource gates stay open. French Study remains untouched and MCP stays deferred.
+
 ## ChatGPT 2026-09-27 22:03 EDT - next native containment and capture measurement work
 
 WindowsTree's actual disposable-child test passes 1/9 and scoped lint is clean. Creation FILETIME, parent identity and termination use a pinned kernel handle; mismatched births refuse. The helper has a true bounded 15-second abort deadline plus 2-second forced-exit grace. The earlier 8-second deadline failed conservatively under load; PowerShell null-string binding was also corrected. Full CLI validation must follow the concurrent supervisor parent-row typing correction.

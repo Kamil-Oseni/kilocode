@@ -60,9 +60,17 @@ const program = Effect.gen(function* () {
   const files = ["alpha", "beta"].map((name) => path.join(dir, name, "notes.txt"))
   const bytes = () => Effect.promise(() => Promise.all(files.map((file) => fs.readFile(file, "utf8"))))
   const pause = Effect.gen(function* () {
-    process.stdout.write(`RECOVERY_READY ${JSON.stringify({ pid: process.pid, bytes: yield* bytes() })}\n`)
+    const input = Schema.decodeUnknownSync(Input)(yield* Effect.promise(() => Bun.file(control).json()))
+    const raw = yield* storage.read<unknown[]>(["session_diff", input.sessionID])
+    const ledger = yield* storage
+      .read<{ files: Record<string, string[]> }>(["session_undo", input.sessionID])
+      .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed({ files: {} })))
+    const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+    process.stdout.write(
+      `RECOVERY_READY ${JSON.stringify({ pid: process.pid, bytes: yield* bytes(), raw: raw.length, ledger: Object.values(ledger.files).flat().length, revert: session.revert?.diff ?? null })}\n`,
+    )
     yield* Effect.never
-  })
+  }).pipe(Effect.orDie)
   let calls = 0
   // These are real delegates: fault injection changes scheduling, never native results.
   const driver: Snapshot.Interface = {
@@ -72,14 +80,26 @@ const program = Effect.gen(function* () {
         calls++
         yield* snap.revert(patches, expected)
         if (mode === "first" && calls === 1) yield* pause
+        if (mode === "partial" && calls === 2) {
+          yield* Effect.promise(() => fs.writeFile(files[0], "manual during failure\r\n"))
+          yield* Effect.die(new Error("Interrupted second owner after its native restore"))
+        }
       }),
   }
   const disk: Storage.Interface = {
     ...storage,
+    create: (key, value) =>
+      Effect.gen(function* () {
+        const created = yield* storage.create(key, value)
+        if (created && mode === "claim" && key[0] === "review_receipt") yield* pause
+        return created
+      }),
     write: (key, value) =>
       Effect.gen(function* () {
         if (mode === "all" && key[0] === "session_diff" && calls === 2) yield* pause
-        return yield* storage.write(key, value)
+        yield* storage.write(key, value)
+        if (calls === 2 && mode === "cleanup" && key[0] === "session_diff") yield* pause
+        if (calls === 2 && mode === "ledger" && key[0] === "session_undo") yield* pause
       }),
   }
   const gather = Effect.fn("RecoveryFixture.gather")(function* (id: SessionID) {
@@ -167,7 +187,7 @@ const program = Effect.gen(function* () {
     yield* storage.write(["session_diff", session.id], yield* snap.diffFull(start, finish))
     return message
   })
-  if (mode === "first" || mode === "all") {
+  if (["first", "all", "claim", "cleanup", "ledger", "partial"].includes(mode)) {
     const parent = yield* sessions.create({})
     const user = yield* sessions.updateMessage({
       id: MessageID.ascending(),
@@ -208,6 +228,11 @@ const program = Effect.gen(function* () {
       requestID: "real-two-owner-recovery",
     }
     yield* Effect.promise(() => fs.writeFile(control, JSON.stringify(input)))
+    if (mode === "partial") {
+      const outcome = yield* reviews.undo(input, Effect.die(new Error("Unexpected local-only route"))).pipe(Effect.exit)
+      if (Exit.isSuccess(outcome)) throw new Error("Expected actual interrupted owner failure")
+      yield* pause
+    }
     yield* reviews.undo(input, Effect.die(new Error("Unexpected local-only route")))
     throw new Error("Missing native fault milestone")
   }
@@ -264,8 +289,11 @@ const program = Effect.gen(function* () {
     .read<unknown[]>(["session_diff", input.sessionID])
     .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed([])))
   const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+  const ledger = yield* storage
+    .read<{ files: Record<string, string[]> }>(["session_undo", input.sessionID])
+    .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed({ files: {} })))
   process.stdout.write(
-    `RECOVERY_RESULT ${JSON.stringify({ pid: process.pid, refused: Exit.isFailure(outcome), calls, bytes: yield* bytes(), complete: saved.complete, raw: raw.length, revert: current.revert?.diff ?? null })}\n`,
+    `RECOVERY_RESULT ${JSON.stringify({ pid: process.pid, refused: Exit.isFailure(outcome), calls, bytes: yield* bytes(), complete: saved.complete, raw: raw.length, ledger: Object.values(ledger.files).flat().length, revert: current.revert?.diff ?? null })}\n`,
   )
   if (mode === "replaced")
     yield* sessions.setRevert({ sessionID: input.sessionID, revert: original.revert, summary: original.summary })

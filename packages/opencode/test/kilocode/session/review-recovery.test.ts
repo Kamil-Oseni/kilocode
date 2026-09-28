@@ -53,10 +53,11 @@ const decode = Schema.decodeUnknownSync(
     calls: Schema.optional(Schema.Number),
     complete: Schema.optional(Schema.Boolean),
     raw: Schema.optional(Schema.Number),
+    ledger: Schema.optional(Schema.Number),
     revert: Schema.optional(Schema.NullOr(Schema.String)),
   }),
 )
-for (const milestone of ["first", "all"]) {
+for (const milestone of ["first", "all", "claim", "cleanup", "ledger", "partial"]) {
   it.live(
     `recovers cross-owner metadata after a real process dies at the ${milestone} restore boundary without replay`,
     () =>
@@ -124,8 +125,15 @@ for (const milestone of ["first", "all"]) {
               await proc.exited
             }
           })
-        if (milestone === "first") {
-          expect(stopped.bytes).toEqual(["alpha original\r\n", "beta edited\r\n"])
+        if (milestone === "first" || milestone === "claim" || milestone === "partial") {
+          expect(stopped.bytes).toEqual(
+            milestone === "claim"
+              ? ["alpha edited\r\n", "beta edited\r\n"]
+              : milestone === "partial"
+                ? ["manual during failure\r\n", "beta original\r\n"]
+                : ["alpha original\r\n", "beta edited\r\n"],
+          )
+          expect(stopped).toMatchObject({ raw: 2, ledger: 0, revert: "original" })
           const resumed = yield* run("resume")
           expect(resumed.pid).not.toBe(stopped.pid)
           expect(resumed).toMatchObject({
@@ -138,6 +146,52 @@ for (const milestone of ["first", "all"]) {
           return
         }
         expect(stopped.bytes).toEqual(["alpha original\r\n", "beta original\r\n"])
+        if (milestone === "cleanup" || milestone === "ledger") {
+          expect(stopped).toMatchObject({
+            raw: 0,
+            ledger: milestone === "ledger" ? 2 : 0,
+            revert: milestone === "ledger" ? null : "original",
+          })
+          if (milestone === "cleanup") {
+            const location = path.join(dir, "alpha")
+            const held = path.join(dir, "alpha-held")
+            const replaced = yield* Effect.promise(async () => {
+              await fs.rename(location, held)
+              try {
+                await fs.mkdir(location)
+                await fs.copyFile(path.join(held, ".git"), path.join(location, ".git"))
+                await fs.writeFile(path.join(location, "notes.txt"), "alpha original\r\n")
+                return await Effect.runPromise(run("resume"))
+              } finally {
+                await fs.rm(location, { recursive: true, force: true })
+                await fs.rename(held, location)
+              }
+            })
+            expect(replaced).toMatchObject({
+              refused: true,
+              calls: 0,
+              complete: false,
+              raw: 0,
+              ledger: 0,
+              revert: "original",
+              bytes: stopped.bytes,
+            })
+          }
+          const resumed = yield* run("resume")
+          expect(resumed.pid).not.toBe(stopped.pid)
+          expect(resumed).toMatchObject({
+            refused: false,
+            calls: 0,
+            complete: true,
+            raw: 0,
+            ledger: 2,
+            revert: null,
+            bytes: stopped.bytes,
+          })
+          const duplicate = yield* run("resume")
+          expect(duplicate).toMatchObject({ refused: false, calls: 0, complete: true, ledger: 2, bytes: stopped.bytes })
+          return
+        }
         const file = path.join(dir, "alpha", "notes.txt")
         yield* Effect.promise(() => fs.writeFile(file, "manual newer\r\n"))
         const manual = yield* run("resume")

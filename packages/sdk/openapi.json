@@ -4742,6 +4742,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "ownerSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
                   "command": {
                     "type": "string"
                   },
@@ -63818,6 +63822,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "ownerSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
                   "command": {
                     "type": "string"
                   },

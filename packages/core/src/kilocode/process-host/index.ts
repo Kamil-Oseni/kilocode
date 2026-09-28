@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process"
+import { request } from "./request"
 import { readFileSync, statSync } from "node:fs"
 import { open, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -81,41 +82,6 @@ function birth(value: string) {
   return value
 }
 
-async function request(file: string, args: string[], bound = 8 * 1024 * 1024) {
-  return new Promise<unknown>((resolve, reject) => {
-    const child = spawn(file, args, { stdio: ["ignore", "pipe", "ignore"], windowsHide: true })
-    const chunks: Buffer[] = []
-    let size = 0
-    let error: Error | undefined
-    const timer = setTimeout(() => {
-      error = new Error("Native process host request timed out")
-      child.kill()
-    }, 15000)
-    child.stdout.on("data", (chunk: Buffer) => {
-      size += chunk.length
-      if (size > bound) {
-        error = new Error("Native process host response exceeded bound")
-        child.kill()
-        return
-      }
-      chunks.push(chunk)
-    })
-    child.once("error", (err) => {
-      clearTimeout(timer)
-      reject(err)
-    })
-    child.once("close", (code) => {
-      clearTimeout(timer)
-      if (error || code !== 0) return reject(error ?? new Error("Native process ownership could not be verified"))
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")))
-      } catch (err) {
-        reject(err)
-      }
-    })
-  })
-}
-
 async function call(args: string[]) {
   return request(await ready(), args)
 }
@@ -134,6 +100,10 @@ export function query() {
 
 export function protocol() {
   return call(["--protocol"])
+}
+
+export function lifecycle() {
+  return call(["--pty-lifecycle-protocol"])
 }
 
 /** Validate a native candidate before admitting even the private gated shell. */
@@ -165,6 +135,47 @@ export async function guard(input: {
     ],
     { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
   )
+}
+
+function record(value: unknown, fields: readonly string[], message: string) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !== [...fields].sort().join(",")
+  )
+    throw new Error(message)
+  return value as Record<string, unknown>
+}
+
+function capability(value: unknown) {
+  const row = record(value, ["version", "operation", "proof"], "Contained PTY launch capability unavailable")
+  if (row.version !== 1 || row.operation !== "pty-launch" || row.proof !== "windows-job")
+    throw new Error("Contained PTY launch capability unavailable")
+}
+
+function launch(value: unknown, token: string) {
+  const row = record(
+    value,
+    ["version", "token", "proof", "state", "pid", "birth", "helper", "helperBirth"],
+    "Native launch identity invalid",
+  )
+  if (row.version !== 1 || row.token !== token || row.proof !== "windows-job" || row.state !== "suspended")
+    throw new Error("Native launch identity invalid")
+  if (
+    typeof row.pid !== "number" ||
+    typeof row.birth !== "string" ||
+    typeof row.helper !== "number" ||
+    typeof row.helperBirth !== "string"
+  )
+    throw new Error("Native launch identity invalid")
+  return { pid: row.pid, birth: row.birth, helper: row.helper, helperBirth: row.helperBirth }
+}
+
+function assignment(value: unknown, token: string) {
+  const row = record(value, ["version", "token", "proof", "assigned"], "Native launch job identity invalid")
+  if (row.version !== 2 || row.token !== token || row.proof !== "windows-job" || row.assigned !== true)
+    throw new Error("Native launch job identity invalid")
 }
 
 /** This opt-in primitive does not grant session authority or integrate the core PTY registry. */
@@ -215,19 +226,8 @@ export async function prepare(input: {
   for (const value of input.args) text(value)
   const packet = Buffer.concat(chunks)
   if (packet.length > 12288) throw new Error("Contained PTY launch envelope exceeds bound")
-  const capability = await call(["--launch-protocol"])
-  if (
-    typeof capability !== "object" ||
-    capability === null ||
-    !("version" in capability) ||
-    capability.version !== 1 ||
-    !("operation" in capability) ||
-    capability.operation !== "pty-launch" ||
-    !("proof" in capability) ||
-    capability.proof !== "windows-job" ||
-    Object.keys(capability).length !== 3
-  )
-    throw new Error("Contained PTY launch capability unavailable")
+  const capacity = await call(["--launch-protocol"])
+  capability(capacity)
   return {
     command: await ready(),
     args: ["pty-launch", pid(input.controller), birth(input.birth), input.control, input.token],
@@ -245,56 +245,22 @@ export async function suspended(control: string, token: string) {
     const result = await file.read(buffer, 0, buffer.length, 0)
     if (result.bytesRead > 4096) throw new Error("Native launch identity exceeds bound")
     const value: unknown = JSON.parse(buffer.subarray(0, result.bytesRead).toString("utf8"))
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      !("version" in value) ||
-      value.version !== 1 ||
-      !("token" in value) ||
-      value.token !== token ||
-      !("proof" in value) ||
-      value.proof !== "windows-job" ||
-      !("state" in value) ||
-      value.state !== "suspended" ||
-      !("pid" in value) ||
-      typeof value.pid !== "number" ||
-      !("birth" in value) ||
-      typeof value.birth !== "string" ||
-      !("helper" in value) ||
-      typeof value.helper !== "number" ||
-      !("helperBirth" in value) ||
-      typeof value.helperBirth !== "string" ||
-      Object.keys(value).length !== 8
-    )
-      throw new Error("Native launch identity invalid")
-    pid(value.pid)
-    pid(value.helper)
-    birth(value.birth)
-    birth(value.helperBirth)
+    const identity = launch(value, token)
+    pid(identity.pid)
+    pid(identity.helper)
+    birth(identity.birth)
+    birth(identity.helperBirth)
     const job = await open(`${control}.job`, "r")
     try {
       const record = Buffer.alloc(4097)
       const read = await job.read(record, 0, record.length, 0)
       if (read.bytesRead > 4096) throw new Error("Native job identity exceeds bound")
       const assigned: unknown = JSON.parse(record.subarray(0, read.bytesRead).toString("utf8"))
-      if (
-        typeof assigned !== "object" ||
-        assigned === null ||
-        !("version" in assigned) ||
-        assigned.version !== 2 ||
-        !("token" in assigned) ||
-        assigned.token !== token ||
-        !("proof" in assigned) ||
-        assigned.proof !== "windows-job" ||
-        !("assigned" in assigned) ||
-        assigned.assigned !== true ||
-        Object.keys(assigned).length !== 4
-      )
-        throw new Error("Native launch job identity invalid")
+      assignment(assigned, token)
     } finally {
       await job.close()
     }
-    return { pid: value.pid, birth: value.birth, helper: value.helper, helperBirth: value.helperBirth }
+    return identity
   } finally {
     await file.close()
   }

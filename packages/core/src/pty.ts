@@ -13,6 +13,10 @@ import { lazy } from "./util/lazy"
 import { KiloPtySelfCommand } from "./kilocode/pty-self-command" // kilocode_change
 import * as KiloPtyRegistry from "./kilocode/pty/registry" // kilocode_change
 import type { Active, Subscriber } from "./kilocode/pty/registry" // kilocode_change
+import { KiloPtyLifecycle, type Lease } from "./kilocode/pty/lifecycle" // kilocode_change
+import { NativePty } from "./kilocode/pty/native" // kilocode_change
+import { NativeProcess } from "./kilocode/process-host" // kilocode_change
+import { Exit } from "effect" // kilocode_change
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
 // Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
@@ -77,6 +81,7 @@ export interface Interface {
   readonly update: (id: PtyID, input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: PtyID) => Effect.Effect<void, NotFoundError>
   readonly removeDirectory: (location: Location.Ref) => Effect.Effect<void> // kilocode_change
+  readonly stopOwner: (sessionID: string) => Effect.Effect<void> // kilocode_change
   readonly write: (id: PtyID, data: string) => Effect.Effect<void, NotFoundError>
   readonly attach: (id: PtyID, input: AttachInput) => Effect.Effect<Attachment, NotFoundError | ExitedError>
 }
@@ -89,6 +94,7 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const location = yield* Location.Service
     const config = yield* Config.Service
+    const lifecycle = yield* KiloPtyLifecycle.Service // kilocode_change
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const sessions = KiloPtyRegistry.sessions // kilocode_change
@@ -139,14 +145,36 @@ const layer = Layer.effect(
       yield* removeSession(id)
     })
 
+    // kilocode_change start - attempt every exact actor before propagating any drainage failure.
+    const drain = Effect.fn("Pty.drain")(function* (owned: KiloPtyRegistry.Active[]) {
+      const results = yield* Effect.forEach(owned, (session) => Effect.exit(removeSession(session.info.id)), {
+        concurrency: 4,
+      })
+      for (const result of results) {
+        if (Exit.isFailure(result)) return yield* Effect.failCause(result.cause)
+      }
+    })
+    // kilocode_change end
+
     const removeDirectory = Effect.fn("Pty.removeDirectory")(function* (target: Location.Ref) {
       const owned = Array.from(sessions.values()).filter(
         (session) =>
           KiloPtyRegistry.sameDirectory(session.location.directory, target.directory) &&
           session.location.workspaceID === target.workspaceID,
       )
-      yield* Effect.forEach(owned, (session) => removeSession(session.info.id), { concurrency: 4, discard: true })
+      yield* drain(owned) // kilocode_change
     })
+
+    // kilocode_change start - drain only immutable creation owners in this exact location.
+    const stopOwner = Effect.fn("Pty.stopOwner")(function* (sessionID: string) {
+      const owner = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
+      const owned = Array.from(sessions.values()).filter(
+        (session) =>
+          session.authority?.ownerSessionID === sessionID && KiloPtyRegistry.sameLocation(session.location, owner),
+      )
+      yield* drain(owned)
+    })
+    // kilocode_change end
 
     const list = Effect.fn("Pty.list")(function* () {
       const owner = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
@@ -192,97 +220,177 @@ const layer = Layer.effect(
         env.LC_CTYPE = "C.UTF-8"
         env.LANG = "C.UTF-8"
       }
-      yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
-      const { spawn } = yield* Effect.promise(() => pty())
-      // kilocode_change start - spawn with initial terminal dimensions
-      const proc = yield* Effect.sync(() =>
-        spawn(command, args, {
-          name: "xterm-256color",
-          cwd,
-          env,
-          cols: input.size?.cols,
-          rows: input.size?.rows,
-        }),
-      )
-      // kilocode_change end
-      const info: Info = {
+      // kilocode_change start - the adapter fence spans suspended spawn, registry publication and resume.
+      const authority = Object.freeze({
+        version: 1 as const,
         id,
-        title: input.title || `Terminal ${id.slice(-4)}`,
-        command,
-        args,
+        location: owner,
         cwd,
-        status: "running",
-        pid: proc.pid,
-      }
-      const session: Active = {
-        info,
-        location: owner, // kilocode_change
-        process: proc,
-        buffer: "",
-        bufferCursor: 0,
-        cursor: 0,
-        subscribers: new Map(),
-        listeners: [],
-        stopping: false, // kilocode_change
-        terminated: false,
-      }
-      sessions.set(id, session)
-      session.listeners.push(
-        proc.onData((chunk) => {
-          session.cursor += chunk.length
-          for (const [token, subscriber] of session.subscribers.entries()) {
-            if (!subscriber.active) {
-              subscriber.pending.push(chunk)
-              continue
-            }
-            try {
-              subscriber.onData(chunk)
-            } catch {
-              session.subscribers.delete(token)
-            }
-          }
-          session.buffer += chunk
-          if (session.buffer.length <= BUFFER_LIMIT) return
-          const excess = session.buffer.length - BUFFER_LIMIT
-          session.buffer = session.buffer.slice(excess)
-          session.bufferCursor += excess
-        }),
-        proc.onExit(({ exitCode }) => {
-          if (session.info.status === "exited") return
-          if (session.stopping) {
-            session.info.status = "exited"
-            session.info.exitCode = exitCode
-            return
-          }
-          session.info.status = "exited"
-          session.info.exitCode = exitCode
-          notifyEnd(session, { exitCode })
-          KiloPtyRegistry.markExited(session)
-          runFork(
-            Effect.gen(function* () {
-              yield* Effect.logInfo("session exited", { id, exitCode })
-              yield* events
-                .publish(Event.Exited, { id, exitCode }, { location: session.location })
-                .pipe(Effect.catch((error) => Effect.logWarning("failed to publish PTY exited event", { id, error })))
-              while (KiloPtyRegistry.exitedCount(session.location) > EXITED_LIMIT) {
-                const oldest = KiloPtyRegistry.oldestExited(session.location)
-                if (!oldest) break
-                yield* removeSession(oldest)
-                if (sessions.has(oldest)) break
-                KiloPtyRegistry.removeExitedID(session.location, oldest)
-              }
+        ownerSessionID: input.ownerSessionID,
+      })
+      const native = process.platform === "win32" && NativeProcess.mode() === "native"
+      const launch = (lease?: Lease) => {
+        const release = lease ? KiloPtyRegistry.beginCreate(owner) : () => undefined
+        return Effect.gen(function* () {
+          const contained = lease
+            ? yield* Effect.promise(() => NativePty.prepare({ command, args, cwd, env }, lease, context))
+            : undefined
+          // kilocode_change end
+          yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
+          const { spawn } = yield* Effect.promise(() => pty())
+          if (lease) yield* lease.dispatch() // kilocode_change
+          // kilocode_change start - spawn with initial terminal dimensions
+          const proc = yield* Effect.sync(() =>
+            spawn(contained?.spec.command ?? command, contained?.spec.args ?? args, {
+              // kilocode_change
+              name: "xterm-256color",
+              cwd,
+              env: contained?.spec.env ?? env, // kilocode_change
+              cols: input.size?.cols,
+              rows: input.size?.rows,
             }),
           )
-        }),
-      )
-      yield* events
-        .publish(Event.Created, { info }, { location: session.location })
-        .pipe(Effect.catch((error) => Effect.logWarning("failed to publish PTY created event", { id, error })))
-      return info
+          // kilocode_change end
+          const info: Info = {
+            id,
+            title: input.title || `Terminal ${id.slice(-4)}`,
+            command,
+            args,
+            cwd,
+            status: "running",
+            pid: proc.pid,
+          }
+          const session: Active = {
+            info,
+            location: owner, // kilocode_change
+            authority, // kilocode_change
+            containment: contained, // kilocode_change
+            process: proc,
+            buffer: "",
+            bufferCursor: 0,
+            cursor: 0,
+            subscribers: new Map(),
+            listeners: [],
+            stopping: false, // kilocode_change
+            terminated: false,
+          }
+          sessions.set(id, session)
+          contained?.bind(proc) // kilocode_change
+          session.listeners.push(
+            proc.onData((chunk) => {
+              session.cursor += chunk.length
+              for (const [token, subscriber] of session.subscribers.entries()) {
+                if (!subscriber.active) {
+                  subscriber.pending.push(chunk)
+                  continue
+                }
+                try {
+                  subscriber.onData(chunk)
+                } catch {
+                  session.subscribers.delete(token)
+                }
+              }
+              session.buffer += chunk
+              if (session.buffer.length <= BUFFER_LIMIT) return
+              const excess = session.buffer.length - BUFFER_LIMIT
+              session.buffer = session.buffer.slice(excess)
+              session.bufferCursor += excess
+            }),
+            proc.onExit(({ exitCode }) => {
+              // kilocode_change start - helper exit alone never proves descendant drain.
+              contained?.exit()
+              const exited = (result: { exitCode?: number }) => {
+                const code = result.exitCode
+                // kilocode_change end
+                if (session.info.status === "exited") return
+                if (session.stopping) {
+                  session.info.status = "exited"
+                  session.info.exitCode = code // kilocode_change
+                  return
+                }
+                session.info.status = "exited"
+                session.info.exitCode = code // kilocode_change
+                notifyEnd(session, { exitCode: code }) // kilocode_change
+                KiloPtyRegistry.markExited(session)
+                runFork(
+                  Effect.gen(function* () {
+                    yield* Effect.logInfo("session exited", { id, exitCode: code }) // kilocode_change
+                    // kilocode_change start - keep distinct event schemas in separate typed branches.
+                    if (typeof code === "number") {
+                      yield* events
+                        .publish(Event.Exited, { id, exitCode: code }, { location: session.location })
+                        .pipe(
+                          Effect.catch((error) =>
+                            Effect.logWarning("failed to publish PTY exited event", { id, error }),
+                          ),
+                        )
+                    }
+                    if (typeof code !== "number") {
+                      yield* events
+                        .publish(Event.Updated, { info: session.info }, { location: session.location })
+                        .pipe(
+                          Effect.catch((error) =>
+                            Effect.logWarning("failed to publish PTY exited event", { id, error }),
+                          ),
+                        )
+                    }
+                    // kilocode_change end
+                    while (KiloPtyRegistry.exitedCount(session.location) > EXITED_LIMIT) {
+                      const oldest = KiloPtyRegistry.oldestExited(session.location)
+                      if (!oldest) break
+                      yield* removeSession(oldest)
+                      if (sessions.has(oldest)) break
+                      KiloPtyRegistry.removeExitedID(session.location, oldest)
+                    }
+                  }),
+                )
+                // kilocode_change start
+              }
+              if (contained) {
+                runFork(
+                  Effect.promise(() => contained.finish()).pipe(
+                    Effect.tap((result) => Effect.sync(() => contained.deliver(() => exited(result)))),
+                    Effect.catchCause((cause) => Effect.logWarning("native PTY exit remains unknown", { id, cause })),
+                  ),
+                )
+                return
+              }
+              exited({ exitCode })
+              // kilocode_change end
+            }),
+          )
+          // kilocode_change start - all native listeners and immutable ownership exist before target admission.
+          if (contained && lease) {
+            const identity = yield* Effect.promise((signal) => contained.start(signal))
+            info.pid = identity.pid
+          }
+          // kilocode_change end
+          yield* events
+            .publish(Event.Created, { info }, { location: session.location })
+            .pipe(Effect.catch((error) => Effect.logWarning("failed to publish PTY created event", { id, error })))
+          contained?.publish() // kilocode_change
+          return info
+          // kilocode_change start
+        }).pipe(
+          Effect.ensuring(Effect.sync(release)),
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              if (!Exit.isFailure(exit)) return
+              const session = sessions.get(id)
+              session?.containment?.abandon(() => {
+                runFork(removeSession(id))
+              })
+            }),
+          ),
+        )
+      }
+      return yield* native ? lifecycle.admission(authority, (lease) => launch(lease)) : launch()
+      // kilocode_change end
     })
 
     const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
       const owner = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
+      if (process.platform === "win32" && NativeProcess.mode() === "native") return yield* createBody(input, owner) // kilocode_change
       const release = KiloPtyRegistry.beginCreate(owner)
       return yield* createBody(input, owner).pipe(Effect.ensuring(Effect.sync(release)))
     })
@@ -293,14 +401,16 @@ const layer = Layer.effect(
       // kilocode_change start - associate nested Kilo TUI terminals with the viewed session
       if ("sessionID" in input) session.info.sessionID = input.sessionID ?? undefined
       // kilocode_change end
-      if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
+      if (input.size && session.info.status === "running" && (!session.containment || session.containment.writable))
+        session.process.resize(input.size.cols, input.size.rows) // kilocode_change
       yield* events.publish(Event.Updated, { info: session.info }, { location: session.location })
       return session.info
     })
 
     const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
       const session = yield* requireSession(id)
-      if (session.info.status === "running") session.process.write(data)
+      if (session.info.status === "running" && (!session.containment || session.containment.writable))
+        session.process.write(data) // kilocode_change
     })
 
     const attach = Effect.fn("Pty.attach")(function* (id: PtyID, input: AttachInput) {
@@ -335,7 +445,8 @@ const layer = Layer.effect(
         replay,
         cursor: end,
         write: (data: string) => {
-          if (session.info.status === "running") session.process.write(data)
+          if (session.info.status === "running" && (!session.containment || session.containment.writable))
+            session.process.write(data) // kilocode_change
         },
         activate: () => {
           if (subscriber.active || subscriber.detached) return
@@ -357,11 +468,11 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, get, create, update, remove, removeDirectory, write, attach }) // kilocode_change
+    return Service.of({ list, get, create, update, remove, removeDirectory, stopOwner, write, attach }) // kilocode_change
   }),
 )
 
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
+export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer), Layer.provide(KiloPtyLifecycle.layer)) // kilocode_change
 
 export const shutdown = KiloPtyRegistry.shutdown // kilocode_change
 export const terminateDirectory = KiloPtyRegistry.terminateDirectory // kilocode_change
@@ -379,4 +490,8 @@ export const shutdownNode = makeGlobalNode({
   deps: [],
 }) // kilocode_change
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [EventV2.node, Location.node, Config.node, KiloPtyLifecycle.node],
+}) // kilocode_change

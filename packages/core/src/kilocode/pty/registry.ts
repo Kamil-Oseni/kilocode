@@ -5,6 +5,8 @@ import type { Location } from "../../location"
 import type { Info } from "../../pty"
 import type { PtyID } from "../../pty/schema"
 import { KiloPtyTermination } from "./termination"
+import type { Request } from "./lifecycle"
+import type { NativePty } from "./native"
 
 const log = Log.create({ service: "pty.registry" })
 
@@ -20,6 +22,8 @@ export type Subscriber = {
 export type Active = {
   info: Info
   location: Location.Ref
+  readonly authority?: Request
+  readonly containment?: NativePty
   process: Proc
   buffer: string
   bufferCursor: number
@@ -167,7 +171,8 @@ export function teardown(session: Active) {
   const task = (async () => {
     session.stopping = true
     try {
-      if (!session.terminated && session.info.status !== "exited") {
+      if (session.containment) await session.containment.stop()
+      if (!session.containment && !session.terminated && session.info.status !== "exited") {
         await KiloPtyTermination.terminate(session.process)
       }
       session.terminated = true

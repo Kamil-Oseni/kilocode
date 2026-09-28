@@ -3765,6 +3765,7 @@ export class Pty extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      ownerSessionID?: string
       command?: string
       args?: Array<string>
       cwd?: string
@@ -3786,6 +3787,7 @@ export class Pty extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "ownerSessionID" },
             { in: "body", key: "command" },
             { in: "body", key: "args" },
             { in: "body", key: "cwd" },
@@ -16591,6 +16593,7 @@ export class Pty2 extends HeyApiClient {
         directory?: string
         workspace?: string
       }
+      ownerSessionID?: string
       command?: string
       args?: Array<string>
       cwd?: string
@@ -16611,6 +16614,7 @@ export class Pty2 extends HeyApiClient {
         {
           args: [
             { in: "query", key: "location" },
+            { in: "body", key: "ownerSessionID" },
             { in: "body", key: "command" },
             { in: "body", key: "args" },
             { in: "body", key: "cwd" },

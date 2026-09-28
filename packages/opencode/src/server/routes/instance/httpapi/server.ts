@@ -118,7 +118,9 @@ import {
   layer as referenceReconcilerLayer,
   locations as locationServiceMapLayer,
 } from "@/kilocode/server/reference-reconciler" // kilocode_change
-import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { LocationServiceMap } from "@opencode-ai/core/location-services" // kilocode_change
+import { buildLocationServiceMap } from "@/kilocode/pty/location-map" // kilocode_change
+import { PtyArchive } from "@/kilocode/pty/archive" // kilocode_change
 import { layer as locationLayer } from "@opencode-ai/server/location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
@@ -298,6 +300,7 @@ const app = LayerNode.group([
   ProjectCopy.node,
   PtyTicket.node,
   Pty.shutdownNode, // kilocode_change
+  PtyArchive.node, // kilocode_change - immutable terminal owners participate in routine archive
 ])
 
 export function createRoutes(

@@ -55,6 +55,7 @@ import { CreateDocumentTool } from "./create-document"
 import { CreatePresentationTool } from "./create-presentation"
 import { CreatePdfTool } from "./create-pdf"
 import { personalTodoTool } from "./personal-todo"
+import { PtyArchive } from "@/kilocode/pty/archive"
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -193,9 +194,10 @@ export namespace KiloToolRegistry {
       const routines = goalDeps
         ? yield* Effect.gen(function* () {
             const database = yield* Database.Service
+            const pty = yield* PtyArchive.Service
             return {
               scheduleTask: yield* scheduleTaskTool({ ...goalDeps, database }),
-              ...(yield* Effect.all(routineManagementTools({ ...goalDeps, database }))),
+              ...(yield* Effect.all(routineManagementTools({ ...goalDeps, database, pty }))),
             }
           })
         : undefined

@@ -18,9 +18,13 @@ KiloShutdown.register(() => runtime.dispose())
 const directory = () => path.join(Global.Path.state, "background-process", "lifecycle")
 const file = (id: SessionID) => path.join(directory(), `${id}.json`)
 
-export async function locked<A>(body: () => Promise<A>) {
+export async function acquire() {
   await mkdir(directory(), { recursive: true, mode: 0o700 })
-  const lease = await Flock.acquire("background-process-lifecycle-v1", { dir: directory(), timeoutMs: 60_000 })
+  return Flock.acquire("background-process-lifecycle-v1", { dir: directory(), timeoutMs: 60_000 })
+}
+
+export async function locked<A>(body: () => Promise<A>) {
+  const lease = await acquire()
   try {
     return await body()
   } finally {
@@ -46,42 +50,45 @@ async function denied(id: SessionID) {
 }
 
 /** Read only persisted ancestry and organization lifecycle; never project command, output, or credentials. */
-export async function allowed(id: SessionID) {
+export const authorize = Effect.fn("BackgroundProcess.authorize")(function* (
+  database: Database.Interface,
+  id: SessionID,
+) {
+  const db = database.db
   const seen = new Set<SessionID>()
-  await runtime.runPromise(
-    Database.Service.use(({ db }) =>
-      Effect.gen(function* () {
-        let current: SessionID | undefined = id
-        while (current) {
-          if (seen.has(current)) throw new Error("Background process session ancestry is inconsistent")
-          if (seen.size >= 10_000) throw new Error("Background process session ancestry exceeded its limit")
-          seen.add(current)
-          if (yield* Effect.tryPromise(() => denied(current!)))
-            return yield* Effect.fail(new Error("This process session belongs to a stopping or archived organization"))
-          const row: { parent: SessionID | null; metadata: Record<string, unknown> | null } | undefined = yield* db
-            .select({ parent: SessionTable.parent_id, metadata: SessionTable.metadata })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, current))
-            .get()
-          if (!row) return
-          const routine = row.metadata?.rayaRoutine
-          if (routine && typeof routine === "object" && !Array.isArray(routine)) {
-            const organization = (routine as Record<string, unknown>).organizationID
-            if (typeof organization === "string") {
-              const owner = yield* db
-                .select({ stopping: Organization.stopping_at, archived: Organization.archived_at })
-                .from(Organization)
-                .where(eq(Organization.id, organization))
-                .get()
-              if (!owner || owner.stopping !== null || owner.archived !== null)
-                throw new Error("This process session belongs to a stopping or archived organization")
-            }
-          }
-          current = row.parent ?? undefined
-        }
-      }),
-    ),
-  )
+
+  let current: SessionID | undefined = id
+  while (current) {
+    if (seen.has(current)) throw new Error("Background process session ancestry is inconsistent")
+    if (seen.size >= 10_000) throw new Error("Background process session ancestry exceeded its limit")
+    seen.add(current)
+    if (yield* Effect.tryPromise(() => denied(current!)))
+      throw new Error("This process session belongs to a stopping or archived organization")
+    const row: { parent: SessionID | null; metadata: Record<string, unknown> | null } | undefined = yield* db
+      .select({ parent: SessionTable.parent_id, metadata: SessionTable.metadata })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, current))
+      .get()
+    if (!row) return
+    const routine = row.metadata?.rayaRoutine
+    if (routine && typeof routine === "object" && !Array.isArray(routine) && "organizationID" in routine) {
+      const organization = routine.organizationID
+      if (typeof organization === "string") {
+        const owner = yield* db
+          .select({ stopping: Organization.stopping_at, archived: Organization.archived_at })
+          .from(Organization)
+          .where(eq(Organization.id, organization))
+          .get()
+        if (!owner || owner.stopping !== null || owner.archived !== null)
+          throw new Error("This process session belongs to a stopping or archived organization")
+      }
+    }
+    current = row.parent ?? undefined
+  }
+})
+
+export async function allowed(id: SessionID) {
+  await runtime.runPromise(Database.Service.use((database) => authorize(database, id)))
 }
 
 export const lineage = Effect.fn("BackgroundProcess.lineage")(function* (

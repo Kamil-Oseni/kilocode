@@ -6,6 +6,12 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { PtyArchive } from "@/kilocode/pty/archive"
+import { locationServiceMapLayer } from "@/kilocode/pty/location-map"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Location } from "@opencode-ai/core/location"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Pty } from "@opencode-ai/core/pty"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { InteractiveTerminal } from "@/kilocode/interactive-terminal"
 import { admit, assert } from "@/kilocode/interactive-terminal/lifecycle"
@@ -25,7 +31,14 @@ import { testEffectShared } from "../lib/effect"
 
 const it = testEffectShared(
   LayerNode.compile(
-    LayerNode.group([Session.node, SessionProjector.node, Storage.node, Database.node, WorkspaceOccupancy.node]),
+    LayerNode.group([
+      Session.node,
+      SessionProjector.node,
+      Storage.node,
+      Database.node,
+      WorkspaceOccupancy.node,
+      PtyArchive.node,
+    ]),
   ),
 )
 
@@ -67,6 +80,79 @@ async function wait(file: string) {
   }
   throw new Error("Archived terminal fixture did not start")
 }
+
+it.instance(
+  "organization archive drains only the central terminal's immutable creation owner and denies restart",
+  () =>
+    Effect.gen(function* () {
+      if (process.platform !== "win32") return
+      const test = yield* TestInstance
+      const database = yield* Database.Service
+      const storage = yield* Storage.Service
+      const sessions = yield* Session.Service
+      const archive = yield* PtyArchive.Service
+      const maps = yield* LocationServiceMap.Service
+      const runner = RayaTaskRunner.make({ database, storage, sessions, pty: archive, halt: () => Effect.void })
+      const worker = yield* runner.tasks.create({
+        name: "Central terminal worker",
+        objective: "Keep a terminal",
+        dir: test.directory,
+        schedule: { kind: "manual" },
+      })
+      const teams = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
+      const team = yield* teams.create({
+        name: "Central terminal team",
+        members: [{ agentID: worker.id, role: "Worker" }],
+      })
+      const owner = yield* sessions.create({
+        title: "Central terminal owner",
+        metadata: { rayaRoutine: { agentID: worker.id, organizationID: team.id } },
+      })
+      const foreign = yield* sessions.create({ title: "Unrelated central terminal" })
+      yield* runner.tasks.record({
+        id: randomUUID(),
+        agentID: worker.id,
+        sessionID: owner.id,
+        at: Date.now(),
+        status: "complete",
+      })
+      const location = maps.get(Location.Ref.make({ directory: AbsolutePath.make(test.directory) }))
+      yield* Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        const receipt = path.join(test.directory, "central-owner.pid")
+        const outside = path.join(test.directory, "central-outside.pid")
+        const restarted = path.join(test.directory, "central-restarted.pid")
+        const create = (sessionID: typeof owner.id, file: string) =>
+          pty.create({
+            ownerSessionID: sessionID,
+            command: process.execPath,
+            args: ["-e", `await Bun.write(${JSON.stringify(file)},String(process.pid));setInterval(()=>{},1000)`],
+            cwd: test.directory,
+            title: "Archive fixture",
+          })
+        const owned = yield* create(owner.id, receipt)
+        yield* Effect.addFinalizer(() =>
+          pty.remove(owned.id).pipe(Effect.catchTag("Pty.NotFoundError", () => Effect.void)),
+        )
+        const other = yield* create(foreign.id, outside)
+        yield* Effect.addFinalizer(() =>
+          pty.remove(other.id).pipe(Effect.catchTag("Pty.NotFoundError", () => Effect.void)),
+        )
+        yield* Effect.promise(() => Promise.all([wait(receipt), wait(outside)]))
+        const pid = Number(yield* Effect.promise(() => Bun.file(receipt).text()))
+        // Display attribution cannot change the immutable terminal creation owner.
+        yield* pty.update(owned.id, { sessionID: foreign.id })
+        expect((yield* teams.archive(team.id, { expectedRevision: team.revision })).archived).toBe(true)
+        expect(Exit.isFailure(yield* pty.get(owned.id).pipe(Effect.exit))).toBe(true)
+        expect((yield* pty.get(other.id)).status).toBe("running")
+        expect((yield* Effect.promise(() => sample(pid))).status).toBe("gone")
+        expect(Exit.isFailure(yield* create(owner.id, restarted).pipe(Effect.exit))).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(restarted).exists())).toBe(false)
+        expect(Exit.isFailure(yield* runner.fire(worker.id).pipe(Effect.exit))).toBe(true)
+      }).pipe(Effect.provide(location))
+    }).pipe(Effect.provide(locationServiceMapLayer)),
+  150000,
+)
 
 it.instance(
   "terminal cleanup retries a locked manifest after confirmed occupancy release and rechecks its owner",
@@ -136,6 +222,7 @@ it.instance(
       const storage = yield* Storage.Service
       const sessions = yield* Session.Service
       const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
         database,
         storage,
         sessions,
@@ -216,6 +303,7 @@ it.instance(
       const storage = yield* Storage.Service
       const sessions = yield* Session.Service
       const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
         database,
         storage,
         sessions,

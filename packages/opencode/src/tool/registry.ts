@@ -32,6 +32,7 @@ import { Provider } from "@/provider/provider"
 
 import { WebSearchTool, webSearchTool } from "./websearch" // kilocode_change - inject goal billing into hosted search
 import { KiloToolRegistry } from "../kilocode/tool/registry" // kilocode_change
+import { PtyArchive } from "@/kilocode/pty/archive" // kilocode_change
 import { Notebook } from "@/kilocode/notebook/service" // kilocode_change
 import { AgentManager } from "@/kilocode/agent-manager/service" // kilocode_change
 import { RepoOverviewTool } from "@/kilocode/tool/repo-overview" // kilocode_change
@@ -556,6 +557,7 @@ export const node = LayerNode.suspend(() =>
       RuntimeFlags.node,
       MCP.node,
       Database.node,
+      PtyArchive.node, // kilocode_change
       Ripgrep.node,
       Command.node,
       Git.node,

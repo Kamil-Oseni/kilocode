@@ -16081,6 +16081,7 @@ export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
 
 export type PtyCreateData = {
   body?: {
+    ownerSessionID?: string
     command?: string
     args?: Array<string>
     cwd?: string
@@ -33809,6 +33810,7 @@ export type V2PtyListResponse = V2PtyListResponses[keyof V2PtyListResponses]
 
 export type V2PtyCreateData = {
   body: {
+    ownerSessionID?: string
     command?: string
     args?: Array<string>
     cwd?: string

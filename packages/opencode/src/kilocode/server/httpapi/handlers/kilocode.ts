@@ -92,6 +92,8 @@ import {
   CanvasRejectPayload, // raya_change - Milestone E canvas API
 } from "../groups/kilocode"
 
+import { PtyArchive } from "@/kilocode/pty/archive"
+
 export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode", (handlers) =>
   Effect.gen(function* () {
     const agents = yield* Agent.Service
@@ -114,10 +116,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const mcp = yield* MCP.Service
     const goals = RayaGoal.make({ storage, sessions, background }) // raya_change - Chief completion sees live child jobs
     const database = yield* Database.Service
+    const pty = yield* PtyArchive.Service
     const runner = RayaTaskRunner.make({
       storage,
       sessions,
       database,
+      pty,
       halt: (sessionID) => runState.cancel(sessionID),
     })
     const inbox = RayaTaskInbox.make(database)

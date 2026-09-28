@@ -30,6 +30,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
 import { recoverPending } from "@/kilocode/tool/apply-patch-transaction"
 import { InstanceState } from "@/effect/instance-state"
+import { PtyArchive } from "@/kilocode/pty/archive"
 
 const log = Log.create({ service: "kilocode-bootstrap" })
 
@@ -56,8 +57,9 @@ export namespace KilocodeBootstrap {
       const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // raya_change - Milestone A durable goal storage
       const config = yield* Config.Service // raya_change - Milestone I
       const database = yield* Database.Service
+      const pty = yield* PtyArchive.Service
       const routines = storage
-        ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database, halt: (id) => runs.cancel(id) })
+        ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database, pty, halt: (id) => runs.cancel(id) })
         : undefined
       const attention = storage
         ? yield* InstanceState.make((ctx) =>
@@ -197,6 +199,7 @@ export namespace KilocodeBootstrap {
       KilocodeWatcher.defaultLayer,
       AppNodeBuilder.build(Storage.node), // raya_change - Milestone A durable goal storage
       AppNodeBuilder.build(Database.node),
+      AppNodeBuilder.build(PtyArchive.node),
       AppNodeBuilder.build(Config.node), // raya_change - Milestone I routing settings
     ]),
   )
@@ -218,6 +221,7 @@ export namespace KilocodeBootstrap {
         watcher,
         Storage.node, // raya_change - Milestone A durable goal storage
         Database.node,
+        PtyArchive.node,
         Config.node, // raya_change - Milestone I routing settings
       ],
     }),

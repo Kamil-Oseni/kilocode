@@ -7,6 +7,7 @@ import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { KiloIndexing } from "../../src/kilocode/indexing"
 import { KilocodeBootstrap } from "../../src/kilocode/bootstrap"
+import { PtyArchive } from "../../src/kilocode/pty/archive"
 import { KilocodeWatcher } from "../../src/kilocode/watcher"
 import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
@@ -545,6 +546,7 @@ describe("kilocode tool registry indexing", () => {
                 config,
                 Database.layerFromPath(":memory:"),
                 AppNodeBuilder.build(SessionRunState.node),
+                AppNodeBuilder.build(PtyArchive.node),
               ]), // raya_change
             ),
           ),

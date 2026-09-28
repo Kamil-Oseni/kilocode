@@ -199,7 +199,7 @@ struct Envelope {
 
 void launch(DWORD controller, uint64_t parent, const std::wstring& control, const std::string& key) {
   Handle owner(pin(controller, parent, SYNCHRONIZE | PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION));
-  for (const auto suffix : {L".go", L".job", L".launch", L".drained", L".running"})
+  for (const auto suffix : {L".go", L".job", L".launch", L".drained", L".running", L".exited"})
     if (exists(control + suffix)) throw std::runtime_error("Native launch identity already used");
   const DWORD length = GetEnvironmentVariableW(L"RAYA_PTY_LAUNCH", nullptr, 0);
   if (!length || length > 16385) throw std::runtime_error("Native launch envelope unavailable or oversized");
@@ -260,6 +260,13 @@ void launch(DWORD controller, uint64_t parent, const std::wstring& control, cons
         throw std::runtime_error("Native launch membership unknown");
       if (!state.ActiveProcesses) {
         write(control + L".drained", "{\"version\":2,\"token\":\"" + key + "\",\"proof\":\"windows-job\",\"empty\":true}");
+        DWORD code = 0;
+        if (WaitForSingleObject(process.value, 2000) != WAIT_OBJECT_0 || !GetExitCodeProcess(process.value, &code)) {
+          write(control + L".exited", header + ",\"state\":\"exited\",\"outcome\":\"unknown\"}");
+          return;
+        }
+        write(control + L".exited", header + ",\"state\":\"exited\",\"exitCode\":" + std::to_string(code) +
+          ",\"outcome\":\"" + (stopping || !resumed ? "cancelled" : "confirmed") + "\"}");
         return;
       }
       const DWORD status = WaitForSingleObject(owner.value, 0);
@@ -337,6 +344,10 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--launch-protocol") {
       std::printf("{\"version\":1,\"operation\":\"pty-launch\",\"proof\":\"windows-job\"}\n");
+      return 0;
+    }
+    if (argc == 2 && std::wstring(argv[1]) == L"--pty-lifecycle-protocol") {
+      std::printf("{\"version\":1,\"operation\":\"pty-lifecycle\",\"proof\":\"windows-job\",\"targetExit\":true}\n");
       return 0;
     }
     if (argc == 6 && std::wstring(argv[1]) == L"pty-launch") {

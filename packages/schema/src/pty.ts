@@ -40,6 +40,7 @@ const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
 export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
 
 export const CreateInput = Schema.Struct({
+  ownerSessionID: optional(SessionID), // kilocode_change - immutable creator attribution, independent of display sessionID
   command: optional(Schema.String),
   args: optional(Schema.Array(Schema.String)),
   cwd: optional(Schema.String),

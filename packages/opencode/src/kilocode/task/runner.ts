@@ -46,6 +46,7 @@ import { BackgroundProcess } from "@/kilocode/background-process"
 import { lineage } from "@/kilocode/background-process/lifecycle"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
+import type { PtyArchive } from "@/kilocode/pty/archive"
 
 const WAIT = "waiting on you"
 
@@ -201,6 +202,7 @@ export namespace RayaTaskRunner {
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
     halt?: (sessionID: SessionID) => Effect.Effect<void>
+    pty?: PtyArchive.Interface
   }): Runner {
     const tasks = RayaTask.make(input)
     const snapshots = RayaTaskSnapshot.make(input)
@@ -926,8 +928,10 @@ export namespace RayaTaskRunner {
       organization: string,
       members: readonly string[],
     ) {
-      if (!input.halt || !input.database || !errands || !schedule)
+      if (!input.halt || !input.database || !input.pty || !errands || !schedule)
         return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
+      const database = input.database
+      const pty = input.pty
       const queue = RayaTaskQueue.make(input.database)
       const seen = new Set<string>()
       for (const id of members) {
@@ -942,56 +946,89 @@ export namespace RayaTaskRunner {
       )
       yield* Effect.promise(() => BackgroundProcess.archive(organization, sessions, members))
       const fenced = yield* lineage(input.database, members, sessions)
-      const terminal = yield* Effect.promise(() => import("@/kilocode/interactive-terminal"))
-      for (const id of fenced) {
-        const session = yield* input.database.db
-          .select({ directory: SessionTable.directory })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, id))
-          .get()
-        if (!session?.directory.trim())
-          return yield* new RayaTask.GuardError({ message: "A worker terminal has no persisted workspace context." })
-        yield* open(
-          session.directory,
-          Effect.tryPromise(() => terminal.InteractiveTerminal.stopSession(id)),
-        )
-      }
+      const failures: Cause.Cause<unknown>[] = []
+      const collect = Effect.fn(function* (effect: Effect.Effect<void, unknown>) {
+        const result = yield* Effect.exit(effect)
+        if (Exit.isFailure(result)) failures.push(result.cause)
+      })
       for (const id of members) {
         for (const row of yield* errands.held(id)) {
           if (seen.has(row.id)) continue
           seen.add(row.id)
-          yield* abort(row.id, true)
+          yield* collect(abort(row.id, true).pipe(Effect.asVoid))
         }
       }
       for (const id of members) {
         const worker = yield* tasks.get(id)
         for (const run of yield* tasks.runsFor(id)) {
           if (!RayaTask.pending(run)) continue
-          yield* open(worker.dir, input.halt(run.sessionID))
+          const halted = yield* Effect.exit(open(worker.dir, input.halt(run.sessionID)))
+          if (Exit.isFailure(halted)) {
+            failures.push(halted.cause)
+            continue
+          }
           const next = {
             ...run,
             status: "error" as const,
             blockedReason: "Stopped because the organization was archived.",
           }
-          yield* tasks.transition(run, next)
-          yield* schedule.settle(next)
-          if (reservations) {
-            const rows = yield* input.sessions.messages({ sessionID: run.sessionID })
-            const cost = rows.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
-            yield* reservations.settle(run.id, run.sessionID, cost).pipe(Effect.orDie)
-          }
+          yield* collect(
+            Effect.gen(function* () {
+              yield* tasks.transition(run, next)
+              yield* schedule.settle(next)
+              if (reservations) {
+                const rows = yield* input.sessions.messages({ sessionID: run.sessionID })
+                const cost = rows.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
+                yield* reservations.settle(run.id, run.sessionID, cost).pipe(Effect.orDie)
+              }
+            }),
+          )
         }
-        yield* queue.discard(id, "Stopped because the organization was archived.").pipe(Effect.orDie)
+        yield* collect(
+          queue.discard(id, "Stopped because the organization was archived.").pipe(Effect.orDie, Effect.asVoid),
+        )
         if ((yield* schedule.active(id)).length || (yield* inspect(input.storage, id)))
-          return yield* new RayaTask.GuardError({
-            message: "A worker start is still in progress. Retry organization archive.",
-          })
+          yield* collect(
+            Effect.fail(
+              new RayaTask.GuardError({
+                message: "A worker start is still in progress. Retry organization archive.",
+              }),
+            ),
+          )
+      }
+      const terminal = yield* Effect.promise(() => import("@/kilocode/interactive-terminal"))
+      for (const id of fenced) {
+        yield* collect(
+          Effect.gen(function* () {
+            const session = yield* database.db
+              .select({ directory: SessionTable.directory, workspace: SessionTable.workspace_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, id))
+              .get()
+            if (!session?.directory.trim())
+              return yield* new RayaTask.GuardError({
+                message: "A worker terminal has no persisted workspace context.",
+              })
+            yield* collect(
+              open(
+                session.directory,
+                Effect.tryPromise(() => terminal.InteractiveTerminal.stopSession(id)),
+              ),
+            )
+            yield* collect(pty.stop(id, session.directory, session.workspace ?? undefined))
+          }),
+        )
       }
       for (const id of members)
         if ((yield* errands.held(id)).length)
-          return yield* new RayaTask.GuardError({
-            message: "A worker still has outstanding delegated work. Retry organization archive.",
-          })
+          yield* collect(
+            Effect.fail(
+              new RayaTask.GuardError({
+                message: "A worker still has outstanding delegated work. Retry organization archive.",
+              }),
+            ),
+          )
+      if (failures.length) return yield* Effect.failCause(failures[0])
     })
 
     const recoverStops = Effect.fn("RayaTaskRunner.recoverStops")(function* () {
@@ -1467,6 +1504,7 @@ export namespace RayaTaskRunner {
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
     halt?: (sessionID: SessionID) => Effect.Effect<void>
+    pty?: PtyArchive.Interface
     contact?: { clock?: () => number; interval?: Duration.Input; batch?: number }
   }) {
     const runner = make(input)

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { eq, sql } from "drizzle-orm"
 import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { InstanceRef } from "@/effect/instance-ref"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -19,12 +20,19 @@ import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { Conflict, RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { PtyArchive } from "@/kilocode/pty/archive"
 import { claim } from "@/kilocode/task/claim"
 import { owner } from "@/kilocode/task/owner"
 import { SessionID } from "@/session/schema"
 import { InstanceStore } from "@/project/instance-store"
 import { Storage } from "@/storage/storage"
 import { tmpdir, withTestInstance } from "../../fixture/fixture"
+
+function layer() {
+  return LayerNode.compile(LayerNode.group([Database.node, PtyArchive.node]), [
+    [Database.node, Database.layerFromPath(":memory:")],
+  ])
+}
 
 function saved(database: Database.Interface, id: SessionID, dir: string) {
   return Effect.gen(function* () {
@@ -229,7 +237,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       expect(yield* database.db.get(sql`SELECT count(*) AS count FROM raya_routine_organization_revision`)).toEqual({
         count: 3,
       })
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -249,7 +257,7 @@ test("archive refuses a missing cancellation service even for paused workers", a
       expect((yield* organizations.get(item.id)).archived).toBe(false)
       expect(yield* organizations.pending()).toEqual([])
       expect((yield* tasks.get(worker.id)).enabled).toBe(false)
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -287,7 +295,7 @@ test("organization policy is bounded and clearing it is an explicit revisioned c
       expect(cleared).toMatchObject({ revision: 4 })
       expect(cleared.policy).toBeUndefined()
       expect((yield* RayaTaskOrganization.make(database, tasks, storage).get(item.id)).policy).toBeUndefined()
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -350,7 +358,7 @@ test("organization budget cannot undercut committed work and zero clears it", as
       const cleared = yield* organizations.update(item.id, { expectedRevision: 2, budget: 0 })
       expect(cleared).toMatchObject({ revision: 3 })
       expect(cleared.budget).toBeUndefined()
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -402,7 +410,7 @@ test("routine organizations reject invalid membership and supervisor graphs", as
         expect(Exit.isFailure(result)).toBe(true)
       }
       expect((yield* organizations.list()).items).toEqual([])
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -428,7 +436,7 @@ test("organization provisioning replays only the exact saved definition", async 
       expect(changed).toEqual(new Conflict({ message: "An organization already uses this ID with different details." }))
       expect(yield* restarted.get(id)).toEqual(created)
       expect((yield* restarted.list()).items.filter((item) => item.id === id)).toHaveLength(1)
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -464,7 +472,7 @@ test("organization usage retains removed and archived membership history", async
         .where(eq(Revision.organization_id, organization.id))
         .run()
       expect(yield* organizations.used("unused")).toEqual({ used: false, complete: false })
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -500,7 +508,7 @@ test("interrupted organization stop stays visible and fenced until a retry compl
       expect((yield* resumed.archive(item.id, { expectedRevision: 1 })).archived).toBe(true)
       expect(yield* resumed.pending()).toEqual([])
       expect(yield* resumed.stopped(worker.id)).toBe(true)
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -515,7 +523,13 @@ test("restart finishes a stopped scheduled worker after an in-flight start clear
         messages: () => Effect.die("unexpected session"),
         children: () => Effect.die("unexpected session"),
       }
-      const runner = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       const at = Date.now() + 60_000
       const worker = yield* runner.tasks.create({
         name: "Scheduled",
@@ -543,13 +557,19 @@ test("restart finishes a stopped scheduled worker after an in-flight start clear
       expect(yield* queue.pending(worker.id, 1)).toEqual([])
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(fiber)
-      const restarted = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const restarted = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       yield* restarted.recoverStops()
       expect((yield* organizations.get(item.id)).archived).toBe(true)
       expect((yield* restarted.tasks.get(worker.id)).enabled).toBe(false)
       expect(yield* restarted.tasks.runsFor(worker.id)).toEqual([])
       expect(Exit.isFailure(yield* restarted.fire(worker.id).pipe(Effect.exit))).toBe(true)
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -570,6 +590,7 @@ test("recovery stops later organizations when an earlier archive still has an in
           }
           const halted: string[] = []
           const runner = RayaTaskRunner.make({
+            pty: yield* PtyArchive.Service,
             storage,
             database,
             sessions,
@@ -624,7 +645,7 @@ test("recovery stops later organizations when an earlier archive still has an in
           expect((yield* runner.tasks.get(second.id)).enabled).toBe(false)
           expect((yield* runner.tasks.runsFor(second.id))[0]?.status).toBe("error")
           expect(halted).toEqual([sid])
-        }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+        }).pipe(Effect.provide(layer()), Effect.scoped),
       ),
   })
 })
@@ -649,6 +670,7 @@ test("routine stop recovery uses the booting workspace for its own worker", asyn
           }
           const halted: string[] = []
           const runner = RayaTaskRunner.make({
+            pty: yield* PtyArchive.Service,
             storage,
             database,
             sessions,
@@ -696,7 +718,7 @@ test("routine stop recovery uses the booting workspace for its own worker", asyn
           expect(halted).toEqual([dir])
           expect((yield* organizations.get(item.id)).archived).toBe(true)
           expect((yield* runner.tasks.runsFor(worker.id))[0]?.status).toBe("error")
-        }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+        }).pipe(Effect.provide(layer()), Effect.scoped),
       ),
   })
 })
@@ -713,6 +735,7 @@ test("archive retains a completed historical run whose persisted terminal contex
         children: () => Effect.succeed([]),
       }
       const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
         storage,
         database,
         sessions,
@@ -738,7 +761,7 @@ test("archive retains a completed historical run whose persisted terminal contex
       )
       expect((yield* organizations.get(item.id)).archived).toBe(false)
       expect((yield* runner.tasks.runsFor(worker.id))[0]?.status).toBe("complete")
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -753,7 +776,13 @@ test("archived organizations cannot restart recurring or event workers after rec
         messages: () => Effect.die("unexpected session"),
         children: () => Effect.die("unexpected session"),
       }
-      const runner = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       const cron = yield* runner.tasks.create({
         name: "Recurring",
         objective: "Work each minute",
@@ -777,7 +806,13 @@ test("archived organizations cannot restart recurring or event workers after rec
       })
       expect((yield* organizations.archive(item.id, { expectedRevision: 1 })).archived).toBe(true)
       expect(yield* queue.pending(cron.id, 1)).toEqual([])
-      const restarted = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const restarted = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       yield* restarted.recoverStops()
       yield* restarted.revive()
       yield* restarted.tick(at + 60_000)
@@ -788,7 +823,7 @@ test("archived organizations cannot restart recurring or event workers after rec
         expect(Exit.isFailure(yield* restarted.fire(worker.id).pipe(Effect.exit))).toBe(true)
       }
       expect(yield* queue.pending(cron.id, 1)).toEqual([])
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -803,7 +838,13 @@ test("an orphaned startup claim keeps archive visible until explicit recovery", 
         messages: () => Effect.die("unexpected session"),
         children: () => Effect.die("unexpected session"),
       }
-      const runner = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       const worker = yield* runner.tasks.create({ name: "Worker", objective: "Work", schedule: { kind: "manual" } })
       const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
       const item = yield* organizations.create({ name: "Team", members: [{ agentID: worker.id, role: "Worker" }] })
@@ -820,7 +861,13 @@ test("an orphaned startup claim keeps archive visible until explicit recovery", 
       expect(Exit.isFailure(yield* organizations.archive(item.id, { expectedRevision: 1 }).pipe(Effect.exit))).toBe(
         true,
       )
-      const restarted = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const restarted = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       expect(Exit.isFailure(yield* restarted.recoverStops().pipe(Effect.exit))).toBe(true)
       expect((yield* organizations.list()).items.map((entry) => entry.id)).toContain(item.id)
       expect(yield* organizations.stopped(worker.id)).toBe(true)
@@ -829,7 +876,7 @@ test("an orphaned startup claim keeps archive visible until explicit recovery", 
       yield* restarted.recoverStops()
       expect((yield* organizations.get(item.id)).archived).toBe(true)
       expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -855,7 +902,13 @@ test("failed session cancellation retains live delegation through archive retry"
             routed.push(input.directory)
           }).pipe(Effect.andThen(effect)),
       } as InstanceStore.Interface
-      const failed = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.die("halt failed") })
+      const failed = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.die("halt failed"),
+      })
       const organizations = RayaTaskOrganization.make(database, { ...tasks, stop: failed.stopMembers }, storage)
       const item = yield* organizations.create({
         name: "Team",
@@ -866,6 +919,7 @@ test("failed session cancellation retains live delegation through archive retry"
         delegations: [{ senderID: chief.id, recipientID: worker.id }],
       })
       const sid = SessionID.make("ses_archive_halt_failure")
+      yield* saved(database, sid, dir)
       yield* database.db
         .insert(Delegation)
         .values({
@@ -896,7 +950,13 @@ test("failed session cancellation retains live delegation through archive retry"
         "running",
       )
       expect((yield* organizations.get(item.id)).archived).toBe(false)
-      const resumed = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const resumed = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       const retry = RayaTaskOrganization.make(database, { ...tasks, stop: resumed.stopMembers }, storage)
       expect(
         (yield* retry
@@ -907,8 +967,79 @@ test("failed session cancellation retains live delegation through archive retry"
       expect((yield* database.db.select().from(Delegation).where(eq(Delegation.session_id, sid)).get())?.state).toBe(
         "cancelled",
       )
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
+})
+
+test("organization archive attempts later worker stops after an earlier halt fails", async () => {
+  await using dir = await tmpdir()
+  await withTestInstance({
+    directory: dir.path,
+    fn: () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const database = yield* Database.Service
+          const storage = memory()
+          const first = SessionID.make("ses_archive_first_failure")
+          const second = SessionID.make("ses_archive_second_stopped")
+          yield* saved(database, first, dir.path)
+          yield* saved(database, second, dir.path)
+          const halted: SessionID[] = []
+          const runner = RayaTaskRunner.make({
+            database,
+            storage,
+            pty: yield* PtyArchive.Service,
+            sessions: {
+              create: () => Effect.die("Archive started a session"),
+              get: () => Effect.die("Archive fetched a session"),
+              children: () => Effect.succeed([]),
+              messages: () => Effect.succeed([]),
+            },
+            halt: (id) =>
+              Effect.sync(() => halted.push(id)).pipe(
+                Effect.andThen(id === first ? Effect.die("First worker halt failed") : Effect.void),
+              ),
+          })
+          const workers = yield* Effect.forEach([first, second], (id) =>
+            Effect.gen(function* () {
+              const worker = yield* runner.tasks.create({
+                name: id,
+                objective: "Work",
+                dir: dir.path,
+                schedule: { kind: "manual" },
+              })
+              yield* runner.tasks.record({
+                id: `run_${id}`,
+                agentID: worker.id,
+                sessionID: id,
+                at: Date.now(),
+                status: "running",
+              })
+              return worker
+            }),
+          )
+          const organizations = RayaTaskOrganization.make(
+            database,
+            { ...runner.tasks, stop: runner.stopMembers },
+            storage,
+          )
+          const team = yield* organizations.create({
+            name: "Failure isolation",
+            members: workers.map((worker) => ({ agentID: worker.id, role: "Worker" })),
+          })
+          expect(
+            Exit.isFailure(
+              yield* organizations.archive(team.id, { expectedRevision: team.revision }).pipe(Effect.exit),
+            ),
+          ).toBe(true)
+          expect(halted).toEqual([first, second])
+          expect((yield* runner.tasks.runsFor(workers[0].id))[0]?.status).toBe("running")
+          expect((yield* runner.tasks.runsFor(workers[1].id))[0]?.status).toBe("error")
+          expect((yield* organizations.get(team.id)).archived).toBe(false)
+          for (const worker of workers) expect((yield* runner.tasks.get(worker.id)).enabled).toBe(false)
+        }).pipe(Effect.provide(layer()), Effect.scoped),
+      ),
+  })
 })
 
 test("organization stop does not launch another recipient's queued work", async () => {
@@ -922,7 +1053,13 @@ test("organization stop does not launch another recipient's queued work", async 
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       }
-      const runner = RayaTaskRunner.make({ storage, database, sessions, halt: () => Effect.void })
+      const runner = RayaTaskRunner.make({
+        pty: yield* PtyArchive.Service,
+        storage,
+        database,
+        sessions,
+        halt: () => Effect.void,
+      })
       const chief = yield* runner.tasks.create({ name: "Chief", objective: "Lead", schedule: { kind: "manual" } })
       const member = yield* runner.tasks.create({ name: "Member", objective: "Work", schedule: { kind: "manual" } })
       const outside = yield* runner.tasks.create({
@@ -995,7 +1132,7 @@ test("organization stop does not launch another recipient's queued work", async 
         (yield* database.db.select().from(Delegation).where(eq(Delegation.id, "rdl_unrelated_queued")).get())?.state,
       ).toBe("queued")
       expect(yield* runner.tasks.runsFor(outside.id)).toEqual([])
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -1054,7 +1191,7 @@ test("routine usage names every durable evidence domain without mutating it", as
         used: ["authority", "run", "memory", "archive", "organization", "queue", "delegation", "inbox"],
         unavailable: [],
       })
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
 
@@ -1091,6 +1228,6 @@ test("organization creation and worker removal share one deterministic mutation 
       expect(Exit.isFailure(removed)).toBe(true)
       expect(yield* organizations.hasActive(worker.id)).toBe(true)
       expect((yield* tasks.get(worker.id)).id).toBe(worker.id)
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })

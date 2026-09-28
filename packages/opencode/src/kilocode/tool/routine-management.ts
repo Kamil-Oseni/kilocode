@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util"
 import { Effect, Schema } from "effect"
 import { english } from "@opencode-ai/core/kilocode/schedule"
 import type { Database } from "@opencode-ai/core/database/database"
+import type { PtyArchive } from "@/kilocode/pty/archive"
 import { Destination, RayaContactOutbox } from "@/kilocode/contact/outbox"
 import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import { RayaTask } from "@/kilocode/task"
@@ -395,6 +396,7 @@ export function routineManagementTools(input: {
   database: Database.Interface
   storage: Storage.Interface
   sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
+  pty?: PtyArchive.Interface
 }) {
   const tasks = RayaTask.make({ storage: input.storage, database: input.database })
   const organizations = RayaTaskOrganization.make(input.database, tasks, input.storage)

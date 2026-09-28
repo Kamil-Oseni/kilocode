@@ -10,14 +10,20 @@ export function measure<T>(operation: (signal: AbortSignal) => Promise<T | undef
       if (settled) return
       settled = true
       clearTimeout(timer)
-      resolve({ status, elapsedMs: performance.now() - started, value })
+      const elapsed = performance.now() - started
+      const expired = status === "timeout" || elapsed >= timeout
+      resolve({ status: expired ? "timeout" : status, elapsedMs: elapsed, value: expired ? undefined : value })
+      if (expired) controller.abort(new Error("Installed diagnostic deadline exceeded"))
     }
-    const timer = setTimeout(() => {
-      finish("timeout")
-      controller.abort(new Error("Installed diagnostic deadline exceeded"))
-    }, timeout)
+    const timer = setTimeout(() => finish("timeout"), timeout)
     void Promise.resolve()
-      .then(() => operation(controller.signal))
+      .then(() => {
+        if (performance.now() - started >= timeout) {
+          finish("timeout")
+          return undefined
+        }
+        return operation(controller.signal)
+      })
       .then(
         (value) => finish(value === undefined ? "missing" : "ready", value),
         () => finish("failed"),

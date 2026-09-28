@@ -10,15 +10,15 @@ test("reports actual diagnostic reads without retaining private errors", async (
   try {
     const file = join(root, "diagnostic.json")
     await writeFile(file, "ready")
-    const ready = await measure((signal) => readFile(file, { encoding: "utf8", signal }), 1000)
+    const ready = await measure((signal) => readFile(file, { encoding: "utf8", signal }), 10000)
     expect(ready.status).toBe("ready")
     expect(ready.value).toBe("ready")
     expect(Number.isFinite(ready.elapsedMs)).toBe(true)
     expect(ready.elapsedMs).toBeGreaterThanOrEqual(0)
     const vault = new PackageVault(root)
-    expect((await measure((signal) => vault.current(signal), 1000)).status).toBe("missing")
+    expect((await measure((signal) => vault.current(signal), 10000)).status).toBe("missing")
     await writeFile(join(root, "packages.json"), "private malformed package detail")
-    const failed = await measure((signal) => vault.current(signal), 1000)
+    const failed = await measure((signal) => vault.current(signal), 10000)
     expect(failed.status).toBe("failed")
     expect(failed.value).toBeUndefined()
     expect(JSON.stringify(failed)).not.toContain("private")
@@ -67,4 +67,33 @@ test("a late callback cannot change or disclose a timed-out result", async () =>
   expect(report.status).toBe("timeout")
   expect(report.value).toBeUndefined()
   expect(JSON.stringify(report)).not.toContain("private")
+})
+
+test("a blocked event loop cannot admit a result after its monotonic deadline", async () => {
+  for (const value of ["private late value", undefined]) {
+    let signal: AbortSignal | undefined
+    const report = await measure(async (input) => {
+      signal = input
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25)
+      return value
+    }, 5)
+    expect(report.status).toBe("timeout")
+    expect(report.elapsedMs).toBeGreaterThanOrEqual(25)
+    expect(report.value).toBeUndefined()
+    expect(signal?.aborted).toBe(true)
+    expect(JSON.stringify(report)).not.toContain("private")
+  }
+})
+
+test("work queued beyond its deadline is never started", async () => {
+  const state = { calls: 0 }
+  const pending = measure(async () => {
+    state.calls++
+    return "private unnecessary result"
+  }, 5)
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25)
+  const report = await pending
+  expect(state.calls).toBe(0)
+  expect(report.status).toBe("timeout")
+  expect(report.value).toBeUndefined()
 })

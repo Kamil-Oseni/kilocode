@@ -19,6 +19,11 @@ import * as Scope from "effect/Scope"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import z from "zod"
+import { randomUUID } from "node:crypto"
+import { mkdir, rm, writeFile } from "node:fs/promises"
+import { Global } from "@opencode-ai/core/global"
+import { BackgroundProcessRunner } from "@/kilocode/background-process/runner"
+import { admit, assert } from "./lifecycle"
 
 export namespace InteractiveTerminal {
   const log = Log.create({ service: "interactive-terminal" })
@@ -123,6 +128,13 @@ export namespace InteractiveTerminal {
     chunk: string
     cursor: number
     resolve: (result: Result) => void
+    reject: (error: Error) => void
+    token: string
+    control: string
+    release: () => Promise<void>
+    exited: Promise<{ exitCode?: number; signal?: number | string }>
+    closing?: Promise<Result>
+    failed?: Error
     ready?: Promise<void>
     timer?: ReturnType<typeof setTimeout>
     data?: Disp
@@ -214,18 +226,6 @@ export namespace InteractiveTerminal {
     schedule(active)
   }
 
-  function gate(shell: string, command: string) {
-    const name = Shell.name(shell)
-    if (name === "cmd") return `pause >nul & ${command}`
-    if (Shell.ps(shell)) return `$null = [Console]::ReadKey($true); ${command}`
-    return `stty -echo; IFS= read -r __kilo_gate; stty echo; ${command}`
-  }
-
-  function release(shell: string) {
-    if (Shell.ps(shell) || Shell.name(shell) === "cmd") return " "
-    return "\r"
-  }
-
   function environment(input: NodeJS.ProcessEnv) {
     const env = modelEnv(input)
     env.TERM = "xterm-256color"
@@ -244,55 +244,94 @@ export namespace InteractiveTerminal {
     active: Active,
     input: { closedBy: ClosedBy; exitCode?: number; signal?: number | string; kill?: boolean; silent?: boolean },
   ) {
-    if (active.done) return active.result
-    active.done = true
-    if (active.timer) clearTimeout(active.timer)
-    active.timer = undefined
-    active.abort?.()
-    active.abort = undefined
-
-    if (input.kill) {
-      try {
-        active.proc.kill()
-      } catch (err) {
-        log.warn("failed to kill interactive terminal", { err, id: active.info.id })
+    if (active.closing) return active.closing
+    const task = (async () => {
+      if (input.kill && !active.failed) {
+        const deadline = performance.now() + 60_000
+        while (performance.now() < deadline) {
+          const ready = await BackgroundProcessRunner.ready(active.control, active.token).catch(
+            (err: NodeJS.ErrnoException) => {
+              if (err.code === "ENOENT") return undefined
+              throw err
+            },
+          )
+          if (ready) break
+          await Bun.sleep(50)
+        }
+        if (performance.now() >= deadline)
+          throw new Error("Terminal process ownership could not be verified; workspace activity remains blocked")
+        await writeFile(active.control, "stop", { mode: 0o600 })
       }
-    }
+      const timeout = AbortSignal.timeout(70_000)
+      const native = await Promise.race([
+        active.exited,
+        new Promise<never>((_, reject) =>
+          timeout.addEventListener(
+            "abort",
+            () => reject(new Error("Terminal descendants have not stopped; workspace activity remains blocked")),
+            { once: true },
+          ),
+        ),
+      ])
+      if (!(await BackgroundProcessRunner.drained(active.control, active.token)))
+        throw new Error("Terminal descendant drainage could not be verified; workspace activity remains blocked")
+      await active.release()
+      active.done = true
+      if (active.timer) clearTimeout(active.timer)
+      active.timer = undefined
+      active.abort?.()
+      active.abort = undefined
 
-    active.data?.dispose()
-    active.exit?.dispose()
-    active.data = undefined
-    active.exit = undefined
-    await active.ready
-    await flush(active)
+      active.data?.dispose()
+      active.exit?.dispose()
+      active.data = undefined
+      active.exit = undefined
+      await active.ready
+      await flush(active)
 
-    const now = Date.now()
-    active.info.status = "closed"
-    active.info.closedBy = input.closedBy
-    active.info.time.updated = now
-    active.info.time.ended = now
-    if (input.exitCode !== undefined) active.info.exitCode = input.exitCode
-    if (input.signal !== undefined) active.info.signal = String(input.signal)
-    state.terminals.delete(active.info.id)
+      const now = Date.now()
+      active.info.status = "closed"
+      active.info.closedBy = input.closedBy
+      active.info.time.updated = now
+      active.info.time.ended = now
+      if (native.exitCode !== undefined) active.info.exitCode = native.exitCode
+      if (native.signal !== undefined) active.info.signal = String(native.signal)
+      state.terminals.delete(active.info.id)
 
-    const result: Result = {
-      id: active.info.id,
-      output: clean(active.output),
-      exitCode: active.info.exitCode,
-      signal: active.info.signal,
-      closedBy: input.closedBy,
-    }
-    active.result = result
+      const result: Result = {
+        id: active.info.id,
+        output: clean(active.output),
+        exitCode: active.info.exitCode,
+        signal: active.info.signal,
+        closedBy: input.closedBy,
+      }
+      active.result = result
 
-    if (!input.silent) {
-      await publish(active, Event.Updated, { info: clone(active.info) })
-      await publish(active, Event.Deleted, {
-        terminalID: active.info.id,
-        sessionID: active.info.sessionID,
-      })
-    }
-    active.resolve(result)
-    return result
+      if (!input.silent) {
+        await publish(active, Event.Updated, { info: clone(active.info) })
+        await publish(active, Event.Deleted, {
+          terminalID: active.info.id,
+          sessionID: active.info.sessionID,
+        })
+      }
+      active.resolve(result)
+      await Promise.all(
+        Object.values(BackgroundProcessRunner.sidecars(active.control)).map((file) => rm(file, { force: true })),
+      )
+      await rm(active.control, { force: true })
+      await rm(`${active.control}.log`, { force: true })
+      return result
+    })()
+    active.closing = task
+    void task.catch((err: unknown) => {
+      const error = err instanceof Error ? err : new Error(String(err))
+      active.done = true
+      active.failed = error
+      active.closing = undefined
+      active.reject(error)
+      log.warn("terminal process drainage failed", { id: active.info.id, error: error.message })
+    })
+    return task
   }
 
   async function launch(state: State, input: RunInput) {
@@ -303,63 +342,105 @@ export namespace InteractiveTerminal {
     const cwd = path.resolve(state.dir, input.cwd ?? state.dir)
     const cols = Math.max(1, input.cols ?? DEFAULT_COLS)
     const rows = Math.max(1, input.rows ?? DEFAULT_ROWS)
-    const args = Shell.args(input.shell, gate(input.shell, input.command), cwd)
-    const { spawn } = await import("@opencode-ai/core/pty/driver")
-    const proc = spawn(input.shell, args, {
-      name: "xterm-256color",
-      cols,
-      rows,
+    const args = Shell.args(input.shell, input.command, cwd)
+    const token = randomUUID()
+    const directory = path.join(Global.Path.state, "interactive-terminal")
+    await mkdir(directory, { recursive: true, mode: 0o700 })
+    const control = path.join(directory, `${token}.control`)
+    const cmd = BackgroundProcessRunner.command({
+      token,
+      shell: input.shell,
+      args,
       cwd,
-      env: environment(input.env),
+      log: `${control}.log`,
+      control,
+      terminal: true,
+      command: input.command,
     })
-    const waiter = Promise.withResolvers<Result>()
-    const now = Date.now()
-    const active: Active = {
-      ctx: state.ctx,
-      info: {
-        id,
-        sessionID: input.sessionID,
-        pid: proc.pid,
-        command: input.command,
-        cwd,
-        description: input.description,
-        status: "running",
+    const { spawn } = await import("@opencode-ai/core/pty/driver")
+    const { active, announced, waiter } = await admit(state.ctx, input.sessionID, cwd, token, async (drained) => {
+      const proc = spawn(cmd[0], cmd.slice(1), {
+        name: "xterm-256color",
         cols,
         rows,
-        time: { started: now, updated: now },
-      },
-      proc,
-      output: "",
-      chunk: "",
-      cursor: 0,
-      resolve: waiter.resolve,
-      done: false,
-    }
-    state.terminals.set(id, active)
-    const announced = Promise.withResolvers<void>()
-    active.ready = announced.promise
-    active.data = proc.onData((data) => append(active, data))
-    active.exit = proc.onExit((event) => {
-      void finish(state, active, {
-        closedBy: "exit",
-        exitCode: event.exitCode,
-        signal: event.signal,
+        cwd,
+        env: environment(input.env),
       })
+      const waiter = Promise.withResolvers<Result>()
+      const exited = Promise.withResolvers<{ exitCode?: number; signal?: number | string }>()
+      const now = Date.now()
+      const active: Active = {
+        ctx: state.ctx,
+        info: {
+          id,
+          sessionID: input.sessionID,
+          pid: proc.pid,
+          command: input.command,
+          cwd,
+          description: input.description,
+          status: "running",
+          cols,
+          rows,
+          time: { started: now, updated: now },
+        },
+        proc,
+        output: "",
+        chunk: "",
+        cursor: 0,
+        resolve: waiter.resolve,
+        reject: waiter.reject,
+        token,
+        control,
+        release: drained,
+        exited: exited.promise,
+        done: false,
+      }
+      state.terminals.set(id, active)
+      const announced = Promise.withResolvers<void>()
+      active.ready = announced.promise
+      active.data = proc.onData((data) => append(active, data))
+      active.exit = proc.onExit((event) => {
+        exited.resolve(event)
+        void finish(state, active, {
+          closedBy: "exit",
+          exitCode: event.exitCode,
+          signal: event.signal,
+        }).catch((err: unknown) =>
+          log.warn("terminal completion failed", { id, error: err instanceof Error ? err.message : String(err) }),
+        )
+      })
+
+      if (input.abort) {
+        const abort = () => {
+          input.abort?.removeEventListener("abort", abort)
+          void finish(state, active, { closedBy: "abort", kill: true }).catch((err: unknown) =>
+            log.warn("terminal cancellation failed", { id, error: err instanceof Error ? err.message : String(err) }),
+          )
+        }
+        active.abort = () => input.abort?.removeEventListener("abort", abort)
+        if (input.abort.aborted) abort()
+        else input.abort.addEventListener("abort", abort, { once: true })
+      }
+
+      return { active, announced, waiter }
     })
 
-    if (input.abort) {
-      const abort = () => {
-        input.abort?.removeEventListener("abort", abort)
-        void finish(state, active, { closedBy: "abort", kill: true })
+    try {
+      const deadline = performance.now() + 60_000
+      while (true) {
+        const ready = await BackgroundProcessRunner.ready(control, token).catch((err: NodeJS.ErrnoException) => {
+          if (err.code === "ENOENT") return false
+          throw err
+        })
+        if (ready && (await BackgroundProcessRunner.contained(control, token))) break
+        if (performance.now() >= deadline || active.failed)
+          throw new Error("Terminal did not establish native containment; workspace activity remains blocked")
+        await Bun.sleep(50)
       }
-      active.abort = () => input.abort?.removeEventListener("abort", abort)
-      if (input.abort.aborted) abort()
-      else input.abort.addEventListener("abort", abort, { once: true })
+      await publish(active, Event.Updated, { info: clone(active.info) })
+    } finally {
+      announced.resolve()
     }
-
-    if (!active.done) active.proc.write(release(input.shell))
-    await publish(active, Event.Updated, { info: clone(active.info) })
-    announced.resolve()
     return waiter.promise
   }
 
@@ -434,7 +515,7 @@ export namespace InteractiveTerminal {
   export async function write(id: ID, data: string) {
     const current = await state()
     const active = current.terminals.get(id)
-    if (!active || active.done) return false
+    if (!active || active.done || active.closing) return false
     active.proc.write(data)
     return true
   }
@@ -442,7 +523,7 @@ export namespace InteractiveTerminal {
   export async function resize(id: ID, cols: number, rows: number) {
     const current = await state()
     const active = current.terminals.get(id)
-    if (!active || active.done) return false
+    if (!active || active.done || active.closing) return false
     const width = Math.max(1, cols)
     const height = Math.max(1, rows)
     active.proc.resize(width, height)
@@ -464,6 +545,12 @@ export namespace InteractiveTerminal {
   export async function stopSession(sessionID: SessionID) {
     const current = await state()
     const list = Array.from(current.terminals.values()).filter((active) => active.info.sessionID === sessionID)
+    await assert(
+      current.ctx,
+      sessionID,
+      list.map((active) => active.token),
+    )
     await Promise.all(list.map((active) => finish(current, active, { closedBy: "abort", kill: true })))
+    await assert(current.ctx, sessionID, [])
   }
 }

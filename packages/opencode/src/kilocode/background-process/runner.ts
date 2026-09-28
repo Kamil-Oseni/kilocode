@@ -1,18 +1,18 @@
 import { KiloPtySelfCommand } from "@/kilocode/pty/self-command"
-import { PowerShell } from "@/kilocode/shell/shell"
 import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
 import { isRecord } from "@/util/record"
-import { mkdir, open, readFile, rm } from "fs/promises"
+import { mkdir, open, readFile, readdir, rm, stat } from "fs/promises"
 import { spawn } from "child_process"
 import path from "path"
+import { Shell } from "@opencode-ai/core/shell"
+import * as WindowsTree from "./windows-tree"
+import { guardian } from "./windows-job"
 
 export namespace BackgroundProcessRunner {
   const MARKER = "__background-process-runner"
   const MODE = 0o600
   const MAX = 1024 * 1024
   const KEEP = 200 * 1024
-  const pwsh = PowerShell.pwsh() ?? "powershell.exe"
 
   export type Input = {
     token: string
@@ -21,10 +21,19 @@ export namespace BackgroundProcessRunner {
     cwd: string
     log: string
     control: string
+    terminal?: boolean
+    command?: string
   }
 
   export function sidecars(control: string) {
-    return { probe: `${control}.probe`, ack: `${control}.ack` }
+    return {
+      probe: `${control}.probe`,
+      ack: `${control}.ack`,
+      ready: `${control}.ready`,
+      go: `${control}.go`,
+      job: `${control}.job`,
+      drained: `${control}.drained`,
+    }
   }
 
   function encode(input: Input) {
@@ -51,6 +60,8 @@ export namespace BackgroundProcessRunner {
       cwd: value.cwd,
       log: value.log,
       control: value.control,
+      ...(value.terminal === true ? { terminal: true } : {}),
+      ...(typeof value.command === "string" ? { command: value.command } : {}),
     }
   }
 
@@ -99,52 +110,127 @@ export namespace BackgroundProcessRunner {
     }
   }
 
-  async function descendants(root: number, seen: Map<number, string>, active: boolean) {
-    const query =
-      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CreationDate | ConvertTo-Json -Compress"
-    const out = await Process.text([pwsh, "-NoProfile", "-NonInteractive", "-Command", query], {
-      nothrow: true,
-      abort: AbortSignal.timeout(2_000),
-      timeout: 2_000,
-    })
-    if (out.code !== 0 || !out.text.trim()) return seen
-    const value: unknown = JSON.parse(out.text)
-    const items = Array.isArray(value) ? value : [value]
-    const rows = items.flatMap((item) => {
-      if (
-        !isRecord(item) ||
-        typeof item.ProcessId !== "number" ||
-        typeof item.ParentProcessId !== "number" ||
-        typeof item.CreationDate !== "string"
-      )
-        return []
-      return [{ pid: item.ProcessId, parent: item.ParentProcessId, birth: item.CreationDate }]
-    })
-    const live = new Map(rows.map((item) => [item.pid, item.birth]))
-    const children = new Map<number, Array<{ pid: number; birth: string }>>()
-    for (const row of rows) {
-      children.set(row.parent, [...(children.get(row.parent) ?? []), { pid: row.pid, birth: row.birth }])
-    }
-    const result = new Map(Array.from(seen).filter(([pid, birth]) => live.get(pid) === birth))
-    const stack = [...(active ? [root] : []), ...result.keys()]
-    while (stack.length > 0) {
-      const pid = stack.pop()
-      if (!pid) continue
-      for (const child of children.get(pid) ?? []) {
-        if (result.has(child.pid)) continue
-        result.set(child.pid, child.birth)
-        stack.push(child.pid)
+  // Linux scan is diagnostic only; it does not authorize a containment receipt.
+  const GRACE = 1_000
+
+  async function bounded(file: string, max: number) {
+    const handle = await open(file, "r")
+    try {
+      const buffer = Buffer.alloc(max + 1)
+      let size = 0
+      while (size < buffer.length) {
+        const read = await handle.read(buffer, size, buffer.length - size, size)
+        if (!read.bytesRead) break
+        size += read.bytesRead
       }
+      if (size > max) throw new Error("Native process ownership response exceeded its limit")
+      return buffer.subarray(0, size)
+    } finally {
+      await handle.close()
     }
-    return result
   }
 
-  // Grace window after the leader exits during which we keep walking from its
-  // pid. A detached descendant spawned just before the leader died may not yet
-  // be visible in Win32_Process, and its ParentProcessId still points at the
-  // (now dead) leader, so seeding the walk from the leader's pid for a short
-  // window lets us capture it before concluding the tree is empty.
-  const GRACE = 1_000
+  export async function drained(control: string, token: string) {
+    const source = await bounded(sidecars(control).drained, 4096)
+    const value: unknown = JSON.parse(source.toString("utf8"))
+    return (
+      isRecord(value) &&
+      value.version === 2 &&
+      value.token === token &&
+      value.proof === "windows-job" &&
+      value.empty === true
+    )
+  }
+
+  export async function ready(control: string, token: string) {
+    const source = await bounded(sidecars(control).ready, 4096)
+    const value: unknown = JSON.parse(source.toString("utf8"))
+    return isRecord(value) && value.version === 1 && value.token === token
+  }
+
+  export async function contained(control: string, token: string) {
+    const source = await bounded(sidecars(control).job, 4096)
+    const value: unknown = JSON.parse(source.toString("utf8"))
+    return (
+      isRecord(value) &&
+      value.version === 2 &&
+      value.token === token &&
+      value.proof === "windows-job" &&
+      value.assigned === true
+    )
+  }
+
+  function gate(input: Input) {
+    if (input.command === undefined) return input.args
+    const file = sidecars(input.control).go
+    if (Shell.ps(input.shell))
+      return Shell.args(
+        input.shell,
+        `while (!(Test-Path -LiteralPath '${file.replaceAll("'", "''")}')) { Start-Sleep -Milliseconds 50 }; ${input.command}`,
+        input.cwd,
+      )
+    if (Shell.name(input.shell) === "cmd")
+      throw new Error("Native supervised command gating is unavailable for this shell")
+    return Shell.args(
+      input.shell,
+      `while [ ! -f '${file.replaceAll("'", "'\\''")}' ]; do sleep 0.05; done; ${input.command}`,
+      input.cwd,
+    )
+  }
+
+  async function linux(input: Input, root: number, seen: Map<number, string>, active: boolean) {
+    const entries = await readdir("/proc")
+    if (entries.length > 32_768) throw new Error("Native process ownership scan exceeded its limit")
+    const rows: { pid: number; parent: number; group: number; birth: string; owned: boolean }[] = []
+    for (const name of entries) {
+      if (!/^\d+$/.test(name)) continue
+      const file = `/proc/${name}`
+      const source = await bounded(`${file}/stat`, 8192)
+        .then((data) => data.toString("utf8"))
+        .catch((err: NodeJS.ErrnoException) => {
+          if (err.code === "ENOENT" || err.code === "ESRCH") return undefined
+          throw err
+        })
+      if (!source) continue
+      const match = source.match(/^\d+ \(.*\) ([A-Z]) (.*)$/)
+      if (!match) throw new Error("Native process ownership response was incomplete")
+      if (match[1] === "Z") continue
+      const fields = match[2].split(" ")
+      if (fields.length < 19) throw new Error("Native process ownership response was incomplete")
+      const meta = await stat(file).catch((err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT" || err.code === "ESRCH") return undefined
+        throw err
+      })
+      if (!meta) continue
+      const owned =
+        meta.uid === process.getuid?.() &&
+        (await bounded(`${file}/environ`, MAX).then(
+          (data) => {
+            if (data.length > MAX) throw new Error("Native process ownership environment exceeded its limit")
+            return data.includes(Buffer.from(`KILO_BACKGROUND_PROCESS_TOKEN=${input.token}\0`))
+          },
+          (err: NodeJS.ErrnoException) => {
+            if (err.code === "ENOENT" || err.code === "ESRCH") return false
+            throw err
+          },
+        ))
+      rows.push({ pid: Number(name), parent: Number(fields[0]), group: Number(fields[1]), birth: fields[18], owned })
+    }
+    const live = new Map(rows.map((row) => [row.pid, row.birth]))
+    const next = new Map([...seen].filter(([pid, birth]) => live.get(pid) === birth))
+    for (const row of rows)
+      if (row.pid !== process.pid && (row.owned || row.group === process.pid)) next.set(row.pid, row.birth)
+    const stack = [...(active ? [root] : []), ...next.keys()]
+    while (stack.length) {
+      const pid = stack.pop()
+      for (const row of rows) {
+        if (row.parent !== pid || row.pid === process.pid || next.has(row.pid)) continue
+        next.set(row.pid, row.birth)
+        stack.push(row.pid)
+      }
+    }
+    return next
+  }
 
   async function respond(control: string, signal: AbortSignal) {
     const files = sidecars(control)
@@ -159,6 +245,85 @@ export namespace BackgroundProcessRunner {
   }
 
   async function windows(input: Input, child: ReturnType<typeof spawn>, done: Promise<number>) {
+    if (!child.pid || input.command === undefined) throw new Error("Native containment requires a gated command")
+    const owners = await Promise.all([WindowsTree.sample(child.pid), WindowsTree.sample(process.pid)])
+    const root = owners[0]
+    const parent = owners[1]
+    if (root.status !== "owned" || !root.birth || parent.status !== "owned" || !parent.birth)
+      throw new Error("Native containment owner could not be verified")
+    const guard = guardian({
+      pid: child.pid,
+      birth: root.birth,
+      controller: process.pid,
+      parentBirth: parent.birth,
+      control: input.control,
+      token: input.token,
+    })
+    let failure: Error | undefined
+    let ended = false
+    // Consume diagnostics without retaining command paths or private ownership tokens.
+    guard.stderr?.resume()
+    let opened = false
+    const closed = new Promise<number>((resolve, reject) => {
+      guard.once("error", (err) => {
+        failure = err
+        reject(err)
+      })
+      guard.once("exit", (code) => {
+        ended = true
+        resolve(code ?? 1)
+      })
+    })
+    // Observe early rejection while assignment is pending without losing the original failure.
+    void closed.catch((err: Error) => {
+      failure = err
+    })
+    const abort = new AbortController()
+    const response = respond(input.control, abort.signal)
+    try {
+      const deadline = performance.now() + 60000
+      while (true) {
+        if (failure || ended) throw new Error("Native containment guardian exited before admission")
+        const source = await bounded(sidecars(input.control).job, 4096).catch((err: NodeJS.ErrnoException) => {
+          if (err.code === "ENOENT") return undefined
+          throw err
+        })
+        if (source) {
+          const value: unknown = JSON.parse(source.toString("utf8"))
+          if (
+            !isRecord(value) ||
+            value.version !== 2 ||
+            value.token !== input.token ||
+            value.proof !== "windows-job" ||
+            value.assigned !== true
+          )
+            throw new Error("Native containment receipt was invalid")
+          break
+        }
+        if (performance.now() >= deadline) throw new Error("Native containment guardian did not admit the command")
+        await Bun.sleep(50)
+      }
+      await Filesystem.writeJson(sidecars(input.control).ready, { version: 1, token: input.token }, MODE)
+      await Filesystem.write(sidecars(input.control).go, "go", MODE)
+      opened = true
+      if ((await closed) !== 0 || !(await drained(input.control, input.token)))
+        throw new Error("Native containment did not confirm actual drainage")
+      return await done
+    } catch (err) {
+      if (!opened) {
+        const result = await WindowsTree.terminate(child.pid, root.birth)
+        if (result === "unknown" || result === "owned")
+          throw new Error("Gated native command could not be safely terminated", { cause: err })
+      }
+      throw err
+    } finally {
+      abort.abort()
+      await response
+      if (!ended) guard.kill()
+    }
+  }
+
+  async function supervise(input: Input, child: ReturnType<typeof spawn>, done: Promise<number>) {
     const pid = child.pid
     if (!pid) throw new Error("Background process runner child did not provide a pid")
     let code: number | undefined
@@ -167,24 +332,8 @@ export namespace BackgroundProcessRunner {
     let seen = new Map<number, string>()
     const abort = new AbortController()
     const response = respond(input.control, abort.signal)
-    const stopped = Promise.withResolvers<number>()
-    const halt = (async () => {
-      while (!abort.signal.aborted) {
-        if (!(await Bun.file(input.control).exists())) {
-          await Bun.sleep(50)
-          continue
-        }
-        child.kill("SIGKILL")
-        await Promise.all(
-          [...seen.keys()].map((item) =>
-            Process.run(["taskkill", "/pid", String(item), "/f", "/t"], { nothrow: true }),
-          ),
-        )
-        await rm(input.control, { force: true })
-        stopped.resolve(await done)
-        return
-      }
-    })().catch(stopped.reject)
+    let stopping = false
+    let opened = false
     void done.then(
       (value) => {
         code = value
@@ -198,18 +347,23 @@ export namespace BackgroundProcessRunner {
       while (true) {
         if (failure) throw failure
         const active = code === undefined || (exited !== undefined && Date.now() - exited < GRACE)
-        const next = await Promise.race([
-          descendants(pid, seen, active).then((value) => ({ type: "scan" as const, value })),
-          stopped.promise.then((value) => ({ type: "stop" as const, value })),
-        ])
-        if (next.type === "stop") return next.value
-        seen = next.value
-        if (code !== undefined && !active && seen.size === 0) return code
+        seen = await linux(input, pid, seen, active)
+        if (!opened) {
+          if (code !== undefined) throw new Error("Native process owner exited before its birth could be verified")
+          await Filesystem.writeJson(sidecars(input.control).ready, { version: 1, token: input.token }, MODE)
+          await Filesystem.write(sidecars(input.control).go, "go", MODE)
+          opened = true
+        }
+        stopping ||= await Bun.file(input.control).exists()
+        if (stopping) throw new Error("Pinned descendant termination is unavailable on this platform")
+        if (code !== undefined && !active && seen.size === 0) {
+          return code
+        }
         await Bun.sleep(100)
       }
     } finally {
       abort.abort()
-      await Promise.all([response, halt])
+      await response
     }
   }
 
@@ -222,12 +376,16 @@ export namespace BackgroundProcessRunner {
       rm(input.control, { force: true }),
       rm(files.probe, { force: true }),
       rm(files.ack, { force: true }),
+      rm(files.drained, { force: true }),
+      rm(files.ready, { force: true }),
+      rm(files.go, { force: true }),
+      rm(files.job, { force: true }),
     ])
     const output = await writer(input)
-    const child = spawn(input.shell, input.args, {
+    const child = spawn(input.shell, gate(input), {
       cwd: input.cwd,
       env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: input.terminal ? "inherit" : ["ignore", "pipe", "pipe"],
       windowsHide: true,
     })
     child.stdout?.on("data", output.append)
@@ -236,12 +394,15 @@ export namespace BackgroundProcessRunner {
       child.once("error", reject)
       child.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)))
     })
+    let code: number
     try {
-      if (process.platform === "win32") return await windows(input, child, done)
-      return await done
+      if (process.platform !== "win32" && process.platform !== "linux")
+        throw new Error("Native process tree verification is unavailable on this platform")
+      code = process.platform === "win32" ? await windows(input, child, done) : await supervise(input, child, done)
     } finally {
       await output.close()
     }
+    return code
   }
 
   export async function maybe(argv = process.argv) {

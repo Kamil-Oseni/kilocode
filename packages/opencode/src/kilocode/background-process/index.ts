@@ -3,7 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Identifier } from "@/id/id"
-import { Instance, type InstanceContext } from "@/kilocode/instance"
+import { Instance, capture, type InstanceContext } from "@/kilocode/instance"
 import { KiloShutdown } from "@/kilocode/cli/shutdown"
 import { model as modelEnv } from "@/kilocode/process/env"
 import { SessionID } from "@/session/schema"
@@ -30,12 +30,14 @@ import net from "net"
 import path from "path"
 import z from "zod"
 import * as Ports from "./ports"
+import * as Lifecycle from "./lifecycle"
 
 export namespace BackgroundProcess {
   const log = Log.create({ service: "background-process" })
   const pwsh = PowerShell.pwsh() ?? "powershell.exe"
   const MAX = 200 * 1024
   const KILL_MS = 3_000
+  const DRAIN_MS = 70_000
   const READY_MS = 30_000
   const PUBLISH_MS = 500
   const PORT_START_MS = 500
@@ -165,9 +167,15 @@ export namespace BackgroundProcess {
     saving?: Promise<void>
     identity?: Promise<Probe>
     disposed?: boolean
+    drained?: boolean
+    origin?: SessionID
+    pending?: boolean
   }
 
   const Persisted = Schema.Struct({
+    version: Schema.optional(Schema.Literals([1, 2])),
+    origin: Schema.optional(SessionID),
+    dispatch: Schema.optional(Schema.Literals(["starting", "registered"])),
     scope: Schema.String,
     token: Schema.String,
     info: Info,
@@ -193,9 +201,13 @@ export namespace BackgroundProcess {
 
   type Probe = "owned" | "gone" | "foreign" | "unknown"
 
-  class StateService extends Context.Service<StateService, { readonly get: () => Effect.Effect<State> }>()(
-    "@kilocode/BackgroundProcess.State",
-  ) {}
+  class StateService extends Context.Service<
+    StateService,
+    {
+      readonly get: () => Effect.Effect<State>
+      readonly all: () => readonly State[]
+    }
+  >()("@kilocode/BackgroundProcess.State") {}
 
   function scoped(ctx: InstanceContext) {
     const root = ctx.project.id === ProjectV2.ID.global ? ctx.directory : ctx.project.worktree
@@ -278,7 +290,7 @@ export namespace BackgroundProcess {
 
   async function save(shared: Shared, active: Active, opts?: { create?: boolean; disposed?: boolean }) {
     const token = active.token
-    if ((!opts?.disposed && active.disposed) || active.info.lifetime !== "persistent" || !token) return
+    if ((!opts?.disposed && active.disposed) || !token) return
     if (!opts?.create && !active.saved) return
     if (opts?.create) active.saved = true
     const prev = active.saving?.catch(() => undefined) ?? Promise.resolve()
@@ -290,6 +302,9 @@ export namespace BackgroundProcess {
       await Filesystem.writeJson(
         manifest(shared, active.info.id),
         {
+          version: 2,
+          origin: active.origin,
+          dispatch: "registered",
           scope: shared.key,
           token,
           info,
@@ -309,7 +324,28 @@ export namespace BackgroundProcess {
     }
   }
 
+  async function drained(active: Active) {
+    if (active.drained) return true
+    if (!active.token || !active.control) return false
+    const empty = await BackgroundProcessRunner.drained(active.control, active.token).catch((err) => {
+      if (code(err) === "ENOENT") return false
+      throw err
+    })
+    if (!empty) return false
+    active.drained = true
+    return true
+  }
+
+  async function contained(active: Active) {
+    if (!active.token || !active.control) return false
+    return BackgroundProcessRunner.contained(active.control, active.token).catch((err) => {
+      if (code(err) === "ENOENT") return false
+      throw err
+    })
+  }
+
   async function forget(shared: Shared, active: Active) {
+    if (!(await drained(active))) throw new Error("Native process tree termination has no exact drain witness")
     active.saved = false
     await active.saving?.catch((err) =>
       log.warn("failed to finish persistent process metadata", { err, id: active.info.id }),
@@ -317,7 +353,17 @@ export namespace BackgroundProcess {
     const control = controlfile(shared, active.info.id)
     const files = BackgroundProcessRunner.sidecars(control)
     await Promise.all(
-      [manifest(shared, active.info.id), logfile(shared, active.info.id), control, files.probe, files.ack].map((file) =>
+      [
+        manifest(shared, active.info.id),
+        logfile(shared, active.info.id),
+        control,
+        files.probe,
+        files.ack,
+        files.drained,
+        files.ready,
+        files.go,
+        files.job,
+      ].map((file) =>
         rm(file, { force: true }).catch((err) =>
           log.warn("failed to remove persistent process artifact", { err, file }),
         ),
@@ -734,10 +780,9 @@ export namespace BackgroundProcess {
   }
 
   async function waitGone(active: Active) {
-    const end = Date.now() + KILL_MS
+    const end = Date.now() + DRAIN_MS
     while (Date.now() < end) {
-      const status = await probe(active)
-      if (status === "gone" || status === "foreign") return
+      if (await drained(active)) return
       await Bun.sleep(100)
     }
   }
@@ -745,42 +790,19 @@ export namespace BackgroundProcess {
   async function kill(active: Active) {
     const pid = active.info.pid
     if (!pid) return
-    if (active.info.lifetime === "persistent") {
+    if (active.token) {
+      if (await drained(active)) return
+      if (!active.pending && !(await contained(active)))
+        throw new Error("Native process containment is unverified; no legacy control was dispatched")
       const before = await probe(active)
-      if (before === "gone" || before === "foreign") return
       if (before !== "owned") throw new Error(`Cannot verify ownership of persistent process: ${active.info.id}`)
-      if (process.platform === "win32") {
-        if (!active.control) throw new Error(`Persistent process control path is missing: ${active.info.id}`)
-        await Filesystem.write(active.control, "stop", 0o600)
-        await waitGone(active)
-        const stopped = await probe(active)
-        if (stopped === "gone" || stopped === "foreign") return
-        if (stopped !== "owned")
-          throw new Error(`Cannot reverify persistent process before taskkill: ${active.info.id}`)
-        const out = await Process.run(["taskkill", "/pid", String(pid), "/f", "/t"], { nothrow: true })
-        await waitGone(active)
-        const forced = await probe(active)
-        if (forced === "gone" || forced === "foreign") return
-        if (out.code !== 0) throw new Error(`Verified persistent process could not be terminated: ${active.info.id}`)
-        throw new Error(`Persistent process runner did not stop safely: ${active.info.id}`)
-      }
-      try {
-        process.kill(-pid, "SIGTERM")
-      } catch (err) {
-        if ((await probe(active)) === "owned") throw err
-        return
-      }
+      if (!active.control) throw new Error(`Native process control path is missing: ${active.info.id}`)
+      await Filesystem.write(active.control, "stop", 0o600)
       await waitGone(active)
-      const force = await probe(active)
-      if (force === "owned") {
-        try {
-          process.kill(-pid, "SIGKILL")
-        } catch (err) {
-          if ((await probe(active)) === "owned") throw err
-        }
-      }
-      if (force === "unknown") throw new Error(`Cannot reverify persistent process before SIGKILL: ${active.info.id}`)
-      return
+      if (await drained(active)) return
+      // Keep the supervisor alive to prove descendant termination. A forced kill of
+      // the supervisor loses that evidence and must never authorize manifest removal.
+      throw new Error(`Native process tree termination remains unconfirmed: ${active.info.id}`)
     }
     if (active.proc ? stopped(active.proc) : !alive(pid)) return
     if (process.platform === "win32") {
@@ -831,9 +853,9 @@ export namespace BackgroundProcess {
       active.info.time.updated = Date.now()
       if (!opts?.silent) publish(active)
       await kill(active)
-      if (active.info.lifetime === "persistent") await output(active)
+      if (active.token) await output(active)
       if (!terminal(active.info.status)) exited(active, active.proc?.exitCode ?? null, active.proc?.signalCode ?? null)
-      if (active.info.lifetime === "persistent") await forget(state.shared, active)
+      if (active.token) await forget(state.shared, active)
     }
     if (!opts?.remove) return
     active.disposed = true
@@ -843,7 +865,7 @@ export namespace BackgroundProcess {
     if (active.watch) clearTimeout(active.watch)
     active.resolve?.(false)
     active.resolve = undefined
-    if (active.info.lifetime === "persistent") await forget(state.shared, active)
+    if (active.token) await forget(state.shared, active)
     if (opts.silent) return
     await Instance.restore(active.ctx, () =>
       Bus.publish(active.ctx, Event.Deleted, {
@@ -881,7 +903,7 @@ export namespace BackgroundProcess {
       void output(active)
         .then(async () => {
           const status = await probe(active)
-          if (status === "owned" || status === "unknown") {
+          if (!(await drained(active))) {
             if (status === "unknown") log.warn("failed to verify persistent process", { id: active.info.id })
             watch(shared, active)
             return
@@ -897,10 +919,19 @@ export namespace BackgroundProcess {
   }
 
   async function verify(active: Active) {
-    const end = Date.now() + 2_000
+    const end = Date.now() + 60_000
     while (Date.now() < end) {
-      const status = await probe(active)
-      if (status === "owned") return
+      const initialized =
+        active.control && active.token
+          ? await BackgroundProcessRunner.ready(active.control, active.token).catch((err) => {
+              if (code(err) === "ENOENT") return false
+              throw err
+            })
+          : false
+      if (initialized && (await contained(active)) && (await probe(active)) === "owned") {
+        active.pending = false
+        return
+      }
       if (active.proc && stopped(active.proc)) break
       await Bun.sleep(50)
     }
@@ -908,35 +939,11 @@ export namespace BackgroundProcess {
   }
 
   async function rollback(active: Active) {
-    const pid = active.info.pid
-    if (!pid) return true
-    const before = await probe(active)
-    if (before === "gone" || before === "foreign") return true
-    if (before === "unknown" && (!active.proc || stopped(active.proc))) return false
-    if (process.platform === "win32") {
-      if (active.control) {
-        await Filesystem.write(active.control, "stop", 0o600)
-      } else {
-        const out = await Process.run(["taskkill", "/pid", String(pid), "/f", "/t"], { nothrow: true })
-        if (out.code !== 0 && (await probe(active)) === "owned") return false
-      }
-    } else {
-      try {
-        process.kill(-pid, "SIGKILL")
-      } catch (err) {
-        if ((await probe(active)) === "owned") throw err
-      }
-    }
-    const end = Date.now() + KILL_MS
-    while (Date.now() < end) {
-      const status = await probe(active)
-      if (status === "gone" || status === "foreign") return true
-      await Bun.sleep(100)
-    }
-    return false
+    if (!(await drained(active))) await kill(active)
+    return drained(active)
   }
 
-  async function launch(state: State, input: StartInput, id = ID.ascending()) {
+  async function launch(state: State, input: StartInput, id = ID.ascending(), origin = input.sessionID) {
     const sh = Shell.acceptable()
     const cwd = path.resolve(state.dir, input.cwd ?? state.dir)
     const readyPattern = pattern(input.ready?.pattern)
@@ -946,9 +953,9 @@ export namespace BackgroundProcess {
     const args = Shell.args(sh, input.command, cwd)
     const lifetime = input.lifetime ?? "session"
     const start = { ...input, cwd, lifetime }
-    const token = lifetime === "persistent" ? randomUUID() : undefined
-    const logpath = lifetime === "persistent" ? logfile(state.shared, id) : undefined
-    const control = lifetime === "persistent" ? controlfile(state.shared, id) : undefined
+    const token = randomUUID()
+    const logpath = logfile(state.shared, id)
+    const control = controlfile(state.shared, id)
     if (logpath) {
       await secure(state.shared)
       if (!(await claim(state.shared)))
@@ -957,8 +964,42 @@ export namespace BackgroundProcess {
     }
     const cmd =
       logpath && token && control
-        ? BackgroundProcessRunner.command({ token, shell: sh, args, cwd, log: logpath, control })
+        ? BackgroundProcessRunner.command({
+            token,
+            shell: sh,
+            args,
+            cwd,
+            log: logpath,
+            control,
+            command: input.command,
+          })
         : [sh, ...args]
+    const started = Date.now()
+    await Filesystem.writeJson(
+      manifest(state.shared, id),
+      {
+        version: 2,
+        origin,
+        dispatch: "starting",
+        scope: state.shared.key,
+        token,
+        start,
+        info: {
+          id,
+          sessionID: input.sessionID,
+          command: input.command,
+          cwd,
+          description: input.description,
+          ports: [],
+          status: "starting",
+          lifetime,
+          ready: false,
+          output: "",
+          time: { started, updated: started },
+        },
+      } satisfies Persisted,
+      0o600,
+    )
     const proc = await Promise.resolve()
       .then(() =>
         spawn(cmd[0], cmd.slice(1), {
@@ -972,11 +1013,14 @@ export namespace BackgroundProcess {
       .catch(async (err) => {
         if (logpath) await rm(logpath, { force: true })
         if (control) await rm(control, { force: true })
+        await rm(manifest(state.shared, id), { force: true })
         throw err
       })
     const now = Date.now()
     const active: Active = {
       ctx: state.ctx,
+      origin,
+      pending: true,
       info: {
         id,
         sessionID: input.sessionID,
@@ -1000,7 +1044,7 @@ export namespace BackgroundProcess {
       log: logpath,
       control,
       token,
-      shared: lifetime === "persistent" ? state.shared : undefined,
+      shared: state.shared,
       offset: 0,
     }
     const processes = owner(state, lifetime)
@@ -1010,14 +1054,9 @@ export namespace BackgroundProcess {
     proc.once("error", (err) => failed(active, err))
     proc.once("exit", (code, signal) => {
       if (processes.get(id) !== active || active.disposed) return
-      if (lifetime !== "persistent") {
-        exited(active, code, signal)
-        return
-      }
       void output(active)
         .then(async () => {
-          const status = await probe(active)
-          if (status === "owned" || status === "unknown") {
+          if (!(await drained(active))) {
             watch(state.shared, active)
             return
           }
@@ -1027,13 +1066,11 @@ export namespace BackgroundProcess {
         .catch((err) => log.warn("failed to finalize persistent process", { err, id }))
     })
     try {
-      if (lifetime === "persistent") {
-        await verify(active)
-        await save(state.shared, active, { create: true })
-        proc.unref()
-        await output(active)
-        watch(state.shared, active)
-      }
+      await verify(active)
+      await save(state.shared, active, { create: true })
+      if (lifetime === "persistent") proc.unref()
+      await output(active)
+      watch(state.shared, active)
       publish(active)
       poll(active, PORT_START_MS)
       if (input.ready) await wait(active, input.ready)
@@ -1048,7 +1085,7 @@ export namespace BackgroundProcess {
         log.error("failed to roll back persistent process", { cause, id })
         return false
       })
-      if (lifetime === "persistent" && !stopped) {
+      if (!stopped) {
         active.disposed = false
         processes.set(id, active)
         const saved = await save(state.shared, active, { create: true })
@@ -1058,24 +1095,13 @@ export namespace BackgroundProcess {
             return false
           })
         if (!saved) recover(state.shared, active)
-        proc.unref()
+        if (lifetime === "persistent") proc.unref()
         publish(active)
         watch(state.shared, active)
       }
-      if (lifetime === "persistent" && stopped) await forget(state.shared, active)
+      if (stopped) await forget(state.shared, active)
       throw err
     }
-  }
-
-  async function cleanup(shared: Shared, file: string, name: string) {
-    const id = name.endsWith(".json") ? name.slice(0, -5) : ""
-    const control = path.join(root(shared), `${id}.stop`)
-    const sidecars = BackgroundProcessRunner.sidecars(control)
-    const files = [
-      file,
-      ...(id.startsWith("bgp") ? [path.join(logroot(shared), `${id}.log`), control, sidecars.probe, sidecars.ack] : []),
-    ]
-    await Promise.all(files.map((item) => rm(item, { force: true })))
   }
 
   async function records(state: State) {
@@ -1096,14 +1122,21 @@ export namespace BackgroundProcess {
           log.warn("failed to read persistent process metadata", { err, file })
           return undefined
         })
-      if (!record) {
-        await cleanup(shared, file, name)
-        continue
-      }
-      if (record.scope !== shared.key || record.info.lifetime !== "persistent" || name !== `${record.info.id}.json`) {
-        await cleanup(shared, file, name)
-        continue
-      }
+      // Unreadable or inconsistent ownership is evidence, not disposable cache.
+      if (!record) continue
+      if (record.scope !== shared.key || name !== `${record.info.id}.json`) continue
+      if (record.dispatch === "starting" || !record.info.pid) continue
+      // Ordinary lifetimes retain their verified tree witness after abrupt backend loss,
+      // but only explicitly persistent processes may be adopted into a new backend.
+      if (record.info.lifetime !== "persistent") continue
+      const allowed = await Promise.all([
+        Lifecycle.allowed(record.origin ?? record.info.sessionID),
+        Lifecycle.allowed(record.info.sessionID),
+      ]).then(
+        () => true,
+        () => false,
+      )
+      if (!allowed) continue
       if (shared.processes.has(record.info.id)) continue
       const active: Active = {
         ctx: state.ctx,
@@ -1113,12 +1146,14 @@ export namespace BackgroundProcess {
         log: logfile(shared, record.info.id),
         control: controlfile(shared, record.info.id),
         token: record.token,
+        origin: record.origin ?? (record.info.lifetime === "persistent" ? record.info.sessionID : undefined),
         shared,
         offset: 0,
         saved: true,
       }
       active.info.output = ""
       active.info.ports = []
+      if (!(await contained(active)) && !(await drained(active))) continue
       const status = await probe(active)
       if (shared.processes.has(active.info.id)) continue
       if (status === "unknown") {
@@ -1126,7 +1161,7 @@ export namespace BackgroundProcess {
         continue
       }
       if (status !== "owned") {
-        await cleanup(shared, file, name)
+        if (await drained(active)) await forget(shared, active)
         continue
       }
       if (process.platform !== "win32") {
@@ -1153,12 +1188,16 @@ export namespace BackgroundProcess {
     StateService,
     Effect.gen(function* () {
       const shared = new Map<string, Shared>()
+      const instances = new Set<State>()
+      const scopes = new Map<string, State>()
       const ref = yield* InstanceState.make(
         Effect.fn("BackgroundProcess.state")(function* (ctx) {
           const scope = scoped(ctx)
           const current = shared.get(scope.key) ?? { ...scope, processes: new Map<ID, Active>() }
           shared.set(scope.key, current)
           const state: State = { ctx, dir: ctx.directory, processes: new Map(), shared: current }
+          instances.add(state)
+          scopes.set(scope.key, state)
           yield* Effect.promise(() => adopt(state))
           yield* Effect.addFinalizer(() =>
             Effect.promise(async () => {
@@ -1168,6 +1207,7 @@ export namespace BackgroundProcess {
                 ),
               )
               state.processes.clear()
+              instances.delete(state)
             }),
           )
           return state
@@ -1195,9 +1235,13 @@ export namespace BackgroundProcess {
               .catch((err) => log.warn("failed to release persistent process scope", { err, scope: current.key }))
           }
           shared.clear()
+          scopes.clear()
         }),
       )
-      return StateService.of({ get: () => InstanceState.get(ref) })
+      return StateService.of({
+        get: () => InstanceState.get(ref),
+        all: () => [...new Set([...instances, ...scopes.values()])],
+      })
     }),
   )
 
@@ -1221,7 +1265,13 @@ export namespace BackgroundProcess {
   }
 
   export async function start(input: StartInput) {
-    return launch(await state(), input)
+    const ctx = Instance.current
+    return Lifecycle.locked(() =>
+      Instance.restore(ctx, async () => {
+        await Lifecycle.allowed(input.sessionID)
+        return launch(await state(), input)
+      }),
+    )
   }
 
   export async function list(input?: { sessionID?: SessionID }) {
@@ -1258,13 +1308,195 @@ export namespace BackgroundProcess {
   }
 
   export async function restart(id: ID) {
-    const current = await state()
-    if (!find(current, id)) await adopt(current)
-    const active = find(current, id)
-    if (!active) return
-    const input = active.start
-    await terminate(current, active, { remove: true })
-    return launch(current, input, id)
+    const ctx = Instance.current
+    return Lifecycle.locked(() =>
+      Instance.restore(ctx, async () => {
+        const scope = { ...scoped(ctx), processes: new Map<ID, Active>() }
+        const saved = await readFile(manifest(scope, id), "utf8")
+          .then((text) => Schema.decodeUnknownSync(Persisted)(JSON.parse(text)))
+          .catch((err) => {
+            if (code(err) === "ENOENT") return undefined
+            throw err
+          })
+        if (saved) {
+          if (saved.info.id !== id || saved.scope !== scope.key)
+            throw new Error("Process restart ownership is inconsistent")
+          if (!saved.origin && saved.info.lifetime !== "persistent")
+            throw new Error("Process restart original ownership is uncertain")
+          await Lifecycle.allowed(saved.origin ?? saved.info.sessionID)
+          await Lifecycle.allowed(saved.info.sessionID)
+          if (saved.dispatch === "starting" || !saved.info.pid)
+            throw new Error("Process restart dispatch has an unknown outcome")
+          const proof: Active = {
+            ctx,
+            info: saved.info,
+            start: saved.start,
+            token: saved.token,
+            control: controlfile(scope, id),
+          }
+          if (!(await contained(proof)) && !(await drained(proof)))
+            throw new Error("Process restart containment is unverified")
+        }
+        const current = await state()
+        if (!find(current, id)) await adopt(current)
+        const active = find(current, id)
+        if (!active) return
+        if (!active.origin && active.info.lifetime !== "persistent")
+          throw new Error("Process restart original ownership is uncertain")
+        const origin = active.origin ?? active.info.sessionID
+        await Lifecycle.allowed(origin)
+        await Lifecycle.allowed(active.start.sessionID)
+        const input = active.start
+        await terminate(current, active, { remove: true })
+        return launch(current, input, id, origin)
+      }),
+    )
+  }
+
+  /** Archive alone revokes every lifetime, including durable processes from completed worker sessions. */
+  export async function archive(organization: string, sessions: readonly SessionID[], members: readonly string[] = []) {
+    const ctx = capture()
+    return Lifecycle.locked(async () => {
+      const lineage = await Lifecycle.expand(members, sessions)
+      await Lifecycle.mark(organization, lineage)
+      const instances = await runtime.runPromise((svc) => Effect.succeed(svc.all()))
+      const fallback: State | undefined = ctx
+        ? {
+            ctx,
+            dir: ctx.directory,
+            processes: new Map(),
+            shared: { ...scoped(ctx), processes: new Map() },
+          }
+        : undefined
+      const ids = new Set(lineage)
+      const seen = new Set<ID>()
+      for (const item of instances)
+        for (const active of values(item)) {
+          if (!active.origin && active.info.lifetime !== "persistent")
+            throw new Error("Ordinary process original ownership is uncertain")
+          if (!ids.has(active.info.sessionID) && !(active.origin && ids.has(active.origin))) continue
+          if (seen.has(active.info.id)) continue
+          await Lifecycle.witness(active.origin ?? active.info.sessionID)
+          seen.add(active.info.id)
+          if (!active.token) throw new Error("Ordinary process descendants have no verified termination witness")
+          if (!(await contained(active)) && !(await drained(active)))
+            throw new Error("Organization process containment is unverified")
+          if (active.token) {
+            const before = await probe(active)
+            if (before !== "owned" && !(await drained(active)))
+              throw new Error("Organization process ownership is uncertain")
+          }
+          await terminate(item, active, { remove: true, silent: true })
+          if (active.token) {
+            if (!(await drained(active))) throw new Error("Organization process termination is not confirmed")
+          } else if (active.info.pid && alive(active.info.pid))
+            throw new Error("Organization process termination is not confirmed")
+        }
+      const base = path.join(Global.Path.state, "background-process")
+      const scopes = await readdir(base)
+      for (const scope of scopes.filter((item) => item.startsWith("scope-"))) {
+        const dir = path.join(base, scope)
+        for (const name of (await readdir(dir)).filter((item) => item.endsWith(".json"))) {
+          const raw = await readFile(path.join(dir, name), "utf8")
+          const record = Schema.decodeUnknownSync(Persisted)(JSON.parse(raw))
+          if (!record.origin && record.info.lifetime !== "persistent")
+            throw new Error("Ordinary process original ownership is uncertain")
+          if (!ids.has(record.info.sessionID) && !(record.origin && ids.has(record.origin))) continue
+          await Lifecycle.witness(record.origin ?? record.info.sessionID)
+          if (record.dispatch === "starting" || !record.info.pid)
+            throw new Error("Organization native process dispatch has an unknown outcome")
+          if (record.info.id !== name.slice(0, -5))
+            throw new Error("Organization process manifest identity is inconsistent")
+          const current = instances.find((item) => item.shared.dir === scope) ?? instances[0] ?? fallback
+          if (!current) throw new Error("Organization process workspace is unavailable")
+          const existing = instances.find((item) => item.shared.dir === scope)?.shared
+          const shared: Shared = existing ?? { key: record.scope, dir: scope, processes: new Map() }
+          if (shared.key !== record.scope) throw new Error("Organization process manifest scope is inconsistent")
+          if (!(await claim(shared))) throw new Error("Organization processes are managed by another backend")
+          try {
+            const active: Active = {
+              ctx: current.ctx,
+              info: record.info,
+              start: record.start,
+              token: record.token,
+              origin: record.origin ?? record.info.sessionID,
+              shared,
+              saved: true,
+              log: logfile(shared, record.info.id),
+              control: controlfile(shared, record.info.id),
+            }
+            const status = await probe(active)
+            if (!(await contained(active)) && !(await drained(active)))
+              throw new Error("Organization process containment is unverified")
+            if (status !== "owned" && !(await drained(active)))
+              throw new Error("Organization process ownership is uncertain")
+            if (status === "owned") await terminate({ ...current, shared }, active, { remove: true, silent: true })
+            if (status !== "owned") await forget(shared, active)
+            if (!(await drained(active))) throw new Error("Organization process termination is not confirmed")
+            if (await Bun.file(path.join(dir, name)).exists())
+              throw new Error("Organization persistent process manifest removal is not confirmed")
+          } finally {
+            if (!existing) await shared.lease?.release()
+          }
+        }
+      }
+    })
+  }
+
+  /** Stable lifecycle evidence for review/archive callers; private commands, logs, and control tokens stay local. */
+  export async function occupancy(sessions: readonly SessionID[]) {
+    const ctx = Instance.current
+    const ids = new Set(sessions)
+    const base = path.join(Global.Path.state, "background-process")
+    const scopes = await readdir(base).catch((err) => {
+      if (code(err) === "ENOENT") return []
+      throw err
+    })
+    const result: {
+      version: 1
+      id: ID
+      sessionID: SessionID
+      origin?: SessionID
+      pid?: number
+      lifetime: Lifetime
+      startedAt: number
+      ownership: "owned" | "gone" | "unknown"
+    }[] = []
+    for (const scope of scopes.filter((item) => item.startsWith("scope-"))) {
+      for (const name of (await readdir(path.join(base, scope))).filter((item) => item.endsWith(".json"))) {
+        const record = Schema.decodeUnknownSync(Persisted)(
+          JSON.parse(await readFile(path.join(base, scope, name), "utf8")),
+        )
+        if (!record.origin && record.info.lifetime !== "persistent")
+          throw new Error("Ordinary process original ownership is uncertain")
+        if (!ids.has(record.info.sessionID) && !(record.origin && ids.has(record.origin))) continue
+        if (name !== `${record.info.id}.json`) throw new Error("Process occupancy manifest identity is inconsistent")
+        const shared: Shared = { key: record.scope, dir: scope, processes: new Map() }
+        const state: Active = {
+          ctx,
+          info: record.info,
+          start: record.start,
+          token: record.token,
+          control: controlfile(shared, record.info.id),
+        }
+        const status = record.dispatch === "starting" || !record.info.pid ? "unknown" : await probe(state)
+        result.push({
+          version: 1,
+          id: record.info.id,
+          sessionID: record.info.sessionID,
+          origin: record.origin,
+          pid: record.info.pid,
+          lifetime: record.info.lifetime,
+          startedAt: record.info.time.started,
+          ownership: (await drained(state))
+            ? "gone"
+            : status === "owned" && (await contained(state))
+              ? "owned"
+              : "unknown",
+        })
+      }
+    }
+    return result
   }
 
   export async function stopSession(sessionID: SessionID) {
@@ -1279,6 +1511,7 @@ export namespace BackgroundProcess {
           active.start.lifetime = "session"
           delete active.start.parentID
           active.info.time.updated = Date.now()
+          await save(current.shared, active)
           publish(active)
           return
         }

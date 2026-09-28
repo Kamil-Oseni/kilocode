@@ -42,6 +42,10 @@ import { RayaTaskOrganization } from "./organization"
 import { make as reservation } from "./reservation"
 import { RayaContactMessenger } from "@/kilocode/contact/raya"
 import * as Log from "@opencode-ai/core/util/log"
+import { BackgroundProcess } from "@/kilocode/background-process"
+import { lineage } from "@/kilocode/background-process/lifecycle"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 
 const WAIT = "waiting on you"
 
@@ -918,7 +922,10 @@ export namespace RayaTaskRunner {
       return record
     })
 
-    const stopMembers = Effect.fn("RayaTaskRunner.stopMembers")(function* (_id: string, members: readonly string[]) {
+    const stopMembers = Effect.fn("RayaTaskRunner.stopMembers")(function* (
+      organization: string,
+      members: readonly string[],
+    ) {
       if (!input.halt || !input.database || !errands || !schedule)
         return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
       const queue = RayaTaskQueue.make(input.database)
@@ -926,6 +933,28 @@ export namespace RayaTaskRunner {
       for (const id of members) {
         const worker = yield* tasks.get(id)
         if (worker.enabled) yield* tasks.update(id, { enabled: false })
+      }
+      const history = yield* Effect.forEach(members, (id) => tasks.runsFor(id), { concurrency: 1 })
+      const sessions = yield* lineage(
+        input.database,
+        members,
+        history.flat().map((run) => run.sessionID),
+      )
+      yield* Effect.promise(() => BackgroundProcess.archive(organization, sessions, members))
+      const fenced = yield* lineage(input.database, members, sessions)
+      const terminal = yield* Effect.promise(() => import("@/kilocode/interactive-terminal"))
+      for (const id of fenced) {
+        const session = yield* input.database.db
+          .select({ directory: SessionTable.directory })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, id))
+          .get()
+        if (!session?.directory.trim())
+          return yield* new RayaTask.GuardError({ message: "A worker terminal has no persisted workspace context." })
+        yield* open(
+          session.directory,
+          Effect.tryPromise(() => terminal.InteractiveTerminal.stopSession(id)),
+        )
       }
       for (const id of members) {
         for (const row of yield* errands.held(id)) {

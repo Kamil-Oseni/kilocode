@@ -54,7 +54,7 @@ function started(sessionID: SessionID, cwd?: string, ctx?: InstanceContext) {
     state.timer = setTimeout(() => {
       state.off?.()
       reject(new Error("timed out waiting for interactive terminal"))
-    }, 5_000)
+    }, 65_000)
     state.off = Instance.restore(ctx ?? capture()!, () =>
       Bus.subscribe(InteractiveTerminal.Event.Updated, (event) => {
         const info = event.properties.info

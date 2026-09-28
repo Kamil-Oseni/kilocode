@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 16:02 EDT - media source pushed; production playback gate open
+
+Source `f95428236f` is committed and pushed through the normal 29-task cached TypeScript gate and cached JetBrains gate. The full CGO-zero Go suite, Go vet, formatting, diff check and 484-file Markdown table guard pass; the final Qwen WebSocket journey additionally proves completed playback flush does not issue another provider cancellation. The installed desktop snapshot remains `7.4.23-snapshot+6da111269a.kamil-oseni.1790623040925`; this external Go service is not deployed by that extension installer. Docker/CGO deployment, exact browser playback receipts and sealed final audio boundaries remain open, so this is source evidence only. Next work is the owned final-boundary/renderer receipt contract, followed by the OpenAI MF adapter and real SFU/acoustic verification.
+
 ## ChatGPT 2026-09-28 15:58 EDT - media attribution and interruption fences checked
 
 The Go media scheduler now owns ingress slices, emits fixed 20 ms frames with exact per-item epoch/sequence/original sample ranges, and leaves silence unattributed. Ingress and scheduled PCM share five tick slots (100 ms), with at most one additional output frame (20 ms). Partial/interleaved chunks reserve padded tick slots; consumption releases them incrementally. Oversized bursts, capacity exhaustion, invalid input and slow-consumer shedding are explicit refusals/loss counters. This is a bounded scheduler allowance, not a measured acoustic latency result or a guarantee that every vendor burst fits. Cancellation clears ingress, scheduled PCM and output before acknowledging the local flush; item tombstones and epochs refuse late cancelled audio.

@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 19:56 EDT - clarification and permission snapshot installed
+
+Source `c2ceafff08` is committed and pushed. The normal push gates pass: 29 TypeScript tasks (one fresh CLI task, 28 cached) and the cached JetBrains gate. Snapshot `7.4.23-snapshot+c2ceafff08.kamil-oseni.1790639402033` built and installed successfully with sequential low-memory validation. Extension/webview typechecks, ESLint, production bundling, compiled CLI/model/sandbox smoke tests and native capture/input/accessibility self-tests pass. Installed manifest identity is exact; SHA-256 comparisons match the compiled CLI, extension, webview and all three native helpers to the built files. Rollback VSIX is retained in the local package vault. No heap limits were raised or type-aware tsgolint run.
+
+This proves package installation and bytes, not activation in an already-open host or production media. No VS Code window was reloaded, activated or driven; desktop remains stopped after Escape and French Study is protected. External MF service is still undeployed; default direct Live UI unchanged. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. Next execute actual completed-goal fresh-work and busy-parent queue/cancellation journeys, then production CGO/provider/SFU/audio and installed-host restart/disconnect/resource gates. MCP remains deferred; unrelated user changes remain uncommitted.
+
 ## ChatGPT 2026-09-28 19:44 EDT - clarification and real permission recovery checked
 
 Valid managed GPT-Live delegations without fresh selectable intent now receive one persisted original-ID clarification offer instead of pausing the entire media session. Missing, client-correlated-only and consumed captions cannot launch guessed work. Malformed/blocked evidence still refuses; clarification stays within five seconds and the original binding/reservation lifetime. Stop, unknown acceptance and restart never replay an offer. Empty/private excerpts now say the task response is available in chat without inventing success.

@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 19:56 EDT - clarification/authority source pushed and snapshot installed
+
+Authoritative source is `c2ceafff08`; normal push passed 29 TypeScript tasks (one fresh CLI task, 28 cached) and cached JetBrains. Installed package is `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+c2ceafff08.kamil-oseni.1790639402033`. Its manifest identity and SHA-256 equality for CLI, extension, webview and capture/input/accessibility helpers are verified against built output. Sequential low-memory build passed extension/webview typechecks, ESLint, production bundle, compiled CLI/model/sandbox smoke and native self-tests. Rollback retained at `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.f71d3e3e2e1a76be7adee232ad1f5ca43a3099961f8f10aef98a86c5faea3dc4.vsix`.
+
+Installation does not prove activation in existing VS Code windows. No reload/activation/desktop control occurred. External MF service remains undeployed; default direct Live UI unchanged. Continue the exact completed-goal fresh-binding and busy-parent queue/cancel journeys below, then production CGO/provider/SFU/browser/audio and installed-host gates. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. Desktop stays stopped after Escape, French Study and user dirt protected; MCP deferred.
+
 ## ChatGPT 2026-09-28 19:44 EDT - clarification and real tool authority checked
 
 `voice/mf-live.ts` now accepts a valid observed delegation without fresh selectable intent by persisting a separate clarification task and immutable original-ID result offer. It never fabricates a canonical call or selection. The existing owned collector sends outside the caption gate; exact ACK, Stop, unknown delivery and restart fences apply. Deadline is capped by five seconds, binding expiry and the original reservation. Missing/client-only/consumed context clarifies; malformed/blocked/foreign/gapped evidence still refuses. Work receipts remain compatible with previously stored tasks; the private registry validates new clarification shape/content/lifetime.

@@ -117,3 +117,5 @@ if (process.env["KILO_DB"] !== ":memory:") {
   }
 }
 // kilocode_change end
+
+await import("../src/effect/app-runtime") // kilocode_change - load the required cleanup module before the teardown deadline

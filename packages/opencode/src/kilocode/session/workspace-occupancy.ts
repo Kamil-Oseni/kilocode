@@ -10,15 +10,19 @@ import { ReviewConflict } from "./review-revision"
 import { root } from "./review-workspace"
 
 const Node = Schema.Struct({ real: Schema.String, dev: Schema.String, ino: Schema.String })
-const Actor = Schema.Struct({
-  version: Schema.Literal(1),
+const fields = {
   token: Schema.String,
   backend: Schema.String,
   pid: Schema.Number,
   sessionID: Schema.String,
   nodes: Schema.Array(Node),
-})
-const decode = Schema.decodeUnknownSync(Actor)
+}
+export const Reservation = Schema.Union([
+  Schema.Struct({ version: Schema.Literal(1), ...fields }),
+  Schema.Struct({ version: Schema.Literal(2), ...fields, terminal: Schema.String }),
+])
+export type Reservation = typeof Reservation.Type
+const decode = Schema.decodeUnknownSync(Reservation)
 const backend = randomUUID()
 const limit = 65_536
 const canonical = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value)
@@ -38,13 +42,29 @@ const read = async (file: string) => {
     const buffer = Buffer.alloc(limit + 1)
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
     if (bytesRead > limit) throw new Error("Oversized occupancy record")
-    return decode(JSON.parse(buffer.subarray(0, bytesRead).toString("utf8")))
+    const raw: unknown = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"))
+    const actor = decode(raw, { onExcessProperty: "error" })
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      Object.keys(raw).length !== (actor.version === 2 ? 7 : 6) ||
+      actor.nodes.some((node) => Object.keys(node).length !== 3)
+    )
+      throw new Error("Workspace reservation has unknown fields")
+    return actor
   } finally {
     await handle.close()
   }
 }
 
 export interface Interface {
+  readonly reserve: (
+    ctx: InstanceContext,
+    sessionID: string,
+    terminal?: string,
+  ) => Effect.Effect<{ identity: Reservation; release: Effect.Effect<void> }>
+  readonly retire: (identity: Reservation) => Effect.Effect<void>
+  readonly forget: (identity: Reservation) => Effect.Effect<void>
   readonly register: (ctx: InstanceContext, sessionID: string) => Effect.Effect<Effect.Effect<void>>
   readonly review: (
     directories: readonly string[],
@@ -65,7 +85,65 @@ export const node = LayerNode.make({
         flock
           .withLock(body, "workspace-occupancy-v1")
           .pipe(Effect.catchTag("LockTimeoutError", Effect.die), Effect.catchTag("LockCompromisedError", Effect.die))
-      const register = (ctx: InstanceContext, sessionID: string) =>
+      const receipts = path.join(global.state, "workspace-occupancy-released-v1")
+      const same = (a: Reservation, b: Reservation) => JSON.stringify(a) === JSON.stringify(b)
+      const validate = (identity: Reservation) => {
+        const actor = decode(identity)
+        if (
+          !/^[a-f0-9-]{36}$/.test(actor.token) ||
+          !Number.isSafeInteger(actor.pid) ||
+          actor.pid <= 0 ||
+          !/^[a-f0-9-]{36}$/.test(actor.backend) ||
+          (actor.version === 2 && !/^[a-f0-9-]{36}$/.test(actor.terminal)) ||
+          !actor.nodes.length ||
+          actor.nodes.length > 2 ||
+          actor.nodes.some((node) => !path.isAbsolute(node.real))
+        )
+          throw new Error("Invalid workspace reservation identity")
+        return actor
+      }
+      const optional = async (file: string) =>
+        read(file).catch((err: NodeJS.ErrnoException) => {
+          if (err.code === "ENOENT") return undefined
+          throw err
+        })
+      const retire = (identity: Reservation) =>
+        locked(
+          Effect.promise(async () => {
+            const actor = validate(identity)
+            const file = path.join(directory, `${actor.token}.json`)
+            const receipt = path.join(receipts, `${actor.token}.json`)
+            await fs.mkdir(receipts, { recursive: true, mode: 0o700 })
+            const previous = await optional(receipt)
+            const current = await optional(file)
+            if ((previous && !same(previous, actor)) || (current && !same(current, actor)))
+              throw new Error("Workspace reservation ownership changed")
+            if (!previous && !current) throw new Error("Workspace reservation has no confirmed release receipt")
+            if (!previous) {
+              const entries = await fs.opendir(receipts)
+              let count = 0
+              for await (const _entry of entries)
+                if (++count >= 4096) throw new Error("Workspace release receipts need reconciliation")
+              // A hard link atomically publishes the exact actor before retiring occupancy.
+              await fs.link(file, receipt)
+            }
+            if (current) await fs.unlink(file)
+          }),
+        )
+      const forget = (identity: Reservation) =>
+        locked(
+          Effect.promise(async () => {
+            const actor = validate(identity)
+            const file = path.join(receipts, `${actor.token}.json`)
+            const receipt = await optional(file)
+            if (!receipt) return
+            if (!same(receipt, actor)) throw new Error("Workspace release receipt ownership changed")
+            if (await optional(path.join(directory, `${actor.token}.json`)))
+              throw new Error("Workspace reservation remains occupied")
+            await fs.unlink(file)
+          }),
+        )
+      const reserve = (ctx: InstanceContext, sessionID: string, terminal?: string) =>
         locked(
           Effect.promise(async () => {
             const nodes = await Promise.all(
@@ -79,20 +157,35 @@ export const node = LayerNode.make({
             for await (const _entry of entries)
               if (++count >= 4096)
                 throw new Error("Workspace activity limit reached. Reconcile its workers before starting more work.")
-            const content = JSON.stringify({ version: 1, token, backend, pid: process.pid, sessionID, nodes })
+            const identity = validate(
+              decode({
+                version: terminal === undefined ? 1 : 2,
+                token,
+                backend,
+                pid: process.pid,
+                sessionID,
+                nodes,
+                ...(terminal === undefined ? {} : { terminal }),
+              }),
+            )
+            const content = JSON.stringify(identity)
             if (Buffer.byteLength(content) > limit) throw new Error("Workspace occupancy owner is too large")
             await fs.writeFile(file, content, { flag: "wx", mode: 0o600 })
             // Only the registry mutex is reacquired. Reviews refuse actors instead of awaiting drainage.
-            return locked(
-              Effect.promise(async () => {
-                const actor = await read(file)
-                if (actor.token !== token || actor.backend !== backend || actor.pid !== process.pid)
-                  throw new Error("Workspace occupancy ownership changed")
-                await fs.unlink(file)
-              }),
-            )
+            return {
+              identity,
+              release: locked(
+                Effect.promise(async () => {
+                  const actor = await read(file)
+                  if (!same(actor, identity)) throw new Error("Workspace occupancy ownership changed")
+                  await fs.unlink(file)
+                }),
+              ),
+            }
           }),
         )
+      const register = (ctx: InstanceContext, sessionID: string) =>
+        reserve(ctx, sessionID).pipe(Effect.map((actor) => actor.release))
       const review: Interface["review"] = (directories) => (body) =>
         locked(
           Effect.gen(function* () {
@@ -138,7 +231,7 @@ export const node = LayerNode.make({
             return yield* body
           }),
         )
-      return Service.of({ register, review })
+      return Service.of({ register, reserve, retire, forget, review })
     }),
   ),
   deps: [Global.node, EffectFlock.node],

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -8,7 +8,9 @@ import { Storage } from "@/storage/storage"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { InteractiveTerminal } from "@/kilocode/interactive-terminal"
-import { admit } from "@/kilocode/interactive-terminal/lifecycle"
+import { admit, assert } from "@/kilocode/interactive-terminal/lifecycle"
+import { BackgroundProcessRunner } from "@/kilocode/background-process/runner"
+import { guardian } from "@/kilocode/background-process/windows-job"
 import { WorkspaceOccupancy } from "@/kilocode/session/workspace-occupancy"
 import { capture } from "@/kilocode/instance"
 import { Shell } from "@opencode-ai/core/shell"
@@ -266,4 +268,92 @@ it.instance(
       expect(Exit.isFailure(yield* runner.fire(worker.id).pipe(Effect.exit))).toBe(true)
     }),
   60000,
+)
+
+it.instance(
+  "historical v2 terminal reconciles exact native drainage and a durable release receipt without replay",
+  () =>
+    Effect.gen(function* () {
+      if (process.platform !== "win32") return
+      const test = yield* TestInstance
+      const sessions = yield* Session.Service
+      const occupancy = yield* WorkspaceOccupancy.Service
+      const owner = yield* sessions.create({ title: "Native terminal reconciliation owner" })
+      const ctx = capture()
+      if (!ctx) throw new Error("Missing terminal fixture context")
+      const token = randomUUID()
+      const manifest = path.join(Global.Path.state, "interactive-terminal", `${token}.json`)
+      const control = path.join(Global.Path.state, "interactive-terminal", `${token}.control`)
+      const effect = path.join(test.directory, "reconcile-effects")
+      const code = `while (!await Bun.file(${JSON.stringify(control + ".go")}).exists()) await Bun.sleep(10); await Bun.write(${JSON.stringify(effect)}, "once")`
+      const child = yield* Effect.promise(() =>
+        admit(ctx, owner.id, test.directory, token, async () =>
+          Bun.spawn([process.execPath, "-e", code], { stdout: "ignore", stderr: "ignore", windowsHide: true }),
+        ),
+      )
+      const identities = yield* Effect.promise(() => Promise.all([sample(child.pid), sample(process.pid)]))
+      if (!identities[0].birth || !identities[1].birth) throw new Error("Missing exact native fixture identity")
+      const guard = yield* Effect.promise(() =>
+        guardian({
+          pid: child.pid,
+          birth: identities[0].birth!,
+          controller: process.pid,
+          parentBirth: identities[1].birth!,
+          control,
+          token,
+        }),
+      )
+      guard.stderr?.resume()
+      const closed = new Promise<number | null>((resolve, reject) => {
+        guard.once("error", reject)
+        guard.once("exit", resolve)
+      })
+      yield* Effect.promise(() => wait(BackgroundProcessRunner.sidecars(control).job))
+      expect(yield* Effect.promise(() => BackgroundProcessRunner.contained(control, token))).toBe(true)
+      yield* Effect.promise(() => writeFile(control + ".go", "go"))
+      expect(yield* Effect.promise(() => child.exited)).toBe(0)
+      expect(yield* Effect.promise(() => closed)).toBe(0)
+      expect(yield* Effect.promise(() => BackgroundProcessRunner.drained(control, token))).toBe(true)
+      const raw: unknown = JSON.parse(yield* Effect.promise(() => Bun.file(manifest).text()))
+      if (!raw || typeof raw !== "object" || !("version" in raw) || !("reservation" in raw))
+        throw new Error("Invalid fixture manifest")
+      expect(raw.version).toBe(2)
+      const reservation = Schema.decodeUnknownSync(WorkspaceOccupancy.Reservation)(raw.reservation)
+      expect(reservation.sessionID).toBe(owner.id)
+      expect(reservation.version).toBe(2)
+      if (reservation.version !== 2) throw new Error("Terminal reservation is not token-bound")
+      expect(reservation.terminal).toBe(token)
+      const native = BackgroundProcessRunner.sidecars(control).drained
+      const proof = yield* Effect.promise(() => Bun.file(native).text())
+      yield* Effect.promise(() => writeFile(native, proof.replace(token, randomUUID())))
+      expect(Exit.isFailure(yield* Effect.tryPromise(() => assert(ctx, owner.id, [])).pipe(Effect.exit))).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(manifest).exists())).toBe(true)
+      yield* Effect.promise(() => writeFile(native, proof))
+      const content = yield* Effect.promise(() => Bun.file(manifest).text())
+      const foreign = yield* occupancy.reserve(ctx, owner.id, randomUUID())
+      yield* Effect.promise(() => writeFile(manifest, JSON.stringify({ ...raw, reservation: foreign.identity })))
+      expect(Exit.isFailure(yield* Effect.tryPromise(() => assert(ctx, owner.id, [])).pipe(Effect.exit))).toBe(true)
+      expect(
+        yield* Effect.promise(() =>
+          Bun.file(path.join(Global.Path.state, "workspace-occupancy-v1", `${foreign.identity.token}.json`)).exists(),
+        ),
+      ).toBe(true)
+      yield* foreign.release
+      yield* Effect.promise(() => writeFile(manifest, JSON.stringify({ ...raw, extra: true })))
+      expect(Exit.isFailure(yield* Effect.tryPromise(() => assert(ctx, owner.id, [])).pipe(Effect.exit))).toBe(true)
+      yield* Effect.promise(() => writeFile(manifest, JSON.stringify({ ...raw, ino: "replaced" })))
+      expect(Exit.isFailure(yield* Effect.tryPromise(() => assert(ctx, owner.id, [])).pipe(Effect.exit))).toBe(true)
+      yield* Effect.promise(() => writeFile(manifest, content))
+      // Actual persisted boundary: exact release is confirmed, terminal metadata remains after backend loss.
+      yield* occupancy.retire(reservation)
+      expect(yield* occupancy.review([test.directory])(Effect.succeed(true))).toBe(true)
+      yield* Effect.promise(() => assert(ctx, owner.id, []))
+      expect(yield* Effect.promise(() => Bun.file(manifest).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(effect).text())).toBe("once")
+      expect(yield* Effect.promise(() => Bun.file(control).exists())).toBe(false)
+      yield* Effect.promise(() =>
+        Promise.all(Object.values(BackgroundProcessRunner.sidecars(control)).map((file) => rm(file, { force: true }))),
+      )
+    }),
+  120000,
 )

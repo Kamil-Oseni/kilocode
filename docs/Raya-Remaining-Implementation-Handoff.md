@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 16:25 EDT - sealed-boundary source pushed; direct RTP transport next
+
+Runtime source `a201467248` is pushed through normal cached TypeScript/JetBrains gates. Full CGO-zero Go tests/vet and formatting/diff/Markdown checks pass. Begin with the direct RTP transport and real SFU/browser attribution probe described below. No service deployment or installed-host playback proof; full voice, OVR-01, EN-05 and FUT-CU-01 remain In progress. Preserve user edits and the desktop stop.
+
 ## ChatGPT 2026-09-28 16:24 EDT - sealed audio boundaries checked; publish then replace queued PCM transport
 
 Current source adds owned item/response/epoch/end sealing, bounded zero-span terminal markers, late-input fences and exact version-three final receipt settlement. Qwen seals accepted audio on audio completion or completed-response fallback under one deadline, drops native-cancelled queues and rejects post-seal audio. Explicit empty responses cannot settle unknown prior playback. Source evidence: scheduler 17, app 35 top-level and Qwen 12 tests; full CGO-zero Go suite, vet, formatting and diff checks pass with package concurrency one and `.tmp/go-media`. Publish this slice after the Markdown guard. Preserve the user's two unrelated progress-document hunks when staging.

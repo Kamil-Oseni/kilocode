@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 16:25 EDT - sealed-boundary source published
+
+Runtime source `a201467248` is committed and pushed through the normal 29 cached TypeScript checks and cached JetBrains gate. The full CGO-zero Go suite, vet, formatting, diff check and 484-file Markdown table guard pass. The external Go service remains undeployed and the installed desktop snapshot unchanged. Next replace the SDK's queued PCM transport, prove frame attribution through the real SFU/browser path and implement exact playback receipts; full voice and installed-host gates remain open.
+
 ## ChatGPT 2026-09-28 16:24 EDT - sealed audio boundaries checked; renderer and transport gates open
 
 The owned Go scheduler now seals an exact item/response/epoch/original-sample boundary before acknowledging source completion. Pending PCM carries the final marker; an already-emitted tail uses a fixed silent tick with a zero sample span that never adds heard samples. Sealing fences late input, is idempotent for the same boundary, shares the existing five-slot queue allowance, and refuses unknown, stale, cancelled, exhausted or dropped-tail boundaries. Qwen audio completion and completed-response fallback use one bounded sealing deadline; native cancellation drops queued PCM, and late audio after sealing closes the session. Explicit empty responses cannot replay completion authority.

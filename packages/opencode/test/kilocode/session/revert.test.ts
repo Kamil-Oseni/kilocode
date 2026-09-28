@@ -6,6 +6,7 @@ import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { createHash } from "node:crypto"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -41,7 +42,7 @@ const it = testEffect(env)
 const guarded = process.platform === "win32" ? it.live.skip : it.live
 
 it.live(
-  "refuses a foreign child worktree review rather than aliasing the parent's same-named file",
+  "reviews and undoes a foreign child worktree without aliasing the parent's same-named file",
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -99,6 +100,9 @@ it.live(
             finish: "end_turn",
           })
           const patch = yield* snapshot.patch(start, finish)
+          expect(yield* snapshot.checkpoints([{ hash: start, files: [file] }])).toBe(true)
+          expect(yield* snapshot.checkpoints([{ hash: "0".repeat(40), files: [file] }])).toBe(false)
+          expect(yield* snapshot.checkpoints([{ hash: "--help", files: [file] }])).toBe(false)
           yield* sessions.updatePart({
             id: PartID.ascending(),
             messageID: assistant.id,
@@ -127,7 +131,14 @@ it.live(
           yield* storage.write(["session_diff", session.id], yield* snapshot.diffFull(start, finish))
           return session
         }).pipe(provideInstance(branch))
-        expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id })))).toBe(true)
+        const diffs = yield* summary.diff({ sessionID: parent.id })
+        const diff = diffs.find((item) => item.file === file)
+        if (!diff) throw new Error("Missing parent review of foreign file")
+        expect(diff.patch).toContain("-child original")
+        expect(diff.patch).toContain("+child edited")
+        expect(diffs.some((item) => item.file === own)).toBe(false)
+        const detail = yield* summary.diff({ sessionID: parent.id, file, full: true })
+        expect(detail[0]).toMatchObject({ before: "child original", after: "child edited" })
         expect(
           Exit.isFailure(
             yield* Effect.exit(
@@ -137,15 +148,25 @@ it.live(
         ).toBe(true)
         expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent safe")
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("child edited")
+        const request = {
+          sessionID: parent.id,
+          files: [file],
+          expected: { [file]: revision(diff) },
+          requestID: "parent-foreign-undo",
+        }
+        yield* revert.discardChanges(request)
+        const key = ["review_receipt", parent.id, createHash("sha256").update(request.requestID).digest("hex")]
+        const saved = yield* storage.read<{ complete: boolean; proof: { version: number; groups: unknown[] } }>(key)
+        expect(saved.proof.version).toBe(2)
+        expect(saved.proof.groups).toHaveLength(1)
+        yield* storage.replace(key, { ...saved, complete: false })
+        yield* storage.remove(["session_undo", parent.id])
+        yield* Effect.promise(() => fs.writeFile(file, "manual child"))
+        expect(Exit.isFailure(yield* Effect.exit(revert.discardChanges(request)))).toBe(true)
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("manual child")
+        yield* Effect.promise(() => fs.writeFile(file, "child original"))
+        yield* revert.discardChanges(request)
         yield* Effect.gen(function* () {
-          const diff = (yield* summary.diff({ sessionID: child.id })).find((item) => item.file === "notes.txt")
-          if (!diff) throw new Error("Missing child-local review")
-          yield* revert.discardChanges({
-            sessionID: child.id,
-            files: [file],
-            expected: { [file]: revision(diff) },
-            requestID: "child-local-undo",
-          })
           expect(yield* summary.diff({ sessionID: child.id })).toEqual([])
         }).pipe(provideInstance(branch))
         expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent safe")
@@ -163,6 +184,27 @@ it.live(
           text: "The child-local Undo is complete.",
         })
         expect(yield* summary.diff({ sessionID: parent.id })).toEqual([])
+        yield* Effect.promise(() => fs.writeFile(file, "child edited"))
+        const fresh = yield* sessions.updateMessage({ ...original.info, id: MessageID.ascending() })
+        for (const part of original.parts)
+          if (["step-start", "step-finish", "patch"].includes(part.type))
+            yield* sessions.updatePart({ ...part, id: PartID.ascending(), messageID: fresh.id })
+        const pending = yield* summary.diff({ sessionID: parent.id })
+        const edited = pending.find((item) => item.file === file)
+        if (!edited) throw new Error("Missing fresh foreign review after Undo")
+        const keep = {
+          sessionID: parent.id,
+          expected: { [file]: revision(edited) },
+          requestID: "parent-foreign-keep",
+        }
+        yield* revert.keepChanges(keep)
+        yield* revert.keepChanges(keep)
+        expect(yield* summary.diff({ sessionID: parent.id })).toEqual([])
+        yield* Effect.gen(function* () {
+          expect(yield* summary.diff({ sessionID: child.id })).toEqual([])
+        }).pipe(provideInstance(branch))
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("child edited")
+        expect(yield* Effect.promise(() => fs.readFile(own, "utf8"))).toBe("parent safe")
         yield* sessions.updatePart({
           id: PartID.ascending(),
           messageID: report.id,

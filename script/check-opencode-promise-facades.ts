@@ -68,6 +68,10 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     count: 11,
     reason: "real HTTP child steering test spans routed app instances, run ownership, and durable session messages",
   },
+  "kilocode/server/httpapi-personal-todo-subtask.test.ts": {
+    count: 2,
+    reason: "real HTTP subtask revision test seeds stored children through the server's shared application runtime",
+  },
   "kilocode/server/routine-forecast.test.ts": {
     count: 11,
     reason: "real HTTP routine tests seed legacy/corrupt storage and run history through the server's shared runtime",

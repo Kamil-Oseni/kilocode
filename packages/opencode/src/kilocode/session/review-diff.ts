@@ -6,14 +6,14 @@ import type { MessageV2 } from "@/session/message-v2"
 import type { Snapshot } from "@/snapshot"
 import type { Storage } from "@/storage/storage"
 import { InstanceState } from "@/effect/instance-state"
+import { InstanceRef } from "@/effect/instance-ref"
 import { boundaries, canonical } from "./review-boundaries"
 import { project } from "./review-patches"
 import { ReviewConflict } from "./review-revision"
 import { active, read } from "./review-undo"
+import { resolve, root, run, type Owner } from "./review-workspace"
 
-type Span = { file: string; start: string; finish: string; first: string; last: string }
-const root = (directory: string, worktree: string) =>
-  path.resolve(worktree === "/" || worktree === "global" || !path.isAbsolute(worktree) ? directory : worktree)
+type Span = { owner: Owner; file: string; start: string; finish: string; first: string; last: string }
 
 /** Preserve a different session directory's immutable snapshot origin before merging its raw diff. */
 export function provenance(diffs: readonly Snapshot.FileDiff[], messages: readonly MessageV2.WithParts[]) {
@@ -53,14 +53,12 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
   const result = new Map<string, Span>()
   const queue = [sessionID]
   const visited = new Set<SessionID>()
-  const groups: { directory: string; messages: MessageV2.WithParts[] }[] = []
+  const groups: { id: SessionID; messages: MessageV2.WithParts[] }[] = []
   while (queue.length) {
     const id = queue.shift()!
     if (visited.has(id)) continue
     visited.add(id)
-    const owner = yield* sessions.get(id).pipe(Effect.orDie)
     const messages = yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie)
-    const local: MessageV2.WithParts[] = []
     for (const message of messages) {
       const blind = message.parts.some(
         (part) => part.type === "tool" && ["bash", "edit", "write", "apply_patch", "multiedit"].includes(part.tool),
@@ -77,37 +75,42 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
           }),
         )
       if (
+        blind &&
         message.info.role === "assistant" &&
-        canonical(root(message.info.path.cwd, message.info.path.root)) !== workspace
-      ) {
-        const origin = root(message.info.path.cwd, message.info.path.root)
-        const pending = message.parts.some((part) => {
-          if (part.type !== "patch") return false
-          if (!part.files.length) return true
-          const generation = `${message.info.id}:${part.id}`
-          return part.files.some((file) => {
-            const key = canonical(file, origin)
-            return (!kept[key] || message.info.id > kept[key]) && !undone.get(key)?.has(generation)
-          })
-        })
-        if (pending || (blind && !message.parts.some((part) => part.type === "patch")))
-          return yield* Effect.die(
-            new ReviewConflict({
-              message:
-                "A worker edited a separate workspace. Open that worker's changes or bring them into this workspace before reviewing here.",
-            }),
-          )
-        continue
-      }
-      local.push(message)
+        canonical(root(message.info.path.cwd, message.info.path.root)) !== workspace &&
+        !message.parts.some((part) => part.type === "patch")
+      )
+        return yield* Effect.die(
+          new ReviewConflict({
+            message: "A worker's file operation has no verified patch scope. Reconcile its workspace before reviewing.",
+          }),
+        )
     }
-    groups.push({ directory: owner.directory, messages: local })
+    groups.push({ id, messages })
     for (const child of yield* sessions.children(id)) queue.push(child.id)
   }
   // Reject an incomplete descendant before projecting any historical patch. Otherwise
   // each review refresh queues Git work that cannot change the refusal.
   for (const group of groups) {
-    const messages = active(yield* project(snap, group.messages, group.directory), group.directory, undone)
+    const pending = group.messages.filter(
+      (message) =>
+        message.info.role === "assistant" &&
+        message.parts.some(
+          (part) =>
+            part.type === "patch" &&
+            part.files.some((file) => {
+              const origin =
+                message.info.role === "assistant" ? root(message.info.path.cwd, message.info.path.root) : ""
+              const key = canonical(file, origin)
+              return (
+                (!kept[key] || message.info.id > kept[key]) && !undone.get(key)?.has(`${message.info.id}:${part.id}`)
+              )
+            }),
+        ),
+    )
+    if (!pending.length) continue
+    const owner = yield* resolve(sessions, group.id, pending)
+    const messages = active(yield* run(owner, project(snap, pending, owner.root)), owner.root, undone)
     for (const message of messages) {
       let start: string | undefined
       let finish: string | undefined
@@ -120,11 +123,12 @@ export const spans = Effect.fn("ReviewDiff.spans")(function* (
         if (part.type !== "patch" || !start || !finish) continue
         const order = `${message.info.id}:${part.id}`
         for (const file of part.files) {
-          const key = canonical(file, group.directory)
+          const key = canonical(file, owner.root)
           if (kept[key] && message.info.id <= kept[key]) continue
           const prior = result.get(key)
           result.set(key, {
-            file: path.resolve(group.directory, file),
+            owner,
+            file: path.resolve(owner.root, file),
             start: prior && prior.first < order ? prior.start : start,
             finish: prior && prior.last > order ? prior.finish : finish,
             first: prior && prior.first < order ? prior.first : order,
@@ -145,24 +149,23 @@ export const overlay = Effect.fn("ReviewDiff.overlay")(function* (
   diffs: readonly Snapshot.FileDiff[],
 ) {
   const owner = yield* sessions.get(sessionID).pipe(Effect.orDie)
+  const ctx = yield* InstanceState.context
+  const directory = root(ctx.directory, ctx.worktree)
   const kept = yield* boundaries(storage, sessions, sessionID)
   const undone = yield* read(storage, sessions, sessionID)
   const scope = yield* spans(snap, storage, sessions, sessionID)
   const result = new Map(
     diffs
       .filter(
-        (diff) =>
-          !!diff.file &&
-          !kept[canonical(diff.file, owner.directory)] &&
-          !undone.has(canonical(diff.file, owner.directory)),
+        (diff) => !!diff.file && !kept[canonical(diff.file, directory)] && !undone.has(canonical(diff.file, directory)),
       )
-      .map((diff) => [canonical(diff.file!, owner.directory), diff]),
+      .map((diff) => [canonical(diff.file!, directory), diff]),
   )
   for (const [key, span] of scope) {
-    if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }]))) {
+    if (!(yield* run(span.owner, snap.matches([{ hash: span.finish, files: [span.file] }])))) {
       // A full-file Undo restores the first pending edit's starting snapshot.
       // Historical child diffs can still name that edit after the restore.
-      if (yield* snap.matches([{ hash: span.start, files: [span.file] }])) {
+      if (yield* run(span.owner, snap.matches([{ hash: span.start, files: [span.file] }]))) {
         result.delete(key)
         continue
       }
@@ -173,9 +176,16 @@ export const overlay = Effect.fn("ReviewDiff.overlay")(function* (
         }),
       )
     }
-    const batch = yield* snap.diffFull(span.start, span.finish)
-    const diff = batch.find((item) => item.file && canonical(item.file, owner.directory) === key)
-    if (diff) result.set(key, diff)
+    const batch = yield* run(span.owner, snap.diffFull(span.start, span.finish))
+    const diff = batch.find((item) => item.file && canonical(item.file, span.owner.root) === key)
+    if (diff)
+      result.set(key, {
+        ...diff,
+        file:
+          canonical(span.owner.root) === canonical(directory) && canonical(owner.directory) === canonical(directory)
+            ? diff.file
+            : span.file,
+      })
     if (!diff) result.delete(key)
   }
   return [...result.values()]
@@ -188,15 +198,15 @@ export const detail = Effect.fn("ReviewDiff.detail")(function* (
   sessionID: SessionID,
   file: string,
 ) {
-  const owner = yield* sessions.get(sessionID).pipe(Effect.orDie)
-  const key = canonical(file, owner.directory)
+  const ctx = yield* InstanceState.context
+  const key = canonical(file, root(ctx.directory, ctx.worktree))
   const span = (yield* spans(snap, storage, sessions, sessionID)).get(key)
   if (!span) {
     const kept = yield* boundaries(storage, sessions, sessionID)
     return kept[key] ? { matched: true as const, diff: undefined } : { matched: false as const }
   }
-  if (!(yield* snap.matches([{ hash: span.finish, files: [span.file] }]))) {
-    if (yield* snap.matches([{ hash: span.start, files: [span.file] }]))
+  if (!(yield* run(span.owner, snap.matches([{ hash: span.finish, files: [span.file] }])))) {
+    if (yield* run(span.owner, snap.matches([{ hash: span.start, files: [span.file] }])))
       return { matched: true as const, diff: undefined }
     return yield* Effect.die(
       new ReviewConflict({
@@ -205,8 +215,14 @@ export const detail = Effect.fn("ReviewDiff.detail")(function* (
       }),
     )
   }
+  const diff = yield* run(
+    span.owner,
+    snap
+      .diffFile(span.start, span.finish, path.relative(span.owner.root, span.file).replaceAll("\\", "/"))
+      .pipe(Effect.provideService(InstanceRef, { ...span.owner.ctx, directory: span.owner.root })),
+  )
   return {
     matched: true as const,
-    diff: yield* snap.diffFile(span.start, span.finish, path.relative(owner.directory, span.file)),
+    diff: diff && { ...diff, file: path.isAbsolute(file) ? span.file : diff.file },
   }
 })

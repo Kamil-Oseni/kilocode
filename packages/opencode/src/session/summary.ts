@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Project } from "@/project/project" // kilocode_change - resolve worker snapshot contexts without restarting applications
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -258,7 +259,12 @@ const layer = Layer.effect(
       })
     })
 
-    return Service.of({ summarize, diff, computeDiff })
+    const project = yield* Project.Service // kilocode_change
+    return Service.of({
+      summarize: (input) => summarize(input).pipe(Effect.provideService(Project.Service, project)),
+      diff: (input) => diff(input).pipe(Effect.provideService(Project.Service, project)),
+      computeDiff,
+    }) // kilocode_change
   }),
 )
 
@@ -273,7 +279,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node], // kilocode_change
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node, Project.node], // kilocode_change
 })
 
 export * as SessionSummary from "./summary"

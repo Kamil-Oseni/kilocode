@@ -14,6 +14,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
 import { spans } from "@/kilocode/session/review-diff"
+import { Project } from "@/project/project"
 import { provideTmpdirProject } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
 
@@ -26,6 +27,7 @@ const env = LayerNode.compile(
     Storage.node,
     Database.node,
     CrossSpawnSpawner.node,
+    Project.node,
   ]),
 )
 const it = testEffect(env)
@@ -399,7 +401,9 @@ it.live(
 
         yield* Effect.promise(() => fs.writeFile(file, `${body}\n`))
         expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id })))).toBe(true)
-        expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id, full: true, file: "b.txt" })))).toBe(true)
+        expect(
+          Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: parent.id, full: true, file: "b.txt" }))),
+        ).toBe(true)
       }),
     { git: true },
   ),

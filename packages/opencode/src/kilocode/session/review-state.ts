@@ -1,4 +1,3 @@
-import path from "node:path"
 import { Effect, Schema } from "effect"
 import { Snapshot } from "@/snapshot"
 import type { Storage } from "@/storage/storage"
@@ -6,7 +5,8 @@ import type { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import { revision } from "./review-revision"
 import { boundaries as read } from "./review-boundaries"
-import { project } from "./review-patches"
+import { group, root } from "./review-workspace"
+import { canonical } from "./review-boundaries"
 import { active, read as undone } from "./review-undo"
 
 export const ReviewDiff = Snapshot.FileDiff.mapFields((fields) => ({
@@ -35,24 +35,41 @@ export const reviewed = Effect.fn("ReviewState.reviewed")(function* (
   const kept = yield* read(storage, sessions, sessionID)
   const history = yield* undone(storage, sessions, sessionID)
   const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
-  const normalize = (file: string) => {
-    const absolute = path.resolve(session.directory, file)
-    return process.platform === "win32" ? absolute.toLowerCase() : absolute
-  }
+  const normalize = (file: string) => canonical(file, session.directory)
   const boundaries = new Map(Object.entries(kept).map(([file, id]) => [normalize(file), id]))
   const latest = new Map<string, { message: string; generation: string }>()
   const visited = new Set<string>()
   const queue = [sessionID]
+  const wanted = new Set(diffs.flatMap((diff) => (diff.file ? [normalize(diff.file)] : [])))
   while (queue.length) {
     const id = queue.shift()!
     if (visited.has(id)) continue
     visited.add(id)
-    const owner = yield* sessions.get(id).pipe(Effect.orDie)
-    const messages = active(
-      yield* project(snap, yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie), owner.directory),
-      owner.directory,
-      history,
+    for (const child of yield* sessions.children(id)) queue.push(child.id)
+    const saved = yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie)
+    if (
+      !saved.some(
+        (message) =>
+          message.info.role === "assistant" &&
+          message.parts.some(
+            (part) =>
+              part.type === "patch" &&
+              part.files.some((file) =>
+                wanted.has(
+                  canonical(
+                    file,
+                    message.info.role === "assistant"
+                      ? root(message.info.path.cwd, message.info.path.root)
+                      : session.directory,
+                  ),
+                ),
+              ),
+          ),
+      )
     )
+      continue
+    const projected = yield* group(snap, sessions, id)
+    const messages = active(projected.messages, projected.owner.root, history)
     for (const message of messages)
       for (const part of message.parts) {
         if (part.type !== "patch") continue
@@ -63,7 +80,6 @@ export const reviewed = Effect.fn("ReviewState.reviewed")(function* (
             latest.set(key, { message: message.info.id, generation })
         }
       }
-    for (const child of yield* sessions.children(id)) queue.push(child.id)
   }
   return diffs.map((diff) => {
     const key = diff.file && normalize(diff.file)

@@ -294,6 +294,7 @@ const snap = Layer.succeed(
     restore: () => Effect.void,
     revert: () => Effect.void,
     matches: () => Effect.succeed(false),
+    checkpoints: () => Effect.succeed(false),
     diff: () => Effect.succeed(""),
     diffFull: () => Effect.succeed([]),
     diffFile: () => Effect.succeed(undefined),

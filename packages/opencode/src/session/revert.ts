@@ -18,6 +18,8 @@ import { boundaries, canonical } from "@/kilocode/session/review-boundaries" // 
 import { receipt, recovery } from "@/kilocode/session/review-receipt" // kilocode_change - durable review retries
 import { project } from "@/kilocode/session/review-patches" // kilocode_change - project legacy patch scope from completed steps
 import { active, append, read as undone } from "@/kilocode/session/review-undo" // kilocode_change - durable per-file Undo history
+import { transaction } from "@/kilocode/session/review-transaction" // kilocode_change - owner-routed review transactions
+import * as Project from "@/project/project" // kilocode_change
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -62,6 +64,7 @@ const layer = Layer.effect(
     const state = yield* SessionRunState.Service
     const config = yield* Config.Service // kilocode_change
     const gate = yield* ReviewGate.Service // kilocode_change - shared with session deletion
+    const projects = yield* Project.Service // kilocode_change - resolve each worker's real workspace
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
@@ -224,7 +227,8 @@ const layer = Layer.effect(
           )
         : input.files
       if (input.expected && files?.length === 0) return session
-      const all = active( // kilocode_change
+      const all = active(
+        // kilocode_change
         yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory),
         session.directory,
         yield* undone(storage, sessions, input.sessionID),
@@ -272,7 +276,8 @@ const layer = Layer.effect(
           )
         : input.files
       if (input.expected && files?.length === 0) return session
-      const all = active( // kilocode_change
+      const all = active(
+        // kilocode_change
         yield* project(snap, yield* gather(input.sessionID, !!input.expected), session.directory),
         session.directory,
         yield* undone(storage, sessions, input.sessionID),
@@ -359,6 +364,17 @@ const layer = Layer.effect(
 
     // kilocode_change start - read/modify/write kept boundaries and workspace restores must not overlap
     const receipts = recovery({ sessions, snap, storage, summary, state, gather })
+    const transactions = transaction({
+      sessions,
+      snap,
+      storage,
+      summary,
+      state,
+      gate,
+      project: projects,
+      events,
+      reconcile: (id, proof) => receipts.reconcile(id, proof).pipe(Effect.provideService(Project.Service, projects)),
+    })
     const locked = <A, E, R>(sessionID: SessionID, body: Effect.Effect<A, E, R>) =>
       Effect.gen(function* () {
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
@@ -368,29 +384,37 @@ const layer = Layer.effect(
       revert: (input) => locked(input.sessionID, revert(input)),
       unrevert: (input) => locked(input.sessionID, unrevert(input)),
       discardChanges: (input) =>
-        locked(
-          input.sessionID,
-          receipt(
-            storage,
-            input,
-            "undo",
-            receipts.prepare(input, "undo"),
-            discardChanges(input),
-            sessions.get(input.sessionID).pipe(Effect.orDie),
-            (proof) => receipts.reconcile(input.sessionID, proof),
+        transactions.undo(
+          input,
+          locked(
+            input.sessionID,
+            receipt(
+              storage,
+              input,
+              "undo",
+              receipts.prepare(input, "undo"),
+              discardChanges(input),
+              sessions.get(input.sessionID).pipe(Effect.orDie),
+              (proof) =>
+                receipts.reconcile(input.sessionID, proof).pipe(Effect.provideService(Project.Service, projects)),
+            ),
           ),
         ),
       keepChanges: (input) =>
-        locked(
-          input.sessionID,
-          receipt(
-            storage,
-            input,
-            "keep",
-            receipts.prepare(input, "keep"),
-            keepChanges(input),
-            sessions.get(input.sessionID).pipe(Effect.orDie),
-            (proof) => receipts.reconcile(input.sessionID, proof),
+        transactions.keep(
+          input,
+          locked(
+            input.sessionID,
+            receipt(
+              storage,
+              input,
+              "keep",
+              receipts.prepare(input, "keep"),
+              keepChanges(input),
+              sessions.get(input.sessionID).pipe(Effect.orDie),
+              (proof) =>
+                receipts.reconcile(input.sessionID, proof).pipe(Effect.provideService(Project.Service, projects)),
+            ),
           ),
         ),
       cleanup: (session) => gate.withWorkspace(session.directory)(cleanup(session)),
@@ -411,6 +435,7 @@ export const node = LayerNode.make({
     SessionRunState.node,
     Config.node, // kilocode_change
     ReviewGate.node, // kilocode_change
+    Project.node, // kilocode_change - review owner discovery without instance bootstrap
   ],
 })
 

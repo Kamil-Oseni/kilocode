@@ -75,6 +75,7 @@ export interface Interface {
   readonly restore: (snapshot: string) => Effect.Effect<void>
   readonly revert: (patches: Patch[], expected?: readonly Patch[]) => Effect.Effect<void> // kilocode_change - recheck live files before guarded restore
   readonly matches: (patches: readonly Patch[]) => Effect.Effect<boolean> // kilocode_change - live workspace precondition
+  readonly checkpoints: (patches: readonly Patch[]) => Effect.Effect<boolean> // kilocode_change - read-only all-owner restore preflight
   readonly diff: (hash: string) => Effect.Effect<string>
   readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
   readonly diffFile: (from: string, to: string, file: string) => Effect.Effect<FileDiff | undefined> // kilocode_change - authoritative full-content detail
@@ -607,6 +608,23 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               )
             })
           const matches = (patches: readonly Patch[]) => locked("matches", current(patches))
+          const checkpoints = (patches: readonly Patch[]) =>
+            locked(
+              "checkpoints",
+              Effect.gen(function* () {
+                // kilocode_change
+                // kilocode_change start - validate every owner before the first multi-workspace restore
+                for (const hash of new Set(patches.filter((item) => item.files.length > 0).map((item) => item.hash))) {
+                  if (!/^[a-f0-9]{40,64}$/i.test(hash)) return false
+                  const tree = yield* git([...core, ...args(["cat-file", "-e", `${hash}^{tree}`])], {
+                    cwd: state.worktree,
+                  })
+                  if (tree.code !== 0) return false
+                }
+                return true
+                // kilocode_change end
+              }),
+            ) // kilocode_change
           // kilocode_change end
           const revert = Effect.fnUntraced(function* (patches: Patch[], expected?: readonly Patch[]) {
             // kilocode_change
@@ -1043,7 +1061,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           })
           // kilocode_change end
 
-          return { cleanup, track, patch, restore, revert, diff, diffFull, diffFile, matches } // kilocode_change - diffFile and workspace preconditions
+          return { cleanup, track, patch, restore, revert, diff, diffFull, diffFile, matches, checkpoints } // kilocode_change - diffFile and workspace preconditions
         }),
       )
 
@@ -1097,6 +1115,9 @@ export const layer: Layer.Layer<Service, never, Requirements> =
         // kilocode_change start - guarded restore and live-file comparison
         matches: Effect.fn("Snapshot.matches")(function* (patches: readonly Patch[]) {
           return yield* InstanceState.useEffect(state, (s) => s.matches(patches))
+        }),
+        checkpoints: Effect.fn("Snapshot.checkpoints")(function* (patches: readonly Patch[]) {
+          return yield* InstanceState.useEffect(state, (s) => s.checkpoints(patches))
         }),
         revert: Effect.fn("Snapshot.revert")(function* (patches: Patch[], expected?: readonly Patch[]) {
           return yield* InstanceState.useEffect(state, (s) => s.revert(patches, expected))

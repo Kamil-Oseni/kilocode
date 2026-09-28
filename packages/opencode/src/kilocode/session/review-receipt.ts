@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import type { Session } from "@/session/session"
 import { Snapshot } from "@/snapshot"
-import type { SessionID } from "@/session/schema"
+import { SessionID } from "@/session/schema"
 import type { SessionSummary } from "@/session/summary"
 import type { SessionRunState } from "@/session/run-state"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -13,15 +13,42 @@ import { boundaries, canonical } from "./review-boundaries"
 import { ReviewConflict, verify, workspace } from "./review-revision"
 import { project } from "./review-patches"
 import { active, append, read as undone } from "./review-undo"
+import { resolve, run, same } from "./review-workspace"
 
+const Owner = Schema.Struct({
+  sessionID: SessionID,
+  directory: Schema.String,
+  root: Schema.String,
+  projectID: Schema.String,
+  real: Schema.String,
+  dev: Schema.String,
+  ino: Schema.String,
+  cwdReal: Schema.String,
+  cwdDev: Schema.String,
+  cwdIno: Schema.String,
+})
+const Events = Schema.Array(Schema.Struct({ file: Schema.String, generation: Schema.String }))
 const Proof = Schema.Union([
-  Schema.Struct({ action: Schema.Literal("keep"), boundaries: Schema.Record(Schema.String, Schema.String) }),
+  Schema.Struct({
+    action: Schema.Literal("keep"),
+    boundaries: Schema.Record(Schema.String, Schema.String),
+    version: Schema.optional(Schema.Literal(2)),
+    owners: Schema.optional(Schema.Array(Owner)),
+  }),
+  Schema.Struct({
+    version: Schema.Literal(2),
+    action: Schema.Literal("undo"),
+    groups: Schema.Array(Schema.Struct({ owner: Owner, patches: Schema.Array(Snapshot.Patch) })),
+    files: Schema.Array(Schema.String),
+    revert: Schema.Boolean,
+    events: Events,
+  }),
   Schema.Struct({
     action: Schema.Literal("undo"),
     patches: Schema.Array(Snapshot.Patch),
     files: Schema.Array(Schema.String),
     revert: Schema.Boolean,
-    events: Schema.optional(Schema.Array(Schema.Struct({ file: Schema.String, generation: Schema.String }))),
+    events: Schema.optional(Events),
   }),
 ])
 export type Proof = typeof Proof.Type
@@ -99,6 +126,19 @@ export function recovery(services: Services) {
   })
 
   const reconcile = Effect.fn("ReviewReceipt.reconcile")(function* (sessionID: SessionID, proof: Proof) {
+    const owners =
+      proof.action === "keep" ? proof.owners : "groups" in proof ? proof.groups.map((group) => group.owner) : undefined
+    for (const saved of owners ?? []) {
+      const owner = yield* resolve(services.sessions, saved.sessionID).pipe(
+        Effect.catchCause(() => Effect.succeed(undefined)),
+      )
+      if (!owner || !same(saved, owner)) return false
+      const idle = yield* services.state.assertNotBusy(saved.sessionID).pipe(
+        Effect.as(true),
+        Effect.catchCause(() => Effect.succeed(false)),
+      )
+      if (!idle) return false
+    }
     if (proof.action === "keep") {
       const kept = yield* boundaries(services.storage, services.sessions, sessionID)
       return Object.entries(proof.boundaries).every(([file, id]) => {
@@ -108,7 +148,20 @@ export function recovery(services: Services) {
     }
     const session = yield* services.sessions.get(sessionID).pipe(Effect.orDie)
     if (proof.revert && session.revert) return false
-    if (proof.patches.length && !(yield* services.snap.matches(proof.patches))) return false
+    if ("groups" in proof) {
+      for (const group of proof.groups) {
+        const owner = yield* resolve(services.sessions, group.owner.sessionID).pipe(
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        )
+        if (!owner || !same(group.owner, owner)) return false
+        if (
+          !(yield* run(owner, services.snap.matches(group.patches)).pipe(
+            Effect.catchCause(() => Effect.succeed(false)),
+          ))
+        )
+          return false
+      }
+    } else if (proof.patches.length && !(yield* services.snap.matches(proof.patches))) return false
     const normalize = (file: string) => canonical(file, session.directory)
     const gone = new Set(proof.files.map(normalize))
     const raw = yield* services.storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID]).pipe(
@@ -118,6 +171,15 @@ export function recovery(services: Services) {
     if (raw.some((diff) => !!diff.file && gone.has(normalize(diff.file)))) return false
     if (proof.events?.length) yield* append(services.storage, sessionID, session.directory, proof.events)
     yield* Effect.promise(() => RayaRevertNote.record(sessionID, proof.files))
+    if ("groups" in proof)
+      for (const group of proof.groups)
+        if (group.owner.sessionID !== sessionID)
+          yield* Effect.promise(() =>
+            RayaRevertNote.record(
+              group.owner.sessionID,
+              group.patches.flatMap((patch) => patch.files),
+            ),
+          )
     return true
   })
 

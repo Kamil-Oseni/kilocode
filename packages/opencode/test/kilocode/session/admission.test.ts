@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -12,6 +12,10 @@ import { Session } from "@/session/session"
 import { SessionRunState } from "@/session/run-state"
 import { MessageID } from "@/session/schema"
 import { ReviewGate } from "@/kilocode/session/review-gate"
+import { WorkspaceOccupancy } from "@/kilocode/session/workspace-occupancy"
+import { InstanceRef } from "@/effect/instance-ref"
+import { Global } from "@opencode-ai/core/global"
+import { SessionRevert } from "@/session/revert"
 import { provideTmpdirProject } from "../../fixture/fixture"
 import { testEffect, pollWithTimeout, awaitWithTimeout } from "../../lib/effect"
 
@@ -21,6 +25,9 @@ const env = LayerNode.compile(
     SessionProjector.node,
     SessionRunState.node,
     ReviewGate.node,
+    WorkspaceOccupancy.node,
+    Global.node,
+    SessionRevert.node,
     Database.node,
     CrossSpawnSpawner.node,
   ]),
@@ -40,6 +47,89 @@ const message = Effect.gen(function* () {
   })
   return { info, parts: [] }
 })
+
+it.live(
+  "replaced occupancy record fails completion explicitly and retains busy ownership",
+  provideTmpdirProject(
+    () =>
+      Effect.gen(function* () {
+        const state = yield* SessionRunState.Service
+        const global = yield* Global.Service
+        const result = yield* message
+        const started = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const worker = yield* state
+          .ensureRunning(
+            result.info.sessionID,
+            Effect.succeed(result),
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(result)),
+          )
+          .pipe(Effect.forkChild)
+        yield* awaitWithTimeout(Deferred.await(started), "worker did not start")
+        const directory = path.join(global.state, "workspace-occupancy-v1")
+        const file = yield* Effect.promise(async () => {
+          for (const name of await fs.readdir(directory)) {
+            const target = path.join(directory, name)
+            const actor = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(
+              JSON.parse(await fs.readFile(target, "utf8")),
+            )
+            if (actor.sessionID !== result.info.sessionID) continue
+            await fs.writeFile(target, JSON.stringify({ ...actor, backend: "replacement" }))
+            return target
+          }
+          throw new Error("Missing actual occupancy record")
+        })
+        yield* Effect.gen(function* () {
+          yield* Deferred.succeed(release, undefined)
+          const exit = yield* awaitWithTimeout(Fiber.await(worker), "failed drain did not complete caller")
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(Exit.isFailure(yield* state.assertNotBusy(result.info.sessionID).pipe(Effect.exit))).toBe(true)
+          expect(yield* Effect.promise(() => fs.stat(file).then(() => true))).toBe(true)
+        }).pipe(Effect.ensuring(Effect.promise(() => fs.unlink(file))))
+      }),
+    { git: true },
+  ),
+  60_000,
+)
+
+it.live(
+  "workspace occupancy rejects an unrelated running session in a nested context",
+  provideTmpdirProject(
+    (dir) =>
+      Effect.gen(function* () {
+        const state = yield* SessionRunState.Service
+        const occupancy = yield* WorkspaceOccupancy.Service
+        const ctx = yield* InstanceRef
+        if (!ctx) throw new Error("Missing test context")
+        const nested = path.join(dir, "nested")
+        yield* Effect.promise(() => fs.mkdir(nested))
+        const result = yield* message.pipe(Effect.provideService(InstanceRef, { ...ctx, directory: nested }))
+        const started = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const work = state
+          .ensureRunning(
+            result.info.sessionID,
+            Effect.succeed(result),
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(result)),
+          )
+          .pipe(Effect.provideService(InstanceRef, { ...ctx, directory: nested }), Effect.forkChild)
+        const worker = yield* work
+        yield* awaitWithTimeout(Deferred.await(started), "nested worker did not start")
+        const other = yield* message
+        yield* state.assertNotBusy(other.info.sessionID)
+        expect(Exit.isFailure(yield* occupancy.review([dir])(Effect.void).pipe(Effect.exit))).toBe(true)
+        const revert = yield* SessionRevert.Service
+        const refusal = yield* revert.discardChanges({ sessionID: other.info.sessionID }).pipe(Effect.exit)
+        expect(Exit.isFailure(refusal)).toBe(true)
+        if (Exit.isFailure(refusal)) expect(Cause.pretty(refusal.cause)).toContain("workspace still")
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(worker)
+        yield* occupancy.review([dir])(Effect.void)
+      }),
+    { git: true },
+  ),
+  60_000,
+)
 
 it.live(
   "cancelled work stays busy until its actual late-writing finalizer drains",

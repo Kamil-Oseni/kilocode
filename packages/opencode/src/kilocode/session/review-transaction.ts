@@ -16,6 +16,7 @@ import { RayaRevertNote } from "./revert-note"
 import { receipt, type Proof } from "./review-receipt"
 import { ReviewConflict, verify, workspace } from "./review-revision"
 import { capture } from "./review-recovery"
+import type { WorkspaceOccupancy } from "./workspace-occupancy"
 
 type Input = {
   sessionID: SessionID
@@ -30,6 +31,7 @@ type Services = {
   summary: SessionSummary.Interface
   state: SessionRunState.Interface
   gate: ReviewGate.Interface
+  occupancy?: WorkspaceOccupancy.Interface
   events: EventV2.Interface
   project: Project.Interface
   reconcile: (sessionID: SessionID, proof: Proof) => Effect.Effect<boolean>
@@ -75,182 +77,185 @@ export function transaction(services: Services) {
       return owners
     })
     const ancestors = yield* ancestry
-    return yield* services.gate.withWorkspaces(
-      [...prior.map((item) => item.owner), ...ancestors].flatMap((owner) => [owner.directory, owner.root]),
-    )(
-      Effect.gen(function* () {
-        const groups = yield* collect(input.sessionID)
-        const inherited = yield* ancestry
-        if (stamp(ancestors) !== stamp(inherited))
-          return yield* new ReviewConflict({
-            message: "The review's inherited workspace changed. Refresh before continuing.",
-          })
-        if (stamp(prior.map((item) => item.owner)) !== stamp(groups.map((item) => item.owner)))
-          return yield* new ReviewConflict({
-            message: "The workers in this review changed. Refresh before continuing.",
-          })
-        for (const item of groups) yield* run(item.owner, services.state.assertNotBusy(item.owner.sessionID))
-        const session = yield* services.sessions.get(input.sessionID).pipe(Effect.orDie)
-        let prepared:
-          | { proof: Proof; work: { owner: Owner; patches: Snapshot.Patch[]; expected: Snapshot.Patch[] }[] }
-          | undefined
-        const prepare = Effect.gen(function* () {
-          const files = yield* verify(
-            yield* services.summary.diff({ sessionID: input.sessionID }),
-            input.expected!,
-            session.directory,
-            input.files,
-          )
-          const wanted = new Set(files.map((file) => canonical(file)))
-          const undone = yield* read(services.storage, services.sessions, input.sessionID)
-          const kept = yield* boundaries(services.storage, services.sessions, input.sessionID)
-          const all = groups
-            .flatMap((item) => active(item.messages, item.owner.root, undone))
-            .sort((a, b) => a.info.id.localeCompare(b.info.id))
-          const claims = new Map<string, Owner>()
-          for (const item of groups)
-            for (const message of active(item.messages, item.owner.root, undone))
+    const dirs = [...prior.map((item) => item.owner), ...ancestors].flatMap((owner) => [owner.directory, owner.root])
+    const guard = <A, E, R>(body: Effect.Effect<A, E, R>) =>
+      services.occupancy ? services.occupancy.review(dirs)(body) : body
+    return yield* services.gate.withWorkspaces(dirs)(
+      guard(
+        Effect.gen(function* () {
+          const groups = yield* collect(input.sessionID)
+          const inherited = yield* ancestry
+          if (stamp(ancestors) !== stamp(inherited))
+            return yield* new ReviewConflict({
+              message: "The review's inherited workspace changed. Refresh before continuing.",
+            })
+          if (stamp(prior.map((item) => item.owner)) !== stamp(groups.map((item) => item.owner)))
+            return yield* new ReviewConflict({
+              message: "The workers in this review changed. Refresh before continuing.",
+            })
+          for (const item of groups) yield* run(item.owner, services.state.assertNotBusy(item.owner.sessionID))
+          const session = yield* services.sessions.get(input.sessionID).pipe(Effect.orDie)
+          let prepared:
+            | { proof: Proof; work: { owner: Owner; patches: Snapshot.Patch[]; expected: Snapshot.Patch[] }[] }
+            | undefined
+          const prepare = Effect.gen(function* () {
+            const files = yield* verify(
+              yield* services.summary.diff({ sessionID: input.sessionID }),
+              input.expected!,
+              session.directory,
+              input.files,
+            )
+            const wanted = new Set(files.map((file) => canonical(file)))
+            const undone = yield* read(services.storage, services.sessions, input.sessionID)
+            const kept = yield* boundaries(services.storage, services.sessions, input.sessionID)
+            const all = groups
+              .flatMap((item) => active(item.messages, item.owner.root, undone))
+              .sort((a, b) => a.info.id.localeCompare(b.info.id))
+            const claims = new Map<string, Owner>()
+            for (const item of groups)
+              for (const message of active(item.messages, item.owner.root, undone))
+                for (const part of message.parts)
+                  if (part.type === "patch")
+                    for (const file of part.files) {
+                      const key = canonical(file)
+                      const previous = claims.get(key)
+                      if (previous && canonical(previous.root) !== canonical(item.owner.root))
+                        return yield* new ReviewConflict({
+                          message:
+                            "Two workers claim the same file from different workspaces. Reconcile their changes first.",
+                        })
+                      claims.set(key, item.owner)
+                    }
+            if (files.some((file) => !claims.has(canonical(file))))
+              return yield* new ReviewConflict({ message: "A reviewed file no longer has a verified worker owner." })
+            const plan = KiloSessionRevert.plan(all, files, kept, !!input.files?.length)
+            const work: { owner: Owner; patches: Snapshot.Patch[]; expected: Snapshot.Patch[] }[] = []
+            for (const item of groups) {
+              const selected = files.filter((file) => claims.get(canonical(file))?.sessionID === item.owner.sessionID)
+              if (!selected.length) continue
+              const expected = yield* run(item.owner, workspace(services.snap, all, selected, item.owner.root))
+              work.push({
+                owner: item.owner,
+                expected,
+                patches: plan.patches.filter((patch) =>
+                  patch.files.some((file) => selected.some((selected) => canonical(selected) === canonical(file))),
+                ),
+              })
+            }
+            const latest: Record<string, string> = {}
+            for (const message of all)
               for (const part of message.parts)
                 if (part.type === "patch")
-                  for (const file of part.files) {
-                    const key = canonical(file)
-                    const previous = claims.get(key)
-                    if (previous && canonical(previous.root) !== canonical(item.owner.root))
-                      return yield* new ReviewConflict({
-                        message:
-                          "Two workers claim the same file from different workspaces. Reconcile their changes first.",
-                      })
-                    claims.set(key, item.owner)
+                  for (const file of part.files)
+                    if (wanted.has(canonical(file))) latest[canonical(file)] = message.info.id
+            const proof: Proof =
+              action === "keep"
+                ? { version: 2, action, boundaries: latest, owners: groups.map((item) => identity(item.owner)) }
+                : {
+                    version: 2,
+                    action,
+                    groups: work.map((item) => ({ owner: identity(item.owner), patches: item.patches })),
+                    files: plan.patches.flatMap((patch) => patch.files),
+                    revert: !!session.revert,
+                    events: plan.events,
+                    recovery: yield* capture(
+                      services,
+                      input.sessionID,
+                      plan.patches.flatMap((patch) => patch.files),
+                      [...groups.map((item) => item.owner), ...inherited].map(identity),
+                    ),
                   }
-          if (files.some((file) => !claims.has(canonical(file))))
-            return yield* new ReviewConflict({ message: "A reviewed file no longer has a verified worker owner." })
-          const plan = KiloSessionRevert.plan(all, files, kept, !!input.files?.length)
-          const work: { owner: Owner; patches: Snapshot.Patch[]; expected: Snapshot.Patch[] }[] = []
-          for (const item of groups) {
-            const selected = files.filter((file) => claims.get(canonical(file))?.sessionID === item.owner.sessionID)
-            if (!selected.length) continue
-            const expected = yield* run(item.owner, workspace(services.snap, all, selected, item.owner.root))
-            work.push({
-              owner: item.owner,
-              expected,
-              patches: plan.patches.filter((patch) =>
-                patch.files.some((file) => selected.some((selected) => canonical(selected) === canonical(file))),
+            prepared = { proof, work }
+            return proof
+          })
+          const operation = Effect.gen(function* () {
+            if (!prepared) yield* prepare
+            const current = prepared!
+            if (current.proof.action === "keep") {
+              const previous = yield* services.storage.read<unknown>(["session_kept", input.sessionID]).pipe(
+                Effect.catchTag("NotFoundError", () => Effect.succeed({})),
+                Effect.flatMap(Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))),
+                Effect.orDie,
+              )
+              const merged = { ...previous }
+              for (const [file, id] of Object.entries(current.proof.boundaries))
+                if (!merged[file] || merged[file] < id) merged[file] = id
+              yield* services.storage.write(["session_kept", input.sessionID], merged).pipe(Effect.orDie)
+              return session
+            }
+            const baselines: { owner: Owner; hash: string; patches: Snapshot.Patch[] }[] = []
+            for (const item of current.work) {
+              if (!(yield* run(item.owner, services.snap.checkpoints(item.patches))))
+                return yield* Effect.die(new Error("An Undo checkpoint is unavailable"))
+              const hash = yield* run(item.owner, services.snap.track())
+              if (!hash) return yield* Effect.die(new Error("A worker workspace snapshot is unavailable"))
+              baselines.push({ owner: item.owner, hash, patches: item.patches })
+            }
+            for (const item of current.work)
+              if (!(yield* run(item.owner, services.snap.matches(item.expected))))
+                return yield* new ReviewConflict({
+                  message: "A worker's files changed before Undo. Refresh before continuing.",
+                })
+            const completed: typeof baselines = []
+            yield* Effect.gen(function* () {
+              for (const item of current.work) {
+                yield* run(item.owner, services.snap.revert(item.patches, item.expected))
+                completed.push(baselines.find((baseline) => baseline.owner.sessionID === item.owner.sessionID)!)
+              }
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.gen(function* () {
+                  let combined = cause
+                  for (const item of completed.toReversed()) {
+                    const rollback = yield* Effect.exit(
+                      run(
+                        item.owner,
+                        services.snap.revert(
+                          [{ hash: item.hash, files: item.patches.flatMap((patch) => patch.files) }],
+                          item.patches,
+                        ),
+                      ),
+                    )
+                    if (rollback._tag === "Failure") combined = Cause.combine(combined, rollback.cause)
+                  }
+                  return yield* Effect.failCause(combined)
+                }),
               ),
-            })
-          }
-          const latest: Record<string, string> = {}
-          for (const message of all)
-            for (const part of message.parts)
-              if (part.type === "patch")
-                for (const file of part.files)
-                  if (wanted.has(canonical(file))) latest[canonical(file)] = message.info.id
-          const proof: Proof =
-            action === "keep"
-              ? { version: 2, action, boundaries: latest, owners: groups.map((item) => identity(item.owner)) }
-              : {
-                  version: 2,
-                  action,
-                  groups: work.map((item) => ({ owner: identity(item.owner), patches: item.patches })),
-                  files: plan.patches.flatMap((patch) => patch.files),
-                  revert: !!session.revert,
-                  events: plan.events,
-                  recovery: yield* capture(
-                    services,
-                    input.sessionID,
-                    plan.patches.flatMap((patch) => patch.files),
-                    [...groups.map((item) => item.owner), ...inherited].map(identity),
-                  ),
-                }
-          prepared = { proof, work }
-          return proof
-        })
-        const operation = Effect.gen(function* () {
-          if (!prepared) yield* prepare
-          const current = prepared!
-          if (current.proof.action === "keep") {
-            const previous = yield* services.storage.read<unknown>(["session_kept", input.sessionID]).pipe(
-              Effect.catchTag("NotFoundError", () => Effect.succeed({})),
-              Effect.flatMap(Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))),
+            )
+            const proof = current.proof
+            if (proof.action !== "undo" || !("version" in proof) || proof.version !== 2)
+              return yield* Effect.die(new Error("Invalid transaction proof"))
+            const gone = new Set(proof.files.map((file) => canonical(file)))
+            const raw = yield* services.storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).pipe(
+              Effect.catchTag("NotFoundError", () => Effect.succeed([] as Snapshot.FileDiff[])),
               Effect.orDie,
             )
-            const merged = { ...previous }
-            for (const [file, id] of Object.entries(current.proof.boundaries))
-              if (!merged[file] || merged[file] < id) merged[file] = id
-            yield* services.storage.write(["session_kept", input.sessionID], merged).pipe(Effect.orDie)
-            return session
-          }
-          const baselines: { owner: Owner; hash: string; patches: Snapshot.Patch[] }[] = []
-          for (const item of current.work) {
-            if (!(yield* run(item.owner, services.snap.checkpoints(item.patches))))
-              return yield* Effect.die(new Error("An Undo checkpoint is unavailable"))
-            const hash = yield* run(item.owner, services.snap.track())
-            if (!hash) return yield* Effect.die(new Error("A worker workspace snapshot is unavailable"))
-            baselines.push({ owner: item.owner, hash, patches: item.patches })
-          }
-          for (const item of current.work)
-            if (!(yield* run(item.owner, services.snap.matches(item.expected))))
-              return yield* new ReviewConflict({
-                message: "A worker's files changed before Undo. Refresh before continuing.",
-              })
-          const completed: typeof baselines = []
-          yield* Effect.gen(function* () {
-            for (const item of current.work) {
-              yield* run(item.owner, services.snap.revert(item.patches, item.expected))
-              completed.push(baselines.find((baseline) => baseline.owner.sessionID === item.owner.sessionID)!)
-            }
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.gen(function* () {
-                let combined = cause
-                for (const item of completed.toReversed()) {
-                  const rollback = yield* Effect.exit(
-                    run(
-                      item.owner,
-                      services.snap.revert(
-                        [{ hash: item.hash, files: item.patches.flatMap((patch) => patch.files) }],
-                        item.patches,
-                      ),
-                    ),
-                  )
-                  if (rollback._tag === "Failure") combined = Cause.combine(combined, rollback.cause)
-                }
-                return yield* Effect.failCause(combined)
-              }),
-            ),
+            const left = raw.filter((item) => !item.file || !gone.has(canonical(item.file, session.directory)))
+            yield* services.storage.write(["session_diff", input.sessionID], left).pipe(Effect.orDie)
+            yield* services.events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: left })
+            if (session.revert) yield* services.sessions.clearRevert(input.sessionID)
+            yield* append(services.storage, input.sessionID, session.directory, proof.events ?? [])
+            for (const item of current.work)
+              yield* Effect.promise(() =>
+                RayaRevertNote.record(
+                  item.owner.sessionID,
+                  item.patches.flatMap((patch) => patch.files),
+                ),
+              )
+            yield* Effect.promise(() => RayaRevertNote.record(input.sessionID, proof.files))
+            return yield* services.sessions.get(input.sessionID).pipe(Effect.orDie)
+          })
+          return yield* receipt(
+            services.storage,
+            input,
+            action,
+            prepare,
+            operation,
+            services.sessions.get(input.sessionID).pipe(Effect.orDie),
+            (proof) => services.reconcile(input.sessionID, proof),
           )
-          const proof = current.proof
-          if (proof.action !== "undo" || !("version" in proof) || proof.version !== 2)
-            return yield* Effect.die(new Error("Invalid transaction proof"))
-          const gone = new Set(proof.files.map((file) => canonical(file)))
-          const raw = yield* services.storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).pipe(
-            Effect.catchTag("NotFoundError", () => Effect.succeed([] as Snapshot.FileDiff[])),
-            Effect.orDie,
-          )
-          const left = raw.filter((item) => !item.file || !gone.has(canonical(item.file, session.directory)))
-          yield* services.storage.write(["session_diff", input.sessionID], left).pipe(Effect.orDie)
-          yield* services.events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: left })
-          if (session.revert) yield* services.sessions.clearRevert(input.sessionID)
-          yield* append(services.storage, input.sessionID, session.directory, proof.events ?? [])
-          for (const item of current.work)
-            yield* Effect.promise(() =>
-              RayaRevertNote.record(
-                item.owner.sessionID,
-                item.patches.flatMap((patch) => patch.files),
-              ),
-            )
-          yield* Effect.promise(() => RayaRevertNote.record(input.sessionID, proof.files))
-          return yield* services.sessions.get(input.sessionID).pipe(Effect.orDie)
-        })
-        return yield* receipt(
-          services.storage,
-          input,
-          action,
-          prepare,
-          operation,
-          services.sessions.get(input.sessionID).pipe(Effect.orDie),
-          (proof) => services.reconcile(input.sessionID, proof),
-        )
-      }),
+        }),
+      ),
     )
   })
   return {

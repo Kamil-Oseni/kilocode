@@ -48,6 +48,7 @@ export const make = <A, E = never>(
     onBusy?: Effect.Effect<void>
     onInterrupt?: Effect.Effect<A, E>
     admit?: <B, E2, R>(body: Effect.Effect<B, E2, R>) => Effect.Effect<B, E2, R> // kilocode_change - only the state publication is gated
+    reserve?: Effect.Effect<Effect.Effect<void>> // kilocode_change - durable occupancy before opening actual work
   },
 ): Runner<A, E> => {
   const ref = SynchronizedRef.makeUnsafe<State<A, E>>({ _tag: "Idle" })
@@ -94,17 +95,25 @@ export const make = <A, E = never>(
   // kilocode_change start - do not let work publish busy before the Running state is committed
   const startRun = (work: Effect.Effect<A, E>, done: Deferred.Deferred<A, E | Cancelled>) => {
     const id = next()
-    live.add(done) // kilocode_change
-    return KiloRunner.start({
-      work: executing(done, work), // kilocode_change - carry the actual execution identity into its work
-      scope,
-      finish: (exit) =>
-        Effect.gen(function* () {
-          // kilocode_change start - work finalizers have drained before this onExit callback
-          live.delete(done)
-          yield* finishRun(id, done, exit)
-        }), // kilocode_change end
-      handle: (fiber) => ({ id, done, fiber }) satisfies RunHandle<A, E>,
+    return Effect.gen(function* () {
+      const release = yield* opts?.reserve ?? Effect.succeed(Effect.void) // kilocode_change
+      live.add(done) // kilocode_change
+      return yield* KiloRunner.start({
+        work: executing(done, work), // kilocode_change - carry the actual execution identity into its work
+        scope,
+        finish: (exit) =>
+          Effect.gen(function* () {
+            // kilocode_change start - work finalizers have drained before this onExit callback
+            const released = yield* Effect.exit(release)
+            if (Exit.isFailure(released)) {
+              yield* finishRun(id, done, Exit.failCause(released.cause))
+              return
+            }
+            live.delete(done)
+            yield* finishRun(id, done, exit)
+          }), // kilocode_change end
+        handle: (fiber) => ({ id, done, fiber }) satisfies RunHandle<A, E>,
+      })
     })
   }
   // kilocode_change end
@@ -186,11 +195,13 @@ export const make = <A, E = never>(
             yield* onBusy
             const id = next()
             const cancelled = yield* Deferred.make<void>()
+            const release = yield* opts?.reserve ?? Effect.succeed(Effect.void) // kilocode_change
             live.add(cancelled)
             const fiber = yield* work.pipe(
               Effect.ensuring(finishShell(id)),
               Effect.ensuring(
                 Effect.gen(function* () {
+                  yield* release // kilocode_change - only after shell and follow-up admission cleanup
                   live.delete(cancelled)
                   yield* idleIfCurrent()
                 }),

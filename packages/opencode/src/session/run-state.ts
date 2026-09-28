@@ -6,6 +6,7 @@ import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation" // kilocode_change
 import { admission } from "@/kilocode/session/admission" // kilocode_change - share review admission without locking inference
 import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change
+import { WorkspaceOccupancy } from "@/kilocode/session/workspace-occupancy" // kilocode_change
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
@@ -39,6 +40,7 @@ export const layer = Layer.effect(
     const background = yield* BackgroundJob.Service
     const status = yield* SessionStatus.Service
     const gate = yield* ReviewGate.Service // kilocode_change
+    const occupancy = yield* WorkspaceOccupancy.Service // kilocode_change
 
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
@@ -66,6 +68,7 @@ export const layer = Layer.effect(
       if (existing) return existing
       const next = Runner.make<SessionV1.WithParts>(data.scope, {
         admit: admission(gate, yield* InstanceState.context), // kilocode_change
+        reserve: occupancy.register(yield* InstanceState.context, sessionID), // kilocode_change
         onIdle: Effect.gen(function* () {
           if (data.runners.get(sessionID) !== next || next.busy) return // kilocode_change - only the exact drained runner may release its binding
           data.runners.delete(sessionID)
@@ -176,7 +179,7 @@ function busyError(sessionID: SessionID) {
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, SessionStatus.node, ReviewGate.node],
+  deps: [BackgroundJob.node, SessionStatus.node, ReviewGate.node, WorkspaceOccupancy.node],
 })
 // kilocode_change end
 

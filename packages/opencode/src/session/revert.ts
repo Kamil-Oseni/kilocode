@@ -20,6 +20,8 @@ import { project } from "@/kilocode/session/review-patches" // kilocode_change -
 import { active, append, read as undone } from "@/kilocode/session/review-undo" // kilocode_change - durable per-file Undo history
 import { transaction } from "@/kilocode/session/review-transaction" // kilocode_change - owner-routed review transactions
 import * as Project from "@/project/project" // kilocode_change
+import { WorkspaceOccupancy } from "@/kilocode/session/workspace-occupancy" // kilocode_change - refuse overlapping durable writers
+import { resolve } from "@/kilocode/session/review-workspace" // kilocode_change
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -65,6 +67,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service // kilocode_change
     const gate = yield* ReviewGate.Service // kilocode_change - shared with session deletion
     const projects = yield* Project.Service // kilocode_change - resolve each worker's real workspace
+    const occupancy = yield* WorkspaceOccupancy.Service // kilocode_change
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
@@ -379,18 +382,26 @@ const layer = Layer.effect(
       summary,
       state,
       gate,
+      occupancy,
       project: projects,
       events,
       reconcile: (id, proof) => receipts.reconcile(id, proof).pipe(Effect.provideService(Project.Service, projects)),
     })
     const locked = <A, E, R>(sessionID: SessionID, body: Effect.Effect<A, E, R>) =>
       Effect.gen(function* () {
-        const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
-        return yield* gate.withWorkspace(session.directory)(body)
+        const owner = yield* resolve(sessions, sessionID).pipe(Effect.provideService(Project.Service, projects))
+        const dirs = [owner.directory, owner.root]
+        return yield* gate.withWorkspaces(dirs)(occupancy.review(dirs)(body))
       })
     return Service.of({
-      revert: (input) => locked(input.sessionID, revert(input)),
-      unrevert: (input) => locked(input.sessionID, unrevert(input)),
+      revert: (input) =>
+        locked(input.sessionID, revert(input)).pipe(
+          Effect.catchTag("ReviewConflict", () => Effect.fail(new Session.BusyError({ sessionID: input.sessionID }))),
+        ),
+      unrevert: (input) =>
+        locked(input.sessionID, unrevert(input)).pipe(
+          Effect.catchTag("ReviewConflict", () => Effect.fail(new Session.BusyError({ sessionID: input.sessionID }))),
+        ),
       discardChanges: (input) =>
         transactions.undo(
           input,
@@ -444,6 +455,7 @@ export const node = LayerNode.make({
     Config.node, // kilocode_change
     ReviewGate.node, // kilocode_change
     Project.node, // kilocode_change - review owner discovery without instance bootstrap
+    WorkspaceOccupancy.node, // kilocode_change
   ],
 })
 

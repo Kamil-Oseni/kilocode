@@ -322,24 +322,26 @@ func (r *Room) halt() {
 		// may block inside the SDK; a deadline never reports it as drained.
 		r.stopped.Store(true)
 		r.control.stop()
-		_ = r.track.Close()
-		_ = r.writer.Close()
-		r.remoteMu.Lock()
-		for sid, track := range r.tracks {
-			_ = r.sinks[sid].Close()
-			_ = track.SetReadDeadline(time.Now())
-		}
-		r.remoteMu.Unlock()
-	drain:
-		for {
-			select {
-			case <-r.input:
-			default:
-				break drain
-			}
-		}
+		r.sender.stop()
+		r.writer.closed.Store(true)
 		go func() {
 			defer close(r.done)
+			_ = r.track.Close()
+			_ = r.writer.Close()
+			r.remoteMu.Lock()
+			for sid, track := range r.tracks {
+				_ = r.sinks[sid].Close()
+				_ = track.SetReadDeadline(time.Now())
+			}
+			r.remoteMu.Unlock()
+		drain:
+			for {
+				select {
+				case <-r.input:
+				default:
+					break drain
+				}
+			}
 			r.room.Disconnect()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*engine.FramePeriod)
 			defer cancel()
@@ -348,6 +350,7 @@ func (r *Room) halt() {
 			// A timed-out SDK handoff retains its owner until actual return.
 			// Closing done must not fabricate that the control worker drained.
 			<-r.control.end
+			<-r.sender.end
 			r.remoteMu.Lock()
 			for sid, decoded := range r.remote {
 				_ = r.sinks[sid].Close()
@@ -389,14 +392,14 @@ func (e *encoded) Close() error {
 type writer struct {
 	input  chan<- engine.Frame
 	rate   int
-	closed bool
+	closed atomic.Bool
 	mu     sync.RWMutex
 }
 
 func (w *writer) WriteSample(sample media.PCM16Sample) error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if w.closed {
+	if w.closed.Load() {
 		return errors.New("LiveKit PCM writer is closed")
 	}
 	if len(sample) != w.rate/50 {
@@ -415,7 +418,7 @@ func (w *writer) WriteSample(sample media.PCM16Sample) error {
 
 func (w *writer) Close() error {
 	w.mu.Lock()
-	w.closed = true
+	w.closed.Store(true)
 	w.mu.Unlock()
 	return nil
 }

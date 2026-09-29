@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 20:38 EDT - Stop latency and retained cleanup ownership
+
+Source `35e9cb8185` is pushed with normal typechecks passing. Full local CGO-zero Go regression/vet and 20 repetitions of the five control adverse tests pass. Actual native [CI run 36503757136](https://github.com/Kamil-Oseni/kilocode/actions/runs/36503757136) passed CGO build/full tests, real synthetic Opus/SFU input/output and microphone replacement, exact-client data routing/outsider exclusion/cancelled/post-Stop refusal, CGO vet, production image health and unauthenticated-request rejection. Binary SHA-256 is `854cdaba4c297ad273380395e26a2708b88f412023d1fc68f07598d6a0ad52c3`; image ID is `sha256:261adc21423653580e56b23b1991e06264f94de9e4da90af6ea6d041a033deed`. Exact log: `.tmp/voice-media-ci-recovery.log`. This synthetic gate does not prove provider/browser/device audio or prolonged resources.
+
+Further review found `Room.Close()` started its bounded wait only after synchronous SDK/decoder cleanup, so it could block before the timeout. Stop now performs only atomic local input/output/control fences synchronously and moves transport/decoder cleanup into its single retained owner. Completion waits for both actual RTP and control workers, including a writer that outlives its deadline. Three new CGO cases use real local track/Opus/SDK/Room objects with controlled blocked writers or a held decoder-admission lock; they remain pending native CI execution.
+
+SDK inspection confirms remote PCM decoder and default jitter workers expose no join receipt. A deadline plus decoder Close cannot prove their termination, and repeated microphone replacement may retain hidden SDK workers. Next resource slice must replace the private receiver with an owned bounded RTP/decode/resample loop and explicit end receipt, retaining uncertain retired ownership and refusing replacement until termination is proved. Do not expose the experimental service or mark the full voice/resource gate Verified on the existing map-count tests. Installed snapshot c2ceafff08/default direct Live unchanged; service undeployed and desktop stopped.
+
 ## ChatGPT 2026-09-28 20:34 EDT - microphone recovery and bounded client-only control
 
 Actual native CI for source `0147c7ca19` ([run 36501951712](https://github.com/Kamil-Oseni/kilocode/actions/runs/36501951712)) passed the CGO production build and full Go suite, but the explicit SFU test failed because its receiver retained every decoded frame until the test queue filled. Vet and production-image smoke were skipped; this run is not a passed SFU gate. The receiver now validates each 20 ms frame on arrival and retains only one nonzero signal sample, without increasing a queue bound.

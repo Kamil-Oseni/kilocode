@@ -109,6 +109,87 @@ it.live(
 )
 
 it.live(
+  "keeps the body busy until its successful idle receipt is durable",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const gate = { held: false }
+        const delayed = {
+          create: storage.create,
+          read: storage.read,
+          remove: storage.remove,
+          replace: (key: string[], content: unknown) =>
+            Effect.gen(function* () {
+              if (!gate.held && (content as { state?: string }).state === "idle") {
+                gate.held = true
+                yield* Deferred.succeed(entered, undefined)
+                yield* Deferred.await(release)
+              }
+              yield* storage.replace(key, content)
+            }),
+        }
+        const execution = RayaTaskExecution.make(delayed)
+        const owner = identity()
+        const first = yield* execution.enter(owner, Effect.succeed("joined")).pipe(Effect.forkChild)
+        yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"))
+        const state = { entered: false }
+        yield* Effect.gen(function* () {
+          const second = yield* execution
+            .enter(
+              owner,
+              Effect.sync(() => {
+                state.entered = true
+                return "second"
+              }),
+            )
+            .pipe(Effect.forkChild)
+          yield* Effect.sleep("100 millis")
+          expect(state.entered).toBe(false)
+          yield* Deferred.succeed(release, undefined)
+          expect(yield* Fiber.join(first)).toBe("joined")
+          expect(yield* Fiber.join(second)).toBe("second")
+          expect(state.entered).toBe(true)
+        }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+        expect(yield* execution.authorized(owner)).toBe(true)
+        yield* execution.finish(owner)
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)
+
+it.live(
+  "retains durable uncertainty when the successful idle receipt cannot be written",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const guarded = {
+          create: storage.create,
+          read: storage.read,
+          remove: storage.remove,
+          replace: (key: string[], content: unknown) =>
+            (content as { state?: string }).state === "idle"
+              ? Effect.die(new Error("injected idle receipt failure"))
+              : storage.replace(key, content),
+        }
+        const execution = RayaTaskExecution.make(guarded)
+        const owner = identity()
+        const result = yield* execution.enter(owner, Effect.succeed("joined")).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        expect(yield* execution.authorized(owner)).toBe(false)
+        expect(yield* execution.enter(owner, Effect.die("Uncertain successful work was replayed"))).toBeUndefined()
+        expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(1)
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)
+
+it.live(
   "retains failed execution evidence and refuses automatic same-process reentry",
   () =>
     Effect.gen(function* () {

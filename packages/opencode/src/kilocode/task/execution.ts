@@ -22,6 +22,8 @@ const Record = Schema.Struct({
   owner: Owner,
   createdAt: Schema.Int,
   updatedAt: Schema.Int,
+  // Records written before the state marker remain uncertain and are never removed by terminal recovery.
+  state: Schema.optional(Schema.Literals(["active", "idle", "recovering"])),
 })
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
 type Permit = { record: typeof Record.Type }
@@ -30,6 +32,7 @@ const Current = Context.Reference<Capability | undefined>("@raya/RoutineExecutio
 const active = new Set<string>()
 const busy = new Set<string>()
 const closing = new Set<string>()
+const recovering = new Set<string>()
 const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 const key = (id: string) => ["raya", "agent-executions", hash(id)]
 const same = (left: typeof Owner.Type, right: typeof Owner.Type) =>
@@ -72,6 +75,10 @@ export namespace RayaTaskExecution {
               return yield* new RayaTask.GuardError({
                 message: "This routine's saved execution identity is inconsistent and needs recovery review.",
               })
+            if (prior.state === "recovering")
+              return yield* new RayaTask.GuardError({
+                message: "This routine's execution outcome is uncertain and needs recovery review.",
+              })
             if (same(prior.owner, identity)) {
               if (active.has(prior.token))
                 return busy.has(prior.token) ? undefined : ({ record: prior } satisfies Permit)
@@ -94,6 +101,7 @@ export namespace RayaTaskExecution {
             owner: identity,
             createdAt: prior?.createdAt ?? now,
             updatedAt: now,
+            state: "active",
           }
           if (prior) yield* storage.replace(key(run.id), record).pipe(Effect.orDie)
           else if (!(yield* storage.create(key(run.id), record).pipe(Effect.orDie)))
@@ -115,6 +123,7 @@ export namespace RayaTaskExecution {
             !current ||
             current.token !== permit.record.token ||
             !same(current.owner, permit.record.owner) ||
+            current.runID !== permit.record.runID ||
             current.agentID !== permit.record.agentID ||
             current.sessionID !== permit.record.sessionID
           )
@@ -127,13 +136,41 @@ export namespace RayaTaskExecution {
       )
     })
 
+    const mark = Effect.fn("RayaTaskExecution.mark")(function* (permit: Permit, state: "active" | "idle") {
+      yield* mutate(
+        storage,
+        Effect.gen(function* () {
+          const current = yield* load(permit.record.runID)
+          if (
+            !current ||
+            current.token !== permit.record.token ||
+            !same(current.owner, permit.record.owner) ||
+            current.runID !== permit.record.runID ||
+            current.agentID !== permit.record.agentID ||
+            current.sessionID !== permit.record.sessionID
+          )
+            return yield* new RayaTask.GuardError({
+              message: "This routine lost its exact execution ownership.",
+            })
+          yield* storage.replace(key(current.runID), { ...current, state, updatedAt: Date.now() }).pipe(Effect.orDie)
+        }),
+        "Routine execution state",
+      )
+    })
+
     const release = Effect.fn("RayaTaskExecution.release")(function* (permit: Permit) {
       yield* mutate(
         storage,
         Effect.gen(function* () {
           const current = yield* load(permit.record.runID)
           if (!current) return
-          if (current.token !== permit.record.token || !same(current.owner, permit.record.owner))
+          if (
+            current.token !== permit.record.token ||
+            !same(current.owner, permit.record.owner) ||
+            current.runID !== permit.record.runID ||
+            current.agentID !== permit.record.agentID ||
+            current.sessionID !== permit.record.sessionID
+          )
             return yield* new RayaTask.GuardError({
               message: "This routine's execution ownership changed before release.",
             })
@@ -170,18 +207,19 @@ export namespace RayaTaskExecution {
             fiber,
           }),
         )
-        return yield* heartbeat(permit).pipe(
+        return yield* mark(permit, "active").pipe(
+          Effect.andThen(heartbeat(permit)),
           Effect.andThen(
             Effect.raceFirst(work, Effect.forever(Effect.sleep("30 seconds").pipe(Effect.andThen(heartbeat(permit))))),
           ),
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              busy.delete(permit.record.token)
               if (Exit.isFailure(exit)) {
                 active.delete(permit.record.token)
                 closing.delete(permit.record.token)
                 return
               }
+              yield* mark(permit, "idle")
               if (!closing.delete(permit.record.token)) return
               yield* release(permit).pipe(
                 Effect.onExit(() =>
@@ -190,7 +228,15 @@ export namespace RayaTaskExecution {
                   }),
                 ),
               )
-            }),
+            }).pipe(
+              Effect.onError(() =>
+                Effect.sync(() => {
+                  active.delete(permit.record.token)
+                  closing.delete(permit.record.token)
+                }),
+              ),
+              Effect.ensuring(Effect.sync(() => busy.delete(permit.record.token))),
+            ),
           ),
         )
       })
@@ -258,6 +304,108 @@ export namespace RayaTaskExecution {
       )
     })
 
-    return { acquire, authorized, enter, finish }
+    const retained = Effect.fn("RayaTaskExecution.retained")(function* (run: {
+      id: string
+      agentID: string
+      sessionID: string
+    }) {
+      const current = yield* load(run.id)
+      if (!current) return false
+      if (current.runID === run.id && current.agentID === run.agentID && current.sessionID === run.sessionID)
+        return true
+      return yield* new RayaTask.GuardError({
+        message: "This routine's retained execution identity needs recovery review.",
+      })
+    })
+
+    const terminal = Effect.fn("RayaTaskExecution.terminal")(function* (run: {
+      id: string
+      agentID: string
+      sessionID: string
+    }) {
+      const found = durable()
+      if (!found.birth)
+        return yield* new RayaTask.GuardError({
+          message: "This backend cannot prove its process identity for terminal routine recovery.",
+        })
+      const identity = { ...found, birth: found.birth }
+      const result = yield* mutate(
+        storage,
+        Effect.gen(function* () {
+          const prior = yield* load(run.id)
+          if (prior && (prior.runID !== run.id || prior.agentID !== run.agentID || prior.sessionID !== run.sessionID))
+            return yield* new RayaTask.GuardError({
+              message: "This routine's execution identity changed before terminal recovery.",
+            })
+          if (prior) {
+            if (prior.state === undefined || prior.state === "active") return undefined
+            if (prior.state === "idle" && !stopped(prior.owner)) return undefined
+            if (prior.state === "recovering" && same(prior.owner, identity)) {
+              if (recovering.has(prior.token)) return undefined
+              recovering.add(prior.token)
+              return { record: prior } satisfies Permit
+            }
+            if (prior.state === "recovering" && !stopped(prior.owner)) return undefined
+          }
+          const now = Date.now()
+          const record: typeof Record.Type = {
+            version: 1,
+            agentID: run.agentID,
+            runID: run.id,
+            sessionID: run.sessionID,
+            token: crypto.randomUUID(),
+            owner: identity,
+            createdAt: prior?.createdAt ?? now,
+            updatedAt: now,
+            state: "recovering",
+          }
+          if (prior) yield* storage.replace(key(run.id), record).pipe(Effect.orDie)
+          else if (!(yield* storage.create(key(run.id), record).pipe(Effect.orDie)))
+            return yield* Effect.die(new Error("Routine terminal ownership changed during admission."))
+          recovering.add(record.token)
+          return { record, prior: prior?.token }
+        }),
+        "Routine terminal execution",
+      )
+      if (!result) return undefined
+      if ("prior" in result && result.prior) {
+        active.delete(result.prior)
+        busy.delete(result.prior)
+        closing.delete(result.prior)
+      }
+      return { record: result.record } satisfies Permit
+    })
+
+    const complete = Effect.fn("RayaTaskExecution.complete")(function* (permit: Permit) {
+      yield* mutate(
+        storage,
+        Effect.gen(function* () {
+          const current = yield* load(permit.record.runID)
+          if (
+            !current ||
+            current.state !== "recovering" ||
+            current.token !== permit.record.token ||
+            !same(current.owner, permit.record.owner) ||
+            current.runID !== permit.record.runID ||
+            current.agentID !== permit.record.agentID ||
+            current.sessionID !== permit.record.sessionID
+          )
+            return yield* new RayaTask.GuardError({
+              message: "This routine's terminal recovery ownership changed before completion.",
+            })
+          yield* storage.remove(key(current.runID)).pipe(Effect.orDie)
+        }),
+        "Routine terminal completion",
+      )
+    })
+
+    const recover = <A, E, R>(permit: Permit, body: Effect.Effect<A, E, R>) =>
+      body.pipe(
+        Effect.tap(() => complete(permit)),
+        Effect.ensuring(Effect.sync(() => recovering.delete(permit.record.token))),
+      )
+    const defer = (permit: Permit) => Effect.sync(() => recovering.delete(permit.record.token))
+
+    return { acquire, authorized, retained, enter, finish, terminal, recover, defer }
   }
 }

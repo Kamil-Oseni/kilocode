@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises"
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import { Cause, Duration, Effect, Exit, Option, Schema } from "effect"
 import type { Bus } from "@/bus"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
@@ -1211,6 +1212,39 @@ export namespace RayaTaskRunner {
       }
     })
 
+    const terminal = Effect.fn("RayaTaskRunner.terminal")(function* (run: RayaTask.Run) {
+      if (!(yield* execution.retained(run))) return { state: "skip" as const, run }
+      if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run))
+        return { state: "blocked" as const, run }
+      const goal = yield* goals.get(run.sessionID)
+      if (!goal || goal.status !== run.status) return { state: "blocked" as const, run }
+      const snapshot = yield* snapshots.find(run.id).pipe(Effect.orElseSucceed(() => undefined))
+      if (
+        !snapshot ||
+        snapshot.runID !== run.id ||
+        snapshot.agentID !== run.agentID ||
+        snapshot.at !== run.at ||
+        (snapshot.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1)
+      )
+        return { state: "blocked" as const, run }
+      const session = yield* input.sessions.get(run.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+      const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session?.metadata?.rayaRoutine).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (
+        session?.id !== run.sessionID ||
+        !identity ||
+        identity.agentID !== run.agentID ||
+        identity.runID !== run.id ||
+        identity.scheduleVersion !== (run.scheduleVersion ?? 1) ||
+        !isDeepStrictEqual(identity.trigger, run.trigger)
+      )
+        return { state: "blocked" as const, run }
+      const permit = yield* execution.terminal(run)
+      if (!permit) return { state: "blocked" as const, run }
+      return { state: "ready" as const, run, permit }
+    })
+
     const resolve = Effect.fn("RayaTaskRunner.resolve")(function* (id: string, runID: string) {
       yield* tasks.get(id)
       const claim = yield* inspect(input.storage, id)
@@ -1352,6 +1386,29 @@ export namespace RayaTaskRunner {
       const items = yield* tasks.list()
       for (const item of items) {
         if (organizations && (yield* organizations.stopped(item.id))) continue
+        const prior = yield* tasks.runsFor(item.id)
+        // Saved history retains at most 50 terminal runs plus its schedule anchor; replay each retained candidate.
+        const done = prior.filter(
+          (run) => !!run.outcome && (run.status === "complete" || run.status === "blocked") && !RayaTask.pending(run),
+        )
+        const restored = yield* Effect.gen(function* () {
+          const admitted = yield* Effect.forEach(
+            done,
+            (run) =>
+              Effect.acquireRelease(terminal(run), (entry) =>
+                entry.state === "ready" ? execution.defer(entry.permit) : Effect.void,
+              ),
+            { concurrency: 1 },
+          )
+          if (admitted.some((entry) => entry.state === "blocked")) return false
+          const ready = admitted.filter((entry) => entry.state === "ready")
+          yield* Effect.forEach(ready, (entry) => execution.recover(entry.permit, settle(entry.run.sessionID)), {
+            concurrency: 1,
+            discard: true,
+          })
+          return true
+        }).pipe(Effect.scoped)
+        if (!restored) continue
         yield* reconcile(item.id)
         const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
         if (stranded?.sessionID && inbox) {

@@ -274,6 +274,9 @@ func native(ctx context.Context, url, token, client string, rate int, owner *set
 	if sealed() {
 		return nil, context.Canceled
 	}
+	if err := readiness(ctx, track, joined.LocalParticipant.GetPublisherPeerConnection(), sealed); err != nil {
+		return nil, err
+	}
 	ready = true
 	return &Room{
 		room:     joined,

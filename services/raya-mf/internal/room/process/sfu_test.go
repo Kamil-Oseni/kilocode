@@ -210,6 +210,22 @@ func TestProductionWorkerSFUPCMControlAndActualTermination(t *testing.T) {
 	if !ok {
 		t.Fatal("Factory did not return production process proxy")
 	}
+	// Factory readiness must suffice for the very first actions. No client
+	// subscription callback, local poll, sleep, or retry may mask an unbound worker.
+	if err := proxy.Publish(ctx, engine.Frame{Rate: 24000, PCM: make([]byte, 960)}); err != nil {
+		t.Fatal("immediate first production Publish was not confirmed", err)
+	}
+	if err := proxy.Send(ctx, room.Data{Topic: "raya.process-test", Body: []byte("exact-client")}); err != nil {
+		t.Fatal("immediate first production Send was not confirmed", err)
+	}
+	select {
+	case value := <-data:
+		if value.Identity != owner || value.Topic != "raya.process-test" || string(value.Body) != "exact-client" {
+			t.Fatal("first process control scope or body changed")
+		}
+	case <-ctx.Done():
+		t.Fatal("first process control never reached exact client")
+	}
 	input := make(chan engine.Frame, 1)
 	inputend := make(chan struct{})
 	go func() {
@@ -237,22 +253,6 @@ func TestProductionWorkerSFUPCMControlAndActualTermination(t *testing.T) {
 			t.Error("test proxy input consumer remained active")
 		}
 	})
-	select {
-	case <-started:
-	case <-ctx.Done():
-		t.Fatal("production worker output did not subscribe")
-	}
-	if err := proxy.Send(ctx, room.Data{Topic: "raya.process-test", Body: []byte("exact-client")}); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case value := <-data:
-		if value.Identity != owner || string(value.Body) != "exact-client" {
-			t.Fatal("process control scope changed")
-		}
-	case <-ctx.Done():
-		t.Fatal("process control never reached exact client")
-	}
 	large := bytes.Repeat([]byte("p"), 15*1024)
 	if err := proxy.Send(ctx, room.Data{Topic: "raya.process-test", Body: large}); err != nil {
 		t.Fatal("actual 15 KiB control Send failed", err)

@@ -38,6 +38,7 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { Session } from "../../src/session/session"
+import { MessageID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SystemPrompt } from "../../src/session/system"
 import { SessionSummary } from "../../src/session/summary"
@@ -1512,6 +1513,146 @@ const bash = (sessionID: Session.Info["id"]) => ({
   always: ["echo 1"],
   metadata: {},
 })
+
+for (const mode of ["complete", "cancel"] as const)
+  routineIt.live(
+    `canonical voice queued behind a busy ordinary parent ${mode}s without affecting unrelated work`,
+    () =>
+      provideTmpdirServer(
+        Effect.fnUntraced(function* ({ dir, llm }) {
+          const storage = yield* Storage.Service
+          const database = yield* Database.Service
+          const sessions = yield* Session.Service
+          const prompts = yield* SessionPrompt.Service
+          const workers = yield* TaskWorker.Service
+          const runs = yield* SessionRunState.Service
+          const permission = yield* Permission.Service
+          const gate = Promise.withResolvers<void>()
+          yield* Effect.addFinalizer(() => Effect.sync(() => gate.resolve(undefined)))
+          yield* llm.push(reply().wait(gate.promise).text("Original ordinary work finished.").stop())
+          if (mode === "complete") yield* llm.push(reply().text("Queued voice work finished.").stop())
+          const parent = yield* sessions.create({ title: `Busy parent ${mode}` })
+          const original = MessageID.ascending()
+          const ordinary = yield* prompts
+            .prompt({
+              sessionID: parent.id,
+              messageID: original,
+              agent: "code",
+              model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+              parts: [{ type: "text", text: "Finish the original ordinary work." }],
+            })
+            .pipe(Effect.forkScoped)
+          yield* llm.wait(1)
+          const before = yield* runs.inspect(parent.id)
+          expect(before.phase).toBe("running")
+          const canonical = yield* voice({
+            storage,
+            database,
+            sessions,
+            prompts,
+            workers,
+            // This isolates queue ownership; it does not verify real goal charging.
+            admissions: () =>
+              Effect.succeed({ amount: 1, dispatch: Effect.void, finish: Effect.void, release: Effect.void }),
+          })
+          const secret = "a".repeat(64)
+          const requestID = crypto.randomUUID()
+          yield* canonical.reserve({ parentSessionID: parent.id, requestID, model: "gpt-live-1" }, secret, dir)
+          const binding = yield* canonical.start(
+            { parentSessionID: parent.id, requestID, providerCallID: "provider_busy_parent", model: "gpt-live-1" },
+            secret,
+            dir,
+          )
+          const input = {
+            generation: binding.generation,
+            context: {
+              version: 1 as const,
+              delegation: "delegation_queued",
+              offset: 900,
+              fragments: [
+                {
+                  id: "fragment_queued",
+                  speaker: "user" as const,
+                  text: "Handle the queued voice request.",
+                  start: 0,
+                  end: 900,
+                  sequence: 1,
+                },
+              ],
+              incomplete: true as const,
+              omitted: false,
+            },
+          }
+          const admitted = yield* canonical.delegate(binding.id, input, secret, dir)
+          expect((yield* canonical.delegate(binding.id, input, secret, dir)).id).toBe(admitted.id)
+          expect(admitted.parentSessionID).toBe(parent.id)
+          expect(admitted.messageID).not.toBe(original)
+          yield* pollWithTimeout(
+            Effect.gen(function* () {
+              const rows = yield* sessions.messages({ sessionID: parent.id })
+              return rows.find((row) => row.info.id === admitted.messageID && row.info.role === "user")
+            }),
+            "canonical voice prompt was not queued in its original parent",
+            "15 seconds",
+          )
+          expect(yield* llm.calls).toBe(1)
+          if (mode === "cancel") {
+            const cancelled = yield* canonical.cancel(binding.id, admitted.callID, binding.generation, secret, dir)
+            expect(cancelled.status).toBe("cancelled")
+            expect(yield* canonical.cancel(binding.id, admitted.callID, binding.generation, secret, dir)).toEqual(
+              cancelled,
+            )
+            const current = yield* runs.inspect(parent.id)
+            expect(current.phase).toBe("running")
+            expect(current.id).toBe(before.id)
+          }
+          gate.resolve(undefined)
+          const result = yield* awaitWithTimeout(
+            Fiber.join(ordinary),
+            "unrelated ordinary work did not finish",
+            "15 seconds",
+          )
+          expect(result.info.role).toBe("assistant")
+          expect(result.info).toMatchObject({ sessionID: parent.id, parentID: original })
+          expect(
+            result.parts
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n"),
+          ).toContain("Original ordinary work finished.")
+          const final = yield* pollWithTimeout(
+            Effect.gen(function* () {
+              const call = yield* canonical.get(binding.id, admitted.callID, binding.generation, secret, dir)
+              if (call.status === "accepted" || call.status === "running") return
+              return call
+            }),
+            "queued voice receipt did not settle",
+            "15 seconds",
+          )
+          expect(final.status).toBe(mode === "cancel" ? "cancelled" : "completed")
+          if (mode === "complete") {
+            expect(final.result?.text).toContain("Queued voice work finished.")
+            const rows = yield* sessions.messages({ sessionID: parent.id })
+            const assistant = rows.find((row) => row.info.id === final.result?.assistantMessageID)
+            expect(assistant?.info).toMatchObject({ parentID: admitted.messageID, sessionID: parent.id })
+          }
+          yield* awaitWithTimeout(
+            Effect.gen(function* () {
+              while ((yield* runs.inspect(parent.id)).phase === "running") yield* Effect.sleep("10 millis")
+            }),
+            "canonical parent queue did not become idle",
+            "15 seconds",
+          )
+          expect(yield* llm.calls).toBe(mode === "cancel" ? 1 : 2)
+          expect((yield* canonical.delegate(binding.id, input, secret, dir)).id).toBe(admitted.id)
+          expect(yield* canonical.get(binding.id, admitted.callID, binding.generation, secret, dir)).toEqual(final)
+          expect(yield* permission.list()).toEqual([])
+          yield* canonical.close(binding.id, binding.generation, secret, dir)
+        }),
+        { git: true, config: providerCfg },
+      ),
+    30_000,
+  )
 
 routineIt.live(
   "MF canonical runtime preserves edit permission rejection and original delegation identity",

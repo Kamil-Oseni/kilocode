@@ -71,7 +71,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 				remote[sid] = decoded
 				remoteMu.Unlock()
 				if old != nil {
-					_ = old.Close()
+					old.Close()
 				}
 			},
 			OnTrackUnsubscribed: func(_ *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, _ *lksdk.RemoteParticipant) {
@@ -80,7 +80,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 				delete(remote, publication.SID())
 				remoteMu.Unlock()
 				if decoded != nil {
-					_ = decoded.Close()
+					decoded.Close()
 				}
 			},
 			OnDataPacket: func(packet lksdk.DataPacket, params lksdk.DataReceiveParams) {
@@ -261,7 +261,7 @@ func (r *Room) halt() {
 			r.err = r.sender.Close(ctx)
 			r.remoteMu.Lock()
 			for sid, decoded := range r.remote {
-				r.err = errors.Join(r.err, decoded.Close())
+				decoded.Close()
 				delete(r.remote, sid)
 			}
 			r.remoteMu.Unlock()

@@ -1,0 +1,72 @@
+# kilocode_change - new file: build and exercise the real CGO/libopus/SFU path.
+name: Raya media conformance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/raya-mf/**"
+      - ".github/workflows/raya-media.yml"
+  pull_request:
+    paths:
+      - "services/raya-mf/**"
+      - ".github/workflows/raya-media.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raya-media-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codec-sfu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Start the isolated test SFU
+        run: |
+          docker run --detach --name raya-test-sfu --network host \
+            livekit/livekit-server:v1.13.7@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3 --dev --bind 127.0.0.1
+          curl --fail --silent --show-error --retry 20 --retry-delay 1 \
+            --retry-connrefused --max-time 2 http://127.0.0.1:7880/ > /dev/null
+
+      - name: Build the production codec path and run the full Go suite
+        run: docker build --target build --tag raya-mf-check services/raya-mf
+
+      - name: Exercise real Opus and SFU transport
+        run: |
+          docker run --rm --network host \
+            --env CGO_ENABLED=1 --env GOMAXPROCS=2 \
+            --env RAYA_TEST_LIVEKIT_URL=http://127.0.0.1:7880 \
+            --env RAYA_TEST_LIVEKIT_KEY=devkey \
+            --env RAYA_TEST_LIVEKIT_SECRET=secret \
+            raya-mf-check go test -p 1 -count=1 -timeout 3m -v ./internal/room/livekit
+
+      - name: Vet the CGO production sources
+        run: docker run --rm --env CGO_ENABLED=1 --env GOMAXPROCS=2 raya-mf-check go vet -p 1 ./...
+
+      - name: Build and smoke-test the production image
+        run: |
+          docker build --tag raya-mf services/raya-mf
+          docker run --detach --name raya-test-media --network host \
+            --env RAYA_MF_ADDR=127.0.0.1:7890 \
+            --env RAYA_MF_TOKEN=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA raya-mf
+          curl --fail --silent --show-error --retry 20 --retry-delay 1 \
+            --retry-connrefused --max-time 2 http://127.0.0.1:7890/healthz | \
+            python3 -c 'import json,sys; data=json.load(sys.stdin); assert data == {"ok": True, "service": "raya-mf"}'
+          status=$(curl --silent --show-error --max-time 2 --output /dev/null \
+            --write-out '%{http_code}' http://127.0.0.1:7890/v1/sessions/foreign)
+          test "$status" = 401
+          docker run --rm --entrypoint sha256sum raya-mf /usr/local/bin/raya-mf
+          docker image inspect --format '{{.Id}}' raya-mf
+
+      - name: Stop owned test services
+        if: always()
+        run: |
+          docker logs raya-test-sfu || true
+          docker logs raya-test-media || true
+          docker rm --force raya-test-media raya-test-sfu || true

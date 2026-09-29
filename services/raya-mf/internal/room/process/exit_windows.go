@@ -4,4 +4,4 @@ package process
 
 import "os"
 
-func signal(_ *os.ProcessState) (bool, int) { return false, 0 }
+func termination(_ *os.ProcessState) (bool, int) { return false, 0 }

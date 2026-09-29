@@ -19,7 +19,7 @@ func observed(state *os.ProcessState) exit {
 		return exit{}
 	}
 	value := exit{Known: true, Code: state.ExitCode()}
-	value.Signaled, value.Signal = signal(state)
+	value.Signaled, value.Signal = termination(state)
 	return value
 }
 

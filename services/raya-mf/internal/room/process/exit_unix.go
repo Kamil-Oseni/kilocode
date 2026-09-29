@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-func signal(state *os.ProcessState) (bool, int) {
+func termination(state *os.ProcessState) (bool, int) {
 	value, ok := state.Sys().(syscall.WaitStatus)
 	if !ok || !value.Signaled() {
 		return false, 0

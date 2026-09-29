@@ -1,5 +1,10 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-29 01:13 EDT - native compilation failure corrected
+
+Published context-lifecycle source `773bc64a538b91044a2f01f951f18a9b036d589f` reached terminal failure in [run 36524768119](https://github.com/Kamil-Oseni/kilocode/actions/runs/36524768119), job `109265259251`. The production CGO build's full test compilation exposed a package-level name collision: Unix exit helper `signal` and the Linux CGO PCM test's `signal` type. Windows CGO-zero checks exclude that combination and could not prove it. Renamed the diagnostic helper to `termination` on both platforms without changing receipt behavior. Focused actual subprocess exit tests pass locally; native compilation and resource diagnostics require the next exact-source run. Failed workflow log is retained in `.tmp/media-run-36524768119-failed.log`; no measurement artifact exists because build failed before measurement. The earlier resource-startup failure remains unresolved, and no prolonged continuous run is dispatched. Full requirements remain In progress, media service undeployed, installed snapshot unchanged and desktop stopped.
+
+
 ## ChatGPT 2026-09-29 01:04 EDT - context lifecycle and native exit evidence checked locally
 
 Implemented provider-visible append-only generic context correction and factual expiry. The existing singular `supersedes` remains compatible; optional `replaces` supports up to eight unique prior accepted facts. Public labels and explicit correction/invalidation text use documented Live append content rather than invented wire fields. A bounded 256-entry ledger reserves expiry capacity before sending; one owned scheduler retains absolute deadlines, appends each invalidation once, requires its exact acknowledgement and fences uncertain outcomes without replay. Commentary/call/result TTL stays a delivery deadline, and holding narration is classified as commentary. No private receipt or call ID is added to speakable content.

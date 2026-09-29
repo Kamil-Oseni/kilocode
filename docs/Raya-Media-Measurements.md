@@ -1,5 +1,10 @@
 # Raya media transport measurements
 
+## ChatGPT 2026-09-29 01:13 EDT - native compilation failure corrected
+
+Published context-lifecycle source `773bc64a538b91044a2f01f951f18a9b036d589f` reached terminal failure in [run 36524768119](https://github.com/Kamil-Oseni/kilocode/actions/runs/36524768119), job `109265259251`. The production CGO build's full test compilation exposed a package-level name collision: Unix exit helper `signal` and the Linux CGO PCM test's `signal` type. Windows CGO-zero checks exclude that combination and could not prove it. Renamed the diagnostic helper to `termination` on both platforms without changing receipt behavior. Focused actual subprocess exit tests pass locally; native compilation and resource diagnostics require the next exact-source run. Failed workflow log is retained in `.tmp/media-run-36524768119-failed.log`; no measurement artifact exists because build failed before measurement. The earlier resource-startup failure remains unresolved, and no prolonged continuous run is dispatched. Full requirements remain In progress, media service undeployed, installed snapshot unchanged and desktop stopped.
+
+
 ## ChatGPT 2026-09-29 00:45 EDT - real PCM correlations passed; resource startup gate failed
 
 [Run 36522536805](https://github.com/Kamil-Oseni/kilocode/actions/runs/36522536805), job `109258348996`, is terminal failure on exact source `7108bfe2af690a3788903a75fe5816457bb5f24d`. Production CGO build/full suite and the real Opus/SFU conformance step passed, including eighteen uniquely correlated decoded PCM trials across three actual joined/retired children. Binary SHA-256: `fe62751eb159620300c0e0488528f8bd5df8cc2913b1a21b325a560e13362362`; build image: `sha256:0f360102cbd5c68d0baef70fdb247e20cd3d1ff499d45812d48852af136a5f5e`. Evidence is retained in `.tmp/media-measurement-36522536805/raya-media-evidence-36522536805/` and `.tmp/media-run-36522536805.log`.

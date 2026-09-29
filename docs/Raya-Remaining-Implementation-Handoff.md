@@ -1,5 +1,23 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 10:17 EDT - installed delegated recovery accepted; next browser transport workflow
+
+All three installed f89a gates passed on the exact verified binary: lost review response (80.16 seconds, one fresh reply), interrupted attachment (39.57 seconds, same original run/session, one start) and expired-before-restart attachment (29.17 seconds, zero provider requests/start cards, original run failed, inert refusal). Eight owned backends joined and exited. Receipts are `.tmp/installed-routine-wait-f89a-delegated-lost-review.json`, `.tmp/installed-routine-f89a-delegated-attachment-restart.json` and `.tmp/installed-routine-f89a-delegated-attachment-expired-restart.json`; package match evidence is `.tmp/installed-snapshot-f89a-verified.json`. The exact snapshot/version/path/hash are in the preceding checkpoint. Do not reinstall or repeat these passing gates without a relevant change.
+
+SDK generation only repositioned the existing idle-event type and union entries; SDK types and formatting pass, with no wire/schema change. Commit/push that generated file and the owned installed-evidence documentation hunks using normal hooks. Keep the user's FUT-GUI-01 row, removed September 26 heading, logs/images/untracked documents out of the index. Documentation and erased type ordering need no runtime rebuild.
+
+Proceed to the separate CLI-to-BrowserBridge-to-headless-Chromium workflow described below. This installed slice proves compiled backend/SQLite/loopback-provider behavior and exact files, not loaded-editor UI, real-provider quality, nonzero delegated accounting, remaining multi-store/owner-GC/resource matrices or native/voice/platform acceptance. Keep the full objective active, EN-02 In progress, FUT-CU-01 unverified, desktop Stop and deferred MCP. Protect French Study and all unrelated user files.
+
+## ChatGPT 2026-09-29 10:13 EDT - installed snapshot verified; production recovery tests running
+
+Installer 87313 exited zero. Snapshot `7.4.23-snapshot+f89a4ab355.kamil-oseni.1790690623558` is installed at `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+f89a4ab355.kamil-oseni.1790690623558`; all 61 binary/bundle files match `.tmp/installed-snapshot-f89a-verified.json`. CLI SHA is `5add9874da978edb8619b5fc75ee7ed942612a2308b3bd87294cd66f379000ed`, 234669568 bytes. Retained package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.19baf301baf4c913507159abcb7557f7f5ddbeb2ece196f73b01412becad5068.vsix`. Do not reinstall or activate any desktop window.
+
+Runtime agent is running installed lost-review session15783, then separate startup attachment and expiry cases with unique installed reports. Wait for terminal results and exact joined-process proof. Generated SDK `src/v2/gen/types.gen.ts` has only the existing idle-event ordering delta, not a contract change; retain the generator's output, typecheck it and commit it with final documentation. Preserve the unrelated user Progress hunks and files. All remaining objective/native/provider/rendered/resource acceptance obligations remain open; EN-02 stays In progress and FUT-CU-01 unverified.
+
+## ChatGPT 2026-09-29 10:04 EDT - recovery published; snapshot installation in progress
+
+Runtime `f89a4ab3554274b16a4b6cfa3500094d7ba426c8` is committed and pushed with normal checks passing (29 package typechecks plus cached JetBrains). Current low-memory build/install is snapshot `7.4.23-snapshot+f89a4ab355.kamil-oseni.1790690623558`, exec session 87313. Do not start a second installer. Wait for its terminal result, verify exact installed bytes using `.tmp/verify-installed-f89a.py` (distinct `.tmp/installed-snapshot-f89a-verified.json` output), then run the unique installed delegated lost-review gate. Installation is not loaded-host acceptance; do not activate a desktop window. Preserve desktop Stop, deferred MCP, unrelated user edits and the complete active objective.
+
 ## ChatGPT 2026-09-29 10:00 EDT - verified delegated recovery ready for publication and installation
 
 Final source acceptance is `.tmp/source-routine-wait-delegated-lost-review-final.json` (104.66 seconds, three requests, four joined/absent owned backends). It proves the real persisted-review/lost-response/restart boundary, one completion in the original errand/run/session/deadline/budget and inert duplicate/restart behavior. Final types, 17-file syntax lint, formatting and guards pass; the two audit blockers are fixed and adverse-tested. Full details, test counts and honest legacy-fixture limits are in the matching Progress checkpoint.

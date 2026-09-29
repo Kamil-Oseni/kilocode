@@ -99,6 +99,7 @@ export type Event =
   | EventSessionTurnOpen
   | EventSessionTurnClose
   | EventSessionQueueChanged
+  | EventRayaRoutineExecutionIdle
   | EventSessionNetworkAsked
   | EventSessionNetworkReplied
   | EventSessionNetworkRejected
@@ -110,7 +111,6 @@ export type Event =
   | EventInteractiveTerminalDeleted
   | EventSandboxStatusChanged
   | EventLspClientDiagnostics
-  | EventRayaRoutineExecutionIdle
   | EventSuggestionShown
   | EventSuggestionAccepted
   | EventSuggestionDismissed
@@ -2596,6 +2596,7 @@ export type GlobalEvent = {
     | EventSessionTurnOpen
     | EventSessionTurnClose
     | EventSessionQueueChanged
+    | EventRayaRoutineExecutionIdle
     | EventSessionNetworkAsked
     | EventSessionNetworkReplied
     | EventSessionNetworkRejected
@@ -2607,7 +2608,6 @@ export type GlobalEvent = {
     | EventInteractiveTerminalDeleted
     | EventSandboxStatusChanged
     | EventLspClientDiagnostics
-    | EventRayaRoutineExecutionIdle
     | EventSuggestionShown
     | EventSuggestionAccepted
     | EventSuggestionDismissed
@@ -8249,6 +8249,18 @@ export type EventSessionQueueChanged = {
   }
 }
 
+export type EventRayaRoutineExecutionIdle = {
+  id: string
+  type: "raya.routine.execution.idle"
+  properties: {
+    version: 1
+    runID: string
+    agentID: string
+    sessionID: string
+    execution: string
+  }
+}
+
 export type EventSessionNetworkAsked = {
   id: string
   type: "session.network.asked"
@@ -8349,18 +8361,6 @@ export type EventLspClientDiagnostics = {
   properties: {
     serverID: string
     path: string
-  }
-}
-
-export type EventRayaRoutineExecutionIdle = {
-  id: string
-  type: "raya.routine.execution.idle"
-  properties: {
-    version: 1
-    runID: string
-    agentID: string
-    sessionID: string
-    execution: string
   }
 }
 

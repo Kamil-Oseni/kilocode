@@ -104,6 +104,7 @@ type Proxy struct {
 	pending  atomic.Uint64
 	queued   atomic.Int32
 	stopped  atomic.Bool
+	killed   atomic.Bool
 	once     sync.Once
 	reported sync.Once
 	stop     chan struct{}
@@ -116,6 +117,7 @@ type Proxy struct {
 	data     chan room.Data
 	failure  chan error
 	err      error // Published by closing done; action uncertainty is kept separate.
+	exit     exit  // Also published only by closing done.
 }
 
 func (p *Proxy) PID() int              { return int(p.pid.Load()) }
@@ -210,6 +212,9 @@ func (p *Proxy) run(path string, watch func() bool) {
 	}()
 	go func() {
 		_ = cmd.Wait()
+		p.exit = observed(cmd.ProcessState)
+		p.exit.StopRequested = p.stopped.Load()
+		p.exit.KillRequested = p.killed.Load()
 		// ProcessState exists only after the OS waiter reaped this exact child.
 		// Exit status alone never changes a prior unknown action outcome.
 		if cmd.ProcessState == nil {
@@ -230,6 +235,7 @@ func (p *Proxy) run(path string, watch func() bool) {
 		select {
 		case <-waited:
 		case <-timer.C:
+			p.killed.Store(true)
 			_ = cmd.Process.Kill()
 			<-waited
 		}

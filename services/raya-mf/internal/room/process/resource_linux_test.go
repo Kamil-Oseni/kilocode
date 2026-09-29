@@ -232,6 +232,37 @@ func observe(pid int, expected uint64) (resource, error) {
 	return value, nil
 }
 
+// stat evidence deliberately excludes executable names, arguments and payloads.
+type proc struct {
+	Present bool   `json:"present"`
+	State   string `json:"state"`
+	Start   uint64 `json:"startTicks"`
+	Error   string `json:"error,omitempty"`
+}
+
+func position(pid int) proc {
+	body, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if errors.Is(err, os.ErrNotExist) {
+		return proc{Error: "absent"}
+	}
+	if err != nil {
+		return proc{Error: "unavailable"}
+	}
+	end := strings.LastIndexByte(string(body), ')')
+	if end < 0 {
+		return proc{Present: true, Error: "invalid"}
+	}
+	fields := strings.Fields(string(body[end+1:]))
+	if len(fields) < 20 || len(fields[0]) != 1 || !strings.Contains("RSDZTtXxKWPI", fields[0]) {
+		return proc{Present: true, Error: "invalid"}
+	}
+	start, err := strconv.ParseUint(fields[19], 10, 64)
+	if err != nil {
+		return proc{Present: true, Error: "invalid"}
+	}
+	return proc{Present: true, State: fields[0], Start: start}
+}
+
 // These are separate container/cgroup observations, never the owned-process sum.
 func group() map[string]string {
 	values := map[string]string{}
@@ -466,13 +497,32 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		if pid != 0 {
 			child, err := observe(pid, start)
 			if err != nil {
+				before := position(pid)
+				stopped := proxy.stopped.Load()
+				initial := inspected.snapshot()
 				done := false
+				timer := time.NewTimer(4 * time.Second)
 				select {
 				case <-proxy.Done():
 					done = true
-				default:
+				case <-timer.C:
 				}
-				t.Fatalf("child resource observation failed: %v; stopped=%t done=%t inputQueued=%d slots=%d startup=%s", err, proxy.stopped.Load(), done, len(proxy.input), len(slots), inspected.snapshot())
+				timer.Stop()
+				data, encoding := json.Marshal(struct {
+					PID      int               `json:"pid"`
+					Expected uint64            `json:"expectedStartTicks"`
+					Stopped  bool              `json:"stoppedAtFailure"`
+					Done     bool              `json:"doneAfterDiagnosticWait"`
+					Exit     exit              `json:"exit"`
+					Before   proc              `json:"beforeWait"`
+					After    proc              `json:"afterWait"`
+					Group    map[string]string `json:"cgroup"`
+				}{pid, start, stopped, done, proxy.outcome(), before, position(pid), group()})
+				if encoding != nil {
+					t.Fatal("resource failure diagnostic serialization failed", encoding)
+				}
+				t.Logf("resource_failure_diagnostic %s", data)
+				t.Fatalf("child resource observation failed: %v; stoppedInitially=%t done=%t inputQueued=%d slots=%d startupInitially=%s startupAfterWait=%s", err, stopped, done, len(proxy.input), len(slots), initial, inspected.snapshot())
 			}
 			entry.Children = []resource{child}
 			entry.OwnedPSS += child.PSS

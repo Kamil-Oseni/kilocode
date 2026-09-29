@@ -40,6 +40,16 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 	if !strings.HasPrefix(client, "client-rvs_") || len(client) > 256 {
 		return nil, errors.New("authorized voice client identity is required")
 	}
+	return join(ctx, func(owner *setup) (room.Room, error) {
+		return native(ctx, url, token, client, rate, owner)
+	})
+}
+
+func native(ctx context.Context, url, token, client string, rate int, owner *setup) (room.Room, error) {
+	sealed := func() bool { return owner.stopped() || ctx.Err() != nil }
+	if sealed() {
+		return nil, context.Canceled
+	}
 	input := make(chan engine.Frame, 64)
 	data := make(chan room.Data, 64)
 	failure := make(chan error, 1)
@@ -49,7 +59,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 		default:
 		}
 	}
-	writer := &writer{input: input, rate: rate}
+	writer := &writer{input: input, rate: rate, guard: sealed}
 	var remoteMu sync.Mutex
 	remote := make(map[string]*receiver)
 	tracks := make(map[string]*webrtc.TrackRemote)
@@ -57,7 +67,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 	stopped := &atomic.Bool{}
 	callback := &lksdk.RoomCallback{
 		OnDisconnected: func() {
-			if !stopped.Load() {
+			if !stopped.Load() && !sealed() {
 				refuse(errors.New("voice room disconnected"))
 			}
 		},
@@ -75,7 +85,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 				}
 				remoteMu.Lock()
 				defer remoteMu.Unlock()
-				if stopped.Load() {
+				if stopped.Load() || sealed() {
 					return
 				}
 				for sid, retired := range remote {
@@ -140,7 +150,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 				}
 				remoteMu.Lock()
 				defer remoteMu.Unlock()
-				if stopped.Load() {
+				if stopped.Load() || sealed() {
 					return
 				}
 				select {
@@ -150,68 +160,108 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 			},
 		},
 	}
+	if sealed() {
+		return nil, context.Canceled
+	}
 	joined := lksdk.NewRoom(callback)
+	var track *track
+	var codec media.PCM16Writer
+	var sender *sender
+	var control *control
 	ready := false
 	defer func() {
 		if ready {
 			return
 		}
-		remoteMu.Lock()
 		stopped.Store(true)
+		writer.closed.Store(true)
+		if track != nil {
+			owner.settle(track.Close())
+		}
+		if sender != nil {
+			sender.stop()
+		}
+		if control != nil {
+			control.stop()
+		}
+		remoteMu.Lock()
+		retired := make([]*receiver, 0, len(remote))
 		for sid, decoded := range remote {
-			_ = sinks[sid].Close()
-			delete(sinks, sid)
-			_ = decoded.Close(context.Background())
-			<-decoded.end
-			delete(remote, sid)
-			delete(tracks, sid)
+			owner.settle(sinks[sid].Close())
+			decoded.stop()
+			retired = append(retired, decoded)
 		}
 		remoteMu.Unlock()
-		_ = writer.Close()
+		owner.settle(writer.Close())
+		owner.settle(disconnect(joined))
+		// Waiting belongs to this one retained setup owner, outside admission
+		// locks. Caller cancellation cannot fabricate native termination.
+		for _, decoded := range retired {
+			<-decoded.end
+			owner.settle(decoded.Close(context.Background()))
+		}
+		if sender != nil {
+			<-sender.end
+			owner.settle(sender.Close(context.Background()))
+		}
+		if control != nil {
+			<-control.end
+			owner.settle(control.Close(context.Background()))
+		}
+		if codec != nil {
+			owner.settle(codec.Close())
+		}
+		discard(input)
 	}()
 	if err := joined.JoinWithContextAndToken(ctx, url, token); err != nil {
-		joined.Disconnect()
 		return nil, err
+	}
+	if sealed() {
+		return nil, context.Canceled
 	}
 	identity := joined.LocalParticipant.Identity()
 	if identity != "media-"+strings.TrimPrefix(client, "client-") {
-		joined.Disconnect()
 		return nil, errors.New("unexpected media participant identity")
 	}
-	track, err := newTrack()
+	var err error
+	track, err = newTrack()
 	if err != nil {
-		joined.Disconnect()
 		return nil, err
+	}
+	if sealed() {
+		return nil, context.Canceled
 	}
 	if _, err := joined.LocalParticipant.PublishTrack(track, &lksdk.TrackPublicationOptions{
 		Name:   "raya-voice",
 		Source: lkproto.TrackSource_MICROPHONE,
 	}); err != nil {
-		_ = track.Close()
-		joined.Disconnect()
 		return nil, err
+	}
+	if sealed() {
+		return nil, context.Canceled
 	}
 	output := &encoded{}
-	codec, err := opus.Encode(output, 1, logger.GetLogger())
+	codec, err = opus.Encode(output, 1, logger.GetLogger())
 	if err != nil {
-		_ = track.Close()
-		joined.Disconnect()
 		return nil, err
 	}
-	sender, err := newSender(func(packet *rtp.Packet) error {
-		if !track.IsBound() {
+	if sealed() {
+		return nil, context.Canceled
+	}
+	sender, err = newSender(func(packet *rtp.Packet) error {
+		if sealed() || !track.IsBound() {
 			return errors.New("voice RTP track is not bound")
 		}
 		return track.WriteRTP(packet)
 	})
 	if err != nil {
-		_ = codec.Close()
-		_ = track.Close()
-		joined.Disconnect()
 		return nil, err
 	}
-	control, err := newControl(func(data room.Data) error {
-		if stopped.Load() {
+	if sealed() {
+		return nil, context.Canceled
+	}
+	control, err = newControl(func(data room.Data) error {
+		if stopped.Load() || sealed() {
 			return controlStopped
 		}
 		packet := lksdk.UserData(data.Body)
@@ -219,11 +269,10 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 		return joined.LocalParticipant.PublishDataPacket(packet, lksdk.WithDataPublishReliable(true), lksdk.WithDataPublishDestination([]string{client}))
 	})
 	if err != nil {
-		_ = sender.Close(ctx)
-		_ = codec.Close()
-		_ = track.Close()
-		joined.Disconnect()
 		return nil, err
+	}
+	if sealed() {
+		return nil, context.Canceled
 	}
 	ready = true
 	return &Room{
@@ -243,7 +292,25 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 		sinks:    sinks,
 		stopped:  stopped,
 		done:     make(chan struct{}),
+		joined:   true,
 	}, nil
+}
+
+// Public Pion peers expose a real goroutine join. The pinned SDK engine and
+// signaling cleanup do not: Disconnected state and Disconnect returning are
+// handoffs, so retain an explicit unknown receipt until that bridge exists.
+func disconnect(joined *lksdk.Room) error {
+	publisher := joined.LocalParticipant.GetPublisherPeerConnection()
+	subscriber := joined.LocalParticipant.GetSubscriberPeerConnection()
+	joined.Disconnect()
+	err := room.ErrCleanupUnknown
+	if publisher != nil {
+		err = errors.Join(err, publisher.GracefulClose())
+	}
+	if subscriber != nil && subscriber != publisher {
+		err = errors.Join(err, subscriber.GracefulClose())
+	}
+	return err
 }
 
 type Room struct {
@@ -267,6 +334,7 @@ type Room struct {
 	sinks    map[string]*sink
 	stopped  *atomic.Bool
 	once     sync.Once
+	joined   bool
 }
 
 func (r *Room) Input() <-chan engine.Frame {
@@ -279,6 +347,16 @@ func (r *Room) Data() <-chan room.Data {
 
 func (r *Room) Failure() <-chan error {
 	return r.failure
+}
+
+func (r *Room) Done() <-chan struct{} { return r.done }
+func (r *Room) Err() error {
+	select {
+	case <-r.done:
+		return r.err
+	default:
+		return errUnknown
+	}
 }
 
 func (r *Room) Publish(ctx context.Context, frame engine.Frame) error {
@@ -381,7 +459,12 @@ func (r *Room) halt() {
 					break drain
 				}
 			}
-			r.room.Disconnect()
+			if r.joined {
+				r.err = disconnect(r.room)
+			}
+			if !r.joined {
+				r.room.Disconnect()
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*engine.FramePeriod)
 			defer cancel()
 			_ = r.sender.Close(ctx)
@@ -392,7 +475,7 @@ func (r *Room) halt() {
 			<-r.sender.end
 			// These are actual local owner receipts. They do not change an
 			// earlier unknown Send outcome or authorize replay of its effects.
-			r.err = errors.Join(r.sender.Close(context.Background()), r.control.Close(context.Background()))
+			r.err = errors.Join(r.err, r.sender.Close(context.Background()), r.control.Close(context.Background()))
 			r.remoteMu.Lock()
 			for sid, decoded := range r.remote {
 				_ = r.sinks[sid].Close()
@@ -436,13 +519,14 @@ type writer struct {
 	input  chan<- engine.Frame
 	rate   int
 	closed atomic.Bool
+	guard  func() bool
 	mu     sync.RWMutex
 }
 
 func (w *writer) WriteSample(sample media.PCM16Sample) error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if w.closed.Load() {
+	if w.closed.Load() || (w.guard != nil && w.guard()) {
 		return errors.New("LiveKit PCM writer is closed")
 	}
 	if len(sample) != w.rate/50 {

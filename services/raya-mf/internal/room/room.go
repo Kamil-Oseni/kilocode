@@ -3,9 +3,12 @@ package room
 
 import (
 	"context"
+	"errors"
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
 )
+
+var ErrCleanupUnknown = errors.New("native transport termination is unconfirmed")
 
 type Data struct {
 	Identity string
@@ -27,6 +30,23 @@ type Room interface {
 type Faults interface {
 	Failure() <-chan error
 }
+
+// Cleanup proves actual resource termination, independently of provider usage
+// settlement. Err is meaningful only after Done closes.
+type Cleanup interface {
+	Done() <-chan struct{}
+	Err() error
+}
+
+// SetupError retains the exact failed or cancelled native operation until its
+// actual cleanup finishes. Cancellation is not a termination receipt.
+type SetupError struct {
+	Cause   error
+	Cleanup Cleanup
+}
+
+func (e *SetupError) Error() string { return e.Cause.Error() }
+func (e *SetupError) Unwrap() error { return e.Cause }
 
 type Factory interface {
 	Join(context.Context, string, string, string) (Room, error)

@@ -81,6 +81,21 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		}
 		return value
 	}
+	// Exercise a real successful SDK join followed by identity refusal. The
+	// failed setup must retain its exact actual disconnect/cleanup receipt.
+	failed, refusal := (Factory{}).JoinAudioAuthorized(ctx, raw, token("other-"+owner), name, client, 24000)
+	var rejected *room.SetupError
+	if failed != nil || !errors.As(refusal, &rejected) || rejected.Cleanup == nil {
+		t.Fatal("identity refusal lost native cleanup ownership", refusal)
+	}
+	select {
+	case <-rejected.Cleanup.Done():
+		if err := rejected.Cleanup.Err(); !errors.Is(err, room.ErrCleanupUnknown) || err.Error() != room.ErrCleanupUnknown.Error() {
+			t.Fatal("refused real SDK join fabricated a private SDK termination receipt", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("refused real SDK join retained cleanup beyond the SFU deadline")
+	}
 	wait := func(check func() bool, message string) {
 		t.Helper()
 		timer := time.NewTimer(4 * time.Second)
@@ -179,7 +194,9 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 				_ = adapter.Close()
 				select {
 				case <-adapter.done:
-					failure = errors.Join(failure, adapter.Close())
+					if err := adapter.Close(); !errors.Is(err, room.ErrCleanupUnknown) || err.Error() != room.ErrCleanupUnknown.Error() {
+						failure = errors.Join(failure, errors.New("adapter lost its honest SDK-unknown receipt"), err)
+					}
 				case <-time.After(2 * time.Second):
 					failure = errors.Join(failure, errors.New("adapter retained a cleanup owner"))
 				}
@@ -539,8 +556,13 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		default:
 			t.Fatal("Room cleanup reported completion before microphone owner joined")
 		}
-		if err := adapter.Close(); err != nil {
-			t.Fatal("actual adapter cleanup failed", err)
+		if err := adapter.Close(); !errors.Is(err, room.ErrCleanupUnknown) || err.Error() != room.ErrCleanupUnknown.Error() {
+			t.Fatal("actual adapter fabricated full private SDK cleanup", err)
+		}
+		for _, peer := range []*webrtc.PeerConnection{adapter.room.LocalParticipant.GetPublisherPeerConnection(), adapter.room.LocalParticipant.GetSubscriberPeerConnection()} {
+			if peer != nil && peer.ConnectionState() != webrtc.PeerConnectionStateClosed {
+				t.Fatal("owned cleanup did not close an actual Pion peer")
+			}
 		}
 		adapter.remoteMu.Lock()
 		count := len(adapter.remote)

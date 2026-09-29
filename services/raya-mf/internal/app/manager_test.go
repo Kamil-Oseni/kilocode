@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -184,6 +187,173 @@ func TestManagerFailedSetupCanRetryAfterSuccessfulCleanup(t *testing.T) {
 	}
 	if voice.count.Load() != 2 {
 		t.Fatal("setup leaked engine")
+	}
+}
+
+type setupCleanup struct {
+	done  chan struct{}
+	err   error
+	reads atomic.Int32
+}
+
+func (s *setupCleanup) Done() <-chan struct{} { return s.done }
+func (s *setupCleanup) Err() error            { s.reads.Add(1); return s.err }
+
+func TestManagerFailedJoinRetainsCleanupUntilAuthenticatedReconciliation(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "confirmed", true: "failure"}[failed], func(t *testing.T) {
+			cause := errors.New("join failed")
+			owner := &setupCleanup{done: make(chan struct{})}
+			if failed {
+				owner.err = errors.New("decoder close failed")
+			}
+			voice := &closing{fakeEngine: newFakeEngine()}
+			var opens, joins atomic.Int32
+			manager := NewManager(joining{join: func(context.Context) (room.Room, error) {
+				joins.Add(1)
+				return nil, &room.SetupError{Cause: cause, Cleanup: owner}
+			}})
+			manager.engine = opening{open: func(context.Context) (engine.Session, error) {
+				opens.Add(1)
+				return voice, nil
+			}}
+			if _, err := manager.Start(context.Background(), wire.Start{ID: "failed_join"}, mediaAuth); !errors.Is(err, cause) {
+				t.Fatalf("lost setup cause: %v", err)
+			}
+			if voice.count.Load() != 1 {
+				t.Fatal("failed setup did not close the original provider exactly once")
+			}
+			state, found, err := manager.Status("failed_join", mediaAuth)
+			if err != nil || !found || state.State != "failed" || state.Cleanup != "unknown" {
+				t.Fatalf("pending cleanup status: %+v, %v", state, err)
+			}
+			if err := manager.Close("failed_join", "wrong-token"); !errors.Is(err, ErrAuthorization) {
+				t.Fatalf("foreign close accepted: %v", err)
+			}
+			if err := manager.Close("failed_join", mediaAuth); !errors.Is(err, ErrCleanupPending) {
+				t.Fatalf("pending close lost ownership: %v", err)
+			}
+			if owner.reads.Load() != 0 {
+				t.Fatal("read cleanup result before actual termination")
+			}
+			for _, id := range []string{"failed_join", "different_join"} {
+				if _, err := manager.Start(context.Background(), wire.Start{ID: id}, mediaAuth); err == nil {
+					t.Fatal("allocated while cleanup unknown")
+				}
+			}
+			if opens.Load() != 1 || joins.Load() != 1 {
+				t.Fatal("unknown cleanup allocated a new engine or room")
+			}
+			close(owner.done)
+			if _, err := manager.Start(context.Background(), wire.Start{ID: "different_join"}, mediaAuth); !errors.Is(err, ErrCleanupPending) {
+				t.Fatalf("termination automatically reconciled ownership: %v", err)
+			}
+			if err := manager.Close("failed_join", mediaAuth); !errors.Is(err, owner.err) {
+				t.Fatalf("reconciliation error: %v", err)
+			}
+			if voice.count.Load() != 1 {
+				t.Fatal("reconciliation replayed provider teardown")
+			}
+			if failed {
+				if _, err := manager.Start(context.Background(), wire.Start{ID: "different_join"}, mediaAuth); !errors.Is(err, ErrCleanupPending) {
+					t.Fatalf("failed cleanup allowed allocation: %v", err)
+				}
+				return
+			}
+			manager.rooms = joining{join: func(context.Context) (room.Room, error) { joins.Add(1); return newFakeRoom(), nil }}
+			manager.engine = opening{open: func(context.Context) (engine.Session, error) { opens.Add(1); return newFakeEngine(), nil }}
+			if _, err := manager.Start(context.Background(), wire.Start{ID: "failed_join"}, mediaAuth); err != nil {
+				t.Fatal(err)
+			}
+			if opens.Load() != 2 || joins.Load() != 2 {
+				t.Fatal("explicit retry did not allocate exactly once")
+			}
+			if err := manager.Close("failed_join", mediaAuth); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestManagerStopBoundsUncooperativeSetupWithoutReleasingItsClaim(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	voice := &closing{fakeEngine: newFakeEngine()}
+	var opens atomic.Int32
+	manager := NewManager(joining{join: func(ctx context.Context) (room.Room, error) {
+		close(entered)
+		<-release
+		return nil, ctx.Err()
+	}})
+	manager.engine = opening{open: func(context.Context) (engine.Session, error) { opens.Add(1); return voice, nil }}
+	start := make(chan error, 1)
+	go func() {
+		_, err := manager.Start(context.Background(), wire.Start{ID: "blocked_setup"}, mediaAuth)
+		start <- err
+	}()
+	<-entered
+	if err := manager.Close("blocked_setup", mediaAuth); !errors.Is(err, ErrCleanupPending) {
+		t.Fatalf("blocked setup stop: %v", err)
+	}
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "different_setup"}, mediaAuth); !errors.Is(err, ErrCleanupPending) {
+		t.Fatalf("stopped unknown setup allowed new allocation: %v", err)
+	}
+	if opens.Load() != 1 || voice.count.Load() != 0 {
+		t.Fatal("unknown setup ownership was replaced or prematurely closed")
+	}
+	close(release)
+	if err := result(t, start); !errors.Is(err, context.Canceled) {
+		t.Fatalf("late setup completion: %v", err)
+	}
+	if voice.count.Load() != 1 {
+		t.Fatal("late setup did not close exact original provider")
+	}
+	if _, found, err := manager.Status("blocked_setup", mediaAuth); err != nil || found {
+		t.Fatalf("confirmed cleanup retained setup: %v", err)
+	}
+}
+
+func TestManagerCompletedOwnerWithUnknownSDKCleanupRetainsLiveClaim(t *testing.T) {
+	provider, calls := setupProvider(t, true)
+	var reports, joins atomic.Int32
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reports.Add(1)
+		var event wire.Envelope
+		if json.NewDecoder(r.Body).Decode(&event) != nil || event.Session != "rvs_setup" || event.Event.Session != "live_setup" || event.Event.Type != "session.setup.closed" || r.Header.Get("X-Raya-Voice-Capability") != mediaAuth {
+			t.Error("SDK cleanup uncertainty changed the exact provider settlement")
+		}
+		_, _ = w.Write([]byte("true"))
+	}))
+	defer backend.Close()
+	owner := &setupCleanup{done: make(chan struct{}), err: room.ErrCleanupUnknown}
+	close(owner.done)
+	cause := errors.New("native Join failed after owned cleanup")
+	manager := NewManager(setupRooms{joining{join: func(context.Context) (room.Room, error) {
+		joins.Add(1)
+		return nil, &room.SetupError{Cause: cause, Cleanup: owner}
+	}}})
+	input := setupInput(provider.URL, backend.URL)
+	if _, err := manager.Start(context.Background(), input, mediaAuth); !errors.Is(err, cause) {
+		t.Fatalf("lost native setup error: %v", err)
+	}
+	for range 3 {
+		status, found, err := manager.Status(input.ID, mediaAuth)
+		if err != nil || !found || status.State != "failed" || status.Cleanup != "unknown" {
+			t.Fatalf("joined Raya owner fabricated SDK termination: %+v, %v", status, err)
+		}
+		if err := manager.Close(input.ID, mediaAuth); !errors.Is(err, room.ErrCleanupUnknown) {
+			t.Fatalf("SDK unknown receipt was lost: %v", err)
+		}
+		for _, id := range []string{input.ID, "rvs_other_sdk_cleanup"} {
+			next := input
+			next.ID = id
+			if _, err := manager.Start(context.Background(), next, mediaAuth); err == nil {
+				t.Fatal("unconfirmed SDK cleanup admitted replacement")
+			}
+		}
+	}
+	if calls.Load() != 1 || joins.Load() != 1 || reports.Load() != 1 {
+		t.Fatal("unknown SDK cleanup replayed provider allocation, room join, or exact settlement")
 	}
 }
 

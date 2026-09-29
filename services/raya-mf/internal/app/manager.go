@@ -31,9 +31,10 @@ type Manager struct {
 }
 
 var (
-	ErrAuthorization = errors.New("media control authorization failed")
-	ErrCapacity      = errors.New("media frontend session capacity reached")
-	ErrSetupTimeout  = errors.New("voice session setup timed out")
+	ErrAuthorization  = errors.New("media control authorization failed")
+	ErrCapacity       = errors.New("media frontend session capacity reached")
+	ErrSetupTimeout   = errors.New("voice session setup timed out")
+	ErrCleanupPending = errors.New("failed voice setup cleanup is unconfirmed")
 )
 
 const (
@@ -52,10 +53,12 @@ func NewManager(rooms room.Factory) *Manager {
 // allocate resources until the previous owner has finished releasing them.
 type ownership struct {
 	ready   chan struct{}
+	run     context.Context
 	cancel  context.CancelFunc
 	session *Session
 	stopped bool
 	closed  error
+	cleanup room.Cleanup
 	token   [sha256.Size]byte
 }
 
@@ -119,7 +122,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		cancel()
 	})
 	defer timer.Stop()
-	claim := &ownership{ready: make(chan struct{}), cancel: cancel, token: sha256.Sum256([]byte(token))}
+	claim := &ownership{ready: make(chan struct{}), run: run, cancel: cancel, token: sha256.Sum256([]byte(token))}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -130,6 +133,13 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		m.mu.Unlock()
 		cancel()
 		return wire.Started{}, errors.New("voice session already exists; close it before reconnecting, or restart the media frontend if cleanup failed")
+	}
+	for _, prior := range m.sessions {
+		if prior.cleanup != nil || (prior.session == nil && (prior.stopped || prior.run.Err() != nil)) {
+			m.mu.Unlock()
+			cancel()
+			return wire.Started{}, ErrCleanupPending
+		}
 	}
 	if len(m.sessions) >= m.limit {
 		m.mu.Unlock()
@@ -143,7 +153,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	defer func() {
 		if claim.session == nil {
 			cancel()
-			if claim.closed == nil {
+			if claim.closed == nil && claim.cleanup == nil {
 				m.release(id, claim)
 			}
 		}
@@ -171,6 +181,12 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		return m.rooms.Join(run, input.LiveKitURL, input.LiveKitToken, input.Room)
 	}()
 	if err != nil {
+		var failure *room.SetupError
+		if errors.As(err, &failure) && failure.Cleanup != nil {
+			m.mu.Lock()
+			claim.cleanup = failure.Cleanup
+			m.mu.Unlock()
+		}
 		if provider == "openai-live" {
 			claim.closed = reporter.failed(voice, err)
 		} else {
@@ -262,10 +278,28 @@ func (m *Manager) Status(id string, token string) (wire.Status, bool, error) {
 	}
 	select {
 	case <-claim.ready:
+		if claim.cleanup != nil {
+			state := "unknown"
+			select {
+			case <-claim.cleanup.Done():
+				state = "complete"
+				if claim.cleanup.Err() != nil || claim.closed != nil {
+					state = "failed"
+				}
+				if errors.Is(claim.cleanup.Err(), room.ErrCleanupUnknown) {
+					state = "unknown"
+				}
+			default:
+			}
+			return wire.Status{ID: id, State: "failed", Cleanup: state}, true, nil
+		}
 		if claim.closed != nil {
 			return wire.Status{ID: id, State: "failed", Cleanup: "failed"}, true, nil
 		}
 	default:
+	}
+	if claim.stopped {
+		return wire.Status{ID: id, State: "failed", Cleanup: "unknown"}, true, nil
 	}
 	return wire.Status{ID: id, State: "starting"}, true, nil
 }
@@ -301,8 +335,22 @@ func authorized(claim *ownership, token string) bool {
 }
 
 func (m *Manager) finish(id string, claim *ownership) error {
-	<-claim.ready
+	timer := time.NewTimer(2 * engine.FramePeriod)
+	defer timer.Stop()
+	select {
+	case <-claim.ready:
+	case <-timer.C:
+		return cleanup(ErrCleanupPending)
+	}
 	err := claim.closed
+	if claim.cleanup != nil {
+		select {
+		case <-claim.cleanup.Done():
+			err = errors.Join(err, claim.cleanup.Err())
+		default:
+			return cleanup(errors.Join(err, ErrCleanupPending))
+		}
+	}
 	if claim.session != nil {
 		err = claim.session.Close()
 	}

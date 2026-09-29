@@ -127,6 +127,69 @@ func setupInput(provider, backend string) wire.Start {
 		Engine: engine.Config{Provider: "openai-live", Endpoint: "ws" + strings.TrimPrefix(provider, "http") + "/v1/live/sessions", Key: "setup-key", Model: "gpt-live-1", Delegation: "client", MaximumSeconds: 10}}
 }
 
+func TestManagerPendingFailedJoinPreservesExactLiveSettlementWithoutReplay(t *testing.T) {
+	for _, final := range []bool{true, false} {
+		t.Run(map[bool]string{true: "final", false: "unknown_usage"}[final], func(t *testing.T) {
+			provider, calls := setupProvider(t, final)
+			var reports atomic.Int32
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reports.Add(1)
+				var event wire.Envelope
+				if json.NewDecoder(r.Body).Decode(&event) != nil || event.Session != "rvs_setup" || event.Event.Session != "live_setup" || event.Event.Type != "session.setup.closed" || r.Header.Get("X-Raya-Voice-Capability") != mediaAuth {
+					t.Error("failed native owner lost exact provider settlement identity")
+				}
+				raw, _ := json.Marshal(event.Event.Data)
+				var data struct {
+					Started struct {
+						Event string `json:"event_id"`
+					}
+					Final *struct {
+						Event string `json:"event_id"`
+						Usage struct{ Seconds float64 }
+					}
+				}
+				if json.Unmarshal(raw, &data) != nil || data.Started.Event != "setup_started" {
+					t.Error("startup receipt was not retained")
+				}
+				if final && (data.Final == nil || data.Final.Event != "setup_final" || data.Final.Usage.Seconds != 0.03) {
+					t.Error("exact final usage was lost")
+				}
+				if !final && data.Final != nil {
+					t.Error("missing final usage was fabricated")
+				}
+				_, _ = w.Write([]byte("true"))
+			}))
+			defer backend.Close()
+			owner := &setupCleanup{done: make(chan struct{})}
+			cause := errors.New("native Join cancellation")
+			manager := NewManager(setupRooms{joining{join: func(context.Context) (room.Room, error) { return nil, &room.SetupError{Cause: cause, Cleanup: owner} }}})
+			input := setupInput(provider.URL, backend.URL)
+			if _, err := manager.Start(context.Background(), input, mediaAuth); !errors.Is(err, cause) {
+				t.Fatalf("setup error lost: %v", err)
+			}
+			if err := manager.Close(input.ID, mediaAuth); !errors.Is(err, ErrCleanupPending) {
+				t.Fatalf("unknown native cleanup released: %v", err)
+			}
+			other := input
+			other.ID = "rvs_other_setup"
+			if _, err := manager.Start(context.Background(), other, mediaAuth); !errors.Is(err, ErrCleanupPending) {
+				t.Fatalf("new paid provider admitted: %v", err)
+			}
+			close(owner.done)
+			err := manager.Close(input.ID, mediaAuth)
+			if final && err != nil {
+				t.Fatalf("confirmed native/provider cleanup failed: %v", err)
+			}
+			if !final && err == nil {
+				t.Fatal("unknown provider final usage was released after local termination")
+			}
+			if calls.Load() != 1 || reports.Load() != 1 {
+				t.Fatal("reconciliation replayed provider admission or settlement")
+			}
+		})
+	}
+}
+
 func TestManagerLiveBackendRefusalFencesActiveMedia(t *testing.T) {
 	for _, body := range []string{"false", "", "true false"} {
 		t.Run(body, func(t *testing.T) {

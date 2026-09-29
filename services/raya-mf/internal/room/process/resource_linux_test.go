@@ -296,6 +296,10 @@ func group() map[string]string {
 // not measure provider calls, devices, acoustic playback or the separate SFU's
 // resources, and reports measured drift without asserting an invented plateau.
 func TestProductionWorkerSustainedResources(t *testing.T) {
+	traced := os.Getenv("RAYA_TEST_PARENT_TRACE")
+	if traced != "" && traced != "1" {
+		t.Fatal("parent action diagnostic gate must be exactly 1")
+	}
 	lost := os.Getenv("RAYA_TEST_RESOURCE_LOST_ACK")
 	if lost != "" && lost != "1" {
 		t.Fatal("resource lost-ACK fixture gate must be exactly 1")
@@ -551,12 +555,17 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 			Observed   float64         `json:"observedActiveSeconds"`
 			Cleanup    resourceCleanup `json:"cleanup"`
 			Unknown    bool            `json:"unknownPublish"`
+			Action     *observation    `json:"parentAction,omitempty"`
 			Lost       struct {
 				Captured bool   `json:"captured"`
 				ID       uint64 `json:"id"`
 				Outcome  string `json:"outcome"`
 			} `json:"lostAck"`
 		}{Configured: seconds, Elapsed: failure.elapsed, Binary: hex.EncodeToString(hash[:]), Outcome: "failed-partial-after-bounded-cleanup", Slots: failure.slots, Windows: windows, Completed: false, Reaped: reaped, Mode: mode, Active: active, Observed: observed, Cleanup: cleanup, Unknown: unknown}
+		if proxy != nil && proxy.trace != nil {
+			value := proxy.trace.snapshot()
+			partial.Action = &value
+		}
 		select {
 		case ack := <-captured:
 			partial.Lost.Captured = true
@@ -634,7 +643,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 	for time.Now().Before(end) {
 		current.pid, current.start, current.ready = 0, 0, time.Time{}
 		inputend = nil
-		joined, err := (Factory{Path: path, wrap: func(input io.Reader) io.Reader {
+		joined, err := (Factory{Path: path, trace: traced == "1", wrap: func(input io.Reader) io.Reader {
 			if lost == "1" {
 				input = &loss{input: input, session: client, captured: captured, observed: make(chan struct{})}
 			}

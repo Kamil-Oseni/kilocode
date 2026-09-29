@@ -58,7 +58,7 @@ func TestProductionResourceLostACKRetainsFailedCleanupEvidence(t *testing.T) {
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestProductionWorkerSustainedResources$", "-test.count=1", "-test.timeout=25s")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	hidden(cmd)
-	cmd.Env = append(os.Environ(), "RAYA_TEST_RESOURCE_LOST_ACK=1", "RAYA_TEST_RESOURCE_SECONDS=60", "RAYA_TEST_RESOURCE_MODE=continuous", "RAYA_TEST_RESOURCE_WORKERS=", "RAYA_TEST_RESOURCE_REPORT="+report)
+	cmd.Env = append(os.Environ(), "RAYA_TEST_PARENT_TRACE=1", "RAYA_TEST_RESOURCE_LOST_ACK=1", "RAYA_TEST_RESOURCE_SECONDS=60", "RAYA_TEST_RESOURCE_MODE=continuous", "RAYA_TEST_RESOURCE_WORKERS=", "RAYA_TEST_RESOURCE_REPORT="+report)
 	// Preserve only the explicit sanitized artifact, never native stderr or
 	// subprocess stack/log payloads. Run still joins the exact test subprocess.
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
@@ -113,12 +113,19 @@ func TestProductionResourceLostACKRetainsFailedCleanupEvidence(t *testing.T) {
 		Cleanup resourceCleanup `json:"cleanup"`
 		Windows []window        `json:"rawWindows"`
 		Active  float64         `json:"completedActiveSeconds"`
+		Action  *observation    `json:"parentAction"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		t.Fatal("failed resource artifact was malformed")
 	}
 	if result.Completed || result.Outcome != "failed-partial-after-bounded-cleanup" || !result.Unknown || !result.Lost.Captured || result.Lost.ID != 2 || result.Lost.Outcome != "confirmed" || result.Active != 0 {
 		t.Fatal("lost genuine ACK was replayed or unknown publish acquired false completion")
+	}
+	if result.Action == nil || result.Action.ID != 2 || (result.Action.Stages&(1<<traceFinish) != 0 && result.Action.Outcome != 3) || result.Action.Correlated || result.Action.Consumed != 0 {
+		t.Fatal("lost ACK diagnostic inferred parent acceptance or changed caller outcome")
+	}
+	if !result.Action.Incomplete && (!result.Action.Available || result.Action.Stages&(1<<traceWriteEnd) == 0 || !result.Action.WriteOK || result.Action.Stages&(1<<traceFinish) == 0) {
+		t.Fatal("complete parent diagnostic omitted admitted write or immutable outcome")
 	}
 	cleanup := result.Cleanup
 	if cleanup.PID <= 0 || cleanup.Start == 0 || !cleanup.Done || !cleanup.Wait || !cleanup.Absent || !cleanup.Exit.Known || !cleanup.Input || !cleanup.Observer || cleanup.Slots != 0 {

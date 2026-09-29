@@ -27,8 +27,9 @@ var ErrCapacity = errors.New("isolated media worker capacity reached")
 var slots = make(chan struct{}, 8)
 
 type Factory struct {
-	Path string
-	wrap func(io.Reader) io.Reader
+	Path  string
+	wrap  func(io.Reader) io.Reader
+	trace bool
 }
 
 func (f Factory) Join(ctx context.Context, url, token, name string) (room.Room, error) {
@@ -65,6 +66,9 @@ func (f Factory) JoinAudioAuthorized(ctx context.Context, url, token, name, clie
 		return nil, ErrCapacity
 	}
 	p := &Proxy{session: client, rate: rate, wrap: f.wrap, stop: make(chan struct{}), done: make(chan struct{}), ready: make(chan Message, 1), ack: make(chan Message, 1), jobs: make(chan Message), admit: make(chan struct{}, 1), input: make(chan engine.Frame, 64), data: make(chan room.Data, 64), failure: make(chan error, 1)}
+	if f.trace {
+		p.trace = &trace{}
+	}
 	p.id.Store(1)
 	watch := context.AfterFunc(ctx, p.halt)
 	go p.run(path, watch)
@@ -116,8 +120,9 @@ type Proxy struct {
 	input    chan engine.Frame
 	data     chan room.Data
 	failure  chan error
-	err      error // Published by closing done; action uncertainty is kept separate.
-	exit     exit  // Also published only by closing done.
+	err      error  // Published by closing done; action uncertainty is kept separate.
+	exit     exit   // Also published only by closing done.
+	trace    *trace // Optional parent-only diagnostics; nil in ordinary production.
 }
 
 func (p *Proxy) PID() int              { return int(p.pid.Load()) }
@@ -187,20 +192,7 @@ func (p *Proxy) run(path string, watch func() bool) {
 	written, read, waited := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(written)
-		for {
-			select {
-			case <-p.stop:
-				return
-			case message := <-p.jobs:
-				if p.stopped.Load() {
-					return
-				}
-				if err := Write(input, message); err != nil {
-					p.fail()
-					return
-				}
-			}
-		}
+		p.write(input)
 	}()
 	go func() {
 		defer close(read)
@@ -248,6 +240,37 @@ func (p *Proxy) run(path string, watch func() bool) {
 	reaped = cmd.ProcessState != nil
 }
 
+func (p *Proxy) write(input io.Writer) {
+	for {
+		select {
+		case <-p.stop:
+			return
+		case message := <-p.jobs:
+			if p.trace != nil {
+				p.trace.mark(message.ID, traceReceive, 0)
+			}
+			if p.stopped.Load() {
+				return
+			}
+			if p.trace != nil {
+				p.trace.mark(message.ID, traceWriteBegin, 0)
+			}
+			err := Write(input, message)
+			if p.trace != nil {
+				code := uint8(0)
+				if err == nil {
+					code = 1
+				}
+				p.trace.mark(message.ID, traceWriteEnd, code)
+			}
+			if err != nil {
+				p.fail()
+				return
+			}
+		}
+	}
+}
+
 func (p *Proxy) read(output io.Reader) {
 	started := false
 	for {
@@ -257,6 +280,9 @@ func (p *Proxy) read(output io.Reader) {
 				p.fail()
 			}
 			return
+		}
+		if p.trace != nil && message.Op == "ack" && message.Session == p.session {
+			p.trace.mark(message.ID, traceAckParsed, ackCode(message.Outcome))
 		}
 		if p.stopped.Load() {
 			return
@@ -278,8 +304,14 @@ func (p *Proxy) read(output io.Reader) {
 				p.fail()
 				return
 			}
+			if p.trace != nil {
+				p.trace.mark(message.ID, traceAckCorrelated, 0)
+			}
 			select {
 			case p.ack <- message:
+				if p.trace != nil {
+					p.trace.mark(message.ID, traceAckForwarded, 0)
+				}
 			default:
 				p.fail()
 				return
@@ -313,12 +345,16 @@ func (p *Proxy) read(output io.Reader) {
 	}
 }
 
-func (p *Proxy) call(ctx context.Context, message Message) error {
+func (p *Proxy) call(ctx context.Context, message Message) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if p.stopped.Load() {
 		return ErrStopped
+	}
+	var started time.Time
+	if p.trace != nil {
+		started = time.Now()
 	}
 	ctx, cancel := context.WithTimeout(ctx, engine.FramePeriod)
 	defer cancel()
@@ -346,6 +382,25 @@ func (p *Proxy) call(ctx context.Context, message Message) error {
 	if err := Validate(message); err != nil {
 		return errors.Join(ErrRefused, err)
 	}
+	if p.trace != nil {
+		p.trace.begin(message.ID, message.Op, started, expires)
+		defer func() {
+			code := uint8(3)
+			switch {
+			case err == nil:
+				code = 1
+			case errors.Is(err, ErrUnknown):
+				code = 3
+			case errors.Is(err, ErrRefused):
+				code = 2
+			case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+				code = 4
+			case errors.Is(err, ErrStopped):
+				code = 5
+			}
+			p.trace.mark(message.ID, traceFinish, code)
+		}()
+	}
 	p.pending.Store(message.ID)
 	defer p.pending.Store(0)
 	select {
@@ -362,6 +417,9 @@ func (p *Proxy) call(ctx context.Context, message Message) error {
 	case <-p.stop:
 		return ErrUnknown
 	case ack := <-p.ack:
+		if p.trace != nil && ack.ID == message.ID {
+			p.trace.mark(message.ID, traceAckConsumed, 0)
+		}
 		if ack.ID != message.ID || ctx.Err() != nil || p.stopped.Load() {
 			p.halt()
 			return ErrUnknown

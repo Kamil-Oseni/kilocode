@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-29 14:24 EDT - browser confirmation snapshot installed and byte-verified
+
+Commit `5ceaf4bf6c` is pushed to `origin/main`; its normal push hook passed all 29 primary package typechecks and the JetBrains typecheck. The low-memory snapshot built a new CLI, regenerated the SDK without a tracked difference, passed extension/webview typechecks, full lint, production bundling and native capture/input/accessibility self-tests, and installed as `7.4.23-snapshot+5ceaf4bf6c.kamil-oseni.1790705788288`. The compiled CLI passed version, model snapshot and sandbox-worker smokes.
+
+Independent retained receipt `.tmp/installed-snapshot-5ceaf4bf6c-verified.json` compares all 462 installed VSIX files to the retained package: binaries and bundles match byte for byte; installed `package.json` differs only by VS Code's `__metadata`. Package SHA-256 is `dbc53d9c4d7d763ed5b2c912d1f7a258dd84e42ca7648be88df669715a56c236`; installed CLI is 234754048 bytes with SHA-256 `79f966e6aeabb96aaedb0b9cc94980681b19738373f7aa7691572860a9607c2e`. No Raya window was reloaded, activated or controlled. Installation proves package identity on disk, not that an open host loaded it. The post-grant interruption/restart convergence and linear-scan latency gaps below remain open. Next: versioned host recovery metadata, bounded lookup, genuine restart and latency trials; keep `FUT-CU-01` unverified and desktop Stopped.
+
 ## ChatGPT 2026-09-29 14:00 EDT - browser confirmation source gate; installed recovery still open
 
 Version 1 browser confirmation now has backend-owned immutable admission, one-time dispatch ownership, metadata-only completion, exact read and acknowledgement, and a canonical SQL ToolPart origin check. The production extension bridge checks the exact workspace and semantic request digest before showing or dispatching, revalidates authority at native execution, and does not replay a lost dispatch grant. A second browser request from the same tool part is refused. The host's persisted unknown failure message is now fixed text rather than a free-text native error. The generated SDK and versioned protocol carry the new endpoints; no raw frames or typed input enter the backend ledger. Source tests cover changed targets, duplicate grants, lost confirm/reply, denial, stale scenes, slot contention and terminal recycling.

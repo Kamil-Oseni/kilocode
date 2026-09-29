@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 14:24 EDT - exact installed source boundary
+
+Pushed commit `5ceaf4bf6c` installed as `7.4.23-snapshot+5ceaf4bf6c.kamil-oseni.1790705788288`. Receipt `.tmp/installed-snapshot-5ceaf4bf6c-verified.json` proves 462 installed package files match the retained VSIX, apart from VS Code's own manifest `__metadata`; installed CLI SHA-256 is `79f966e6aeabb96aaedb0b9cc94980681b19738373f7aa7691572860a9607c2e`. Build/native checks and the normal cross-package/JetBrains push hook passed. The open Raya host was not reloaded or controlled and must not be counted as source-matched. Browser restart convergence, linear ledger latency, installed rendered Windows control and the full 17-task release gate remain open; desktop Stopped, MCP deferred.
+
 ## ChatGPT 2026-09-29 14:00 EDT - confirmation recovery and latency next
 
 The current source adds exact canonical browser tool origin, immutable 256-slot backend admission/dispatch/completion/ACK, generated SDK endpoints and a production bridge that refuses changed workspace/request digests and duplicate native dispatch. The compiled source CLI plus SDK/SSE/bridge/headless Chromium passed five local workflows after the final bridge refactor in `.tmp/source-browser-workflow-confirmation-final.json` (`-runner.json`). These are source transport results, not a loaded Windows host or release benchmark. Focused extension bridge checks pass 47/47; scoped lint and typecheck pass. The full ledger stress check's 260 cycles took 185.03 seconds.

@@ -46,3 +46,60 @@ test("workspace authentication captures have independent identities, expiry, and
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test("revocation before authentication deletion preserves the exact saved capture", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "raya-auth-guarded-"))
+  try {
+    const workspace = await profile(join(dir, "profiles"), dir)
+    const auth = new BrowserAuth(join(workspace.path, "auth"), workspace.owner)
+    const saved = await auth.capture("Guarded capture", {
+      cookies: [{ name: "session", value: "guarded-value", domain: ".example.test" }],
+      origins: [],
+    })
+    const state = join(workspace.path, "auth", `${saved.id}.state`)
+    const receipt = join(workspace.path, "auth", `${saved.id}.json`)
+    const before = await Promise.all([readFile(state), readFile(receipt)])
+
+    await expect(
+      auth.delete(saved.id, () => {
+        throw new Error("Computer Use grant was revoked")
+      }),
+    ).rejects.toThrow("grant was revoked")
+
+    expect(await readFile(state)).toEqual(before[0])
+    expect(await readFile(receipt)).toEqual(before[1])
+    expect((await auth.read(saved.id)).info.id).toBe(saved.id)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("revocation after authentication bytes are removed retains the exact receipt", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "raya-auth-partial-"))
+  try {
+    const workspace = await profile(join(dir, "profiles"), dir)
+    const auth = new BrowserAuth(join(workspace.path, "auth"), workspace.owner)
+    const saved = await auth.capture("Partial deletion", {
+      cookies: [{ name: "session", value: "partial-value", domain: ".example.test" }],
+      origins: [],
+    })
+    const state = join(workspace.path, "auth", `${saved.id}.state`)
+    const receipt = join(workspace.path, "auth", `${saved.id}.json`)
+    const before = await readFile(receipt)
+    let checks = 0
+
+    await expect(
+      auth.delete(saved.id, () => {
+        checks++
+        if (checks === 2) throw new Error("Computer Use grant was revoked")
+      }),
+    ).rejects.toThrow("grant was revoked")
+
+    expect(checks).toBe(2)
+    expect(await Bun.file(state).exists()).toBe(false)
+    expect(await readFile(receipt)).toEqual(before)
+    expect((await auth.list()).find((info) => info.id === saved.id)?.status).toBe("missing")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

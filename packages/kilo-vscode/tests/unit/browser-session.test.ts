@@ -1,6 +1,6 @@
 // raya_change - Milestone F drive/watch, input forwarding, and login persistence
 import { describe, expect, it } from "bun:test"
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type {
@@ -8,8 +8,60 @@ import type {
   BrowserContextLike,
   BrowserLaunch,
   BrowserPage,
+  BrowserResult,
 } from "../../src/services/browser-automation/browser-session"
 import { BrowserOutcomeError, BrowserSession, evaluate } from "../../src/services/browser-automation/browser-session"
+import {
+  ComputerUseLeaseStore,
+  type AuthorizationRequest,
+  type SensitivePolicy,
+} from "../../src/services/computer-use/lease-store"
+
+const policy: SensitivePolicy = {
+  communications: "deny",
+  financial: "deny",
+  credentials: "deny",
+  software: "deny",
+  system: "deny",
+  deletion: "deny",
+  disclosure: "deny",
+  legal: "deny",
+  publishing: "deny",
+}
+
+async function authority(sessionID: string) {
+  const saved: Record<string, unknown> = {}
+  const lease = new ComputerUseLeaseStore({
+    get: <T>(key: string) => saved[key] as T | undefined,
+    update: async (key, value) => {
+      saved[key] = value
+    },
+  })
+  await lease.grant({
+    sessionID,
+    level: "autonomous",
+    duration: "session",
+    applications: "all",
+    actions: ["browser"],
+    sensitive: policy,
+    cooperativeInput: false,
+  })
+  const request = {
+    id: `authorize_${sessionID}`,
+    sessionID,
+    operation: "authorize",
+    surface: "browser",
+    action: "browser",
+    sensitive: false,
+  } satisfies AuthorizationRequest
+  return {
+    lease,
+    guard: () => {
+      const result = lease.authorize(request)
+      if (result.decision !== "allow") throw new Error(result.reason)
+    },
+  }
+}
 
 class FakeCDP implements BrowserCDP {
   readonly commands: Array<{ method: string; params?: Record<string, unknown> }> = []
@@ -44,9 +96,12 @@ class FakePage implements BrowserPage {
   delay = 0
   pause: Promise<void> | undefined
   evaluation: Promise<unknown> | undefined
+  onClick: (() => void) | undefined
+  onFill: (() => void) | undefined
   active = 0
   maxActive = 0
   readonly fills: Array<{ selector: string; text: string }> = []
+  readonly presses: string[] = []
   readonly selects: Array<{ selector: string; values: string[] }> = []
   readonly scrolls: Array<{ x: number; y: number }> = []
 
@@ -93,6 +148,7 @@ class FakePage implements BrowserPage {
     return {
       click: async () => {
         this.clickAttempts += 1
+        this.onClick?.()
         this.active += 1
         this.maxActive = Math.max(this.maxActive, this.active)
         if (this.pause) await this.pause
@@ -105,8 +161,11 @@ class FakePage implements BrowserPage {
       },
       fill: async (text: string) => {
         this.fills.push({ selector, text })
+        this.onFill?.()
       },
-      press: async () => undefined,
+      press: async (key: string) => {
+        this.presses.push(`${selector}:${key}`)
+      },
       selectOption: async (values: string[]) => {
         this.selects.push({ selector, values })
       },
@@ -619,5 +678,277 @@ describe("Raya browser session", () => {
     expect(fake.pages[0]!.clicks).toEqual(["#first", "#second"])
     expect(fake.pages[0]!.maxActive).toBe(1)
     await session.dispose()
+  })
+
+  it("revalidates authority when a queued action reaches native dispatch", async () => {
+    const fake = harness()
+    const session = new BrowserSession("guarded-queue-profile", fake.launch)
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let first: Promise<BrowserResult> | undefined
+    let second: Promise<BrowserResult> | undefined
+    let allowed = true
+    const guard = () => {
+      if (!allowed) throw new Error("Computer Use grant was revoked")
+    }
+    try {
+      await session.ready()
+      fake.pages[0]!.pause = release.promise
+      fake.pages[0]!.onClick = () => entered.resolve()
+      first = session.execute({ operation: "click", selector: "#first", guard })
+      await Promise.race([
+        entered.promise,
+        Bun.sleep(2_000).then(() => {
+          throw new Error("First queued browser action did not reach native dispatch")
+        }),
+      ])
+      second = session.execute({ operation: "click", selector: "#second", guard })
+      allowed = false
+      release.resolve()
+
+      await first
+      await expect(second).rejects.toThrow("grant was revoked")
+      expect(fake.pages[0]!.clickAttempts).toBe(1)
+      expect(fake.pages[0]!.clicks).toEqual(["#first"])
+    } finally {
+      release.resolve()
+      await Promise.allSettled([first, second].filter((item): item is Promise<BrowserResult> => !!item))
+      await session.dispose()
+    }
+  })
+
+  it("revalidates authority after filling and before submitting text", async () => {
+    const fake = harness()
+    const session = new BrowserSession("guarded-submit-profile", fake.launch)
+    let allowed = true
+    const guard = () => {
+      if (!allowed) throw new Error("Computer Use grant was revoked after fill")
+    }
+    try {
+      await session.ready()
+      fake.pages[0]!.onFill = () => {
+        allowed = false
+      }
+      const error = await session
+        .execute({ operation: "type", selector: "#message", text: "Draft", submit: true, guard })
+        .catch((value: unknown) => value)
+      expect(error).toBeInstanceOf(BrowserOutcomeError)
+      expect(String(error)).toContain("may have taken effect")
+      expect(fake.pages[0]!.fills).toEqual([{ selector: "#message", text: "Draft" }])
+      expect(fake.pages[0]!.presses).toEqual([])
+    } finally {
+      await session.dispose()
+    }
+  })
+
+  it("refuses a revoked startup owner before profile mutation and leaves user startup retryable", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-startup-owner-"))
+    const marker = join(dir, "active-auth.json")
+    const fake = harness()
+    const permit = await authority("session_startup_owner")
+    const session = new BrowserSession(dir, fake.launch)
+    let checks = 0
+    let stopped: Promise<void> | undefined
+    const guard = () => {
+      checks++
+      if (checks === 2) stopped = permit.lease.stop()
+      permit.guard()
+    }
+    try {
+      await mkdir(dir, { recursive: true })
+      await writeFile(marker, '{"captureID":"preserved","status":"restored"}')
+      const before = await readFile(marker)
+
+      const error = await session.execute({ operation: "tabs", action: "list", guard }).catch((value: unknown) => value)
+      expect(error).not.toBeInstanceOf(BrowserOutcomeError)
+      expect(String(error)).toContain("stopped")
+      if (!stopped) throw new Error("Expected the startup lease to stop")
+      await stopped
+      expect(fake.pages).toHaveLength(0)
+      expect(await readFile(marker)).toEqual(before)
+
+      await session.ready()
+      expect(fake.pages).toHaveLength(1)
+    } finally {
+      await session.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("lets a user-owned startup finish while a revoked joining action refuses locally", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-startup-joiner-"))
+    const fake = harness()
+    const permit = await authority("session_startup_joiner")
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const joined = Promise.withResolvers<void>()
+    const launch: BrowserLaunch = async (profile) => {
+      entered.resolve()
+      await release.promise
+      return fake.launch(profile)
+    }
+    const session = new BrowserSession(dir, launch)
+    let user: Promise<void> | undefined
+    let action: Promise<BrowserResult> | undefined
+    try {
+      user = session.ready()
+      await entered.promise
+      action = session.execute({
+        operation: "tabs",
+        action: "list",
+        guard: () => {
+          permit.guard()
+          joined.resolve()
+        },
+      })
+      await joined.promise
+      await permit.lease.stop()
+      release.resolve()
+
+      await user
+      const error = await action.catch((value: unknown) => value)
+      expect(error).not.toBeInstanceOf(BrowserOutcomeError)
+      expect(String(error)).toContain("stopped")
+      expect(fake.pages).toHaveLength(1)
+      expect((await session.execute({ operation: "tabs", action: "list" })).tabs).toHaveLength(1)
+    } finally {
+      release.resolve()
+      await Promise.allSettled([user, action].filter((item): item is Promise<unknown> => !!item))
+      await session.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("closes a native context returned after startup authority is revoked", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-startup-launch-"))
+    const fake = harness()
+    const permit = await authority("session_startup_launch")
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let closed = 0
+    let pages = 0
+    const launch: BrowserLaunch = async (profile) => {
+      entered.resolve()
+      await release.promise
+      const context = await fake.launch(profile)
+      return {
+        ...context,
+        newPage: async () => {
+          pages++
+          return context.newPage()
+        },
+        close: async () => {
+          closed++
+          await context.close()
+        },
+      }
+    }
+    const session = new BrowserSession(dir, launch)
+    let action: Promise<BrowserResult> | undefined
+    try {
+      action = session.execute({ operation: "tabs", action: "list", guard: permit.guard })
+      await entered.promise
+      await permit.lease.stop()
+      release.resolve()
+
+      const error = await action.catch((value: unknown) => value)
+      expect(error).toBeInstanceOf(BrowserOutcomeError)
+      expect(String(error)).toContain("may have taken effect")
+      expect(closed).toBe(1)
+      expect(pages).toBe(0)
+      expect(fake.pages).toHaveLength(1)
+      expect(fake.pages[0]!.clickAttempts).toBe(0)
+      expect(fake.pages[0]!.fills).toEqual([])
+    } finally {
+      release.resolve()
+      await Promise.allSettled([action].filter((item): item is Promise<unknown> => !!item))
+      await session.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps startup outcome unknown and profile-owned when revoked context closure fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-startup-close-"))
+    const fake = harness()
+    const permit = await authority("session_startup_close")
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let closes = 0
+    let foreign = 0
+    const launch: BrowserLaunch = async (profile) => {
+      entered.resolve()
+      await release.promise
+      const context = await fake.launch(profile)
+      return {
+        ...context,
+        close: async () => {
+          closes++
+          if (closes === 1) throw new Error("Controlled native context close failure")
+          await context.close()
+        },
+      }
+    }
+    const session = new BrowserSession(dir, launch)
+    const other = new BrowserSession(dir, async (profile) => {
+      foreign++
+      return fake.launch(profile)
+    })
+    let action: Promise<BrowserResult> | undefined
+    try {
+      action = session.execute({ operation: "tabs", action: "list", guard: permit.guard })
+      await entered.promise
+      await permit.lease.stop()
+      release.resolve()
+
+      const error = await action.catch((value: unknown) => value)
+      expect(error).toBeInstanceOf(BrowserOutcomeError)
+      expect(String(error)).toContain("closure was not confirmed")
+      expect(closes).toBe(1)
+      await expect(other.ready()).rejects.toThrow("profile is in use")
+      expect(foreign).toBe(0)
+      await expect(session.execute({ operation: "tabs", action: "list" })).rejects.toThrow(
+        "Authentication replacement was not confirmed",
+      )
+    } finally {
+      release.resolve()
+      await Promise.allSettled([action].filter((item): item is Promise<unknown> => !!item))
+      await other.dispose()
+      await session.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+    expect(closes).toBe(2)
+  })
+
+  it("retains uncertainty when revocation follows startup metadata removal", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-startup-partial-"))
+    const marker = join(dir, "active-auth.json")
+    const fake = harness()
+    const permit = await authority("session_startup_partial")
+    const session = new BrowserSession(dir, fake.launch)
+    let checks = 0
+    let stopped: Promise<void> | undefined
+    const guard = () => {
+      checks++
+      if (checks === 3) stopped = permit.lease.stop()
+      permit.guard()
+    }
+    try {
+      await mkdir(dir, { recursive: true })
+      await writeFile(marker, '{"captureID":"removed","status":"restored"}')
+
+      const error = await session.execute({ operation: "tabs", action: "list", guard }).catch((value: unknown) => value)
+      if (!stopped) throw new Error("Expected the startup lease to stop")
+      await stopped
+      expect(error).toBeInstanceOf(BrowserOutcomeError)
+      expect(String(error)).toContain("may have taken effect")
+      expect(fake.pages).toHaveLength(0)
+      await expect(access(marker)).rejects.toThrow()
+      await expect(session.execute({ operation: "tabs", action: "list" })).rejects.toThrow(
+        "Authentication replacement was not confirmed",
+      )
+    } finally {
+      await session.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

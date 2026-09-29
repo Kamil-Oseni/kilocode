@@ -187,7 +187,25 @@ export class BrowserDialogs {
     }
   }
 
-  async answer(tabID: string, id: string, action: "accept" | "dismiss", text?: string): Promise<void> {
+  private claim(entry: Entry, guard?: () => void) {
+    entry.info.status = "resolving"
+    this.publish()
+    try {
+      guard?.()
+    } catch (error) {
+      entry.info.status = "open"
+      this.publish()
+      throw error
+    }
+  }
+
+  async answer(
+    tabID: string,
+    id: string,
+    action: "accept" | "dismiss",
+    text?: string,
+    guard?: () => void,
+  ): Promise<void> {
     if (action !== "accept" && action !== "dismiss")
       throw new TargetError("Dialog response must be accept or dismiss. No response was sent.")
     const entry = this.entries.get(id)
@@ -202,8 +220,7 @@ export class BrowserDialogs {
       throw new TargetError(
         "Response text is allowed only for accepting a prompt and must be at most 10,000 characters",
       )
-    entry.info.status = "resolving"
-    this.publish()
+    this.claim(entry, guard)
     try {
       if (action === "accept") await entry.native.accept(text)
       else await entry.native.dismiss()

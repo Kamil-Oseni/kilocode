@@ -23,6 +23,7 @@ export type BrowserAction = {
   observationID?: string
   origin?: TransferOrigin
   uploader?: UploadTransport
+  guard?: () => void
 } & (
   | { operation: "profile"; action: "info" | "retry" }
   | { operation: "profile"; action: "reset"; profileID: string }
@@ -65,6 +66,7 @@ type BrowserNativeAction = Exclude<
   BrowserAction,
   { operation: "profile" | "auth" | "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload" }
 >
+type Startup = { guard: () => void; operation: string }
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
 export type BrowserResult = {
@@ -328,12 +330,33 @@ export class BrowserSession {
   }
 
   async ready(): Promise<void> {
+    return this.warm()
+  }
+
+  private async warm(start?: Startup): Promise<void> {
+    start?.guard()
+    if (this.start) {
+      await this.start
+      start?.guard()
+      return
+    }
     if (this.context) return
-    if (this.start) return this.start
-    this.start = this.open()
+    this.start = this.open(start)
     await this.start.catch(async (error: unknown) => {
-      await this.dispose(true)
+      const retired = await this.dispose(true).then(
+        () => undefined,
+        (failure: unknown) => failure,
+      )
+      if (retired) {
+        if (error instanceof BrowserOutcomeError)
+          throw new BrowserOutcomeError(
+            start?.operation ?? "browser startup",
+            `${error.message} Browser closure was not confirmed: ${retired instanceof Error ? retired.message : String(retired)}`,
+          )
+        throw retired
+      }
       await this.unlock()
+      if (error instanceof TargetError || error instanceof BrowserOutcomeError) throw error
       const message = error instanceof Error ? error.message : String(error)
       this.failure = /Singleton|profile.*in use|user data directory.*in use/i.test(message)
         ? {
@@ -354,7 +377,17 @@ export class BrowserSession {
     })
   }
 
-  private async open(): Promise<void> {
+  private async open(start?: Startup): Promise<void> {
+    const state = { effect: false }
+    const guard = () => {
+      try {
+        start?.guard()
+      } catch (error) {
+        if (!state.effect || !start) throw error
+        this.uncertain = true
+        throw new BrowserOutcomeError(start.operation, error instanceof Error ? error.message : String(error))
+      }
+    }
     this.stopAuth ??= this.auth.watch(() => {
       for (const listener of this.resets) listener()
     })
@@ -363,16 +396,30 @@ export class BrowserSession {
     await mkdir(this.profile, { recursive: true })
     await this.lock()
     this.authentication = { source: "live", profileID: this.workspace.profileID, login: "unverified" }
-    await unlink(join(this.profile, "active-auth.json")).catch((error: unknown) => {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return
-      throw error
-    })
+    guard()
+    state.effect = await unlink(join(this.profile, "active-auth.json")).then(
+      () => true,
+      (error: unknown) => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false
+        throw error
+      },
+    )
+    guard()
+    state.effect = true
     const context = await this.launcher(this.profile)
-    const page = context.pages()[0] ?? (await context.newPage())
     this.context = context
+    guard()
+    const page =
+      context.pages()[0] ??
+      (await (async () => {
+        guard()
+        return context.newPage()
+      })())
+    guard()
     context.on?.("page", (page) => this.register(page))
     this.register()
     await this.bind(page)
+    guard()
     this.timer = setInterval(() => void this.pump(), 250)
   }
 
@@ -514,6 +561,7 @@ export class BrowserSession {
     action: Extract<BrowserAction, { operation: "tabs" }>,
     dispatch: () => void,
   ): Promise<BrowserResult> {
+    if (action.action === "list") this.guard(action)
     if (action.action === "open") {
       dispatch()
       const page = await this.browser().newPage()
@@ -665,7 +713,7 @@ export class BrowserSession {
     return () => this.resets.delete(listener)
   }
 
-  private async eraseProfile() {
+  private async eraseProfile(dispatch: () => void) {
     if (!(await held(this.profile))) throw new Error("Browser profile storage identity changed; reset refused")
     const root = await realpath(this.profile)
     const path = join(root, "chromium")
@@ -674,7 +722,11 @@ export class BrowserSession {
       throw error
     })
     if (canonical && !same(canonical, path)) throw new Error("Browser profile identity changed; reset refused")
-    if (canonical) await rm(path, { recursive: true })
+    if (canonical) {
+      dispatch()
+      await rm(path, { recursive: true })
+    }
+    dispatch()
     await unlink(join(root, "active-auth.json")).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return
       throw error
@@ -684,21 +736,26 @@ export class BrowserSession {
     this.failure = undefined
   }
 
-  private async retry() {
-    if ((this.profileState().status === "closed" || this.failure) && this.context) await this.dispose(true)
-    await this.ready()
+  private async retry(guard: () => void, dispatch: () => void) {
+    if ((this.profileState().status === "closed" || this.failure) && this.context) {
+      dispatch()
+      await this.dispose(true)
+    }
+    await this.warm({ guard, operation: "profile" })
   }
 
-  private async restore(restored: Awaited<ReturnType<BrowserAuth["read"]>>) {
-    await this.ready()
+  private async restore(restored: Awaited<ReturnType<BrowserAuth["read"]>>, guard: () => void, dispatch: () => void) {
+    await this.warm({ guard, operation: "auth" })
     const context = this.browser()
     if (!context.setStorageState) throw new Error("Browser runtime cannot replace authentication storage")
     this.uncertain = true
+    dispatch()
     await this.provenance(restored.info.id, "restoring")
     if (restored.info.expiresAt <= Date.now())
       throw new TargetError(
         "Authentication capture expired before restoration could start. Reset or restore a fresh capture; no saved bytes were dispatched.",
       )
+    dispatch()
     await context.setStorageState(restored.state).catch(() => {
       throw new Error(
         "Authentication replacement was not confirmed. Its secret contents were not disclosed; reset before continuing.",
@@ -713,6 +770,7 @@ export class BrowserSession {
       expiresAt: restored.info.expiresAt,
       login: "unverified",
     }
+    dispatch()
     await this.provenance(restored.info.id, "restored")
     this.uncertain = false
   }
@@ -720,9 +778,12 @@ export class BrowserSession {
   private async lifecycle(action: Extract<BrowserAction, { operation: "profile" | "auth" }>): Promise<BrowserResult> {
     if ("profileID" in action && action.profileID !== this.workspace.profileID)
       throw new TargetError("Observed workspace browser profile does not match this request")
-    if (action.operation === "profile" && action.action === "info")
+    if (action.operation === "profile" && action.action === "info") {
+      this.guard(action)
       return { operation: "profile", profile: this.profileState() }
+    }
     if (action.operation === "auth" && (action.action === "list" || action.action === "inspect")) {
+      this.guard(action)
       const captures = await this.auth.list()
       const selected = action.action === "inspect" ? captures.filter((info) => info.id === action.captureID) : captures
       if (action.action === "inspect" && !selected.length)
@@ -733,12 +794,19 @@ export class BrowserSession {
       throw new TargetError(
         "A browser profile change is already in progress; inspect its outcome before another change",
       )
+    const state = { dispatched: false }
+    const guard = () => this.guard(action)
+    const dispatch = () => {
+      guard()
+      state.dispatched = true
+    }
     this.changing = (async () => {
       if (action.operation === "profile" && action.action === "retry") {
-        await this.retry()
+        await this.retry(guard, dispatch)
         return
       }
       await this.lock()
+      this.guard(action)
       const restored =
         action.operation === "auth" && action.action === "restore" ? await this.auth.read(action.captureID) : undefined
       const closes =
@@ -747,21 +815,32 @@ export class BrowserSession {
         action.captureID === this.authentication.captureID
       if (closes) {
         // Native Chromium ownership is checked as well: never delete a profile held by an external browser.
-        if (!this.context) this.context = await this.launcher(this.profile)
+        if (!this.context) {
+          dispatch()
+          this.context = await this.launcher(this.profile)
+        }
+        dispatch()
         this.takeControl("The workspace browser session is being replaced. Old tabs and queued actions are invalid.")
         await this.dispose(true)
-        await this.eraseProfile()
+        await this.eraseProfile(dispatch)
       }
-      if (action.operation === "profile") await this.auth.clear()
-      if (action.operation === "auth" && action.action === "delete") await this.auth.delete(action.captureID)
+      if (action.operation === "profile") {
+        await this.auth.clear(dispatch)
+      }
+      if (action.operation === "auth" && action.action === "delete") {
+        await this.auth.delete(action.captureID, dispatch)
+      }
       if (restored) {
-        await this.restore(restored)
+        await this.restore(restored, guard, dispatch)
       }
       if (closes)
         this.takeControl("Browser identity changed. Inspect the profile and sign-in state, then resume agent control.")
     })()
     try {
       await this.changing
+    } catch (error) {
+      if (!state.dispatched || error instanceof BrowserOutcomeError) throw error
+      throw new BrowserOutcomeError(action.operation, error instanceof Error ? error.message : String(error))
     } finally {
       this.changing = undefined
       if (!this.context) await this.unlock()
@@ -829,7 +908,8 @@ export class BrowserSession {
   ): Promise<BrowserResult> {
     if (action.operation === "upload") return this.upload(action)
     if (action.operation === "download" && action.action !== "start") return this.download(action)
-    await this.ready()
+    await this.warm({ guard: () => this.guard(action), operation: action.operation })
+    this.guard(action)
     if (action.operation === "download") return this.download(action)
     if (action.operation === "dialog") return this.dialog(action)
     if (this.queued >= 8)
@@ -966,15 +1046,23 @@ export class BrowserSession {
 
   private async upload(action: Extract<BrowserAction, { operation: "upload" }>): Promise<BrowserResult> {
     if (!action.origin) throw new TargetError("Upload operations require task and request identity")
-    if (action.action === "list") return { operation: "upload", uploads: await this.uploads.list(action.origin) }
-    if (action.action === "inspect")
+    if (action.action === "list") {
+      this.guard(action)
+      return { operation: "upload", uploads: await this.uploads.list(action.origin) }
+    }
+    if (action.action === "inspect") {
+      this.guard(action)
       return { operation: "upload", uploads: await this.uploads.list(action.origin, action.uploadID) }
-    if (action.action === "cancel")
+    }
+    if (action.action === "cancel") {
+      this.guard(action)
       return { operation: "upload", uploads: await this.uploads.cancel(action.uploadID, action.origin) }
+    }
     if (action.action !== "start" || !action.uploader || !action.tabID)
       throw new TargetError("Upload requires a connected authorized file transport and observed tab")
     if (this.state.control === "manual") throw new TargetError("Resume agent browser control before starting an upload")
-    await this.ready()
+    await this.warm({ guard: () => this.guard(action), operation: action.operation })
+    this.guard(action)
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
     this.consume(action)
@@ -1005,6 +1093,7 @@ export class BrowserSession {
     }
     try {
       await check()
+      this.guard(action)
       const uploads = await this.uploads.start(
         {
           id: action.uploadID,
@@ -1026,9 +1115,11 @@ export class BrowserSession {
               const job = this.dialogs.start("upload", action.tabID!, async () => {
                 signal.throwIfAborted()
                 await check()
+                this.guard(action)
                 await dispatch()
                 await check()
                 signal.throwIfAborted()
+                this.guard(action)
                 await element.setInputFiles!(files, { timeout: 30000 })
                 lease.check()
                 if (lease.frame.url() !== expected)
@@ -1084,13 +1175,17 @@ export class BrowserSession {
 
   private async download(action: Extract<BrowserAction, { operation: "download" }>): Promise<BrowserResult> {
     if (!action.origin) throw new TargetError("Download operations require an identified task and request")
-    if (action.action === "list")
+    if (action.action === "list") {
+      this.guard(action)
       return { operation: "download", ...(await this.transfers.list(action.origin, undefined, action.offset)) }
+    }
     if (action.action === "cancel") {
+      this.guard(action)
       await this.transfers.cancel(action.transferID, action.origin)
       return { operation: "download", ...(await this.transfers.list(action.origin, action.transferID)) }
     }
     if (action.action === "inspect") {
+      this.guard(action)
       const result = await this.transfers.list(action.origin, action.transferID)
       const artifact =
         result.transfers[0].status === "completed"
@@ -1109,6 +1204,7 @@ export class BrowserSession {
       observationID: action.observationID,
       selector: action.selector,
       origin: action.origin,
+      guard: action.guard,
     }).then(
       () => undefined,
       (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -1130,11 +1226,17 @@ export class BrowserSession {
 
   private async dialog(action: Extract<BrowserAction, { operation: "dialog" }>): Promise<BrowserResult> {
     if (!action.tabID) throw new TargetError("Observed tab identity is required for dialogs")
+    this.guard(action)
     if (action.action !== "list") {
       if (this.state.control === "manual")
         throw new TargetError("Manual browser control is active; use the visible dialog controls")
       if (!action.dialogID) throw new TargetError("Observed dialog identity is required")
-      await this.dialogs.answer(action.tabID, action.dialogID, action.action, action.text)
+      try {
+        await this.dialogs.answer(action.tabID, action.dialogID, action.action, action.text, () => this.guard(action))
+      } catch (error) {
+        if (error instanceof TargetError) throw error
+        throw new BrowserOutcomeError("dialog", error instanceof Error ? error.message : String(error))
+      }
     }
     return { operation: "dialog", tabID: action.tabID, ...this.dialogs.list(action.tabID, action.operationID) }
   }
@@ -1173,6 +1275,7 @@ export class BrowserSession {
       if (revision !== this.revision) throw new TargetError("Browser action cancelled before dispatch.")
       if (action.operation !== "tabs") this.resolve(action.tabID)
       if (action.frameID) this.document(action.tabID, action.frameID).check()
+      this.guard(action)
       state.dispatched = true
     }
     try {
@@ -1282,7 +1385,10 @@ export class BrowserSession {
       const locator = await locate(page, action.selector)
       dispatch()
       await locator.fill(action.text, { timeout: 5_000 })
-      if (action.submit) await locator.press("Enter", { timeout: 5_000 })
+      if (action.submit) {
+        dispatch()
+        await locator.press("Enter", { timeout: 5_000 })
+      }
       return
     }
     if (action.operation === "select") {
@@ -1313,6 +1419,7 @@ export class BrowserSession {
   private async frames(action: Extract<BrowserAction, { operation: "frames" }>): Promise<BrowserResult> {
     const registry = this.documents.get(this.resolve(action.tabID))
     if (!registry) throw new TargetError("Browser host does not support frame discovery")
+    this.guard(action)
     const frames =
       action.action === "list"
         ? registry.list()
@@ -1328,6 +1435,7 @@ export class BrowserSession {
     if (action.operation === "snapshot") {
       const locator = lease.frame.locator("body")
       if (!locator.ariaSnapshot) throw new TargetError("Browser host cannot snapshot this frame")
+      this.guard(action)
       state.snapshot = await locator.ariaSnapshot({ timeout: 10_000 })
     } else {
       if (action.operation === "navigate" || action.operation === "screenshot")
@@ -1383,6 +1491,7 @@ export class BrowserSession {
     const page = this.resolve(action.tabID)
     if (action.frameID) return this.framed(action, dispatch)
     await this.drive(action, page, dispatch)
+    if (action.operation === "snapshot" || action.operation === "screenshot") this.guard(action)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
     const data =
@@ -1443,6 +1552,14 @@ export class BrowserSession {
       mode: action.mode,
       steps: action.steps,
     })
+  }
+
+  private guard(action: BrowserAction): void {
+    try {
+      action.guard?.()
+    } catch (error) {
+      throw new TargetError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   private async pace(number: number): Promise<void> {

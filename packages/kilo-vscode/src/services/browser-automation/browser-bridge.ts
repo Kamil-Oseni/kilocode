@@ -266,6 +266,7 @@ export class BrowserBridge {
     const owner = { directory, sessionID: request.sessionID, uploadID: request.uploadID }
     return {
       chunk: async (file, offset, signal) => {
+        this.check(request)
         const response = await this.connection
           .getClient()
           .kilocode.browser.uploadChunk({ ...owner, fileID: file.id, offset }, { signal })
@@ -416,10 +417,12 @@ export class BrowserBridge {
       this.check(request)
       await this.show(request, directory)
       if (controller.signal.aborted) return
+      this.check(request)
       const value = await this.host.execute({
         ...action(request),
         origin: { requestID: request.id, sessionID: request.sessionID, directory },
         uploader: this.uploader(request, directory),
+        guard: () => this.check(request),
       })
       const result = Object.assign(value, {
         receipt: evidence(request, startedAt, "confirmed", value),

@@ -78,7 +78,8 @@ export class BrowserAuth {
     return info
   }
 
-  private async erase(id: string) {
+  private async erase(id: string, guard?: () => void) {
+    guard?.()
     await unlink(this.file(id, "state")).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return
       throw error
@@ -212,13 +213,14 @@ export class BrowserAuth {
     return { info, state }
   }
 
-  async delete(id: string) {
+  async delete(id: string, guard?: () => void) {
     await this.directory()
-    await this.erase(id)
+    await this.erase(id, guard)
+    guard?.()
     await unlink(this.file(id, "json"))
   }
 
-  async clear() {
-    for (const info of await this.list()) await this.delete(info.id)
+  async clear(guard?: () => void) {
+    for (const info of await this.list()) await this.delete(info.id, guard)
   }
 }

@@ -19,7 +19,14 @@ type Host = {
   markers: { revival: boolean; failed: boolean; refused: boolean }
   termination?: { exit: number | null; signal: string | null; absent: boolean }
 }
-type Run = { id: string; agentID: string; status: string; sessionID: string; blockedReason?: string }
+type Run = {
+  id: string
+  agentID: string
+  status: string
+  sessionID: string
+  blockedReason?: string
+  outcome?: { cost?: number }
+}
 type Dispatch = { id: string; messageID: string; phase: string; intent: string; finishedAt?: number }
 type Receipt = { source: string; session_id: string | null; delivery_id: string | null; delivered_at: number | null }
 type Message = {
@@ -29,6 +36,8 @@ type Message = {
     parentID?: string
     finish?: string
     error?: { name?: string }
+    cost?: number
+    tokens?: { input: number; output: number }
     time?: { completed?: number }
   }
 }
@@ -47,6 +56,7 @@ type Recovery = {
 }
 type Goal = {
   status: string
+  usage?: { cost?: number; delegatedCost?: number }
   budget?: { modelCost?: number }
   charges?: unknown[]
   intent?: string
@@ -73,13 +83,13 @@ async function installed() {
   for await (const chunk of createReadStream(exe, { highWaterMark: 65_536 })) hash.update(chunk)
   return { exe, dir, version: expected, digest: hash.digest("hex"), source: false }
 }
-function fixture(mode: "error" | "interrupted", scheduled = false, root?: string) {
+function fixture(mode: "error" | "interrupted", scheduled = false, root?: string, priced = false) {
   const started = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   const state = { requests: 0, questions: 0, failures: 0, followups: 0, reads: 0, audits: 0, proof: false }
   const response = (delta: unknown, finish = "stop") =>
     new Response(
-      `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }] })}\n\ndata: [DONE]\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }] })}\n\n${priced ? `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 } })}\n\n` : ""}data: [DONE]\n\n`,
       { headers: { "content-type": "text/event-stream" } },
     )
   const server = Bun.serve({
@@ -150,6 +160,7 @@ function fixture(mode: "error" | "interrupted", scheduled = false, root?: string
         state.followups++
         return response({ role: "assistant", content: "RECOVERY_FOLLOWUP_ACK" })
       }
+      if (priced && body.includes("PRICED_PARENT")) return response({ role: "assistant", content: "PRICED_PARENT_ACK" })
       if (body.includes("RECOVERY_ORIGINAL") && state.questions === 0) {
         state.questions++
         return response(
@@ -198,7 +209,7 @@ function fixture(mode: "error" | "interrupted", scheduled = false, root?: string
   }
 }
 
-function environment(home: string, url: string, password: string) {
+function environment(home: string, url: string, password: string, priced = false) {
   return {
     ...process.env,
     HOME: home,
@@ -226,7 +237,7 @@ function environment(home: string, url: string, password: string) {
               tool_call: true,
               release_date: "2025-01-01",
               limit: { context: 100_000, output: 10_000 },
-              cost: { input: 0, output: 0 },
+              cost: { input: priced ? 1 : 0, output: priced ? 2 : 0 },
               options: {},
             },
           },
@@ -469,10 +480,16 @@ async function stop(host: Host) {
   assert.ok(!host.failed && !host.diagnostic.failed, "An owned backend output stream failed")
 }
 
-async function scenario(mode: "error" | "interrupted", lost = false, scheduled = false, delegated = false) {
+async function scenario(
+  mode: "error" | "interrupted",
+  lost = false,
+  scheduled = false,
+  delegated = false,
+  priced = false,
+) {
   const timer = setTimeout(
     () => lifetime.abort(new Error("Actual runtime acceptance deadline elapsed")),
-    scheduled ? 230_000 : 150_000,
+    scheduled ? 230_000 : priced ? 210_000 : 150_000,
   )
   const app = await installed()
   const temp = await mkdtemp(join(tmpdir(), `raya-wait-${mode}-`))
@@ -480,8 +497,8 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
   const home = join(temp, "home")
   await Promise.all([mkdir(root), mkdir(home)])
   await writeFile(join(root, "README.md"), `Disposable ${mode} WAIT recovery acceptance.\n`)
-  const fake = fixture(mode, scheduled, root)
-  const env = environment(home, fake.url, randomBytes(32).toString("hex"))
+  const fake = fixture(mode, scheduled, root, priced)
+  const env = environment(home, fake.url, randomBytes(32).toString("hex"), priced)
   const password = env.KILO_SERVER_PASSWORD
   const hosts: Host[] = []
   const stages: unknown[] = []
@@ -489,7 +506,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     process.env.RAYA_WAIT_RECOVERY_REPORT ??
       join(
         import.meta.dir,
-        `../../../../.tmp/source-routine-wait-${delegated ? (lost ? "delegated-lost-review" : "delegated") : scheduled ? "scheduled-once" : lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
+        `../../../../.tmp/${app.source ? "source" : "installed"}-routine-wait-${priced ? "priced-delegated-lost-review" : delegated ? (lost ? "delegated-lost-review" : "delegated") : scheduled ? "scheduled-once" : lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
       ),
   )
   const storage = join(home, ".local", "share", "kilo", "storage")
@@ -497,6 +514,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     const value = JSON.parse(await readFile(join(storage, "raya", "goal", sid) + ".json", "utf8")) as Goal
     return {
       status: value.status,
+      ...(priced ? { usage: value.usage } : {}),
       budget: value.budget,
       charges: value.charges,
       intent: value.intent,
@@ -524,6 +542,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       model: { providerID: "test", id: "test-model" },
       schedule: scheduled ? { kind: "once", at: Date.now() - 1_000 } : { kind: "manual" },
       ...(scheduled || delegated ? { enabled: true } : {}),
+      ...(priced ? { budget: 10 } : {}),
     })) as { id: string }
   }
   const runs = async (id: string) => {
@@ -600,6 +619,32 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     trace = await events(host, password, root)
     const worker = await create(`Waiting ${mode} recovery`, scheduled ? ["question", "read"] : ["question"])
     const sender = delegated ? await create("Recovery coordinator", []) : undefined
+    const parent = await (async () => {
+      if (!priced || !sender) return undefined
+      await send(sender.id, "priced_parent", "PRICED_PARENT")
+      await wait(
+        async () => (await runs(sender.id))[0]?.status === "complete",
+        "The actual priced parent did not complete",
+        60_000,
+      )
+      const run = (await runs(sender.id))[0]
+      const goal = await saved(run.sessionID)
+      const messages = (await call(host!, password, root, "GET", `/session/${run.sessionID}/message`)) as Message[]
+      const assistants = messages.filter((row) => row.info.role === "assistant")
+      assert.ok(assistants.length > 0)
+      assert.ok(assistants.every((row) => row.info.cost !== undefined && row.info.cost > 0))
+      const cost = assistants.reduce((sum, row) => sum + (row.info.cost ?? 0), 0)
+      assert.equal(cost, 0.0002)
+      assert.equal(goal.usage?.cost, cost)
+      assert.equal(run.outcome?.cost, cost)
+      stages.push({
+        stage: "priced-parent",
+        run,
+        usage: goal.usage,
+        assistants: assistants.map((row) => ({ id: row.info.id, cost: row.info.cost, tokens: row.info.tokens })),
+      })
+      return { run, cost, goal }
+    })()
     const assignment = sender
       ? {
           source: "delegated_recovery_original",
@@ -610,6 +655,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
           context: "Disposable delegated WAIT recovery acceptance.",
           deadline: Date.now() + 600_000,
           budget: 5,
+          ...(parent ? { parentRunID: parent.run.id } : {}),
         }
       : undefined
     const admission = assignment
@@ -649,6 +695,46 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       )
     }
     const origin = admission ? errand(admission.id) : undefined
+    if (parent) {
+      assert.equal(origin?.parent_run_id, parent.run.id)
+      assert.ok(sender && assignment && admission)
+      // A completed parent summary is immutable; live admission reads durable child commitments separately.
+      const goal = await saved(parent.run.sessionID)
+      assert.deepEqual(goal, parent.goal)
+      assert.deepEqual((await runs(sender.id))[0], parent.run)
+      const count = fake.count()
+      const rows = () => {
+        const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+        try {
+          return ledger
+            .query<
+              { count: number },
+              [string]
+            >("SELECT COUNT(*) AS count FROM raya_routine_delegation WHERE parent_run_id = ?")
+            .get(parent.run.id)?.count
+        } finally {
+          ledger.close()
+        }
+      }
+      assert.equal(rows(), 1)
+      const refused = await request(host, password, root, "POST", `/kilocode/agent/${sender.id}/delegate`, {
+        ...assignment,
+        source: "priced_live_budget_probe",
+      })
+      assert.ok(refused.status >= 400 && refused.status < 500)
+      assert.equal(rows(), 1)
+      assert.equal(fake.count(), count)
+      assert.deepEqual(errand(admission.id), origin)
+      assert.deepEqual(await saved(parent.run.sessionID), parent.goal)
+      stages.push({
+        stage: "priced-live-commitment",
+        usage: goal.usage,
+        budget: goal.budget,
+        refused: refused.status,
+        rows: rows(),
+        model: count,
+      })
+    }
     if (origin) {
       assert.equal(origin.state, "needs_input")
       assert.equal(origin.child_run_id, original.id)
@@ -682,6 +768,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       const lease =
         join(storage, "raya", "agent-executions", createHash("sha256").update(original.id).digest("hex")) + ".json"
       const execution = await readFile(lease)
+      const count = fake.count()
       for (const refusal of ["deadline", "disabled"] as const) {
         const mutate = (value: boolean | number) => {
           if (refusal === "disabled")
@@ -712,7 +799,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
           assert.deepEqual((await runs(worker.id))[0], original)
           assert.deepEqual(errand(admission!.id), denied)
           assert.deepEqual(await readFile(lease), execution)
-          assert.equal(fake.count(), 1)
+          assert.equal(fake.count(), count)
           stages.push({
             stage: "delegated-direct-question-refused",
             policy: refusal,
@@ -817,6 +904,30 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     assert.equal(marker.reviewIntent, undefined)
     assert.ok(dispatch.phase === "started" || dispatch.phase === "finished")
     const messages = (await call(host, password, root, "GET", `/session/${original.sessionID}/message`)) as Message[]
+    if (priced) {
+      const assistants = messages.filter((row) => row.info.role === "assistant")
+      const charged = assistants.filter((row) => (row.info.cost ?? 0) > 0)
+      assert.equal(charged.length, 1, "Only the confirmed question step has a priced receipt before recovery")
+      assert.equal(charged[0].info.cost, 0.0002)
+      assert.equal(charged[0].info.tokens?.input, 100)
+      assert.equal(charged[0].info.tokens?.output, 50)
+      assert.ok(assistants.filter((row) => row.info.error).every((row) => (row.info.cost ?? 0) === 0))
+      assert.equal(
+        blocked.usage?.cost,
+        assistants.reduce((sum, row) => sum + (row.info.cost ?? 0), 0),
+      )
+      assert.equal(blocked.budget?.modelCost, assignment?.budget)
+      stages.push({
+        stage: "priced-blocked",
+        usage: blocked.usage,
+        assistants: assistants.map((row) => ({
+          id: row.info.id,
+          cost: row.info.cost,
+          tokens: row.info.tokens,
+          error: row.info.error?.name,
+        })),
+      })
+    }
     const assistant = dispatch.assistantID
       ? messages.find((row) => row.info.role === "assistant" && row.info.id === dispatch.assistantID)
       : undefined
@@ -1203,6 +1314,47 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       const completed = errand(admission.id)
       assert.deepEqual(immutable(completed), immutable(origin))
       assert.match(String(completed.response), /RECOVERY_FOLLOWUP_ACK/)
+      if (priced) {
+        assert.ok(parent)
+        const messages = (await call(
+          host,
+          password,
+          root,
+          "GET",
+          `/session/${original.sessionID}/message`,
+        )) as Message[]
+        const assistants = messages.filter((row) => row.info.role === "assistant")
+        const charged = assistants.filter((row) => (row.info.cost ?? 0) > 0)
+        assert.equal(charged.length, 2)
+        assert.ok(
+          charged.every(
+            (row) => row.info.cost === 0.0002 && row.info.tokens?.input === 100 && row.info.tokens.output === 50,
+          ),
+        )
+        const cost = assistants.reduce((sum, row) => sum + (row.info.cost ?? 0), 0)
+        assert.equal(cost, 0.0004)
+        assert.equal(final.usage?.cost, cost)
+        assert.equal((await runs(worker.id))[0].outcome?.cost, cost)
+        assert.equal(completed.cost, cost)
+        const goal = await saved(parent.run.sessionID)
+        assert.deepEqual(goal, parent.goal)
+        assert.deepEqual((await runs(sender.id))[0], parent.run)
+        const count = fake.count()
+        const changed = await request(host, password, root, "POST", `/kilocode/agent/${sender.id}/delegate`, {
+          ...assignment,
+          budget: 4,
+        })
+        assert.ok(changed.status >= 400 && changed.status < 500)
+        assert.equal(fake.count(), count)
+        assert.deepEqual(errand(admission.id), completed)
+        stages.push({
+          stage: "priced-settled",
+          cost,
+          parent: { runID: parent.run.id, sessionID: parent.run.sessionID, usage: goal.usage },
+          assistants: charged.map((row) => ({ id: row.info.id, cost: row.info.cost, tokens: row.info.tokens })),
+          changedDuplicate: changed.status,
+        })
+      }
       const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
       const reports = (() => {
         try {
@@ -1234,6 +1386,11 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       assert.deepEqual(errand(admission.id), completed)
       assert.deepEqual(receipts(worker.id), delivered)
       assert.deepEqual(await saved(original.sessionID), final)
+      if (parent) {
+        const goal = await saved(parent.run.sessionID)
+        assert.deepEqual(goal, parent.goal)
+        assert.deepEqual((await runs(sender.id))[0], parent.run)
+      }
       const checked = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
       try {
         assert.equal(
@@ -1647,4 +1804,10 @@ test(
   "actual runtime recovers a lost delegated review response without replaying its original errand",
   () => scenario("error", true, false, true),
   240_000,
+)
+
+test(
+  "actual runtime preserves nonzero priced parent and child accounting across lost delegated review and restart",
+  () => scenario("error", true, false, true, true),
+  270_000,
 )

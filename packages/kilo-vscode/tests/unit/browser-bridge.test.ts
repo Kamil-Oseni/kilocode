@@ -194,6 +194,84 @@ describe("Raya browser bridge", () => {
     }
   })
 
+  it("revalidates immutable authority after showing the browser and before host execution", async () => {
+    const shown = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const rejected = Promise.withResolvers<void>()
+    const failures: unknown[] = []
+    let allowed = true
+    let executed = 0
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({ data: true }),
+          reject: async (value: unknown) => {
+            failures.push(value)
+            rejected.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => {
+          shown.resolve()
+          await release.promise
+        },
+        execute: async () => {
+          executed++
+          return { operation: "click", url: "https://example.test", title: "Example" }
+        },
+      },
+      undefined,
+      undefined,
+      () =>
+        allowed
+          ? { operation: "authorize", decision: "allow", reason: "Active grant", grantID: "grant_show" }
+          : { operation: "authorize", decision: "deny", reason: "Grant revoked while browser opened" },
+    )
+    try {
+      connection.event({
+        type: "kilocode.browser.requested",
+        properties: {
+          id: "brr_show_revoke",
+          sessionID: "ses_test",
+          operation: "click",
+          selector: "#publish",
+          authorization: grant("browser", "grant_show"),
+        },
+      })
+      await shown.promise
+      allowed = false
+      release.resolve()
+      await Promise.race([
+        rejected.promise,
+        Bun.sleep(2_000).then(() => {
+          throw new Error("Revoked browser request was not rejected")
+        }),
+      ])
+
+      expect(executed).toBe(0)
+      expect(failures).toContainEqual(
+        expect.objectContaining({
+          requestID: "brr_show_revoke",
+          error: expect.objectContaining({
+            message: expect.stringContaining("revoked while browser opened"),
+          }),
+        }),
+      )
+      const failure = failures[0] as { error?: { receipt?: unknown } } | undefined
+      expect(failure?.error?.receipt).toBeUndefined()
+    } finally {
+      release.resolve()
+      bridge.dispose()
+    }
+  })
+
   it("binds staged upload API calls to the authoritative task and preserves lost acknowledgements", async () => {
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()
@@ -789,14 +867,13 @@ describe("Raya browser bridge", () => {
       result: { operation: input.operation, url: "https://example.test" },
     })
     expect(shown).toHaveLength(1)
-    expect(actions).toEqual([
-      {
-        id: "brr_test",
-        sessionID: "ses_test",
-        ...input,
-        origin: { requestID: "brr_test", sessionID: "ses_test", directory: "C:\\workspace" },
-      },
-    ])
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      id: "brr_test",
+      sessionID: "ses_test",
+      ...input,
+      origin: { requestID: "brr_test", sessionID: "ses_test", directory: "C:\\workspace" },
+    })
     bridge.dispose()
   })
 

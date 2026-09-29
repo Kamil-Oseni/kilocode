@@ -5,7 +5,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { chromium } from "playwright-core"
-import { BrowserDialogs } from "../../src/services/browser-automation/browser-dialog"
+import { BrowserDialogs, type NativeDialog } from "../../src/services/browser-automation/browser-dialog"
+import { TargetError } from "../../src/services/browser-automation/browser-target"
 
 test("ordinary completed operations do not exhaust retained dialog history", async () => {
   const dialogs = new BrowserDialogs()
@@ -17,6 +18,48 @@ test("ordinary completed operations do not exhaust retained dialog history", asy
     }
     expect(dialogs.list().operations).toEqual([])
   } finally {
+    dialogs.dispose()
+  }
+})
+
+test("dialog authority revoked by the resolving publication cannot reach the native response", async () => {
+  const dialogs = new BrowserDialogs()
+  let opened: ((dialog: NativeDialog) => void) | undefined
+  let accepted = 0
+  let allowed = true
+  dialogs.attach(
+    {
+      on: (event, listener) => {
+        if (event === "dialog") opened = listener as (dialog: NativeDialog) => void
+      },
+      off: () => undefined,
+    },
+    "tab_guarded",
+  )
+  opened?.({
+    type: () => "confirm",
+    message: () => "Publish changes?",
+    defaultValue: () => "",
+    accept: async () => {
+      accepted++
+    },
+    dismiss: async () => undefined,
+  })
+  const entry = dialogs.list("tab_guarded").dialogs[0]
+  if (!entry) throw new Error("Expected an open dialog")
+  const off = dialogs.onChange(() => {
+    if (dialogs.list("tab_guarded").dialogs[0]?.status === "resolving") allowed = false
+  })
+  try {
+    await expect(
+      dialogs.answer("tab_guarded", entry.id, "accept", undefined, () => {
+        if (!allowed) throw new TargetError("Computer Use grant was revoked")
+      }),
+    ).rejects.toThrow("grant was revoked")
+    expect(accepted).toBe(0)
+    expect(dialogs.list("tab_guarded").dialogs[0]?.status).toBe("open")
+  } finally {
+    off()
     dialogs.dispose()
   }
 })

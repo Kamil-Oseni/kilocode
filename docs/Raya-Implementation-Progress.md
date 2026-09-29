@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 20:52 EDT - native media recovery slice checked and pushed
+
+Source `b15ba07aad` passed actual [media CI run 36504737892](https://github.com/Kamil-Oseni/kilocode/actions/runs/36504737892), job `109203494387`: CGO build/full Go suite, six control adverse/compatibility cases, synthetic Opus/SFU input/output, microphone replacement, exact-client data and long structured caption delivery, outsider exclusion, pre-cancelled/post-Stop refusal, three blocked cleanup cases, CGO vet and production image health/401 smoke. Retained log `.tmp/voice-media-ci-caption.log`; binary SHA-256 `25984cb0c378535cf5e9fe68a8b741b04e168df49aefb3a8b0001f69487d41e5`; image ID `sha256:51e054435deb5d04973e7141c820845fe09f0aa2bab9ffc7a087b678e48cf132`. Normal push typechecks pass. Local CGO-zero regression/vet, scoped control tests, the earlier race stress and Markdown/format checks pass.
+
+This completes the source/native synthetic recovery slice, not the full voice or desktop requirement. Next implement the owned microphone receiver and real end receipt: current SDK private RTP/jitter loops remain unjoined and repeated replacement cannot yet prove bounded retired resources. Then run production provider/SFU/browser microphone/device-output, interruption/restart/disconnect and prolonged resources before activation. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress.
+
+External MF remains undeployed; snapshot c2ceafff08/default direct Live unchanged because this slice changed only the experimental service and tests/docs. No desktop activation/reload/capture/input occurred. Desktop remains stopped after Escape, MCP deferred, French Study and unrelated user edits preserved.
+
 ## ChatGPT 2026-09-28 20:46 EDT - real Stop gate passed; preserve bounded long captions
 
 Source `34ab61c011` passed actual [native CI run 36504232134](https://github.com/Kamil-Oseni/kilocode/actions/runs/36504232134): CGO production build/full suite, explicit synthetic SFU/Opus transport, three blocked Room cleanup cases, CGO vet and final production image health/401 smoke. Blocked decoder-admission Close returned unknown in 40 ms; admitted audio/data writers remained owned until release. Binary SHA-256 `9d4910d2b5e1797ca0511018d8847a771619d262fb36e1ded87ccf1584407803`; image ID `sha256:5504c691353fce308e6f8d2aae804829e8e3d6267e945dd1a816e27e8bcd23fb`; exact log `.tmp/voice-media-ci-stop.log`.

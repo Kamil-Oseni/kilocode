@@ -295,6 +295,8 @@ import type {
   KilocodeRoutineDelegateGetResponses,
   KilocodeRoutineEventErrors,
   KilocodeRoutineEventResponses,
+  KilocodeRoutineEventsErrors,
+  KilocodeRoutineEventsResponses,
   KilocodeRoutineForecastErrors,
   KilocodeRoutineForecastResponses,
   KilocodeRoutineHistoriesErrors,
@@ -10763,6 +10765,44 @@ export class Routine extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<KilocodeRoutineRunsResponses, KilocodeRoutineRunsErrors, ThrowOnError>({
       url: "/kilocode/agent/{agentID}/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Replay routine run events
+   *
+   * Return the saved run snapshot and bounded redacted events after a cursor. An expired or future cursor requires a fresh snapshot request without after.
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      after?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "after" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineEventsResponses,
+      KilocodeRoutineEventsErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/events",
       ...options,
       ...params,
     })

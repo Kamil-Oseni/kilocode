@@ -725,6 +725,19 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.tasks.runsFor(ctx.params.agentID)
     })
+    const agentEvents = Effect.fn("KilocodeHttpApi.agentEvents")(function* (ctx: {
+      params: { agentID: string }
+      query: { after?: string }
+    }) {
+      const after = ctx.query.after === undefined ? undefined : Number(ctx.query.after)
+      return yield* runner.tasks
+        .eventsFor(ctx.params.agentID, after)
+        .pipe(
+          Effect.catchTag("RayaTask.GuardError", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+          ),
+        )
+    })
     const agentHistories = Effect.fn("KilocodeHttpApi.agentHistories")(function* () {
       return yield* runner.tasks.histories()
     })
@@ -1236,6 +1249,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentRun", agentRun)
         .handle("agentRecovery", agentRecovery)
         .handle("agentRuns", agentRuns)
+        .handle("agentEvents", agentEvents)
         .handle("agentHistories", agentHistories)
         .handle("agentSnapshot", agentSnapshot)
         .handle("agentTemplates", agentTemplateList)

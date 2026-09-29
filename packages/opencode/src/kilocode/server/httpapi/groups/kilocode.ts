@@ -296,6 +296,7 @@ export const KilocodePaths = {
   agentRun: `${root}/agent/:agentID/run`,
   agentRecovery: `${root}/agent/:agentID/runs/:runID/recovery`,
   agentRuns: `${root}/agent/:agentID/runs`,
+  agentEvents: `${root}/agent/:agentID/events`,
   agentHistories: `${root}/agent-runs`,
   agentArchive: `${root}/agent-archive`,
   agentSnapshot: `${root}/agent/:agentID/runs/:runID/snapshot`,
@@ -973,6 +974,22 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.runs",
             summary: "List agent runs",
             description: "Bounded run history with outcome and cost.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentEvents", KilocodePaths.agentEvents, {
+          params: { agentID: Schema.String },
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            after: Schema.optional(Schema.String),
+          }),
+          success: described(RayaTask.EventPage, "Routine event snapshot and cursor replay"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.events",
+            summary: "Replay routine run events",
+            description:
+              "Return the saved run snapshot and bounded redacted events after a cursor. An expired or future cursor requires a fresh snapshot request without after.",
           }),
         ),
         HttpApiEndpoint.get("agentHistories", KilocodePaths.agentHistories, {

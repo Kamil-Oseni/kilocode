@@ -158,6 +158,7 @@ describe("routine event journal", () => {
         expect(page.cursor).toBe(81)
         expect(page.events[0].sequence).toBeGreaterThan(1)
         expect(Exit.isFailure(yield* Effect.exit(tasks.eventsFor(agent.id, 0)))).toBe(true)
+        expect((yield* tasks.eventsFor(agent.id)).events[0]?.sequence).toBe(page.events[0].sequence)
         expect(page.runs.find((run) => run.id === "terminal")?.status).toBe("complete")
       }).pipe(Effect.provide(Storage.layerFromDir(dir)))
     }),

@@ -254,6 +254,12 @@ export namespace RayaTask {
     events: Schema.Array(Event),
   })
   export type History = typeof History.Type
+  export const EventPage = Schema.Struct({
+    version: Schema.Literal(1),
+    cursor: History.fields.cursor,
+    runs: History.fields.runs,
+    events: History.fields.events,
+  })
 
   export const Histories = Schema.Struct({
     items: Schema.Array(Schema.Struct({ agentID: Schema.String, runs: Schema.Array(Run) })),
@@ -764,19 +770,24 @@ export namespace RayaTask {
       return (yield* saved(id)).runs
     })
 
-    const eventsFor = Effect.fn("RayaTask.events")(function* (id: string, after = 0) {
-      if (!Number.isSafeInteger(after) || after < 0)
+    const eventsFor = Effect.fn("RayaTask.events")(function* (id: string, after?: number) {
+      if (after !== undefined && (!Number.isSafeInteger(after) || after < 0))
         return yield* new GuardError({ kind: "conflict", message: "Invalid routine event cursor." })
       const state = yield* saved(id)
       const first = state.events[0]?.sequence ?? state.cursor + 1
-      if (after < first - 1)
+      if (after !== undefined && after < first - 1)
         return yield* new GuardError({
           kind: "conflict",
           message: "Routine event cursor expired. Reload the snapshot.",
         })
-      if (after > state.cursor)
+      if (after !== undefined && after > state.cursor)
         return yield* new GuardError({ kind: "conflict", message: "Routine event cursor is ahead of the snapshot." })
-      return { cursor: state.cursor, runs: state.runs, events: state.events.filter((event) => event.sequence > after) }
+      return {
+        version: 1 as const,
+        cursor: state.cursor,
+        runs: state.runs,
+        events: after === undefined ? state.events : state.events.filter((event) => event.sequence > after),
+      }
     })
 
     const histories = Effect.fn("RayaTask.histories")(function* () {

@@ -1424,6 +1424,10 @@ export namespace RayaGoal {
         return yield* new AuditError({
           message: "Only an explicit user review can resume this interrupted worker reply.",
         })
+      if (input.status === "complete" && state.replyRecovery && state.replyRecovery.reviewedAt === undefined)
+        return yield* new AuditError({
+          message: "Only an explicit user review can authorize completion of this interrupted worker reply.",
+        })
       if (expected !== undefined && state.revision !== expected)
         return yield* new AuditError({
           message: "This goal changed since the operation started. Its result was not applied.",

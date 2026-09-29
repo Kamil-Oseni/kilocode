@@ -47,6 +47,8 @@ type Recovery = {
 }
 type Goal = {
   status: string
+  budget?: { modelCost?: number }
+  charges?: unknown[]
   intent?: string
   blockedReason?: string
   dispatch?: Dispatch & { outcome?: string; assistantID?: string }
@@ -467,7 +469,7 @@ async function stop(host: Host) {
   assert.ok(!host.failed && !host.diagnostic.failed, "An owned backend output stream failed")
 }
 
-async function scenario(mode: "error" | "interrupted", lost = false, scheduled = false) {
+async function scenario(mode: "error" | "interrupted", lost = false, scheduled = false, delegated = false) {
   const timer = setTimeout(
     () => lifetime.abort(new Error("Actual runtime acceptance deadline elapsed")),
     scheduled ? 230_000 : 150_000,
@@ -487,7 +489,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     process.env.RAYA_WAIT_RECOVERY_REPORT ??
       join(
         import.meta.dir,
-        `../../../../.tmp/source-routine-wait-${scheduled ? "scheduled-once" : lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
+        `../../../../.tmp/source-routine-wait-${delegated ? (lost ? "delegated-lost-review" : "delegated") : scheduled ? "scheduled-once" : lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
       ),
   )
   const storage = join(home, ".local", "share", "kilo", "storage")
@@ -495,6 +497,8 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     const value = JSON.parse(await readFile(join(storage, "raya", "goal", sid) + ".json", "utf8")) as Goal
     return {
       status: value.status,
+      budget: value.budget,
+      charges: value.charges,
       intent: value.intent,
       blockedReason: value.blockedReason,
       dispatch: value.dispatch,
@@ -519,7 +523,7 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       tools,
       model: { providerID: "test", id: "test-model" },
       schedule: scheduled ? { kind: "once", at: Date.now() - 1_000 } : { kind: "manual" },
-      ...(scheduled ? { enabled: true } : {}),
+      ...(scheduled || delegated ? { enabled: true } : {}),
     })) as { id: string }
   }
   const runs = async (id: string) => {
@@ -575,11 +579,45 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       ledger.close()
     }
   }
+  const errand = (id: string) => {
+    const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+    try {
+      const row = ledger
+        .query<Record<string, string | number | null>, [string]>("SELECT * FROM raya_routine_delegation WHERE id = ?")
+        .get(id)
+      assert.ok(row, "The actual delegation row must exist")
+      return row
+    } finally {
+      ledger.close()
+    }
+  }
+  const immutable = (row: Record<string, string | number | null>) =>
+    Object.fromEntries(
+      Object.entries(row).filter(([key]) => !["state", "response", "cost", "reason", "time_updated"].includes(key)),
+    )
   try {
     host = await backend(app, root, env, hosts)
     trace = await events(host, password, root)
     const worker = await create(`Waiting ${mode} recovery`, scheduled ? ["question", "read"] : ["question"])
-    if (!scheduled) await send(worker.id, `${mode}_original`, "RECOVERY_ORIGINAL")
+    const sender = delegated ? await create("Recovery coordinator", []) : undefined
+    const assignment = sender
+      ? {
+          source: "delegated_recovery_original",
+          senderID: sender.id,
+          recipientID: worker.id,
+          objective: "RECOVERY_ORIGINAL",
+          expected: "A written same-request clarification reply.",
+          context: "Disposable delegated WAIT recovery acceptance.",
+          deadline: Date.now() + 600_000,
+          budget: 5,
+        }
+      : undefined
+    const admission = assignment
+      ? ((await call(host, password, root, "POST", `/kilocode/agent/${sender!.id}/delegate`, assignment)) as {
+          id: string
+        })
+      : undefined
+    if (!scheduled && !delegated) await send(worker.id, `${mode}_original`, "RECOVERY_ORIGINAL")
     type Question = { id: string; sessionID: string; tool?: { callID: string } }
     let pending: Question | undefined
     await wait(
@@ -598,6 +636,95 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     const original = (await runs(worker.id))[0]
     assert.ok(original && pending)
     assert.equal(pending.tool?.callID, "call_installed_question")
+    if (admission) {
+      const probe = { errand: errand(admission.id) }
+      stages.push({ stage: "delegated-question-state", probe })
+      await wait(
+        () => {
+          probe.errand = errand(admission.id)
+          return probe.errand.state === "needs_input"
+        },
+        "The delegated question did not park its exact errand",
+        20_000,
+      )
+    }
+    const origin = admission ? errand(admission.id) : undefined
+    if (origin) {
+      assert.equal(origin.state, "needs_input")
+      assert.equal(origin.child_run_id, original.id)
+      assert.equal(origin.session_id, original.sessionID)
+      assert.equal(origin.sender_id, sender?.id)
+      assert.equal(origin.recipient_id, worker.id)
+      assert.equal(origin.objective, assignment?.objective)
+      assert.equal(origin.deadline, assignment?.deadline)
+      assert.equal(origin.budget, assignment?.budget)
+      assert.equal((await saved(original.sessionID)).completion, "reply")
+      assert.equal((await saved(original.sessionID)).budget?.modelCost, assignment?.budget)
+      const session = (await call(host, password, root, "GET", `/session/${original.sessionID}`)) as {
+        metadata?: {
+          rayaRoutine?: {
+            version?: number
+            runID?: string
+            agentID?: string
+            delegationID?: string
+            trigger?: { kind?: string }
+            budget?: { modelCost?: number }
+          }
+        }
+      }
+      assert.equal(session.metadata?.rayaRoutine?.version, 1)
+      assert.equal(session.metadata?.rayaRoutine?.runID, original.id)
+      assert.equal(session.metadata?.rayaRoutine?.agentID, worker.id)
+      assert.equal(session.metadata?.rayaRoutine?.delegationID, admission?.id)
+      assert.equal(session.metadata?.rayaRoutine?.trigger?.kind, "manual")
+      stages.push({ stage: "delegated-original", errand: origin })
+      const goal = await saved(original.sessionID)
+      const lease =
+        join(storage, "raya", "agent-executions", createHash("sha256").update(original.id).digest("hex")) + ".json"
+      const execution = await readFile(lease)
+      for (const refusal of ["deadline", "disabled"] as const) {
+        const mutate = (value: boolean | number) => {
+          if (refusal === "disabled")
+            return call(host!, password, root, "PATCH", `/kilocode/agent/${worker.id}`, { enabled: value })
+          const ledger = new Sqlite(join(home, "archive-acceptance.db"))
+          try {
+            ledger
+              .query("UPDATE raya_routine_delegation SET deadline = ? WHERE id = ?")
+              .run(value as number, admission!.id)
+          } finally {
+            ledger.close()
+          }
+          return Promise.resolve()
+        }
+        await mutate(refusal === "disabled" ? false : Date.now() - 1)
+        const denied = errand(admission!.id)
+        try {
+          const response = await request(host, password, root, "POST", `/question/${pending.id}/reply`, {
+            answers: [["Proceed"]],
+          })
+          assert.ok(response.status === 200 || response.status >= 400)
+          const questions = (await call(host, password, root, "GET", "/question")) as Question[]
+          assert.ok(
+            questions.some((item) => item.id === pending?.id),
+            "A refused continuation must retain its exact pending Question",
+          )
+          assert.deepEqual(await saved(original.sessionID), goal)
+          assert.deepEqual((await runs(worker.id))[0], original)
+          assert.deepEqual(errand(admission!.id), denied)
+          assert.deepEqual(await readFile(lease), execution)
+          assert.equal(fake.count(), 1)
+          stages.push({
+            stage: "delegated-direct-question-refused",
+            policy: refusal,
+            fixture: refusal === "deadline" ? "isolated-sql-mutation" : "actual-agent-update",
+            status: response.status,
+          })
+        } finally {
+          await mutate(refusal === "disabled" ? true : Number(origin.deadline))
+        }
+        assert.deepEqual(errand(admission!.id), origin)
+      }
+    }
     const anchor = scheduled ? occurrence(worker.id) : undefined
     if (anchor) {
       assert.equal(anchor.rows.length, 1)
@@ -671,6 +798,8 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
       throw err
     }
     const blocked = await saved(original.sessionID)
+    const paused = admission ? errand(admission.id) : undefined
+    if (paused) assert.equal(paused.state, "running", "The answered Question must retain its resumed errand")
     if (scheduled) assert.equal(blocked.completion, undefined)
     const marker = blocked.replyRecovery
     const dispatch = blocked.dispatch
@@ -736,19 +865,20 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
           }
         : undefined,
       receipts: before,
+      errand: paused,
       model: fake.receipt(),
     })
-    assert.equal(before.length, scheduled ? 1 : 2)
-    if (!scheduled)
+    assert.equal(before.length, scheduled || delegated ? 1 : 2)
+    if (!scheduled && !delegated)
       assert.deepEqual(
         before.map((row) => row.source),
         [`${mode}_original`, `${mode}_followup`],
       )
-    if (!scheduled) {
+    if (!scheduled && !delegated) {
       assert.equal(before[0].session_id, original.sessionID)
       assert.notEqual(before[0].delivered_at, null)
     }
-    const intake = before[scheduled ? 0 : 1]
+    const intake = before[scheduled || delegated ? 0 : 1]
     assert.equal(intake.source, `${mode}_followup`)
     assert.equal(intake.session_id, original.sessionID)
     assert.equal(intake.delivery_id, null)
@@ -767,6 +897,10 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     assert.deepEqual(await saved(original.sessionID), blocked)
     assert.deepEqual(receipts(worker.id), before)
     if (anchor) assert.deepEqual(occurrence(worker.id), anchor)
+    if (origin && admission) {
+      assert.deepEqual(immutable(errand(admission.id)), immutable(origin))
+      assert.deepEqual(errand(admission.id), paused)
+    }
     await trace.stop()
     trace = undefined
     const leasePath =
@@ -779,6 +913,44 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
         createHash("sha256").update(original.id).digest("hex"),
         marker.execution,
       ) + ".json"
+    if (admission) {
+      const snapshot = errand(admission.id)
+      const execution = await readFile(leasePath)
+      const mutate = (column: "deadline" | "state", value: string | number | null) => {
+        const ledger = new Sqlite(join(home, "archive-acceptance.db"))
+        try {
+          ledger.query(`UPDATE raya_routine_delegation SET ${column} = ? WHERE id = ?`).run(value, admission.id)
+        } finally {
+          ledger.close()
+        }
+      }
+      for (const refusal of [
+        { column: "deadline" as const, value: Date.now() - 1 },
+        { column: "state" as const, value: "cancelled" },
+      ]) {
+        mutate(refusal.column, refusal.value)
+        try {
+          const response = await request(host, password, root, "PATCH", `/session/${original.sessionID}/goal`, {
+            status: "active",
+            expectedIntent: blocked.intent,
+          })
+          assert.ok(response.status >= 400, `Changed delegated ${refusal.column} must refuse review`)
+          assert.deepEqual(await saved(original.sessionID), blocked)
+          assert.equal(fake.count(), count)
+          assert.deepEqual(await readFile(leasePath), execution)
+          assert.equal(await Bun.file(reviewPath).exists(), false)
+          stages.push({
+            stage: "delegated-adverse-review",
+            fixture: "isolated-sql-mutation",
+            column: refusal.column,
+            status: response.status,
+          })
+        } finally {
+          mutate(refusal.column, snapshot[refusal.column])
+        }
+        assert.deepEqual(errand(admission.id), snapshot)
+      }
+    }
     if (lost) {
       const seen = Promise.withResolvers<Goal>()
       const state = { reading: false, pending: false, closed: false }
@@ -1013,12 +1185,71 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
     assert.equal((await runs(worker.id))[0].sessionID, original.sessionID)
     assert.equal(fake.receipt().followups, 1)
     const delivered = receipts(worker.id)
-    assert.equal(delivered.length, scheduled ? 1 : 2)
-    const delivery = delivered[scheduled ? 0 : 1]
+    assert.equal(delivered.length, scheduled || delegated ? 1 : 2)
+    const delivery = delivered[scheduled || delegated ? 0 : 1]
     assert.equal(delivery.session_id, original.sessionID)
     assert.notEqual(delivery.delivery_id, null)
     assert.notEqual(delivery.delivered_at, null)
     assert.equal(delivery.delivery_id, final.dispatch?.messageID)
+    if (origin && admission && sender && assignment) {
+      assert.equal(final.completion, "reply")
+      assert.deepEqual(final.budget, blocked.budget)
+      assert.deepEqual((final.charges ?? []).slice(0, blocked.charges?.length ?? 0), blocked.charges ?? [])
+      await wait(
+        () => errand(admission.id).state === "completed",
+        "The exact delegated request did not complete",
+        20_000,
+      )
+      const completed = errand(admission.id)
+      assert.deepEqual(immutable(completed), immutable(origin))
+      assert.match(String(completed.response), /RECOVERY_FOLLOWUP_ACK/)
+      const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+      const reports = (() => {
+        try {
+          return ledger
+            .query<{ source: string; body: string }, [string]>(
+              "SELECT source, body FROM raya_routine_message WHERE agent_id = ? AND kind = 'delegation' ORDER BY time_created, id",
+            )
+            .all(sender.id)
+            .filter((row) => row.source === `reply:${assignment.source}`)
+        } finally {
+          ledger.close()
+        }
+      })()
+      assert.equal(reports.length, 1, "Exactly one final delegated report must exist")
+      assert.match(reports[0].body, /RECOVERY_FOLLOWUP_ACK/)
+      const count = fake.count()
+      await request(host, password, root, "PATCH", `/session/${original.sessionID}/goal`, {
+        status: "active",
+        expectedIntent: blocked.intent,
+      }).then((reply) => assert.equal(reply.status, 200))
+      await call(host, password, root, "POST", `/kilocode/agent/${sender.id}/delegate`, assignment)
+      await send(worker.id, `${mode}_followup`, "RECOVERY_FOLLOWUP")
+      await stop(host)
+      host = await backend(app, root, env, hosts)
+      await call(host, password, root, "GET", "/kilocode/agent")
+      await wait(() => host?.markers.revival === true, "Completed delegation did not finish restart revival", 45_000)
+      await Bun.sleep(1_000)
+      assert.equal(fake.count(), count)
+      assert.deepEqual(errand(admission.id), completed)
+      assert.deepEqual(receipts(worker.id), delivered)
+      assert.deepEqual(await saved(original.sessionID), final)
+      const checked = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+      try {
+        assert.equal(
+          checked
+            .query<
+              { count: number },
+              [string, string]
+            >("SELECT COUNT(*) AS count FROM raya_routine_message WHERE agent_id = ? AND kind = 'delegation' AND source = ?")
+            .get(sender.id, `reply:${assignment.source}`)?.count,
+          1,
+        )
+      } finally {
+        checked.close()
+      }
+      stages.push({ stage: "delegated-settled", errand: completed, reports })
+    }
     if (anchor) {
       assert.equal(final.completion, undefined)
       assert.equal(final.reply, undefined)
@@ -1121,6 +1352,271 @@ async function scenario(mode: "error" | "interrupted", lost = false, scheduled =
   }
 }
 
+async function attachment(expired = false) {
+  const timer = setTimeout(() => lifetime.abort(new Error("Deferred attachment acceptance deadline elapsed")), 150_000)
+  const app = await installed()
+  const temp = await mkdtemp(join(tmpdir(), "raya-delegated-attachment-"))
+  const root = join(temp, "project")
+  const home = join(temp, "home")
+  await Promise.all([mkdir(root), mkdir(home)])
+  const fake = fixture("error")
+  const env = environment(home, fake.url, randomBytes(32).toString("hex"))
+  const hosts: Host[] = []
+  const stages: unknown[] = []
+  const report = resolve(
+    process.env.RAYA_WAIT_RECOVERY_REPORT ??
+      join(
+        import.meta.dir,
+        `../../../../.tmp/source-routine-delegated-attachment-${expired ? "expired-" : ""}restart.json`,
+      ),
+  )
+  let host: Host | undefined
+  let error: string | undefined
+  const sql = <T>(work: (ledger: Sqlite) => T) => {
+    const ledger = new Sqlite(join(home, "archive-acceptance.db"))
+    try {
+      return work(ledger)
+    } finally {
+      ledger.close()
+    }
+  }
+  try {
+    host = await backend(app, root, env, hosts)
+    const create = (name: string, tools: string[]) =>
+      call(host!, env.KILO_SERVER_PASSWORD, root, "POST", "/kilocode/agent", {
+        name,
+        objective: "Answer this synthetic worker conversation.",
+        access: "brief",
+        tools,
+        model: { providerID: "test", id: "test-model" },
+        schedule: { kind: "manual" },
+        enabled: true,
+      }) as Promise<{ id: string }>
+    const sender = await create("Attachment coordinator", [])
+    const worker = await create("Attachment recipient", ["question"])
+    const assignment = {
+      source: "attachment_recovery_original",
+      senderID: sender.id,
+      recipientID: worker.id,
+      objective: "RECOVERY_ORIGINAL",
+      deadline: Date.now() + 600_000,
+      budget: 5,
+    }
+    sql((ledger) =>
+      ledger.exec(
+        "CREATE TRIGGER raya_fixture_attachment BEFORE UPDATE OF state ON raya_routine_delegation WHEN OLD.state = 'accepted' AND NEW.state = 'running' BEGIN SELECT RAISE(ABORT, 'isolated attachment failure'); END",
+      ),
+    )
+    const response = await request(
+      host,
+      env.KILO_SERVER_PASSWORD,
+      root,
+      "POST",
+      `/kilocode/agent/${sender.id}/delegate`,
+      assignment,
+    )
+    assert.ok(response.status >= 400, "The real attachment write must fail at the injected SQLite boundary")
+    const row = sql((ledger) =>
+      ledger
+        .query<
+          { id: string; child_run_id: string; session_id: string | null; state: string },
+          [string]
+        >("SELECT id, child_run_id, session_id, state FROM raya_routine_delegation WHERE source = ?")
+        .get(assignment.source),
+    )
+    assert.ok(row)
+    assert.equal(row.state, "accepted")
+    assert.equal(row.session_id, null)
+    const runs = (await call(host, env.KILO_SERVER_PASSWORD, root, "GET", `/kilocode/agent/${worker.id}/runs`)) as Run[]
+    assert.equal(runs.length, 1)
+    assert.equal(runs[0].id, row.child_run_id)
+    assert.equal(runs[0].status, "running")
+    const session = (await call(host, env.KILO_SERVER_PASSWORD, root, "GET", `/session/${runs[0].sessionID}`)) as {
+      metadata?: { rayaRoutine?: { runID?: string; delegationID?: string } }
+    }
+    assert.equal(session.metadata?.rayaRoutine?.runID, row.child_run_id)
+    assert.equal(session.metadata?.rayaRoutine?.delegationID, row.id)
+    const storage = join(home, ".local", "share", "kilo", "storage")
+    const goal = JSON.parse(await readFile(join(storage, "raya", "goal", runs[0].sessionID) + ".json", "utf8")) as Goal
+    assert.equal(goal.status, "active")
+    assert.ok(!goal.dispatch || goal.dispatch.phase === "queued")
+    assert.equal(
+      await Bun.file(
+        join(storage, "raya", "agent-executions", createHash("sha256").update(row.child_run_id).digest("hex")) +
+          ".json",
+      ).exists(),
+      false,
+    )
+    assert.equal(fake.count(), 0, "A deferred start must not invoke the model before attachment")
+    stages.push({
+      stage: "attachment-failed",
+      fixture: "isolated-sql-trigger",
+      status: response.status,
+      row,
+      run: runs[0],
+      session: session.metadata,
+      goal,
+    })
+    await stop(host)
+    sql((ledger) => ledger.exec("DROP TRIGGER raya_fixture_attachment"))
+    if (expired)
+      sql((ledger) =>
+        ledger.query("UPDATE raya_routine_delegation SET deadline = ? WHERE id = ?").run(Date.now() - 1, row.id),
+      )
+    host = await backend(app, root, env, hosts)
+    await call(host, env.KILO_SERVER_PASSWORD, root, "GET", "/kilocode/agent")
+    if (expired) {
+      await wait(
+        async () => {
+          assert.ok(host)
+          const current = sql((ledger) =>
+            ledger
+              .query<{ state: string }, [string]>("SELECT state FROM raya_routine_delegation WHERE id = ?")
+              .get(row.id),
+          )
+          const history = (await call(
+            host,
+            env.KILO_SERVER_PASSWORD,
+            root,
+            "GET",
+            `/kilocode/agent/${worker.id}/runs`,
+          )) as Run[]
+          return current?.state === "failed" && history.length === 1 && history[0].status === "error"
+        },
+        "Expired deferred startup did not fail its original errand and run",
+        60_000,
+      )
+      const history = (await call(
+        host,
+        env.KILO_SERVER_PASSWORD,
+        root,
+        "GET",
+        `/kilocode/agent/${worker.id}/runs`,
+      )) as Run[]
+      assert.equal(history[0].id, row.child_run_id)
+      assert.equal(history[0].sessionID, runs[0].sessionID)
+      assert.equal(fake.count(), 0)
+      assert.equal(
+        sql(
+          (ledger) =>
+            ledger
+              .query<{ count: number }, [string]>("SELECT COUNT(*) AS count FROM raya_routine_message WHERE source = ?")
+              .get(`start:${assignment.source}`)?.count,
+        ),
+        0,
+        "An expired deferred startup must not publish a started card",
+      )
+      const retry = await request(
+        host,
+        env.KILO_SERVER_PASSWORD,
+        root,
+        "POST",
+        `/kilocode/agent/${sender.id}/delegate`,
+        assignment,
+      )
+      assert.ok(retry.status >= 400)
+      await Bun.sleep(1_000)
+      assert.equal(fake.count(), 0)
+      assert.deepEqual(
+        await call(host, env.KILO_SERVER_PASSWORD, root, "GET", `/kilocode/agent/${worker.id}/runs`),
+        history,
+      )
+      stages.push({
+        stage: "attachment-expired",
+        fixture: "isolated-sql-deadline",
+        run: history[0],
+        retry: retry.status,
+      })
+      return
+    }
+    await call(host, env.KILO_SERVER_PASSWORD, root, "POST", `/kilocode/agent/${sender.id}/delegate`, assignment)
+    await wait(
+      async () => {
+        assert.ok(host)
+        const questions = (await call(host, env.KILO_SERVER_PASSWORD, root, "GET", "/question")) as Array<{
+          sessionID: string
+        }>
+        return questions.some((item) => item.sessionID === runs[0].sessionID)
+      },
+      "The exact deferred startup did not resume after attachment recovery",
+      60_000,
+    )
+    const restored = (await call(
+      host,
+      env.KILO_SERVER_PASSWORD,
+      root,
+      "GET",
+      `/kilocode/agent/${worker.id}/runs`,
+    )) as Run[]
+    assert.equal(restored.length, 1)
+    assert.equal(restored[0].id, runs[0].id)
+    assert.equal(restored[0].sessionID, runs[0].sessionID)
+    assert.equal(fake.count(), 1)
+    assert.equal(fake.receipt().questions, 1)
+    await call(host, env.KILO_SERVER_PASSWORD, root, "POST", `/kilocode/agent/${sender.id}/delegate`, assignment)
+    await Bun.sleep(1_000)
+    assert.equal(fake.count(), 1)
+    const final = sql((ledger) =>
+      ledger
+        .query<
+          { id: string; child_run_id: string; session_id: string; state: string },
+          [string]
+        >("SELECT id, child_run_id, session_id, state FROM raya_routine_delegation WHERE source = ?")
+        .get(assignment.source),
+    )
+    assert.ok(final)
+    assert.equal(final.id, row.id)
+    assert.equal(final.child_run_id, row.child_run_id)
+    assert.equal(final.session_id, runs[0].sessionID)
+    assert.equal(final.state, "needs_input")
+    stages.push({ stage: "attachment-recovered", row: final, run: restored[0], model: fake.receipt() })
+  } catch (err) {
+    error = err instanceof Error ? err.message : "Deferred attachment acceptance failed"
+    throw err
+  } finally {
+    clearTimeout(timer)
+    const cleanup = await Promise.allSettled(hosts.map(stop))
+    fake.server.stop(true)
+    await mkdir(join(report, ".."), { recursive: true })
+    await writeFile(
+      report,
+      JSON.stringify(
+        {
+          version: 1,
+          app,
+          stages,
+          model: fake.receipt(),
+          error,
+          cleanup: cleanup.map((item, index) => ({
+            pid: hosts[index].child.pid,
+            joined: item.status === "fulfilled",
+            termination: hosts[index].termination,
+          })),
+        },
+        null,
+        2,
+      ),
+    )
+    assert.ok(resolve(temp).startsWith(resolve(tmpdir()) + sep))
+    if (cleanup.every((item) => item.status === "fulfilled")) await rm(temp, { recursive: true, force: true })
+    assert.ok(
+      cleanup.every((item) => item.status === "fulfilled"),
+      "An owned backend did not join; isolated data retained",
+    )
+  }
+}
+
+test(
+  "actual runtime resumes its genuine deferred delegation after an attachment failure and restart",
+  () => attachment(),
+  180_000,
+)
+test(
+  "actual runtime refuses an expired genuine deferred delegation after attachment failure and restart",
+  () => attachment(true),
+  180_000,
+)
+
 test(
   "actual runtime retains a terminal nonretryable old-intent WAIT error until explicit recovery",
   () => scenario("error"),
@@ -1141,4 +1637,14 @@ test(
   "actual runtime reviews a genuine scheduled once WAIT failure without replacing its occurrence",
   () => scenario("error", false, true),
   300_000,
+)
+test(
+  "actual runtime reviews a genuine delegated WAIT failure without replacing its errand",
+  () => scenario("error", false, false, true),
+  240_000,
+)
+test(
+  "actual runtime recovers a lost delegated review response without replaying its original errand",
+  () => scenario("error", true, false, true),
+  240_000,
 )

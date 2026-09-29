@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Effect, Option, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
+import type { Storage } from "@/storage/storage"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineOrganizationTable as Organization,
@@ -12,6 +13,14 @@ import { commitment, direct, standing } from "./commitment"
 import { cost as coordinatorCost } from "./coordinator"
 import { RayaTask } from "./index"
 import { RayaTaskInbox, type Publish } from "./inbox"
+import {
+  Context as ReviewContext,
+  ledger,
+  Snapshot as ReviewSnapshot,
+  type Journal,
+  type Snapshot,
+} from "./delegation-review"
+import { mutate } from "./mutation"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
@@ -348,9 +357,18 @@ export namespace RayaTaskDelegation {
       recipientID: string
     }) => Effect.Effect<{ id: string; name: string; revision: number; budget?: number }, unknown>,
     shares?: (senderID: string, recipientID: string) => Effect.Effect<boolean, unknown>,
+    recovery?: {
+      storage: Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
+      receipt: (run: RayaTask.Run) => Effect.Effect<{ token: string } | undefined, unknown>
+      reviewed: (run: RayaTask.Run, digest: string) => Effect.Effect<{ token: string } | undefined, unknown>
+      guard: (row: Record, run: RayaTask.Run) => Effect.Effect<void, unknown>
+    },
   ) {
     const db = database.db
     const inbox = RayaTaskInbox.make(database)
+    const reviews = recovery ? ledger(recovery.storage) : undefined
+    const safe = <A, E extends { message: string }, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(Effect.mapError((err) => new Conflict({ message: err.message })))
     const publish = (items: readonly Publish[]) =>
       Effect.forEach(items, (item) =>
         inbox.publish(item).pipe(
@@ -740,28 +758,286 @@ export namespace RayaTaskDelegation {
         Effect.catch(() => Effect.succeed(false)),
       )
     })
+    const snapshot = (row: Record, updated: number): Snapshot =>
+      Schema.decodeUnknownSync(ReviewSnapshot)(
+        Object.fromEntries(
+          Object.entries({
+            id: row.id,
+            source: row.source,
+            senderID: row.senderID,
+            recipientID: row.recipientID,
+            parentID: row.parentID,
+            parentRunID: row.parentRunID,
+            organizationID: row.organizationID,
+            organizationName: row.organizationName,
+            organizationRevision: row.organizationRevision,
+            workspace: row.workspace,
+            objective: row.objective,
+            expected: row.expected,
+            context: row.context,
+            deadline: row.deadline,
+            budget: row.budget,
+            depth: row.depth,
+            state: row.state === "needs_input" ? "needs_input" : "running",
+            childRunID: row.childRunID,
+            sessionID: row.sessionID,
+            artifacts: row.artifacts,
+            response: row.response,
+            cost: row.cost,
+            reason: row.reason,
+            time: row.time,
+            updated,
+          }).filter(([, value]) => value !== undefined),
+        ),
+      )
+    const advanced = (row: Snapshot, journal: Journal) =>
+      row.updated === journal.target.updated &&
+      isDeepStrictEqual({ ...row, state: journal.prior.state, updated: journal.prior.updated }, journal.prior)
+    const inspect = Effect.fn("RayaTaskDelegation.inspectReview")(function* (
+      id: string,
+      run: RayaTask.Run,
+      ctx: typeof ReviewContext.Type,
+      immutable: boolean,
+    ) {
+      if (!recovery || !reviews)
+        return yield* new Conflict({ message: "Delegation recovery services are unavailable." })
+      yield* Schema.decodeUnknownEffect(ReviewContext)(ctx).pipe(
+        Effect.mapError(() => new Conflict({ message: "This delegation recovery context is invalid." })),
+      )
+      const raw = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
+      if (!raw) return yield* new Invalid({ message: "This delegation request was not found." })
+      const record = decode(raw)
+      if (
+        record.childRunID !== run.id ||
+        record.sessionID !== run.sessionID ||
+        record.recipientID !== run.agentID ||
+        (run.status !== "running" && run.status !== "blocked")
+      )
+        return yield* new Conflict({ message: "This delegation no longer matches its original child run." })
+      if (record.deadline !== undefined && record.deadline <= Date.now())
+        return yield* new Conflict({ message: "This delegation deadline has passed." })
+      if (!(yield* authorize(record)))
+        return yield* new Conflict({ message: "This delegation is no longer authorized." })
+      if (record.parentID) {
+        const lineage = yield* ancestors(record.parentID)
+        const parent = lineage[0]
+        const active = (item: Record) =>
+          live.includes(item.state as (typeof live)[number]) || item.state === "completed"
+        if (
+          !parent ||
+          parent.id !== record.parentID ||
+          parent.recipientID !== record.senderID ||
+          !active(parent) ||
+          (parent.organizationID !== undefined && parent.organizationID !== record.organizationID) ||
+          parent.workspace !== record.workspace ||
+          (parent.deadline !== undefined && (record.deadline === undefined || record.deadline > parent.deadline)) ||
+          (parent.budget !== undefined && (record.budget === undefined || record.budget > parent.budget)) ||
+          lineage.some((item) => !active(item))
+        )
+          return yield* new Conflict({ message: "This delegation's parent work is no longer active." })
+      }
+      yield* recovery.guard(record, run)
+      const saved = snapshot(record, raw.time_updated)
+      const journal = yield* safe(reviews.load(id))
+      if (immutable && !journal)
+        return yield* new Conflict({ message: "This delegation has no durable recovery journal." })
+      const linked =
+        journal?.runID === run.id && journal.sessionID === run.sessionID && isDeepStrictEqual(journal.review, ctx)
+      const positioned = linked && (isDeepStrictEqual(saved, journal.prior) || advanced(saved, journal))
+      const current = yield* recovery.receipt(run)
+      const admitted =
+        (record.state === "needs_input" || record.state === "running") &&
+        (!journal || positioned || (journal.phase === "complete" && current !== undefined))
+      if (!admitted)
+        return yield* new Conflict({ message: "This delegation is not waiting on this reviewed response." })
+      if (immutable && current)
+        return yield* new Conflict({ message: "This delegation has a current execution receipt." })
+      const receipt = current ?? (positioned ? yield* recovery.reviewed(run, ctx.execution) : undefined)
+      if (!receipt || digest(receipt.token) !== ctx.execution)
+        return yield* new Conflict({ message: "This delegation's execution ownership changed before review." })
+      return { raw, record, saved, journal, positioned }
+    })
+    const review = Effect.fn("RayaTaskDelegation.review")(function* (
+      id: string,
+      run: RayaTask.Run,
+      ctx: typeof ReviewContext.Type,
+    ) {
+      if (!recovery || !reviews)
+        return yield* new Conflict({ message: "Delegation recovery services are unavailable." })
+      yield* mutate(
+        recovery.storage,
+        Effect.gen(function* () {
+          const checked = yield* inspect(id, run, ctx, false)
+          if (checked.positioned) return
+          yield* safe(
+            reviews.prepare({
+              runID: run.id,
+              sessionID: run.sessionID,
+              review: ctx,
+              prior: checked.saved,
+              updated: Math.max(Date.now(), checked.saved.updated + 1),
+            }),
+          )
+        }),
+        "Delegation recovery review",
+      )
+    })
+    const rearm = Effect.fn("RayaTaskDelegation.rearm")(function* (
+      id: string,
+      run: RayaTask.Run,
+      ctx: typeof ReviewContext.Type,
+    ) {
+      if (!recovery || !reviews)
+        return yield* new Conflict({ message: "Delegation recovery services are unavailable." })
+      return yield* mutate(
+        recovery.storage,
+        Effect.gen(function* () {
+          const checked = yield* inspect(id, run, ctx, true)
+          if (checked.record.state === "running" && checked.journal && advanced(checked.saved, checked.journal)) {
+            const journal = checked.journal!
+            const cas =
+              journal.phase === "prepared"
+                ? yield* safe(reviews.replace(journal, { ...journal, phase: "cas", updatedAt: Date.now() }))
+                : journal
+            if (cas.phase !== "complete")
+              yield* safe(reviews.replace(cas, { ...cas, phase: "complete", updatedAt: Date.now() }))
+            return checked.record
+          }
+          const now = Date.now()
+          const journal = yield* safe(
+            reviews.prepare({
+              runID: run.id,
+              sessionID: run.sessionID,
+              review: ctx,
+              prior: checked.saved,
+              updated: now,
+            }),
+          )
+          const changed = yield* db.transaction(
+            (tx) =>
+              Effect.gen(function* () {
+                const prior = yield* tx.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
+                if (
+                  !prior ||
+                  prior.state !== journal.prior.state ||
+                  !isDeepStrictEqual(snapshot(decode(prior), prior.time_updated), journal.prior)
+                )
+                  return yield* new Conflict({ message: "This delegation's saved provenance changed before rearm." })
+                if (checked.record.organizationID) {
+                  const organization = yield* tx
+                    .select({
+                      revision: Organization.revision,
+                      archived: Organization.archived_at,
+                      stopping: Organization.stopping_at,
+                    })
+                    .from(Organization)
+                    .where(eq(Organization.id, checked.record.organizationID))
+                    .get()
+                    .pipe(Effect.orDie)
+                  if (
+                    !organization ||
+                    organization.archived !== null ||
+                    organization.stopping !== null ||
+                    organization.revision !== checked.record.organizationRevision
+                  )
+                    return yield* new Conflict({ message: "This delegation's organization changed before rearm." })
+                }
+                return yield* tx
+                  .update(Delegation)
+                  .set({ state: "running", time_updated: journal.target.updated })
+                  .where(
+                    and(
+                      eq(Delegation.id, id),
+                      eq(Delegation.state, journal.prior.state),
+                      eq(Delegation.child_run_id, run.id),
+                      eq(Delegation.session_id, run.sessionID),
+                      eq(Delegation.time_updated, journal.prior.updated),
+                      checked.record.deadline === undefined
+                        ? isNull(Delegation.deadline)
+                        : gt(Delegation.deadline, Date.now()),
+                    ),
+                  )
+                  .returning()
+                  .all()
+                  .pipe(
+                    Effect.orDie,
+                    Effect.map((rows) => rows[0]),
+                  )
+              }),
+            { behavior: "immediate" },
+          )
+          const current =
+            changed ?? (yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie))
+          if (!current) return yield* new Conflict({ message: "This delegation disappeared during rearm." })
+          const record = decode(current)
+          const saved = snapshot(record, current.time_updated)
+          if (record.state !== "running" || !advanced(saved, journal))
+            return yield* new Conflict({ message: "This delegation changed during rearm." })
+          const cas =
+            journal.phase === "prepared"
+              ? yield* safe(reviews.replace(journal, { ...journal, phase: "cas", updatedAt: Date.now() }))
+              : journal
+          if (cas.phase !== "complete")
+            yield* safe(reviews.replace(cas, { ...cas, phase: "complete", updatedAt: Date.now() }))
+          return record
+        }),
+        "Delegation recovery",
+      )
+    })
     const attach = Effect.fn("RayaTaskDelegation.attach")(function* (id: string, runID: string, sessionID: SessionID) {
-      const prior = yield* get(id)
+      const saved = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
+      if (!saved) return yield* new Invalid({ message: "This delegation request was not found." })
+      const prior = decode(saved)
       if (prior.childRunID && prior.childRunID !== runID)
         return yield* new Conflict({ message: "This delegation is already attached to another run." })
       if (prior.sessionID && prior.sessionID !== sessionID)
         return yield* new Conflict({ message: "This delegation is already attached to another session." })
       if (prior.childRunID === runID && prior.sessionID === sessionID) {
+        if (prior.state !== "running")
+          return yield* new Conflict({ message: "This delegation cannot start from its current state." })
+        if (prior.deadline !== undefined && prior.deadline <= Date.now())
+          return yield* new Conflict({ message: "This delegation deadline has passed." })
+        if (!(yield* authorize(prior)))
+          return yield* new Conflict({ message: "This delegation is no longer authorized." })
         yield* begin(prior)
         return prior
       }
       if (prior.state !== "accepted" && prior.state !== "running")
         return yield* new Conflict({ message: "This delegation cannot start from its current state." })
+      if (prior.deadline !== undefined && prior.deadline <= Date.now())
+        return yield* new Conflict({ message: "This delegation deadline has passed." })
+      if (!(yield* authorize(prior)))
+        return yield* new Conflict({ message: "This delegation is no longer authorized." })
       const now = Date.now()
-      yield* db
+      const updated = yield* db
         .update(Delegation)
         .set({ state: "running", child_run_id: runID, session_id: sessionID, time_updated: now })
-        .where(eq(Delegation.id, id))
-        .run()
+        .where(
+          and(
+            eq(Delegation.id, id),
+            eq(Delegation.state, saved.state),
+            eq(Delegation.time_updated, saved.time_updated),
+            saved.child_run_id === null
+              ? isNull(Delegation.child_run_id)
+              : eq(Delegation.child_run_id, saved.child_run_id),
+            saved.session_id === null ? isNull(Delegation.session_id) : eq(Delegation.session_id, saved.session_id),
+          ),
+        )
+        .returning()
+        .all()
         .pipe(Effect.orDie)
-      const record = decode({
-        ...(yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie))!,
-      })
+      const current =
+        updated[0] ?? (yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie))
+      if (!current) return yield* new Conflict({ message: "This delegation disappeared before it could start." })
+      const record = decode(current)
+      if (!updated[0]) {
+        if (record.state !== "running" || record.childRunID !== runID || record.sessionID !== sessionID)
+          return yield* new Conflict({ message: "This delegation changed before it could start." })
+        if (record.deadline !== undefined && record.deadline <= Date.now())
+          return yield* new Conflict({ message: "This delegation deadline has passed." })
+        if (!(yield* authorize(record)))
+          return yield* new Conflict({ message: "This delegation is no longer authorized." })
+      }
       yield* begin(record)
       return record
     })
@@ -778,6 +1054,7 @@ export namespace RayaTaskDelegation {
       if (prior.state === "completed" || prior.state === "failed" || prior.state === "cancelled") {
         if (prior.state === state && prior.response === response && prior.cost === amount && prior.reason === reason) {
           yield* reply(prior, recipient)
+          if (reviews) yield* reviews.finish(prior.id).pipe(Effect.orDie)
           return prior
         }
         return yield* new Conflict({ message: "This delegation already has a different result." })
@@ -805,31 +1082,82 @@ export namespace RayaTaskDelegation {
           current.reason === reason
         ) {
           yield* reply(current, recipient)
+          if (reviews && state !== "needs_input") yield* reviews.finish(current.id).pipe(Effect.orDie)
           return current
         }
         return yield* new Conflict({ message: "This delegation already has a different result." })
       }
       const record = decode(updated[0])
       yield* reply(record, recipient)
+      if (reviews && state !== "needs_input") yield* reviews.finish(record.id).pipe(Effect.orDie)
       return record
     })
     const resume = Effect.fn("RayaTaskDelegation.resume")(function* (id: string, runID: string, sessionID: SessionID) {
-      const prior = yield* get(id)
+      const saved = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
+      if (!saved) return yield* new Invalid({ message: "This delegation request was not found." })
+      const prior = decode(saved)
       if (prior.childRunID !== runID || prior.sessionID !== sessionID)
         return yield* new Conflict({ message: "This delegation is attached to another run or session." })
+      if (prior.deadline !== undefined && prior.deadline <= Date.now())
+        return yield* new Conflict({ message: "This delegation deadline has passed." })
+      if (!(yield* authorize(prior)))
+        return yield* new Conflict({ message: "This delegation is no longer authorized." })
       if (prior.state === "running") return prior
       if (prior.state !== "needs_input")
         return yield* new Conflict({ message: "This delegation is not waiting for a response." })
-      const updated = yield* db
-        .update(Delegation)
-        .set({ state: "running", time_updated: Date.now() })
-        .where(and(eq(Delegation.id, id), eq(Delegation.state, "needs_input")))
-        .returning()
-        .all()
-        .pipe(Effect.orDie)
+      const updated = yield* db.transaction(
+        (tx) =>
+          Effect.gen(function* () {
+            if (prior.organizationID) {
+              const organization = yield* tx
+                .select({
+                  revision: Organization.revision,
+                  archived: Organization.archived_at,
+                  stopping: Organization.stopping_at,
+                })
+                .from(Organization)
+                .where(eq(Organization.id, prior.organizationID))
+                .get()
+                .pipe(Effect.orDie)
+              if (
+                !organization ||
+                organization.archived !== null ||
+                organization.stopping !== null ||
+                organization.revision !== prior.organizationRevision
+              )
+                return yield* new Conflict({ message: "This delegation's organization changed before resume." })
+            }
+            return yield* tx
+              .update(Delegation)
+              .set({ state: "running", time_updated: Date.now() })
+              .where(
+                and(
+                  eq(Delegation.id, id),
+                  eq(Delegation.state, "needs_input"),
+                  eq(Delegation.recipient_id, prior.recipientID),
+                  eq(Delegation.child_run_id, runID),
+                  eq(Delegation.session_id, sessionID),
+                  eq(Delegation.time_updated, saved.time_updated),
+                  prior.deadline === undefined ? isNull(Delegation.deadline) : gt(Delegation.deadline, Date.now()),
+                ),
+              )
+              .returning()
+              .all()
+              .pipe(Effect.orDie)
+          }),
+        { behavior: "immediate" },
+      )
       if (updated[0]) return decode(updated[0])
       const current = yield* get(id)
-      if (current.state === "running" && current.childRunID === runID && current.sessionID === sessionID) return current
+      if (
+        current.state === "running" &&
+        current.childRunID === runID &&
+        current.sessionID === sessionID &&
+        current.recipientID === prior.recipientID &&
+        (current.deadline === undefined || current.deadline > Date.now()) &&
+        (yield* authorize(current))
+      )
+        return current
       return yield* new Conflict({ message: "This delegation changed while its response was being applied." })
     })
     const chain = Effect.fn("RayaTaskDelegation.chain")(function* (id: string) {
@@ -928,6 +1256,8 @@ export namespace RayaTaskDelegation {
       take,
       accepted,
       authorize,
+      review,
+      rearm,
       attach,
       finish,
       resume,

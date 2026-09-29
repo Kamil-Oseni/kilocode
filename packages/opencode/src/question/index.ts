@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
@@ -6,6 +7,11 @@ import { QuestionID } from "./schema"
 import { KiloQuestion } from "@/kilocode/question" // kilocode_change
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { QuestionV1 } from "@opencode-ai/schema/question-v1"
+// kilocode_change start - await retained worker authority before releasing answers
+import { Database } from "@opencode-ai/core/database/database"
+import { Storage } from "@/storage/storage"
+import { make as replyGate, approve, accept } from "@/kilocode/task/reply"
+// kilocode_change end
 
 export const Option = QuestionV1.Option
 export type Option = typeof Option.Type
@@ -69,6 +75,11 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    // kilocode_change start
+    const deps = { database: yield* Database.Service, storage: yield* Storage.Service }
+    const gate = replyGate(deps)
+    const wait = replyGate(deps, true)
+    // kilocode_change end
     const state = yield* InstanceState.make<State>(
       Effect.fn("Question.state")(function* () {
         const state = {
@@ -111,6 +122,7 @@ export const layer = Layer.effect(
 
       // kilocode_change start
       yield* KiloQuestion.guardFollowup(input.sessionID, () => new RejectedError())
+      yield* approve(wait, input.sessionID)
       // kilocode_change end
 
       pending.set(id, { info, deferred })
@@ -138,14 +150,18 @@ export const layer = Layer.effect(
         yield* Effect.logDebug("reply for unknown request", { requestID: input.requestID }) // kilocode_change
         return yield* new NotFoundError({ requestID: input.requestID })
       }
-      pending.delete(input.requestID)
-      yield* Effect.logInfo("replied", { requestID: input.requestID, answers: input.answers })
+      yield* approve(gate, existing.info.sessionID) // kilocode_change - denied answers remain pending with an explicit request failure
+      if (pending.get(input.requestID) !== existing) return // kilocode_change - a concurrent reject owns the waiter
+      // kilocode_change start - accept before publishing; publication is an observation, not authority
+      if (!(yield* accept(pending, input.requestID, existing, Deferred.succeed(existing.deferred, input.answers))))
+        return
+      // kilocode_change end
+      yield* Effect.logInfo("replied", { requestID: input.requestID }) // kilocode_change - free-text answers may contain secrets
       yield* events.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         answers: input.answers.map((a) => [...a]),
       })
-      yield* Deferred.succeed(existing.deferred, input.answers)
     })
 
     const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
@@ -155,6 +171,7 @@ export const layer = Layer.effect(
         yield* Effect.logDebug("reject for unknown request", { requestID }) // kilocode_change
         return yield* new NotFoundError({ requestID })
       }
+      yield* gate(existing.info.sessionID) // kilocode_change - valid dismissal restores WAIT; refused authority never prevents cancellation
       pending.delete(requestID)
       yield* Effect.logInfo("rejected", { requestID })
       yield* events.publish(Event.Rejected, {
@@ -183,8 +200,14 @@ export const layer = Layer.effect(
 )
 
 // kilocode_change - preserve legacy layer composition for Kilo callers
-export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+export const defaultLayer = Layer.suspend(() => AppNodeBuilder.build(node)) // kilocode_change
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+// kilocode_change start
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [EventV2Bridge.node, Database.node, Storage.node],
+})
+// kilocode_change end
 
 export * as Question from "."

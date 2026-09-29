@@ -1,6 +1,7 @@
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { afterEach, expect } from "bun:test"
-import { Effect, Fiber, Layer, Queue } from "effect"
+import { Effect, Fiber, Queue } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Question } from "../../src/question"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -9,9 +10,8 @@ import { SessionID } from "../../src/session/schema"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const events = AppNodeBuilder.build(EventV2Bridge.node)
 const it = testEffect(
-  Layer.mergeAll(Question.layer.pipe(Layer.provide(events)), events, AppNodeBuilder.build(CrossSpawnSpawner.node)),
+  AppNodeBuilder.build(LayerNode.group([Question.node, EventV2Bridge.node, CrossSpawnSpawner.node])),
 )
 
 afterEach(async () => {

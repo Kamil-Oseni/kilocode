@@ -7,12 +7,14 @@ import { sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation, ceiling } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaGoal } from "@/kilocode/goal"
 import { owner } from "@/kilocode/task/owner"
 
@@ -72,13 +74,40 @@ function session(id: string) {
   }
 }
 
+// Admission fixtures retain the exact session input so post-creation authority
+// checks read the same metadata and permission ceiling that creation received.
+function retained(input: Pick<Session.Interface, "create" | "get" | "messages" | "children">) {
+  const rows = new Map<SessionID, Session.Info>()
+  return {
+    ...input,
+    create: (value?: Parameters<Session.Interface["create"]>[0]) =>
+      input.create(value).pipe(
+        Effect.map((row) => {
+          const saved = {
+            ...row,
+            metadata: value?.metadata ?? row.metadata,
+            permission: value?.permission?.map((rule) => ({ ...rule })) ?? row.permission,
+            agent: value?.agent ?? row.agent,
+            model: value?.model ?? row.model,
+          }
+          rows.set(saved.id, saved)
+          return saved
+        }),
+      ),
+    get: (id: SessionID) => {
+      const row = rows.get(id)
+      return row ? Effect.succeed(row) : input.get(id)
+    },
+  }
+}
+
 test("chief of staff obtains a tracked accounting result without rewriting either assignment", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const database = yield* Database.Service
       const storage = memory()
       const starts: string[] = []
-      const sessions = {
+      const sessions = retained({
         create: () =>
           Effect.sync(() => {
             starts.push("start")
@@ -87,7 +116,7 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
         get: () => Effect.die("unused"),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
-      }
+      })
       const runner = RayaTaskRunner.make({
         database,
         storage,
@@ -170,7 +199,7 @@ test("a bounded worker cannot allocate more than its unspent branch budget", asy
       const database = yield* Database.Service
       const storage = memory()
       const starts: string[] = []
-      const sessions = {
+      const sessions = retained({
         create: () =>
           Effect.sync(() => {
             starts.push("start")
@@ -185,7 +214,7 @@ test("a bounded worker cannot allocate more than its unspent branch budget", asy
           }),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
-      }
+      })
       const runner = RayaTaskRunner.make({ database, storage, sessions })
       const goals = RayaGoal.make({ database, storage, sessions })
       const chief = yield* runner.tasks.create({
@@ -281,7 +310,7 @@ test("queued organization work cannot start under a later company revision", asy
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -290,7 +319,7 @@ test("queued organization work cannot start under a later company revision", asy
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -385,7 +414,7 @@ test("organization authority is rechecked after the worker startup claim is acqu
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -394,7 +423,7 @@ test("organization authority is rechecked after the worker startup claim is acqu
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -451,11 +480,16 @@ test("organization policy is pinned at authorization and cannot widen delegated 
       const database = yield* Database.Service
       const storage = memory()
       const calls: Array<{ permission: unknown }> = []
+      const launches: string[] = []
       const state = { id: "", updated: false }
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        continuation: (run) =>
+          Effect.sync(() => {
+            launches.push(run.id)
+          }),
+        sessions: retained({
           create: (input) =>
             Effect.gen(function* () {
               if (!input) return yield* Effect.die(new Error("Expected delegated session input"))
@@ -472,7 +506,7 @@ test("organization policy is pinned at authorization and cannot widen delegated 
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -500,17 +534,25 @@ test("organization policy is pinned at authorization and cannot widen delegated 
         delegations: [{ senderID: chief.id, recipientID: books.id }],
       })
       state.id = organization.id
-      const row = yield* runner.delegate({
-        source: "dlg_policy",
-        senderID: chief.id,
-        recipientID: books.id,
-        organizationID: organization.id,
-        organizationRevision: organization.revision,
-        objective: "Review the close.",
-      })
-      expect(row.state).toBe("running")
+      const refused = yield* runner
+        .delegate({
+          source: "dlg_policy",
+          senderID: chief.id,
+          recipientID: books.id,
+          organizationID: organization.id,
+          organizationRevision: organization.revision,
+          objective: "Review the close.",
+        })
+        .pipe(Effect.flip)
+      expect(refused.message).toBe("This assignment is no longer authorized to start.")
+      const row = yield* RayaTaskDelegation.make(database).lookup("dlg_policy")
+      expect(row?.state).toBe("accepted")
+      expect(row?.sessionID).toBeUndefined()
+      expect(launches).toEqual([])
       expect((yield* organizations.get(organization.id)).revision).toBe(2)
-      const saved = yield* RayaTaskSnapshot.make({ storage }).get(row.childRunID!)
+      const run = (yield* runner.tasks.runsFor(books.id)).find((run) => run.sessionID === SessionID.make("ses_policy"))
+      if (!run) throw new Error("Expected the retained created run")
+      const saved = yield* RayaTaskSnapshot.make({ storage }).get(run.id)
       expect(saved.version).toBe(2)
       if (saved.version !== 2) return yield* Effect.die("Expected a current startup snapshot")
       expect(saved.objective.split(text)).toHaveLength(2)
@@ -532,7 +574,7 @@ test("standalone runs bind only an unambiguous organization", async () => {
       const database = yield* Database.Service
       const storage = memory()
       const opened: Array<{ metadata?: Record<string, unknown> }> = []
-      const sessions = {
+      const sessions = retained({
         create: (input?: { metadata?: Record<string, unknown> }) =>
           Effect.sync(() => {
             opened.push({ metadata: input?.metadata })
@@ -541,7 +583,7 @@ test("standalone runs bind only an unambiguous organization", async () => {
         get: () => Effect.die("unused"),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
-      }
+      })
       const runner = RayaTaskRunner.make({ database, storage, sessions })
       const unique = yield* runner.tasks.create({
         name: "Unique",
@@ -640,7 +682,7 @@ test("a durable removal owner refuses concurrent delegation admission", async ()
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -649,7 +691,7 @@ test("a durable removal owner refuses concurrent delegation admission", async ()
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -698,7 +740,11 @@ test("restart resumes an accepted delegation that stopped before its startup cla
         sessions: {
           create: (value) =>
             Effect.sync(() => {
-              const created = { ...session("ses_restart_accepted"), metadata: value?.metadata }
+              const created = {
+                ...session("ses_restart_accepted"),
+                metadata: value?.metadata,
+                permission: value?.permission?.map((rule) => ({ ...rule })),
+              }
               opened.push(created)
               return created
             }),
@@ -754,11 +800,15 @@ test("restart attaches the exact saved run when delegation attachment was interr
     Effect.gen(function* () {
       const database = yield* Database.Service
       const storage = memory()
-      const opened: Array<ReturnType<typeof session> & { metadata?: Record<string, unknown> }> = []
+      const opened: Session.Info[] = []
       const sessions = {
-        create: (value?: { metadata?: Record<string, unknown> }) =>
+        create: (value?: Parameters<Session.Interface["create"]>[0]) =>
           Effect.sync(() => {
-            const created = { ...session("ses_restart_attach"), metadata: value?.metadata }
+            const created = {
+              ...session("ses_restart_attach"),
+              metadata: value?.metadata,
+              permission: value?.permission?.map((rule) => ({ ...rule })),
+            }
             opened.push(created)
             return created
           }),
@@ -918,7 +968,7 @@ test("a completed manual run releases the worker's next queued delegation", asyn
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -927,7 +977,7 @@ test("a completed manual run releases the worker's next queued delegation", asyn
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const sender = yield* runner.tasks.create({
         name: "Sender",
@@ -988,7 +1038,7 @@ test("settlement replay restores one report and releases one queued delegation",
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               const id = `ses_settlement_replay_${starts.length + 1}`
@@ -998,7 +1048,7 @@ test("settlement replay restores one report and releases one queued delegation",
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -1097,14 +1147,24 @@ test("waiting for the user survives restart and holds the next delegation", asyn
       const storage = memory()
       const starts: string[] = []
       const halted: string[] = []
+      const saved: Session.Info[] = []
+      const entered = yield* Deferred.make<void>()
+      const hold = yield* Deferred.make<void>()
+      const joined = new Set<string>()
       const sessions = {
-        create: () =>
+        create: (value?: Parameters<Session.Interface["create"]>[0]) =>
           Effect.sync(() => {
             const id = `ses_wait_restart_${starts.length + 1}`
             starts.push(id)
-            return session(id)
+            const created = {
+              ...session(id),
+              metadata: value?.metadata,
+              permission: value?.permission?.map((rule) => ({ ...rule })),
+            }
+            saved.push(created)
+            return created
           }),
-        get: () => Effect.die("unused"),
+        get: (id: SessionID) => Effect.sync(() => saved.find((item) => item.id === id)!),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       }
@@ -1112,6 +1172,15 @@ test("waiting for the user survives restart and holds the next delegation", asyn
         database,
         storage,
         sessions,
+        continuation: (run: RayaTask.Run) =>
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.andThen(Deferred.await(hold)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                joined.add(run.id)
+              }),
+            ),
+          ),
         halt: (id: SessionID) =>
           Effect.sync(() => {
             halted.push(id)
@@ -1122,20 +1191,41 @@ test("waiting for the user survives restart and holds the next delegation", asyn
         name: "Chief",
         objective: "Assign work",
         access: "brief",
+        enabled: true,
         schedule: { kind: "manual" },
       })
       const books = yield* runner.tasks.create({
         name: "Books",
         objective: "Review accounts",
         access: "brief",
+        enabled: true,
         schedule: { kind: "manual" },
       })
+      // The fixture holds the real owned continuation boundary, including the
+      // next queued body, and joins its durable idle/release before SQLite closes.
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(hold, undefined)
+          const execution = RayaTaskExecution.make(storage)
+          for (const _ of Array.from({ length: 500 })) {
+            const runs = yield* runner.tasks.runsFor(books.id)
+            const rows = yield* Effect.forEach(runs, (run) => execution.receipt(run))
+            if (runs.every((run) => joined.has(run.id)) && rows.every((row) => !row || row.state === "idle")) {
+              yield* Effect.forEach(runs, (run) => execution.finish(run))
+              return
+            }
+            yield* Effect.sleep("10 millis")
+          }
+          throw new Error("Owned WAIT fixture continuations did not reach durable idle")
+        }).pipe(Effect.orDie),
+      )
       const first = yield* runner.delegate({
         source: "dlg_wait_first",
         senderID: chief.id,
         recipientID: books.id,
         objective: "Ask which ledger to use.",
       })
+      yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"))
       const second = yield* runner.delegate({
         source: "dlg_wait_second",
         senderID: chief.id,
@@ -1189,9 +1279,9 @@ test("waiting for the user survives restart and holds the next delegation", asyn
         ),
       ).toBe(true)
       expect((yield* reopened.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(1)
-    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+    }).pipe(Effect.scoped, Effect.provide(Database.layerFromPath(":memory:"))),
   )
-})
+}, 30000)
 
 test("stopping a parent cancels live descendants without rewriting assignments", async () => {
   await Effect.runPromise(
@@ -1207,7 +1297,7 @@ test("stopping a parent cancels live descendants without rewriting assignments",
           Effect.sync(() => {
             halted.push(sessionID)
           }),
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -1216,7 +1306,7 @@ test("stopping a parent cancels live descendants without rewriting assignments",
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief of Staff",
@@ -1286,7 +1376,7 @@ test("late settlement cannot replace cancellation or alter the recipient's next 
         database,
         storage,
         halt: () => Effect.void,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               const id = `ses_late_${starts.length + 1}`
@@ -1299,7 +1389,7 @@ test("late settlement cannot replace cancellation or alter the recipient's next 
               ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as([]))
               : Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -1366,7 +1456,7 @@ test("parent run cost stays independent of a completed child request", async () 
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () => Effect.sync(() => session("ses_books")),
           get: () => Effect.die("unused"),
           messages: ({ sessionID }) =>
@@ -1380,7 +1470,7 @@ test("parent run cost stays independent of a completed child request", async () 
               },
             ] as never),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const inbox = RayaTaskInbox.make(database)
       const store = RayaTaskDelegation.make(database)
@@ -1469,7 +1559,7 @@ test("an overdue queued request fails on tick without starting", async () => {
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -1478,7 +1568,7 @@ test("an overdue queued request fails on tick without starting", async () => {
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const store = RayaTaskDelegation.make(database)
       const inbox = RayaTaskInbox.make(database)
@@ -1533,7 +1623,7 @@ test("an archived or other-folder worker is denied without starting", async () =
       const runner = RayaTaskRunner.make({
         database,
         storage,
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -1542,7 +1632,7 @@ test("an archived or other-folder worker is denied without starting", async () =
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const inbox = RayaTaskInbox.make(database)
       const chief = yield* runner.tasks.create({
@@ -1614,7 +1704,7 @@ test("stopping a parent keeps a completed child result", async () => {
           Effect.sync(() => {
             halted.push(sessionID)
           }),
-        sessions: {
+        sessions: retained({
           create: () =>
             Effect.sync(() => {
               starts.push("start")
@@ -1623,7 +1713,7 @@ test("stopping a parent keeps a completed child result", async () => {
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
-        },
+        }),
       })
       const store = RayaTaskDelegation.make(database)
       const inbox = RayaTaskInbox.make(database)

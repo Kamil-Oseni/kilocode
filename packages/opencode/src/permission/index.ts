@@ -20,6 +20,8 @@ import { drainCovered } from "@/kilocode/permission/drain"
 import { ReadPermission } from "@/kilocode/permission/read"
 import { AgentManagerPermission } from "@/kilocode/permission/agent-manager" // kilocode_change
 import { ExternalDirectoryPermission } from "@/kilocode/permission/external-directory"
+import { Storage } from "@/storage/storage"
+import { make as replyGate, approve, accept } from "@/kilocode/task/reply"
 // kilocode_change end
 
 export const Event = PermissionV1.Event
@@ -164,6 +166,11 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service // kilocode_change
     const database = yield* Database.Service // kilocode_change
+    // kilocode_change start
+    const deps = { database, storage: yield* Storage.Service }
+    const gate = replyGate(deps)
+    const wait = replyGate(deps, true)
+    // kilocode_change end
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -295,6 +302,7 @@ const layer = Layer.effect(
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+      yield* approve(wait, info.sessionID) // kilocode_change - waiting ownership is established before Asked is visible
       pending.set(id, { info, ruleset, hardRuleset, deferred, policy }) // kilocode_change
       yield* events.publish(Event.Asked, info) // kilocode_change - was bus.publish
       // kilocode_change start - was `return yield* Effect.ensuring(...)`; report the manual decision to callers
@@ -330,14 +338,18 @@ const layer = Layer.effect(
       // kilocode_change end
 
       if (input.reply !== "reject" && !(yield* current(existing))) return // kilocode_change
-      pending.delete(input.requestID)
-      yield* events.publish(Event.Replied, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-        reply: input.reply,
-      })
-
+      if (input.reply !== "reject") yield* approve(gate, existing.info.sessionID) // kilocode_change
+      if (input.reply === "reject") yield* gate(existing.info.sessionID) // kilocode_change - valid rejection restores WAIT without preventing cancellation
+      if (pending.get(input.requestID) !== existing) return // kilocode_change
+      if (input.reply === "reject") pending.delete(input.requestID) // kilocode_change
       if (input.reply === "reject") {
+        // kilocode_change start
+        yield* events.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
+        // kilocode_change end
         yield* Deferred.fail(
           existing.deferred,
           input.message
@@ -358,9 +370,22 @@ const layer = Layer.effect(
         return
       }
 
-      if (!(yield* current(existing))) return // kilocode_change - publication can await a concurrent policy update
-      yield* Deferred.succeed(existing.deferred, undefined)
+      if (!(yield* current(existing))) return // kilocode_change - decide against current policy before releasing work
+      yield* approve(gate, existing.info.sessionID) // kilocode_change
+      if (!(yield* current(existing))) return // kilocode_change - authority checks can await a policy change
+      if (pending.get(input.requestID) !== existing) return // kilocode_change
+      // kilocode_change start - settlement and pending removal cannot be split by request cancellation
+      if (!(yield* accept(pending, input.requestID, existing, Deferred.succeed(existing.deferred, undefined)))) return
+      // kilocode_change end
+      // kilocode_change start - only an accepted decision may be published
+      yield* events.publish(Event.Replied, {
+        sessionID: existing.info.sessionID,
+        requestID: existing.info.id,
+        reply: input.reply,
+      })
+      // kilocode_change end
       if (input.reply === "once") return
+      if (!(yield* existing.policy.current())) return // kilocode_change - later revocation cannot become a persistent grant
 
       // kilocode_change start - downgrade "always" to "once" for protected config paths
       if (ConfigProtection.isRequest(existing.info) && !ConfigProtection.isGlobalSkillRequest(existing.info)) return
@@ -383,6 +408,7 @@ const layer = Layer.effect(
         (data) => Effect.asVoid(events.publish(Event.Replied, data)),
         undefined,
         (entry) => current(entry as PendingEntry),
+        (entry) => gate(entry.info.sessionID),
       ) // kilocode_change - drain publishes replies through the same EventV2Bridge channel
 
       if (!existing.saved) {
@@ -392,6 +418,7 @@ const layer = Layer.effect(
           action: "allow" as const,
         }))
         if (alwaysRules.length > 0) {
+          if (!(yield* existing.policy.current())) return // kilocode_change - a sibling reply listener can revoke policy during drain
           yield* config.updateGlobal({ permission: toConfig(alwaysRules) }, { dispose: false })
         }
       }
@@ -442,6 +469,7 @@ const layer = Layer.effect(
         (data) => Effect.asVoid(events.publish(Event.Replied, data)),
         input.requestID as unknown as string,
         (entry) => current(entry as PendingEntry),
+        (entry) => gate(entry.info.sessionID),
       )
     })
 
@@ -467,14 +495,27 @@ const layer = Layer.effect(
       if (input.requestID) {
         const entry = s.pending.get(input.requestID)
         const ok = entry ? covered(entry, s.approved, s.session[entry.info.sessionID] ?? []) : false
-        if (entry && ok && (!input.sessionID || entry.info.sessionID === input.sessionID) && (yield* current(entry))) {
-          s.pending.delete(input.requestID)
-          yield* events.publish(Event.Replied, {
-            sessionID: entry.info.sessionID,
-            requestID: entry.info.id,
-            reply: "once",
-          })
-          if (yield* current(entry)) yield* Deferred.succeed(entry.deferred, undefined)
+        if (
+          entry &&
+          ok &&
+          (!input.sessionID || entry.info.sessionID === input.sessionID) &&
+          (yield* current(entry)) &&
+          (yield* gate(entry.info.sessionID))
+        ) {
+          if (
+            (yield* current(entry)) &&
+            (yield* gate(entry.info.sessionID)) &&
+            (yield* current(entry)) &&
+            s.pending.get(input.requestID) === entry
+          ) {
+            if (yield* accept(s.pending, input.requestID, entry, Deferred.succeed(entry.deferred, undefined))) {
+              yield* events.publish(Event.Replied, {
+                sessionID: entry.info.sessionID,
+                requestID: entry.info.id,
+                reply: "once",
+              })
+            }
+          }
         }
       }
 
@@ -482,13 +523,20 @@ const layer = Layer.effect(
         if (input.sessionID && entry.info.sessionID !== input.sessionID) continue
         if (!covered(entry, s.approved, s.session[entry.info.sessionID] ?? [])) continue
         if (!(yield* current(entry))) continue
-        s.pending.delete(id)
-        yield* events.publish(Event.Replied, {
-          sessionID: entry.info.sessionID,
-          requestID: entry.info.id,
-          reply: "once",
-        })
-        if (yield* current(entry)) yield* Deferred.succeed(entry.deferred, undefined)
+        if (!(yield* gate(entry.info.sessionID))) continue
+        if (
+          (yield* current(entry)) &&
+          (yield* gate(entry.info.sessionID)) &&
+          (yield* current(entry)) &&
+          s.pending.get(id) === entry
+        ) {
+          if (!(yield* accept(s.pending, id, entry, Deferred.succeed(entry.deferred, undefined)))) continue
+          yield* events.publish(Event.Replied, {
+            sessionID: entry.info.sessionID,
+            requestID: entry.info.id,
+            reply: "once",
+          })
+        }
       }
     })
 
@@ -586,7 +634,7 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [EventV2Bridge.node, Config.node, Database.node], // kilocode_change
+  deps: [EventV2Bridge.node, Config.node, Database.node, Storage.node], // kilocode_change
 })
 
 export * as Permission from "."

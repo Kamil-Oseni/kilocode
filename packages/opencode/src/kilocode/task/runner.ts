@@ -21,6 +21,7 @@ import {
   ceiling,
   credited,
   prompt,
+  scope,
   Invalid,
   type Conflict,
   type Request as Ask,
@@ -217,16 +218,129 @@ export namespace RayaTaskRunner {
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
     const organizations = input.database ? RayaTaskOrganization.make(input.database, tasks, input.storage) : undefined
+    const authority = Effect.fn("RayaTaskRunner.delegatedAuthority")(function* (row: Errand, run: RayaTask.Run) {
+      if (row.childRunID !== run.id || row.sessionID !== run.sessionID || row.recipientID !== run.agentID)
+        return yield* new RayaTask.GuardError({ message: "This assignment no longer owns the worker's original run." })
+      const sender = yield* tasks.get(row.senderID)
+      const recipient = yield* tasks.get(row.recipientID)
+      const snapshot = yield* snapshots.find(run.id)
+      const fields = (item: RayaTask.Agent) => ({
+        role: item.role,
+        access: item.access,
+        tools: item.tools,
+        dir: item.dir,
+        paths: item.paths,
+        capabilities: item.capabilities,
+      })
+      if (
+        !recipient.enabled ||
+        sender.access === undefined ||
+        recipient.access === undefined ||
+        !snapshot ||
+        snapshot.agentID !== recipient.id ||
+        snapshot.at !== run.at ||
+        (snapshot.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1) ||
+        !isDeepStrictEqual(fields(snapshot.definition), fields(recipient)) ||
+        scope(sender, recipient) !== row.workspace ||
+        (sender.dir?.trim() && recipient.dir?.trim() && row.workspace === undefined)
+      )
+        return yield* new RayaTask.GuardError({
+          message: "This assignment's worker access changed. Review it before continuing.",
+        })
+      if (organizations && ((yield* organizations.stopped(sender.id)) || (yield* organizations.stopped(recipient.id))))
+        return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
+      const session = yield* input.sessions.get(run.sessionID)
+      const rules = yield* open(
+        recipient.dir,
+        Effect.gen(function* () {
+          const worktree = recipient.dir ? (yield* InstanceState.context).worktree : undefined
+          return RayaTask.rules(ceiling(sender, recipient), worktree)
+        }),
+      )
+      if (!isDeepStrictEqual(session.permission, rules))
+        return yield* new RayaTask.GuardError({
+          message: "This worker's access changed. Review the assignment before continuing.",
+        })
+      const goal = yield* goals.get(run.sessionID)
+      if (!goal || goal.budget?.modelCost !== (row.budget ?? snapshot.definition.budget))
+        return yield* new RayaTask.GuardError({
+          message: "This assignment's budget changed. Review it before continuing.",
+        })
+      if (row.parentRunID) {
+        const parent = (yield* tasks.runsFor(sender.id)).find((item) => item.id === row.parentRunID)
+        if (!parent || parent.status === "error")
+          return yield* new RayaTask.GuardError({ message: "The original requesting run was removed or stopped." })
+      }
+    })
     const errands = input.database
-      ? RayaTaskDelegation.make(input.database, organizations?.authorize, organizations?.shares)
+      ? RayaTaskDelegation.make(input.database, organizations?.authorize, organizations?.shares, {
+          storage: input.storage,
+          receipt: execution.receipt,
+          reviewed: execution.reviewed,
+          guard: authority,
+        })
       : undefined
+    const assignment = Effect.fn("RayaTaskRunner.assignment")(function* (
+      run: RayaTask.Run,
+      identity: typeof ContinuationRecord.Type,
+    ) {
+      const row = errands ? yield* errands.bySession(run.sessionID) : undefined
+      if (!identity.delegationID && !row) return undefined
+      if (
+        !errands ||
+        !row ||
+        identity.delegationID !== row.id ||
+        identity.agentID !== run.agentID ||
+        identity.runID !== run.id ||
+        identity.scheduleVersion !== (run.scheduleVersion ?? 1) ||
+        !isDeepStrictEqual(identity.trigger, run.trigger) ||
+        identity.organizationID !== row.organizationID ||
+        identity.organizationRevision !== row.organizationRevision
+      )
+        return yield* new RayaTask.GuardError({ message: "This worker reply no longer has its original assignment." })
+      yield* authority(row, run)
+      return row
+    })
     const turn = (run: RayaTask.Run) =>
-      input.continuation?.(run) ??
-      kick({
-        database: input.database,
-        sessionID: run.sessionID,
-        storage: input.storage,
-        sessions: input.sessions,
+      Effect.gen(function* () {
+        const row = errands ? yield* errands.bySession(run.sessionID) : undefined
+        const session = yield* input.sessions.get(run.sessionID)
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+          Effect.orElseSucceed(() => undefined),
+        )
+        if (row || identity?.delegationID) {
+          if (!identity)
+            return yield* new RayaTask.GuardError({ message: "This assignment's saved worker identity changed." })
+          const current = yield* assignment(run, identity)
+          if (
+            !current ||
+            !errands ||
+            current.state !== "running" ||
+            (current.deadline !== undefined && current.deadline <= Date.now()) ||
+            !(yield* errands.authorize(current))
+          )
+            return yield* new RayaTask.GuardError({ message: "This assignment can no longer continue." })
+          const latest = (yield* tasks.runsFor(current.recipientID)).find((item) => item.id === run.id)
+          const goal = yield* goals.get(run.sessionID)
+          if (
+            !latest ||
+            latest.agentID !== run.agentID ||
+            latest.sessionID !== run.sessionID ||
+            latest.at !== run.at ||
+            (latest.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1) ||
+            !isDeepStrictEqual(latest.trigger, run.trigger) ||
+            latest.status !== "running" ||
+            goal?.status !== "active"
+          )
+            return
+        }
+        return yield* input.continuation?.(run) ??
+          kick({
+            database: input.database,
+            sessionID: run.sessionID,
+            storage: input.storage,
+            sessions: input.sessions,
+          })
       })
     const LATE = "This request timed out. It was not completed."
     const affiliation = Effect.fn("RayaTaskRunner.affiliation")(function* (id: string) {
@@ -611,19 +725,68 @@ export namespace RayaTaskRunner {
       for (const item of items) {
         const history = yield* tasks.runsFor(item.id)
         const run = history.findLast((entry) => entry.sessionID === sessionID)
-        if (!run || run.status === "complete" || run.status === "error") continue
+        if (!run) continue
+        if (!waiting) {
+          const row = errands ? yield* errands.bySession(sessionID) : undefined
+          const session = yield* input.sessions.get(sessionID)
+          const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+            Effect.orElseSucceed(() => undefined),
+          )
+          if (row || identity?.delegationID) {
+            if (
+              !identity ||
+              !errands ||
+              (run.status !== "running" && !(run.status === "blocked" && run.blockedReason === WAIT))
+            )
+              return yield* new RayaTask.GuardError({ message: "This assignment can no longer continue." })
+            const current = yield* assignment(run, identity)
+            if (!current)
+              return yield* new RayaTask.GuardError({ message: "This assignment's saved worker identity changed." })
+            const goal = yield* goals.get(sessionID)
+            if (
+              goal?.status !== "active" ||
+              (goal.replyRecovery && goal.replyRecovery.reviewedAt === undefined) ||
+              (yield* execution.authorized(run)) !== true
+            )
+              return yield* new RayaTask.GuardError({ message: "This worker needs recovery review before continuing." })
+            yield* errands.resume(current.id, run.id, sessionID)
+            const resumed = yield* assignment(run, identity)
+            if (
+              !resumed ||
+              resumed.state !== "running" ||
+              (resumed.deadline !== undefined && resumed.deadline <= Date.now()) ||
+              !(yield* errands.authorize(resumed)) ||
+              (yield* execution.authorized(run)) !== true
+            )
+              return yield* new RayaTask.GuardError({ message: "This assignment can no longer continue." })
+            const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
+            if (
+              !latest ||
+              (latest.status !== "running" && !(latest.status === "blocked" && latest.blockedReason === WAIT))
+            )
+              return yield* new RayaTask.GuardError({
+                message: "This worker was stopped before the answer could continue.",
+              })
+          }
+        }
+        if (run.status === "complete" || run.status === "error") continue
         if (waiting) {
           if (run.status === "blocked" && run.blockedReason === WAIT) {
             yield* retain(run)
+            yield* close(run)
             continue
           }
           yield* tasks.transition(run, { ...run, status: "blocked", blockedReason: WAIT })
           const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
-          if (latest) yield* retain(latest)
+          if (latest) {
+            yield* retain(latest)
+            yield* close(latest)
+          }
           continue
         }
         if (run.status !== "blocked" || run.blockedReason !== WAIT) continue
-        yield* tasks.transition(run, { ...run, status: "running", blockedReason: undefined })
+        if (!(yield* tasks.transition(run, { ...run, status: "running", blockedReason: undefined })))
+          return yield* new RayaTask.GuardError({ message: "This worker changed before the answer could continue." })
       }
     })
 
@@ -678,10 +841,34 @@ export namespace RayaTaskRunner {
       const note = brief(item, reports, question)
       const last = (yield* tasks.runsFor(id)).at(-1)
       if (last && RayaTask.pending(last)) {
-        const run = yield* steer(last, note, opts?.defer)
-        const row = errands ? yield* errands.bySession(run.sessionID) : undefined
-        if (row?.state === "needs_input" && errands) yield* errands.resume(row.id, run.id, run.sessionID)
-        return run
+        const row = errands ? yield* errands.bySession(last.sessionID) : undefined
+        if (row && errands) {
+          const session = yield* input.sessions.get(last.sessionID)
+          const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+            Effect.mapError(() => new RayaTask.GuardError({ message: "This worker's saved run identity is invalid." })),
+          )
+          yield* assignment(last, identity)
+          if (
+            (row.state !== "running" && row.state !== "needs_input") ||
+            (row.deadline !== undefined && row.deadline <= Date.now()) ||
+            !(yield* errands.authorize(row))
+          )
+            return yield* new RayaTask.GuardError({ message: "This assignment can no longer accept a response." })
+          const run = yield* steer(last, note, true)
+          yield* authority(row, run)
+          const current = yield* errands.resume(row.id, run.id, run.sessionID)
+          if (
+            current.state !== "running" ||
+            (current.deadline !== undefined && current.deadline <= Date.now()) ||
+            !(yield* errands.authorize(current))
+          )
+            return yield* new RayaTask.GuardError({
+              message: "This assignment changed before the response could start.",
+            })
+          if (!opts?.defer) yield* launch(run)
+          return run
+        }
+        return yield* steer(last, note, opts?.defer)
       }
       return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer, bind: opts?.bind })
     })
@@ -732,6 +919,7 @@ export namespace RayaTaskRunner {
           return yield* new RayaTask.GuardError({
             message: "This reviewed reply cannot resume its original run safely.",
           })
+        const row = yield* assignment(prior, identity)
         const pending = inbox ? yield* inbox.stranded(identity.agentID) : undefined
         if (pending?.sessionID !== sessionID || pending.source !== goal!.replyRecovery!.source) {
           const source = inbox
@@ -750,6 +938,14 @@ export namespace RayaTaskRunner {
             return
           return yield* new RayaTask.GuardError({
             message: "This reviewed reply no longer has its original undelivered source.",
+          })
+        }
+        if (row && errands) {
+          const marker = goal!.replyRecovery!
+          yield* errands.rearm(row.id, prior, {
+            intent: marker.intent,
+            source: marker.source,
+            execution: marker.execution,
           })
         }
       }
@@ -781,6 +977,23 @@ export namespace RayaTaskRunner {
           ),
         )
         return
+      }
+      if (reviewed && prior) {
+        const session = yield* input.sessions.get(sessionID)
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+          Effect.mapError(
+            () => new RayaTask.GuardError({ message: "This reviewed worker's identity changed before continuation." }),
+          ),
+        )
+        const row = yield* assignment(prior, identity)
+        if (
+          row &&
+          (!errands ||
+            row.state !== "running" ||
+            (row.deadline !== undefined && row.deadline <= Date.now()) ||
+            !(yield* errands.authorize(row)))
+        )
+          return yield* new RayaTask.GuardError({ message: "This assignment changed before continuation could start." })
       }
       yield* launch(run).pipe(
         Effect.catchCause((cause) =>
@@ -826,9 +1039,13 @@ export namespace RayaTaskRunner {
         return yield* new RayaTask.GuardError({
           message: "This worker reply's execution ownership changed before review.",
         })
+      const row = yield* assignment(prior, identity)
+      const context = { intent: marker.intent, source: marker.source, execution: marker.execution }
+      if (row && errands) yield* errands.review(row.id, prior, context)
       if (identity.trigger.kind === "timer" && schedule)
         yield* schedule.review(prior, { intent: marker.intent, source: marker.source, execution: marker.execution })
       yield* execution.review(prior, receipt.token)
+      if (row && errands) yield* errands.rearm(row.id, prior, context)
       if (identity.trigger.kind === "timer" && schedule)
         yield* schedule.rearm(prior, { intent: marker.intent, source: marker.source, execution: marker.execution })
     })
@@ -858,12 +1075,36 @@ export namespace RayaTaskRunner {
           !identity ||
           identity.agentID !== recipient.id ||
           identity.runID !== taken.childRunID ||
-          identity.delegationID !== taken.id
+          identity.delegationID !== taken.id ||
+          identity.scheduleVersion !== (prior.scheduleVersion ?? 1) ||
+          !isDeepStrictEqual(identity.trigger, prior.trigger) ||
+          identity.organizationID !== taken.organizationID ||
+          identity.organizationRevision !== taken.organizationRevision
         )
           return yield* new RayaTask.GuardError({
             message: "This delegation's saved run identity is inconsistent and needs recovery review.",
           })
-        return yield* errands.attach(taken.id, prior.id, prior.sessionID)
+        if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
+          yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE)
+          yield* drop(recipient.id, prior.sessionID, prior.id, LATE)
+          return yield* errands.get(taken.id)
+        }
+        if (!(yield* errands.authorize(taken)))
+          return yield* new RayaTask.GuardError({ message: "This assignment is no longer authorized to start." })
+        yield* authority({ ...taken, sessionID: prior.sessionID }, prior)
+        const goal = yield* goals.get(prior.sessionID)
+        // Only recover an initial intake that never acquired execution ownership.
+        if (
+          prior.status !== "running" ||
+          goal?.status !== "active" ||
+          goal.replyRecovery ||
+          (goal.dispatch && goal.dispatch.phase !== "queued") ||
+          (yield* execution.receipt(prior))
+        )
+          return yield* new RayaTask.GuardError({ message: "This interrupted start needs recovery review." })
+        const attached = yield* errands.attach(taken.id, prior.id, prior.sessionID)
+        yield* launch(prior)
+        return attached
       }
       if (!(yield* errands.authorize(taken))) {
         yield* errands.finish(
@@ -895,6 +1136,7 @@ export namespace RayaTaskRunner {
       })
       const run = yield* fire(recipient.id, undefined, note, {
         follow: false,
+        defer: true,
         view: ceiling(sender, recipient),
         runID: taken.childRunID,
         delegationID: taken.id,
@@ -944,7 +1186,18 @@ export namespace RayaTaskRunner {
           }),
         ),
       )
-      return yield* errands.attach(taken.id, run.id, run.sessionID)
+      const current = yield* errands.get(taken.id)
+      if (current.deadline !== undefined && current.deadline <= Date.now()) {
+        yield* errands.finish(current.id, "failed", recipient, undefined, undefined, LATE)
+        yield* drop(recipient.id, run.sessionID, run.id, LATE)
+        return yield* errands.get(current.id)
+      }
+      if (!(yield* errands.authorize(current)))
+        return yield* new RayaTask.GuardError({ message: "This assignment is no longer authorized to start." })
+      yield* authority({ ...current, sessionID: run.sessionID }, run)
+      const attached = yield* errands.attach(taken.id, run.id, run.sessionID)
+      yield* launch(run)
+      return attached
     })
 
     const busy = Effect.fn("RayaTaskRunner.busy")(function* (id: string) {
@@ -1870,7 +2123,17 @@ export namespace RayaTaskRunner {
                   )
                 : Effect.void
             bridge.fork(
-              runner.park(sid, waiting).pipe(
+              Effect.gen(function* () {
+                if (input.database) {
+                  const row = yield* RayaTaskDelegation.make(input.database).bySession(sid)
+                  const session = yield* input.sessions.get(sid)
+                  const raw = session.metadata?.rayaRoutine
+                  // Delegated request hooks own waiting and approval synchronously.
+                  // Delayed events must not re-park a reply or reopen a later question.
+                  if (row || (typeof raw === "object" && raw !== null && Object.hasOwn(raw, "delegationID"))) return
+                }
+                yield* runner.park(sid, waiting)
+              }).pipe(
                 Effect.andThen(saved),
                 Effect.catchCause((cause) =>
                   Cause.hasInterrupts(cause)

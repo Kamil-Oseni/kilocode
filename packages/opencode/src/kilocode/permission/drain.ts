@@ -1,6 +1,7 @@
 import { Deferred, Effect } from "effect"
 import { Permission } from "@/permission"
 import { ConfigProtection } from "@/kilocode/permission/config-paths"
+import { accept } from "@/kilocode/task/reply"
 
 interface PendingEntry {
   info: Permission.Request
@@ -27,6 +28,7 @@ export function drainCovered(
   publishReply: PublishReply,
   exclude?: string,
   current: (entry: PendingEntry) => Effect.Effect<boolean> = () => Effect.succeed(true),
+  gate: (entry: PendingEntry) => Effect.Effect<boolean> = () => Effect.succeed(true),
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (const [id, entry] of pending) {
@@ -52,13 +54,16 @@ export function drainCovered(
       const denied = actions.some((r: Permission.Rule) => r.action === "deny")
       const allowed = !denied && actions.every((r: Permission.Rule) => r.action === "allow")
       if (!denied && !allowed) continue
-      pending.delete(id)
       if (denied) {
+        pending.delete(id)
         yield* publishReply({ sessionID: entry.info.sessionID, requestID: entry.info.id, reply: "reject" })
         yield* Deferred.fail(entry.deferred, new Permission.RejectedError())
       } else {
-        yield* publishReply({ sessionID: entry.info.sessionID, requestID: entry.info.id, reply: "always" })
-        if (yield* current(entry)) yield* Deferred.succeed(entry.deferred, undefined)
+        if (!(yield* gate(entry))) continue
+        if ((yield* current(entry)) && (yield* gate(entry)) && (yield* current(entry)) && pending.get(id) === entry) {
+          if (!(yield* accept(pending, id, entry, Deferred.succeed(entry.deferred, undefined)))) continue
+          yield* publishReply({ sessionID: entry.info.sessionID, requestID: entry.info.id, reply: "always" })
+        }
       }
     }
   })

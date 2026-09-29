@@ -133,6 +133,103 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  it.live(
+    "refuses valid prior completion evidence until interrupted full-goal recovery is explicitly reviewed",
+    () =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const id = SessionID.make(`ses_recovery_audit_${crypto.randomUUID()}`)
+        const rows: MessageV2.WithParts[] = []
+        const metadata = {
+          rayaRoutine: {
+            version: 2,
+            agentID: "audit-worker",
+            runID: "audit-run",
+            scheduleVersion: 1,
+            trigger: { kind: "timer", id: "audit-occurrence", scheduledAt: 1, observedAt: 2 },
+          },
+        }
+        const goals = RayaGoal.make({
+          storage,
+          sessions: {
+            messages: () => Effect.succeed(rows),
+            children: () => Effect.succeed([]),
+            get: () =>
+              Effect.succeed({
+                id,
+                slug: "recovery-audit",
+                projectID: ProjectV2.ID.make("recovery-audit"),
+                directory: process.cwd(),
+                title: "Recovery audit",
+                version: "test",
+                metadata,
+                time: { created: 1, updated: 1 },
+              } satisfies Session.Info),
+          },
+        })
+        yield* Effect.addFinalizer(() => goals.clear(id))
+        const criteria = [{ id: "check", description: "Verify the command result", verification: "Successful exit" }]
+        yield* goals.create(id, "Verify the command result", undefined, undefined, undefined, criteria)
+        const queued = yield* goals.continued(id)
+        const dispatch = queued?.dispatch
+        if (!dispatch?.messageID) throw new Error("The goal has no queued dispatch identity")
+        yield* goals.dispatched(id, dispatch.id)
+        const result = transcript({ sessionID: id, tool: "bash", exit: 0 })
+        const user = result.rows[0]
+        const assistant = result.rows[1]
+        if (user.info.role !== "user" || assistant.info.role !== "assistant")
+          throw new Error("The evidence fixture has invalid message roles")
+        user.info.id = dispatch.messageID
+        assistant.info.parentID = dispatch.messageID
+        assistant.info.cost = 0.125
+        rows.push(...result.rows)
+        const turn = yield* goals.recordTurn(id)
+        expect(turn?.state.usage.cost).toBe(0.125)
+        const revised = yield* goals.revise(id, "Verify the command result after clarification")
+        const blocked = yield* goals.recoverReply(id, {
+          dispatchID: dispatch.id,
+          intent: revised.intent!,
+          source: "audit-followup",
+          outcome: "unknown",
+          execution: "a".repeat(64),
+        })
+        expect(blocked?.status).toBe("blocked")
+        expect(blocked?.completion).toBeUndefined()
+        expect(blocked?.criteria).toEqual(criteria)
+        expect(blocked?.usage.cost).toBe(0.125)
+        expect(blocked?.replyRecovery?.reviewedAt).toBeUndefined()
+        const proof = completed(result.part).part
+        const audit = {
+          status: "complete" as const,
+          audit: {
+            summary: "The actual retained command evidence passed.",
+            requirements: [
+              {
+                criterionID: "check",
+                requirement: "Verify the command result",
+                passed: true,
+                evidence: [{ callID: proof.callID, summary: "The retained command exited with code zero." }],
+              },
+            ],
+          },
+        }
+        expect((yield* goals.evidence(id)).some((item) => item.callID === proof.callID)).toBe(true)
+        const error = yield* goals.update(id, audit).pipe(Effect.flip)
+        expect(error._tag).toBe("RayaGoal.AuditError")
+        expect(error.message).toContain("explicit user review")
+        expect(yield* goals.get(id)).toEqual(blocked)
+        const reviewed = yield* goals.edit(id, { status: "active", expectedIntent: blocked?.intent })
+        expect(reviewed.state.replyRecovery?.reviewedAt).toBeDefined()
+        const complete = yield* goals.update(id, audit)
+        expect(complete.status).toBe("complete")
+        expect(complete.criteria).toEqual(criteria)
+        expect(complete.usage.cost).toBe(0.125)
+        expect(complete.audit?.requirements[0].evidence[0].record?.digest).toBe(digest(proof))
+        expect(complete.replyRecovery?.reviewedAt).toBe(reviewed.state.replyRecovery?.reviewedAt)
+      }),
+    30_000,
+  )
+
   it.live("rejects a valid completion audit while a Chief branch remains unreviewed", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -910,8 +1007,17 @@ describe("RayaGoal", () => {
       expect(saved.intent).toBe(goal.intent)
       expect(saved.status).toBe("active")
       expect((yield* setup(storage, () => []).get(sessionID))?.plan).toEqual(saved.plan)
+      const replay = yield* goals.plan(sessionID, { expectedIntent: goal.intent!, expectedRevision: null, tasks })
+      expect(replay).toEqual(saved)
+      expect(yield* goals.get(sessionID)).toEqual(saved)
       expect(
-        yield* goals.plan(sessionID, { expectedIntent: goal.intent!, expectedRevision: null, tasks }).pipe(Effect.flip),
+        yield* goals
+          .plan(sessionID, {
+            expectedIntent: goal.intent!,
+            expectedRevision: null,
+            tasks: tasks.map((item) => ({ ...item, description: "Changed task description" })),
+          })
+          .pipe(Effect.flip),
       ).toMatchObject({ conflict: true })
       const unchanged = yield* goals.plan(sessionID, {
         expectedIntent: goal.intent!,

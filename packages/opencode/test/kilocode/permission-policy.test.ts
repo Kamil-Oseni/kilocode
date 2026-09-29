@@ -108,35 +108,43 @@ it.instance(
   { git: true },
   30000,
 )
-it.instance(
-  "policy changed during actual reply publication cannot release work",
-  () =>
-    Effect.gen(function* () {
-      const state = yield* setup
-      const events = yield* EventV2Bridge.Service
-      let changed = false
-      const unsubscribe = yield* events.listen((event) => {
-        if (
-          changed ||
-          event.type !== Permission.Event.Replied.type ||
-          !event.data ||
-          typeof event.data !== "object" ||
-          !("reply" in event.data) ||
-          event.data.reply === "reject"
-        )
-          return Effect.void
-        changed = true
-        return state.cfg.updateGlobal({ permission: { bash: "deny" } }).pipe(Effect.asVoid)
-      })
-      yield* Effect.addFinalizer(() => unsubscribe)
-      yield* state.permission.reply({ requestID: state.request.id, reply: "once" })
-      expect(changed).toBe(true)
-      expect(Exit.isFailure(yield* Fiber.await(state.fiber))).toBe(true)
-      expect(state.dispatched).toEqual([])
-    }),
-  { git: true },
-  30000,
-)
+for (const reply of ["once", "always"] as const)
+  it.instance(
+    `${reply} reply publication observes acceptance and later revocation denies fresh work without overwritten policy`,
+    () =>
+      Effect.gen(function* () {
+        const state = yield* setup
+        const events = yield* EventV2Bridge.Service
+        let changed = false
+        const unsubscribe = yield* events.listen((event) => {
+          if (
+            changed ||
+            event.type !== Permission.Event.Replied.type ||
+            !event.data ||
+            typeof event.data !== "object" ||
+            !("reply" in event.data) ||
+            event.data.reply === "reject"
+          )
+            return Effect.void
+          return Effect.gen(function* () {
+            expect(Exit.isSuccess(yield* Fiber.await(state.fiber))).toBe(true)
+            expect((yield* state.permission.list()).some((item) => item.id === state.request.id)).toBe(false)
+            changed = true
+            yield* state.cfg.updateGlobal({ permission: { bash: "deny" } })
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        yield* state.permission.reply({ requestID: state.request.id, reply })
+        expect(changed).toBe(true)
+        expect(Exit.isSuccess(yield* Fiber.await(state.fiber))).toBe(true)
+        expect(state.dispatched).toEqual([true])
+        expect((yield* state.cfg.getGlobal()).permission?.bash).toBe("deny")
+        const ruleset = Permission.fromConfig((yield* state.cfg.get()).permission ?? {})
+        expect(Exit.isFailure(yield* state.permission.ask({ ...state.input, ruleset }).pipe(Effect.exit))).toBe(true)
+      }),
+    { git: true },
+    30000,
+  )
 for (const action of ["saved", "everything"] as const) {
   it.instance(
     `stale policy cannot escape through ${action} release`,

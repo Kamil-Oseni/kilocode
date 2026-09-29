@@ -147,6 +147,21 @@ type retirement struct {
 	Active  float64 `json:"activeSeconds"`
 }
 
+// Terminal failure evidence describes only owners actually joined. SDK
+// Disconnect returning is not a claim that its inaccessible private loops joined.
+type resourceCleanup struct {
+	PID      int               `json:"pid"`
+	Start    uint64            `json:"startTicks"`
+	Done     bool              `json:"childDone"`
+	Wait     bool              `json:"actualWait"`
+	Absent   bool              `json:"pidAbsent"`
+	Exit     exit              `json:"exit"`
+	Input    bool              `json:"inputDrainJoined"`
+	Observer bool              `json:"observerReadersJoined"`
+	Slots    int               `json:"ownedSlotsAfterCleanup"`
+	Group    map[string]string `json:"finalCgroup"`
+}
+
 func summarize(values []float64) spread {
 	if len(values) == 0 {
 		return spread{}
@@ -281,6 +296,10 @@ func group() map[string]string {
 // not measure provider calls, devices, acoustic playback or the separate SFU's
 // resources, and reports measured drift without asserting an invented plateau.
 func TestProductionWorkerSustainedResources(t *testing.T) {
+	lost := os.Getenv("RAYA_TEST_RESOURCE_LOST_ACK")
+	if lost != "" && lost != "1" {
+		t.Fatal("resource lost-ACK fixture gate must be exactly 1")
+	}
 	mode, err := strategy(os.Getenv("RAYA_TEST_RESOURCE_MODE"))
 	if err != nil {
 		t.Fatal(err)
@@ -391,6 +410,21 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		},
 	}})
 	var proxy *Proxy
+	var terminal func()
+	var inputend <-chan struct{}
+	var current struct {
+		pid   int
+		start uint64
+		ready time.Time
+	}
+	cleanup := resourceCleanup{}
+	// Registered first, so even a fatal cleanup assertion cannot prevent the
+	// terminal report from observing both independently bounded cleanup owners.
+	t.Cleanup(func() {
+		if terminal != nil {
+			terminal()
+		}
+	})
 	// Independent cleanups ensure even a fatal child-reaping assertion cannot
 	// bypass the observer's callback fence and owned reader join.
 	t.Cleanup(func() {
@@ -402,6 +436,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		go func() { peer.Disconnect(); readers.Wait(); close(end) }()
 		select {
 		case <-end:
+			cleanup.Observer = true
 		case <-time.After(4 * time.Second):
 			t.Error("resource observer owners did not finish")
 		}
@@ -409,8 +444,28 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 	t.Cleanup(func() {
 		cancel()
 		if proxy != nil {
+			cleanup.PID, cleanup.Start = current.pid, current.start
 			_ = proxy.Close()
-			terminated(t, proxy)
+			select {
+			case <-proxy.Done():
+				cleanup.Done = true
+				cleanup.Exit = proxy.outcome()
+				cleanup.Wait = cleanup.Exit.Known
+				cleanup.Absent = current.pid > 0 && errors.Is(syscall.Kill(current.pid, 0), syscall.ESRCH)
+				if !cleanup.Wait || !cleanup.Absent || proxy.Err() != nil {
+					t.Error("failed resource child cleanup lacks exact Wait/PID-absence receipt")
+				}
+			case <-time.After(4 * time.Second):
+				t.Error("failed resource child cleanup remains unknown")
+			}
+		}
+		if inputend != nil {
+			select {
+			case <-inputend:
+				cleanup.Input = true
+			case <-time.After(time.Second):
+				t.Error("resource input drain remained owned after cleanup")
+			}
 		}
 	})
 	if err := peer.JoinWithContextAndToken(ctx, url, token(client)); err != nil {
@@ -454,22 +509,61 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 	reaped := make([]retirement, 0, seconds/30+1)
 	var cycles, published uint64
 	active := 0.0
+	unknown := false
+	captured := make(chan Message, 1)
+	failure := struct {
+		elapsed float64
+		slots   int
+	}{}
 	defer func() {
+		if t.Failed() {
+			failure.elapsed = time.Since(started).Seconds()
+			failure.slots = len(slots)
+		}
+	}()
+	terminal = func() {
 		if !t.Failed() {
 			return
 		}
+		cleanup.Slots, cleanup.Group = len(slots), group()
+		if failure.elapsed == 0 {
+			failure.elapsed = time.Since(started).Seconds()
+		}
+		observed := 0.0
+		if !current.ready.IsZero() {
+			for _, entry := range windows {
+				if entry.Phase == "active" && len(entry.Children) == 1 && entry.Children[0].PID == current.pid && entry.Children[0].Start == current.start {
+					observed = max(observed, entry.Seconds-current.ready.Sub(started).Seconds())
+				}
+			}
+		}
 		partial := struct {
-			Configured int          `json:"configuredSeconds"`
-			Elapsed    float64      `json:"elapsedSeconds"`
-			Binary     string       `json:"binarySha256"`
-			Outcome    string       `json:"outcome"`
-			Slots      int          `json:"ownedSlotsBeforeCleanup"`
-			Windows    []window     `json:"rawWindows"`
-			Completed  bool         `json:"completed"`
-			Reaped     []retirement `json:"retirements"`
-			Mode       string       `json:"mode"`
-			Active     float64      `json:"completedActiveSeconds"`
-		}{seconds, time.Since(started).Seconds(), hex.EncodeToString(hash[:]), "failed-partial-before-cleanup", len(slots), windows, false, reaped, mode, active}
+			Configured int             `json:"configuredSeconds"`
+			Elapsed    float64         `json:"elapsedSeconds"`
+			Binary     string          `json:"binarySha256"`
+			Outcome    string          `json:"outcome"`
+			Slots      int             `json:"ownedSlotsBeforeCleanup"`
+			Windows    []window        `json:"rawWindows"`
+			Completed  bool            `json:"completed"`
+			Reaped     []retirement    `json:"retirements"`
+			Mode       string          `json:"mode"`
+			Active     float64         `json:"completedActiveSeconds"`
+			Observed   float64         `json:"observedActiveSeconds"`
+			Cleanup    resourceCleanup `json:"cleanup"`
+			Unknown    bool            `json:"unknownPublish"`
+			Lost       struct {
+				Captured bool   `json:"captured"`
+				ID       uint64 `json:"id"`
+				Outcome  string `json:"outcome"`
+			} `json:"lostAck"`
+		}{Configured: seconds, Elapsed: failure.elapsed, Binary: hex.EncodeToString(hash[:]), Outcome: "failed-partial-after-bounded-cleanup", Slots: failure.slots, Windows: windows, Completed: false, Reaped: reaped, Mode: mode, Active: active, Observed: observed, Cleanup: cleanup, Unknown: unknown}
+		select {
+		case ack := <-captured:
+			partial.Lost.Captured = true
+			partial.Lost.ID = ack.ID
+			partial.Lost.Outcome = ack.Outcome
+		default:
+		}
 		data, err := json.Marshal(partial)
 		if err != nil {
 			t.Error("partial resource report serialization failed", err)
@@ -481,7 +575,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 				t.Error("partial resource report write failed", err)
 			}
 		}
-	}()
+	}
 	cadence := make([]float64, 0, seconds*50)
 	var previous time.Time
 	var inspected *startup
@@ -538,24 +632,43 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		t.Logf("resource_sample %s", data)
 	}
 	for time.Now().Before(end) {
-		joined, err := (Factory{Path: path, wrap: func(input io.Reader) io.Reader { inspected = &startup{input: input}; return inspected }}).JoinAudioAuthorized(ctx, url, token(owner), name, client, 24000)
+		current.pid, current.start, current.ready = 0, 0, time.Time{}
+		inputend = nil
+		joined, err := (Factory{Path: path, wrap: func(input io.Reader) io.Reader {
+			if lost == "1" {
+				input = &loss{input: input, session: client, captured: captured, observed: make(chan struct{})}
+			}
+			inspected = &startup{input: input}
+			return inspected
+		}}).JoinAudioAuthorized(ctx, url, token(owner), name, client, 24000)
 		if err != nil {
+			var setup *room.SetupError
+			if errors.As(err, &setup) && setup.Cleanup != nil {
+				if value, ok := setup.Cleanup.(*Proxy); ok {
+					proxy = value
+					current.pid = value.PID()
+					current.start, _ = identity(current.pid)
+				}
+			}
 			t.Fatal("actual production child join failed", err)
 		}
 		proxy = joined.(*Proxy)
 		ready := time.Now()
 		t.Logf("resource_child_ready pid=%d at=%s startup=%s", proxy.PID(), time.Now().UTC().Format(time.RFC3339Nano), inspected.snapshot())
 		pid := proxy.PID()
+		current.pid, current.ready = pid, ready
 		start, err := identity(pid)
 		if err != nil {
 			t.Fatal("owned child starttime unavailable", err)
 		}
+		current.start = start
 		cycles++
 		before := signals.Load()
 		outbound := packets.Load()
-		inputend := make(chan struct{})
+		drained := make(chan struct{})
+		inputend = drained
 		go func(p *Proxy) {
-			defer close(inputend)
+			defer close(drained)
 			for {
 				var frame engine.Frame
 				select {
@@ -623,6 +736,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 				t.Fatal("actual synthetic microphone send failed", err)
 			}
 			if err := proxy.Publish(ctx, engine.Frame{Rate: 24000, PCM: pcm, Epoch: 1, Seq: published, Start: (published - 1) * 480, End: published * 480, Item: "resource-output", At: at}); err != nil {
+				unknown = errors.Is(err, ErrUnknown)
 				tick.Stop()
 				t.Fatal("production PCM publish failed", err)
 			}

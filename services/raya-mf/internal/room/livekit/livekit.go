@@ -9,6 +9,8 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room"
@@ -44,6 +46,9 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 	writer := &writer{input: input, rate: rate}
 	var remoteMu sync.Mutex
 	remote := make(map[string]*lkmedia.PCMRemoteTrack)
+	tracks := make(map[string]*webrtc.TrackRemote)
+	sinks := make(map[string]*sink)
+	stopped := &atomic.Bool{}
 	callback := &lksdk.RoomCallback{
 		ParticipantCallback: lksdk.ParticipantCallback{
 			OnTrackSubscribed: func(track *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, participant *lksdk.RemoteParticipant) {
@@ -56,30 +61,39 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 				if !strings.EqualFold(track.Codec().MimeType, webrtc.MimeTypeOpus) {
 					return
 				}
+				remoteMu.Lock()
+				defer remoteMu.Unlock()
+				if stopped.Load() || len(remote) != 0 {
+					return
+				}
+				input := &sink{writer: writer}
 				decoded, err := lkmedia.NewPCMRemoteTrack(
 					track,
-					writer,
+					input,
 					lkmedia.WithTargetSampleRate(rate),
 					lkmedia.WithTargetChannels(1),
 				)
 				if err != nil {
 					return
 				}
-				remoteMu.Lock()
 				sid := publication.SID()
-				old := remote[sid]
 				remote[sid] = decoded
-				remoteMu.Unlock()
-				if old != nil {
-					old.Close()
-				}
+				tracks[sid] = track
+				sinks[sid] = input
 			},
-			OnTrackUnsubscribed: func(_ *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, _ *lksdk.RemoteParticipant) {
+			OnTrackUnsubscribed: func(track *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, _ *lksdk.RemoteParticipant) {
 				remoteMu.Lock()
+				defer remoteMu.Unlock()
+				if tracks[publication.SID()] != track {
+					return
+				}
 				decoded := remote[publication.SID()]
 				delete(remote, publication.SID())
-				remoteMu.Unlock()
+				delete(tracks, publication.SID())
 				if decoded != nil {
+					_ = sinks[publication.SID()].Close()
+					delete(sinks, publication.SID())
+					_ = track.SetReadDeadline(time.Now())
 					decoded.Close()
 				}
 			},
@@ -91,14 +105,37 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 				if !ok || user.Topic != "raya.playout" || len(user.Payload) > 4096 {
 					return
 				}
+				remoteMu.Lock()
+				defer remoteMu.Unlock()
+				if stopped.Load() {
+					return
+				}
 				select {
-				case data <- room.Data{Identity: params.SenderIdentity, Topic: user.Topic, Body: user.Payload}:
+				case data <- room.Data{Identity: params.SenderIdentity, Topic: user.Topic, Body: append([]byte(nil), user.Payload...)}:
 				default:
 				}
 			},
 		},
 	}
 	joined := lksdk.NewRoom(callback)
+	ready := false
+	defer func() {
+		if ready {
+			return
+		}
+		remoteMu.Lock()
+		stopped.Store(true)
+		for sid, decoded := range remote {
+			_ = sinks[sid].Close()
+			delete(sinks, sid)
+			_ = tracks[sid].SetReadDeadline(time.Now())
+			decoded.Close()
+			delete(remote, sid)
+			delete(tracks, sid)
+		}
+		remoteMu.Unlock()
+		_ = writer.Close()
+	}()
 	if err := joined.JoinWithContextAndToken(ctx, url, token); err != nil {
 		joined.Disconnect()
 		return nil, err
@@ -140,17 +177,37 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 		joined.Disconnect()
 		return nil, err
 	}
+	control, err := newControl(func(data room.Data) error {
+		if stopped.Load() {
+			return controlStopped
+		}
+		packet := lksdk.UserData(data.Body)
+		packet.Topic = data.Topic
+		return joined.LocalParticipant.PublishDataPacket(packet, lksdk.WithDataPublishReliable(true), lksdk.WithDataPublishDestination([]string{client}))
+	})
+	if err != nil {
+		_ = sender.Close(ctx)
+		_ = codec.Close()
+		_ = track.Close()
+		joined.Disconnect()
+		return nil, err
+	}
+	ready = true
 	return &Room{
 		room:     joined,
 		track:    track,
 		codec:    codec,
 		encoded:  output,
 		sender:   sender,
+		control:  control,
 		writer:   writer,
 		input:    input,
 		data:     data,
 		remote:   remote,
 		remoteMu: &remoteMu,
+		tracks:   tracks,
+		sinks:    sinks,
+		stopped:  stopped,
 		done:     make(chan struct{}),
 	}, nil
 }
@@ -161,6 +218,7 @@ type Room struct {
 	codec    media.PCM16Writer
 	encoded  *encoded
 	sender   *sender
+	control  *control
 	mu       sync.Mutex
 	closed   bool
 	err      error
@@ -170,6 +228,9 @@ type Room struct {
 	data     chan room.Data
 	remote   map[string]*lkmedia.PCMRemoteTrack
 	remoteMu *sync.Mutex
+	tracks   map[string]*webrtc.TrackRemote
+	sinks    map[string]*sink
+	stopped  *atomic.Bool
 	once     sync.Once
 }
 
@@ -213,10 +274,18 @@ func (r *Room) Publish(ctx context.Context, frame engine.Frame) error {
 	return nil
 }
 
-func (r *Room) Send(_ context.Context, data room.Data) error {
-	packet := lksdk.UserData(data.Body)
-	packet.Topic = data.Topic
-	return r.room.LocalParticipant.PublishDataPacket(packet, lksdk.WithDataPublishReliable(true))
+func (r *Room) Send(ctx context.Context, data room.Data) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if r.stopped.Load() {
+		return controlStopped
+	}
+	err := r.control.Send(ctx, data)
+	if errors.Is(err, controlUnknown) {
+		r.halt()
+	}
+	return err
 }
 
 func (r *Room) Flush(ctx context.Context, _ string) error {
@@ -251,17 +320,41 @@ func (r *Room) halt() {
 	r.once.Do(func() {
 		// Fence input/output immediately. At most one retained cleanup owner
 		// may block inside the SDK; a deadline never reports it as drained.
+		r.stopped.Store(true)
+		r.control.stop()
 		_ = r.track.Close()
 		_ = r.writer.Close()
+		r.remoteMu.Lock()
+		for sid, track := range r.tracks {
+			_ = r.sinks[sid].Close()
+			_ = track.SetReadDeadline(time.Now())
+		}
+		r.remoteMu.Unlock()
+	drain:
+		for {
+			select {
+			case <-r.input:
+			default:
+				break drain
+			}
+		}
 		go func() {
 			defer close(r.done)
 			r.room.Disconnect()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*engine.FramePeriod)
 			defer cancel()
 			r.err = r.sender.Close(ctx)
+			r.err = errors.Join(r.err, r.control.Close(ctx))
+			// A timed-out SDK handoff retains its owner until actual return.
+			// Closing done must not fabricate that the control worker drained.
+			<-r.control.end
 			r.remoteMu.Lock()
 			for sid, decoded := range r.remote {
+				_ = r.sinks[sid].Close()
+				delete(r.sinks, sid)
+				_ = r.tracks[sid].SetReadDeadline(time.Now())
 				decoded.Close()
+				delete(r.tracks, sid)
 				delete(r.remote, sid)
 			}
 			r.remoteMu.Unlock()
@@ -306,6 +399,9 @@ func (w *writer) WriteSample(sample media.PCM16Sample) error {
 	if w.closed {
 		return errors.New("LiveKit PCM writer is closed")
 	}
+	if len(sample) != w.rate/50 {
+		return errors.New("microphone decoder requires one 20 ms mono frame")
+	}
 	pcm := make([]byte, len(sample)*2)
 	for index, value := range sample {
 		binary.LittleEndian.PutUint16(pcm[index*2:], uint16(value))
@@ -321,5 +417,30 @@ func (w *writer) Close() error {
 	w.mu.Lock()
 	w.closed = true
 	w.mu.Unlock()
+	return nil
+}
+
+// Each decoder owns only its sink. Retiring a microphone must not close the
+// room-wide PCM input used by a later authorized microphone publication.
+type sink struct {
+	writer *writer
+	mu     sync.RWMutex
+	closed bool
+}
+
+func (s *sink) String() string  { return "raya-microphone" }
+func (s *sink) SampleRate() int { return s.writer.rate }
+func (s *sink) WriteSample(frame media.PCM16Sample) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return errors.New("microphone decoder retired")
+	}
+	return s.writer.WriteSample(frame)
+}
+func (s *sink) Close() error {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
+	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room"
 	"github.com/livekit/media-sdk"
 	"github.com/livekit/media-sdk/opus"
 	"github.com/livekit/protocol/auth"
@@ -33,13 +34,24 @@ func (*samples) String() string  { return "sfu-synthetic-receiver" }
 func (*samples) SampleRate() int { return 24000 }
 func (*samples) Close() error    { return nil }
 func (s *samples) WriteSample(frame media.PCM16Sample) error {
-	copy := append(media.PCM16Sample(nil), frame...)
-	select {
-	case s.frames <- copy:
-		return nil
-	default:
-		return errors.New("test decoder bound exceeded")
+	if len(frame) != 480 {
+		return errors.New("test decoder changed 20 ms frame size")
 	}
+	signal := false
+	for _, value := range frame {
+		if value != 0 {
+			signal = true
+			break
+		}
+	}
+	if !signal {
+		return nil
+	}
+	select {
+	case s.frames <- append(media.PCM16Sample(nil), frame...):
+	default:
+	}
+	return nil
 }
 
 func TestLiveKitSFUSyntheticPCM(t *testing.T) {
@@ -86,10 +98,27 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 			}
 		}
 	}
-	frames := &samples{frames: make(chan media.PCM16Sample, 64)}
+	frames := &samples{frames: make(chan media.PCM16Sample, 1)}
 	failures := make(chan error, 4)
 	started, done := make(chan struct{}), make(chan struct{})
 	var once sync.Once
+	delivered, leaked := make(chan room.Data, 2), make(chan room.Data, 2)
+	observe := func(output chan<- room.Data) func(lksdk.DataPacket, lksdk.DataReceiveParams) {
+		return func(packet lksdk.DataPacket, params lksdk.DataReceiveParams) {
+			user, ok := packet.(*lksdk.UserDataPacket)
+			if !ok || params.SenderIdentity != owner || user.Topic != "raya.sfu-test" {
+				return
+			}
+			select {
+			case output <- room.Data{Identity: params.SenderIdentity, Topic: user.Topic, Body: append([]byte(nil), user.Payload...)}:
+			default:
+				select {
+				case failures <- errors.New("test data observation bound exceeded"):
+				default:
+				}
+			}
+		}
+	}
 	receiver := lksdk.NewRoom(&lksdk.RoomCallback{ParticipantCallback: lksdk.ParticipantCallback{OnTrackSubscribed: func(track *webrtc.TrackRemote, pub *lksdk.RemoteTrackPublication, participant *lksdk.RemoteParticipant) {
 		if participant.Identity() != owner || pub.Source() != lkproto.TrackSource_MICROPHONE {
 			return
@@ -130,8 +159,8 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 				}
 			}()
 		})
-	}}})
-	outsider := lksdk.NewRoom(nil)
+	}, OnDataPacket: observe(delivered)}})
+	outsider := lksdk.NewRoom(&lksdk.RoomCallback{ParticipantCallback: lksdk.ParticipantCallback{OnDataPacket: observe(leaked)}})
 	var adapter *Room
 	var senders []*sender
 	var encoders []media.PCM16Writer
@@ -192,7 +221,44 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		t.Fatal("production adapter could not join actual local SFU")
 	}
 	adapter = joined.(*Room)
-	microphone := func(participant *lksdk.Room, source lkproto.TrackSource) func(int) {
+	wait(func() bool {
+		peer := adapter.room.LocalParticipant.GetPublisherPeerConnection()
+		return peer != nil && peer.ConnectionState() == webrtc.PeerConnectionStateConnected
+	}, "actual publisher peer did not connect")
+	cancelled, end := context.WithCancel(ctx)
+	end()
+	if err := adapter.Send(cancelled, room.Data{Topic: "raya.sfu-test", Body: []byte("cancelled")}); !errors.Is(err, context.Canceled) {
+		t.Fatal("pre-cancelled data Send was not refused", err)
+	}
+	if err := adapter.Send(ctx, room.Data{Topic: "raya.sfu-test", Body: []byte("exact-client")}); err != nil {
+		t.Fatal("actual reliable data publication failed", err)
+	}
+	select {
+	case packet := <-delivered:
+		if packet.Identity != owner || packet.Topic != "raya.sfu-test" || string(packet.Body) != "exact-client" {
+			t.Fatal("actual data identity/body changed or cancelled data was sent")
+		}
+	case err := <-failures:
+		t.Fatal(err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("actual reliable data never reached exact client")
+	}
+	absent := func() {
+		t.Helper()
+		timer := time.NewTimer(150 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-delivered:
+			t.Fatal("refused or duplicate data reached client")
+		case <-leaked:
+			t.Fatal("client-only reliable data reached outsider")
+		case err := <-failures:
+			t.Fatal(err)
+		case <-timer.C:
+		}
+	}
+	absent()
+	microphone := func(participant *lksdk.Room, source lkproto.TrackSource) (func(int), func()) {
 		t.Helper()
 		track, err := lksdk.NewLocalTrack(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2})
 		if err != nil {
@@ -214,7 +280,7 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 			t.Fatal(err)
 		}
 		senders = append(senders, owned)
-		return func(count int) {
+		produce := func(count int) {
 			t.Helper()
 			tick := time.NewTicker(engine.FramePeriod)
 			defer tick.Stop()
@@ -239,6 +305,12 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 					t.Fatal("actual synthetic RTP send failed", err)
 				}
 			}
+			adapter.remoteMu.Lock()
+			stopped := adapter.stopped.Load()
+			adapter.remoteMu.Unlock()
+			if stopped {
+				return
+			}
 			wait(func() bool {
 				remote := adapter.room.GetParticipantByIdentity(participant.LocalParticipant.Identity())
 				if remote == nil {
@@ -251,6 +323,12 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 				}
 				return false
 			}, "actual SFU did not subscribe to synthetic source")
+		}
+		return produce, func() {
+			t.Helper()
+			if err := participant.LocalParticipant.UnpublishTrack(publication.SID()); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	reject := func() {
@@ -267,11 +345,14 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 			t.Fatal("production adapter allocated unauthorized decoder")
 		}
 	}
-	microphone(outsider, lkproto.TrackSource_MICROPHONE)(12)
+	wrong, _ := microphone(outsider, lkproto.TrackSource_MICROPHONE)
+	wrong(12)
 	reject()
-	microphone(receiver, lkproto.TrackSource_SCREEN_SHARE_AUDIO)(12)
+	screen, _ := microphone(receiver, lkproto.TrackSource_SCREEN_SHARE_AUDIO)
+	screen(12)
 	reject()
-	microphone(receiver, lkproto.TrackSource_MICROPHONE)(24)
+	first, retire := microphone(receiver, lkproto.TrackSource_MICROPHONE)
+	first(24)
 	select {
 	case frame := <-adapter.Input():
 		if frame.Rate != 24000 || len(frame.PCM) != 960 {
@@ -290,6 +371,35 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		t.Fatal(err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("authorized microphone produced no real decoded PCM")
+	}
+	retire()
+	wait(func() bool {
+		adapter.remoteMu.Lock()
+		defer adapter.remoteMu.Unlock()
+		return len(adapter.remote) == 0
+	}, "retired microphone decoder remained owned")
+	for len(adapter.input) != 0 {
+		<-adapter.input
+	}
+	replacement, _ := microphone(receiver, lkproto.TrackSource_MICROPHONE)
+	replacement(24)
+	select {
+	case frame := <-adapter.Input():
+		if frame.Rate != 24000 || len(frame.PCM) != 960 {
+			t.Fatal("replacement microphone changed frame format")
+		}
+		signal := false
+		for offset := 0; offset < len(frame.PCM); offset += 2 {
+			if int16(binary.LittleEndian.Uint16(frame.PCM[offset:])) != 0 {
+				signal = true
+				break
+			}
+		}
+		if !signal {
+			t.Fatal("replacement microphone has no real decoded signal")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("retiring the original microphone closed shared input")
 	}
 	wait(adapter.track.IsBound, "production output RTP track was not bound")
 	tick := time.NewTicker(engine.FramePeriod)
@@ -333,6 +443,22 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		t.Fatal("actual SFU output did not reach client decoder")
 	}
 	_ = adapter.Close()
+	if err := adapter.Send(context.Background(), room.Data{Topic: "raya.sfu-test", Body: []byte("post-stop")}); err == nil {
+		t.Fatal("post-Stop data Send was admitted")
+	}
+	absent()
+	replacement(4)
+	select {
+	case <-adapter.Input():
+		t.Fatal("post-Stop microphone input was admitted")
+	default:
+	}
+	adapter.remoteMu.Lock()
+	stopped := adapter.stopped.Load()
+	adapter.remoteMu.Unlock()
+	if !stopped {
+		t.Fatal("Stop did not fence decoder admission immediately")
+	}
 	if adapter.Publish(context.Background(), engine.Frame{Rate: 24000, PCM: make([]byte, 960)}) == nil {
 		t.Fatal("shutdown did not immediately fence RTP publication")
 	}
@@ -340,6 +466,12 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 	case <-adapter.done:
 		if err := adapter.Close(); err != nil {
 			t.Fatal("actual adapter cleanup failed", err)
+		}
+		adapter.remoteMu.Lock()
+		count := len(adapter.remote)
+		adapter.remoteMu.Unlock()
+		if count != 0 {
+			t.Fatal("post-Stop decoder allocation escaped cleanup")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("actual SFU cleanup remained unknown")

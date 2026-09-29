@@ -195,6 +195,7 @@ export class BrowserBridge {
   private revision = 0
   private connected = false
   private disposed = false
+  private fault = false
 
   constructor(
     private readonly connection: BrowserConnection,
@@ -283,6 +284,13 @@ export class BrowserBridge {
   }
 
   private admit(request: BrowserRequest, directory: string, hash: string, recovered: boolean): Admission | undefined {
+    if (this.fault)
+      return this.refuse(
+        request,
+        directory,
+        hash,
+        "Saved browser safety state could not be read or retained. This request was not dispatched. Review the saved state before restoring browser control.",
+      )
     const prior = this.receipts.get(request.id)
     if (prior && prior.fingerprint !== hash) {
       return {
@@ -303,6 +311,23 @@ export class BrowserBridge {
           await this.deliver(request.id, directory, prior)
         })(),
       }
+    }
+    // Reserve room for every admitted action: even an observation can finish with an unknown outcome.
+    // Memento writes are not cross-host claims; this bounds only this bridge's active and retained state.
+    if (this.store) {
+      const pending = [...this.receipts.values()].filter((receipt) => !receipt.delivered).length
+      const scopes = new Set([
+        ...this.blocked,
+        ...[...this.active.values()].map((entry) => scope(entry.directory)),
+        scope(directory),
+      ])
+      if (pending >= 256 || scopes.size > 64)
+        return this.refuse(
+          request,
+          directory,
+          hash,
+          "Browser safety storage is full of unresolved work. This request was not dispatched. Review unresolved outcomes before continuing.",
+        )
     }
     if (effect(request) !== "observe" && this.blocked.has(scope(directory))) {
       const message =
@@ -356,6 +381,15 @@ export class BrowserBridge {
     }
   }
 
+  private refuse(request: BrowserRequest, directory: string, hash: string, message: string): Admission {
+    return {
+      settle: this.deliver(request.id, directory, {
+        fingerprint: hash,
+        failure: { code: "invalid_request", message },
+      }),
+    }
+  }
+
   private failed(request: BrowserRequest, startedAt: number, completed: boolean, error: unknown): BrowserFailure {
     const detail = error instanceof Error ? error.message : String(error)
     const unknown = error instanceof BrowserOutcomeError || error instanceof DialogPendingError || completed
@@ -378,6 +412,7 @@ export class BrowserBridge {
   }
 
   private check(request: ActionRequest): void {
+    if (this.fault) throw new Error("Browser safety state is unavailable; input was refused before dispatch")
     const decision = this.validate?.(authorization(request))
     if (!("authorization" in request)) {
       if (decision?.decision === "deny") throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
@@ -490,7 +525,17 @@ export class BrowserBridge {
   }
 
   private restore(): void {
-    const saved = this.store?.get<unknown>(journal)
+    const saved = (() => {
+      try {
+        return this.store?.get<unknown>(journal)
+      } catch {
+        this.fault = true
+        console.error("[Raya] Browser safety journal could not be read; browser actions remain paused")
+        return undefined
+      }
+    })()
+    if (saved === undefined) return
+    this.fault = true
     if (!saved || typeof saved !== "object") return
     const value = saved as { version?: unknown; items?: unknown; blocked?: unknown }
     if (
@@ -501,21 +546,42 @@ export class BrowserBridge {
       value.blocked.length > 64
     )
       return
-    for (const id of value.blocked) if (typeof id === "string" && /^[a-f0-9]{64}$/.test(id)) this.blocked.add(id)
+    const blocked = new Set<string>()
+    const items = new Map<string, Receipt>()
+    for (const id of value.blocked) {
+      if (typeof id !== "string" || !/^[a-f0-9]{64}$/.test(id) || blocked.has(id)) return
+      blocked.add(id)
+    }
     for (const item of value.items) {
       const entry = restored(item)
-      if (entry) this.receipts.set(entry[0], entry[1])
+      if (!entry || items.has(entry[0])) return
+      items.set(entry[0], entry[1])
     }
+    for (const id of blocked) this.blocked.add(id)
+    for (const [id, receipt] of items) this.receipts.set(id, receipt)
+    this.fault = false
   }
 
   private retain(): Promise<void> {
     if (!this.store) return Promise.resolve()
+    if (this.fault)
+      return Promise.reject(new Error("Browser safety journal is quarantined; saved evidence was preserved"))
     const items = [...this.receipts.entries()]
       .filter((entry) => !entry[1].delivered && persistable(entry[1].failure))
       .map(([id, value]) => ({ id, fingerprint: value.fingerprint, failure: value.failure }))
-      .slice(-256)
-    const blocked = [...this.blocked].slice(-64)
-    this.writes = this.writes.then(() => Promise.resolve(this.store!.update(journal, { version: 1, items, blocked })))
+    const blocked = [...this.blocked]
+    if (items.length > 256 || blocked.length > 64) {
+      this.fault = true
+      return Promise.reject(
+        new Error("Browser safety journal capacity exceeded; unresolved evidence was not truncated"),
+      )
+    }
+    this.writes = this.writes
+      .then(() => Promise.resolve(this.store!.update(journal, { version: 1, items, blocked })))
+      .catch(() => {
+        this.fault = true
+        throw new Error("Browser safety journal could not be retained; later requests will not be dispatched")
+      })
     return this.writes
   }
 
@@ -547,6 +613,7 @@ export class BrowserBridge {
   }
 
   resume(directory: string): void {
+    if (this.fault) return
     if (!this.blocked.delete(scope(directory))) return
     void this.retain().catch((error) =>
       console.error("[Raya] Browser resume persistence failed; restart may restore the safety pause", error),

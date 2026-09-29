@@ -26,7 +26,10 @@ var ErrCapacity = errors.New("isolated media worker capacity reached")
 // cannot free a slot while its actual process or pipe owners remain unjoined.
 var slots = make(chan struct{}, 8)
 
-type Factory struct{ Path string }
+type Factory struct {
+	Path string
+	wrap func(io.Reader) io.Reader
+}
 
 func (f Factory) Join(ctx context.Context, url, token, name string) (room.Room, error) {
 	return f.JoinAuthorized(ctx, url, token, name, "")
@@ -61,7 +64,7 @@ func (f Factory) JoinAudioAuthorized(ctx context.Context, url, token, name, clie
 	default:
 		return nil, ErrCapacity
 	}
-	p := &Proxy{session: client, rate: rate, stop: make(chan struct{}), done: make(chan struct{}), ready: make(chan Message, 1), ack: make(chan Message, 1), jobs: make(chan Message), admit: make(chan struct{}, 1), input: make(chan engine.Frame, 64), data: make(chan room.Data, 64), failure: make(chan error, 1)}
+	p := &Proxy{session: client, rate: rate, wrap: f.wrap, stop: make(chan struct{}), done: make(chan struct{}), ready: make(chan Message, 1), ack: make(chan Message, 1), jobs: make(chan Message), admit: make(chan struct{}, 1), input: make(chan engine.Frame, 64), data: make(chan room.Data, 64), failure: make(chan error, 1)}
 	p.id.Store(1)
 	watch := context.AfterFunc(ctx, p.halt)
 	go p.run(path, watch)
@@ -95,6 +98,7 @@ func (f Factory) JoinAudioAuthorized(ctx context.Context, url, token, name, clie
 type Proxy struct {
 	session  string
 	rate     int
+	wrap     func(io.Reader) io.Reader
 	pid      atomic.Int64
 	id       atomic.Uint64
 	pending  atomic.Uint64
@@ -139,9 +143,11 @@ func (p *Proxy) fail() {
 }
 
 func (p *Proxy) run(path string, watch func() bool) {
+	release := owner()
 	reaped := true
 	defer func() {
 		watch()
+		release()
 		if reaped {
 			<-slots
 		}
@@ -194,7 +200,14 @@ func (p *Proxy) run(path string, watch func() bool) {
 			}
 		}
 	}()
-	go func() { defer close(read); p.read(output) }()
+	go func() {
+		defer close(read)
+		var stream io.Reader = output
+		if p.wrap != nil {
+			stream = p.wrap(stream)
+		}
+		p.read(stream)
+	}()
 	go func() {
 		_ = cmd.Wait()
 		// ProcessState exists only after the OS waiter reaped this exact child.

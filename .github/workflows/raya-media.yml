@@ -28,6 +28,10 @@ on:
         type: choice
         options: ["1", "8"]
         default: "1"
+      parent_trace_v1:
+        description: "Opt in to version 1 parent write/ACK diagnostics (single continuous journey only; no native timing claim)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,6 +46,18 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+
+      - name: Validate optional parent diagnostic controls
+        env:
+          TRACE: ${{ toJSON(inputs.parent_trace_v1 || false) }}
+          WORKERS: ${{ inputs.resource_workers || '1' }}
+          MODE: ${{ inputs.resource_mode || 'churn' }}
+        run: |
+          case "$TRACE" in true|false) ;; *) exit 1 ;; esac
+          if test "$TRACE" = true; then
+            test "$WORKERS" = 1
+            test "$MODE" = continuous
+          fi
 
       - name: Start the isolated test SFU
         run: |
@@ -104,11 +120,14 @@ jobs:
         env:
           DURATION: ${{ inputs.resource_seconds || '60' }}
           MODE: ${{ inputs.resource_mode || 'churn' }}
+          TRACE: ${{ toJSON(inputs.parent_trace_v1 || false) }}
         run: |
           set -o pipefail
           test "$DURATION" = 60 || test "$DURATION" = 1800
           test "$MODE" = continuous || test "$MODE" = churn
+          case "$TRACE" in true) test "$MODE" = continuous; DIAGNOSTIC=1 ;; false) DIAGNOSTIC= ;; *) exit 1 ;; esac
           mkdir -p evidence
+          printf '{"version":1,"enabled":%s}\n' "$TRACE" > evidence/parent-trace-config.json
           docker image inspect --format '{{.Id}}' raya-mf-check > evidence/build-image.txt
           docker run --rm --network host --memory 2g --pids-limit 256 \
             --mount type=bind,source="$PWD/evidence",target=/evidence \
@@ -119,12 +138,13 @@ jobs:
             --env RAYA_TEST_MEDIA_BINARY=/out/raya-mf \
             --env RAYA_TEST_RESOURCE_SECONDS="$DURATION" \
             --env RAYA_TEST_RESOURCE_MODE="$MODE" \
+            --env RAYA_TEST_PARENT_TRACE="$DIAGNOSTIC" \
             --env RAYA_TEST_RESOURCE_REPORT=/evidence/resources.json \
             raya-mf-check go test -p 1 -count=1 -timeout 35m -v \
               -run '^TestProductionWorkerSustainedResources$' ./internal/room/process \
             | tee evidence/sustained-resources.log
           grep -q 'resource_measurement' evidence/sustained-resources.log
-          python3 - "$DURATION" "$MODE" <<'PY'
+          python3 - "$DURATION" "$MODE" "$TRACE" <<'PY'
           import json, math, sys
           with open('evidence/resources.json', encoding='utf-8') as source:
               result = json.load(source)
@@ -138,6 +158,15 @@ jobs:
           assert result['elapsedSeconds'] >= int(sys.argv[1])
           assert len(result['rawWindows']) >= int(sys.argv[1]) // 2
           assert result['mode'] == sys.argv[2]
+          if sys.argv[3] == 'true':
+              action = result['parentAction']
+              assert isinstance(action['id'], int) and action['id'] > 1
+              assert isinstance(action['incomplete'], bool)
+              if not action['incomplete']:
+                  assert action['available'] is True
+                  assert action['stages'] & (1 << 7) and action['callerOutcome'] == 1
+          else:
+              assert sys.argv[3] == 'false' and 'parentAction' not in result
           assert result['cycles'] == 1 if sys.argv[2] == 'continuous' else result['cycles'] >= 2
           assert result['decodedInputFrames'] > 0 and result['receivedOpusPackets'] > 0
           assert result['receivedControl'] > 0

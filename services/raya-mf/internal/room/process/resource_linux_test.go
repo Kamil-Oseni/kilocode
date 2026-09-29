@@ -296,9 +296,9 @@ func group() map[string]string {
 // not measure provider calls, devices, acoustic playback or the separate SFU's
 // resources, and reports measured drift without asserting an invented plateau.
 func TestProductionWorkerSustainedResources(t *testing.T) {
-	traced := os.Getenv("RAYA_TEST_PARENT_TRACE")
-	if traced != "" && traced != "1" {
-		t.Fatal("parent action diagnostic gate must be exactly 1")
+	traced, err := diagnostic(os.Getenv("RAYA_TEST_PARENT_TRACE"))
+	if err != nil {
+		t.Fatal(err)
 	}
 	lost := os.Getenv("RAYA_TEST_RESOURCE_LOST_ACK")
 	if lost != "" && lost != "1" {
@@ -414,6 +414,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		},
 	}})
 	var proxy *Proxy
+	var action *observation
 	var terminal func()
 	var inputend <-chan struct{}
 	var current struct {
@@ -565,6 +566,8 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		if proxy != nil && proxy.trace != nil {
 			value := proxy.trace.snapshot()
 			partial.Action = &value
+		} else if action != nil {
+			partial.Action = action
 		}
 		select {
 		case ack := <-captured:
@@ -643,7 +646,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 	for time.Now().Before(end) {
 		current.pid, current.start, current.ready = 0, 0, time.Time{}
 		inputend = nil
-		joined, err := (Factory{Path: path, trace: traced == "1", wrap: func(input io.Reader) io.Reader {
+		joined, err := (Factory{Path: path, trace: traced, wrap: func(input io.Reader) io.Reader {
 			if lost == "1" {
 				input = &loss{input: input, session: client, captured: captured, observed: make(chan struct{})}
 			}
@@ -798,6 +801,10 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("parent input drain remained owned after child Wait")
 		}
+		if traced && mode == "continuous" && proxy.trace != nil {
+			value := proxy.trace.snapshot()
+			action = &value
+		}
 		proxy = nil
 		record("retired", 0, 0)
 		if mode == "continuous" {
@@ -866,7 +873,8 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		Reaped        []retirement      `json:"retirements"`
 		Mode          string            `json:"mode"`
 		Active        float64           `json:"activeSeconds"`
-	}{1, hex.EncodeToString(hash[:]), runtime.Version(), runtime.GOOS, runtime.GOARCH, seconds, time.Since(started).Seconds(), 60, "owned PSS=Go test parent (including synthetic SDK client)+all active/retiring production children; separate cgroup includes other container processes; SFU excluded from owned sum; no provider/device/acoustic measurement or plateau assertion", cycles, published, inputs.Load(), packets.Load(), controls.Load(), distributions, summarize(initial), summarize(last), windows, true, reaped, mode, active}
+		Action        *observation      `json:"parentAction,omitempty"`
+	}{1, hex.EncodeToString(hash[:]), runtime.Version(), runtime.GOOS, runtime.GOARCH, seconds, time.Since(started).Seconds(), 60, "owned PSS=Go test parent (including synthetic SDK client)+all active/retiring production children; separate cgroup includes other container processes; SFU excluded from owned sum; no provider/device/acoustic measurement or plateau assertion", cycles, published, inputs.Load(), packets.Load(), controls.Load(), distributions, summarize(initial), summarize(last), windows, true, reaped, mode, active, action}
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		t.Fatal(err)

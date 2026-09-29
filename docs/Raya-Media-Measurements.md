@@ -1,6 +1,14 @@
 # Raya media transport measurements
 
-ChatGPT, 2026-09-28 23:34 EDT. The first native latency measurement passed; the sustained resource diagnostic failed and prolonged resource acceptance remains unproven.
+ChatGPT, 2026-09-28 23:48 EDT. The fresh complete native gate and 60-second diagnostic passed. The 30-minute resource benchmark is active; prolonged resource acceptance remains unproven.
+
+## ChatGPT 2026-09-28 23:48 EDT - native diagnostic gate passed; prolonged run active
+
+Source `b98257e36a` [run 36518270683](https://github.com/Kamil-Oseni/kilocode/actions/runs/36518270683), job `109245332808`, completed successfully: production CGO/full suite, actual SFU conformance and latency, 60-second resource diagnostic, CGO vet and production image smoke all passed. Evidence is retained in `.tmp/media-measurement-36518270683/` and the workflow artifact. Binary SHA-256: `3740271906d91eb96f4525c13c95254974c89de81c04c7d6723b404492f8d79f`; build image: `sha256:f618e75e186496fe870861a707e106ff207f550a4a9bed4c8a4120a5fbe22c9a`.
+
+All ten latency sessions/fifty exact nonce deliveries completed. Warm ACK p50/p95: 0.165/0.210 ms; independent warm client arrival: 0.308/0.368 ms; repeated join readiness: 53.521/55.376 ms; Close to actual Done: 1.621/3.354 ms. These small-sample local measurements exclude provider, device, playback and UI. The diagnostic completed 60.021 seconds, two actual child retirements, 64 process observations, 2,985 nonzero decoded input frames, 2,991 received Opus packets and 58 exact control deliveries. Active owned PSS p50/max: 95,712/166,888 KiB; final owned slots: zero. Effective cgroup limits were 2 GiB/256 process-threads with zero OOM events. The diagnostic has no post-warmup window and proves no memory plateau. Its success after the padding correction does not independently establish the earlier exit's cause.
+
+The explicit 1,800-second benchmark is now active: [run 36518672345](https://github.com/Kamil-Oseni/kilocode/actions/runs/36518672345), job `109246562775`, exact source `b98257e36ac0baf2dd41f2203e5a91897ac5fcce`. Next inspect this same run to terminal completion, preserve its raw artifact and report warmed/final resource windows and every actual retirement. Do not restart it after observation timeout or claim prolonged acceptance before it passes. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. Installed snapshot unchanged; media service undeployed, desktop stopped, MCP deferred and user/French Study changes preserved.
 
 ## First native result
 

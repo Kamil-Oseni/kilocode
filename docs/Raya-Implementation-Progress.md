@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 21:19 EDT - correct native test compilation before claiming receiver proof
+
+Actual [native CI run 36506778647](https://github.com/Kamil-Oseni/kilocode/actions/runs/36506778647) for `56cc274829` failed compilation: the generic receiver test helper `decoded` collided with the native codec test's existing type. SFU, vet and image smoke did not run. Rename only the helper to `awaited`, close the actual Pion test buffer, and retain all native assertions. Focused CGO-zero receiver/failure tests and scoped vet pass. Publish this correction and inspect its fresh exact CGO/full-suite/SFU/vet/image run; no native receiver pass is claimed from the failed run.
+
+Next close bounded setup-failure ownership after the native gate passes. Production provider/browser/device/restart/disconnect/prolonged-resource and installed-host gates remain open; full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. Service undeployed, installed c2ceafff08/default direct Live unchanged and desktop stopped; unrelated user edits preserved.
+
 ## ChatGPT 2026-09-28 21:11 EDT - owned microphone readers and honest failure recovery
 
 The experimental LiveKit adapter replaces SDK private PCM/jitter workers with a Raya-owned bounded receiver: one RTP reader, one decode/reorder loop, one once-only cleanup owner, FIFO/reorder bounds of eight packets each, copied Opus payloads up to 1275 bytes, sequence-wrap/dedup handling and a 60 ms missing-packet allowance matching the prior SDK jitter limit. In-order audio decodes immediately. Stop fences admission; actual reader/decode/interrupt/codec termination closes the end receipt. Replacement refuses an unjoined retired owner. Retirement fences the sink and drains old queued PCM; Room cleanup joins every actual microphone owner.

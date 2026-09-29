@@ -42,7 +42,7 @@ func receive(t *testing.T, decode func([]byte) error) (*receiver, chan<- *rtp.Pa
 func frame(seq uint16) *rtp.Packet {
 	return &rtp.Packet{Header: rtp.Header{SequenceNumber: seq}, Payload: []byte{byte(seq)}}
 }
-func decoded(t *testing.T, values <-chan byte) byte {
+func awaited(t *testing.T, values <-chan byte) byte {
 	t.Helper()
 	select {
 	case value := <-values:
@@ -57,7 +57,7 @@ func TestReceiverReordersDuplicatesWrapAndSkipsBoundedLoss(t *testing.T) {
 	values := make(chan byte, 20)
 	r, packets := receive(t, func(data []byte) error { values <- data[0]; return nil })
 	packets <- frame(65534)
-	if decoded(t, values) != 254 {
+	if awaited(t, values) != 254 {
 		t.Fatal("first packet changed")
 	}
 	packets <- frame(0)
@@ -65,13 +65,13 @@ func TestReceiverReordersDuplicatesWrapAndSkipsBoundedLoss(t *testing.T) {
 	packets <- frame(65535)
 	packets <- frame(1)
 	for _, expected := range []byte{255, 0, 1} {
-		if decoded(t, values) != expected {
+		if awaited(t, values) != expected {
 			t.Fatal("sequence wrap/reorder changed")
 		}
 	}
 	begin := time.Now()
 	packets <- frame(3)
-	if decoded(t, values) != 3 || time.Since(begin) < 45*time.Millisecond {
+	if awaited(t, values) != 3 || time.Since(begin) < 45*time.Millisecond {
 		t.Fatal("loss gap was not bounded before skip")
 	}
 	select {
@@ -178,7 +178,7 @@ func TestReceiverRefusesPayloadAndReorderOverflow(t *testing.T) {
 	values := make(chan byte, 1)
 	r, packets := receive(t, func(data []byte) error { values <- data[0]; return nil })
 	packets <- frame(1)
-	decoded(t, values)
+	awaited(t, values)
 	for seq := uint16(3); seq <= 11; seq++ {
 		packets <- frame(seq)
 		time.Sleep(time.Millisecond)
@@ -277,6 +277,7 @@ func TestReceiverClonesPayloadAndRefusesFastFIFOOverflow(t *testing.T) {
 
 func TestReceiverExpectedShutdownReadErrorsDoNotReportFailure(t *testing.T) {
 	buffer := packetio.NewBuffer()
+	defer buffer.Close()
 	if err := buffer.SetReadDeadline(time.Now()); err != nil {
 		t.Fatal(err)
 	}

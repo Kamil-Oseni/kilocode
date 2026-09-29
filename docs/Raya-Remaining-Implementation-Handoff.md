@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-28 21:19 EDT - native receiver compile correction, fresh CI required
+
+Source `56cc274829` failed actual [native run 36506778647](https://github.com/Kamil-Oseni/kilocode/actions/runs/36506778647), job `109209859523`, before any native tests: receiver-test helper `decoded` conflicted with the cgo codec-test type. Exact log `.tmp/voice-media-ci-receiver-first.log`. The helper is renamed `awaited` and its actual Pion test buffer closed; native assertions unchanged. Focused CGO-zero receiver/failure tests and scoped vet pass. Publish normally and inspect the fresh exact CGO build/full suite, SFU, vet and image smoke; fix actual failures before recording native proof. Then implement retained bounded setup-failure cleanup/admission described below. All production provider/browser/device/restart/resource and installed-host gates remain open. Service undeployed, installed snapshot/default Live unchanged and desktop stopped.
+
 ## ChatGPT 2026-09-28 21:11 EDT - publish owned receiver slice, then validate actual native path
 
 Pending source replaces SDK `PCMRemoteTrack`/private jitter/SOXR loops with `receiver.go` (generic owned read/decode/reorder/cleanup), `microphone.go` (actual target-rate libopus with exactly one observed mono 20 ms frame), and adapter ownership in `livekit.go`. FIFO and reorder maps each hold at most eight copied Opus packets of at most 1275 bytes; normal input decodes immediately, missing-sequence gaps wait at most the existing 60 ms jitter allowance. Close caps its local wait at 20 ms, retains uncertain read/interrupt/decode/finish ownership, and exposes end only after actual joins. Exact retired owners block replacement; sink fencing and bounded queue drain remove stale old-microphone PCM. Room completion waits actual microphone/RTP/control owners; late actual cleanup receipts do not change unknown Send effects or permit replay.

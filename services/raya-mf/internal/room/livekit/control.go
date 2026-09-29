@@ -16,6 +16,10 @@ var controlUnknown = errors.New("data publication completion is unknown; publish
 var controlStopped = errors.New("data publisher is stopped")
 var controlBusy = errors.New("data publisher already owns a write")
 
+// Match the pinned SDK's 15 KiB data payload allowance. Incoming playout
+// receipts have a separate 4 KiB bound; provider captions can exceed that.
+const limit = 15360
+
 type command struct {
 	ctx  context.Context
 	data room.Data
@@ -49,7 +53,7 @@ func (c *control) Send(ctx context.Context, data room.Data) error {
 	if c.stopped.Load() {
 		return controlStopped
 	}
-	if len(data.Body) == 0 || len(data.Body) > 4096 || len(data.Topic) == 0 || len(data.Topic) > 128 || !utf8.ValidString(data.Topic) || strings.TrimSpace(data.Topic) != data.Topic || len(data.Identity) > 256 || !utf8.ValidString(data.Identity) {
+	if len(data.Body) == 0 || len(data.Body) > limit || len(data.Topic) == 0 || len(data.Topic) > 128 || !utf8.ValidString(data.Topic) || strings.TrimSpace(data.Topic) != data.Topic || len(data.Identity) > 256 || !utf8.ValidString(data.Identity) {
 		return errors.New("invalid bounded data publication")
 	}
 	if !c.active.CompareAndSwap(false, true) {

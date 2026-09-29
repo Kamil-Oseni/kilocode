@@ -4,6 +4,7 @@ package livekit
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room"
+	protocol "github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
 )
 
 func publisher(t *testing.T, write func(room.Data) error) *control {
@@ -51,7 +53,7 @@ func outcome(t *testing.T, result <-chan error) error {
 func TestControlRefusesInvalidCancelledAndStoppedWithoutEffects(t *testing.T) {
 	var calls atomic.Int32
 	c := publisher(t, func(room.Data) error { calls.Add(1); return nil })
-	for _, data := range []room.Data{{}, {Topic: "topic", Body: make([]byte, 4097)}, {Topic: strings.Repeat("x", 129), Body: []byte{1}}, {Topic: " topic", Body: []byte{1}}, {Topic: "\xff", Body: []byte{1}}, {Topic: "topic", Body: []byte{1}, Identity: strings.Repeat("x", 257)}} {
+	for _, data := range []room.Data{{}, {Topic: "topic", Body: make([]byte, 15361)}, {Topic: strings.Repeat("x", 129), Body: []byte{1}}, {Topic: " topic", Body: []byte{1}}, {Topic: "\xff", Body: []byte{1}}, {Topic: "topic", Body: []byte{1}, Identity: strings.Repeat("x", 257)}} {
 		if c.Send(context.Background(), data) == nil {
 			t.Fatal("invalid data admitted")
 		}
@@ -61,7 +63,7 @@ func TestControlRefusesInvalidCancelledAndStoppedWithoutEffects(t *testing.T) {
 	if !errors.Is(c.Send(ctx, room.Data{Topic: "topic", Body: []byte{1}}), context.Canceled) || calls.Load() != 0 {
 		t.Fatal("cancelled request had effects")
 	}
-	if err := c.Send(context.Background(), room.Data{Topic: strings.Repeat("x", 128), Body: make([]byte, 4096)}); err != nil {
+	if err := c.Send(context.Background(), room.Data{Topic: strings.Repeat("x", 128), Body: make([]byte, 15360)}); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != 1 {
@@ -75,6 +77,24 @@ func TestControlRefusesInvalidCancelledAndStoppedWithoutEffects(t *testing.T) {
 	}
 	if _, err := newControl(nil); err == nil {
 		t.Fatal("nil writer admitted")
+	}
+}
+
+func TestControlAcceptsMaximumProviderCaption(t *testing.T) {
+	body, err := json.Marshal(protocol.Transcript{Type: "transcript.output.delta", Item: "event-caption", Text: strings.Repeat("a", 8192)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	c := publisher(t, func(data room.Data) error {
+		calls.Add(1)
+		if data.Topic != "raya.transcript" || !bytes.Equal(data.Body, body) {
+			t.Error("provider caption changed during handoff")
+		}
+		return nil
+	})
+	if err := c.Send(context.Background(), room.Data{Topic: "raya.transcript", Body: body}); err != nil || calls.Load() != 1 {
+		t.Fatal("valid maximum provider caption refused", err)
 	}
 }
 

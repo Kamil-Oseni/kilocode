@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 20:46 EDT - real Stop gate passed; preserve bounded long captions
+
+Source `34ab61c011` passed actual [native CI run 36504232134](https://github.com/Kamil-Oseni/kilocode/actions/runs/36504232134): CGO production build/full suite, explicit synthetic SFU/Opus transport, three blocked Room cleanup cases, CGO vet and final production image health/401 smoke. Blocked decoder-admission Close returned unknown in 40 ms; admitted audio/data writers remained owned until release. Binary SHA-256 `9d4910d2b5e1797ca0511018d8847a771619d262fb36e1ded87ccf1584407803`; image ID `sha256:5504c691353fce308e6f8d2aae804829e8e3d6267e945dd1a816e27e8bcd23fb`; exact log `.tmp/voice-media-ci-stop.log`.
+
+A cross-contract check found outgoing control used the incoming receipt's 4 KiB bound while Live permits 8 KiB caption fragments. Outgoing payloads now have the pinned SDK's bounded 15 KiB allowance; incoming playout receipts keep their independent 4 KiB bound. A new actual-controller test serializes the real Transcript shape with an 8192-byte ASCII caption and verifies one unchanged handoff. Six focused tests/vet pass after resolving a test import collision. The real SFU journey now checks that long structured caption reaches the exact client unchanged; its native rerun is pending publication.
+
+Next publish this bounded-caption correction and inspect its exact real CI run, then implement the owned microphone reader/end receipt described below. Service remains undeployed, installed snapshot/default direct Live unchanged, desktop stopped and full provider/browser/device/restart/resource gates In progress.
+
 ## ChatGPT 2026-09-28 20:38 EDT - Stop latency and retained cleanup ownership
 
 Source `35e9cb8185` is pushed with normal typechecks passing. Full local CGO-zero Go regression/vet and 20 repetitions of the five control adverse tests pass. Actual native [CI run 36503757136](https://github.com/Kamil-Oseni/kilocode/actions/runs/36503757136) passed CGO build/full tests, real synthetic Opus/SFU input/output and microphone replacement, exact-client data routing/outsider exclusion/cancelled/post-Stop refusal, CGO vet, production image health and unauthenticated-request rejection. Binary SHA-256 is `854cdaba4c297ad273380395e26a2708b88f412023d1fc68f07598d6a0ad52c3`; image ID is `sha256:261adc21423653580e56b23b1991e06264f94de9e4da90af6ea6d041a033deed`. Exact log: `.tmp/voice-media-ci-recovery.log`. This synthetic gate does not prove provider/browser/device audio or prolonged resources.

@@ -6,6 +6,7 @@ package livekit
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"math"
 	"net"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room"
+	protocol "github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
 	"github.com/livekit/media-sdk"
 	"github.com/livekit/media-sdk/opus"
 	"github.com/livekit/protocol/auth"
@@ -106,7 +108,7 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 	observe := func(output chan<- room.Data) func(lksdk.DataPacket, lksdk.DataReceiveParams) {
 		return func(packet lksdk.DataPacket, params lksdk.DataReceiveParams) {
 			user, ok := packet.(*lksdk.UserDataPacket)
-			if !ok || params.SenderIdentity != owner || user.Topic != "raya.sfu-test" {
+			if !ok || params.SenderIdentity != owner || (user.Topic != "raya.sfu-test" && user.Topic != "raya.transcript") {
 				return
 			}
 			select {
@@ -256,6 +258,24 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 			t.Fatal(err)
 		case <-timer.C:
 		}
+	}
+	absent()
+	caption, err := json.Marshal(protocol.Transcript{Type: "transcript.output.delta", Item: "event-caption", Text: strings.Repeat("a", 8192)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Send(ctx, room.Data{Topic: "raya.transcript", Body: caption}); err != nil {
+		t.Fatal("actual maximum provider caption refused", err)
+	}
+	select {
+	case packet := <-delivered:
+		if packet.Identity != owner || packet.Topic != "raya.transcript" || string(packet.Body) != string(caption) {
+			t.Fatal("actual provider caption changed in transport")
+		}
+	case err := <-failures:
+		t.Fatal(err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("maximum provider caption never reached actual client")
 	}
 	absent()
 	microphone := func(participant *lksdk.Room, source lkproto.TrackSource) (func(int), func()) {

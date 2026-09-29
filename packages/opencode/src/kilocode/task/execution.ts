@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto"
 import { Context, Effect, Exit, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
-import type { SessionID } from "@/session/schema"
+import { SessionID } from "@/session/schema"
+import { GlobalBus } from "@/bus/global"
+import { ExecutionIdle } from "./execution-event"
 import { RayaTask } from "."
 import { durable, stopped } from "./owner"
 import { read } from "./storage-read"
@@ -24,6 +26,12 @@ const Record = Schema.Struct({
   updatedAt: Schema.Int,
   // Records written before the state marker remain uncertain and are never removed by terminal recovery.
   state: Schema.optional(Schema.Literals(["active", "idle", "recovering"])),
+})
+const Review = Schema.Struct({
+  version: Schema.Literal(1),
+  actor: Schema.Literal("user"),
+  at: Schema.Int,
+  record: Record,
 })
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
 type Permit = { record: typeof Record.Type }
@@ -235,7 +243,34 @@ export namespace RayaTaskExecution {
                   closing.delete(permit.record.token)
                 }),
               ),
-              Effect.ensuring(Effect.sync(() => busy.delete(permit.record.token))),
+              Effect.onExit((settled) =>
+                Effect.gen(function* () {
+                  busy.delete(permit.record.token)
+                  if (!Exit.isSuccess(exit) || !Exit.isSuccess(settled) || !active.has(permit.record.token)) return
+                  yield* Effect.try({
+                    try: () =>
+                      GlobalBus.emit("event", {
+                        payload: {
+                          type: ExecutionIdle.type,
+                          properties: {
+                            version: 1,
+                            runID: permit.record.runID,
+                            agentID: permit.record.agentID,
+                            sessionID: SessionID.make(permit.record.sessionID),
+                            execution: hash(permit.record.token),
+                          },
+                        },
+                      }),
+                    catch: () => new Error("Routine idle notification listener failed"),
+                  }).pipe(
+                    Effect.catch(() =>
+                      Effect.logWarning(
+                        "Routine idle notification could not be delivered; queued intake remains saved for recovery.",
+                      ),
+                    ),
+                  )
+                }),
+              ),
             ),
           ),
         )
@@ -316,6 +351,119 @@ export namespace RayaTaskExecution {
       return yield* new RayaTask.GuardError({
         message: "This routine's retained execution identity needs recovery review.",
       })
+    })
+
+    const receipt = Effect.fn("RayaTaskExecution.receipt")(function* (run: {
+      id: string
+      agentID: string
+      sessionID: string
+    }) {
+      const current = yield* load(run.id)
+      if (!current) return undefined
+      if (current.runID === run.id && current.agentID === run.agentID && current.sessionID === run.sessionID)
+        return current
+      return yield* new RayaTask.GuardError({ message: "This routine's execution identity needs recovery review." })
+    })
+
+    const idle = Effect.fn("RayaTaskExecution.idle")(function* (
+      run: { id: string; agentID: string; sessionID: string },
+      digest: string,
+    ) {
+      return yield* mutate(
+        storage,
+        Effect.gen(function* () {
+          const current = yield* receipt(run)
+          const found = durable()
+          return (
+            !!current &&
+            hash(current.token) === digest &&
+            current.state === "idle" &&
+            !!found.birth &&
+            same(current.owner, { ...found, birth: found.birth }) &&
+            active.has(current.token) &&
+            !busy.has(current.token)
+          )
+        }),
+        "Routine idle notification",
+      )
+    })
+
+    const reviewed = Effect.fn("RayaTaskExecution.reviewed")(function* (
+      run: { id: string; agentID: string; sessionID: string },
+      digest: string,
+    ) {
+      if (!/^[a-f0-9]{64}$/.test(digest))
+        return yield* new RayaTask.GuardError({ message: "This routine's recovery review identity is invalid." })
+      const value = yield* read(storage, ["raya", "agent-execution-reviews", hash(run.id), digest]).pipe(
+        Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
+      )
+      if (value === undefined) return undefined
+      const saved = yield* Schema.decodeUnknownEffect(Review)(value).pipe(Effect.orDie)
+      if (
+        saved.record.runID !== run.id ||
+        saved.record.agentID !== run.agentID ||
+        saved.record.sessionID !== run.sessionID ||
+        hash(saved.record.token) !== digest
+      )
+        return yield* new RayaTask.GuardError({ message: "This routine's saved recovery review changed." })
+      return saved.record
+    })
+
+    // Called only after an explicit user review. Retain the old effect receipt before freeing new intake.
+    const review = Effect.fn("RayaTaskExecution.review")(function* (
+      run: { id: string; agentID: string; sessionID: string },
+      token: string,
+    ) {
+      yield* mutate(
+        storage,
+        Effect.gen(function* () {
+          const path = ["raya", "agent-execution-reviews", hash(run.id), hash(token)]
+          const saved = yield* read(storage, path).pipe(
+            Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
+            Effect.flatMap((value) =>
+              value === undefined ? Effect.succeed(undefined) : Schema.decodeUnknownEffect(Review)(value),
+            ),
+            Effect.orDie,
+          )
+          if (
+            saved &&
+            (saved.record.token !== token ||
+              saved.record.runID !== run.id ||
+              saved.record.agentID !== run.agentID ||
+              saved.record.sessionID !== run.sessionID)
+          )
+            return yield* new RayaTask.GuardError({ message: "This routine's saved recovery review changed." })
+          const current = yield* receipt(run)
+          if (!current) {
+            if (saved) return
+            return yield* new RayaTask.GuardError({ message: "This routine has no exact execution receipt to review." })
+          }
+          if (current.token !== token || current.state === "recovering" || recovering.has(token) || busy.has(token))
+            return yield* new RayaTask.GuardError({
+              message: "This routine is still working or its execution changed. Review it again after it stops.",
+            })
+          const found = durable()
+          if (!(found.birth && same(current.owner, { ...found, birth: found.birth })) && !stopped(current.owner))
+            return yield* new RayaTask.GuardError({
+              message: "This routine may still be working in another backend. Wait for it to stop before reviewing.",
+            })
+          if (saved && !same(saved.record.owner, current.owner))
+            return yield* new RayaTask.GuardError({ message: "This routine's execution owner changed after review." })
+          if (
+            !saved &&
+            !(yield* storage
+              .create(path, { version: 1, actor: "user", at: Date.now(), record: current })
+              .pipe(Effect.orDie))
+          )
+            return yield* new RayaTask.GuardError({
+              message: "This routine's recovery review changed before it was saved.",
+            })
+          yield* storage.remove(key(run.id)).pipe(Effect.orDie)
+          active.delete(token)
+          closing.delete(token)
+        }),
+        "Routine execution review",
+      )
     })
 
     const terminal = Effect.fn("RayaTaskExecution.terminal")(function* (run: {
@@ -406,6 +554,6 @@ export namespace RayaTaskExecution {
       )
     const defer = (permit: Permit) => Effect.sync(() => recovering.delete(permit.record.token))
 
-    return { acquire, authorized, retained, enter, finish, terminal, recover, defer }
+    return { acquire, authorized, retained, receipt, idle, reviewed, review, enter, finish, terminal, recover, defer }
   }
 }

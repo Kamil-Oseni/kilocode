@@ -192,13 +192,14 @@ try {
   assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("turn"))
   assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("tool"))
   const activity = root.querySelector(".goal-banner__activity")
-  assert.equal(activity.open, false)
+  assert.equal(activity.open, false, "Activity details should start collapsed")
   assert.equal(activity.querySelector("summary").textContent, "Activity counts")
   assert.ok(activity.textContent.includes("not goal completion"))
   assert.ok(activity.textContent.includes("$1.50 total, $1.10 in this chat and $0.40 in delegated chats"))
+  assert.equal(root.querySelector(".goal-banner__progress-label").textContent, "Current work")
   assert.equal(
-    root.querySelector(".goal-banner__progress").textContent,
-    "Plan: Second task and 1 other task are marked in progress.",
+    root.querySelector(".goal-banner__progress > span:last-child").textContent,
+    "Plan tasks in progress: Second task and 1 other task.",
   )
   emit({
     type: "goalState",
@@ -507,9 +508,15 @@ try {
   root.querySelector("#goal-charge-limit-0").dispatchEvent(new window.Event("input", { bubbles: true }))
   root.querySelector("#goal-charge-reservation-0").value = "1"
   root.querySelector("#goal-charge-reservation-0").dispatchEvent(new window.Event("input", { bubbles: true }))
-  assert.equal(button("Update goal").disabled, false)
+  assert.equal(button("Update goal").disabled, true, "A budget change must wait for an explicit review reason")
+  const explanation = root.querySelector("#goal-limit-reason")
+  assert.ok(explanation, "A changed budget should show the reason input")
+  explanation.value = "Allow the additional work I reviewed"
+  explanation.dispatchEvent(new window.Event("input", { bubbles: true }))
+  assert.equal(button("Update goal").disabled, false, "A valid reviewed budget change should enable Update goal")
   button("Update goal").click()
   const budget = sent.findLast((msg) => msg.type === "goalEdit")
+  assert.equal(budget.budgetReason, "Allow the additional work I reviewed")
   assert.deepEqual(budget.budget, {
     activeMs: 1_800_000,
     modelCost: 3,
@@ -539,9 +546,17 @@ try {
   children.value = ""
   children.dispatchEvent(new window.Event("input", { bubbles: true }))
   button("Remove").click()
+  assert.equal(button("Update goal").disabled, true, "Removing saved limits must require a new review reason")
+  const removal = root.querySelector("#goal-limit-reason")
+  assert.ok(removal, "Removing saved limits should show the reason input")
+  assert.equal(removal.value, "", "A prior limit review must not carry its reason into a new edit")
+  removal.value = "Remove the saved limits after reviewing the remaining work"
+  removal.dispatchEvent(new window.Event("input", { bubbles: true }))
+  assert.equal(button("Update goal").disabled, false, "Explicitly reviewed limit removal should enable submission")
   button("Update goal").click()
   const cleared = sent.findLast((msg) => msg.type === "goalEdit")
   assert.equal(cleared.budget, null)
+  assert.equal(cleared.budgetReason, "Remove the saved limits after reviewing the remaining work")
   emit({
     type: "goalEdited",
     sessionID: "session",
@@ -564,13 +579,13 @@ try {
   const checkbox = root.querySelector('.goal-banner__criteria-editor input[type="checkbox"]')
   assert.equal(checkbox.checked, true)
   checkbox.click()
-  assert.equal(checkbox.checked, false)
+  assert.equal(checkbox.checked, false, "The criterion checkbox should reflect its explicit unchecked value")
   assert.ok(!button("Update goal").disabled)
   button("Update goal").click()
   const criteria = sent.findLast((msg) => msg.type === "goalEdit")
   assert.equal(criteria.objective, goal.objective)
   assert.equal(criteria.criteria.length, 1)
-  assert.equal(criteria.criteria[0].required, false)
+  assert.equal(criteria.criteria[0].required, false, "The submitted criterion should remain optional")
   assert.equal(criteria.expectedIntent, "criteria")
   emit({
     type: "goalEdited",
@@ -603,7 +618,7 @@ try {
   assert.ok(root.textContent.includes("Run the expanded checks"))
   button("Steer").click()
   const toggle = root.querySelector('.goal-banner__criteria-editor input[type="checkbox"]')
-  assert.equal(toggle.checked, false)
+  assert.equal(toggle.checked, false, "The restored optional criterion should not become required")
   toggle.click()
   assert.ok(!button("Update goal").disabled)
   button("Update goal").click()
@@ -634,7 +649,7 @@ try {
     field.value = value
     field.dispatchEvent(new window.Event("input", { bubbles: true }))
   }
-  assert.equal(binding().checked, false)
+  assert.equal(binding().checked, false, "Command binding should start disabled for an unbound criterion")
   binding().click()
   assert.ok(button("Update goal").disabled)
   assert.ok(root.textContent.includes("This does not run it or grant permission"))
@@ -643,7 +658,7 @@ try {
   fill(directory(), "relative/workspace")
   assert.ok(button("Update goal").disabled)
   fill(directory(), "C:/workspace/report")
-  assert.equal(button("Update goal").disabled, false)
+  assert.equal(button("Update goal").disabled, false, "A valid edited command binding should enable Update goal")
   button("Update goal").click()
   const bound = sent.findLast((msg) => msg.type === "goalEdit")
   assert.deepEqual(bound.criteria[0].check, {
@@ -693,10 +708,52 @@ try {
   button("Remove criterion").click()
   assert.ok(button("Update goal").disabled)
   button("Cancel").click()
+  const receipt = {
+    version: 1,
+    dispatchID: "old-dispatch",
+    messageID: "msg_old",
+    oldIntent: "old",
+    intent: "review-current",
+    source: "followup",
+    outcome: "unknown",
+    execution: "a".repeat(64),
+    at: Date.now(),
+  }
+  emit({
+    type: "goalState",
+    sessionID: "session",
+    goal: { ...goal, status: "blocked", intent: "review-current", replyRecovery: receipt },
+  })
+  assert.equal(
+    [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Steer"),
+    false,
+    "An unresolved reply review must hide Steer",
+  )
+  assert.ok(root.textContent.includes("Review the previous reply"))
+  button("Review and resume").click()
+  const review = sent.findLast((msg) => msg.type === "goalEdit")
+  assert.equal(review.status, "active")
+  assert.equal(review.expectedIntent, "review-current")
+  assert.equal(Object.hasOwn(review, "objective"), false, "Explicit review must omit the objective from its message")
+  assert.equal(review.criteria, undefined)
+  assert.equal(review.budget, undefined)
+  emit({
+    type: "goalEdited",
+    sessionID: "session",
+    requestID: review.requestID,
+    goal: {
+      ...goal,
+      status: "active",
+      intent: "reviewed",
+      replyRecovery: { ...receipt, reviewedAt: Date.now(), reviewIntent: "reviewed" },
+    },
+  })
+  assert.ok(button("Steer"))
   emit({ type: "goalState", sessionID: "session", goal: { ...goal, status: "complete", intent: "completed" } })
   assert.equal(
     [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Steer"),
     false,
+    "A completed goal must hide Steer",
   )
   button("Dismiss goal").click()
   assert.ok(root.textContent.includes("Stop tracking this goal?"))

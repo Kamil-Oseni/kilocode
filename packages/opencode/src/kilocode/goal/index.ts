@@ -272,8 +272,30 @@ export namespace RayaGoal {
   })
   export type Progress = typeof Progress.Type
 
+  const ReplyRecovery = Schema.Struct({
+    version: Schema.Literal(1),
+    dispatchID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+    messageID: MessageID,
+    oldIntent: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+    intent: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+    source: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+    outcome: Schema.Literals(["error", "interrupted", "unknown"]),
+    execution: Schema.String.check(Schema.isMinLength(64), Schema.isMaxLength(64), Schema.isPattern(/^[a-f0-9]{64}$/)),
+    at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+    reviewedAt: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    reviewIntent: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+  }).check(
+    Schema.makeFilter((value) =>
+      (value.reviewedAt === undefined) === (value.reviewIntent === undefined)
+        ? undefined
+        : "Reply recovery acknowledgement is incomplete.",
+    ),
+  )
+
   // Completed goals stay visible in the session carousel after a new one is armed.
   export const HistoryItem = Schema.Struct({
+    replyRecovery: Schema.optional(ReplyRecovery),
+    replyRecoveries: Schema.optional(Schema.Array(ReplyRecovery).check(Schema.isMaxLength(20))),
     review: Schema.optional(Review),
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
@@ -298,6 +320,8 @@ export namespace RayaGoal {
   export type HistoryItem = typeof HistoryItem.Type
 
   export const State = Schema.Struct({
+    replyRecovery: Schema.optional(ReplyRecovery),
+    replyRecoveries: Schema.optional(Schema.Array(ReplyRecovery).check(Schema.isMaxLength(20))),
     review: Schema.optional(Review),
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
@@ -817,6 +841,8 @@ export namespace RayaGoal {
                 deliverables: existing.deliverables,
                 audit: existing.audit,
                 auditAttempt: existing.auditAttempt,
+                replyRecovery: existing.replyRecovery,
+                replyRecoveries: existing.replyRecoveries,
               },
             ].slice(-20)
           : existing?.history
@@ -859,6 +885,8 @@ export namespace RayaGoal {
 
     const control = Effect.fn("RayaGoal.control")(function* (sessionID: SessionID, status: "active" | "paused") {
       const state = yield* requireGoal(sessionID)
+      if (state.replyRecovery && state.replyRecovery.reviewedAt === undefined)
+        return yield* new AuditError({ message: "Review the interrupted worker reply before resuming it." })
       if (state.status === "complete") {
         return yield* new AuditError({
           message: `A ${state.status} goal cannot be ${status === "active" ? "resumed" : "paused"}.`,
@@ -896,6 +924,8 @@ export namespace RayaGoal {
     // remains untouched and the continuation reads the revised objective.
     const revise = Effect.fn("RayaGoal.revise")(function* (sessionID: SessionID, objective: string) {
       const state = yield* requireGoal(sessionID)
+      if (state.replyRecovery && state.replyRecovery.reviewedAt === undefined)
+        return yield* new AuditError({ message: "Review the interrupted worker reply before changing its direction." })
       if (state.status === "complete") {
         return yield* new AuditError({ message: "A completed goal cannot be revised." })
       }
@@ -931,6 +961,12 @@ export namespace RayaGoal {
 
     const edit = Effect.fn("RayaGoal.edit")(function* (sessionID: SessionID, input: typeof Control.Type) {
       const prior = yield* requireGoal(sessionID)
+      const review = prior.replyRecovery && prior.replyRecovery.reviewedAt === undefined
+      if (review && (input.status !== "active" || input.expectedIntent !== prior.intent))
+        return yield* new AuditError({
+          message: "Review this worker reply, then resume using its current intent.",
+          conflict: true,
+        })
       if (input.expectedIntent !== undefined && input.expectedIntent !== (prior.intent ?? "unset")) {
         return yield* new AuditError({
           conflict: true,
@@ -1018,8 +1054,12 @@ export namespace RayaGoal {
         const hit = exhausted({ ...prior, budget }, now, usage.total)
         if (hit) return yield* new AuditError({ message: budgetReason(hit) })
       }
+      const intent = crypto.randomUUID()
       const next = yield* save(sessionID, {
         ...prior,
+        replyRecovery: review
+          ? { ...prior.replyRecovery!, reviewedAt: now, reviewIntent: intent }
+          : prior.replyRecovery,
         objective,
         criteria,
         budget,
@@ -1039,7 +1079,7 @@ export namespace RayaGoal {
         revisions: changed ? revisions(prior, now, "control") : prior.revisions,
         review: changed || status === "active" ? undefined : prior.review,
         status,
-        intent: crypto.randomUUID(),
+        intent,
         updatedAt: now,
         blockedReason: changed || (status === "active" && prior.status !== "active") ? undefined : prior.blockedReason,
         budgetHit: limited || status === "active" ? undefined : prior.budgetHit,
@@ -1380,6 +1420,10 @@ export namespace RayaGoal {
       expected?: string,
     ) {
       const state = yield* requireGoal(sessionID)
+      if (input.status === "active" && state.replyRecovery && state.replyRecovery.reviewedAt === undefined)
+        return yield* new AuditError({
+          message: "Only an explicit user review can resume this interrupted worker reply.",
+        })
       if (expected !== undefined && state.revision !== expected)
         return yield* new AuditError({
           message: "This goal changed since the operation started. Its result was not applied.",
@@ -1802,6 +1846,60 @@ export namespace RayaGoal {
       return { requirements: verified, summary, verifiedAt: Date.now() } satisfies Audit
     })
 
+    const recoverReply = Effect.fn("RayaGoal.recoverReply")(function* (
+      sessionID: SessionID,
+      input: {
+        dispatchID: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+      },
+    ) {
+      const state = yield* requireGoal(sessionID)
+      if (state.replyRecovery && state.replyRecovery.reviewedAt === undefined) return state
+      const dispatch = state.dispatch
+      if (
+        (state.status !== "active" && state.status !== "paused") ||
+        state.completion !== "reply" ||
+        state.intent !== input.intent ||
+        !dispatch?.messageID ||
+        dispatch.id !== input.dispatchID ||
+        dispatch.intent === input.intent ||
+        dispatch.phase === "queued"
+      )
+        return
+      const session = deps.sessions.get ? yield* deps.sessions.get(sessionID) : undefined
+      if (!Schema.is(routine)(session?.metadata?.rayaRoutine)) return
+      const now = Date.now()
+      const receipt = yield* Schema.decodeUnknownEffect(ReplyRecovery)({
+        version: 1,
+        dispatchID: dispatch.id,
+        messageID: dispatch.messageID,
+        oldIntent: dispatch.intent,
+        intent: input.intent,
+        source: input.source,
+        outcome: input.outcome,
+        execution: input.execution,
+        at: now,
+      }).pipe(Effect.mapError(() => new AuditError({ message: "The interrupted reply recovery identity is invalid." })))
+      const reason =
+        "The previous worker reply ended uncertainly. Review its conversation before resuming the waiting follow-up; the previous action will not be replayed."
+      return yield* save(sessionID, {
+        ...state,
+        replyRecovery: receipt,
+        replyRecoveries: state.replyRecovery
+          ? [...(state.replyRecoveries ?? []), state.replyRecovery].slice(-20)
+          : state.replyRecoveries,
+        status: "blocked",
+        blockedReason: reason,
+        updatedAt: now,
+        activeMs: elapsed(state, now),
+        activeAt: undefined,
+        progress: progress(state, { at: now, kind: "status", message: `Blocked: ${reason}` }),
+      })
+    })
+
     const recordTurn = Effect.fn("RayaGoal.recordTurn")(function* (
       sessionID: SessionID,
       messageID?: MessageID,
@@ -2147,6 +2245,7 @@ export namespace RayaGoal {
 
     const continued = Effect.fn("RayaGoal.continued")(function* (sessionID: SessionID, intent?: string) {
       const state = yield* requireGoal(sessionID)
+      if (state.replyRecovery && state.replyRecovery.reviewedAt === undefined) return
       if (intent !== undefined && state.intent !== intent) return
       if (state.status !== "active") {
         return yield* new AuditError({ message: `A ${state.status} goal cannot continue automatically.` })
@@ -2444,6 +2543,7 @@ export namespace RayaGoal {
       update,
       evidence,
       recordTurn,
+      recoverReply,
       continued,
       continuedChief,
       retried,

@@ -1,7 +1,7 @@
 // kilocode_change - new file
 import path from "path"
 import fs from "fs/promises"
-import { Cause, Effect, Exit, Fiber, Scope } from "effect"
+import { Cause, Effect, Exit, Fiber, Schema, Scope } from "effect"
 import { SessionID, PartID } from "@/session/schema"
 import { MessageV2 } from "@/session/message-v2"
 import { Session } from "@/session/session"
@@ -498,13 +498,27 @@ export namespace KiloSessionPrompt {
   export function resolveCloseReason(input: {
     sessionID: string
     closeReasons: Map<string, KiloSession.CloseReason>
-    exit: Exit.Exit<any, any>
+    exit: Exit.Exit<unknown, unknown>
   }): KiloSession.CloseReason {
     const explicit = input.closeReasons.get(input.sessionID)
     input.closeReasons.delete(input.sessionID)
     if (explicit) return explicit
     if (Exit.isFailure(input.exit)) {
       return Cause.hasInterruptsOnly(input.exit.cause) ? "interrupted" : "error"
+    }
+    // Runner cancellation returns the retained assistant after its finalizers finish.
+    const value = input.exit.value
+    if (value && typeof value === "object" && "info" in value) {
+      const info = value.info
+      if (
+        info &&
+        typeof info === "object" &&
+        "role" in info &&
+        info.role === "assistant" &&
+        "error" in info &&
+        Schema.is(MessageV2.AbortedError.Schema)(info.error)
+      )
+        return "interrupted"
     }
     return "completed"
   }

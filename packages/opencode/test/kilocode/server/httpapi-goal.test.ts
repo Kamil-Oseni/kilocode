@@ -14,6 +14,7 @@ import { Git } from "@/git"
 import { Storage } from "@/storage/storage"
 import { SessionID, MessageID } from "@/session/schema"
 import { receipts } from "@/kilocode/goal/stop-receipt"
+import { RayaGoal } from "@/kilocode/goal"
 
 void Log.init({ print: false })
 
@@ -38,6 +39,100 @@ afterEach(async () => {
 })
 
 describe("goal HTTP API", () => {
+  test("reviewed reply goals allow current-intent edits without changing exact review retry semantics", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const handler = app()
+    const request = (method: string, route: string, body?: unknown) =>
+      handler(
+        new Request(new URL(route, "http://localhost"), {
+          method,
+          headers: { "content-type": "application/json", "x-kilo-directory": tmp.path },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+        HttpApiServer.context,
+      )
+    const response = await request("POST", "/session", {})
+    expect(response.status).toBe(200)
+    const session = (await response.json()) as { id: string }
+    const route = `/session/${session.id}/goal`
+    expect((await request("POST", route, { objective: "Original direction" })).status).toBe(200)
+    const layer = LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, Git.node, CrossSpawnSpawner.node]))
+    const state = await Effect.runPromise(
+      Storage.Service.use((storage) => storage.read<RayaGoal.State>(["raya", "goal", session.id])).pipe(
+        Effect.provide(layer),
+      ),
+    )
+    if (!state.intent) throw new Error("The actual goal did not retain its intent")
+    const marker = {
+      version: 1 as const,
+      dispatchID: "original-dispatch",
+      messageID: MessageID.ascending(),
+      oldIntent: "original-intent",
+      intent: "blocked-intent",
+      source: "attached-followup",
+      outcome: "error" as const,
+      execution: "a".repeat(64),
+      at: Date.now(),
+    }
+    const saved = {
+      ...state,
+      dispatch: {
+        id: marker.dispatchID,
+        messageID: marker.messageID,
+        intent: marker.oldIntent,
+        phase: "finished" as const,
+        queuedAt: marker.at,
+      },
+      replyRecovery: marker,
+      status: "blocked" as const,
+      intent: marker.intent,
+    }
+    const write = (value: RayaGoal.State) =>
+      Effect.runPromise(
+        Storage.Service.use((storage) => storage.replace(["raya", "goal", session.id], value)).pipe(
+          Effect.provide(layer),
+        ),
+      )
+    await write(saved)
+    for (const body of [
+      { status: "active", expectedIntent: marker.intent, objective: "Changed during review" },
+      { status: "active", expectedIntent: marker.intent, budget: { modelCost: 2 }, budgetReason: "Changed limit" },
+      { status: "active", expectedIntent: "stale" },
+    ])
+      expect((await request("PATCH", route, body)).status).toBe(409)
+    const reviewed = {
+      ...saved,
+      status: "active" as const,
+      intent: state.intent,
+      replyRecovery: { ...marker, reviewedAt: marker.at, reviewIntent: state.intent },
+    }
+    await write(reviewed)
+    const retry = await request("PATCH", route, { status: "active", expectedIntent: marker.intent })
+    expect(retry.status).toBe(200)
+    expect(await retry.json()).toMatchObject({ intent: state.intent, objective: state.objective })
+    const changed = await request("PATCH", route, {
+      status: "active",
+      expectedIntent: state.intent,
+      objective: "New reviewed direction",
+      budget: { modelCost: 2 },
+      budgetReason: "Allow the remaining work",
+    })
+    expect(changed.status).toBe(200)
+    expect(await changed.json()).toMatchObject({ objective: "New reviewed direction", budget: { modelCost: 2 } })
+    expect(
+      (await request("PATCH", route, { status: "active", expectedIntent: state.intent, objective: "Stale edit" }))
+        .status,
+    ).toBe(409)
+    await write({ ...reviewed, status: "complete" })
+    const terminal = await request("PATCH", route, { status: "active", expectedIntent: marker.intent })
+    expect(terminal.status).toBe(200)
+    expect(await terminal.json()).toMatchObject({ status: "complete", intent: state.intent })
+    expect(
+      (await request("PATCH", route, { status: "active", expectedIntent: state.intent, objective: "Resurrect" }))
+        .status,
+    ).toBe(400)
+  }, 60_000)
+
   test("stop history preserves requested and observed delegated attempts through the HTTP schema", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const handler = app()

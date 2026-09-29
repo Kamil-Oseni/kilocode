@@ -472,6 +472,42 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { sessionID: SessionID }
       payload: typeof GoalUpdatePayload.Type
     }) {
+      const pending = yield* goals.get(ctx.params.sessionID)
+      const review =
+        Object.keys(ctx.payload).every((key) => key === "status" || key === "expectedIntent" || key === "objective") &&
+        (ctx.payload.objective === undefined || ctx.payload.objective.trim() === pending?.objective)
+      if (
+        pending?.replyRecovery &&
+        pending.replyRecovery.reviewedAt === undefined &&
+        ctx.payload.status === "active" &&
+        !review
+      )
+        return yield* new HttpApiError.Conflict({})
+      if (
+        pending?.replyRecovery?.reviewedAt !== undefined &&
+        ctx.payload.status === "active" &&
+        review &&
+        (ctx.payload.expectedIntent === pending.replyRecovery.intent ||
+          ctx.payload.expectedIntent === pending.replyRecovery.reviewIntent)
+      ) {
+        if (
+          pending.intent !== pending.replyRecovery.reviewIntent ||
+          (pending.dispatch?.id !== pending.replyRecovery.dispatchID && pending.dispatch?.intent !== pending.intent)
+        )
+          return yield* new HttpApiError.Conflict({})
+        if (pending.status === "active")
+          yield* runner.resume(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.Conflict({})))
+        return pending
+      }
+      if (pending?.replyRecovery && pending.replyRecovery.reviewedAt === undefined) {
+        const intent = ctx.payload.expectedIntent
+        if (ctx.payload.status !== "active" || intent === undefined || intent !== pending.intent)
+          return yield* new HttpApiError.Conflict({})
+        yield* runState.assertNotBusy(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.Conflict({})))
+        yield* runner
+          .reviewReply(ctx.params.sessionID, intent)
+          .pipe(Effect.mapError(() => new HttpApiError.Conflict({})))
+      }
       const result = yield* goals.edit(ctx.params.sessionID, ctx.payload).pipe(
         Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
         Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
@@ -481,6 +517,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       )
       const prior = result.prior
       const goal = result.state
+      if (
+        prior.replyRecovery &&
+        prior.replyRecovery.reviewedAt === undefined &&
+        goal.replyRecovery?.reviewedAt !== undefined
+      ) {
+        yield* runner.resume(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.Conflict({})))
+        return goal
+      }
       if (
         goal.status === "active" &&
         (prior.status === "paused" ||

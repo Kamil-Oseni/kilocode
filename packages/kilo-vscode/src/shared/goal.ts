@@ -103,6 +103,19 @@ export type GoalCharge = GoalChargeBase &
   )
 
 export interface GoalState {
+  replyRecovery?: {
+    version: 1
+    dispatchID: string
+    messageID: string
+    oldIntent: string
+    intent: string
+    source: string
+    outcome: "error" | "interrupted" | "unknown"
+    execution: string
+    at: number
+    reviewedAt?: number
+    reviewIntent?: string
+  }
   review?: { status: "pending" | "accepted"; at: number; criteria: string[]; acceptedAt?: number }
   revisions?: Array<{
     id: string

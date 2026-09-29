@@ -179,7 +179,8 @@ export namespace RayaTaskRunner {
       opts?: { defer?: boolean; bind?: { source: string; sessionID: SessionID } },
     ) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     dispatch: (id: string) => Effect.Effect<Note | undefined, RayaTask.GuardError | RayaTask.NotFoundError>
-    resume: (sessionID: SessionID) => Effect.Effect<void>
+    resume: (sessionID: SessionID) => Effect.Effect<void, unknown>
+    reviewReply: (sessionID: SessionID, intent: string) => Effect.Effect<void, unknown>
     delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
     stopMembers: (id: string, members: readonly string[]) => Effect.Effect<void, unknown>
@@ -193,7 +194,7 @@ export namespace RayaTaskRunner {
       RayaTask.GuardError | RayaTask.NotFoundError
     >
     park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
-    revive: () => Effect.Effect<void>
+    revive: () => Effect.Effect<void, unknown>
     announce: (source: string, filter?: string) => Effect.Effect<RayaTask.Run[]>
     tasks: Tasks
     preview: (from: number) => Effect.Effect<RayaTask.Agent[]>
@@ -456,7 +457,16 @@ export namespace RayaTaskRunner {
           bind?: { source: string; sessionID: SessionID }
         },
       ) =>
-        tasks.enforce(id).pipe(
+        Effect.gen(function* () {
+          for (const run of yield* tasks.runsFor(id)) {
+            const goal = yield* goals.get(run.sessionID)
+            if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)
+              return yield* new RayaTask.GuardError({
+                message: "Review the interrupted worker reply before starting more work.",
+              })
+          }
+        }).pipe(
+          Effect.andThen(tasks.enforce(id)),
           Effect.andThen(recoverable(id)),
           Effect.andThen(
             claim(
@@ -651,6 +661,13 @@ export namespace RayaTaskRunner {
       if (organizations && (yield* organizations.stopped(id)))
         return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
       const item = yield* tasks.get(id)
+      for (const run of yield* tasks.runsFor(id)) {
+        const goal = yield* goals.get(run.sessionID)
+        if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)
+          return yield* new RayaTask.GuardError({
+            message: "Review the interrupted worker reply before sending more work.",
+          })
+      }
       if (item.access === undefined)
         return yield* new RayaTask.GuardError({
           kind: "access",
@@ -684,10 +701,72 @@ export namespace RayaTaskRunner {
       yield* launch(run)
       return saved
     })
-    const resume = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {
+    const resume: Runner["resume"] = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {
       const items = yield* tasks.list()
       const active = yield* Effect.forEach(items, (item) => tasks.runsFor(item.id), { concurrency: 1 })
-      const run = active.flat().find((run) => run.sessionID === sessionID && RayaTask.pending(run))
+      const goal = yield* goals.get(sessionID)
+      const reviewed =
+        goal?.replyRecovery?.reviewedAt !== undefined &&
+        goal.status === "active" &&
+        goal.replyRecovery.reviewIntent === goal.intent &&
+        (goal.dispatch?.id === goal.replyRecovery.dispatchID || goal.dispatch?.intent === goal.intent)
+      const prior = active.flat().find((run) => run.sessionID === sessionID)
+      if (reviewed && prior) {
+        const session = yield* input.sessions.get(sessionID)
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+          Effect.mapError(
+            () =>
+              new RayaTask.GuardError({
+                message: "This reviewed worker reply no longer has its original run identity.",
+              }),
+          ),
+        )
+        if (
+          identity.runID !== prior.id ||
+          identity.agentID !== prior.agentID ||
+          identity.trigger.kind === "timer" ||
+          identity.scheduleVersion !== (prior.scheduleVersion ?? 1) ||
+          !isDeepStrictEqual(identity.trigger, prior.trigger) ||
+          (prior.status !== "running" && prior.status !== "blocked")
+        )
+          return yield* new RayaTask.GuardError({
+            message: "This reviewed reply cannot resume its original run safely.",
+          })
+        const pending = inbox ? yield* inbox.stranded(identity.agentID) : undefined
+        if (pending?.sessionID !== sessionID || pending.source !== goal!.replyRecovery!.source) {
+          const source = inbox
+            ? (yield* inbox.page(identity.agentID)).messages.find((row) => row.source === goal!.replyRecovery!.source)
+            : undefined
+          if (
+            prior.status === "running" &&
+            source?.sessionID === sessionID &&
+            source.kind === "user" &&
+            goal!.dispatch?.intent === goal!.intent &&
+            goal!.dispatch?.phase !== "queued"
+          )
+            return
+          return yield* new RayaTask.GuardError({
+            message: "This reviewed reply no longer has its original undelivered source.",
+          })
+        }
+      }
+      if (reviewed && prior && organizations && (yield* organizations.stopped(prior.agentID)))
+        return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
+      if (reviewed && prior && prior.status === "blocked") {
+        if (
+          !(yield* tasks.transition(prior, {
+            ...prior,
+            status: "running",
+            blockedReason: undefined,
+            outcome: undefined,
+          }))
+        )
+          return yield* new RayaTask.GuardError({ message: "This worker reply changed before recovery resumed." })
+      }
+      const run =
+        reviewed && prior
+          ? { ...prior, status: "running" as const, blockedReason: undefined, outcome: undefined }
+          : active.flat().find((run) => run.sessionID === sessionID && RayaTask.pending(run))
       if (!run) {
         yield* revive().pipe(
           Effect.catchCause((cause) =>
@@ -701,6 +780,47 @@ export namespace RayaTaskRunner {
           Effect.sync(() => log.error("routine resume admission failed", { sessionID, err: Cause.squash(cause) })),
         ),
       )
+    })
+
+    const reviewReply = Effect.fn("RayaTaskRunner.reviewReply")(function* (sessionID: SessionID, intent: string) {
+      const goal = yield* goals.get(sessionID)
+      const marker = goal?.replyRecovery
+      if (!goal || !marker || marker.reviewedAt !== undefined || goal.intent !== intent)
+        return yield* new RayaTask.GuardError({ message: "This worker reply changed before review.", kind: "conflict" })
+      const session = yield* input.sessions.get(sessionID)
+      const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+        Effect.mapError(
+          () => new RayaTask.GuardError({ message: "This worker reply has invalid recovery ownership." }),
+        ),
+      )
+      if (identity.trigger.kind === "timer")
+        return yield* new RayaTask.GuardError({
+          message:
+            "This scheduled reply needs scheduled-run recovery review; it cannot be resumed as a manual follow-up.",
+        })
+      const prior = (yield* tasks.runsFor(identity.agentID)).find(
+        (run) => run.id === identity.runID && run.sessionID === sessionID,
+      )
+      if (organizations && (yield* organizations.stopped(identity.agentID)))
+        return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
+      const pending = inbox ? yield* inbox.stranded(identity.agentID) : undefined
+      if (
+        !prior ||
+        (prior.status !== "running" && prior.status !== "blocked") ||
+        identity.scheduleVersion !== (prior.scheduleVersion ?? 1) ||
+        !isDeepStrictEqual(identity.trigger, prior.trigger) ||
+        pending?.source !== marker.source ||
+        pending.sessionID !== sessionID
+      )
+        return yield* new RayaTask.GuardError({
+          message: "This worker reply no longer has its original pending follow-up.",
+        })
+      const receipt = (yield* execution.receipt(prior)) ?? (yield* execution.reviewed(prior, marker.execution))
+      if (!receipt || createHash("sha256").update(receipt.token).digest("hex") !== marker.execution)
+        return yield* new RayaTask.GuardError({
+          message: "This worker reply's execution ownership changed before review.",
+        })
+      yield* execution.review(prior, receipt.token)
     })
 
     const start = Effect.fn("RayaTaskRunner.startErrand")(function* (taken: Errand) {
@@ -1117,6 +1237,9 @@ export namespace RayaTaskRunner {
     })
 
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (sessionID: SessionID) {
+      const recovery = (yield* goals.get(sessionID))?.replyRecovery
+      // Review needs the original execution receipt; blocked is not a verified terminal outcome here.
+      if (recovery && recovery.reviewedAt === undefined) return
       const items = yield* tasks.list()
       for (const item of items) {
         const history = yield* tasks.runsFor(item.id)
@@ -1124,6 +1247,8 @@ export namespace RayaTaskRunner {
         if (!run) {
           const done = history.findLast((entry) => entry.sessionID === sessionID && entry.status !== "running")
           if (done) {
+            const goal = yield* goals.get(sessionID)
+            if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
             const saved = yield* snapshots.find(done.id).pipe(Effect.orDie)
             if (
               saved &&
@@ -1145,6 +1270,7 @@ export namespace RayaTaskRunner {
           continue
         }
         const goal = yield* goals.get(sessionID)
+        if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
         const status =
           goal?.status === "complete"
             ? "complete"
@@ -1213,10 +1339,11 @@ export namespace RayaTaskRunner {
     })
 
     const terminal = Effect.fn("RayaTaskRunner.terminal")(function* (run: RayaTask.Run) {
+      const goal = yield* goals.get(run.sessionID)
+      if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) return { state: "blocked" as const, run }
       if (!(yield* execution.retained(run))) return { state: "skip" as const, run }
       if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run))
         return { state: "blocked" as const, run }
-      const goal = yield* goals.get(run.sessionID)
       if (!goal || goal.status !== run.status) return { state: "blocked" as const, run }
       const snapshot = yield* snapshots.find(run.id).pipe(Effect.orElseSucceed(() => undefined))
       if (
@@ -1382,15 +1509,31 @@ export namespace RayaTaskRunner {
       }
     })
 
-    const revive = Effect.fn("RayaTaskRunner.revive")(function* () {
+    const revive: Runner["revive"] = Effect.fn("RayaTaskRunner.revive")(function* () {
       const items = yield* tasks.list()
       for (const item of items) {
         if (organizations && (yield* organizations.stopped(item.id))) continue
         const prior = yield* tasks.runsFor(item.id)
         // Saved history retains at most 50 terminal runs plus its schedule anchor; replay each retained candidate.
-        const done = prior.filter(
-          (run) => !!run.outcome && (run.status === "complete" || run.status === "blocked") && !RayaTask.pending(run),
-        )
+        for (const run of prior) {
+          const goal = yield* goals.get(run.sessionID)
+          if (
+            run.status === "blocked" &&
+            goal?.status === "active" &&
+            goal.replyRecovery?.reviewedAt !== undefined &&
+            goal.replyRecovery.reviewIntent === goal.intent &&
+            (goal.dispatch?.id === goal.replyRecovery.dispatchID || goal.dispatch?.intent === goal.intent)
+          )
+            yield* resume(run.sessionID)
+        }
+        const current = yield* tasks.runsFor(item.id)
+        const done: RayaTask.Run[] = []
+        for (const run of current) {
+          if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run)) continue
+          const goal = yield* goals.get(run.sessionID)
+          if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
+          done.push(run)
+        }
         const restored = yield* Effect.gen(function* () {
           const admitted = yield* Effect.forEach(
             done,
@@ -1410,6 +1553,8 @@ export namespace RayaTaskRunner {
         }).pipe(Effect.scoped)
         if (!restored) continue
         yield* reconcile(item.id)
+        const recovering = yield* Effect.forEach(yield* tasks.runsFor(item.id), (run) => goals.get(run.sessionID))
+        if (recovering.some((goal) => goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)) continue
         const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
         if (stranded?.sessionID && inbox) {
           const history = yield* tasks.runsFor(item.id)
@@ -1567,6 +1712,7 @@ export namespace RayaTaskRunner {
       ask: ask as Runner["ask"],
       dispatch: dispatch as Runner["dispatch"],
       resume,
+      reviewReply,
       delegate: delegate as Runner["delegate"],
       stop: abort as Runner["stop"],
       stopMembers: stopMembers as Runner["stopMembers"],

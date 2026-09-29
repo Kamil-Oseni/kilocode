@@ -110,6 +110,7 @@ export type Event =
   | EventInteractiveTerminalDeleted
   | EventSandboxStatusChanged
   | EventLspClientDiagnostics
+  | EventRayaRoutineExecutionIdle
   | EventSuggestionShown
   | EventSuggestionAccepted
   | EventSuggestionDismissed
@@ -2606,6 +2607,7 @@ export type GlobalEvent = {
     | EventInteractiveTerminalDeleted
     | EventSandboxStatusChanged
     | EventLspClientDiagnostics
+    | EventRayaRoutineExecutionIdle
     | EventSuggestionShown
     | EventSuggestionAccepted
     | EventSuggestionDismissed
@@ -8347,6 +8349,18 @@ export type EventLspClientDiagnostics = {
   properties: {
     serverID: string
     path: string
+  }
+}
+
+export type EventRayaRoutineExecutionIdle = {
+  id: string
+  type: "raya.routine.execution.idle"
+  properties: {
+    version: 1
+    runID: string
+    agentID: string
+    sessionID: string
+    execution: string
   }
 }
 
@@ -21468,6 +21482,32 @@ export type KilocodeGoalGetResponses = {
    * Current goal
    */
   200: {
+    replyRecovery?: {
+      version: 1
+      dispatchID: string
+      messageID: string
+      oldIntent: string
+      intent: string
+      source: string
+      outcome: "error" | "interrupted" | "unknown"
+      execution: string
+      at: number
+      reviewedAt?: number
+      reviewIntent?: string
+    }
+    replyRecoveries?: Array<{
+      version: 1
+      dispatchID: string
+      messageID: string
+      oldIntent: string
+      intent: string
+      source: string
+      outcome: "error" | "interrupted" | "unknown"
+      execution: string
+      at: number
+      reviewedAt?: number
+      reviewIntent?: string
+    }>
     review?: {
       status: "pending" | "accepted"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -21781,6 +21821,32 @@ export type KilocodeGoalGetResponses = {
       message: string
     }>
     history?: Array<{
+      replyRecovery?: {
+        version: 1
+        dispatchID: string
+        messageID: string
+        oldIntent: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+        at: number
+        reviewedAt?: number
+        reviewIntent?: string
+      }
+      replyRecoveries?: Array<{
+        version: 1
+        dispatchID: string
+        messageID: string
+        oldIntent: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+        at: number
+        reviewedAt?: number
+        reviewIntent?: string
+      }>
       review?: {
         status: "pending" | "accepted"
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22126,6 +22192,32 @@ export type KilocodeGoalUpdateResponses = {
    * Updated goal
    */
   200: {
+    replyRecovery?: {
+      version: 1
+      dispatchID: string
+      messageID: string
+      oldIntent: string
+      intent: string
+      source: string
+      outcome: "error" | "interrupted" | "unknown"
+      execution: string
+      at: number
+      reviewedAt?: number
+      reviewIntent?: string
+    }
+    replyRecoveries?: Array<{
+      version: 1
+      dispatchID: string
+      messageID: string
+      oldIntent: string
+      intent: string
+      source: string
+      outcome: "error" | "interrupted" | "unknown"
+      execution: string
+      at: number
+      reviewedAt?: number
+      reviewIntent?: string
+    }>
     review?: {
       status: "pending" | "accepted"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22439,6 +22531,32 @@ export type KilocodeGoalUpdateResponses = {
       message: string
     }>
     history?: Array<{
+      replyRecovery?: {
+        version: 1
+        dispatchID: string
+        messageID: string
+        oldIntent: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+        at: number
+        reviewedAt?: number
+        reviewIntent?: string
+      }
+      replyRecoveries?: Array<{
+        version: 1
+        dispatchID: string
+        messageID: string
+        oldIntent: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+        at: number
+        reviewedAt?: number
+        reviewIntent?: string
+      }>
       review?: {
         status: "pending" | "accepted"
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22765,6 +22883,32 @@ export type KilocodeGoalCreateResponses = {
    * Created goal
    */
   200: {
+    replyRecovery?: {
+      version: 1
+      dispatchID: string
+      messageID: string
+      oldIntent: string
+      intent: string
+      source: string
+      outcome: "error" | "interrupted" | "unknown"
+      execution: string
+      at: number
+      reviewedAt?: number
+      reviewIntent?: string
+    }
+    replyRecoveries?: Array<{
+      version: 1
+      dispatchID: string
+      messageID: string
+      oldIntent: string
+      intent: string
+      source: string
+      outcome: "error" | "interrupted" | "unknown"
+      execution: string
+      at: number
+      reviewedAt?: number
+      reviewIntent?: string
+    }>
     review?: {
       status: "pending" | "accepted"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -23078,6 +23222,32 @@ export type KilocodeGoalCreateResponses = {
       message: string
     }>
     history?: Array<{
+      replyRecovery?: {
+        version: 1
+        dispatchID: string
+        messageID: string
+        oldIntent: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+        at: number
+        reviewedAt?: number
+        reviewIntent?: string
+      }
+      replyRecoveries?: Array<{
+        version: 1
+        dispatchID: string
+        messageID: string
+        oldIntent: string
+        intent: string
+        source: string
+        outcome: "error" | "interrupted" | "unknown"
+        execution: string
+        at: number
+        reviewedAt?: number
+        reviewIntent?: string
+      }>
       review?: {
         status: "pending" | "accepted"
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

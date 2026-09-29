@@ -1,7 +1,7 @@
 import * as GoalMessage from "./message"
 import path from "node:path"
 // raya_change - Milestone A idle continuation with no-tool spin suppression
-import { Cause, Effect, Schema, Semaphore } from "effect"
+import { Cause, Effect, Schema, Semaphore, Scope } from "effect"
 import type { Bus } from "@/bus"
 import type { Session } from "@/session/session"
 import { SessionID, type MessageID } from "@/session/schema"
@@ -15,6 +15,11 @@ import { RayaGoal } from "."
 import type { Database } from "@opencode-ai/core/database/database"
 import { continuation, owned } from "@/kilocode/task/continuation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { RayaTaskExecution } from "@/kilocode/task/execution"
+import { record } from "@/kilocode/task/continuation"
+import { createHash } from "node:crypto"
+import { ExecutionIdle } from "@/kilocode/task/execution-event"
+import { capture } from "@/kilocode/instance"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { gate } from "@/kilocode/session/input-gate"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
@@ -420,6 +425,80 @@ function detail(error: unknown) {
   return "a turn error"
 }
 
+function uncertain(input: {
+  database?: Database.Interface
+  storage: Storage.Interface
+  sessions: Pick<Session.Interface, "get" | "messages" | "children">
+  sessionID: SessionID
+  outcome?: "error" | "interrupted"
+  messageID?: MessageID
+}) {
+  return Effect.gen(function* () {
+    if (!input.database) return false
+    const goals = RayaGoal.make(input)
+    const goal = yield* goals.get(input.sessionID)
+    if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) return true
+    const dispatch = goal?.dispatch
+    if (
+      !goal ||
+      goal.status !== "active" ||
+      goal.completion !== "reply" ||
+      !dispatch?.messageID ||
+      dispatch.phase === "queued" ||
+      dispatch.intent === (goal.intent ?? "unset")
+    )
+      return false
+    if (goal.replyRecovery?.dispatchID === dispatch.id && goal.replyRecovery.reviewedAt !== undefined) return false
+    if (input.outcome && !input.messageID) return false
+    const outcome =
+      input.outcome ??
+      (dispatch.outcome === "error" || dispatch.outcome === "interrupted"
+        ? dispatch.outcome
+        : dispatch.phase === "started"
+          ? "unknown"
+          : undefined)
+    if (!outcome) return false
+    const session = yield* input.sessions.get(input.sessionID)
+    const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+      Effect.orElseSucceed(() => undefined),
+    )
+    if (!identity) return false
+    const pending = yield* RayaTaskInbox.make(input.database).stranded(identity.agentID)
+    if (pending?.sessionID !== input.sessionID) return false
+    const owner = { id: identity.runID, agentID: identity.agentID, sessionID: input.sessionID }
+    const receipt = yield* RayaTaskExecution.make(input.storage).receipt(owner)
+    if (!receipt) return false
+    const assistant = input.messageID ?? dispatch.assistantID
+    if (assistant) {
+      const rows = yield* input.sessions.messages({ sessionID: input.sessionID })
+      const observed = rows.find((row) => row.info.id === assistant)
+      if (observed?.info.role !== "assistant" || observed.info.parentID !== dispatch.messageID) return false
+      if (input.outcome === "error" && !observed.info.error) return false
+      if (
+        rows.some(
+          (row) => row.info.role === "assistant" && row.info.parentID === dispatch.messageID && row.info.id > assistant,
+        )
+      )
+        return false
+      if (
+        input.outcome &&
+        dispatch.phase === "finished" &&
+        (dispatch.assistantID !== assistant || dispatch.outcome !== input.outcome)
+      )
+        return false
+      yield* goals.recordTurn(input.sessionID, assistant, goal.intent)
+    }
+    const blocked = yield* goals.recoverReply(input.sessionID, {
+      dispatchID: dispatch.id,
+      intent: goal.intent ?? "unset",
+      source: pending.source,
+      outcome,
+      execution: createHash("sha256").update(receipt.token).digest("hex"),
+    })
+    return !!blocked?.replyRecovery && blocked.replyRecovery.reviewedAt === undefined
+  })
+}
+
 export namespace RayaGoalContinuation {
   export const limit = RayaGoal.retryLimit
   export const expected = prompt
@@ -629,6 +708,7 @@ export namespace RayaGoalContinuation {
   function proceed(input: ResumeInput) {
     const goals = RayaGoal.make(input)
     return Effect.gen(function* () {
+      if (yield* uncertain(input)) return
       const goal = yield* goals.get(input.sessionID)
       if (!goal || goal.status !== "active") return
       if (input.permitted && !(yield* input.permitted())) return
@@ -787,16 +867,91 @@ export namespace RayaGoalContinuation {
 
   export function subscribe(input: {
     database?: Database.Interface
+    directory?: string
     bus: Bus.Interface
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
     run?: Run
     enabled?: () => Effect.Effect<boolean> // raya_change - Milestone I continuation default
     idle?: (sessionID: SessionID) => Effect.Effect<boolean>
-  }): Effect.Effect<void> {
+  }): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
       const goals = RayaGoal.make(input)
+      const directory = input.directory ?? capture()?.directory
+      const scope = yield* Scope.Scope
+      const waiting = new Set<string>()
+      const notifications = new Set<string>()
+      const listener = (event: GlobalEvent) => {
+        if (!directory || event.payload?.type !== ExecutionIdle.type) return
+        const raw = event.payload.properties as unknown
+        if (!Schema.is(ExecutionIdle.properties)(raw)) return
+        const notification = `${raw.sessionID}:${raw.execution}`
+        if (notifications.has(notification) || notifications.size >= 64) return
+        notifications.add(notification)
+        bridge.fork(
+          Effect.gen(function* () {
+            const hint = raw
+            const session = yield* input.sessions.get(hint.sessionID)
+            if (path.relative(directory, session.directory) !== "") return
+            const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+              Effect.orElseSucceed(() => undefined),
+            )
+            if (!identity || identity.agentID !== hint.agentID || identity.runID !== hint.runID) return
+            const owner = { id: hint.runID, agentID: hint.agentID, sessionID: hint.sessionID }
+            if (!(yield* RayaTaskExecution.make(input.storage).idle(owner, hint.execution))) return
+            const goal = yield* goals.get(hint.sessionID)
+            if (
+              !goal ||
+              goal.status !== "active" ||
+              goal.completion !== "reply" ||
+              (goal.replyRecovery?.reviewedAt === undefined && !!goal.replyRecovery) ||
+              goal.dispatch?.phase !== "queued" ||
+              goal.dispatch.intent !== (goal.intent ?? "unset")
+            )
+              return
+            const key = `${hint.sessionID}:${goal.dispatch.id}`
+            if (waiting.has(key) || waiting.size >= 64) return
+            waiting.add(key)
+            notifications.delete(notification)
+            yield* Effect.gen(function* () {
+              if (input.enabled && !(yield* input.enabled())) return
+              if (input.idle && !(yield* input.idle(hint.sessionID))) return
+              if (
+                KiloSessionPromptQueue.active(hint.sessionID) ||
+                KiloSessionPromptQueue.snapshot(hint.sessionID).length
+              )
+                return
+              const pending = input.database
+                ? yield* RayaTaskInbox.make(input.database).stranded(hint.agentID)
+                : undefined
+              if (pending?.sessionID !== hint.sessionID) return
+              yield* launch({
+                goals,
+                session,
+                sessionID: hint.sessionID,
+                directory: session.directory,
+                permitted: () => continuation({ ...input, session }),
+                run: input.run,
+                dispatch: goal.dispatch!.id,
+                database: input.database,
+                storage: input.storage,
+              })
+            }).pipe(Effect.ensuring(Effect.sync(() => waiting.delete(key))))
+          }).pipe(
+            Effect.ensuring(Effect.sync(() => notifications.delete(notification))),
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.void
+                : Effect.sync(() => log.warn("Routine idle intake hint was refused", { cause: Cause.squash(cause) })),
+            ),
+            Effect.forkIn(scope),
+            Effect.asVoid,
+          ),
+        )
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
       yield* input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
         if (event.properties.parentID) return undefined
         const sid = event.properties.sessionID
@@ -808,6 +963,17 @@ export namespace RayaGoalContinuation {
                 goals.finished(sid, event.properties.messageID, event.properties.reason),
                 event.properties.messageID,
               )
+            if (event.properties.reason === "error" || event.properties.reason === "interrupted") {
+              if (
+                yield* uncertain({
+                  ...input,
+                  sessionID: sid,
+                  outcome: event.properties.reason,
+                  messageID: event.properties.messageID,
+                })
+              )
+                return
+            }
             if (event.properties.reason === "interrupted") return
             const active = yield* goals.get(sid)
             if (!active || active.status !== "active") return

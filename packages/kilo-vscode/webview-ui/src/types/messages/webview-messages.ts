@@ -84,7 +84,7 @@ export interface GoalEditMessage {
   type: "goalEdit"
   sessionID: string
   requestID: string
-  objective: string
+  objective?: string
   expectedIntent: string
   status?: "active" | "paused"
 }

@@ -61,6 +61,19 @@ export namespace KilocodeBootstrap {
       const routines = storage
         ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database, pty, halt: (id) => runs.cancel(id) })
         : undefined
+      const continuation = storage
+        ? yield* InstanceState.make((ctx) =>
+            RayaGoalContinuation.subscribe({
+              database,
+              directory: ctx.directory,
+              bus,
+              sessions,
+              storage,
+              enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
+              idle: (id) => runs.inspect(id).pipe(Effect.map((state) => state.phase === "idle")),
+            }),
+          )
+        : undefined
       const attention = storage
         ? yield* InstanceState.make((ctx) =>
             RayaGoalContinuation.subscribeAttention({
@@ -112,14 +125,7 @@ export namespace KilocodeBootstrap {
         yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
         if (storage) {
           yield* Effect.logInfo("Raya goal and routine initialization starting")
-          yield* RayaGoalContinuation.subscribe({
-            database,
-            bus,
-            sessions,
-            storage,
-            enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
-            idle: (id) => runs.inspect(id).pipe(Effect.map((state) => state.phase === "idle")),
-          }) // raya_change - Milestones A/I configurable idle continuation
+          if (continuation) yield* InstanceState.get(continuation)
           if (attention) yield* InstanceState.get(attention)
           if (routines) yield* routines()
           yield* Effect.logInfo("Raya goal and routine initialization complete")

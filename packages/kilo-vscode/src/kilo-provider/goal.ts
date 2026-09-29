@@ -331,6 +331,53 @@ function guidance(message: { status?: unknown; accept?: unknown }) {
     : "Review the refreshed goal before trying again."
 }
 
+function reviewable(message: {
+  objective?: unknown
+  status?: unknown
+  criteria?: unknown
+  budget?: unknown
+  budgetReason?: unknown
+  accept?: unknown
+}) {
+  return (
+    message.objective === undefined &&
+    message.status === "active" &&
+    message.criteria === undefined &&
+    message.budget === undefined &&
+    message.budgetReason === undefined &&
+    message.accept === undefined
+  )
+}
+
+async function review(client: KiloClient, sessionID: string, directory: string | undefined, intent: string) {
+  const result = await client.kilocode.goal.get({ sessionID, directory }, { throwOnError: true })
+  const goal = result.data as GoalState | undefined
+  if (
+    !goal?.replyRecovery ||
+    goal.replyRecovery.reviewedAt !== undefined ||
+    goal.replyRecovery.intent !== intent ||
+    goal.intent !== intent ||
+    goal.status !== "blocked"
+  )
+    throw new Error("Review the refreshed interrupted follow-up before resuming.")
+  return goal
+}
+
+function recovered(goal: GoalState | undefined, prior: GoalState | undefined) {
+  if (!prior) return true
+  return (
+    goal?.replyRecovery?.reviewedAt !== undefined &&
+    goal.replyRecovery.reviewIntent === goal.intent &&
+    goal.replyRecovery.execution === prior.replyRecovery?.execution &&
+    goal.replyRecovery.dispatchID === prior.replyRecovery?.dispatchID &&
+    goal.replyRecovery.messageID === prior.replyRecovery?.messageID
+  )
+}
+
+function objective(value: string | undefined, prior: GoalState | undefined) {
+  return value?.trim() ?? prior!.objective
+}
+
 function editError(message: {
   accept?: unknown
   criteria?: unknown
@@ -354,7 +401,10 @@ function editError(message: {
     return "Explain the limit change in 240 characters or fewer."
   if (message.status !== undefined && message.status !== "active" && message.status !== "paused")
     return "Choose pause or resume for the goal status."
-  if (!identifier(message.expectedIntent) || typeof message.objective !== "string" || !message.objective.trim())
+  if (
+    !identifier(message.expectedIntent) ||
+    (!reviewable(message) && (typeof message.objective !== "string" || !message.objective.trim()))
+  )
     return `The goal change is incomplete. ${guidance(message)}`
 }
 
@@ -395,7 +445,7 @@ export async function editGoal(input: {
     return
   }
   const edit = message as typeof message & {
-    objective: string
+    objective?: string
     expectedIntent: string
     status?: "active" | "paused"
     criteria?: GoalState["criteria"]
@@ -411,6 +461,10 @@ export async function editGoal(input: {
     return
   }
   try {
+    const prior =
+      edit.objective === undefined
+        ? await review(input.client, message.sessionID, input.directory, edit.expectedIntent)
+        : undefined
     const permit = await capability(input.client, edit.criteria, input.authorize)
     if (!permit()) {
       input.post({
@@ -423,7 +477,7 @@ export async function editGoal(input: {
     const result = await input.client.kilocode.goal.update({
       sessionID: message.sessionID,
       directory: input.directory,
-      objective: edit.objective.trim(),
+      objective: edit.objective?.trim(),
       expectedIntent: edit.expectedIntent,
       status: edit.status,
       criteria: edit.criteria,
@@ -444,7 +498,8 @@ export async function editGoal(input: {
     }
     const goal = result.data
     if (
-      !confirmation(goal, edit.objective.trim(), edit.status, edit.accept === true, edit.criteria) ||
+      !confirmation(goal, objective(edit.objective, prior), edit.status, edit.accept === true, edit.criteria) ||
+      !recovered(goal as GoalState | undefined, prior) ||
       (edit.budget !== undefined && !sameBudget(goal?.budget, edit.budget))
     ) {
       input.post({

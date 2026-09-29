@@ -120,7 +120,8 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   createEffect(on(identity, () => setPage(0)))
   const viewing = () => pages()[page()] ?? props.goal
   const archive = () => page() > 0
-  const editable = () => props.goal?.status !== "complete"
+  const recovery = () => !!props.goal?.replyRecovery && props.goal.replyRecovery.reviewedAt === undefined
+  const editable = () => props.goal?.status !== "complete" && !recovery()
   const todos = () =>
     props.goal?.plan?.tasks.map((task) => ({ content: task.description, status: task.status })) ?? props.todos ?? []
   const planned = () => !archive() && !!todos().length
@@ -781,6 +782,12 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   Stop/Dismiss) only appear in the expanded card so the collapsed
                   goal carries no button chrome. */}
               <Show when={props.expanded && !archive()}>
+                <Show when={recovery()}>
+                  <p class="goal-banner__hint">
+                    Review the previous reply and any changes it made before resuming. Raya will continue your new
+                    request without resending the uncertain reply.
+                  </p>
+                </Show>
                 <div class="goal-banner__actions">
                   <div class="goal-banner__actions-lead">
                     <Show when={editable()}>
@@ -813,7 +820,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                         disabled={props.disabled}
                         onClick={() => props.onResume?.()}
                       >
-                        Resume
+                        {recovery() ? "Review and resume" : "Resume"}
                       </Button>
                     </Show>
                     <Show when={state().status !== "complete"}>
@@ -864,6 +871,7 @@ export const GoalBanner: Component = () => {
     budget?: GoalBudget | null
     budgetReason?: string
     accept?: true
+    review?: true
   }>()
   const [failure, setFailure] = createSignal<string>()
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -899,6 +907,8 @@ export const GoalBanner: Component = () => {
 
   const consistent = (goal: GoalState, request: NonNullable<ReturnType<typeof pending>>) =>
     goal.objective === request.objective &&
+    (!request.review ||
+      (goal.replyRecovery?.reviewedAt !== undefined && goal.replyRecovery.reviewIntent === goal.intent)) &&
     (request.criteria === undefined || equal(goal.criteria, request.criteria)) &&
     (request.budget === undefined || sameBudget(goal.budget, request.budget ?? undefined)) &&
     !!goal.intent &&
@@ -1006,11 +1016,13 @@ export const GoalBanner: Component = () => {
     accept?: true,
     budget?: GoalBudget | null,
     budgetReason?: string,
+    review?: true,
   ) => {
     const sessionID = sid()
     if (!sessionID || busy() || (!status && !accept && failure())) return
+    if (goal()?.replyRecovery && goal()?.replyRecovery?.reviewedAt === undefined && !review) return
     const requestID = crypto.randomUUID()
-    setPending({ requestID, objective, intent: expectedIntent, status, criteria, budget, budgetReason, accept })
+    setPending({ requestID, objective, intent: expectedIntent, status, criteria, budget, budgetReason, accept, review })
     if (accept) setNotice("Checking evidence and recording acceptance...")
     if (status) setNotice(status === "paused" ? "Pausing goal…" : "Resuming goal…")
     timer = setTimeout(() => {
@@ -1030,7 +1042,7 @@ export const GoalBanner: Component = () => {
       type: "goalEdit",
       sessionID,
       requestID,
-      objective,
+      ...(review ? {} : { objective }),
       expectedIntent,
       status,
       criteria,
@@ -1042,6 +1054,11 @@ export const GoalBanner: Component = () => {
   const transition = (status: "active" | "paused") => {
     const current = goal()
     if (!current || current.status === "complete" || current.status === status) return
+    if (current.replyRecovery && current.replyRecovery.reviewedAt === undefined) {
+      if (status !== "active") return
+      revise(current.objective, current.intent ?? "unset", undefined, status, undefined, undefined, undefined, true)
+      return
+    }
     revise(current.objective, current.intent ?? "unset", undefined, status)
   }
 
@@ -1080,7 +1097,7 @@ export const GoalBanner: Component = () => {
       confirmingStop={stopping()}
       onToggle={() => setExpanded((value) => !value)}
       onEdit={() => {
-        if (busy() || editing()) return
+        if (busy() || editing() || (goal()?.replyRecovery && goal()?.replyRecovery?.reviewedAt === undefined)) return
         setFailure(undefined)
         setExpanded(true)
         setStopping(false)

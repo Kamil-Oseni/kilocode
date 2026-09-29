@@ -18165,6 +18165,146 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "replyRecovery": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "dispatchID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "oldIntent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "intent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["error", "interrupted", "unknown"]
+                        },
+                        "execution": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64,
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "at": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewIntent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "dispatchID",
+                        "messageID",
+                        "oldIntent",
+                        "intent",
+                        "source",
+                        "outcome",
+                        "execution",
+                        "at"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "replyRecoveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "dispatchID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg"
+                          },
+                          "oldIntent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "intent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "source": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": ["error", "interrupted", "unknown"]
+                          },
+                          "execution": {
+                            "type": "string",
+                            "minLength": 64,
+                            "maxLength": 64,
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "at": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reviewedAt": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reviewIntent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "dispatchID",
+                          "messageID",
+                          "oldIntent",
+                          "intent",
+                          "source",
+                          "outcome",
+                          "execution",
+                          "at"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    },
                     "review": {
                       "type": "object",
                       "properties": {
@@ -20060,6 +20200,146 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "replyRecovery": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "dispatchID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "oldIntent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "intent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "source": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": ["error", "interrupted", "unknown"]
+                              },
+                              "execution": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64,
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "at": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "reviewedAt": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "reviewIntent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "dispatchID",
+                              "messageID",
+                              "oldIntent",
+                              "intent",
+                              "source",
+                              "outcome",
+                              "execution",
+                              "at"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "replyRecoveries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "number",
+                                  "enum": [1]
+                                },
+                                "dispatchID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "messageID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "oldIntent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "intent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": ["error", "interrupted", "unknown"]
+                                },
+                                "execution": {
+                                  "type": "string",
+                                  "minLength": 64,
+                                  "maxLength": 64,
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "at": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "reviewedAt": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "reviewIntent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "dispatchID",
+                                "messageID",
+                                "oldIntent",
+                                "intent",
+                                "source",
+                                "outcome",
+                                "execution",
+                                "at"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 20
+                          },
                           "review": {
                             "type": "object",
                             "properties": {
@@ -21854,6 +22134,146 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "replyRecovery": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "dispatchID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "oldIntent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "intent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["error", "interrupted", "unknown"]
+                        },
+                        "execution": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64,
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "at": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewIntent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "dispatchID",
+                        "messageID",
+                        "oldIntent",
+                        "intent",
+                        "source",
+                        "outcome",
+                        "execution",
+                        "at"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "replyRecoveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "dispatchID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg"
+                          },
+                          "oldIntent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "intent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "source": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": ["error", "interrupted", "unknown"]
+                          },
+                          "execution": {
+                            "type": "string",
+                            "minLength": 64,
+                            "maxLength": 64,
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "at": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reviewedAt": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reviewIntent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "dispatchID",
+                          "messageID",
+                          "oldIntent",
+                          "intent",
+                          "source",
+                          "outcome",
+                          "execution",
+                          "at"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    },
                     "review": {
                       "type": "object",
                       "properties": {
@@ -23749,6 +24169,146 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "replyRecovery": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "dispatchID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "oldIntent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "intent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "source": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": ["error", "interrupted", "unknown"]
+                              },
+                              "execution": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64,
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "at": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "reviewedAt": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "reviewIntent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "dispatchID",
+                              "messageID",
+                              "oldIntent",
+                              "intent",
+                              "source",
+                              "outcome",
+                              "execution",
+                              "at"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "replyRecoveries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "number",
+                                  "enum": [1]
+                                },
+                                "dispatchID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "messageID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "oldIntent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "intent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": ["error", "interrupted", "unknown"]
+                                },
+                                "execution": {
+                                  "type": "string",
+                                  "minLength": 64,
+                                  "maxLength": 64,
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "at": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "reviewedAt": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "reviewIntent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "dispatchID",
+                                "messageID",
+                                "oldIntent",
+                                "intent",
+                                "source",
+                                "outcome",
+                                "execution",
+                                "at"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 20
+                          },
                           "review": {
                             "type": "object",
                             "properties": {
@@ -25461,6 +26021,146 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "replyRecovery": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "dispatchID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "oldIntent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "intent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["error", "interrupted", "unknown"]
+                        },
+                        "execution": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64,
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "at": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewIntent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "dispatchID",
+                        "messageID",
+                        "oldIntent",
+                        "intent",
+                        "source",
+                        "outcome",
+                        "execution",
+                        "at"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "replyRecoveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "dispatchID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg"
+                          },
+                          "oldIntent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "intent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "source": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": ["error", "interrupted", "unknown"]
+                          },
+                          "execution": {
+                            "type": "string",
+                            "minLength": 64,
+                            "maxLength": 64,
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "at": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reviewedAt": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reviewIntent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "dispatchID",
+                          "messageID",
+                          "oldIntent",
+                          "intent",
+                          "source",
+                          "outcome",
+                          "execution",
+                          "at"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    },
                     "review": {
                       "type": "object",
                       "properties": {
@@ -27356,6 +28056,146 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "replyRecovery": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "dispatchID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "oldIntent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "intent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "source": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": ["error", "interrupted", "unknown"]
+                              },
+                              "execution": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64,
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "at": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "reviewedAt": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "reviewIntent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "dispatchID",
+                              "messageID",
+                              "oldIntent",
+                              "intent",
+                              "source",
+                              "outcome",
+                              "execution",
+                              "at"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "replyRecoveries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "number",
+                                  "enum": [1]
+                                },
+                                "dispatchID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "messageID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "oldIntent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "intent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": ["error", "interrupted", "unknown"]
+                                },
+                                "execution": {
+                                  "type": "string",
+                                  "minLength": 64,
+                                  "maxLength": 64,
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "at": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "reviewedAt": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "reviewIntent": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "dispatchID",
+                                "messageID",
+                                "oldIntent",
+                                "intent",
+                                "source",
+                                "outcome",
+                                "execution",
+                                "at"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 20
+                          },
                           "review": {
                             "type": "object",
                             "properties": {
@@ -68940,6 +69780,9 @@
             "$ref": "#/components/schemas/EventLspClientDiagnostics"
           },
           {
+            "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
+          },
+          {
             "$ref": "#/components/schemas/EventSuggestionShown"
           },
           {
@@ -76910,6 +77753,9 @@
               },
               {
                 "$ref": "#/components/schemas/EventLspClientDiagnostics"
+              },
+              {
+                "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
               },
               {
                 "$ref": "#/components/schemas/EventSuggestionShown"
@@ -95917,6 +96763,45 @@
               }
             },
             "required": ["serverID", "path"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventRayaRoutineExecutionIdle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.execution.idle"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "runID": {
+                "type": "string"
+              },
+              "agentID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "execution": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["version", "runID", "agentID", "sessionID", "execution"],
             "additionalProperties": false
           }
         },

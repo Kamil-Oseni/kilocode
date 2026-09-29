@@ -19,10 +19,15 @@ on:
         options: ["60", "1800"]
         default: "60"
       resource_mode:
-        description: "Keep one native child alive, or repeatedly replace children"
+        description: "Keep native children alive, or replace one child (eight requires continuous)"
         type: choice
         options: ["continuous", "churn"]
         default: "continuous"
+      resource_workers:
+        description: "Measure one native transport or eight simultaneous transports"
+        type: choice
+        options: ["1", "8"]
+        default: "1"
 
 permissions:
   contents: read
@@ -95,6 +100,7 @@ jobs:
           PY
 
       - name: Measure sustained production-child resources
+        if: inputs.resource_workers != '8'
         env:
           DURATION: ${{ inputs.resource_seconds || '60' }}
           MODE: ${{ inputs.resource_mode || 'churn' }}
@@ -173,6 +179,99 @@ jobs:
               assert group['pids.max'] == '256'
               events = dict(line.split() for line in group['memory.events'].splitlines())
               assert int(events['oom']) == 0 and int(events['oom_kill']) == 0
+          PY
+
+      - name: Measure eight simultaneous production transports
+        if: inputs.resource_workers == '8'
+        env:
+          DURATION: ${{ inputs.resource_seconds || '60' }}
+          MODE: ${{ inputs.resource_mode || 'continuous' }}
+        run: |
+          set -o pipefail
+          test "$DURATION" = 60 || test "$DURATION" = 1800
+          test "$MODE" = continuous
+          mkdir -p evidence
+          docker image inspect --format '{{.Id}}' raya-mf-check > evidence/build-image.txt
+          docker run --rm --network host --memory 2g --pids-limit 256 \
+            --mount type=bind,source="$PWD/evidence",target=/evidence \
+            --env CGO_ENABLED=1 --env GOMAXPROCS=2 \
+            --env RAYA_TEST_LIVEKIT_URL=http://127.0.0.1:7880 \
+            --env RAYA_TEST_LIVEKIT_KEY=devkey \
+            --env RAYA_TEST_LIVEKIT_SECRET=secret \
+            --env RAYA_TEST_MEDIA_BINARY=/out/raya-mf \
+            --env RAYA_TEST_RESOURCE_SECONDS="$DURATION" \
+            --env RAYA_TEST_RESOURCE_WORKERS=8 \
+            --env RAYA_TEST_RESOURCE_REPORT=/evidence/resources.json \
+            raya-mf-check go test -p 1 -count=1 -timeout 35m -v \
+              -run '^TestProductionWorkersSustainedJointResources$' ./internal/room/process \
+            | tee evidence/sustained-resources.log
+          grep -q 'cohort_resource_measurement' evidence/sustained-resources.log
+          python3 - "$DURATION" <<'PY'
+          import json, math, sys
+          with open('evidence/resources.json', encoding='utf-8') as source:
+              result = json.load(source)
+          with open('evidence/native-conformance.log', encoding='utf-8') as source:
+              latency = [json.loads(line.split('RAYA_MEDIA_LATENCY ', 1)[1]) for line in source if 'RAYA_MEDIA_LATENCY {' in line]
+          assert len(latency) == 1 and latency[0]['status'] == 'complete'
+          assert result['binarySha256'] == latency[0]['binarySHA256']
+          assert result['version'] == 1 and result['completed'] is True
+          assert result['mode'] == 'cohort' and result['workers'] == 8
+          assert result['attemptedWorkers'] == result['readyWorkers'] == 8
+          duration = int(sys.argv[1])
+          assert result['configuredSeconds'] == duration
+          assert math.isfinite(result['elapsedSeconds']) and result['elapsedSeconds'] >= duration
+          assert math.isfinite(result['activeSeconds']) and result['activeSeconds'] >= duration
+          ready, stopped = result['commonReadySeconds'], result['commonStopSeconds']
+          assert math.isfinite(ready) and math.isfinite(stopped) and 0 <= ready < stopped
+          assert math.isclose(result['activeSeconds'], stopped - ready, rel_tol=1e-12, abs_tol=1e-9)
+          assert result['ninth'] == {'refused': True, 'beforeSlots': 8, 'afterSlots': 8}
+          retired = result['retirements']
+          assert len(retired) == 8
+          identities = {(child['pid'], child['startTicks']) for child in retired}
+          assert len(identities) == 8
+          for child in retired:
+              assert child['actualWait'] is True and child['pidAbsent'] is True
+              assert child['exit']['known'] is True
+              assert math.isfinite(child['activeSeconds']) and child['activeSeconds'] >= duration
+              assert math.isfinite(child['readySeconds']) and child['readySeconds'] >= 0
+              assert child['readySeconds'] <= ready
+              assert math.isclose(child['activeSeconds'], stopped - child['readySeconds'], rel_tol=1e-12, abs_tol=1e-9)
+          windows = result['rawWindows']
+          active = [window for window in windows if window['phase'] == 'active']
+          assert len(active) >= duration // 2
+          assert all(math.isfinite(window['seconds']) and window['seconds'] >= 0 for window in windows)
+          assert all(left['seconds'] <= right['seconds'] for left, right in zip(windows, windows[1:]))
+          assert len({(window['parent']['pid'], window['parent']['startTicks']) for window in windows}) == 1
+          previous = {}
+          for window in windows:
+              children = window['children'] or []
+              assert window['slots'] == len(children) <= 8
+              assert window['ownedPssKiB'] == window['parent']['pssKiB'] + sum(child['pssKiB'] for child in children)
+              runtime = window['parentGoRuntime']
+              assert 0 <= runtime['heapAllocBytes'] <= runtime['heapInuseBytes'] <= runtime['heapSysBytes']
+              assert runtime['numGC'] >= 0 and runtime['goroutines'] > 0
+              group = window['cgroup']
+              assert group['memory.max'] == str(2 * 1024 ** 3) and group['pids.max'] == '256'
+              events = dict(line.split() for line in group['memory.events'].splitlines())
+              assert int(events['oom']) == 0 and int(events['oom_kill']) == 0
+              if window['phase'] != 'active':
+                  continue
+              assert window['slots'] == len(children) == 8
+              assert ready <= window['seconds'] <= stopped
+              assert {(child['pid'], child['startTicks']) for child in children} == identities
+              lanes = window['lanes']
+              assert len(lanes) == 8 and {(lane['pid'], lane['startTicks']) for lane in lanes} == identities
+              for lane in lanes:
+                  identity = (lane['pid'], lane['startTicks'])
+                  counters = tuple(lane[name] for name in ('inputFrames', 'outputFrames', 'controls', 'published'))
+                  assert all(isinstance(count, int) and count >= 0 for count in counters)
+                  assert identity not in previous or all(left <= right for left, right in zip(previous[identity], counters))
+                  if window['seconds'] - ready > 5:
+                      assert identity in previous and all(left < right for left, right in zip(previous[identity], counters))
+                  previous[identity] = counters
+          assert len(previous) == 8 and all(all(count > 0 for count in counters) for counters in previous.values())
+          assert all(left['parentGoRuntime']['numGC'] <= right['parentGoRuntime']['numGC'] for left, right in zip(windows, windows[1:]))
+          assert windows[-1]['phase'] == 'retired' and windows[-1]['slots'] == 0 and not windows[-1]['children']
           PY
 
       - name: Vet the CGO production sources

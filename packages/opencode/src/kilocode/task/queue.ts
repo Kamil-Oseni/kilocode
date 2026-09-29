@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, lt, lte } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNull, lt, lte } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import {
@@ -32,6 +32,23 @@ const resolution = Schema.Struct({
   requireExpired: Schema.Boolean,
 })
 type Resolution = typeof resolution.Type
+const rearmInput = Schema.Struct({
+  id: name,
+  agentID: name,
+  version,
+  scheduledAt: timestamp,
+  observedAt: timestamp,
+  timezone: Schema.NullOr(name),
+  claimID: name,
+  sessionID: name,
+  owner: name,
+  leaseUntil: Schema.NullOr(timestamp),
+  updated: timestamp,
+  nextOwner: name,
+  now: timestamp,
+  until: timestamp,
+})
+export type Rearm = typeof rearmInput.Type
 
 export namespace RayaTaskQueue {
   export class Conflict extends Schema.TaggedErrorClass<Conflict>()("RayaTaskQueue.Conflict", {
@@ -176,6 +193,33 @@ export namespace RayaTaskQueue {
         .all()
         .pipe(Effect.map((rows) => rows.length === 1))
     })
+    const rearm = Effect.fn("RayaTaskQueue.rearm")(function* (input: Rearm) {
+      yield* Schema.decodeUnknownEffect(rearmInput)(input)
+      if (input.until <= input.now)
+        return yield* new Conflict({ message: "A rearmed lease must expire in the future." })
+      const rows = yield* db
+        .update(Occurrence)
+        .set({ owner: input.nextOwner, lease_until: input.until, time_updated: input.now })
+        .where(
+          and(
+            eq(Occurrence.id, input.id),
+            eq(Occurrence.agent_id, input.agentID),
+            eq(Occurrence.schedule_version, input.version),
+            eq(Occurrence.scheduled_at, input.scheduledAt),
+            eq(Occurrence.observed_at, input.observedAt),
+            input.timezone === null ? isNull(Occurrence.timezone) : eq(Occurrence.timezone, input.timezone),
+            eq(Occurrence.claim_id, input.claimID),
+            eq(Occurrence.session_id, input.sessionID),
+            eq(Occurrence.owner, input.owner),
+            input.leaseUntil === null ? isNull(Occurrence.lease_until) : eq(Occurrence.lease_until, input.leaseUntil),
+            eq(Occurrence.time_updated, input.updated),
+            eq(Occurrence.state, "linked"),
+          ),
+        )
+        .returning()
+        .all()
+      return rows[0]
+    })
     const resolve = Effect.fn("RayaTaskQueue.resolve")(function* (input: Resolution) {
       yield* Schema.decodeUnknownEffect(resolution)(input)
       const rows = yield* db
@@ -257,6 +301,7 @@ export namespace RayaTaskQueue {
       heartbeat,
       link,
       settle,
+      rearm,
       resolve,
       stale,
       get,

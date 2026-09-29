@@ -1,10 +1,12 @@
-import { Effect } from "effect"
+import { isDeepStrictEqual } from "node:util"
+import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
 import { RayaTaskQueue } from "./queue"
 import { mutate } from "./mutation"
 import { removals } from "./removal"
+import { Context as ReviewContext, schedulerReview, type Journal, type Snapshot } from "./scheduler-review"
 
 type Timer = Extract<RayaTask.Trigger, { kind: "timer" }>
 type Row = NonNullable<Effect.Success<ReturnType<ReturnType<typeof RayaTaskQueue.make>["get"]>>>
@@ -21,6 +23,7 @@ const timer = (row: Row): Timer => ({
 export function scheduler(input: { database: Database.Interface; storage: Storage.Interface }) {
   const queue = RayaTaskQueue.make(input.database)
   const tasks = RayaTask.make(input)
+  const reviews = schedulerReview(input.storage)
   const clean = () =>
     mutate(
       input.storage,
@@ -113,6 +116,7 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
     return timer(row)
   })
   const reserve = Effect.fn("RayaTaskScheduler.reserve")(function* (trigger: Timer, claimID: string) {
+    yield* reviews.ensure(owner)
     const now = Date.now()
     const row = yield* queue.claim({ id: trigger.id, claimID, owner, now, until: now + ttl }).pipe(Effect.orDie)
     if (!row) return yield* new RayaTask.GuardError({ message: "This scheduled occurrence already has an owner." })
@@ -128,8 +132,191 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
   const settle = Effect.fn("RayaTaskScheduler.settle")(function* (run: RayaTask.Run) {
     if (run.trigger?.kind !== "timer" || RayaTask.pending(run)) return
     const row = yield* queue.get(run.trigger.id).pipe(Effect.orDie)
-    if (!row || row.claim_id !== run.id || row.session_id !== run.sessionID) return
-    yield* queue.settle({ id: row.id, claimID: run.id, sessionID: run.sessionID, now: Date.now() }).pipe(Effect.orDie)
+    if (
+      !row ||
+      row.agent_id !== run.agentID ||
+      row.schedule_version !== (run.scheduleVersion ?? 1) ||
+      row.scheduled_at !== run.trigger.scheduledAt ||
+      row.observed_at !== run.trigger.observedAt ||
+      (row.timezone ?? undefined) !== run.trigger.tz ||
+      row.claim_id !== run.id ||
+      row.session_id !== run.sessionID ||
+      (row.state !== "linked" && row.state !== "complete")
+    )
+      return
+    const done =
+      row.state === "complete" ||
+      (yield* queue
+        .settle({ id: row.id, claimID: run.id, sessionID: run.sessionID, now: Date.now() })
+        .pipe(Effect.orDie))
+    if (!done) return
+    const current = yield* queue.get(row.id).pipe(Effect.orDie)
+    if (!current || current.state !== "complete" || current.claim_id !== run.id || current.session_id !== run.sessionID)
+      return
+    yield* reviews.finish(run, {
+      id: current.id,
+      agentID: current.agent_id,
+      version: current.schedule_version,
+      scheduledAt: current.scheduled_at,
+      observedAt: current.observed_at,
+      timezone: current.timezone,
+    })
+  })
+  const inspect = Effect.fn("RayaTaskScheduler.inspect")(function* (
+    run: RayaTask.Run,
+    ctx: typeof ReviewContext.Type,
+    immutable: boolean,
+  ) {
+    yield* Schema.decodeUnknownEffect(ReviewContext)(ctx).pipe(
+      Effect.mapError(
+        () => new RayaTask.GuardError({ message: "This reviewed follow-up has invalid scheduler context." }),
+      ),
+    )
+    if (run.trigger?.kind !== "timer" || (run.status !== "running" && run.status !== "blocked"))
+      return yield* new RayaTask.GuardError({ message: "This run is not an active scheduled follow-up." })
+    const item = yield* tasks.get(run.agentID)
+    const history = yield* tasks.runsFor(run.agentID)
+    const saved = history.find((value) => value.id === run.id)
+    const row = yield* queue.get(run.trigger.id).pipe(Effect.orDie)
+    const version = item.scheduleVersion ?? 1
+    const cursor = yield* queue.cursor(item.id, version).pipe(Effect.orDie)
+    if (
+      !saved ||
+      !isDeepStrictEqual(saved, run) ||
+      !item.enabled ||
+      (item.schedule.kind !== "once" && item.schedule.kind !== "cron") ||
+      version !== run.scheduleVersion ||
+      !row ||
+      row.id !== run.trigger.id ||
+      row.agent_id !== run.agentID ||
+      row.schedule_version !== version ||
+      row.scheduled_at !== run.trigger.scheduledAt ||
+      row.observed_at !== run.trigger.observedAt ||
+      (row.timezone ?? undefined) !== run.trigger.tz ||
+      row.state !== "linked" ||
+      row.claim_id !== run.id ||
+      row.session_id !== run.sessionID ||
+      cursor?.through !== row.scheduled_at
+    )
+      return yield* new RayaTask.GuardError({
+        message: "This scheduled follow-up changed and needs a fresh recovery review.",
+      })
+    yield* reviews.available(row.owner ?? "", owner)
+    yield* reviews.execution(run, ctx, immutable)
+    return { item, row, cursor }
+  })
+  const review = Effect.fn("RayaTaskScheduler.review")(function* (run: RayaTask.Run, ctx: typeof ReviewContext.Type) {
+    yield* inspect(run, ctx, false)
+  })
+  const snapshot = (row: Row): Snapshot => ({
+    owner: row.owner ?? "",
+    leaseUntil: row.lease_until,
+    updated: row.time_updated,
+  })
+  const exact = (left: Snapshot, right: Snapshot) => isDeepStrictEqual(left, right)
+  const identified = (row: Row, journal: Journal) =>
+    row.id === journal.identity.id &&
+    row.agent_id === journal.identity.agentID &&
+    row.schedule_version === journal.identity.version &&
+    row.scheduled_at === journal.identity.scheduledAt &&
+    row.observed_at === journal.identity.observedAt &&
+    row.timezone === journal.identity.timezone &&
+    row.claim_id === journal.identity.runID &&
+    row.session_id === journal.identity.sessionID &&
+    row.state === "linked"
+  const advanced = (row: Snapshot, journal: Journal) =>
+    row.owner === journal.target.id &&
+    row.leaseUntil !== null &&
+    row.leaseUntil >= journal.target.leaseUntil &&
+    row.updated >= journal.target.updated
+  const phase = (journal: Journal, value: Journal["phase"]): Journal => ({
+    ...journal,
+    phase: value,
+    updatedAt: Date.now(),
+  })
+  const rearm = Effect.fn("RayaTaskScheduler.rearm")(function* (run: RayaTask.Run, ctx: typeof ReviewContext.Type) {
+    return yield* mutate(
+      input.storage,
+      Effect.gen(function* () {
+        const checked = yield* inspect(run, ctx, true)
+        const record = yield* reviews.ensure(owner)
+        if (!record)
+          return yield* new RayaTask.GuardError({
+            message: "This backend cannot prove its process identity for reviewed scheduled work.",
+          })
+        const current = snapshot(checked.row)
+        const identity = {
+          id: checked.row.id,
+          agentID: checked.row.agent_id,
+          version: checked.row.schedule_version,
+          scheduledAt: checked.row.scheduled_at,
+          observedAt: checked.row.observed_at,
+          timezone: checked.row.timezone,
+          runID: run.id,
+          sessionID: run.sessionID,
+          cursor: checked.cursor.through,
+        }
+        const found = yield* reviews.load(run.id)
+        const matching =
+          found && isDeepStrictEqual(found.identity, identity) && isDeepStrictEqual(found.review, ctx)
+            ? found
+            : undefined
+        const until = Date.now() + ttl
+        const journal = matching
+          ? matching
+          : yield* reviews.prepare({ run, ctx, identity, row: current, owner: record, until })
+        const present = yield* queue.get(identity.id).pipe(Effect.orDie)
+        if (!present || !identified(present, journal))
+          return yield* new RayaTask.GuardError({ message: "This scheduled follow-up occurrence disappeared." })
+        const row = snapshot(present)
+        const old = journal.target.id !== owner
+        if (old && !((journal.phase === "prepared" && exact(row, journal.prior)) || advanced(row, journal)))
+          return yield* new RayaTask.GuardError({ message: "This scheduled follow-up changed rearm authority." })
+        if (old) yield* reviews.available(journal.target.id, owner, journal.target.owner)
+        const renew = advanced(row, journal) && (old || (row.leaseUntil ?? 0) <= Date.now())
+        const next =
+          old || renew
+            ? yield* reviews.replace(journal, {
+                ...journal,
+                phase: "prepared",
+                prior: row,
+                target: { id: owner, owner: record.owner, leaseUntil: until, updated: Date.now() },
+                updatedAt: Date.now(),
+              })
+            : journal
+        if (advanced(row, next)) {
+          if (next.phase === "complete") return
+          const cas = next.phase === "cas" ? next : yield* reviews.replace(next, phase(next, "cas"))
+          yield* reviews.replace(cas, phase(cas, "complete"))
+          return
+        }
+        if (!exact(row, next.prior) || next.phase !== "prepared")
+          return yield* new RayaTask.GuardError({ message: "This scheduled follow-up changed during rearm." })
+        const changed = yield* queue
+          .rearm({
+            id: identity.id,
+            agentID: identity.agentID,
+            version: identity.version,
+            scheduledAt: identity.scheduledAt,
+            observedAt: identity.observedAt,
+            timezone: identity.timezone,
+            claimID: identity.runID,
+            sessionID: identity.sessionID,
+            owner: next.prior.owner,
+            leaseUntil: next.prior.leaseUntil,
+            updated: next.prior.updated,
+            nextOwner: next.target.id,
+            now: next.target.updated,
+            until: next.target.leaseUntil,
+          })
+          .pipe(Effect.orDie)
+        if (!changed)
+          return yield* new RayaTask.GuardError({ message: "This scheduled follow-up lost its exact rearm claim." })
+        const cas = yield* reviews.replace(next, phase(next, "cas"))
+        yield* reviews.replace(cas, phase(cas, "complete"))
+      }),
+      "Scheduled follow-up rearm",
+    )
   })
   const resolve = Effect.fn("RayaTaskScheduler.resolve")(function* (input: {
     id: string
@@ -179,5 +366,21 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         ? "starting"
         : "active"
   const queued = (id: string, version: number) => queue.pending(id, version).pipe(Effect.orDie)
-  return { prepare, check, reserve, link, settle, resolve, pulse, owned, active, queued, status, retire, clean }
+  return {
+    prepare,
+    check,
+    reserve,
+    link,
+    settle,
+    review,
+    rearm,
+    resolve,
+    pulse,
+    owned,
+    active,
+    queued,
+    status,
+    retire,
+    clean,
+  }
 }

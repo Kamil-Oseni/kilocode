@@ -1861,7 +1861,6 @@ export namespace RayaGoal {
       const dispatch = state.dispatch
       if (
         (state.status !== "active" && state.status !== "paused") ||
-        state.completion !== "reply" ||
         state.intent !== input.intent ||
         !dispatch?.messageID ||
         dispatch.id !== input.dispatchID ||
@@ -1870,7 +1869,9 @@ export namespace RayaGoal {
       )
         return
       const session = deps.sessions.get ? yield* deps.sessions.get(sessionID) : undefined
-      if (!Schema.is(routine)(session?.metadata?.rayaRoutine)) return
+      const identity = session?.metadata?.rayaRoutine
+      if (!Schema.is(routine)(identity)) return
+      if (state.completion !== "reply" && (identity.version !== 2 || identity.trigger.kind !== "timer")) return
       const now = Date.now()
       const receipt = yield* Schema.decodeUnknownEffect(ReplyRecovery)({
         version: 1,
@@ -2027,13 +2028,14 @@ export namespace RayaGoal {
       }
       const accounting = Accounting.sum(scope, sessionID)
       const now = Date.now()
-      const changed =
-        state.completion === "reply" &&
-        state.dispatch?.messageID === user.info.id &&
-        state.dispatch.intent !== (state.intent ?? "unset")
+      const changed = state.dispatch?.messageID === user.info.id && state.dispatch.intent !== (state.intent ?? "unset")
       const session = changed && deps.sessions.get ? yield* deps.sessions.get(sessionID) : undefined
-      // A routine reply to its previous intake incurs usage, but cannot answer a newly admitted intent.
-      const obsolete = changed && Schema.is(routine)(session?.metadata?.rayaRoutine)
+      const identity = session?.metadata?.rayaRoutine
+      // A reply or scheduled turn incurs usage, but cannot complete or block a newer routine intent.
+      const obsolete =
+        changed &&
+        Schema.is(routine)(identity) &&
+        (state.completion === "reply" || (identity.version === 2 && identity.trigger.kind === "timer"))
       const response = state.completion === "reply" && !obsolete ? reply.trim().slice(0, 8000) : ""
       const answered = !!response
       const stalled = !answered && (idle || failed) && retries >= idleLimit
@@ -2050,7 +2052,7 @@ export namespace RayaGoal {
       const hit =
         blocked || state.status !== "active"
           ? undefined
-          : exhausted({ ...state, charges }, now, spendable.total, retries)
+          : exhausted({ ...state, charges }, now, spendable.total, obsolete ? (state.usage.retries ?? 0) : retries)
       const stopped = answered || blocked || hit !== undefined
       const retry = !obsolete && !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {

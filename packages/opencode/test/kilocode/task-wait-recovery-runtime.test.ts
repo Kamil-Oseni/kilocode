@@ -53,6 +53,8 @@ type Goal = {
   reply?: { messageID: string; body: string }
   replyRecovery?: Recovery
   accounted?: { userID: string; messages: string[] }
+  completion?: string
+  audit?: { verifiedAt?: number; requirements?: Array<{ passed: boolean; evidence: Array<{ callID: string }> }> }
 }
 async function installed() {
   const value = process.env.RAYA_INSTALLED_EXTENSION
@@ -69,10 +71,10 @@ async function installed() {
   for await (const chunk of createReadStream(exe, { highWaterMark: 65_536 })) hash.update(chunk)
   return { exe, dir, version: expected, digest: hash.digest("hex"), source: false }
 }
-function fixture(mode: "error" | "interrupted") {
+function fixture(mode: "error" | "interrupted", scheduled = false, root?: string) {
   const started = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
-  const state = { requests: 0, questions: 0, failures: 0, followups: 0 }
+  const state = { requests: 0, questions: 0, failures: 0, followups: 0, reads: 0, audits: 0, proof: false }
   const response = (delta: unknown, finish = "stop") =>
     new Response(
       `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }] })}\n\ndata: [DONE]\n\n`,
@@ -97,6 +99,51 @@ function fixture(mode: "error" | "interrupted") {
       const followup = payload.messages?.some(
         (message) => message.role === "user" && JSON.stringify(message.content)?.includes("RECOVERY_FOLLOWUP"),
       )
+      if (followup && scheduled) {
+        assert.ok(root)
+        if (!state.followups) state.followups++
+        const tool = (name: string, id: string, args: unknown) =>
+          response(
+            {
+              role: "assistant",
+              tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: JSON.stringify(args) } }],
+            },
+            "tool_calls",
+          )
+        if (!state.reads) {
+          state.reads++
+          return tool("read", "call_scheduled_read", { filePath: join(root, "README.md") })
+        }
+        if (!state.audits) {
+          state.proof =
+            payload.messages?.some(
+              (message) =>
+                message.role === "tool" &&
+                JSON.stringify(message.content)?.includes("Disposable error WAIT recovery acceptance."),
+            ) === true
+          assert.ok(state.proof, "The real read tool result was not present before completion")
+          state.audits++
+          return tool("update_goal", "call_scheduled_audit", {
+            status: "complete",
+            audit: {
+              summary: "Verified the disposable README after clarification.",
+              requirements: [
+                {
+                  requirement: "Read and verify the disposable README after clarification.",
+                  passed: true,
+                  evidence: [
+                    {
+                      callID: "call_scheduled_read",
+                      summary: "The actual read returned the disposable README contents.",
+                    },
+                  ],
+                },
+              ],
+            },
+          })
+        }
+        return response({ role: "assistant", content: "SCHEDULED_FOLLOWUP_VERIFIED" })
+      }
       if (followup) {
         state.followups++
         return response({ role: "assistant", content: "RECOVERY_FOLLOWUP_ACK" })
@@ -420,15 +467,18 @@ async function stop(host: Host) {
   assert.ok(!host.failed && !host.diagnostic.failed, "An owned backend output stream failed")
 }
 
-async function scenario(mode: "error" | "interrupted", lost = false) {
-  const timer = setTimeout(() => lifetime.abort(new Error("Actual runtime acceptance deadline elapsed")), 150_000)
+async function scenario(mode: "error" | "interrupted", lost = false, scheduled = false) {
+  const timer = setTimeout(
+    () => lifetime.abort(new Error("Actual runtime acceptance deadline elapsed")),
+    scheduled ? 230_000 : 150_000,
+  )
   const app = await installed()
   const temp = await mkdtemp(join(tmpdir(), `raya-wait-${mode}-`))
   const root = join(temp, "project")
   const home = join(temp, "home")
   await Promise.all([mkdir(root), mkdir(home)])
   await writeFile(join(root, "README.md"), `Disposable ${mode} WAIT recovery acceptance.\n`)
-  const fake = fixture(mode)
+  const fake = fixture(mode, scheduled, root)
   const env = environment(home, fake.url, randomBytes(32).toString("hex"))
   const password = env.KILO_SERVER_PASSWORD
   const hosts: Host[] = []
@@ -437,7 +487,7 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
     process.env.RAYA_WAIT_RECOVERY_REPORT ??
       join(
         import.meta.dir,
-        `../../../../.tmp/source-routine-wait-${lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
+        `../../../../.tmp/source-routine-wait-${scheduled ? "scheduled-once" : lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
       ),
   )
   const storage = join(home, ".local", "share", "kilo", "storage")
@@ -451,6 +501,8 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
       reply: value.reply,
       replyRecovery: value.replyRecovery,
       accounted: value.accounted,
+      completion: value.completion,
+      audit: value.audit,
     }
   }
   let host: Host | undefined
@@ -460,11 +512,14 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
     assert.ok(host)
     return (await call(host, password, root, "POST", "/kilocode/agent", {
       name,
-      objective: "Answer this synthetic worker conversation.",
+      objective: scheduled
+        ? "RECOVERY_ORIGINAL Read and verify the disposable README after clarification."
+        : "Answer this synthetic worker conversation.",
       access: "brief",
       tools,
       model: { providerID: "test", id: "test-model" },
-      schedule: { kind: "manual" },
+      schedule: scheduled ? { kind: "once", at: Date.now() - 1_000 } : { kind: "manual" },
+      ...(scheduled ? { enabled: true } : {}),
     })) as { id: string }
   }
   const runs = async (id: string) => {
@@ -488,11 +543,43 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
       ledger.close()
     }
   }
+  const occurrence = (id: string) => {
+    const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+    try {
+      return {
+        rows: ledger
+          .query<
+            {
+              id: string
+              claim_id: string
+              session_id: string
+              state: string
+              schedule_version: number
+              scheduled_at: number
+              observed_at: number
+              timezone: string | null
+            },
+            [string]
+          >(
+            "SELECT id, claim_id, session_id, state, schedule_version, scheduled_at, observed_at, timezone FROM raya_routine_occurrence WHERE agent_id = ? ORDER BY scheduled_at",
+          )
+          .all(id),
+        cursor: ledger
+          .query<
+            { schedule_version: number; through: number; time_updated: number },
+            [string]
+          >("SELECT schedule_version, through, time_updated FROM raya_routine_cursor WHERE agent_id = ?")
+          .all(id),
+      }
+    } finally {
+      ledger.close()
+    }
+  }
   try {
     host = await backend(app, root, env, hosts)
     trace = await events(host, password, root)
-    const worker = await create(`Waiting ${mode} recovery`, ["question"])
-    await send(worker.id, `${mode}_original`, "RECOVERY_ORIGINAL")
+    const worker = await create(`Waiting ${mode} recovery`, scheduled ? ["question", "read"] : ["question"])
+    if (!scheduled) await send(worker.id, `${mode}_original`, "RECOVERY_ORIGINAL")
     type Question = { id: string; sessionID: string; tool?: { callID: string } }
     let pending: Question | undefined
     await wait(
@@ -506,11 +593,39 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
         )
       },
       "The real question did not park its original worker run",
-      60_000,
+      scheduled ? 90_000 : 60_000,
     )
     const original = (await runs(worker.id))[0]
     assert.ok(original && pending)
     assert.equal(pending.tool?.callID, "call_installed_question")
+    const anchor = scheduled ? occurrence(worker.id) : undefined
+    if (anchor) {
+      assert.equal(anchor.rows.length, 1)
+      assert.equal(anchor.rows[0].state, "linked")
+      assert.equal(anchor.rows[0].claim_id, original.id)
+      assert.equal(anchor.rows[0].session_id, original.sessionID)
+      assert.equal(anchor.cursor.length, 1)
+      const session = (await call(host, password, root, "GET", `/session/${original.sessionID}`)) as {
+        metadata?: {
+          rayaRoutine?: {
+            version?: number
+            runID?: string
+            trigger?: { kind?: string; id?: string; scheduledAt?: number; observedAt?: number }
+          }
+        }
+      }
+      const identity = session.metadata?.rayaRoutine
+      assert.ok(identity)
+      assert.equal(identity.version, 2)
+      assert.equal(identity.runID, original.id)
+      assert.ok(identity.trigger)
+      assert.equal(identity.trigger.kind, "timer")
+      assert.equal(identity.trigger.id, anchor.rows[0].id)
+      assert.equal(identity.trigger.scheduledAt, anchor.rows[0].scheduled_at)
+      assert.equal(identity.trigger.observedAt, anchor.rows[0].observed_at)
+      assert.equal((await saved(original.sessionID)).completion, undefined)
+      stages.push({ stage: "scheduled-original", occurrence: anchor })
+    }
     await send(worker.id, `${mode}_followup`, "RECOVERY_FOLLOWUP")
     const continued = await runs(worker.id)
     assert.equal(continued.length, 1)
@@ -556,6 +671,7 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
       throw err
     }
     const blocked = await saved(original.sessionID)
+    if (scheduled) assert.equal(blocked.completion, undefined)
     const marker = blocked.replyRecovery
     const dispatch = blocked.dispatch
     assert.ok(marker && dispatch)
@@ -622,16 +738,21 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
       receipts: before,
       model: fake.receipt(),
     })
-    assert.equal(before.length, 2)
-    assert.deepEqual(
-      before.map((row) => row.source),
-      [`${mode}_original`, `${mode}_followup`],
-    )
-    assert.equal(before[0].session_id, original.sessionID)
-    assert.notEqual(before[0].delivered_at, null)
-    assert.equal(before[1].session_id, original.sessionID)
-    assert.equal(before[1].delivery_id, null)
-    assert.equal(before[1].delivered_at, null)
+    assert.equal(before.length, scheduled ? 1 : 2)
+    if (!scheduled)
+      assert.deepEqual(
+        before.map((row) => row.source),
+        [`${mode}_original`, `${mode}_followup`],
+      )
+    if (!scheduled) {
+      assert.equal(before[0].session_id, original.sessionID)
+      assert.notEqual(before[0].delivered_at, null)
+    }
+    const intake = before[scheduled ? 0 : 1]
+    assert.equal(intake.source, `${mode}_followup`)
+    assert.equal(intake.session_id, original.sessionID)
+    assert.equal(intake.delivery_id, null)
+    assert.equal(intake.delivered_at, null)
     const count = fake.count()
     await send(worker.id, `${mode}_followup`, "RECOVERY_FOLLOWUP")
     await Bun.sleep(1_000)
@@ -645,6 +766,7 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
     assert.equal(fake.count(), count)
     assert.deepEqual(await saved(original.sessionID), blocked)
     assert.deepEqual(receipts(worker.id), before)
+    if (anchor) assert.deepEqual(occurrence(worker.id), anchor)
     await trace.stop()
     trace = undefined
     const leasePath =
@@ -789,7 +911,13 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
         async () => {
           const rows = await runs(worker.id)
           const goal = await saved(original.sessionID)
-          return rows.length === 1 && rows[0].status === "complete" && goal.reply?.body === "RECOVERY_FOLLOWUP_ACK"
+          return (
+            rows.length === 1 &&
+            rows[0].status === "complete" &&
+            (scheduled
+              ? goal.status === "complete" && !!goal.audit?.verifiedAt
+              : goal.reply?.body === "RECOVERY_FOLLOWUP_ACK")
+          )
         },
         "The persisted review did not authorize one fresh dispatch after restart",
         60_000,
@@ -857,6 +985,7 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
         `PATCH /session/${original.sessionID}/goal: ${response.status} ${JSON.stringify(value).slice(0, 512)}`,
       )
     const resumed = value as Goal
+    if (scheduled) assert.equal(resumed.completion, undefined)
     assert.equal(resumed.status, lost ? "complete" : "active")
     assert.ok(
       typeof resumed.replyRecovery?.reviewedAt === "number" && Number.isFinite(resumed.replyRecovery.reviewedAt),
@@ -868,7 +997,13 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
       async () => {
         const rows = await runs(worker.id)
         const goal = await saved(original.sessionID)
-        return rows.length === 1 && rows[0].status === "complete" && goal.reply?.body === "RECOVERY_FOLLOWUP_ACK"
+        return (
+          rows.length === 1 &&
+          rows[0].status === "complete" &&
+          (scheduled
+            ? goal.status === "complete" && !!goal.audit?.verifiedAt
+            : goal.reply?.body === "RECOVERY_FOLLOWUP_ACK")
+        )
       },
       "Explicit recovery did not deliver the same-session follow-up",
       60_000,
@@ -878,11 +1013,52 @@ async function scenario(mode: "error" | "interrupted", lost = false) {
     assert.equal((await runs(worker.id))[0].sessionID, original.sessionID)
     assert.equal(fake.receipt().followups, 1)
     const delivered = receipts(worker.id)
-    assert.equal(delivered.length, 2)
-    assert.equal(delivered[1].session_id, original.sessionID)
-    assert.notEqual(delivered[1].delivery_id, null)
-    assert.notEqual(delivered[1].delivered_at, null)
-    assert.equal(delivered[1].delivery_id, final.dispatch?.messageID)
+    assert.equal(delivered.length, scheduled ? 1 : 2)
+    const delivery = delivered[scheduled ? 0 : 1]
+    assert.equal(delivery.session_id, original.sessionID)
+    assert.notEqual(delivery.delivery_id, null)
+    assert.notEqual(delivery.delivered_at, null)
+    assert.equal(delivery.delivery_id, final.dispatch?.messageID)
+    if (anchor) {
+      assert.equal(final.completion, undefined)
+      assert.equal(final.reply, undefined)
+      assert.ok(
+        final.audit?.requirements?.some(
+          (item) => item.passed && item.evidence.some((proof) => proof.callID === "call_scheduled_read"),
+        ),
+      )
+      assert.equal(fake.receipt().reads, 1)
+      assert.equal(fake.receipt().audits, 1)
+      assert.equal(fake.receipt().proof, true)
+      stages.push({ stage: "scheduled-goal-complete", goal: final, occurrence: occurrence(worker.id) })
+      await wait(
+        () => occurrence(worker.id).rows[0]?.state === "complete",
+        "Verified scheduled recovery did not settle its exact occurrence",
+        20_000,
+      )
+      const settled = occurrence(worker.id)
+      assert.deepEqual(settled.cursor, anchor.cursor)
+      assert.deepEqual(
+        settled.rows,
+        anchor.rows.map((row) => ({ ...row, state: "complete" })),
+      )
+      const count = fake.count()
+      await request(host, password, root, "PATCH", `/session/${original.sessionID}/goal`, {
+        status: "active",
+        expectedIntent: blocked.intent,
+      }).then(async (reply) => assert.equal(reply.status, 200))
+      await send(worker.id, `${mode}_followup`, "RECOVERY_FOLLOWUP")
+      await stop(host)
+      host = await backend(app, root, env, hosts)
+      await call(host, password, root, "GET", "/kilocode/agent")
+      await wait(() => host?.markers.revival === true, "Completed scheduled recovery did not finish revival", 45_000)
+      await Bun.sleep(1_000)
+      assert.equal(fake.count(), count)
+      assert.deepEqual(occurrence(worker.id), settled)
+      assert.deepEqual(receipts(worker.id), delivered)
+      assert.deepEqual(await saved(original.sessionID), final)
+      stages.push({ stage: "scheduled-settled", occurrence: settled })
+    }
     if (lost) {
       assert.notEqual(final.dispatch?.id, marker.dispatchID)
       assert.deepEqual(resumed.dispatch, final.dispatch)
@@ -959,4 +1135,10 @@ test(
   "actual runtime recovers one lost review response without replaying the old WAIT turn",
   () => scenario("error", true),
   180_000,
+)
+
+test(
+  "actual runtime reviews a genuine scheduled once WAIT failure without replacing its occurrence",
+  () => scenario("error", false, true),
+  300_000,
 )

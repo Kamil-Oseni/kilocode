@@ -442,7 +442,6 @@ function uncertain(input: {
     if (
       !goal ||
       goal.status !== "active" ||
-      goal.completion !== "reply" ||
       !dispatch?.messageID ||
       dispatch.phase === "queued" ||
       dispatch.intent === (goal.intent ?? "unset")
@@ -463,6 +462,7 @@ function uncertain(input: {
       Effect.orElseSucceed(() => undefined),
     )
     if (!identity) return false
+    if (goal.completion !== "reply" && (identity.version !== 2 || identity.trigger.kind !== "timer")) return false
     const pending = yield* RayaTaskInbox.make(input.database).stranded(identity.agentID)
     if (pending?.sessionID !== input.sessionID) return false
     const owner = { id: identity.runID, agentID: identity.agentID, sessionID: input.sessionID }

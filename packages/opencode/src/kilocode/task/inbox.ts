@@ -630,6 +630,29 @@ export namespace RayaTaskInbox {
         .run()
         .pipe(Effect.orDie)
     })
+    const acknowledged = Effect.fn("RayaTaskInbox.acknowledged")(function* (
+      agent: string,
+      source: string,
+      session: SessionID,
+      message: string,
+    ) {
+      const row = yield* db
+        .select({ at: Message.delivered_at })
+        .from(Message)
+        .where(
+          and(
+            eq(Message.agent_id, agent),
+            eq(Message.source, source),
+            eq(Message.kind, "user"),
+            eq(Message.session_id, session),
+            eq(Message.delivery_id, message),
+            isNotNull(Message.delivered_at),
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
+      return !!row
+    })
     const content = Effect.fn("RayaTaskInbox.content")(function* (agentID: string, id: string) {
       const row = yield* db
         .select()
@@ -981,6 +1004,7 @@ export namespace RayaTaskInbox {
       attach,
       delivery,
       delivered,
+      acknowledged,
       content,
       pending,
       stranded,

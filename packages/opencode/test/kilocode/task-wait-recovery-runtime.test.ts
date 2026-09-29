@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { createHash, randomBytes } from "node:crypto"
-import { createReadStream } from "node:fs"
+import { createReadStream, watch } from "node:fs"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve, sep } from "node:path"
@@ -420,7 +420,7 @@ async function stop(host: Host) {
   assert.ok(!host.failed && !host.diagnostic.failed, "An owned backend output stream failed")
 }
 
-async function scenario(mode: "error" | "interrupted") {
+async function scenario(mode: "error" | "interrupted", lost = false) {
   const timer = setTimeout(() => lifetime.abort(new Error("Actual runtime acceptance deadline elapsed")), 150_000)
   const app = await installed()
   const temp = await mkdtemp(join(tmpdir(), `raya-wait-${mode}-`))
@@ -437,7 +437,7 @@ async function scenario(mode: "error" | "interrupted") {
     process.env.RAYA_WAIT_RECOVERY_REPORT ??
       join(
         import.meta.dir,
-        `../../../../.tmp/source-routine-wait-${mode === "error" ? "error400" : mode}-recovery.json`,
+        `../../../../.tmp/source-routine-wait-${lost ? "lost-review" : mode === "error" ? "error400" : mode}-recovery.json`,
       ),
   )
   const storage = join(home, ".local", "share", "kilo", "storage")
@@ -647,13 +647,163 @@ async function scenario(mode: "error" | "interrupted") {
     assert.deepEqual(receipts(worker.id), before)
     await trace.stop()
     trace = undefined
+    const leasePath =
+      join(storage, "raya", "agent-executions", createHash("sha256").update(original.id).digest("hex")) + ".json"
+    const reviewPath =
+      join(
+        storage,
+        "raya",
+        "agent-execution-reviews",
+        createHash("sha256").update(original.id).digest("hex"),
+        marker.execution,
+      ) + ".json"
+    if (lost) {
+      const seen = Promise.withResolvers<Goal>()
+      const state = { reading: false, pending: false, closed: false }
+      const inspect = () => {
+        if (state.closed) return
+        if (state.reading) {
+          state.pending = true
+          return
+        }
+        state.reading = true
+        void saved(original.sessionID)
+          .then((goal) => {
+            if (
+              goal.replyRecovery?.reviewedAt === undefined ||
+              goal.replyRecovery.reviewIntent === undefined ||
+              state.closed
+            )
+              return
+            state.closed = true
+            host!.child.kill("SIGKILL")
+            seen.resolve(goal)
+            watcher.close()
+          })
+          .catch((err) => {
+            const code = err && typeof err === "object" && "code" in err ? String(err.code) : "unknown"
+            if (code === "ENOENT") {
+              state.pending = true
+              return
+            }
+            state.closed = true
+            watcher.close()
+            seen.reject(new Error(`Goal review watcher read failed (${code})`))
+          })
+          .finally(() => {
+            state.reading = false
+            if (!state.closed && state.pending) {
+              state.pending = false
+              inspect()
+            }
+          })
+      }
+      const watcher = watch(join(storage, "raya", "goal"), { persistent: false }, (_event, name) => {
+        if (name?.toString() !== `${original.sessionID}.json`) return
+        inspect()
+      })
+      watcher.on("error", () => {
+        if (state.closed) return
+        state.closed = true
+        watcher.close()
+        seen.reject(new Error("Goal review watcher failed"))
+      })
+      const attempt = request(host, password, root, "PATCH", `/session/${original.sessionID}/goal`, {
+        status: "active",
+        expectedIntent: blocked.intent,
+      }).then(
+        async (response) => ({ status: response.status, response: await response.json() }),
+        (err) => ({ error: err instanceof Error ? err.name : "unknown" }),
+      )
+      const reviewed = await bounded(
+        seen.promise,
+        10_000,
+        "The persisted review fault boundary was not observed",
+      ).finally(() => {
+        if (!state.closed) {
+          state.closed = true
+          watcher.close()
+        }
+      })
+      await stop(host)
+      const first = await bounded(attempt, 10_000, "The killed review request did not settle")
+      assert.notEqual("status" in first ? first.status : undefined, 200, "The first review response was not lost")
+      assert.equal(reviewed.status, "active")
+      assert.equal(reviewed.dispatch?.id, marker.dispatchID)
+      assert.equal(reviewed.dispatch?.intent, marker.oldIntent)
+      assert.equal(reviewed.dispatch?.phase, "finished")
+      assert.ok(reviewed.replyRecovery?.reviewedAt)
+      assert.ok(reviewed.replyRecovery.reviewIntent)
+      assert.equal(reviewed.replyRecovery.execution, marker.execution)
+      const immutable = JSON.parse(await readFile(reviewPath, "utf8")) as {
+        version?: number
+        actor?: string
+        record?: { token?: string; runID?: string; agentID?: string; sessionID?: string }
+      }
+      assert.equal(immutable.version, 1)
+      assert.equal(immutable.actor, "user")
+      assert.equal(immutable.record?.runID, original.id)
+      assert.equal(immutable.record?.agentID, original.agentID)
+      assert.equal(immutable.record?.sessionID, original.sessionID)
+      assert.equal(
+        typeof immutable.record?.token === "string"
+          ? createHash("sha256").update(immutable.record.token).digest("hex")
+          : undefined,
+        marker.execution,
+      )
+      assert.equal(await Bun.file(leasePath).exists(), false, "A new execution lease means the fault missed resume")
+      const history = JSON.parse(
+        await readFile(join(storage, "raya", "agent-runs", worker.id) + ".json", "utf8"),
+      ) as Run[]
+      assert.deepEqual(
+        history.find((run) => run.id === original.id),
+        current[0],
+      )
+      assert.equal(fake.count(), count)
+      assert.deepEqual(receipts(worker.id), before)
+      stages.push({
+        stage: "review-response-lost",
+        mode,
+        first,
+        goal: reviewed,
+        run: history.find((run) => run.id === original.id),
+        review: {
+          version: immutable.version,
+          actor: immutable.actor,
+          run: immutable.record?.runID === original.id,
+          agent: immutable.record?.agentID === original.agentID,
+          session: immutable.record?.sessionID === original.sessionID,
+          digest:
+            typeof immutable.record?.token === "string" &&
+            createHash("sha256").update(immutable.record.token).digest("hex") === marker.execution,
+        },
+        execution: false,
+        receipts: before,
+        model: fake.receipt(),
+        owner: host.termination,
+      })
+      host = await backend(app, root, env, hosts)
+      await call(host, password, root, "GET", "/kilocode/agent")
+      await wait(() => host?.markers.revival === true, "Restart did not finish lost-review revival", 45_000)
+      await wait(
+        async () => {
+          const rows = await runs(worker.id)
+          const goal = await saved(original.sessionID)
+          return rows.length === 1 && rows[0].status === "complete" && goal.reply?.body === "RECOVERY_FOLLOWUP_ACK"
+        },
+        "The persisted review did not authorize one fresh dispatch after restart",
+        60_000,
+      )
+      assert.equal(fake.count(), count + 1)
+      assert.equal(fake.receipt().failures, 1)
+      assert.equal(fake.receipt().followups, 1)
+    }
+    const acknowledged = fake.count()
     const response = await request(host, password, root, "PATCH", `/session/${original.sessionID}/goal`, {
       status: "active",
       expectedIntent: blocked.intent,
     })
     const value = await response.json()
-    const leasePath =
-      join(storage, "raya", "agent-executions", createHash("sha256").update(original.id).digest("hex")) + ".json"
     const lease = (await Bun.file(leasePath).exists())
       ? (JSON.parse(await readFile(leasePath, "utf8")) as {
           token?: string
@@ -664,14 +814,6 @@ async function scenario(mode: "error" | "interrupted") {
           owner?: { pid?: number; birth?: string }
         })
       : undefined
-    const reviewPath =
-      join(
-        storage,
-        "raya",
-        "agent-execution-reviews",
-        createHash("sha256").update(original.id).digest("hex"),
-        marker.execution,
-      ) + ".json"
     const session = (await call(host, password, root, "GET", `/session/${original.sessionID}`)) as {
       metadata?: { rayaRoutine?: unknown }
     }
@@ -715,12 +857,13 @@ async function scenario(mode: "error" | "interrupted") {
         `PATCH /session/${original.sessionID}/goal: ${response.status} ${JSON.stringify(value).slice(0, 512)}`,
       )
     const resumed = value as Goal
-    assert.equal(resumed.status, "active")
+    assert.equal(resumed.status, lost ? "complete" : "active")
     assert.ok(
       typeof resumed.replyRecovery?.reviewedAt === "number" && Number.isFinite(resumed.replyRecovery.reviewedAt),
     )
     assert.equal(resumed.replyRecovery?.reviewIntent, resumed.intent)
     assert.notEqual(resumed.intent, blocked.intent)
+    if (lost) assert.equal(fake.count(), acknowledged)
     await wait(
       async () => {
         const rows = await runs(worker.id)
@@ -740,6 +883,18 @@ async function scenario(mode: "error" | "interrupted") {
     assert.notEqual(delivered[1].delivery_id, null)
     assert.notEqual(delivered[1].delivered_at, null)
     assert.equal(delivered[1].delivery_id, final.dispatch?.messageID)
+    if (lost) {
+      assert.notEqual(final.dispatch?.id, marker.dispatchID)
+      assert.deepEqual(resumed.dispatch, final.dispatch)
+      assert.deepEqual(resumed.reply, final.reply)
+      assert.deepEqual(resumed.accounted, final.accounted)
+      assert.equal(final.replyRecovery?.reviewedAt, resumed.replyRecovery?.reviewedAt)
+      assert.equal(final.replyRecovery?.reviewIntent, resumed.replyRecovery?.reviewIntent)
+      assert.equal(final.replyRecovery?.execution, marker.execution)
+      await Bun.sleep(1_000)
+      assert.equal(fake.count(), acknowledged)
+      assert.deepEqual(receipts(worker.id), delivered)
+    }
     stages.push({ stage: "resolved", mode, goal: final, receipts: delivered, model: fake.receipt() })
     console.log(`Actual ${mode} WAIT recovery acceptance passed: ${app.version}`)
   } catch (err) {
@@ -798,5 +953,10 @@ test(
 test(
   "actual runtime retains an interrupted old-intent WAIT turn until explicit recovery",
   () => scenario("interrupted"),
+  180_000,
+)
+test(
+  "actual runtime recovers one lost review response without replaying the old WAIT turn",
+  () => scenario("error", true),
   180_000,
 )

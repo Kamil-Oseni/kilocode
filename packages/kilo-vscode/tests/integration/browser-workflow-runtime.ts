@@ -519,6 +519,8 @@ async function main() {
       "CLI did not become ready",
     )
     observed.backend = true
+    if (installed && process.env.RAYA_BROWSER_RESOURCE === "1")
+      process.send?.({ version: 1, phase: "backend", pid: process.pid, backend: child.pid })
     console.log("Actual CLI ready")
     const clientFor = (url: string) =>
       createKiloClient({
@@ -784,6 +786,8 @@ async function main() {
       for (const state of states) state("disconnected")
       child.kill("SIGKILL")
       await bounded(exited, 15_000, "First installed backend did not exit")
+      if (process.env.RAYA_BROWSER_RESOURCE === "1")
+        process.send?.({ version: 1, phase: "backend_exited", pid: process.pid, backend: child.pid })
       await bounded(Promise.all(drains), 10_000, "First installed backend streams did not join")
       second = spawn(installed, ["serve", "--hostname", "127.0.0.1", "--port", "0"], {
         cwd: project,
@@ -817,6 +821,8 @@ async function main() {
       client = clientFor(url)
       sse = new AbortController()
       loss.restarted = true
+      if (process.env.RAYA_BROWSER_RESOURCE === "1")
+        process.send?.({ version: 1, phase: "restarted_backend", pid: process.pid, backend: second.pid })
       await connect()
       await bounded(
         (async () => {

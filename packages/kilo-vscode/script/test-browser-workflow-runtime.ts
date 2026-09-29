@@ -14,6 +14,8 @@ async function bounded<T>(promise: Promise<T>, ms: number, detail: string) {
 }
 const root = resolve(import.meta.dir, "..")
 const repo = resolve(root, "../..")
+if (process.env.RAYA_BROWSER_RESOURCE === "1")
+  assert.equal(typeof process.send, "function", "Resource gate needs parent IPC")
 const base = join(root, "tmp")
 await mkdir(base, { recursive: true })
 const dir = await mkdtemp(join(base, "browser-workflow-"))
@@ -37,6 +39,18 @@ const state: {
   absent?: boolean
   joined?: boolean
 } = { expired: false, fallback: false, bytes: 0, retired: false }
+function forward(value: unknown, runner: number, worker: number) {
+  if (process.env.RAYA_BROWSER_RESOURCE !== "1" || !state.owner) return
+  if (!value || typeof value !== "object" || !("phase" in value)) return
+  if (value.phase === "owner") {
+    process.send?.({ version: 1, phase: "worker", pid: runner, worker })
+    return
+  }
+  if (value.phase !== "backend" && value.phase !== "backend_exited" && value.phase !== "restarted_backend") return
+  if (!("backend" in value) || typeof value.backend !== "number" || !Number.isSafeInteger(value.backend)) return
+  if (value.backend < 1) return
+  process.send?.({ version: 1, phase: value.phase, pid: runner, worker, backend: value.backend })
+}
 const child = Bun.spawn(["node", build.outputs[0].path], {
   cwd: root,
   env: { ...process.env, RAYA_BROWSER_REPO: repo, RAYA_BROWSER_BUN: process.execPath },
@@ -66,6 +80,7 @@ const child = Bun.spawn(["node", build.outputs[0].path], {
       assert.ok(resolve(value.report).startsWith(resolve(repo, ".tmp") + sep))
       state.owner = { root: value.root, report: value.report }
     }
+    forward(value, process.pid, child.pid)
     if (
       value.phase === "retired" &&
       "joined" in value &&

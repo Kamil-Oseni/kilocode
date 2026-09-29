@@ -130,7 +130,7 @@ export type BrowserFrame = {
   url: string
 }
 
-// raya_change start - rate-limited agent control with explicit manual takeover
+// raya_change start - bounded agent control with explicit manual takeover
 export type BrowserState = {
   control: "agent" | "manual"
   busy: boolean
@@ -312,7 +312,6 @@ export class BrowserSession {
   private queue: Promise<void> = Promise.resolve()
   private queued = 0
   private tabFence = 0
-  private last = 0
   private revision = 0
   private running = 0
   private scale = 2 // raya_change - HiDPI capture factor; refined to the webview's devicePixelRatio on resize
@@ -1296,7 +1295,7 @@ export class BrowserSession {
     revision: number,
   ): Promise<BrowserResult> {
     if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
-    await this.pace(number)
+    this.update({ control: "agent", busy: true, attempts: number })
     const state = { dispatched: false }
     const dispatch = () => {
       if (revision !== this.revision) throw new TargetError("Browser action cancelled before dispatch.")
@@ -1600,13 +1599,6 @@ export class BrowserSession {
     } catch (error) {
       throw new TargetError(error instanceof Error ? error.message : String(error))
     }
-  }
-
-  private async pace(number: number): Promise<void> {
-    this.update({ control: "agent", busy: true, attempts: number })
-    const delay = Math.max(0, this.last + 350 - Date.now())
-    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
-    this.last = Date.now()
   }
 
   private handover(reason: string, attempts?: number, busy = false): void {

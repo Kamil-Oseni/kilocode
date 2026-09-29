@@ -507,7 +507,7 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
-  it("preserves the destination instead of replaying dispatched rate-limited navigation", async () => {
+  it("preserves the destination instead of replaying dispatched navigation", async () => {
     const fake = harness()
     const session = new BrowserSession("rate-profile", fake.launch)
     await session.ready()
@@ -519,6 +519,22 @@ describe("Raya browser session", () => {
 
     expect(fake.pages[0]!.gotoAttempts).toBe(1)
     expect(session.current()).toEqual({ control: "agent", busy: false })
+    await session.dispose()
+  })
+
+  it("runs a bounded sequence without a fixed delay between ready actions", async () => {
+    const fake = harness()
+    const session = new BrowserSession("sequence-profile", fake.launch)
+    await session.ready()
+
+    const start = performance.now()
+    for (const index of [1, 2, 3, 4, 5]) {
+      await session.execute({ operation: "navigate", url: `https://example.test/step-${index}` })
+    }
+
+    expect(fake.pages[0]!.gotoAttempts).toBe(5)
+    expect(fake.pages[0]!.current).toBe("https://example.test/step-5")
+    expect(performance.now() - start).toBeLessThan(1200)
     await session.dispose()
   })
 

@@ -981,7 +981,7 @@ async function main() {
             roundtrip: "tool issuance to next actual provider request, including actual SDK/SSE/host/backend transport",
             prompt: "whole genuine session prompt",
             dispatch:
-              "production BrowserSession host.execute including queue, pacing, grounding and native action; not isolated native dispatch",
+              "production BrowserSession host.execute including queue, grounding and native action; not isolated native dispatch",
           },
           effects,
           events,

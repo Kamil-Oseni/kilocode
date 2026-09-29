@@ -36,16 +36,32 @@ describe("reconnect transcript reconciliation", () => {
     expect(peak).toBe(RECONNECT_CONCURRENCY)
 
     while (gate.gates.length) gate.gates.shift()!()
-    while (started.length < RECONNECT_LIMIT) {
+    while (started.length < 60) {
       await Promise.resolve()
       while (gate.gates.length) gate.gates.shift()!()
     }
     while (gate.gates.length) gate.gates.shift()!()
     await work
 
-    expect(started).toHaveLength(RECONNECT_LIMIT)
-    expect(new Set(started).size).toBe(RECONNECT_LIMIT)
+    expect(started).toHaveLength(60)
+    expect(new Set(started).size).toBe(60)
     expect(peak).toBe(RECONNECT_CONCURRENCY)
+  })
+
+  it("recovers the forty-first tracked session after the first bounded batch", async () => {
+    const ids = Array.from({ length: RECONNECT_LIMIT + 1 }, (_, index) => `session-${index}`)
+    const seen: string[] = []
+
+    await reconcile({
+      ids,
+      valid: () => true,
+      load: async (id) => {
+        seen.push(id)
+      },
+    })
+
+    expect(seen).toHaveLength(RECONNECT_LIMIT + 1)
+    expect(seen.at(-1)).toBe(`session-${RECONNECT_LIMIT}`)
   })
 
   it("stops queued reads when a newer connection generation wins", async () => {

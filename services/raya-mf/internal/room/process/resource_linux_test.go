@@ -132,6 +132,8 @@ type retirement struct {
 	Seconds float64 `json:"seconds"`
 	Wait    bool    `json:"actualWait"`
 	Absent  bool    `json:"pidAbsent"`
+	Ready   float64 `json:"readySeconds"`
+	Active  float64 `json:"activeSeconds"`
 }
 
 func summarize(values []float64) spread {
@@ -237,6 +239,10 @@ func group() map[string]string {
 // not measure provider calls, devices, acoustic playback or the separate SFU's
 // resources, and reports measured drift without asserting an invented plateau.
 func TestProductionWorkerSustainedResources(t *testing.T) {
+	mode, err := strategy(os.Getenv("RAYA_TEST_RESOURCE_MODE"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	raw := os.Getenv("RAYA_TEST_RESOURCE_SECONDS")
 	if raw == "" {
 		t.Skip("requires explicit bounded resource observation duration")
@@ -249,7 +255,9 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 	if report != "" && !filepath.IsAbs(report) {
 		t.Fatal("optional resource report path must be absolute")
 	}
-	defer func() { t.Logf("resource_outcome {\"configuredSeconds\":%d,\"failed\":%t}", seconds, t.Failed()) }()
+	defer func() {
+		t.Logf("resource_outcome {\"configuredSeconds\":%d,\"mode\":%q,\"failed\":%t}", seconds, mode, t.Failed())
+	}()
 	path, url, key, secret := environment(t)
 	if len(slots) != 0 {
 		t.Fatal("resource scope already contains another owned transport")
@@ -395,11 +403,12 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := time.Now()
-	t.Logf("resource_start {\"configuredSeconds\":%d,\"binarySha256\":%q,\"parentPid\":%d,\"parentStartTicks\":%d}", seconds, hex.EncodeToString(hash[:]), os.Getpid(), parent)
+	t.Logf("resource_start {\"configuredSeconds\":%d,\"mode\":%q,\"binarySha256\":%q,\"parentPid\":%d,\"parentStartTicks\":%d}", seconds, mode, hex.EncodeToString(hash[:]), os.Getpid(), parent)
 	end := started.Add(time.Duration(seconds) * time.Second)
 	windows := make([]window, 0, seconds+120)
 	reaped := make([]retirement, 0, seconds/30+1)
 	var cycles, published uint64
+	active := 0.0
 	defer func() {
 		if !t.Failed() {
 			return
@@ -413,7 +422,9 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 			Windows    []window     `json:"rawWindows"`
 			Completed  bool         `json:"completed"`
 			Reaped     []retirement `json:"retirements"`
-		}{seconds, time.Since(started).Seconds(), hex.EncodeToString(hash[:]), "failed-partial-before-cleanup", len(slots), windows, false, reaped}
+			Mode       string       `json:"mode"`
+			Active     float64      `json:"completedActiveSeconds"`
+		}{seconds, time.Since(started).Seconds(), hex.EncodeToString(hash[:]), "failed-partial-before-cleanup", len(slots), windows, false, reaped, mode, active}
 		data, err := json.Marshal(partial)
 		if err != nil {
 			t.Error("partial resource report serialization failed", err)
@@ -465,6 +476,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 			t.Fatal("actual production child join failed", err)
 		}
 		proxy = joined.(*Proxy)
+		ready := time.Now()
 		t.Logf("resource_child_ready pid=%d at=%s startup=%s", proxy.PID(), time.Now().UTC().Format(time.RFC3339Nano), inspected.snapshot())
 		pid := proxy.PID()
 		start, err := identity(pid)
@@ -512,6 +524,9 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		minimum := time.Now().Add(10 * time.Second)
 		if until.Before(minimum) {
 			until = minimum
+		}
+		if mode == "continuous" {
+			until = ready.Add(time.Duration(seconds) * time.Second)
 		}
 		next := time.Now().Add(time.Second)
 		bootstrap := time.Now().Add(5 * time.Second)
@@ -575,6 +590,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 			t.Fatal("cycle lacked actual nonzero decoded microphone input or received output RTP")
 		}
 		record("retiring-admission", pid, start)
+		duration := time.Since(ready).Seconds()
 		_ = proxy.Close()
 		select {
 		case <-proxy.Done():
@@ -585,7 +601,8 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
 			t.Fatal("child leaked after retirement", err)
 		}
-		reaped = append(reaped, retirement{PID: pid, Start: start, Seconds: time.Since(started).Seconds(), Wait: true, Absent: true})
+		active += duration
+		reaped = append(reaped, retirement{PID: pid, Start: start, Seconds: time.Since(started).Seconds(), Wait: true, Absent: true, Ready: ready.Sub(started).Seconds(), Active: duration})
 		select {
 		case <-inputend:
 		case <-time.After(time.Second):
@@ -593,9 +610,12 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		}
 		proxy = nil
 		record("retired", 0, 0)
+		if mode == "continuous" {
+			break
+		}
 	}
-	if packets.Load() == 0 || controls.Load() == 0 || inputs.Load() == 0 || cycles < 2 {
-		t.Fatal("resource journey did not exercise repeated full-duplex transport and control")
+	if packets.Load() == 0 || controls.Load() == 0 || inputs.Load() == 0 || (mode == "churn" && cycles < 2) || (mode == "continuous" && cycles != 1) {
+		t.Fatal("resource journey did not exercise the expected full-duplex transport and lifecycle mode")
 	}
 	select {
 	case err := <-fault:
@@ -654,7 +674,9 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		Windows       []window          `json:"rawWindows"`
 		Completed     bool              `json:"completed"`
 		Reaped        []retirement      `json:"retirements"`
-	}{1, hex.EncodeToString(hash[:]), runtime.Version(), runtime.GOOS, runtime.GOARCH, seconds, time.Since(started).Seconds(), 60, "owned PSS=Go test parent (including synthetic SDK client)+all active/retiring production children; separate cgroup includes other container processes; SFU excluded from owned sum; no provider/device/acoustic measurement or plateau assertion", cycles, published, inputs.Load(), packets.Load(), controls.Load(), distributions, summarize(initial), summarize(last), windows, true, reaped}
+		Mode          string            `json:"mode"`
+		Active        float64           `json:"activeSeconds"`
+	}{1, hex.EncodeToString(hash[:]), runtime.Version(), runtime.GOOS, runtime.GOARCH, seconds, time.Since(started).Seconds(), 60, "owned PSS=Go test parent (including synthetic SDK client)+all active/retiring production children; separate cgroup includes other container processes; SFU excluded from owned sum; no provider/device/acoustic measurement or plateau assertion", cycles, published, inputs.Load(), packets.Load(), controls.Load(), distributions, summarize(initial), summarize(last), windows, true, reaped, mode, active}
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		t.Fatal(err)

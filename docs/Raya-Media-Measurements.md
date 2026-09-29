@@ -1,5 +1,13 @@
 # Raya media transport measurements
 
+## ChatGPT 2026-09-28 23:55 EDT - separate continuous-worker resource acceptance
+
+A read-only acceptance audit found that the existing prolonged test replaces every native child after thirty seconds. Its active run `36518672345` / job `109246562775` on `b98257e36a` measures a long-lived parent with repeated short-lived children, not one thirty-minute child. It remains live in the sustained-resource step; preserve this exact run to terminal completion.
+
+Added explicit `churn` and `continuous` resource modes, with default push diagnostics retaining churn and manual dispatch offering continuous. Continuous keeps the same native child for the configured interval starting at confirmed readiness, then requires actual Wait and PID absence. Additive version-1 reports include mode, per-child ready/active seconds and aggregate active seconds. The workflow matches requested mode/duration, native latency/resource binary identity, stable parent and exact observed/retired child identities, sample ordering, slot/child counts, PSS sums and genuine retirement receipts. Mode-specific checks require exactly one full-duration child for continuous or repeated distinct children for churn. Invalid mode spelling/whitespace is refused before expensive setup.
+
+The complete local CGO-zero suite passes, including the actual portable mode parser's valid/invalid cases; Go formatting, YAML formatting, workflow/upstream annotation checks and both Python verifier syntax checks pass. These local checks do not compile or execute the Linux CGO lifecycle changes. No continuous-worker native acceptance result exists yet. Stage/commit this slice locally, but defer its push until the existing churn benchmark is terminal: the workflow's cancel-in-progress policy would cancel the live experiment on a service/workflow push. Then push, inspect the fresh diagnostic gate, dispatch `resource_seconds=1800` with `resource_mode=continuous`, and retain its terminal evidence. Neither mode proves prolonged eight-worker load, expected 50 Hz delivery, physical device/provider playback, or a universal memory plateau. Full requirements remain In progress; desktop stopped and installed snapshot unchanged.
+
 ChatGPT, 2026-09-28 23:48 EDT. The fresh complete native gate and 60-second diagnostic passed. The 30-minute resource benchmark is active; prolonged resource acceptance remains unproven.
 
 ## ChatGPT 2026-09-28 23:48 EDT - native diagnostic gate passed; prolonged run active
@@ -34,7 +42,7 @@ The `Raya media conformance` workflow builds the production CGO executable from 
 The normal push gate runs a 60-second resource diagnostic. For prolonged measurement, dispatch the same workflow on the reviewed commit with `resource_seconds=1800`. The dedicated test container has a 2 GiB memory cap and 256-process/thread cap. These are declared test-environment budgets, not configured production service limits. The separate SFU is outside that container and outside the measured parent/child aggregate.
 
 ```powershell
-gh workflow run raya-media.yml --repo Kamil-Oseni/kilocode --ref main -f resource_seconds=1800
+gh workflow run raya-media.yml --repo Kamil-Oseni/kilocode --ref main -f resource_seconds=1800 -f resource_mode=continuous
 ```
 
 Do not start a second run merely because observation times out. Inspect the original run's authoritative status. The workflow retains measurement logs for 30 days, including failures; save evidence needed for longer-term acceptance separately. A skipped, missing, failed or cancelled test is not a passing result.

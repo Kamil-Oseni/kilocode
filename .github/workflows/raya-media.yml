@@ -18,6 +18,11 @@ on:
         type: choice
         options: ["60", "1800"]
         default: "60"
+      resource_mode:
+        description: "Keep one native child alive, or repeatedly replace children"
+        type: choice
+        options: ["continuous", "churn"]
+        default: "continuous"
 
 permissions:
   contents: read
@@ -72,9 +77,11 @@ jobs:
       - name: Measure sustained production-child resources
         env:
           DURATION: ${{ inputs.resource_seconds || '60' }}
+          MODE: ${{ inputs.resource_mode || 'churn' }}
         run: |
           set -o pipefail
           test "$DURATION" = 60 || test "$DURATION" = 1800
+          test "$MODE" = continuous || test "$MODE" = churn
           mkdir -p evidence
           docker image inspect --format '{{.Id}}' raya-mf-check > evidence/build-image.txt
           docker run --rm --network host --memory 2g --pids-limit 256 \
@@ -85,22 +92,53 @@ jobs:
             --env RAYA_TEST_LIVEKIT_SECRET=secret \
             --env RAYA_TEST_MEDIA_BINARY=/out/raya-mf \
             --env RAYA_TEST_RESOURCE_SECONDS="$DURATION" \
+            --env RAYA_TEST_RESOURCE_MODE="$MODE" \
             --env RAYA_TEST_RESOURCE_REPORT=/evidence/resources.json \
             raya-mf-check go test -p 1 -count=1 -timeout 35m -v \
               -run '^TestProductionWorkerSustainedResources$' ./internal/room/process \
             | tee evidence/sustained-resources.log
           grep -q 'resource_measurement' evidence/sustained-resources.log
-          python3 - "$DURATION" <<'PY'
+          python3 - "$DURATION" "$MODE" <<'PY'
           import json, sys
           with open('evidence/resources.json', encoding='utf-8') as source:
               result = json.load(source)
+          with open('evidence/native-conformance.log', encoding='utf-8') as source:
+              latency = [json.loads(line.split('RAYA_MEDIA_LATENCY ', 1)[1]) for line in source if 'RAYA_MEDIA_LATENCY {' in line]
+          assert len(latency) == 1 and latency[0]['status'] == 'complete'
+          assert result['binarySha256'] == latency[0]['binarySHA256']
           assert result['version'] == 1
           assert result['completed'] is True
           assert result['configuredSeconds'] == int(sys.argv[1])
           assert result['elapsedSeconds'] >= int(sys.argv[1])
           assert len(result['rawWindows']) >= int(sys.argv[1]) // 2
-          assert result['cycles'] >= 2
+          assert result['mode'] == sys.argv[2]
+          assert result['cycles'] == 1 if sys.argv[2] == 'continuous' else result['cycles'] >= 2
           assert result['decodedInputFrames'] > 0 and result['receivedOpusPackets'] > 0
+          assert result['receivedControl'] > 0
+          retired = result['retirements']
+          assert len(retired) == result['cycles']
+          assert all(child['actualWait'] is True and child['pidAbsent'] is True for child in retired)
+          assert all(child['activeSeconds'] > 0 and child['readySeconds'] >= 0 for child in retired)
+          assert result['activeSeconds'] == sum(child['activeSeconds'] for child in retired)
+          identities = {(child['pid'], child['startTicks']) for child in retired}
+          assert len(identities) == result['cycles']
+          observed = {(child['pid'], child['startTicks']) for window in result['rawWindows'] for child in window['children'] or []}
+          assert observed == identities
+          windows = result['rawWindows']
+          assert all(left['seconds'] <= right['seconds'] for left, right in zip(windows, windows[1:]))
+          assert len({(window['parent']['pid'], window['parent']['startTicks']) for window in windows}) == 1
+          for window in windows:
+              children = window['children'] or []
+              assert window['slots'] == len(children)
+              assert window['ownedPssKiB'] == window['parent']['pssKiB'] + sum(child['pssKiB'] for child in children)
+          assert windows[-1]['phase'] == 'retired' and not windows[-1]['children']
+          if sys.argv[2] == 'continuous':
+              active = [window for window in result['rawWindows'] if window['phase'] == 'active']
+              assert len(active) >= int(sys.argv[1]) // 2
+              assert all(len(window['children']) == 1 and window['slots'] == 1 for window in active)
+              assert {(child['pid'], child['startTicks']) for window in active for child in window['children']} == identities
+              assert retired[0]['seconds'] >= int(sys.argv[1])
+              assert retired[0]['activeSeconds'] >= int(sys.argv[1])
           assert all(window['slots'] <= 8 for window in result['rawWindows'])
           assert result['rawWindows'][-1]['slots'] == 0
           for window in result['rawWindows']:

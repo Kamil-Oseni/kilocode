@@ -148,7 +148,6 @@ func (s *session) project(ctx context.Context, item engine.ContextItem, original
 		s.reserved++
 	}
 	s.commands[item.ID] = entry
-	s.order = append(s.order, item.ID)
 	end := time.Now().Add(startup)
 	if !historical && item.TTLMS > 0 && item.Created.Add(time.Duration(item.TTLMS)*time.Millisecond).Before(end) {
 		end = item.Created.Add(time.Duration(item.TTLMS) * time.Millisecond)
@@ -181,6 +180,9 @@ func (s *session) project(ctx context.Context, item engine.ContextItem, original
 		defer s.mu.Unlock()
 		valid := !entry.finished && time.Now().Before(end)
 		if valid {
+			// The owned writer gate establishes submitted prefix order. Ledger
+			// admission may occur in a different concurrent scheduling order.
+			s.order = append(s.order, item.ID)
 			entry.attempted = true
 		}
 		return valid
@@ -191,7 +193,8 @@ func (s *session) project(ctx context.Context, item engine.ContextItem, original
 	s.mu.Lock()
 	attempted := entry.attempted
 	s.mu.Unlock()
-	if err != nil && generic && ((reserve && attempted) || record.Expired != "") {
+	correction := item.Supersedes != "" || len(item.Replaces) != 0
+	if err != nil && generic && (((reserve || correction) && attempted) || record.Expired != "") {
 		s.fail("GPT-Live context lifecycle acceptance is unconfirmed")
 	}
 	return err
@@ -282,11 +285,15 @@ func (s *session) Snapshot(context.Context) (engine.Snapshot, error) {
 	defer s.mu.Unlock()
 	items := make([]engine.ContextItem, 0, len(s.commands))
 	context := make([]engine.ContextRecord, 0, len(s.commands))
-	for _, id := range s.order {
-		entry := s.commands[id]
+	// Refusals before writer admission have no order entry, but must still
+	// prevent an incomplete ledger from becoming a replayable snapshot.
+	for _, entry := range s.commands {
 		if !entry.finished || entry.err != nil {
 			return engine.Snapshot{}, errors.New("context snapshot has unresolved append outcomes")
 		}
+	}
+	for _, id := range s.order {
+		entry := s.commands[id]
 		if entry.finished && entry.err == nil && entry.delegation == "" {
 			items = append(items, clone(entry.item))
 			record := engine.ContextRecord{Item: clone(entry.item), Content: entry.item.Text}

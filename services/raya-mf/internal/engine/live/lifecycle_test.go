@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -586,5 +587,133 @@ func TestLiveLifecycleExpiryDuringHeldPrefixNeverResumesEarly(t *testing.T) {
 	observed(t, target, "context.expired")
 	if target.(*session).paused.Load() || *target.(*session).source.Load() == prior {
 		t.Fatal("exact due expiry ACK did not release local fence")
+	}
+}
+
+func TestLiveLifecycleAttemptedNonTTLReplacementUnknownFences(t *testing.T) {
+	for _, mode := range []string{"lost_plural", "refused_plural", "lost_singular", "refused_singular"} {
+		t.Run(mode, func(t *testing.T) {
+			f := serve(t, func(value, answer map[string]any) map[string]any {
+				content, _ := value["content"].(string)
+				if strings.Contains(content, " replaces ") {
+					if strings.HasPrefix(mode, "lost_") {
+						return nil
+					}
+					return map[string]any{"type": "error", "error": map[string]any{"client_event_id": value["event_id"]}}
+				}
+				return answer
+			})
+			value, _ := opened(t, f)
+			written(t, f, "session.start")
+			if err := value.Inject(context.Background(), engine.ContextItem{ID: "old_value", Kind: "fact", Text: "Old value"}); err != nil {
+				t.Fatal(err)
+			}
+			written(t, f, "session.thinking.append")
+			observed(t, value, "context.injected")
+			item := engine.ContextItem{ID: "new_value", Kind: "fact", Text: "Correct value", Replaces: []string{"old_value"}}
+			if strings.HasSuffix(mode, "_singular") {
+				item.Replaces = nil
+				item.Supersedes = "old_value"
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+			defer cancel()
+			if value.Inject(ctx, item) == nil {
+				t.Fatal("unknown replacement became confirmed")
+			}
+			written(t, f, "session.thinking.append")
+			written(t, f, "session.close")
+			if value.PushAudio(context.Background(), make([]byte, 960)) == nil {
+				t.Fatal("unconfirmed non-TTL replacement permitted fresh input")
+			}
+			if err := value.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if value.Inject(context.Background(), item) == nil {
+				t.Fatal("uncertain replacement replay became accepted")
+			}
+			if _, err := value.Snapshot(context.Background()); err == nil {
+				t.Fatal("uncertain replacement became a replayable snapshot")
+			}
+			select {
+			case extra := <-f.writes:
+				t.Fatal("replacement was retried", extra)
+			case <-time.After(20 * time.Millisecond):
+			}
+		})
+	}
+}
+
+func TestLiveLifecycleSnapshotTracksConcurrentActualWireOrder(t *testing.T) {
+	f := serve(t, nil)
+	value, _ := opened(t, f)
+	written(t, f, "session.start")
+	const count = 16
+	start := make(chan struct{})
+	failures := make(chan error, count)
+	var workers sync.WaitGroup
+	for index := 0; index < count; index++ {
+		workers.Add(1)
+		go func(index int) {
+			defer workers.Done()
+			<-start
+			failures <- value.Inject(context.Background(), engine.ContextItem{ID: fmt.Sprintf("concurrent_%d", index), Kind: "fact", Text: fmt.Sprintf("Value %d", index)})
+		}(index)
+	}
+	close(start)
+	contents := make([]string, 0, count)
+	for index := 0; index < count; index++ {
+		contents = append(contents, written(t, f, "session.thinking.append")["content"].(string))
+	}
+	workers.Wait()
+	for index := 0; index < count; index++ {
+		if err := <-failures; err != nil {
+			t.Fatal(err)
+		}
+		observed(t, value, "context.injected")
+	}
+	snapshot, err := value.Snapshot(context.Background())
+	if err != nil || len(snapshot.Context) != count {
+		t.Fatal("missing accepted concurrent prefix", err)
+	}
+	// Compare the observed boundary, never assume a particular goroutine order.
+	for index, content := range contents {
+		if snapshot.Context[index].Content != content {
+			t.Fatal("snapshot reordered actual submitted provider prefix", index)
+		}
+	}
+	g := serve(t, nil)
+	target, _ := opened(t, g)
+	written(t, g, "session.start")
+	if err := target.Prefill(context.Background(), snapshot); err != nil {
+		t.Fatal(err)
+	}
+	for _, content := range contents {
+		if written(t, g, "session.thinking.append")["content"] != content {
+			t.Fatal("prefill reordered the actual provider prefix")
+		}
+		observed(t, target, "context.injected")
+	}
+}
+
+func TestLiveLifecyclePreGateRefusalStillBlocksSnapshot(t *testing.T) {
+	f := serve(t, nil)
+	value, _ := opened(t, f)
+	written(t, f, "session.start")
+	s := value.(*session)
+	<-s.gate
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	err := value.Inject(ctx, engine.ContextItem{ID: "never_written", Kind: "fact", Text: "Unconfirmed"})
+	cancel()
+	s.gate <- struct{}{}
+	if err == nil {
+		t.Fatal("held gate was treated as successful append")
+	}
+	if _, err := value.Snapshot(context.Background()); err == nil {
+		t.Fatal("unordered failed admission disappeared from snapshot validation")
+	}
+	select {
+	case extra := <-f.writes:
+		t.Fatal("pre-gate refusal wrote context", extra)
+	case <-time.After(20 * time.Millisecond):
 	}
 }

@@ -45,6 +45,7 @@ function action({ confirmation: _, ...request }: ActionRequest): BrowserAction {
       deltaX: x,
       deltaY: y,
       selector: request.selector,
+      sensitive: request.authorization.sensitive,
     }
   }
   // raya_change start - Milestone G validates generated special-number unions at the host boundary
@@ -73,7 +74,7 @@ function action({ confirmation: _, ...request }: ActionRequest): BrowserAction {
   // raya_change end
   if ("authorization" in request) {
     const { authorization: _, ...input } = request
-    return input
+    return { ...input, sensitive: request.authorization.sensitive }
   }
   return request
 }

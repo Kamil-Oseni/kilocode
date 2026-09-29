@@ -31,6 +31,39 @@ export interface TargetPage {
   getByTestId?(value: string): TargetLocator
 }
 
+const sensitive: ReadonlyArray<readonly [string, RegExp]> = [
+  ["credentials", /\b(password|passcode|credential|api key|secret)\b/i],
+  ["financial", /\b(pay|payment|purchase|buy|checkout|transfer funds?)\b/i],
+  ["software", /\b(install|uninstall)\b/i],
+  ["system", /\b(firewall|security settings?|administrator settings?)\b/i],
+  ["deletion", /\b(delete|erase permanently|permanently delete)\b/i],
+  ["disclosure", /\b(upload|attach files?|choose files?)\b/i],
+  ["legal", /\b(accept terms|agree to terms|sign contract)\b/i],
+  ["publishing", /\b(publish|deploy|push changes?|commit changes?|public post)\b/i],
+  ["communications", /\b(send|reply|post)\b/i],
+]
+
+/** Recheck the resolved element's browser-owned accessible name, including CSS and test-ID targets. */
+export async function checkSensitive(locator: TargetLocator, category: string | false): Promise<void> {
+  if (!locator.ariaSnapshot) throw new TargetError("Browser host cannot inspect the target before input")
+  const snapshot = await locator.ariaSnapshot({ timeout: 5_000 })
+  const line = snapshot.split("\n", 1)[0]?.trim()
+  if (!line) throw new TargetError("Browser target has no accessible semantics before input")
+  if (/^-\s*(generic|group)\b/i.test(line))
+    throw new TargetError("Browser target has no actionable accessible role; select the exact control before input")
+  const matches = sensitive
+    .filter(([name, pattern]) =>
+      name === "communications"
+        ? /^-\s*(button|link|menuitem|option|tab)\b/i.test(line) && pattern.test(line)
+        : pattern.test(line),
+    )
+    .map(([name]) => name)
+  if (matches.length > 1)
+    throw new TargetError("Browser target spans multiple sensitive policy categories; no action was dispatched")
+  if (matches.length === 1 && matches[0] !== category)
+    throw new TargetError(`Browser target semantics require sensitive_category=${matches[0]}; no action was dispatched`)
+}
+
 async function unique(locator: TargetLocator, description: string) {
   if (!locator.count) throw new TargetError("Browser host cannot verify semantic target uniqueness")
   const count = await locator.count()

@@ -73,6 +73,7 @@ describe("Raya browser bridge", () => {
       execute: async (action) => {
         calls.execute++
         expect("confirmation" in action).toBe(false)
+        expect(action.sensitive).toBe(request.authorization.sensitive)
         return { operation: "click", url: "https://example.test", title: "Confirmed" }
       },
     })

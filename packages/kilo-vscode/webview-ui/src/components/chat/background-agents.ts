@@ -16,11 +16,26 @@
 
 import type {
   BackgroundJobInfo,
+  BackgroundJobsLoadedMessage,
   PermissionRequest,
   QuestionRequest,
   SessionStatusInfo,
   ToolPart,
 } from "../../types/messages"
+
+interface BackgroundAgentSnapshot {
+  jobs: BackgroundJobInfo[]
+  loaded: boolean
+  unavailable: boolean
+}
+
+export function reconcileBackgroundAgents(
+  state: BackgroundAgentSnapshot,
+  message: BackgroundJobsLoadedMessage,
+): BackgroundAgentSnapshot {
+  if (message.error) return { ...state, unavailable: true }
+  return { jobs: message.jobs, loaded: true, unavailable: false }
+}
 
 export type BackgroundAgentStatus = BackgroundJobInfo["status"]
 

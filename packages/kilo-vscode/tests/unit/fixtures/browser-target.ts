@@ -29,6 +29,58 @@ async function main() {
       <button id="legacy" onclick="document.querySelector('[data-testid=result]').textContent='Done'">Finish</button>
     `)
     await session.ready()
+    await page.setContent(`
+      <button data-testid="send-action" onclick="document.body.dataset.sent='yes'">Send message</button>
+      <button id="delete-action" onclick="document.body.dataset.deleted='yes'">Delete permanently</button>
+      <button id="mixed-action" onclick="document.body.dataset.mixed='yes'">Send and delete</button>
+      <div data-testid="send-wrapper"><button onclick="document.body.dataset.wrapped='yes'">Send note</button></div>
+      <div data-testid="unnamed-action" onclick="document.body.dataset.unnamed='yes'"></div>
+      <label>Email<input data-testid="email-draft"></label>
+    `)
+    await assert.rejects(
+      session.execute({ operation: "click", selector: { kind: "testid", value: "send-action" }, sensitive: false }),
+      /sensitive_category=communications/,
+    )
+    await assert.rejects(
+      session.execute({ operation: "click", selector: "#delete-action", sensitive: false }),
+      /sensitive_category=deletion/,
+    )
+    await assert.rejects(
+      session.execute({ operation: "click", selector: "#mixed-action", sensitive: "communications" }),
+      /multiple sensitive policy categories/,
+    )
+    await assert.rejects(
+      session.execute({ operation: "click", selector: { kind: "testid", value: "send-wrapper" }, sensitive: false }),
+      /sensitive_category=communications/,
+    )
+    await assert.rejects(
+      session.execute({ operation: "click", selector: { kind: "testid", value: "unnamed-action" }, sensitive: false }),
+      /no actionable accessible role|no accessible semantics/,
+    )
+    assert.deepEqual(await page.evaluate(() => ({ ...document.body.dataset })), {})
+    await session.execute({
+      operation: "type",
+      selector: { kind: "testid", value: "email-draft" },
+      text: "draft@example.test",
+      submit: false,
+      sensitive: false,
+    })
+    assert.equal(await page.getByTestId("email-draft").inputValue(), "draft@example.test")
+    await session.execute({
+      operation: "click",
+      selector: { kind: "testid", value: "send-action" },
+      sensitive: "communications",
+    })
+    assert.equal(await page.evaluate(() => document.body.dataset.sent), "yes")
+    await page.setContent(`
+      <section id="first"><button onclick="this.textContent='Saved first'">Save</button></section>
+      <section id="second"><button onclick="this.textContent='Saved second'">Save</button></section>
+      <button onclick="this.textContent='Wrong'">Save copy</button>
+      <label>Name<input id="name"></label><label>Name extra<input id="extra"></label>
+      <label for="choice">Choice</label><select id="choice"><option value="a">A</option><option value="b">B</option></select>
+      <div data-testid="result">Ready</div>
+      <button id="legacy" onclick="document.querySelector('[data-testid=result]').textContent='Done'">Finish</button>
+    `)
     const host = page as unknown as TargetPage
     const attempts: number[] = []
     const off = session.onState((state) => {

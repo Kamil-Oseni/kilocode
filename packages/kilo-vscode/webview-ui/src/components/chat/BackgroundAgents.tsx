@@ -30,6 +30,7 @@ import {
   backgroundAgentUsage,
   backgroundJobAgents,
   foregroundAgent,
+  reconcileBackgroundAgents,
   showBackgroundAgent,
   type BackgroundAgent,
 } from "./background-agents"
@@ -43,8 +44,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const vscode = useVSCode()
   const worktree = useWorktreeMode()
   const [open, setOpen] = createSignal(false)
-  const [jobs, setJobs] = createSignal<BackgroundJobInfo[]>([])
-  const [loaded, setLoaded] = createSignal(false)
+  const [snapshot, setSnapshot] = createSignal({ jobs: [] as BackgroundJobInfo[], loaded: false, unavailable: false })
   const [hidden, setHidden] = createSignal<Set<string>>(new Set())
   const [mounted, setMounted] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
@@ -57,8 +57,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       const saved = id ? loadAgentView(vscode.getState(), id) : { open: false, hidden: [] }
       setOpen(saved.open)
       setHidden(new Set(saved.hidden))
-      setLoaded(false)
-      setJobs([])
+      setSnapshot({ jobs: [], loaded: false, unavailable: false })
       pending = undefined
       if (mounted()) requestJobs()
     }),
@@ -78,13 +77,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       if (message.sessionID !== session.currentSessionID()) return
       if (message.requestID !== pending) return
       pending = undefined
-      if (message.error) {
-        setJobs([])
-        setLoaded(false)
-        return
-      }
-      setJobs(message.jobs)
-      setLoaded(true)
+      setSnapshot((state) => reconcileBackgroundAgents(state, message))
     })
     requestJobs()
     const timer = setInterval(requestJobs, 5_000)
@@ -106,7 +99,8 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const agents = createMemo(() => {
     const id = session.currentSessionID()
     if (!id) return []
-    if (loaded()) return backgroundJobAgents(jobs(), id, session.scopedPermissions(id), session.scopedQuestions(id))
+    if (snapshot().loaded)
+      return backgroundJobAgents(snapshot().jobs, id, session.scopedPermissions(id), session.scopedQuestions(id))
     return fallback()
   })
 
@@ -124,6 +118,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const status = (agent: BackgroundAgent) => language.t(`task.backgroundAgents.status.${agent.status}`)
 
   const summary = createMemo(() => {
+    if (snapshot().unavailable) return language.t("task.backgroundAgents.unavailable")
     const running = visible().filter((agent) => agent.status === "running").length
     const total = visible().length
     if (total === 0 && foreground()) return language.t("task.backgroundAgents.foreground")
@@ -146,6 +141,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   }
 
   const icon = (agent: BackgroundAgent) => {
+    if (snapshot().unavailable) return "warning" as const
     if (agent.status === "completed") return "circle-check" as const
     if (agent.status === "cancelled") return "circle-ban-sign" as const
     if (agent.status === "error") return "warning" as const
@@ -164,6 +160,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
 
   const cancelAgent = (event: MouseEvent, agent: BackgroundAgent) => {
     event.stopPropagation()
+    if (snapshot().unavailable) return
     if (agent.status !== "running") return
     const id = session.currentSessionID()
     if (!id) return
@@ -184,18 +181,24 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   }
 
   return (
-    <Show when={visible().length > 0 || (!props.readonly && foreground())}>
-      <div data-component="task-header-agents">
+    <Show when={snapshot().unavailable || visible().length > 0 || (!props.readonly && foreground())}>
+      <div data-component="task-header-agents" data-unavailable={snapshot().unavailable ? "" : undefined}>
         <div data-slot="task-header-agents-toolbar">
-          <Show when={visible().length > 0}>
+          <Show when={snapshot().unavailable || visible().length > 0}>
             <button
               data-slot="task-header-todos-trigger"
               onClick={toggle}
               aria-expanded={open()}
-              aria-label={waiting() > 0 ? language.t("task.backgroundAgents.waiting") : undefined}
+              aria-label={
+                snapshot().unavailable
+                  ? language.t("task.backgroundAgents.unavailable")
+                  : waiting() > 0
+                    ? language.t("task.backgroundAgents.waiting")
+                    : undefined
+              }
             >
               <Show
-                when={waiting() > 0}
+                when={snapshot().unavailable || waiting() > 0}
                 fallback={
                   <Icon name={visible().length === 1 ? agentIcon(visible()[0]?.agent) : "subagent"} size="small" />
                 }
@@ -203,7 +206,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                 <Icon name="warning" size="small" />
               </Show>
               <span data-slot="task-header-todos-summary">
-                <Show when={waiting() > 0} fallback={summary()}>
+                <Show when={!snapshot().unavailable && waiting() > 0} fallback={summary()}>
                   {language.t("task.backgroundAgents.waiting")}
                 </Show>
               </span>
@@ -215,7 +218,9 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
               />
             </button>
           </Show>
-          <Show when={!props.readonly && visible().some((agent) => agent.status !== "running")}>
+          <Show
+            when={!props.readonly && !snapshot().unavailable && visible().some((agent) => agent.status !== "running")}
+          >
             <Button
               icon="close-small"
               variant="ghost"
@@ -231,7 +236,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
         </div>
         <Show when={open()}>
           <div data-slot="task-header-todos-list">
-            <Show when={visible().some((agent) => agent.permission || agent.question)}>
+            <Show when={!snapshot().unavailable && visible().some((agent) => agent.permission || agent.question)}>
               <div data-slot="task-header-agent-attention">
                 <Icon name="warning" size="small" />
                 <span>{language.t("task.backgroundAgents.waiting")}</span>
@@ -269,7 +274,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                     <button
                       data-slot="task-header-agent-main"
                       title={`${language.t("task.backgroundAgents.open")}: ${label(agent)}`}
-                      aria-label={`${language.t("task.backgroundAgents.open")}: ${label(agent)}, ${status(agent)}`}
+                      aria-label={`${language.t("task.backgroundAgents.open")}: ${label(agent)}, ${snapshot().unavailable ? language.t("task.backgroundAgents.unavailable") : status(agent)}`}
                       onClick={() => openAgent(agent)}
                     >
                       <span data-slot="task-header-agent-primary">
@@ -277,7 +282,9 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         <span data-slot="task-header-agent-label" dir="auto">
                           {label(agent)}
                         </span>
-                        <span data-slot="task-header-agent-status-label">{status(agent)}</span>
+                        <span data-slot="task-header-agent-status-label">
+                          {snapshot().unavailable ? language.t("task.backgroundAgents.unavailable") : status(agent)}
+                        </span>
                       </span>
                       <span data-slot="task-header-agent-secondary">
                         <Show when={identity(agent).task}>
@@ -287,26 +294,26 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                             </span>
                           )}
                         </Show>
-                        <Show when={agent.status === "running" && detail()}>
+                        <Show when={!snapshot().unavailable && agent.status === "running" && detail()}>
                           {(value) => (
                             <span data-slot="task-header-agent-detail" dir="auto">
                               {value()}
                             </span>
                           )}
                         </Show>
-                        <Show when={agent.status === "completed"}>
+                        <Show when={!snapshot().unavailable && agent.status === "completed"}>
                           <span data-slot="task-header-agent-report">
                             {language.t("task.backgroundAgents.viewReport")}
                           </span>
                         </Show>
-                        <Show when={agent.status === "error" && detail()}>
+                        <Show when={!snapshot().unavailable && agent.status === "error" && detail()}>
                           {(value) => (
                             <span data-slot="task-header-agent-detail" dir="auto">
                               {value()}
                             </span>
                           )}
                         </Show>
-                        <Show when={elapsed() !== undefined}>
+                        <Show when={!snapshot().unavailable && elapsed() !== undefined}>
                           <span data-slot="task-header-agent-elapsed" title={started()}>
                             {backgroundAgentDuration(elapsed()!)}
                           </span>
@@ -321,14 +328,14 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                             </span>
                           )}
                         </Show>
-                        <Show when={agent.permission || agent.question}>
+                        <Show when={!snapshot().unavailable && (agent.permission || agent.question)}>
                           <span data-slot="task-header-agent-attention-label">
                             {language.t("task.backgroundAgents.needsInput")}
                           </span>
                         </Show>
                       </span>
                     </button>
-                    <Show when={!props.readonly && agent.status === "running"}>
+                    <Show when={!props.readonly && !snapshot().unavailable && agent.status === "running"}>
                       <Button
                         icon="stop"
                         variant="ghost"
@@ -341,7 +348,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         </span>
                       </Button>
                     </Show>
-                    <Show when={!props.readonly && agent.status !== "running"}>
+                    <Show when={!props.readonly && !snapshot().unavailable && agent.status !== "running"}>
                       <Button
                         icon="close-small"
                         variant="ghost"

@@ -6,7 +6,14 @@ import { Script } from "node:vm"
 import { chromium } from "playwright-core"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { held, same } from "./browser-held"
-import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
+import {
+  checkSensitive,
+  locate,
+  TargetError,
+  type BrowserTarget,
+  type TargetLocator,
+  type TargetPage,
+} from "./browser-target"
 import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
 import { pending, BrowserDialogs, type DialogPage, type DialogInfo, type DialogOperation } from "./browser-dialog"
 import { BrowserSmoke } from "./browser-smoke"
@@ -24,6 +31,7 @@ export type BrowserAction = {
   origin?: TransferOrigin
   uploader?: UploadTransport
   guard?: () => void
+  sensitive?: string | false
 } & (
   | { operation: "profile"; action: "info" | "retry" }
   | { operation: "profile"; action: "reset"; profileID: string }
@@ -66,6 +74,11 @@ type BrowserNativeAction = Exclude<
   BrowserAction,
   { operation: "profile" | "auth" | "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload" }
 >
+
+async function verifySensitive(action: BrowserAction, locator: TargetLocator): Promise<void> {
+  if (action.sensitive === undefined || !["click", "type", "select"].includes(action.operation)) return
+  await checkSensitive(locator, action.sensitive)
+}
 type Startup = { guard: () => void; operation: string }
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
@@ -298,6 +311,7 @@ export class BrowserSession {
   private capturing = false
   private queue: Promise<void> = Promise.resolve()
   private queued = 0
+  private tabFence = 0
   private last = 0
   private revision = 0
   private running = 0
@@ -548,13 +562,25 @@ export class BrowserSession {
   async tab(action: "open" | "select" | "close", id?: string, url = "about:blank"): Promise<void> {
     await this.ready()
     this.assertInput()
+    if (this.queued >= 8)
+      throw new TargetError("Browser action queue is full. Wait for recovery before sending another action.")
     this.release()
-    const result = this.queue.then(() => this.manage({ operation: "tabs", action, tabID: id, url }, () => undefined))
+    this.queued += 1
+    const fence = this.tabFence
+    const result = this.queue.then(() => {
+      if (this.tabFence !== fence)
+        throw new TargetError("Queued browser tab action cancelled by manual control; no action dispatched")
+      return this.manage({ operation: "tabs", action, tabID: id, url }, () => undefined)
+    })
     this.queue = result.then(
       () => undefined,
       () => undefined,
     )
-    await result
+    try {
+      await result
+    } finally {
+      this.queued -= 1
+    }
   }
 
   private async manage(
@@ -1205,6 +1231,7 @@ export class BrowserSession {
       selector: action.selector,
       origin: action.origin,
       guard: action.guard,
+      sensitive: action.sensitive,
     }).then(
       () => undefined,
       (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -1342,9 +1369,15 @@ export class BrowserSession {
     }
   }
 
-  private async press(page: BrowserPage, selector: BrowserTarget, dispatch: () => void): Promise<void> {
+  private async press(
+    page: BrowserPage,
+    selector: BrowserTarget,
+    dispatch: () => void,
+    sensitive?: string | false,
+  ): Promise<void> {
     if (typeof selector !== "string") {
       const locator = await locate(page, selector)
+      if (sensitive !== undefined) await checkSensitive(locator, sensitive)
       dispatch()
       await locator.click({ timeout: 5_000 })
       return
@@ -1353,11 +1386,13 @@ export class BrowserSession {
     if (named?.[1] || named?.[2]) {
       const name = named[1] ?? named[2]!.replace(/-/g, " ")
       const locator = page.getByRole("button", { name: new RegExp(name, "i") })
+      if (sensitive !== undefined) await checkSensitive(locator, sensitive)
       dispatch()
       await locator.click({ timeout: 5_000 })
       return
     }
     const locator = page.locator(selector)
+    if (sensitive !== undefined) await checkSensitive(locator, sensitive)
     dispatch()
     await locator.click({ timeout: 5_000 })
   }
@@ -1378,14 +1413,16 @@ export class BrowserSession {
       return
     }
     if (action.operation === "click") {
-      await this.press(page, action.selector, dispatch)
+      await this.press(page, action.selector, dispatch, action.sensitive)
       return
     }
     if (action.operation === "type") {
       const locator = await locate(page, action.selector)
+      if (action.sensitive !== undefined) await checkSensitive(locator, action.sensitive)
       dispatch()
       await locator.fill(action.text, { timeout: 5_000 })
       if (action.submit) {
+        if (action.sensitive !== undefined) await checkSensitive(locator, action.sensitive)
         dispatch()
         await locator.press("Enter", { timeout: 5_000 })
       }
@@ -1393,6 +1430,7 @@ export class BrowserSession {
     }
     if (action.operation === "select") {
       const locator = await locate(page, action.selector)
+      if (action.sensitive !== undefined) await checkSensitive(locator, action.sensitive)
       dispatch()
       await locator.selectOption(action.values, { timeout: 5_000 })
       return
@@ -1444,11 +1482,13 @@ export class BrowserSession {
       const element = await lease.element(target)
       try {
         const source = action.operation === "evaluate" ? prepare(action.expression) : undefined
+        await verifySensitive(action, element)
         dispatch()
         if (action.operation === "click") await element.click({ timeout: 5_000 })
         if (action.operation === "type") {
           await element.fill(action.text, { timeout: 5_000 })
           if (action.submit) {
+            await verifySensitive(action, element)
             dispatch()
             await element.press("Enter", { timeout: 5_000 })
           }
@@ -1571,6 +1611,7 @@ export class BrowserSession {
 
   private handover(reason: string, attempts?: number, busy = false): void {
     this.revision += 1
+    this.tabFence += 1
     this.update({ control: "manual", busy, reason, attempts })
   }
 
@@ -1736,6 +1777,7 @@ export class BrowserSession {
       this.stopAuth = undefined
     }
     this.revision += 1
+    this.tabFence += 1
     const context = this.context
     const cdp = this.cdp
     const uploads = this.uploads

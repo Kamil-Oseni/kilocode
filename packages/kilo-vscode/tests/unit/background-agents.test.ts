@@ -8,10 +8,12 @@ import {
   backgroundAgents,
   backgroundJobAgents,
   foregroundAgent,
+  reconcileBackgroundAgents,
   showBackgroundAgent,
 } from "../../webview-ui/src/components/chat/background-agents"
 import type {
   BackgroundJobInfo,
+  BackgroundJobsLoadedMessage,
   PermissionRequest,
   QuestionRequest,
   SessionStatusInfo,
@@ -58,6 +60,37 @@ const busy: SessionStatusInfo = { type: "busy" }
 const idle: SessionStatusInfo = { type: "idle" }
 
 describe("backgroundAgents", () => {
+  it("retains last-known workers through a failed refresh and replaces them only after recovery", () => {
+    const running: BackgroundJobInfo = {
+      id: "job",
+      type: "task",
+      status: "running",
+      started_at: 1,
+      metadata: { parentSessionId: "parent", sessionId: "child", background: true },
+    }
+    const message = (jobs: BackgroundJobInfo[], error?: string): BackgroundJobsLoadedMessage => ({
+      type: "backgroundJobsLoaded",
+      sessionID: "parent",
+      requestID: "request",
+      jobs,
+      error,
+    })
+    const initial = { jobs: [], loaded: false, unavailable: false }
+    const first = reconcileBackgroundAgents(initial, message([running]))
+    const failed = reconcileBackgroundAgents(first, message([], "backend unavailable"))
+    expect(failed).toEqual({ jobs: [running], loaded: true, unavailable: true })
+    expect(reconcileBackgroundAgents(failed, message([{ ...running, status: "completed" }]))).toEqual({
+      jobs: [{ ...running, status: "completed" }],
+      loaded: true,
+      unavailable: false,
+    })
+    expect(reconcileBackgroundAgents(initial, message([], "backend unavailable"))).toEqual({
+      jobs: [],
+      loaded: false,
+      unavailable: true,
+    })
+  })
+
   it("keeps the specialist name separate from the task in the activity row", () => {
     const agent = {
       id: "child",

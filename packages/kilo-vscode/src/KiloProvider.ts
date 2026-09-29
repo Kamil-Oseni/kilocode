@@ -3660,7 +3660,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
     if (this.jobsBackoff > Date.now()) {
-      this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [] })
+      this.postMessage({
+        type: "backgroundJobsLoaded",
+        sessionID,
+        requestID,
+        jobs: [],
+        error: "Background agent status is temporarily unavailable",
+      })
       return
     }
     try {
@@ -3678,6 +3684,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         sessionID,
         requestID,
         jobs: [],
+        error: "Background agent status is temporarily unavailable",
       })
     }
   }

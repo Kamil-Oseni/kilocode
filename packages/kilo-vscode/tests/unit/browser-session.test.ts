@@ -680,6 +680,120 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
+  it("bounds queued panel tab actions without cancelling earlier tab requests", async () => {
+    const fake = harness()
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let native = 0
+    const launch: BrowserLaunch = async (profile) => {
+      const context = await fake.launch(profile)
+      return {
+        ...context,
+        newPage: async () => {
+          native += 1
+          if (native === 1) {
+            entered.resolve()
+            await release.promise
+          }
+          return context.newPage()
+        },
+      }
+    }
+    const session = new BrowserSession("bounded-panel-tabs", launch)
+    try {
+      await session.ready()
+      const first = session.tab("open")
+      await entered.promise
+      const queued = Array.from({ length: 7 }, () => session.tab("open"))
+      await Bun.sleep(0)
+      await expect(session.tab("open")).rejects.toThrow("queue is full")
+      expect(native).toBe(1)
+      release.resolve()
+      await Promise.all([first, ...queued])
+      expect(native).toBe(8)
+    } finally {
+      release.resolve()
+      await session.dispose()
+    }
+  })
+
+  it("does not dispatch a queued panel tab after manual takeover, but accepts a fresh one", async () => {
+    const fake = harness()
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let native = 0
+    const launch: BrowserLaunch = async (profile) => {
+      const context = await fake.launch(profile)
+      return {
+        ...context,
+        newPage: async () => {
+          native += 1
+          if (native === 1) {
+            entered.resolve()
+            await release.promise
+          }
+          return context.newPage()
+        },
+      }
+    }
+    const session = new BrowserSession("stopped-panel-tabs", launch)
+    try {
+      await session.ready()
+      const first = session.tab("open")
+      await entered.promise
+      const queued = session.tab("open")
+      await Bun.sleep(0)
+      session.takeControl()
+      release.resolve()
+      await first
+      await expect(queued).rejects.toThrow("no action dispatched")
+      expect(native).toBe(1)
+      session.resume()
+      await session.tab("open")
+      expect(native).toBe(2)
+    } finally {
+      release.resolve()
+      await session.dispose()
+    }
+  })
+
+  it("does not dispatch an old queued panel tab after browser disposal", async () => {
+    const fake = harness()
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let native = 0
+    const launch: BrowserLaunch = async (profile) => {
+      const context = await fake.launch(profile)
+      return {
+        ...context,
+        newPage: async () => {
+          native += 1
+          if (native === 1) {
+            entered.resolve()
+            await release.promise
+          }
+          return context.newPage()
+        },
+      }
+    }
+    const session = new BrowserSession("disposed-panel-tabs", launch)
+    try {
+      await session.ready()
+      const first = session.tab("open").catch((error: unknown) => error)
+      await entered.promise
+      const queued = session.tab("open").catch((error: unknown) => error)
+      await Bun.sleep(0)
+      await session.dispose()
+      release.resolve()
+      await first
+      expect(String(await queued)).toContain("no action dispatched")
+      expect(native).toBe(1)
+    } finally {
+      release.resolve()
+      await session.dispose()
+    }
+  })
+
   it("revalidates authority when a queued action reaches native dispatch", async () => {
     const fake = harness()
     const session = new BrowserSession("guarded-queue-profile", fake.launch)

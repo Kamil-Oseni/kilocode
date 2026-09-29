@@ -9,6 +9,59 @@ import { forget, remember } from "../../src/edit-review/attempts"
 import { forget as erase, listed, record } from "../../src/edit-review/undone"
 
 describe("host review acknowledgements", () => {
+  test("transient diff failure still loads revisions for Keep all and Undo all", async () => {
+    let calls = 0
+    const client = createKiloClient({
+      baseUrl: "http://review.test",
+      fetch: async () => {
+        calls++
+        if (calls === 1) throw new Error("fetch failed")
+        return Response.json([{ file: "chat.txt", patch: "+hello", additions: 1, deletions: 0, reviewed: "" }])
+      },
+    })
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    provider.postMessage = (message) => messages.push(message)
+    const host = provider as unknown as {
+      getWorkspaceDirectory: () => string
+      loadReview: (session: string) => Promise<void>
+    }
+    host.getWorkspaceDirectory = () => process.cwd()
+
+    await host.loadReview("session-a")
+
+    expect(calls).toBe(2)
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: "reviewStatsLoaded",
+        sessionID: "session-a",
+        source: "session",
+        expected: { "chat.txt": expect.any(String) },
+        files: 1,
+      }),
+    )
+  })
+
+  test("permanent diff failure does not invent review revisions", async () => {
+    let calls = 0
+    const client = createKiloClient({
+      baseUrl: "http://review.test",
+      fetch: async () => {
+        calls++
+        return Response.json({ message: "invalid session" }, { status: 404 })
+      },
+    })
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    provider.postMessage = (message) => messages.push(message)
+    const host = provider as unknown as { loadReview: (session: string) => Promise<void> }
+
+    await host.loadReview("session-a")
+
+    expect(calls).toBe(1)
+    expect(messages).not.toContainEqual(expect.objectContaining({ type: "reviewStatsLoaded" }))
+  })
+
   test("Git-only fallback reports its workspace scope and full file count", async () => {
     const client = { session: { diff: async () => ({ data: [] }) } }
     const provider = new KiloProvider({} as never, { getClient: () => client } as never)
@@ -101,16 +154,31 @@ describe("host review acknowledgements", () => {
     )
   })
 
-  test("review detail refresh is scoped to the current session", () => {
+  test("review detail refresh follows the focused session before metadata finishes loading", () => {
     const provider = new KiloProvider({} as never, {} as never)
     const requested: Array<string | undefined> = []
     const host = provider as unknown as {
       currentSession?: { id: string }
+      contextSessionID?: string
+      trackedSessionIds: Set<string>
       scheduleReview(sessionID?: string): void
       handleCheckpointMessage(message: unknown): boolean
+      handleEvent(event: unknown): void
     }
-    host.currentSession = { id: "session-a" }
+    host.currentSession = { id: "session-b" }
+    host.contextSessionID = "session-a"
+    host.trackedSessionIds.add("session-b")
     host.scheduleReview = (sessionID) => requested.push(sessionID)
+    host.handleEvent({
+      type: "session.updated",
+      id: "old-event",
+      seq: 1,
+      properties: {
+        sessionID: "session-b",
+        info: { id: "session-b", title: "Old chat", time: { created: 1, updated: 2 } },
+      },
+    })
+    expect(host.contextSessionID).toBe("session-a")
     expect(host.handleCheckpointMessage({ type: "requestReviewStats", sessionID: "session-b" })).toBe(true)
     expect(host.handleCheckpointMessage({ type: "requestReviewStats", sessionID: "session-a" })).toBe(true)
     expect(host.handleCheckpointMessage({ type: "requestReviewStats", sessionID: 7 })).toBe(true)

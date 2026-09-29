@@ -2070,7 +2070,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     },
   ): boolean {
     if (message.type === "requestReviewStats") {
-      if (typeof message.sessionID === "string" && message.sessionID === this.currentSession?.id)
+      if (
+        typeof message.sessionID === "string" &&
+        message.sessionID === (this.contextSessionID ?? this.currentSession?.id)
+      )
         this.scheduleReview(message.sessionID)
       return true
     }
@@ -6071,7 +6074,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.contextSessionID = event.properties.info.id
       this.trackedSessionIds.add(event.properties.info.id)
     }
-    if (event.type === "session.updated" && this.currentSession?.id === event.properties.sessionID) {
+    if (
+      event.type === "session.updated" &&
+      this.currentSession?.id === event.properties.sessionID &&
+      (!this.contextSessionID || this.contextSessionID === event.properties.sessionID)
+    ) {
       this.setCurrentSession(event.properties.info)
       this.contextSessionID = event.properties.sessionID
     }
@@ -6691,12 +6698,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const files = new Map<string, { additions: number; deletions: number }>()
     for (const id of ids) {
       const directory = this.getWorkspaceDirectory(id)
-      const result = await this.client.session
-        .diff({ sessionID: id, directory }, { throwOnError: true })
-        .catch((err) => {
-          console.error("[Raya] session review stats failed:", err)
-          return undefined
-        })
+      const result = await retry(() =>
+        this.client!.session.diff({ sessionID: id, directory }, { throwOnError: true }),
+      ).catch((err) => {
+        console.error("[Raya] session review stats failed:", err)
+        return undefined
+      })
       if (!result?.data) return
       for (const item of result.data) {
         if (item.reviewed === undefined) authoritative = false

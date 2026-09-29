@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import { createHash, randomBytes } from "node:crypto"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { createReadStream } from "node:fs"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { tmpdir } from "node:os"
 import { join, resolve, sep } from "node:path"
-import { createKiloClient, type GlobalEvent } from "@kilocode/sdk/v2/client"
+import { createKiloClient, type BrowserRequest, type GlobalEvent } from "@kilocode/sdk/v2/client"
 import { spawn } from "../../src/util/process"
 import { BrowserBridge, type BrowserConnection } from "../../src/services/browser-automation/browser-bridge"
 import { BrowserOutcomeError, BrowserSession } from "../../src/services/browser-automation/browser-session"
@@ -18,7 +19,7 @@ type Payload = {
   messages?: Array<{ role?: string; tool_call_id?: string; content?: unknown }>
   tools?: Array<{ function?: { name?: string } }>
 }
-type Mode = "happy" | "stale" | "denied" | "revoked" | "partial"
+type Mode = "happy" | "stale" | "denied" | "revoked" | "partial" | "fresh"
 const modes = ["happy", "stale", "denied", "revoked", "partial"] as const
 type Case = {
   turns: number
@@ -39,8 +40,10 @@ const cases: Record<Mode, Case> = {
   denied: empty(),
   revoked: empty(),
   partial: empty(),
+  fresh: empty(),
 }
 const effects: Array<{ name: string; amount: string }> = []
+const recovered = { tab: "" }
 const events: Array<{ type: string; operation?: string; outcome?: string }> = []
 const dispatch: Array<{ operation: string; ms: number; outcome: string }> = []
 const refusals: Array<{ permission: string; sessionID: string }> = []
@@ -124,7 +127,7 @@ function observation(payload: Payload, mode: Mode, step: number) {
   return id
 }
 function finish(payload: Payload, mode: Mode, step: number) {
-  assert.equal(step, { happy: 8, stale: 4, denied: 3, revoked: 3, partial: 3 }[mode])
+  assert.equal(step, { happy: 8, stale: 4, denied: 3, revoked: 3, partial: 3, fresh: 1 }[mode])
   if (mode === "happy") {
     assert.match(output(payload, mode, 7), /Ada Ω/)
     assert.match(output(payload, mode, 7), /42\.75/)
@@ -137,6 +140,8 @@ function finish(payload: Payload, mode: Mode, step: number) {
     assert.match(output(payload, mode, 2), /may already have affected the destination\. Do not automatically retry/)
   return frame({ role: "assistant", content: `WORKFLOW_${mode.toUpperCase()}_DONE` })
 }
+// The deterministic model intentionally enumerates independent adverse browser cases.
+// eslint-disable-next-line complexity
 function plan(payload: Payload, mode: Mode, origin: string) {
   const state = cases[mode]
   if (state.issued !== undefined) state.roundtrip.push(performance.now() - state.issued)
@@ -164,6 +169,14 @@ function plan(payload: Payload, mode: Mode, origin: string) {
       "tool_calls",
     )
   }
+  if (mode === "fresh") {
+    if (step === 0) {
+      assert.ok(recovered.tab, "An actual browser tab must exist before restart")
+      return tool("browser_snapshot", { tab_id: recovered.tab })
+    }
+    assert.match(output(payload, mode, 0), /Saved record|Local record/)
+    return finish(payload, mode, step)
+  }
   if (step === 0)
     return tool("browser_navigate", {
       url: `${origin}/form${mode === "partial" ? "?partial=1" : ""}`,
@@ -171,6 +184,7 @@ function plan(payload: Payload, mode: Mode, origin: string) {
     })
   const tab = result(payload, mode, 0).tabID
   assert.ok(tab, "Navigation must return an actual opaque tab identity")
+  if (mode === "happy") recovered.tab = tab
   if (step === 1) return tool("browser_snapshot", { tab_id: tab })
   const observed = observation(payload, mode, 1)
   const snapshot = output(payload, mode, 1)
@@ -241,10 +255,26 @@ async function close(server: Server) {
     "Owned HTTP server did not close",
   )
 }
+// The owned process/browser lifetime and fault injection share one cleanup boundary.
+// eslint-disable-next-line complexity
 async function main() {
   const repo = process.env.RAYA_BROWSER_REPO
   const bun = process.env.RAYA_BROWSER_BUN
   assert.ok(repo && bun, "Use the owned Bun runner for this Node integration suite")
+  const installed = process.env.RAYA_BROWSER_INSTALLED_CLI
+  if (installed) {
+    const receipt = process.env.RAYA_BROWSER_INSTALLED_RECEIPT
+    assert.ok(receipt, "The installed gate requires an independent snapshot verification receipt")
+    const verified = JSON.parse(await readFile(receipt, "utf8")) as {
+      installed?: string
+      cliSha256?: string
+    }
+    assert.equal(resolve(installed), resolve(verified.installed ?? "", "bin", "kilo.exe"))
+    assert.equal(process.env.RAYA_BROWSER_INSTALLED_SHA, verified.cliSha256)
+    const hash = createHash("sha256")
+    for await (const chunk of createReadStream(installed)) hash.update(chunk)
+    assert.equal(hash.digest("hex"), process.env.RAYA_BROWSER_INSTALLED_SHA, "Installed CLI identity changed")
+  }
   const root = await mkdtemp(join(tmpdir(), "raya-browser-workflow-"))
   const project = join(root, "project")
   const home = join(root, "home")
@@ -324,7 +354,7 @@ async function main() {
       return
     }
     const payload = JSON.parse(raw) as Payload
-    const mode = modes.find((value) =>
+    const mode = ([...modes, "fresh"] as const).find((value) =>
       strings(payload.messages).some((text) => text.includes(`WORKFLOW_${value.toUpperCase()}`)),
     )
     assert.ok(mode, "Only explicit bounded workflow fixtures are accepted")
@@ -366,47 +396,45 @@ async function main() {
       },
     },
   }
-  const child = spawn(
-    bun,
-    [
-      "run",
-      "--cwd",
-      join(repo, "packages", "opencode"),
-      "--conditions=browser",
-      "src/index.ts",
-      "serve",
-      "--hostname",
-      "127.0.0.1",
-      "--port",
-      "0",
-    ],
-    {
-      cwd: project,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        HOME: home,
-        KILO_TEST_HOME: home,
-        XDG_CONFIG_HOME: join(home, ".config"),
-        XDG_DATA_HOME: join(home, ".local", "share"),
-        XDG_STATE_HOME: join(home, ".local", "state"),
-        XDG_CACHE_HOME: join(home, ".cache"),
-        KILO_SERVER_PASSWORD: password,
-        KILO_CLIENT: "vscode",
-        KILO_TELEMETRY_LEVEL: "off",
-        KILO_CONFIG_CONTENT: JSON.stringify(cfg),
-        KILO_DISABLE_PROJECT_CONFIG: "1",
-        KILO_PURE: "1",
-        KILO_DISABLE_AUTOUPDATE: "1",
-        KILO_DISABLE_AUTOCOMPACT: "1",
-        KILO_DISABLE_MODELS_FETCH: "1",
-        KILO_AUTH_CONTENT: "{}",
-        RAYA_DB: join(home, "workflow.db"),
-        RAYA_NO_DAEMON: "1",
-        KILO_NO_DAEMON: "1",
-      },
-    },
-  )
+  const args = [
+    "run",
+    "--cwd",
+    join(repo, "packages", "opencode"),
+    "--conditions=browser",
+    "src/index.ts",
+    "serve",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "0",
+  ]
+  const env = {
+    ...process.env,
+    HOME: home,
+    KILO_TEST_HOME: home,
+    XDG_CONFIG_HOME: join(home, ".config"),
+    XDG_DATA_HOME: join(home, ".local", "share"),
+    XDG_STATE_HOME: join(home, ".local", "state"),
+    XDG_CACHE_HOME: join(home, ".cache"),
+    KILO_SERVER_PASSWORD: password,
+    KILO_CLIENT: "vscode",
+    KILO_TELEMETRY_LEVEL: "off",
+    KILO_CONFIG_CONTENT: JSON.stringify(cfg),
+    KILO_DISABLE_PROJECT_CONFIG: "1",
+    KILO_PURE: "1",
+    KILO_DISABLE_AUTOUPDATE: "1",
+    KILO_DISABLE_AUTOCOMPACT: "1",
+    KILO_DISABLE_MODELS_FETCH: "1",
+    KILO_AUTH_CONTENT: "{}",
+    RAYA_DB: join(home, "workflow.db"),
+    RAYA_NO_DAEMON: "1",
+    KILO_NO_DAEMON: "1",
+  }
+  const child = spawn(installed ?? bun, installed ? ["serve", "--hostname", "127.0.0.1", "--port", "0"] : args, {
+    cwd: project,
+    stdio: ["ignore", "pipe", "pipe"],
+    env,
+  })
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done, reject) => {
     child.once("error", reject)
     child.once("exit", (code, signal) => done({ code, signal }))
@@ -436,6 +464,17 @@ async function main() {
   // This storage port belongs solely to the disposable harness, never the user's grant settings.
   const saved: Record<string, unknown> = {}
   const receipts: string[] = []
+  const loss: {
+    requestID?: string
+    proof?: unknown
+    ack?: string
+    status?: number
+    dropped: boolean
+    restarted: boolean
+    retained: boolean
+    reconciled: boolean
+    hits: number
+  } = { dropped: false, restarted: false, retained: false, reconciled: false, hits: 0 }
   const disk = { writes: Promise.resolve() }
   const storage = {
     get: <T>(key: string) => saved[key] as T | undefined,
@@ -451,7 +490,10 @@ async function main() {
   const authority = { armed: false, shown: 0, stopped: false, intercepted: false }
   let bridge: BrowserBridge | undefined
   let stream: Promise<void> | undefined
-  const sse = new AbortController()
+  let sse = new AbortController()
+  let second: ReturnType<typeof spawn> | undefined
+  let secondExit: Promise<{ code: number | null; signal: NodeJS.Signals | null }> | undefined
+  let secondDrains: Promise<void>[] = []
   const cleanup: {
     backend?: unknown
     browser?: boolean
@@ -459,6 +501,10 @@ async function main() {
     servers?: boolean
     streams?: boolean
     absent?: boolean
+    restartedBackend?: unknown
+    restartedStreams?: boolean
+    restartedAbsent?: boolean
+    restartFallback?: boolean
   } = {}
   let error: string | undefined
   try {
@@ -474,22 +520,60 @@ async function main() {
     )
     observed.backend = true
     console.log("Actual CLI ready")
-    const client = createKiloClient({
-      baseUrl: url,
-      directory: project,
-      headers: { Authorization: `Basic ${Buffer.from(`kilo:${password}`).toString("base64")}` },
-      fetch: (input, init) => {
-        // The generated SDK passes a Request, including its SSE/caller cancellation signal.
-        const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
-        const path = new URL(input instanceof Request ? input.url : String(input)).pathname
-        const deadlines =
-          path === "/global/event" ? [] : [AbortSignal.timeout(path.endsWith("/message") ? 90_000 : 35_000)]
-        return fetch(input, {
-          ...init,
-          signal: AbortSignal.any([controller.signal, ...(signal ? [signal] : []), ...deadlines]),
-        })
-      },
-    })
+    const clientFor = (url: string) =>
+      createKiloClient({
+        baseUrl: url,
+        directory: project,
+        headers: { Authorization: `Basic ${Buffer.from(`kilo:${password}`).toString("base64")}` },
+        // The transport interceptor tests one exact lost acknowledgement without changing other SDK traffic.
+        // eslint-disable-next-line complexity
+        fetch: async (input, init) => {
+          // The generated SDK passes a Request, including its SSE/caller cancellation signal.
+          const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+          const path = new URL(input instanceof Request ? input.url : String(input)).pathname
+          const ack =
+            installed &&
+            loss.requestID &&
+            path === `/kilocode/browser/${loss.requestID}/acknowledge` &&
+            input instanceof Request
+              ? input.clone().json()
+              : undefined
+          const deadlines =
+            path === "/global/event" ? [] : [AbortSignal.timeout(path.endsWith("/message") ? 90_000 : 35_000)]
+          if (
+            installed &&
+            loss.dropped &&
+            !loss.restarted &&
+            loss.requestID &&
+            path === `/kilocode/browser/${loss.requestID}/confirmation`
+          )
+            throw new Error("Injected confirmation-read loss until installed backend restart")
+          const response = await fetch(input, {
+            ...init,
+            signal: AbortSignal.any([controller.signal, ...(signal ? [signal] : []), ...deadlines]),
+          })
+          if (
+            installed &&
+            !loss.dropped &&
+            loss.requestID &&
+            path === `/kilocode/browser/${loss.requestID}/acknowledge`
+          ) {
+            const body = await ack
+            if (body && typeof body === "object" && "proof" in body && "ack" in body) {
+              loss.proof = body.proof
+              loss.ack = String(body.ack)
+              loss.status = response.status
+              loss.hits += 1
+              assert.equal(response.ok, true, "Installed CLI must durably acknowledge before response loss")
+              loss.dropped = true
+              throw new Error("Injected loss of the first installed click acknowledgement response")
+            }
+          }
+          if (installed && loss.requestID && path === `/kilocode/browser/${loss.requestID}/acknowledge`) loss.hits += 1
+          return response
+        },
+      })
+    let client = clientFor(url)
     const handlers = new Set<SSEEventHandler>()
     const states = new Set<(state: "connected" | "disconnected") => void>()
     const connection: BrowserConnection = {
@@ -545,51 +629,56 @@ async function main() {
       async (request) => lease.authorize(request),
       (request) => lease.authorize(request),
     )
-    const connected = Promise.withResolvers<void>()
     const responses: Promise<unknown>[] = []
-    stream = (async () => {
-      const response = await client.global.event({
-        signal: AbortSignal.any([sse.signal, controller.signal]),
-        sseMaxRetryAttempts: 1,
+    const connect = async () => {
+      const connected = Promise.withResolvers<void>()
+      stream = (async () => {
+        const response = await client.global.event({
+          signal: AbortSignal.any([sse.signal, controller.signal]),
+          sseMaxRetryAttempts: 1,
+        })
+        for await (const value of response.stream as AsyncGenerator<GlobalEvent>) {
+          const event = normalize(value.payload)
+          if (event.type === "server.connected") {
+            for (const state of states) state("connected")
+            connected.resolve()
+            observed.sse = true
+          }
+          for (const handler of handlers) handler(event, value.directory)
+          if (event.type === "kilocode.browser.requested") {
+            events.push({ type: event.type, operation: event.properties.operation })
+            if (installed && event.properties.operation === "click") loss.requestID = event.properties.id
+          }
+          if (event.type === "permission.asked") {
+            assert.equal(
+              event.properties.permission,
+              "browser_type",
+              "No unrelated permission is authorized by the harness",
+            )
+            refusals.push({ permission: event.properties.permission, sessionID: event.properties.sessionID })
+            responses.push(
+              client.permission.reply(
+                { directory: project, requestID: event.properties.id, reply: "reject" },
+                { throwOnError: true },
+              ),
+            )
+          }
+        }
+      })().catch((err) => {
+        if (!sse.signal.aborted && !controller.signal.aborted) throw err
       })
-      for await (const value of response.stream as AsyncGenerator<GlobalEvent>) {
-        const event = normalize(value.payload)
-        if (event.type === "server.connected") {
-          for (const state of states) state("connected")
-          connected.resolve()
-          observed.sse = true
-        }
-        for (const handler of handlers) handler(event, value.directory)
-        if (event.type === "kilocode.browser.requested")
-          events.push({ type: event.type, operation: event.properties.operation })
-        if (event.type === "permission.asked") {
-          assert.equal(
-            event.properties.permission,
-            "browser_type",
-            "No unrelated permission is authorized by the harness",
-          )
-          refusals.push({ permission: event.properties.permission, sessionID: event.properties.sessionID })
-          responses.push(
-            client.permission.reply(
-              { directory: project, requestID: event.properties.id, reply: "reject" },
-              { throwOnError: true },
-            ),
-          )
-        }
-      }
-    })().catch((err) => {
-      if (!sse.signal.aborted && !controller.signal.aborted) throw err
-    })
-    await bounded(
-      Promise.race([
-        connected.promise,
-        stream.then(() => {
-          throw new Error("SSE ended before connection")
-        }),
-      ]),
-      15_000,
-      "Actual SDK SSE did not connect",
-    )
+      await bounded(
+        Promise.race([
+          connected.promise,
+          stream.then(() => {
+            throw new Error("SSE ended before connection")
+          }),
+        ]),
+        15_000,
+        "Actual SDK SSE did not connect",
+      )
+    }
+    await connect()
     const verify = async (mode: Mode, id: string, before: number, parts: unknown) => {
       if (mode !== "denied")
         assert.ok(strings(parts).some((text) => text.includes(`WORKFLOW_${mode.toUpperCase()}_DONE`)))
@@ -616,7 +705,7 @@ async function main() {
       }
       console.log(`Actual browser case confirmed: ${mode}`)
     }
-    for (const mode of modes) {
+    for (const mode of installed ? (["happy"] as const) : modes) {
       active.mode = mode
       console.log(`Actual browser case started: ${mode}`)
       const before = effects.length
@@ -674,15 +763,122 @@ async function main() {
       assert.ok(reply.data)
       await verify(mode, created.data.id, before, reply.data.parts)
     }
+    if (installed) {
+      await bounded(
+        (async () => {
+          while (!loss.dropped) await new Promise((done) => setTimeout(done, 20))
+        })(),
+        10_000,
+        "The installed click acknowledgement response was not lost",
+      )
+      assert.equal(loss.status, 200)
+      assert.ok(loss.requestID && loss.proof && loss.ack)
+      const journal = () =>
+        saved["raya.computerUse.browser.failureReceipts.v1"] as { version?: number; items?: unknown[] } | undefined
+      assert.equal(journal()?.version, 2)
+      assert.equal(journal()?.items?.length, 1, "The lost ACK must retain one bridge receipt")
+      loss.retained = true
+      assert.deepEqual(effects, [{ name: "Ada Ω", amount: "42.75" }])
+      sse.abort()
+      await bounded(stream ?? Promise.resolve(), 10_000, "First installed SSE stream did not retire")
+      for (const state of states) state("disconnected")
+      child.kill("SIGKILL")
+      await bounded(exited, 15_000, "First installed backend did not exit")
+      await bounded(Promise.all(drains), 10_000, "First installed backend streams did not join")
+      second = spawn(installed, ["serve", "--hostname", "127.0.0.1", "--port", "0"], {
+        cwd: project,
+        stdio: ["ignore", "pipe", "pipe"],
+        env,
+      })
+      secondExit = new Promise((done, reject) => {
+        second!.once("error", reject)
+        second!.once("exit", (code, signal) => done({ code, signal }))
+      })
+      const ready = Promise.withResolvers<string>()
+      secondDrains = [second.stdout, second.stderr].map(async (pipe) => {
+        assert.ok(pipe)
+        let tail = ""
+        for await (const chunk of pipe) {
+          tail = (tail + String(chunk)).slice(-16_384)
+          const url = tail.match(/listening on (http:\/\/[^\s]+)/)?.[1]
+          if (url) ready.resolve(url)
+        }
+      })
+      const url = await bounded(
+        Promise.race([
+          ready.promise,
+          secondExit.then(() => {
+            throw new Error("Restarted installed CLI exited before ready")
+          }),
+        ]),
+        45_000,
+        "Restarted installed CLI did not become ready",
+      )
+      client = clientFor(url)
+      sse = new AbortController()
+      loss.restarted = true
+      await connect()
+      await bounded(
+        (async () => {
+          while (journal()?.items?.length !== 0) await new Promise((done) => setTimeout(done, 20))
+        })(),
+        10_000,
+        "The production bridge did not reconcile its retained receipt after reconnect",
+      )
+      loss.reconciled = true
+      const proof = loss.proof as NonNullable<Extract<BrowserRequest, { operation: "click" }>["confirmation"]>
+      const confirmation = await client.kilocode.browser.confirmation(
+        { requestID: loss.requestID, directory: project, proof },
+        { throwOnError: true },
+      )
+      assert.equal(confirmation.data?.completion?.outcome, "confirmed")
+      assert.equal(confirmation.data?.acknowledgement?.ack, loss.ack)
+      assert.equal(confirmation.data?.pending, false)
+      assert.equal(confirmation.data?.dispatch?.requestID, loss.requestID)
+      active.mode = "fresh"
+      const fresh = await client.session.create(
+        {
+          directory: project,
+          title: "Fresh observation after installed backend restart",
+          agent: "code",
+          permission: [
+            { permission: "*", pattern: "*", action: "deny" },
+            { permission: "browser_snapshot", pattern: "*", action: "allow" },
+          ],
+        },
+        { throwOnError: true },
+      )
+      assert.ok(fresh.data)
+      const reply = await bounded(
+        client.session.prompt(
+          {
+            directory: project,
+            sessionID: fresh.data.id,
+            agent: "code",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "WORKFLOW_FRESH Take one authorized snapshot of the existing tab." }],
+          },
+          { throwOnError: true, signal: controller.signal },
+        ),
+        60_000,
+        "Fresh installed observation did not finish",
+      )
+      assert.ok(reply.data)
+      assert.ok(strings(reply.data.parts).some((text) => text.includes("WORKFLOW_FRESH_DONE")))
+      assert.deepEqual(cases.fresh.errors, [])
+      assert.deepEqual(effects, [{ name: "Ada Ω", amount: "42.75" }])
+    }
     await bounded(Promise.all(responses), 5000, "Permission responses did not settle")
     assert.equal(dispatch.filter((item) => item.operation === "click" && item.outcome === "confirmed").length, 1)
-    assert.ok(dispatch.some((item) => item.operation === "click" && item.outcome === "refused"))
-    assert.equal(
-      dispatch.filter((item) => item.operation === "type").length,
-      3,
-      "Denied input must never reach the browser host",
-    )
-    assert.equal(dispatch.filter((item) => item.operation === "type" && item.outcome === "unknown").length, 1)
+    if (!installed) {
+      assert.ok(dispatch.some((item) => item.operation === "click" && item.outcome === "refused"))
+      assert.equal(
+        dispatch.filter((item) => item.operation === "type").length,
+        3,
+        "Denied input must never reach the browser host",
+      )
+      assert.equal(dispatch.filter((item) => item.operation === "type" && item.outcome === "unknown").length, 1)
+    }
     assert.deepEqual(failures, [])
   } catch (err) {
     error = err instanceof Error ? err.message : "Browser workflow failed"
@@ -714,6 +910,28 @@ async function main() {
           else throw err
         }
       })(),
+      (async () => {
+        if (!second) return
+        if (second.exitCode === null && second.signalCode === null) second.kill("SIGTERM")
+        cleanup.restartedBackend = await bounded(secondExit!, 15_000, "Restarted installed backend did not exit").catch(
+          async (err) => {
+            cleanup.restartFallback = true
+            second!.kill("SIGKILL")
+            await bounded(secondExit!, 10_000, "Forced restarted backend did not exit")
+            throw err
+          },
+        )
+        await bounded(Promise.all(secondDrains), 10_000, "Restarted installed backend streams did not join")
+        cleanup.restartedStreams = true
+        try {
+          process.kill(second.pid!, 0)
+          cleanup.restartedAbsent = false
+        } catch (err) {
+          if (err && typeof err === "object" && "code" in err && err.code === "ESRCH") cleanup.restartedAbsent = true
+          else throw err
+        }
+        assert.equal(cleanup.restartedAbsent, true, "Restarted installed backend remains alive")
+      })(),
     ])
     await mkdir(join(report, ".."), { recursive: true })
     await writeFile(
@@ -723,7 +941,8 @@ async function main() {
           version: 1,
           scope: {
             configured: {
-              sourceBackend: true,
+              sourceBackend: !installed,
+              installedBackend: !!installed,
               realSdkSse: true,
               productionBridge: true,
               realHeadlessChrome: true,
@@ -734,7 +953,7 @@ async function main() {
               realHeadlessChrome: dispatch.some(
                 (item) => item.operation === "navigate" && item.outcome === "confirmed",
               ),
-              modelRequests: modes.reduce((total, mode) => total + cases[mode].turns, 0),
+              modelRequests: [...modes, "fresh" as const].reduce((total, mode) => total + cases[mode].turns, 0),
               bridgeActions: dispatch.length,
               partialSubmitRevocation:
                 partial.stopped && dispatch.some((item) => item.operation === "type" && item.outcome === "unknown"),
@@ -742,7 +961,9 @@ async function main() {
             renderedHost: false,
             realProvider: false,
             nativeDesktop: false,
-            lostAcknowledgement: "not-tested",
+            lostAcknowledgement: installed ? loss.dropped : "not-tested",
+            backendRestart: installed ? loss.restarted : "not-tested",
+            bridgeHostRestart: false,
             queuedNativeRevocation:
               "not-tested; this transport case stops the lease during host.show before host.execute",
           },
@@ -764,10 +985,27 @@ async function main() {
           authority,
           partial,
           receipts,
+          ...(installed
+            ? {
+                installed: { path: installed, sha256: process.env.RAYA_BROWSER_INSTALLED_SHA },
+                snapshotReceipt: process.env.RAYA_BROWSER_INSTALLED_RECEIPT,
+                loss: {
+                  dropped: loss.dropped,
+                  restarted: loss.restarted,
+                  retained: loss.retained,
+                  reconciled: loss.reconciled,
+                  hits: loss.hits,
+                  status: loss.status,
+                },
+                restarted: !!second,
+                fresh: cases.fresh,
+              }
+            : {}),
           error,
           cleanup,
           retirement: retired.map((item) => item.status),
           pid: child.pid,
+          ...(second ? { restartedPid: second.pid } : {}),
         },
         null,
         2,

@@ -19,6 +19,7 @@ import {
 import { useVSCode } from "./vscode"
 import { VoiceLoop } from "./voice-loop"
 import { RealtimeVoice, type RealtimeTranscript } from "./realtime-voice" // raya_change - native realtime thin client
+import { MicrophoneError } from "./voice-errors"
 import { StreamPlayer } from "./stream-player" // raya_change - user-gesture-safe MiniMax audio sink
 import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-response exclusion
 import { createVoiceRecovery } from "./voice-recovery"
@@ -480,16 +481,19 @@ export const VoiceProvider: ParentComponent = (props) => {
       setCascade(false)
       setError(undefined)
       const generation = ++state.generation
-      void realtime.start(message.connection).catch(async () => {
+      void realtime.start(message.connection).catch(async (err: unknown) => {
         if (generation !== state.generation) return
         state.terminal = true
         vscode.postMessage({ type: "speechRealtimeStop" })
-        await realtime.stop().catch(() => {
-          if (generation === state.generation) setError("Voice cleanup failed. Restart Raya before reconnecting.")
-        })
+        const failure = await realtime.stop().then(
+          () => undefined,
+          () => "Voice cleanup failed. Restart Raya before reconnecting.",
+        )
         if (generation !== state.generation) return
         setError(
-          "Voice connection could not finish. Check your audio device and media frontend, then reconnect or continue typing.",
+          failure ??
+            (err instanceof MicrophoneError ? err.message : undefined) ??
+            "Voice connection could not finish. Check your audio device and media frontend, then reconnect or continue typing.",
         )
         setStatus("degraded")
       })

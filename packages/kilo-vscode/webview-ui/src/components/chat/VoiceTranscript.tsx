@@ -4,6 +4,17 @@ import { useVoice } from "../../context/voice"
 export const VoiceTranscript: Component = () => {
   const voice = useVoice()
   const transcript = voice.transcript
+  const state = () => {
+    if (voice.status() === "degraded") return voice.error() ? "Voice paused" : "Reconnecting voice"
+    return {
+      off: "Voice off",
+      connecting: "Connecting voice",
+      listening: "Listening",
+      thinking: "Thinking",
+      speaking: "Raya is speaking",
+      degraded: "Voice paused",
+    }[voice.status()]
+  }
   const caption = () => {
     const value = transcript()
     if (!value) return
@@ -32,18 +43,31 @@ export const VoiceTranscript: Component = () => {
         aria-live="polite"
       >
         <span class="prompt-realtime-voice__state">
-          {voice.status()}
+          {state()}
           {voice.aec() ? " · AEC" : ""}
         </span>
         <Show when={voice.live() && voice.captions()}>
-          {(value) => <div data-slot="live-transcript">
-            <span>Live captions; generated words do not confirm audio playback.</span>
-            <Show when={value().incomplete || value().limited}><span role="status">Caption coverage is incomplete{value().limited ? "; display limit reached" : ""}.</span></Show>
-            <Show when={value().fragments.length > 64}><span>Showing the latest 64 caption fragments; this is not the full retained history.</span></Show>
-            <For each={value().fragments.slice(-64)}>{(fragment) => <div data-speaker={fragment.speaker}>
-              <strong>{fragment.speaker === "user" ? "You" : "Raya"}: </strong><span>{fragment.text}</span>
-            </div>}</For>
-          </div>}
+          {(value) => (
+            <div data-slot="live-transcript">
+              <span>Live captions; generated words do not confirm audio playback.</span>
+              <Show when={value().incomplete || value().limited}>
+                <span role="status">
+                  Caption coverage is incomplete{value().limited ? "; display limit reached" : ""}.
+                </span>
+              </Show>
+              <Show when={value().fragments.length > 64}>
+                <span>Showing the latest 64 caption fragments; this is not the full retained history.</span>
+              </Show>
+              <For each={value().fragments.slice(-64)}>
+                {(fragment) => (
+                  <div data-speaker={fragment.speaker}>
+                    <strong>{fragment.speaker === "user" ? "You" : "Raya"}: </strong>
+                    <span>{fragment.text}</span>
+                  </div>
+                )}
+              </For>
+            </div>
+          )}
         </Show>
         <Show when={!voice.live() && caption()}>
           <span data-slot="voice-transcript-caption">{caption()}</span>

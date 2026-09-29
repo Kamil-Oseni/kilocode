@@ -1,6 +1,23 @@
 # Raya media transport measurements
 
-ChatGPT, 2026-09-28 23:20 EDT. Measurement implementation is pending native execution; no latency or prolonged resource result is claimed here.
+ChatGPT, 2026-09-28 23:34 EDT. The first native latency measurement passed; the sustained resource diagnostic failed and prolonged resource acceptance remains unproven.
+
+## First native result
+
+Source `8443f15b9a`, [run 36517294759](https://github.com/Kamil-Oseni/kilocode/actions/runs/36517294759), job `109242334610`, passed production CGO build/full suite and the native conformance/latency step. Binary SHA-256: `482eb64e17f8fd4b2500f9a46b57c33dbc24940ed4642fb052a6bdb45d52bb12`. All ten sessions and fifty exact nonce deliveries completed without retry. Raw evidence is retained in `.tmp/media-measurement-36517294759/native-conformance.log` and the workflow artifact.
+
+| Metric | Count | p50 ms | p95 ms | Max ms |
+|---|---|---|---|---|
+| Repeated join readiness | 10 | 50.665 | 1133.411 | 1133.411 |
+| First control ACK | 10 | 0.362 | 0.858 | 0.858 |
+| First exact client arrival | 10 | 0.573 | 1.034 | 1.034 |
+| Warm control ACK | 40 | 0.130 | 0.197 | 0.368 |
+| Warm exact client arrival | 40 | 0.236 | 0.353 | 0.687 |
+| Close to actual Done | 10 | 1.966 | 41.019 | 41.019 |
+
+The same run failed its 60-second resource diagnostic after 1.093 measured seconds: the accepted child disappeared before the first process-resource sample. The partial report preserves zero samples and a failed outcome. Vet and production image smoke were skipped after that failure, so this is not a complete successful gate. Native startup-fault diagnosis is the next action; the 30-minute run has not started. These small-sample local timings support no provider, playback, installed-host or comparative-product claim.
+
+ChatGPT, 2026-09-28 23:41 EDT: bounded startup diagnostics now retain sanitized operation/error/frame-shape counts for at most sixteen genuine private wire messages. Independent actual UDP/Pion receiver tests established that legitimate padding-only packets were incorrectly rejected; the correction advances their sequence without producing codec data. Padding is excluded from the RTP payload by [RFC 3550 section 5.1](https://www.rfc-editor.org/rfc/rfc3550.html#section-5.1). Local receiver/full Go tests and vet pass, but the failed native diagnostic's exact cause remains unproven until a fresh native run. Invalid empty and oversized packets remain refused.
 
 ## Reproducible environment
 
@@ -9,7 +26,7 @@ The `Raya media conformance` workflow builds the production CGO executable from 
 The normal push gate runs a 60-second resource diagnostic. For prolonged measurement, dispatch the same workflow on the reviewed commit with `resource_seconds=1800`. The dedicated test container has a 2 GiB memory cap and 256-process/thread cap. These are declared test-environment budgets, not configured production service limits. The separate SFU is outside that container and outside the measured parent/child aggregate.
 
 ```powershell
-gh workflow run raya-media.yml --ref main -f resource_seconds=1800
+gh workflow run raya-media.yml --repo Kamil-Oseni/kilocode --ref main -f resource_seconds=1800
 ```
 
 Do not start a second run merely because observation times out. Inspect the original run's authoritative status. The workflow retains measurement logs for 30 days, including failures; save evidence needed for longer-term acceptance separately. A skipped, missing, failed or cancelled test is not a passing result.

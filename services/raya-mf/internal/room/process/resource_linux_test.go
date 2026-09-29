@@ -3,6 +3,7 @@
 package process
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -10,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -34,6 +36,65 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
+
+// Diagnostic startup inspection preserves actual frames and stops inspecting
+// after a fixed 16 messages. No private startup fields or payloads are retained.
+type startup struct {
+	input   io.Reader
+	buffer  bytes.Buffer
+	mu      sync.Mutex
+	count   int
+	last    string
+	rate    int
+	bytes   int
+	failure string
+	at      time.Time
+}
+
+func (s *startup) Read(body []byte) (int, error) {
+	if s.buffer.Len() != 0 {
+		return s.buffer.Read(body)
+	}
+	s.mu.Lock()
+	count := s.count
+	s.mu.Unlock()
+	if count >= 16 {
+		return s.input.Read(body)
+	}
+	message, err := Read(s.input)
+	s.mu.Lock()
+	s.count++
+	s.at = time.Now()
+	if err != nil {
+		if s.failure == "" {
+			s.failure = "framing"
+			if errors.Is(err, io.EOF) {
+				s.failure = "eof"
+			}
+		}
+		s.mu.Unlock()
+		return 0, err
+	}
+	s.last = message.Op
+	if message.Frame != nil {
+		s.rate = message.Frame.Rate
+		s.bytes = len(message.Frame.PCM)
+	}
+	if message.Error != "" {
+		s.failure = message.Error
+	}
+	s.mu.Unlock()
+	if err := Write(&s.buffer, message); err != nil {
+		return 0, err
+	}
+	return s.buffer.Read(body)
+}
+
+func (s *startup) snapshot() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fmt.Sprintf("frames=%d last=%s failure=%s rate=%d pcmBytes=%d at=%s", s.count, s.last, s.failure, s.rate, s.bytes, s.at.UTC().Format(time.RFC3339Nano))
+}
 
 type resource struct {
 	PID     int    `json:"pid"`
@@ -367,6 +428,7 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 	}()
 	cadence := make([]float64, 0, seconds*50)
 	var previous time.Time
+	var inspected *startup
 	record := func(phase string, pid int, start uint64) {
 		value, err := observe(os.Getpid(), parent)
 		if err != nil {
@@ -376,7 +438,13 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		if pid != 0 {
 			child, err := observe(pid, start)
 			if err != nil {
-				t.Fatal("child resource observation failed", err)
+				done := false
+				select {
+				case <-proxy.Done():
+					done = true
+				default:
+				}
+				t.Fatalf("child resource observation failed: %v; stopped=%t done=%t inputQueued=%d slots=%d startup=%s", err, proxy.stopped.Load(), done, len(proxy.input), len(slots), inspected.snapshot())
 			}
 			entry.Children = []resource{child}
 			entry.OwnedPSS += child.PSS
@@ -392,11 +460,12 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 		t.Logf("resource_sample %s", data)
 	}
 	for time.Now().Before(end) {
-		joined, err := (Factory{Path: path}).JoinAudioAuthorized(ctx, url, token(owner), name, client, 24000)
+		joined, err := (Factory{Path: path, wrap: func(input io.Reader) io.Reader { inspected = &startup{input: input}; return inspected }}).JoinAudioAuthorized(ctx, url, token(owner), name, client, 24000)
 		if err != nil {
 			t.Fatal("actual production child join failed", err)
 		}
 		proxy = joined.(*Proxy)
+		t.Logf("resource_child_ready pid=%d at=%s startup=%s", proxy.PID(), time.Now().UTC().Format(time.RFC3339Nano), inspected.snapshot())
 		pid := proxy.PID()
 		start, err := identity(pid)
 		if err != nil {

@@ -129,7 +129,7 @@ func (r *receiver) read(read func() (*rtp.Packet, error)) {
 		if r.stopped.Load() {
 			return
 		}
-		if packet == nil || len(packet.Payload) == 0 || len(packet.Payload) > payload {
+		if packet == nil || (len(packet.Payload) == 0 && (!packet.Header.Padding || packet.Header.PaddingSize == 0)) || len(packet.Payload) > payload {
 			r.fail(errors.New("invalid bounded microphone RTP payload"))
 			return
 		}
@@ -179,6 +179,12 @@ func (r *receiver) decode(write func([]byte) error) {
 			delete(pending, next)
 			if r.stopped.Load() {
 				return false
+			}
+			// Valid padding-only RTP still owns its sequence number, but contains
+			// no codec data. Consume it without manufacturing decoded silence.
+			if len(data) == 0 {
+				next++
+				continue
 			}
 			if err := write(data); err != nil {
 				if r.stopped.Load() {

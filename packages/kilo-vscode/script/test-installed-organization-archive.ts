@@ -14,6 +14,12 @@ type Organization = {
   members: Array<{ agentID: string }>
 }
 type Run = { id: string; status: string; sessionID?: string }
+type EventPage = {
+  version: number
+  cursor: number
+  runs: Run[]
+  events: Array<{ id: string; sequence: number; status: string; runID: string }>
+}
 type Page = { items: Organization[] }
 
 async function installed() {
@@ -260,6 +266,13 @@ async function main() {
     const before = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Run[]
     assert.equal(before[0]?.status, "running")
     assert.ok(before[0]?.sessionID, "The running worker has no conversation to preserve")
+    const start = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/events`)) as EventPage
+    assert.equal(start.version, 1)
+    assert.equal(start.cursor, 1)
+    assert.deepEqual(
+      start.events.map((item) => [item.sequence, item.status, item.runID]),
+      [[1, "running", before[0]!.id]],
+    )
     const archived = (await call(host, password, root, "DELETE", `/kilocode/organization/${organization.id}`, {
       expectedRevision: organization.revision,
     })) as Organization
@@ -268,6 +281,15 @@ async function main() {
     assert.equal(after[0]?.status, "error")
     assert.equal(after[0]?.id, before[0]?.id)
     assert.equal(after[0]?.sessionID, before[0]?.sessionID)
+    const stopped = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/events`)) as EventPage
+    assert.ok(stopped.cursor > start.cursor)
+    assert.equal(stopped.runs.find((item) => item.id === before[0]!.id)?.status, "error")
+    assert.equal(stopped.events.at(-1)?.status, "error")
+    assert.equal(
+      (await request(host, password, root, "GET", `/kilocode/agent/${manual.id}/events?after=${stopped.cursor + 1}`))
+        .status,
+      400,
+    )
     const roster = (await call(host, password, root, "GET", "/kilocode/agent")) as Worker[]
     assert.equal(roster.find((item) => item.id === manual.id)?.enabled, false)
     assert.equal(roster.find((item) => item.id === scheduled.id)?.enabled, false)
@@ -276,6 +298,18 @@ async function main() {
     await stop(host)
     host = await backend(app.exe, root, env)
     await retained(host, password, root, organization, manual, scheduled, recurring, event, before[0]!)
+    const replay = (await call(
+      host,
+      password,
+      root,
+      "GET",
+      `/kilocode/agent/${manual.id}/events?after=${start.cursor}`,
+    )) as EventPage
+    assert.equal(replay.cursor, stopped.cursor)
+    assert.deepEqual(
+      replay.events.map((item) => item.id),
+      stopped.events.slice(1).map((item) => item.id),
+    )
     await Bun.sleep(Math.max(0, Math.max(due, cronAt.getTime()) + 65_000 - Date.now()))
     assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${scheduled.id}/runs`), [])
     assert.deepEqual(await call(host, password, root, "GET", `/kilocode/agent/${recurring.id}/runs`), [])

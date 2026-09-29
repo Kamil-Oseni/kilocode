@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 19:21 EDT - installed Routine cursor replay passed
+
+Pushed `f83307d787` after primary/JetBrains hook success. Installed snapshot `7.4.23-snapshot+f83307d787.kamil-oseni.1790723571213`; `.tmp/installed-snapshot-f83307d787-verified.json` matches 462 extension files to retained VSIX SHA-256 `aa66de1514da51b4e67a812f4c7cb555e9516605c8c40eed41326a2c9ea7cded`, except VS Code metadata, and records CLI SHA-256 `346fc97eabd1d3c9f70a4228fed6a5ea0bdafa14881954803a1297770d41fcc5`. The installed archive harness now checks event cursor/terminal snapshot, future-cursor refusal and exact post-restart replay IDs as well as archive schedule fences, retained history and interruption recovery; it passes against the exact package. Commit/push that harness and this evidence. Next implement bounded live delivery and UI cursor/deduplication/gap recovery. `FUT-ARCH-01` remains In progress; Desktop Stopped.
+
 ## ChatGPT 2026-09-29 19:07 EDT - Routine event HTTP snapshot source gate
 
 `FUT-ARCH-01` now has an additive version 1 `GET /kilocode/agent/:agentID/events` route with saved run snapshot, cursor and optional `after` replay. The generated SDK and OpenAPI document include it; old run-history endpoints remain. Invalid/ahead/stale cursors fail explicitly, while omitting `after` resnapshots a pruned journal. Combined real-storage/HTTP tests pass 6/40; CLI/SDK typechecks, formatting and annotation guard pass. Commit/push and install a matching snapshot next. SSE live delivery, projection deduplication/gap recovery and loaded-host behavior remain open. Desktop remains Stopped.

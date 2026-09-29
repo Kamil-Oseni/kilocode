@@ -12,6 +12,12 @@ on:
       - "services/raya-mf/**"
       - ".github/workflows/raya-media.yml"
   workflow_dispatch:
+    inputs:
+      resource_seconds:
+        description: "Sustained synthetic transport measurement (60s diagnostic or 30-minute run)"
+        type: choice
+        options: ["60", "1800"]
+        default: "60"
 
 permissions:
   contents: read
@@ -23,7 +29,7 @@ concurrency:
 jobs:
   codec-sfu:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
 
@@ -39,13 +45,71 @@ jobs:
 
       - name: Exercise real Opus and SFU transport
         run: |
+          set -o pipefail
+          mkdir -p evidence
           docker run --rm --network host \
             --env CGO_ENABLED=1 --env GOMAXPROCS=2 \
             --env RAYA_TEST_LIVEKIT_URL=http://127.0.0.1:7880 \
             --env RAYA_TEST_LIVEKIT_KEY=devkey \
             --env RAYA_TEST_LIVEKIT_SECRET=secret \
             --env RAYA_TEST_MEDIA_BINARY=/out/raya-mf \
-            raya-mf-check go test -p 1 -count=1 -timeout 3m -v ./internal/room/livekit ./internal/room/process
+            raya-mf-check go test -p 1 -count=1 -timeout 5m -v ./internal/room/livekit ./internal/room/process \
+            | tee evidence/native-conformance.log
+          grep -q 'RAYA_MEDIA_LATENCY' evidence/native-conformance.log
+          python3 - <<'PY'
+          import json
+          with open('evidence/native-conformance.log', encoding='utf-8') as source:
+              reports = [json.loads(line.partition('RAYA_MEDIA_LATENCY ')[2])
+                         for line in source if 'RAYA_MEDIA_LATENCY ' in line]
+          assert len(reports) == 1
+          result = reports[0]
+          assert result['version'] == 1 and result['status'] == 'complete'
+          assert result['progress'] == {'attemptedSessions': 10, 'completedSessions': 10,
+                                       'attemptedTrials': 50, 'confirmedExactNonces': 50}
+          assert all(value >= 0 for samples in result['samples'].values() for value in samples)
+          PY
+
+      - name: Measure sustained production-child resources
+        env:
+          DURATION: ${{ inputs.resource_seconds || '60' }}
+        run: |
+          set -o pipefail
+          test "$DURATION" = 60 || test "$DURATION" = 1800
+          mkdir -p evidence
+          docker image inspect --format '{{.Id}}' raya-mf-check > evidence/build-image.txt
+          docker run --rm --network host --memory 2g --pids-limit 256 \
+            --mount type=bind,source="$PWD/evidence",target=/evidence \
+            --env CGO_ENABLED=1 --env GOMAXPROCS=2 \
+            --env RAYA_TEST_LIVEKIT_URL=http://127.0.0.1:7880 \
+            --env RAYA_TEST_LIVEKIT_KEY=devkey \
+            --env RAYA_TEST_LIVEKIT_SECRET=secret \
+            --env RAYA_TEST_MEDIA_BINARY=/out/raya-mf \
+            --env RAYA_TEST_RESOURCE_SECONDS="$DURATION" \
+            --env RAYA_TEST_RESOURCE_REPORT=/evidence/resources.json \
+            raya-mf-check go test -p 1 -count=1 -timeout 35m -v \
+              -run '^TestProductionWorkerSustainedResources$' ./internal/room/process \
+            | tee evidence/sustained-resources.log
+          grep -q 'resource_measurement' evidence/sustained-resources.log
+          python3 - "$DURATION" <<'PY'
+          import json, sys
+          with open('evidence/resources.json', encoding='utf-8') as source:
+              result = json.load(source)
+          assert result['version'] == 1
+          assert result['completed'] is True
+          assert result['configuredSeconds'] == int(sys.argv[1])
+          assert result['elapsedSeconds'] >= int(sys.argv[1])
+          assert len(result['rawWindows']) >= int(sys.argv[1]) // 2
+          assert result['cycles'] >= 2
+          assert result['decodedInputFrames'] > 0 and result['receivedOpusPackets'] > 0
+          assert all(window['slots'] <= 8 for window in result['rawWindows'])
+          assert result['rawWindows'][-1]['slots'] == 0
+          for window in result['rawWindows']:
+              group = window['cgroup']
+              assert group['memory.max'] == str(2 * 1024 ** 3)
+              assert group['pids.max'] == '256'
+              events = dict(line.split() for line in group['memory.events'].splitlines())
+              assert int(events['oom']) == 0 and int(events['oom_kill']) == 0
+          PY
 
       - name: Vet the CGO production sources
         run: docker run --rm --env CGO_ENABLED=1 --env GOMAXPROCS=2 raya-mf-check go vet -p 1 ./...
@@ -64,6 +128,15 @@ jobs:
           test "$status" = 401
           docker run --rm --entrypoint sha256sum raya-mf /usr/local/bin/raya-mf
           docker image inspect --format '{{.Id}}' raya-mf
+
+      - name: Retain measurement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raya-media-evidence-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Stop owned test services
         if: always()

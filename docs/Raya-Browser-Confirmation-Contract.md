@@ -22,6 +22,8 @@ An additive dispatch endpoint validates admission identity and a fresh host invo
 
 An exact duplicate reads the existing record and reports ownership without a new grant. A changed invocation, scope, digest, origin, or operation refuses. A lost first grant response remains conservative: the host cannot know whether an attempt became possible, and does not retry execution. Death of an owner does not establish absence of a browser effect. The host retains its current-process active-request guard and records its attempt before native execution.
 
+Dispatch ownership is not Computer Use permission. The host still revalidates the active lease, exact application/target, sensitive-action policy and cancellation immediately before each native effect and at existing asynchronous boundaries. Claiming a request cannot enlarge or revive expired/revoked authority. This transport contract introduces no ordinary per-action permission prompt.
+
 ## Metadata-only completion and acknowledgement
 
 An additive confirmation endpoint accepts a closed version 1 payload containing admission/dispatch/request identities, session/scope/digest, acknowledgement ID, operation, confirmed outcome, and bounded start/finish timestamps. It validates the exact persisted admission and dispatch before exclusively creating an immutable confirmation record.

@@ -160,11 +160,28 @@ jobs:
           assert result['mode'] == sys.argv[2]
           if sys.argv[3] == 'true':
               action = result['parentAction']
-              assert isinstance(action['id'], int) and action['id'] > 1
-              assert isinstance(action['incomplete'], bool)
+              assert type(action['id']) is int and action['id'] > 1
+              assert action['id'] == 1 + result['published'] + result['receivedControl']
+              assert type(action['incomplete']) is bool
+              assert type(action['available']) is bool
+              assert type(action['droppedUpdates']) is int and action['droppedUpdates'] >= 0
+              assert type(action['stages']) is int and 0 <= action['stages'] <= 255
+              assert type(action['operation']) is int and 0 <= action['operation'] <= 3
+              assert type(action['ackOutcome']) is int and 0 <= action['ackOutcome'] <= 3
+              assert type(action['callerOutcome']) is int and 0 <= action['callerOutcome'] <= 5
+              assert all(type(action[field]) is bool for field in ('writeSucceeded', 'ackCorrelated', 'ackForwarded'))
+              for field in ('budgetNs', 'wireExpiresMs', 'writerReceivedNs', 'writeBeginNs',
+                            'writeEndNs', 'ackParsedNs', 'ackConsumedNs', 'callerFinishedNs'):
+                  assert type(action[field]) is int and action[field] >= 0
               if not action['incomplete']:
-                  assert action['available'] is True
-                  assert action['stages'] & (1 << 7) and action['callerOutcome'] == 1
+                  assert action['available'] is True and action['droppedUpdates'] == 0
+                  assert action['operation'] in (1, 2) and action['budgetNs'] > 0 and action['wireExpiresMs'] > 0
+                  assert action['stages'] == 255
+                  assert action['writeSucceeded'] is True
+                  assert action['ackOutcome'] == action['callerOutcome'] == 1
+                  assert action['ackCorrelated'] is True and action['ackForwarded'] is True
+                  assert action['writerReceivedNs'] <= action['writeBeginNs'] <= action['writeEndNs']
+                  assert action['writeBeginNs'] <= action['ackParsedNs'] <= action['ackConsumedNs'] <= action['callerFinishedNs']
           else:
               assert sys.argv[3] == 'false' and 'parentAction' not in result
           assert result['cycles'] == 1 if sys.argv[2] == 'continuous' else result['cycles'] >= 2

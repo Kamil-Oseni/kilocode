@@ -1,13 +1,14 @@
 import { expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { Effect, Exit } from "effect"
+import { Deferred, Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
 import { PartID, SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaGoal } from "@/kilocode/goal"
@@ -75,12 +76,22 @@ function session(id: string) {
   }
 }
 
+function idle(storage: Pick<Storage.Interface, "read" | "create" | "replace" | "remove">, run: RayaTask.Run) {
+  const execution = RayaTaskExecution.make(storage)
+  return Effect.gen(function* () {
+    while (!(yield* execution.acquire(run))) yield* Effect.sleep("10 millis")
+  }).pipe(Effect.timeout("5 seconds"))
+}
+
 test("a paused worker follow-up starts one run without rewriting the assignment", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const database = yield* Database.Service
       const storage = memory()
       const starts: string[] = []
+      const turns: RayaTask.Run[] = []
+      const firstTurn = yield* Deferred.make<RayaTask.Run>()
+      const secondTurn = yield* Deferred.make<RayaTask.Run>()
       const runner = RayaTaskRunner.make({
         database,
         storage,
@@ -90,9 +101,14 @@ test("a paused worker follow-up starts one run without rewriting the assignment"
               starts.push("start")
               return session("ses_followup")
             }),
-          get: () => Effect.die("unused"),
+          get: (id) => Effect.succeed(session(id)),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
+        },
+        continuation: (run) => {
+          const receipt = turns.length === 0 ? firstTurn : secondTurn
+          turns.push(run)
+          return Deferred.succeed(receipt, run).pipe(Effect.asVoid)
         },
       })
       const inbox = RayaTaskInbox.make(database)
@@ -116,6 +132,8 @@ test("a paused worker follow-up starts one run without rewriting the assignment"
       const first = yield* inbox.admit({ agentID: agent.id, source: "user_1", kind: "user", body: question })
       expect(first.created).toBe(true)
       const run = yield* runner.ask(agent.id, question)
+      expect((yield* Deferred.await(firstTurn).pipe(Effect.timeout("5 seconds"))).id).toBe(run.id)
+      yield* idle(storage, run)
       expect(starts).toEqual(["start"])
       expect(run.sessionID).toBe(SessionID.make("ses_followup"))
       expect(run.trigger).toEqual({ kind: "manual" })
@@ -133,7 +151,10 @@ test("a paused worker follow-up starts one run without rewriting the assignment"
         false,
       )
       yield* runner.ask(agent.id, question)
+      expect((yield* Deferred.await(secondTurn).pipe(Effect.timeout("5 seconds"))).id).toBe(run.id)
+      yield* idle(storage, run)
       expect(starts).toEqual(["start"])
+      expect(turns).toHaveLength(2)
       expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
@@ -145,6 +166,9 @@ test("accepted worker messages wait for distinct reply turns in order", async ()
       const database = yield* Database.Service
       const storage = memory()
       const created: SessionID[] = []
+      const turns: RayaTask.Run[] = []
+      const firstTurn = yield* Deferred.make<RayaTask.Run>()
+      const secondTurn = yield* Deferred.make<RayaTask.Run>()
       const sessions = {
         create: () =>
           Effect.sync(() => {
@@ -156,7 +180,16 @@ test("accepted worker messages wait for distinct reply turns in order", async ()
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       }
-      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+        continuation: (run) => {
+          const receipt = turns.length === 0 ? firstTurn : secondTurn
+          turns.push(run)
+          return Deferred.succeed(receipt, run).pipe(Effect.asVoid)
+        },
+      })
       const inbox = RayaTaskInbox.make(database)
       const goals = RayaGoal.make({ storage, sessions })
       const agent = yield* runner.tasks.create({
@@ -170,6 +203,9 @@ test("accepted worker messages wait for distinct reply turns in order", async ()
       })
       yield* inbox.publish({ agentID: agent.id, source: "user_first", kind: "user", body: "First question" })
       const first = yield* runner.dispatch(agent.id)
+      const firstRun = yield* Deferred.await(firstTurn).pipe(Effect.timeout("5 seconds"))
+      expect(firstRun.sessionID).toBe(SessionID.make("ses_queue_1"))
+      yield* idle(storage, firstRun)
       expect(first?.source).toBe("user_first")
       yield* inbox.publish({ agentID: agent.id, source: "user_second", kind: "user", body: "Second question" })
       expect(yield* runner.dispatch(agent.id)).toBeUndefined()
@@ -184,6 +220,9 @@ test("accepted worker messages wait for distinct reply turns in order", async ()
         reply: { messageID: MessageID.ascending(), body: "First answer", at: Date.now() },
       })
       yield* runner.settle(SessionID.make("ses_queue_1"))
+      const secondRun = yield* Deferred.await(secondTurn).pipe(Effect.timeout("5 seconds"))
+      expect(secondRun.sessionID).toBe(SessionID.make("ses_queue_2"))
+      yield* idle(storage, secondRun)
 
       expect(created).toEqual([SessionID.make("ses_queue_1"), SessionID.make("ses_queue_2")])
       expect(yield* inbox.pending(agent.id)).toBeUndefined()
@@ -244,15 +283,17 @@ test("a follow-up while waiting on you resumes the same session", async () => {
     Effect.gen(function* () {
       const database = yield* Database.Service
       const storage = memory()
+      const turn = yield* Deferred.make<RayaTask.Run>()
       const runner = RayaTaskRunner.make({
         database,
         storage,
         sessions: {
           create: () => Effect.die("must not start another worker"),
-          get: () => Effect.die("unused"),
+          get: (id) => Effect.succeed(session(id)),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
         },
+        continuation: (run) => Deferred.succeed(turn, run).pipe(Effect.asVoid),
       })
       const agent = yield* runner.tasks.create({
         name: "Accounts",
@@ -282,6 +323,8 @@ test("a follow-up while waiting on you resumes the same session", async () => {
       })
       yield* runner.park(sid, true)
       const run = yield* runner.ask(agent.id, "Why did expenses increase?")
+      expect((yield* Deferred.await(turn).pipe(Effect.timeout("5 seconds"))).id).toBe(run.id)
+      yield* idle(storage, run)
       expect(run.sessionID).toBe(sid)
       expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(1)
       const latest = (yield* runner.tasks.runsFor(agent.id))[0]

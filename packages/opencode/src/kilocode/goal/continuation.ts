@@ -13,7 +13,7 @@ import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue"
 import * as Log from "@opencode-ai/core/util/log"
 import { RayaGoal } from "."
 import type { Database } from "@opencode-ai/core/database/database"
-import { continuation } from "@/kilocode/task/continuation"
+import { continuation, owned } from "@/kilocode/task/continuation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { gate } from "@/kilocode/session/input-gate"
@@ -362,6 +362,7 @@ function recover<A, E, R>(effect: Effect.Effect<A, E, R>, identity?: string) {
 
 function launch(input: {
   goals: Goals
+  session: { id: SessionID; metadata?: Record<string, unknown> }
   sessionID: SessionID
   directory: string
   permitted: () => Effect.Effect<boolean>
@@ -370,8 +371,9 @@ function launch(input: {
   dispatch: string
   database?: Database.Interface
   storage: Storage.Interface
+  nested?: boolean
 }) {
-  return input.permitted().pipe(
+  const body = input.permitted().pipe(
     Effect.flatMap((allowed) =>
       allowed ? input.goals.dispatched(input.sessionID, input.dispatch) : Effect.succeed(undefined),
     ),
@@ -399,6 +401,8 @@ function launch(input: {
       })
     }),
   )
+  if (input.nested) return body
+  return owned({ database: input.database, storage: input.storage, session: input.session }, body)
 }
 
 function detail(error: unknown) {
@@ -612,7 +616,7 @@ export namespace RayaGoalContinuation {
     })
   }
 
-  export function resume(input: {
+  type ResumeInput = {
     database?: Database.Interface
     sessionID: SessionID
     storage: Storage.Interface
@@ -620,7 +624,9 @@ export namespace RayaGoalContinuation {
     run?: Run
     loop?: Loop
     permitted?: () => Effect.Effect<boolean>
-  }) {
+  }
+
+  function proceed(input: ResumeInput) {
     const goals = RayaGoal.make(input)
     return Effect.gen(function* () {
       const goal = yield* goals.get(input.sessionID)
@@ -754,6 +760,8 @@ export namespace RayaGoalContinuation {
       if (!queued?.dispatch) return
       yield* launch({
         goals,
+        session,
+        nested: true,
         sessionID: input.sessionID,
         directory: session.directory,
         permitted: () =>
@@ -767,6 +775,13 @@ export namespace RayaGoalContinuation {
         database: input.database,
         storage: input.storage,
       })
+    })
+  }
+
+  export function resume(input: ResumeInput) {
+    return Effect.gen(function* () {
+      const session = yield* input.sessions.get(input.sessionID)
+      return yield* owned({ database: input.database, storage: input.storage, session }, proceed(input))
     })
   }
 
@@ -824,6 +839,7 @@ export namespace RayaGoalContinuation {
               if (!retry?.dispatch || retry.status !== "active") return
               yield* launch({
                 goals,
+                session,
                 sessionID: sid,
                 directory: session.directory,
                 permitted: () => continuation({ ...input, session }),
@@ -858,6 +874,7 @@ export namespace RayaGoalContinuation {
             if (!queued?.dispatch) return
             yield* launch({
               goals,
+              session,
               sessionID: sid,
               directory: session.directory,
               permitted: () => continuation({ ...input, session }),

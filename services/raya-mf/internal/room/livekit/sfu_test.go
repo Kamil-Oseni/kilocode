@@ -121,7 +121,7 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 			}
 		}
 	}
-	receiver := lksdk.NewRoom(&lksdk.RoomCallback{ParticipantCallback: lksdk.ParticipantCallback{OnTrackSubscribed: func(track *webrtc.TrackRemote, pub *lksdk.RemoteTrackPublication, participant *lksdk.RemoteParticipant) {
+	peer := lksdk.NewRoom(&lksdk.RoomCallback{ParticipantCallback: lksdk.ParticipantCallback{OnTrackSubscribed: func(track *webrtc.TrackRemote, pub *lksdk.RemoteTrackPublication, participant *lksdk.RemoteParticipant) {
 		if participant.Identity() != owner || pub.Source() != lkproto.TrackSource_MICROPHONE {
 			return
 		}
@@ -173,7 +173,7 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		// is a failing gate, never a successful claim of complete shutdown.
 		go func() {
 			var failure error
-			receiver.Disconnect()
+			peer.Disconnect()
 			outsider.Disconnect()
 			if adapter != nil {
 				_ = adapter.Close()
@@ -212,7 +212,7 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 			t.Error("actual SFU cleanup owner remained blocked")
 		}
 	})
-	if err := receiver.JoinWithContextAndToken(ctx, raw, token(client)); err != nil {
+	if err := peer.JoinWithContextAndToken(ctx, raw, token(client)); err != nil {
 		t.Fatal("synthetic client could not join local SFU")
 	}
 	if err := outsider.JoinWithContextAndToken(ctx, raw, token("outsider-"+id)); err != nil {
@@ -368,10 +368,10 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 	wrong, _ := microphone(outsider, lkproto.TrackSource_MICROPHONE)
 	wrong(12)
 	reject()
-	screen, _ := microphone(receiver, lkproto.TrackSource_SCREEN_SHARE_AUDIO)
+	screen, _ := microphone(peer, lkproto.TrackSource_SCREEN_SHARE_AUDIO)
 	screen(12)
 	reject()
-	first, retire := microphone(receiver, lkproto.TrackSource_MICROPHONE)
+	first, retire := microphone(peer, lkproto.TrackSource_MICROPHONE)
 	first(24)
 	select {
 	case frame := <-adapter.Input():
@@ -392,16 +392,36 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("authorized microphone produced no real decoded PCM")
 	}
+	owned := func() *receiver {
+		t.Helper()
+		adapter.remoteMu.Lock()
+		defer adapter.remoteMu.Unlock()
+		if len(adapter.remote) != 1 {
+			t.Fatal("authorized microphone did not own exactly one receiver")
+		}
+		for _, receiver := range adapter.remote {
+			return receiver
+		}
+		return nil
+	}
+	retired := owned()
 	retire()
+	select {
+	case <-retired.end:
+	case <-time.After(2 * time.Second):
+		t.Fatal("actual microphone receiver did not join after retirement")
+	}
 	wait(func() bool {
 		adapter.remoteMu.Lock()
 		defer adapter.remoteMu.Unlock()
 		return len(adapter.remote) == 0
 	}, "retired microphone decoder remained owned")
-	for len(adapter.input) != 0 {
-		<-adapter.input
+	select {
+	case <-adapter.Input():
+		t.Fatal("retired microphone left stale queued PCM")
+	default:
 	}
-	replacement, _ := microphone(receiver, lkproto.TrackSource_MICROPHONE)
+	replacement, remove := microphone(peer, lkproto.TrackSource_MICROPHONE)
 	replacement(24)
 	select {
 	case frame := <-adapter.Input():
@@ -420,6 +440,35 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("retiring the original microphone closed shared input")
+	}
+	for index := 0; index < 6; index++ {
+		retired := owned()
+		remove()
+		select {
+		case <-retired.end:
+		case <-time.After(2 * time.Second):
+			t.Fatal("rapid replacement retained a microphone reader/jitter owner")
+		}
+		wait(func() bool {
+			adapter.remoteMu.Lock()
+			defer adapter.remoteMu.Unlock()
+			return len(adapter.remote) == 0
+		}, "retired microphone remained in active ownership")
+		select {
+		case <-adapter.Input():
+			t.Fatal("rapid retirement left stale queued microphone PCM")
+		default:
+		}
+		replacement, remove = microphone(peer, lkproto.TrackSource_MICROPHONE)
+		replacement(8)
+		select {
+		case frame := <-adapter.Input():
+			if frame.Rate != 24000 || len(frame.PCM) != 960 {
+				t.Fatal("rapid replacement changed PCM frame format")
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("rapid replacement produced no actual PCM")
+		}
 	}
 	wait(adapter.track.IsBound, "production output RTP track was not bound")
 	tick := time.NewTicker(engine.FramePeriod)
@@ -462,6 +511,7 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("actual SFU output did not reach client decoder")
 	}
+	last := owned()
 	_ = adapter.Close()
 	if err := adapter.Send(context.Background(), room.Data{Topic: "raya.sfu-test", Body: []byte("post-stop")}); err == nil {
 		t.Fatal("post-Stop data Send was admitted")
@@ -484,6 +534,11 @@ func TestLiveKitSFUSyntheticPCM(t *testing.T) {
 	}
 	select {
 	case <-adapter.done:
+		select {
+		case <-last.end:
+		default:
+			t.Fatal("Room cleanup reported completion before microphone owner joined")
+		}
 		if err := adapter.Close(); err != nil {
 			t.Fatal("actual adapter cleanup failed", err)
 		}

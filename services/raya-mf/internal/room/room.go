@@ -22,6 +22,12 @@ type Room interface {
 	Close() error
 }
 
+// Faults exposes fatal input failures without fabricating an audio frame or
+// waiting for an uncertain native reader to finish its cleanup.
+type Faults interface {
+	Failure() <-chan error
+}
+
 type Factory interface {
 	Join(context.Context, string, string, string) (Room, error)
 }

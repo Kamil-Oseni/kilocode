@@ -19,7 +19,6 @@ import (
 	lkproto "github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	lksdk "github.com/livekit/server-sdk-go/v2"
-	lkmedia "github.com/livekit/server-sdk-go/v2/pkg/media"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
@@ -43,13 +42,25 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 	}
 	input := make(chan engine.Frame, 64)
 	data := make(chan room.Data, 64)
+	failure := make(chan error, 1)
+	refuse := func(err error) {
+		select {
+		case failure <- err:
+		default:
+		}
+	}
 	writer := &writer{input: input, rate: rate}
 	var remoteMu sync.Mutex
-	remote := make(map[string]*lkmedia.PCMRemoteTrack)
+	remote := make(map[string]*receiver)
 	tracks := make(map[string]*webrtc.TrackRemote)
 	sinks := make(map[string]*sink)
 	stopped := &atomic.Bool{}
 	callback := &lksdk.RoomCallback{
+		OnDisconnected: func() {
+			if !stopped.Load() {
+				refuse(errors.New("voice room disconnected"))
+			}
+		},
 		ParticipantCallback: lksdk.ParticipantCallback{
 			OnTrackSubscribed: func(track *webrtc.TrackRemote, publication *lksdk.RemoteTrackPublication, participant *lksdk.RemoteParticipant) {
 				if participant == nil || participant.Identity() != client {
@@ -59,21 +70,36 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 					return
 				}
 				if !strings.EqualFold(track.Codec().MimeType, webrtc.MimeTypeOpus) {
+					refuse(errors.New("authorized microphone codec is unsupported"))
 					return
 				}
 				remoteMu.Lock()
 				defer remoteMu.Unlock()
-				if stopped.Load() || len(remote) != 0 {
+				if stopped.Load() {
 					return
 				}
+				for sid, retired := range remote {
+					if !retired.stopped.Load() {
+						return
+					}
+					select {
+					case <-retired.end:
+						discard(input)
+						delete(remote, sid)
+						delete(tracks, sid)
+						delete(sinks, sid)
+					default:
+						refuse(receiverUnknown)
+						return
+					}
+				}
 				input := &sink{writer: writer}
-				decoded, err := lkmedia.NewPCMRemoteTrack(
-					track,
-					input,
-					lkmedia.WithTargetSampleRate(rate),
-					lkmedia.WithTargetChannels(1),
-				)
+				decoded, err := newMicrophone(func() (*rtp.Packet, error) {
+					packet, _, err := track.ReadRTP()
+					return packet, err
+				}, func() error { return track.SetReadDeadline(time.Now()) }, input, failure)
 				if err != nil {
+					refuse(err)
 					return
 				}
 				sid := publication.SID()
@@ -88,13 +114,20 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 					return
 				}
 				decoded := remote[publication.SID()]
-				delete(remote, publication.SID())
-				delete(tracks, publication.SID())
 				if decoded != nil {
 					_ = sinks[publication.SID()].Close()
-					delete(sinks, publication.SID())
-					_ = track.SetReadDeadline(time.Now())
-					decoded.Close()
+					discard(input)
+					ctx, cancel := context.WithTimeout(context.Background(), deadline)
+					defer cancel()
+					_ = decoded.Close(ctx)
+					select {
+					case <-decoded.end:
+						delete(remote, publication.SID())
+						delete(tracks, publication.SID())
+						delete(sinks, publication.SID())
+					default:
+						// Retain the exact retired owner until actual termination.
+					}
 				}
 			},
 			OnDataPacket: func(packet lksdk.DataPacket, params lksdk.DataReceiveParams) {
@@ -128,8 +161,8 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 		for sid, decoded := range remote {
 			_ = sinks[sid].Close()
 			delete(sinks, sid)
-			_ = tracks[sid].SetReadDeadline(time.Now())
-			decoded.Close()
+			_ = decoded.Close(context.Background())
+			<-decoded.end
 			delete(remote, sid)
 			delete(tracks, sid)
 		}
@@ -203,6 +236,7 @@ func (Factory) JoinAudioAuthorized(ctx context.Context, url, token, _ string, cl
 		writer:   writer,
 		input:    input,
 		data:     data,
+		failure:  failure,
 		remote:   remote,
 		remoteMu: &remoteMu,
 		tracks:   tracks,
@@ -226,7 +260,8 @@ type Room struct {
 	writer   *writer
 	input    chan engine.Frame
 	data     chan room.Data
-	remote   map[string]*lkmedia.PCMRemoteTrack
+	failure  chan error
+	remote   map[string]*receiver
 	remoteMu *sync.Mutex
 	tracks   map[string]*webrtc.TrackRemote
 	sinks    map[string]*sink
@@ -240,6 +275,10 @@ func (r *Room) Input() <-chan engine.Frame {
 
 func (r *Room) Data() <-chan room.Data {
 	return r.data
+}
+
+func (r *Room) Failure() <-chan error {
+	return r.failure
 }
 
 func (r *Room) Publish(ctx context.Context, frame engine.Frame) error {
@@ -329,9 +368,9 @@ func (r *Room) halt() {
 			_ = r.track.Close()
 			_ = r.writer.Close()
 			r.remoteMu.Lock()
-			for sid, track := range r.tracks {
+			for sid, decoded := range r.remote {
 				_ = r.sinks[sid].Close()
-				_ = track.SetReadDeadline(time.Now())
+				decoded.stop()
 			}
 			r.remoteMu.Unlock()
 		drain:
@@ -345,18 +384,22 @@ func (r *Room) halt() {
 			r.room.Disconnect()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*engine.FramePeriod)
 			defer cancel()
-			r.err = r.sender.Close(ctx)
-			r.err = errors.Join(r.err, r.control.Close(ctx))
+			_ = r.sender.Close(ctx)
+			_ = r.control.Close(ctx)
 			// A timed-out SDK handoff retains its owner until actual return.
 			// Closing done must not fabricate that the control worker drained.
 			<-r.control.end
 			<-r.sender.end
+			// These are actual local owner receipts. They do not change an
+			// earlier unknown Send outcome or authorize replay of its effects.
+			r.err = errors.Join(r.sender.Close(context.Background()), r.control.Close(context.Background()))
 			r.remoteMu.Lock()
 			for sid, decoded := range r.remote {
 				_ = r.sinks[sid].Close()
 				delete(r.sinks, sid)
-				_ = r.tracks[sid].SetReadDeadline(time.Now())
-				decoded.Close()
+				_ = decoded.Close(ctx)
+				<-decoded.end
+				r.err = errors.Join(r.err, decoded.Close(context.Background()))
 				delete(r.tracks, sid)
 				delete(r.remote, sid)
 			}
@@ -412,6 +455,7 @@ func (w *writer) WriteSample(sample media.PCM16Sample) error {
 	select {
 	case w.input <- engine.Frame{PCM: pcm, Rate: w.rate}:
 	default:
+		return errors.New("microphone input exceeded its bounded frame allowance")
 	}
 	return nil
 }
@@ -446,4 +490,17 @@ func (s *sink) Close() error {
 	s.closed = true
 	s.mu.Unlock()
 	return nil
+}
+
+// The sole microphone sink is fenced before retirement drains its old frames.
+// Bound the drain by the room's existing capacity; no replacement is admitted
+// while an old receiver is still active or its termination remains unknown.
+func discard(input <-chan engine.Frame) {
+	for index := 0; index < 64; index++ {
+		select {
+		case <-input:
+		default:
+			return
+		}
+	}
 }

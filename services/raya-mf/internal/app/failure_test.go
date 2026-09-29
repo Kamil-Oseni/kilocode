@@ -308,3 +308,50 @@ func TestFailureUsesActualHTTPBackendWithoutLeakingProviderPayload(t *testing.T)
 		t.Fatalf("event = %s", raw)
 	}
 }
+
+type faulted struct {
+	*fakeRoom
+	faults chan error
+}
+
+func (f *faulted) Failure() <-chan error { return f.faults }
+
+func TestFatalMicrophoneFailurePausesAndReportsOnceThroughHTTP(t *testing.T) {
+	received := make(chan wire.Envelope, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/kilocode/voice/events" || r.Header.Get("Authorization") != "synthetic-auth" {
+			t.Error("wrong microphone failure route or authorization")
+		}
+		var event wire.Envelope
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Error(err)
+		}
+		received <- event
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("true"))
+	}))
+	defer server.Close()
+	voice := &failingEngine{fakeEngine: newFakeEngine()}
+	media := &faulted{fakeRoom: newFakeRoom(), faults: make(chan error, 1)}
+	session := NewSession(context.Background(), "microphone-fault", voice, media, HTTPBackend{URL: server.URL, Auth: "synthetic-auth"})
+	defer session.Close()
+	media.faults <- secret
+	status := finished(t, session)
+	if status.Failure == nil || status.Failure.Code != "room_input_failed" || status.BackendReport != "succeeded" || voice.closed.Load() != 1 {
+		t.Fatalf("fatal microphone status = %#v", status)
+	}
+	event := <-received
+	raw, err := json.Marshal(event)
+	if err != nil || event.Session != "microphone-fault" || event.Event.Type != "engine.error" || strings.Contains(string(raw), "secret") {
+		t.Fatal("microphone failure lost identity or leaked native diagnostics")
+	}
+	if !errors.Is(session.Inject(context.Background(), engine.ContextItem{}), context.Canceled) {
+		t.Fatal("failed voice session admitted new context")
+	}
+	media.faults <- secret
+	select {
+	case <-received:
+		t.Fatal("terminal microphone fault was reported twice")
+	default:
+	}
+}

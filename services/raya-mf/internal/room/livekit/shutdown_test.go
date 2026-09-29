@@ -16,7 +16,6 @@ import (
 	"github.com/livekit/media-sdk/opus"
 	"github.com/livekit/protocol/logger"
 	lksdk "github.com/livekit/server-sdk-go/v2"
-	lkmedia "github.com/livekit/server-sdk-go/v2/pkg/media"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
@@ -48,7 +47,7 @@ func shutdown(t *testing.T, audio func(*rtp.Packet) error, data func(room.Data) 
 		room: lksdk.NewRoom(nil), track: track, codec: codec, encoded: output,
 		sender: sender, control: control, writer: &writer{input: input, rate: 24000},
 		input: input, data: make(chan room.Data, 64),
-		remote: make(map[string]*lkmedia.PCMRemoteTrack), remoteMu: &sync.Mutex{},
+		remote: make(map[string]*receiver), remoteMu: &sync.Mutex{},
 		tracks: make(map[string]*webrtc.TrackRemote), sinks: make(map[string]*sink),
 		stopped: &atomic.Bool{}, done: make(chan struct{}),
 	}
@@ -154,7 +153,10 @@ func TestRoomCloseRetainsAdmittedWriters(t *testing.T) {
 			}
 			release()
 			select {
-			case <-sent:
+			case err := <-sent:
+				if kind == "audio" && !errors.Is(err, errUnknown) || kind == "data" && !errors.Is(err, controlUnknown) {
+					t.Fatal("accepted blocked send lost its unknown outcome", err)
+				}
 			case <-time.After(time.Second):
 				t.Fatal("admitted caller did not finish")
 			}
@@ -162,6 +164,9 @@ func TestRoomCloseRetainsAdmittedWriters(t *testing.T) {
 			case <-value.done:
 			case <-time.After(time.Second):
 				t.Fatal("Room cleanup did not observe actual writer return")
+			}
+			if err := value.Close(); err != nil {
+				t.Fatal("actual joined owners did not reconcile local cleanup", err)
 			}
 		})
 	}

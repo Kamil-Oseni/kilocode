@@ -15,6 +15,7 @@ import (
 var failures = map[string]string{
 	"room_data_closed":     "The voice room control connection closed.",
 	"room_input_closed":    "Microphone input from the voice room stopped.",
+	"room_input_failed":    "Microphone input stopped unexpectedly.",
 	"engine_audio_closed":  "The voice engine audio connection closed.",
 	"engine_events_closed": "The voice engine event connection closed.",
 	"audio_input":          "Microphone audio could not reach the voice engine.",

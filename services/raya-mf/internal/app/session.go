@@ -118,9 +118,16 @@ func (s *Session) Close() error {
 
 func (s *Session) input() {
 	defer s.wait.Done()
+	var faults <-chan error
+	if transport, ok := s.room.(room.Faults); ok {
+		faults = transport.Failure()
+	}
 	for {
 		select {
 		case <-s.ctx.Done():
+			return
+		case <-faults:
+			s.fail("room_input_failed")
 			return
 		case data, ok := <-s.room.Data():
 			if !ok {

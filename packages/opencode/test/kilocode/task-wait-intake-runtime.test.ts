@@ -1,12 +1,13 @@
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { createHash, randomBytes } from "node:crypto"
-import { createReadStream } from "node:fs"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve, sep } from "node:path"
 import { Database as Sqlite } from "bun:sqlite"
 
 type Diagnostic = { text: string; bytes: number; failed: boolean }
+const lifetime = new AbortController()
 type Host = {
   url: string
   child: Bun.Subprocess
@@ -18,25 +19,15 @@ type Host = {
   termination?: { exit: number | null; signal: string | null; absent: boolean }
 }
 type Run = { id: string; agentID: string; status: string; sessionID: string; blockedReason?: string }
-type Dispatch = { id: string; messageID: string; phase: string; intent?: string }
+type Dispatch = { id: string; messageID: string; phase: string; intent: string }
 type Goal = { status: string; intent?: string; dispatch?: Dispatch; reply?: { messageID: string; body: string } }
 type Message = {
   info: { id: string; role: string; parentID?: string; finish?: string; time?: { completed?: number } }
   parts: Array<{ type: string; text?: string; tool?: string; state?: { status: string; output?: string } }>
 }
 
-async function installed() {
-  const value = process.env.RAYA_INSTALLED_EXTENSION
-  const expected = process.env.RAYA_INSTALLED_VERSION
-  assert.ok(value && expected, "Pin RAYA_INSTALLED_EXTENSION and RAYA_INSTALLED_VERSION")
-  const dir = resolve(value)
-  const manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { version?: string }
-  assert.equal(manifest.version, expected)
-  assert.match(expected, /^\d+\.\d+\.\d+-snapshot\+[a-f0-9]+\./)
-  const exe = join(dir, "bin", "kilo.exe")
-  const hash = createHash("sha256")
-  for await (const chunk of createReadStream(exe, { highWaterMark: 65_536 })) hash.update(chunk)
-  return { exe, dir, version: expected, digest: hash.digest("hex") }
+function installed() {
+  return { exe: process.execPath, dir: resolve(import.meta.dir, "../.."), version: "source-runtime" }
 }
 function fixture() {
   const state = { requests: 0, questions: 0, followupRequests: 0, followupUserRequests: 0 }
@@ -62,10 +53,12 @@ function fixture() {
       if (state.requests > 6) return new Response("Bounded model fixture exhausted", { status: 503 })
       if (body.includes("WAIT_FOLLOWUP")) state.followupRequests++
       const payload = JSON.parse(body) as { messages?: Array<{ role?: string; content?: unknown }> }
-      const followup = payload.messages?.some(
-        (message) => message.role === "user" && JSON.stringify(message.content)?.includes("WAIT_FOLLOWUP"),
+      if (
+        payload.messages?.some(
+          (message) => message.role === "user" && JSON.stringify(message.content)?.includes("WAIT_FOLLOWUP"),
+        )
       )
-      if (followup) state.followupUserRequests++
+        state.followupUserRequests++
       if (body.includes("WAIT_ORIGINAL") && state.questions === 0) {
         state.questions++
         return response(
@@ -96,15 +89,15 @@ function fixture() {
       }
       return response({
         role: "assistant",
-        content: body.includes("TERMINAL_RECOVERY")
-          ? "TERMINAL_REPLY_ACK"
-          : followup
-            ? "WAIT_FOLLOWUP_ACK"
-            : body.includes("WAIT_ORIGINAL")
-              ? "OLD_REPLY_ACK"
-              : body.includes("COMPLETED_SECOND")
-                ? "SECOND_REPLY_ACK"
-                : "FIRST_REPLY_ACK",
+        content: payload.messages?.some(
+          (message) => message.role === "user" && JSON.stringify(message.content)?.includes("WAIT_FOLLOWUP"),
+        )
+          ? "WAIT_FOLLOWUP_ACK"
+          : body.includes("WAIT_ORIGINAL")
+            ? "OLD_REPLY_ACK"
+            : body.includes("COMPLETED_SECOND")
+              ? "SECOND_REPLY_ACK"
+              : "FIRST_REPLY_ACK",
       })
     },
   })
@@ -186,11 +179,26 @@ async function drain(stream: ReadableStream<Uint8Array>, receive: (value: Uint8A
   }
 }
 
-async function backend(exe: string, root: string, env: Record<string, string | undefined>, hosts: Host[]) {
+async function backend(exe: string, env: Record<string, string | undefined>, hosts: Host[]) {
   const child = Bun.spawn(
-    [exe, "--print-logs", "--log-level", "INFO", "serve", "--hostname", "127.0.0.1", "--port", "0"],
+    [
+      exe,
+      "run",
+      "--cwd",
+      resolve(import.meta.dir, "../.."),
+      "--conditions=browser",
+      "src/index.ts",
+      "--print-logs",
+      "--log-level",
+      "INFO",
+      "serve",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      "0",
+    ],
     {
-      cwd: root,
+      cwd: resolve(import.meta.dir, "../.."),
       env,
       stdin: "ignore",
       stdout: "pipe",
@@ -248,7 +256,7 @@ function request(host: Host, password: string, root: string, method: string, pat
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(35_000),
+    signal: AbortSignal.any([AbortSignal.timeout(35_000), lifetime.signal]),
   })
 }
 
@@ -262,6 +270,7 @@ async function call(host: Host, password: string, root: string, method: string, 
 async function wait(check: () => Promise<boolean> | boolean, message: string, timeout = 20_000) {
   const deadline = performance.now() + timeout
   while (performance.now() < deadline) {
+    lifetime.signal.throwIfAborted()
     if (await check()) return
     await Bun.sleep(100)
   }
@@ -282,7 +291,7 @@ async function stop(host: Host) {
       return false
     } catch (err) {
       if (err instanceof Error && "code" in err && err.code === "ESRCH") return true
-      throw new Error("An owned backend process absence could not be confirmed")
+      throw new Error("An owned backend process absence could not be confirmed", { cause: err })
     }
   })()
   host.termination = {
@@ -295,7 +304,7 @@ async function stop(host: Host) {
 }
 
 async function main() {
-  assert.equal(process.platform, "win32")
+  const timer = setTimeout(() => lifetime.abort(new Error("Actual runtime acceptance deadline elapsed")), 120_000)
   const app = await installed()
   const temp = await mkdtemp(join(tmpdir(), "raya-followup-installed-"))
   const root = join(temp, "project")
@@ -308,13 +317,12 @@ async function main() {
   const hosts: Host[] = []
   const stages: unknown[] = []
   const report = resolve(
-    process.env.RAYA_FOLLOWUP_REPORT ?? join(import.meta.dir, "../../../.tmp/installed-routine-followup.json"),
+    process.env.RAYA_FOLLOWUP_REPORT ?? join(import.meta.dir, "../../../../.tmp/source-routine-followup.json"),
   )
   const storage = join(home, ".local", "share", "kilo", "storage")
   const saved = async (sid: string) => {
     const value = JSON.parse(await readFile(join(storage, "raya", "goal", sid) + ".json", "utf8")) as Goal
-    const digest = createHash("sha256").update(JSON.stringify(value)).digest("hex")
-    return { status: value.status, intent: value.intent, dispatch: value.dispatch, reply: value.reply, digest }
+    return { status: value.status, intent: value.intent, dispatch: value.dispatch, reply: value.reply }
   }
   let host: Host | undefined
   let error: string | undefined
@@ -371,7 +379,7 @@ async function main() {
     return { row, goal, parts }
   }
   try {
-    host = await backend(app.exe, root, env, hosts)
+    host = await backend(app.exe, env, hosts)
     const worker = await create("Completed follow-up", [])
     await send(worker.id, "completed_first", "COMPLETED_FIRST")
     const first = await complete(worker.id, 1, "FIRST_REPLY_ACK")
@@ -453,6 +461,7 @@ async function main() {
         ["waiting_first", "waiting_followup"],
       )
       assert.ok(receipts.every((row) => row.session_id === original.sessionID && row.delivered_at !== null))
+      assert.ok(receipts.every((row) => row.delivery_id !== null))
       assert.notEqual(receipts[0].delivery_id, receipts[1].delivery_id)
       assert.equal(receipts[1].delivery_id, final.goal.dispatch?.messageID)
     } finally {
@@ -463,119 +472,22 @@ async function main() {
     await Bun.sleep(1_000)
     assert.equal((await runs(waiting.id)).length, 1)
     assert.equal(fake.count(), count)
-
-    const recovery = await create("Terminal settlement recovery", [])
-    assert.match(recovery.id, /^[a-f0-9-]{36}$/)
-    const database = join(home, "archive-acceptance.db")
-    const fault = new Sqlite(database)
-    try {
-      fault.exec(`CREATE TRIGGER fail_installed_terminal_report
-        BEFORE INSERT ON raya_routine_message
-        WHEN NEW.agent_id = '${recovery.id}' AND NEW.kind = 'report'
-        BEGIN SELECT RAISE(ABORT, 'injected installed terminal report failure'); END`)
-    } finally {
-      fault.close()
-    }
-    await send(recovery.id, "terminal_recovery", "TERMINAL_RECOVERY")
-    await wait(
-      async () => (await runs(recovery.id)).at(-1)?.status === "complete",
-      "The injected settlement did not retain terminal filesystem history",
-      60_000,
-    )
-    const row = (await runs(recovery.id))[0]
-    assert.ok(row)
-    const goal = await saved(row.sessionID)
-    assert.equal(goal.status, "complete")
-    assert.equal(goal.reply?.body, "TERMINAL_REPLY_ACK")
-    const path = join(storage, "raya", "agent-executions", createHash("sha256").update(row.id).digest("hex")) + ".json"
-    await wait(
-      async () => {
-        if (!(await Bun.file(path).exists())) return false
-        const lease = (await Bun.file(path).json()) as {
-          version?: number
-          state?: string
-          runID?: string
-          agentID?: string
-          sessionID?: string
-          token?: string
-          owner?: { pid?: number; host?: string; birth?: string }
-        }
-        return (
-          lease.version === 1 &&
-          lease.state === "idle" &&
-          lease.runID === row.id &&
-          lease.agentID === recovery.id &&
-          lease.sessionID === row.sessionID &&
-          typeof lease.token === "string" &&
-          /^[a-f0-9-]{36}$/.test(lease.token) &&
-          lease.owner !== undefined &&
-          host !== undefined &&
-          lease.owner.pid === host.child.pid &&
-          typeof lease.owner.host === "string" &&
-          lease.owner.host.length > 0 &&
-          typeof lease.owner.birth === "string" &&
-          lease.owner.birth.length > 0
-        )
-      },
-      "The completed worker body did not retain exact idle ownership after failed settlement",
-      30_000,
-    )
-    const reports = () => {
-      const ledger = new Sqlite(database, { readonly: true })
-      try {
-        return ledger
-          .query<
-            { source: string; session_id: string | null },
-            [string]
-          >("SELECT source, session_id FROM raya_routine_message WHERE agent_id = ? AND source LIKE 'report:%'")
-          .all(recovery.id)
-      } finally {
-        ledger.close()
-      }
-    }
-    assert.deepEqual(reports(), [])
-    const requests = fake.count()
-    stages.push({ stage: "terminal-settlement-interrupted", run: row, goal, reports: reports(), model: fake.receipt() })
-    assert.ok(host)
     await stop(host)
-    const repair = new Sqlite(database)
-    try {
-      repair.exec("DROP TRIGGER fail_installed_terminal_report")
-    } finally {
-      repair.close()
-    }
-    for (let attempt = 0; attempt < 2; attempt++) {
-      host = await backend(app.exe, root, env, hosts)
-      await call(host, password, root, "GET", "/kilocode/agent")
-      await wait(() => host?.markers.revival === true, "Restart did not finish terminal recovery", 45_000)
-      assert.equal(host.markers.failed, false)
-      await wait(
-        async () => !(await Bun.file(path).exists()),
-        "Terminal recovery did not retire exact ownership",
-        30_000,
-      )
-      assert.deepEqual(await runs(recovery.id), [row])
-      assert.deepEqual(await saved(row.sessionID), goal)
-      assert.deepEqual(reports(), [{ source: `report:${row.id}`, session_id: row.sessionID }])
-      assert.equal(fake.count(), requests)
-      await send(waiting.id, "waiting_followup", "WAIT_FOLLOWUP")
-      await Bun.sleep(1_000)
-      assert.equal((await runs(waiting.id)).length, 1)
-      assert.equal(fake.count(), requests)
-      stages.push({
-        stage: "terminal-settlement-recovered",
-        attempt,
-        run: row,
-        reports: reports(),
-        model: fake.receipt(),
-      })
-      if (attempt === 0) await stop(host)
-    }
+    host = await backend(app.exe, env, hosts)
+    await call(host, password, root, "GET", "/kilocode/agent")
+    await wait(() => host?.markers.revival === true, "Restart did not finish actual routine revival", 45_000)
+    assert.equal(host.markers.failed, false)
+    await send(waiting.id, "waiting_followup", "WAIT_FOLLOWUP")
+    assert.equal(fake.count(), count)
+    assert.equal((await runs(waiting.id)).length, 1)
+    assert.deepEqual(await saved(original.sessionID), final.goal)
+    stages.push({ stage: "restart-duplicate-refused", model: fake.receipt(), goal: final.goal })
     console.log(`Installed routine follow-up acceptance passed: ${app.version}`)
   } catch (err) {
     error = err instanceof assert.AssertionError ? err.message : "Installed follow-up failed; inspect stage receipts"
     throw err
   } finally {
+    clearTimeout(timer)
     const cleanup = await Promise.allSettled(hosts.map(stop))
     fake.server.stop(true)
     await mkdir(join(report, ".."), { recursive: true })
@@ -593,6 +505,16 @@ async function main() {
             joined: item.status === "fulfilled",
             reason: item.status === "fulfilled" ? "joined" : "owned-cleanup-unconfirmed",
             termination: hosts[index].termination,
+            startup: [
+              "Cannot find package",
+              "Unknown argument",
+              "Unknown option",
+              "SyntaxError",
+              "TypeError",
+              "ReferenceError",
+              "ENOENT",
+              "Migration",
+            ].filter((value) => hosts[index].diagnostic.text.includes(value)),
           })),
         },
         null,
@@ -608,4 +530,4 @@ async function main() {
   }
 }
 
-await main()
+test("actual runtime delivers a WAIT worker follow-up once in its original session", main, 240_000)

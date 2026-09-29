@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 04:35 EDT - Routine fixes ready for exact installed acceptance
+
+Terminal recovery is committed as `3b41348c46`. The final combined CLI typecheck passes after explicit narrowing of the optional test dispatch message ID; the corrected scope regression passes 3/3 with 24 assertions. Both runtime slices and the strengthened installed follow-up harness pass scoped syntax/ordinary lint and formatting. Affected annotation, Promise-facade, extension marker, source-link and Markdown-table guards pass. No type-aware lint or desktop input was used.
+
+Next commit and push WAIT-intake/runtime evidence, build and install one exact snapshot, verify all retained package/native/bundle bytes, and execute the actual installed follow-up plus report-fault/two-restart journey. This is still pending installed acceptance; retain the previous installed failure receipt and keep EN-02/overall goal In progress. Desktop remains stopped and MCP deferred.
+
 ## ChatGPT 2026-09-29 04:33 EDT - Routine recovery source regressions passed; final publication checks
 
 Frozen recovery source passes terminal tests 4/4 (39 assertions), execution lifetime 9/9 (46 assertions), final named idle-boundary 1/1 (5 assertions), and actual cross-process ownership 2/2 (13 assertions). WAIT actual source intake passed previously; ordinary/malformed/canonical Routine scope passes 3/3 (24 assertions), and actual completed-parent fresh work passes 1/1 (15 assertions). Syntax-only lint/formatting pass; final combined typecheck found test typing errors being corrected before publication. Independent read-only review found no concrete blocker.

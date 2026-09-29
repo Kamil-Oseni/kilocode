@@ -845,12 +845,45 @@ export namespace RayaGoalContinuation {
                 permitted: () => continuation({ ...input, session }),
                 run: input.run,
                 dispatch: retry.dispatch.id,
+                database: input.database,
                 storage: input.storage,
               })
               return
             }
 
             const turn = yield* recover(goals.recordTurn(sid, event.properties.messageID, active.intent), active.intent)
+            // A user message admitted during a question belongs to the same worker conversation.
+            // Account the old response, then persist a fresh intake before trying to join its body.
+            const raw = session.metadata?.rayaRoutine
+            const agent =
+              raw && typeof raw === "object" && "agentID" in raw && typeof raw.agentID === "string"
+                ? raw.agentID
+                : undefined
+            const inbox = input.database && agent ? RayaTaskInbox.make(input.database) : undefined
+            const pending = inbox && agent ? yield* inbox.stranded(agent) : undefined
+            if (
+              pending?.sessionID === sid &&
+              active.completion === "reply" &&
+              active.dispatch?.phase === "finished" &&
+              event.properties.goalIntent === active.dispatch.intent &&
+              active.dispatch.intent !== (active.intent ?? "unset") &&
+              turn?.state.status === "active"
+            ) {
+              const queued = yield* recover(goals.continued(sid, active.intent), active.intent)
+              if (!queued?.dispatch) return
+              yield* launch({
+                goals,
+                session,
+                sessionID: sid,
+                directory: session.directory,
+                permitted: () => continuation({ ...input, session }),
+                run: input.run,
+                dispatch: queued.dispatch.id,
+                database: input.database,
+                storage: input.storage,
+              })
+              return
+            }
             if (
               input.enabled &&
               input.idle &&
@@ -880,6 +913,7 @@ export namespace RayaGoalContinuation {
               permitted: () => continuation({ ...input, session }),
               run: input.run,
               dispatch: queued.dispatch.id,
+              database: input.database,
               storage: input.storage,
             })
           }).pipe(

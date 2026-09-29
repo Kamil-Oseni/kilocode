@@ -28,6 +28,7 @@ import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/v
 import type { Database } from "@opencode-ai/core/database/database"
 import * as DelegationAccounting from "./delegation-accounting"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { record as routine } from "@/kilocode/task/continuation"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -1928,7 +1929,14 @@ export namespace RayaGoal {
       }
       const accounting = Accounting.sum(scope, sessionID)
       const now = Date.now()
-      const response = state.completion === "reply" ? reply.trim().slice(0, 8000) : ""
+      const changed =
+        state.completion === "reply" &&
+        state.dispatch?.messageID === user.info.id &&
+        state.dispatch.intent !== (state.intent ?? "unset")
+      const session = changed && deps.sessions.get ? yield* deps.sessions.get(sessionID) : undefined
+      // A routine reply to its previous intake incurs usage, but cannot answer a newly admitted intent.
+      const obsolete = changed && Schema.is(routine)(session?.metadata?.rayaRoutine)
+      const response = state.completion === "reply" && !obsolete ? reply.trim().slice(0, 8000) : ""
       const answered = !!response
       const stalled = !answered && (idle || failed) && retries >= idleLimit
       const reason = invalid
@@ -1938,7 +1946,7 @@ export namespace RayaGoal {
           : failed
             ? `Automatic continuation stopped after ${idleLimit} turns without a successful tool result. Review the failures and choose a different approach.`
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
-      const blocked = !answered && (invalid || repeated || stalled)
+      const blocked = !obsolete && !answered && (invalid || repeated || stalled)
       const total = Math.max((state.usage.cost ?? 0) + cost, accounting.cost)
       const spendable = yield* spend(sessionID, state, total)
       const hit =
@@ -1946,7 +1954,7 @@ export namespace RayaGoal {
           ? undefined
           : exhausted({ ...state, charges }, now, spendable.total, retries)
       const stopped = answered || blocked || hit !== undefined
-      const retry = !stopped && state.status === "active" && (idle || failed)
+      const retry = !obsolete && !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
         ...state,
         inputs,

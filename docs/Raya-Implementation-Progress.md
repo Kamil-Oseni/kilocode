@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 21:25 EDT - owned microphone native gate passed
+
+Correction `74e525f925` passed actual [native CI run 36507446051](https://github.com/Kamil-Oseni/kilocode/actions/runs/36507446051), job `109211958162`: production CGO build/full Go suite, actual mono/stereo Opus decode at 16/24 kHz, malformed and variable-duration refusal, explicit input overflow, 50 joined retirement cycles, ten receiver adverse cases, real synthetic SFU transport with six rapid microphone replacements and retired-end/stale-queue assertions, retained blocked Room cleanup, CGO vet and final production image health/401 smoke. Exact log `.tmp/voice-media-ci-receiver.log`; binary SHA-256 `0e7a7fdf5ef6fe2557b39aebacadab57adb3f86a172404e8af5a377550a32ea0`; image `sha256:801168a43d3e652752747f5ace71732bd6d3d1f4cde25573d4f9c4c54d08bb4b`. Normal push typechecks passed. The earlier compile failure is corrected, not counted as successful evidence.
+
+Next implement one retained failed-join cleanup owner, prompt bounded setup return and an admission barrier before further provider/native allocation. Reuse actual termination receipts and keep provider usage settlement separate; only exact authenticated reconciliation can release pending ownership. Then production provider/browser/device audio and installed-host restart/disconnect/prolonged-resource gates. Joined fixtures do not prove a memory plateau. Full voice/OVR-01/EN-05/FUT-CU-01 remain In progress. External service undeployed; installed c2ceafff08/default direct Live unchanged, desktop stopped and user/French Study edits preserved.
+
 ## ChatGPT 2026-09-28 21:19 EDT - correct native test compilation before claiming receiver proof
 
 Actual [native CI run 36506778647](https://github.com/Kamil-Oseni/kilocode/actions/runs/36506778647) for `56cc274829` failed compilation: the generic receiver test helper `decoded` collided with the native codec test's existing type. SFU, vet and image smoke did not run. Rename only the helper to `awaited`, close the actual Pion test buffer, and retain all native assertions. Focused CGO-zero receiver/failure tests and scoped vet pass. Publish this correction and inspect its fresh exact CGO/full-suite/SFU/vet/image run; no native receiver pass is claimed from the failed run.

@@ -72,6 +72,26 @@ jobs:
           assert result['progress'] == {'attemptedSessions': 10, 'completedSessions': 10,
                                        'attemptedTrials': 50, 'confirmedExactNonces': 50}
           assert all(value >= 0 for samples in result['samples'].values() for value in samples)
+          with open('evidence/native-conformance.log', encoding='utf-8') as source:
+              pcm = [json.loads(line.partition('pcm_acquisition_measurement ')[2])
+                     for line in source if 'pcm_acquisition_measurement ' in line]
+          assert len(pcm) == 1
+          measured = pcm[0]
+          assert measured['version'] == 1 and measured['completed'] is True
+          assert measured['binarySha256'] == result['binarySHA256']
+          assert measured['attemptedSessions'] == measured['joinedSessions'] == measured['actualWaitRetiredSessions'] == 3
+          assert measured['attemptedTrials'] == len(measured['rawMeasurements']) == 18
+          assert measured['markerDurationMs'] == 640 and measured['excludedGuardMs'] == 160
+          assert measured['consecutiveFramesPerSymbol'] == 2
+          directions = {'child-publish-to-client-decoded-pcm', 'client-opus-rtp-to-child-decoded-input'}
+          assert set(measured['signalAcquisition']) == set(measured['firstToneConfirmation']) == directions
+          assert len({tuple(sample['signature']) for sample in measured['rawMeasurements']}) == 18
+          for direction in directions:
+              samples = [sample for sample in measured['rawMeasurements'] if sample['direction'] == direction]
+              assert len(samples) == 9
+              assert {(sample['session'], sample['trial']) for sample in samples} == {(session, trial) for session in range(3) for trial in range(3)}
+              assert measured['signalAcquisition'][direction]['count'] == measured['firstToneConfirmation'][direction]['count'] == 9
+              assert all(0 < sample['firstToneConfirmationMs'] <= sample['signalAcquisitionMs'] <= 180000 for sample in samples)
           PY
 
       - name: Measure sustained production-child resources
@@ -133,6 +153,10 @@ jobs:
               children = window['children'] or []
               assert window['slots'] == len(children)
               assert window['ownedPssKiB'] == window['parent']['pssKiB'] + sum(child['pssKiB'] for child in children)
+              runtime = window['parentGoRuntime']
+              assert 0 <= runtime['heapAllocBytes'] <= runtime['heapInuseBytes'] <= runtime['heapSysBytes']
+              assert runtime['numGC'] >= 0 and runtime['goroutines'] > 0
+          assert all(left['parentGoRuntime']['numGC'] <= right['parentGoRuntime']['numGC'] for left, right in zip(windows, windows[1:]))
           assert windows[-1]['phase'] == 'retired' and not windows[-1]['children']
           if sys.argv[2] == 'continuous':
               active = [window for window in result['rawWindows'] if window['phase'] == 'active']

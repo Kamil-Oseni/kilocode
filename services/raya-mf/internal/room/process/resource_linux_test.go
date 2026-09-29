@@ -116,6 +116,17 @@ type window struct {
 	Signals  uint64            `json:"nonzeroInputFrames"`
 	Packets  uint64            `json:"receivedOpusPackets"`
 	Controls uint64            `json:"receivedControl"`
+	Runtime  *heap             `json:"parentGoRuntime,omitempty"`
+}
+
+// Numeric runtime counters describe this Go test parent, including its SDK
+// observer and retained measurement/report buffers, not the production child.
+type heap struct {
+	Alloc      uint64 `json:"heapAllocBytes"`
+	Inuse      uint64 `json:"heapInuseBytes"`
+	Sys        uint64 `json:"heapSysBytes"`
+	GC         uint32 `json:"numGC"`
+	Goroutines int    `json:"goroutines"`
 }
 
 type spread struct {
@@ -312,6 +323,9 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 					if err != nil {
 						return
 					}
+					if packet.Padding && packet.PaddingSize > 0 && len(packet.Payload) == 0 {
+						continue
+					}
 					if len(packet.Payload) == 0 || len(packet.Payload) > 1275 {
 						select {
 						case fault <- errors.New("invalid actual SFU Opus packet"):
@@ -446,6 +460,9 @@ func TestProductionWorkerSustainedResources(t *testing.T) {
 			t.Fatal("parent resource observation failed", err)
 		}
 		entry := window{Seconds: time.Since(started).Seconds(), Phase: phase, Slots: len(slots), Parent: value, OwnedPSS: value.PSS, Group: group(), Signals: signals.Load(), Packets: packets.Load(), Controls: controls.Load()}
+		var stats runtime.MemStats
+		runtime.ReadMemStats(&stats)
+		entry.Runtime = &heap{Alloc: stats.HeapAlloc, Inuse: stats.HeapInuse, Sys: stats.HeapSys, GC: stats.NumGC, Goroutines: runtime.NumGoroutine()}
 		if pid != 0 {
 			child, err := observe(pid, start)
 			if err != nil {

@@ -106,7 +106,7 @@ export const Status = Schema.Struct({
 const Retirement = Schema.Struct({ version: Schema.Literal(1), prior: Status }).check(
   Schema.makeFilter(
     (value) =>
-      !value.prior.dispatch ||
+      (!value.prior.dispatch && !value.prior.completion) ||
       (!!value.prior.completion && !!value.prior.acknowledgement && value.prior.completion.outcome !== "unknown"),
   ),
 )
@@ -136,9 +136,12 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
   const raw = (slot: number, kind: string, inventory?: ReadonlySet<string>) =>
     inventory && !inventory.has(`${slot}/${kind}`)
       ? Effect.succeed(undefined)
-      : storage
-          .read<unknown>(key(slot, kind))
-          .pipe(Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)))
+      : storage.read<unknown>(key(slot, kind)).pipe(
+          Effect.catchIf(
+            (err) => Storage.NotFoundError.isInstance(err),
+            () => Effect.succeed(undefined),
+          ),
+        )
   const inventory = Effect.gen(function* () {
     const paths = yield* storage.list(root)
     if (paths.length > 1_280) return yield* refusal()
@@ -176,9 +179,10 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
             prior.dispatch.requestID !== prior.admission.requestID ||
             prior.dispatch.at < prior.admission.at)) ||
         (prior.completion &&
-          (!prior.dispatch ||
+          ((prior.dispatch
+            ? prior.completion.invocation !== prior.dispatch.invocation
+            : prior.completion.outcome !== "cancelled") ||
             prior.completion.identity !== prior.admission.proof.identity ||
-            prior.completion.invocation !== prior.dispatch.invocation ||
             prior.completion.requestID !== prior.admission.requestID ||
             prior.completion.operation !== prior.admission.operation ||
             prior.completion.startedAt < prior.admission.at)) ||
@@ -197,10 +201,10 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
       yield* storage.remove(key(slot, "retirement"))
       return undefined
     }
-    const admission = yield* raw(slot, "admission", present)
-    const dispatch = yield* raw(slot, "dispatch", present)
-    const completion = yield* raw(slot, "completion", present)
-    const acknowledgement = yield* raw(slot, "acknowledgement", present)
+    const [admission, dispatch, completion, acknowledgement] = yield* Effect.all(
+      fields.map((field) => raw(slot, field, present)),
+      { concurrency: 4 },
+    )
     if (admission === undefined) {
       if (dispatch !== undefined || completion !== undefined || acknowledgement !== undefined) return yield* refusal()
       return undefined
@@ -217,9 +221,8 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
       return yield* refusal()
     if (
       result &&
-      (!attempt ||
+      ((attempt ? result.invocation !== attempt.invocation : result.outcome !== "cancelled") ||
         result.identity !== item.proof.identity ||
-        result.invocation !== attempt.invocation ||
         result.requestID !== item.requestID ||
         result.operation !== item.operation ||
         result.startedAt < item.at)
@@ -246,10 +249,19 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
     return yield* locked(
       Effect.gen(function* () {
         const present = yield* inventory
-        const slots: Array<typeof Status.Type | undefined> = []
-        for (let slot = 0; slot < 256; slot++) {
-          const row = yield* load(slot, present)
-          slots.push(row)
+        // The inventory already proves which slots have files. Read only those slots,
+        // with bounded parallelism for independent immutable records. The outer flock
+        // still serializes admissions across backend processes.
+        const occupied = [...new Set([...present].map((item) => Number(item.slice(0, item.indexOf("/")))))].toSorted(
+          (a, b) => a - b,
+        )
+        const rows = yield* Effect.forEach(occupied, (slot) => load(slot, present), { concurrency: 16 })
+        const slots: Array<typeof Status.Type | undefined> = Array(256).fill(undefined)
+        for (let index = 0; index < occupied.length; index++) {
+          const slot = occupied[index]
+          const row = rows[index]
+          if (slot === undefined) return yield* refusal()
+          slots[slot] = row
           if (!row || row.admission.requestID !== value.requestID) continue
           const prior = row.admission
           const previous = {
@@ -279,7 +291,10 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
           for (let index = 0; index < slots.length; index++) {
             const row = slots[index]
             if (!row) continue
-            if (row.dispatch && (!row.completion || !row.acknowledgement || row.completion.outcome === "unknown"))
+            if (
+              (row.dispatch && (!row.completion || !row.acknowledgement || row.completion.outcome === "unknown")) ||
+              (row.completion && !row.acknowledgement)
+            )
               continue
             if (!(yield* eligible(row.admission))) continue
             // The bounded marker makes interrupted collection restartable without authorizing an old attempt.
@@ -313,6 +328,7 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
     return yield* locked(
       Effect.gen(function* () {
         const value = yield* exact(proof)
+        if (value.completion && !value.dispatch) return yield* refusal()
         if (value.dispatch) {
           if (value.dispatch.invocation !== id) return yield* refusal()
           return { granted: false as const, dispatch: value.dispatch }
@@ -355,6 +371,33 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
       }),
     )
   })
+  const cancel = Effect.fn("BrowserConfirmation.cancel")(function* (proof: typeof Proof.Type, invocation: string) {
+    const id = yield* decode(UUID, invocation)
+    return yield* locked(
+      Effect.gen(function* () {
+        const value = yield* exact(proof)
+        if (value.dispatch) return yield* refusal()
+        if (value.completion) {
+          if (value.completion.outcome !== "cancelled" || value.completion.invocation !== id) return yield* refusal()
+          return value.completion
+        }
+        const at = Math.max(Date.now(), value.admission.at)
+        const result = {
+          version: 1 as const,
+          identity: value.admission.proof.identity,
+          invocation: id,
+          ack: crypto.randomUUID(),
+          requestID: value.admission.requestID,
+          operation: value.admission.operation,
+          outcome: "cancelled" as const,
+          startedAt: at,
+          finishedAt: at,
+        }
+        if (!(yield* storage.create(key(proof.slot, "completion"), result))) return yield* refusal()
+        return result
+      }),
+    )
+  })
   const acknowledge = Effect.fn("BrowserConfirmation.acknowledge")(function* (
     proof: typeof Proof.Type,
     input: { ack: string },
@@ -375,5 +418,5 @@ export function confirmations(storage: Store, cfg: { flock: EffectFlock.Interfac
     )
   })
   const read = (proof: typeof Proof.Type) => locked(exact(proof))
-  return { reserve, dispatch, confirm, acknowledge, read }
+  return { reserve, dispatch, confirm, cancel, acknowledge, read }
 }

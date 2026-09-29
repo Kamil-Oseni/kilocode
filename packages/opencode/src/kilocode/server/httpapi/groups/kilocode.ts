@@ -202,7 +202,11 @@ export const SelfHealCreatePayload = RayaSelfHeal.Create // raya_change
 export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
 export const SelfHealVerificationPublishPayload = RayaSelfHeal.VerificationPublish // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
-export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
+export const BrowserRejectPayload = Schema.Struct({
+  error: BrowserFailure,
+  proof: Schema.optional(BrowserProof),
+  invocation: Schema.optional(BrowserDispatchInput.fields.invocation),
+}).annotate({ parseOptions: { onExcessProperty: "error" } }) // raya_change - Milestone F
 export const BrowserDispatchPayload = BrowserDispatchInput.annotate({ parseOptions: { onExcessProperty: "error" } })
 export const BrowserConfirmPayload = Schema.Struct({ proof: BrowserProof, completion: BrowserCompletion }).annotate({
   parseOptions: { onExcessProperty: "error" },
@@ -501,7 +505,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: BrowserRejectPayload,
           success: described(Schema.Boolean, "Browser rejection accepted"),
-          error: HttpApiError.NotFound,
+          error: [HttpApiError.NotFound, HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.browser.reject",

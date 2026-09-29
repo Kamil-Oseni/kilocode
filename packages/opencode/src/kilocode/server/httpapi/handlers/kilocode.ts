@@ -317,9 +317,10 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { requestID: BrowserRequestID }
       payload: typeof BrowserRejectPayload.Type
     }) {
-      yield* browser
-        .reject({ requestID: ctx.params.requestID, error: ctx.payload.error })
-        .pipe(Effect.catchTag("Browser.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      yield* browser.reject({ requestID: ctx.params.requestID, ...ctx.payload }).pipe(
+        Effect.catchTag("Browser.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("BrowserConfirmation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+      )
       return true
     })
     const browserDispatch = Effect.fn("KilocodeHttpApi.browserDispatch")(function* (ctx: {

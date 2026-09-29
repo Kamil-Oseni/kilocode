@@ -115,6 +115,17 @@ describe("Raya browser bridge", () => {
               if (mode === "changed" && calls.read === 2) done.resolve()
               return {
                 data: {
+                  ...(saved.completion
+                    ? {
+                        dispatch: {
+                          version: 1,
+                          identity: request.confirmation.identity,
+                          invocation: saved.completion.invocation,
+                          requestID: request.id,
+                          at: 1,
+                        },
+                      }
+                    : {}),
                   completion:
                     mode === "changed" ? { ...saved.completion, resultDigest: "d".repeat(64) } : saved.completion,
                   pending: saved.pending,
@@ -159,7 +170,7 @@ describe("Raya browser bridge", () => {
         await bounded(done.promise)
         expect(calls.execute).toBe(1)
         expect(calls.dispatch).toBe(1)
-        expect(calls.confirm).toBe(mode === "changed" ? 2 : 1)
+        expect(calls.confirm).toBe(1)
         expect(Object.keys(saved.completion ?? {}).sort()).toEqual(
           [
             "version",
@@ -177,7 +188,7 @@ describe("Raya browser bridge", () => {
         expect(calls.reject).toBe(0)
         expect(calls.reply).toBe(mode === "changed" ? 0 : 1)
         expect(calls.ack).toBe(mode === "changed" ? 0 : 1)
-        expect(calls.read).toBe(mode === "changed" ? 2 : 1)
+        expect(calls.read).toBe(mode === "changed" ? 3 : 1)
         if (mode !== "changed")
           expect(replies[0]).toMatchObject({
             requestID: request.id,
@@ -708,7 +719,7 @@ describe("Raya browser bridge", () => {
       expect(failures[0]).toMatchObject({
         error: { code: "dialog_pending", message: expect.stringContaining("must not be retried") },
       })
-      expect(failures[1]).toEqual(failures[0])
+      expect(failures[1]).toMatchObject({ error: { receipt: { outcome: "unknown" } } })
     } finally {
       bridge.dispose()
     }
@@ -745,7 +756,7 @@ describe("Raya browser bridge", () => {
       connection.state("connected")
       await done.promise
       expect(calls).toBe(0)
-      expect(failures[0]).toMatchObject({ error: { message: expect.stringContaining("no local execution receipt") } })
+      expect(failures[0]).toMatchObject({ error: { message: expect.stringContaining("before native dispatch") } })
     } finally {
       bridge.dispose()
     }
@@ -873,10 +884,6 @@ describe("Raya browser bridge", () => {
       await attempted.promise
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
       connection.state("connected")
-      await new Promise<void>((resolve) => setTimeout(resolve, 0))
-      expect(calls).toBe(1)
-      expect(replies).toHaveLength(1)
-      connection.state("connected")
       await recovered.promise
       expect(calls).toBe(1)
       expect(replies).toHaveLength(2)
@@ -887,9 +894,8 @@ describe("Raya browser bridge", () => {
     }
   })
 
-  it("retains dispatched failures instead of executing them again during recovery", async () => {
+  it("does not replay an acknowledged failed dispatch during recovery", async () => {
     const delivered = Promise.withResolvers<void>()
-    const repeated = Promise.withResolvers<void>()
     const request = {
       id: "brr_failed_once",
       sessionID: "ses_test",
@@ -906,7 +912,7 @@ describe("Raya browser bridge", () => {
           reply: async () => ({}),
           reject: async (input: unknown) => {
             failures.push(input)
-            ;(failures.length === 1 ? delivered : repeated).resolve()
+            delivered.resolve()
             return {}
           },
         },
@@ -925,9 +931,9 @@ describe("Raya browser bridge", () => {
       await delivered.promise
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
       connection.state("connected")
-      await repeated.promise
+      await Bun.sleep(10)
       expect(calls).toBe(1)
-      expect(failures[1]).toEqual(failures[0])
+      expect(failures).toHaveLength(1)
     } finally {
       bridge.dispose()
     }
@@ -1286,7 +1292,7 @@ describe("Raya browser bridge", () => {
     expect(saved.blocked).toHaveLength(1)
     expect(saved.blocked[0]).toMatch(/^[a-f0-9]{64}$/)
     expect(saved).toMatchObject({
-      version: 1,
+      version: 2,
       items: [
         {
           id: "brr_disconnect_action",
@@ -1339,6 +1345,549 @@ describe("Raya browser bridge", () => {
       error: { message: expect.stringContaining("explicitly resume") },
     })
     second.dispose()
+  })
+
+  it("publishes an interrupted dispatch as unknown after restart without replaying native input", async () => {
+    const entered = Promise.withResolvers<void>()
+    const hold = Promise.withResolvers<void>()
+    const store = memory()
+    const calls = { execute: 0, confirm: 0, reject: 0, ack: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          confirm: async (input: { completion: BrowserConfirmationCompletion }) => {
+            calls.confirm++
+            expect(input.completion.outcome).toBe("unknown")
+            return { data: input.completion }
+          },
+          reply: async () => ({ data: true }),
+          reject: async () => {
+            calls.reject++
+            return { data: true }
+          },
+          acknowledge: async () => {
+            calls.ack++
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const firstConnection = harness(client)
+    const first = new BrowserBridge(
+      firstConnection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls.execute++
+          entered.resolve()
+          await hold.promise
+          return { operation: "click", tabID: "tab_seen" }
+        },
+      },
+      store,
+    )
+    firstConnection.event({
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_restart_unknown",
+        sessionID: "ses_test",
+        operation: "click",
+        selector: "#private-selector",
+        tabID: "tab_seen",
+        authorization: prompt("browser", "tab_seen"),
+      },
+    })
+    await entered.promise
+    const saved = store.read() as { version: number; items: Array<{ proof: unknown; invocation: string }> }
+    expect(saved.version).toBe(2)
+    expect(saved.items[0]).toMatchObject({ proof: { version: 1 }, operation: "click", dispatched: true })
+    expect(JSON.stringify(saved)).not.toContain("private-selector")
+    first.dispose()
+    await Bun.sleep(0)
+
+    const secondConnection = harness(client)
+    const second = new BrowserBridge(
+      secondConnection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          throw new Error("replayed native input")
+        },
+      },
+      store,
+    )
+    secondConnection.state("connected")
+    await bounded(
+      (async () => {
+        while (calls.ack === 0) await Bun.sleep(1)
+      })(),
+    )
+    expect(calls).toEqual({ execute: 1, confirm: 1, reject: 1, ack: 1 })
+    expect(store.read()).toMatchObject({ version: 2, items: [] })
+    expect((store.read() as { blocked: string[] }).blocked.length).toBeGreaterThan(0)
+    second.dispose()
+  })
+
+  it("settles a lost dispatch response as unknown before retiring its proof", async () => {
+    const done = Promise.withResolvers<void>()
+    const backend = {
+      dispatch: undefined as { identity: string; invocation: string; requestID: string; at: number } | undefined,
+      completion: undefined as BrowserConfirmationCompletion | undefined,
+    }
+    const calls = { execute: 0, reject: 0, ack: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          dispatch: async (input: {
+            requestID: string
+            browserDispatchInput: { proof: { identity: string }; invocation: string }
+          }) => {
+            backend.dispatch = {
+              identity: input.browserDispatchInput.proof.identity,
+              invocation: input.browserDispatchInput.invocation,
+              requestID: input.requestID,
+              at: Date.now(),
+            }
+            throw new Error("Dispatch response lost after durable grant")
+          },
+          confirmation: async () => ({
+            data: { pending: true, dispatch: backend.dispatch, completion: backend.completion },
+          }),
+          confirm: async (input: { completion: BrowserConfirmationCompletion }) => {
+            backend.completion = input.completion
+            return { data: input.completion }
+          },
+          reply: async () => ({ data: true }),
+          reject: async () => {
+            calls.reject++
+            return { data: true }
+          },
+          acknowledge: async () => {
+            calls.ack++
+            done.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const store = memory()
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls.execute++
+          return { operation: "click", tabID: "tab_seen" }
+        },
+      },
+      store,
+    )
+    connection.state("connected")
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_lost_dispatch_response",
+        sessionID: "ses_test",
+        operation: "click",
+        selector: "#save",
+        authorization: prompt("browser"),
+      },
+    })
+    await bounded(done.promise)
+    expect(calls).toEqual({ execute: 0, reject: 1, ack: 1 })
+    expect(backend.completion).toMatchObject({ outcome: "unknown", invocation: backend.dispatch?.invocation })
+    await bounded(
+      (async () => {
+        while ((store.read() as { items: unknown[] }).items.length > 0) await Bun.sleep(1)
+      })(),
+    )
+    expect(store.read()).toMatchObject({ version: 2, items: [] })
+    bridge.dispose()
+  })
+
+  it("does not settle an active request during a concurrent recovery pass", async () => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const done = Promise.withResolvers<void>()
+    const calls = { execute: 0, reject: 0, ack: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({ data: true }),
+          reject: async () => {
+            calls.reject++
+            return { data: true }
+          },
+          acknowledge: async () => {
+            calls.ack++
+            done.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => {
+          entered.resolve()
+          await release.promise
+        },
+        execute: async () => {
+          calls.execute++
+          return { operation: "click", tabID: "tab_seen" }
+        },
+      },
+      memory(),
+    )
+    connection.state("connected")
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_active_recovery",
+        sessionID: "ses_test",
+        operation: "click",
+        selector: "#save",
+        authorization: prompt("browser"),
+      },
+    })
+    await entered.promise
+    connection.state("connected")
+    await Bun.sleep(10)
+    expect(calls).toEqual({ execute: 0, reject: 0, ack: 0 })
+    release.resolve()
+    await bounded(done.promise)
+    expect(calls).toEqual({ execute: 1, reject: 0, ack: 1 })
+    bridge.dispose()
+  })
+
+  it("ignores a late dispatch confirmation when a live owner appears during the read", async () => {
+    const entered = Promise.withResolvers<void>()
+    const delayed = Promise.withResolvers<unknown>()
+    const seed = {
+      ...unknown(3),
+      proof: { ...sealed().confirmation, identity: "00000000-0000-4000-8000-000000000003", slot: 3 },
+      invocation: "00000000-0000-4000-8000-000000000013",
+      operation: "click",
+      startedAt: 1,
+    }
+    let confirms = 0
+    const store = memory({ version: 2, items: [seed], blocked: [] })
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          confirmation: async () => {
+            entered.resolve()
+            return delayed.promise
+          },
+          confirm: async () => {
+            confirms++
+            return { data: true }
+          },
+          reply: async () => ({ data: true }),
+          reject: async () => ({ data: true }),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          throw new Error("replayed native input")
+        },
+      },
+      store,
+    )
+    connection.state("connected")
+    await entered.promise
+    const state = bridge as unknown as { receipts: Map<string, unknown>; active: Map<string, unknown> }
+    state.active.set("brr_saved_3", {
+      controller: new AbortController(),
+      request: { id: "brr_saved_3", sessionID: "ses_test", operation: "click", selector: "#save" },
+      directory: "C:\\workspace",
+      startedAt: Date.now(),
+      receipt: state.receipts.get("brr_saved_3"),
+    })
+    delayed.resolve({
+      data: {
+        pending: true,
+        dispatch: {
+          version: 1,
+          identity: seed.proof.identity,
+          invocation: seed.invocation,
+          requestID: "brr_saved_3",
+          at: 1,
+        },
+      },
+    })
+    await Bun.sleep(10)
+    expect(confirms).toBe(0)
+    expect((store.read() as { items: unknown[] }).items).toHaveLength(1)
+    bridge.dispose()
+  })
+
+  it("keeps proof when another host dispatches before conditional rejection", async () => {
+    const done = Promise.withResolvers<void>()
+    const seed = {
+      ...unknown(4),
+      proof: { ...sealed().confirmation, identity: "00000000-0000-4000-8000-000000000004", slot: 4 },
+      invocation: "00000000-0000-4000-8000-000000000014",
+      operation: "click",
+      startedAt: 1,
+    }
+    const state = {
+      dispatch: undefined as
+        | { version: 1; identity: string; invocation: string; requestID: string; at: number }
+        | undefined,
+      completion: undefined as BrowserConfirmationCompletion | undefined,
+    }
+    const calls = { conditional: 0, unknown: 0, ack: 0, execute: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          confirmation: async () => ({
+            data: { pending: true, dispatch: state.dispatch, completion: state.completion },
+          }),
+          confirm: async (input: { completion: BrowserConfirmationCompletion }) => {
+            state.completion = input.completion
+            expect(input.completion.outcome).toBe("unknown")
+            return { data: input.completion }
+          },
+          reject: async (input: { proof?: unknown; invocation?: string }) => {
+            if (!input.proof) {
+              calls.unknown++
+              return { data: true }
+            }
+            calls.conditional++
+            expect(input.proof).toEqual(seed.proof)
+            expect(input.invocation).toBe(seed.invocation)
+            state.dispatch = {
+              version: 1,
+              identity: seed.proof.identity,
+              invocation: seed.invocation,
+              requestID: seed.id,
+              at: Date.now(),
+            }
+            return { error: { message: "dispatch already granted" } }
+          },
+          reply: async () => ({ data: true }),
+          acknowledge: async () => {
+            calls.ack++
+            done.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const store = memory({ version: 2, items: [seed], blocked: [] })
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls.execute++
+          throw new Error("replayed native input")
+        },
+      },
+      store,
+    )
+    connection.state("connected")
+    await bounded(done.promise)
+    expect(calls).toEqual({ conditional: 1, unknown: 1, ack: 1, execute: 0 })
+    expect(state.completion).toMatchObject({ outcome: "unknown", invocation: seed.invocation })
+    bridge.dispose()
+  })
+
+  it("exact-ACKs a fenced cancellation after its HTTP response is lost", async () => {
+    const entered = Promise.withResolvers<void>()
+    const done = Promise.withResolvers<void>()
+    const seed = {
+      ...unknown(5),
+      proof: { ...sealed().confirmation, identity: "00000000-0000-4000-8000-000000000005", slot: 5 },
+      invocation: "00000000-0000-4000-8000-000000000015",
+      operation: "click",
+      startedAt: 1,
+    }
+    const state = { completion: undefined as BrowserConfirmationCompletion | undefined }
+    const calls = { reject: 0, ack: 0, execute: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          confirmation: async () => ({ data: { pending: !state.completion, completion: state.completion } }),
+          reject: async (input: { proof?: { identity: string }; invocation?: string }) => {
+            calls.reject++
+            expect(input.proof).toEqual(seed.proof)
+            expect(input.invocation).toBe(seed.invocation)
+            state.completion = {
+              version: 1,
+              identity: seed.proof.identity,
+              invocation: seed.invocation,
+              ack: "00000000-0000-4000-8000-000000000099",
+              requestID: seed.id,
+              operation: "click",
+              outcome: "cancelled",
+              startedAt: 1,
+              finishedAt: 2,
+            }
+            entered.resolve()
+            throw new Error("The cancellation response was lost")
+          },
+          reply: async () => ({ data: true }),
+          acknowledge: async (input: { ack: string }) => {
+            expect(input.ack).toBe(state.completion?.ack)
+            calls.ack++
+            done.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const store = memory({ version: 2, items: [seed], blocked: [] })
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          calls.execute++
+          throw new Error("replayed native input")
+        },
+      },
+      store,
+    )
+    connection.state("connected")
+    await entered.promise
+    await Bun.sleep(10)
+    expect((store.read() as { items: unknown[] }).items).toHaveLength(1)
+    connection.state("connected")
+    await bounded(done.promise)
+    expect(calls).toEqual({ reject: 1, ack: 1, execute: 0 })
+    bridge.dispose()
+  })
+
+  it("continues recovering later receipts when an earlier confirmation hangs", async () => {
+    const done = Promise.withResolvers<void>()
+    const base = sealed().confirmation
+    const row = (id: number) => ({
+      ...unknown(id),
+      proof: { ...base, identity: `00000000-0000-4000-8000-${String(id).padStart(12, "0")}`, slot: id },
+      invocation: `00000000-0000-4000-8000-${String(id + 10).padStart(12, "0")}`,
+      operation: "click",
+      startedAt: 1,
+    })
+    const store = memory({ version: 2, items: [row(1), row(2)], blocked: [] })
+    const delayed = Promise.withResolvers<unknown>()
+    const calls = { first: 0, confirm: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          confirmation: async (input: { requestID: string }) => {
+            if (input.requestID === "brr_saved_1" && ++calls.first === 1) return delayed.promise
+            return { data: { pending: true } }
+          },
+          confirm: async () => {
+            calls.confirm++
+            return { data: true }
+          },
+          reject: async (input: { requestID: string }) => {
+            if (input.requestID === "brr_saved_2") done.resolve()
+            return { data: true }
+          },
+          reply: async () => ({ data: true }),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      {
+        show: async () => undefined,
+        execute: async () => {
+          throw new Error("replayed native input")
+        },
+      },
+      store,
+    )
+    connection.state("connected")
+    await Promise.race([
+      done.promise,
+      Bun.sleep(4_000).then(() => {
+        throw new Error("Later receipt was starved")
+      }),
+    ])
+    await Bun.sleep(20)
+    expect((store.read() as { items: Array<{ id: string }> }).items.map((item) => item.id)).toEqual(["brr_saved_1"])
+    delayed.resolve({
+      data: {
+        pending: true,
+        dispatch: {
+          version: 1,
+          identity: row(1).proof.identity,
+          invocation: row(1).invocation,
+          requestID: "brr_saved_1",
+          at: 1,
+        },
+      },
+    })
+    await Bun.sleep(10)
+    expect(calls.confirm).toBe(0)
+    connection.state("connected")
+    await bounded(
+      (async () => {
+        while ((store.read() as { items: unknown[] }).items.length > 0) await Bun.sleep(1)
+      })(),
+    )
+    expect(calls.first).toBeGreaterThanOrEqual(2)
+    bridge.dispose()
+  }, 5_000)
+
+  it("redacts legacy receipt messages and locations during journal migration", async () => {
+    const done = Promise.withResolvers<void>()
+    const seed = unknown(0)
+    seed.failure.message = "typed-secret-from-old-host-error"
+    const receipt = seed.failure.receipt as typeof seed.failure.receipt & { target?: unknown }
+    receipt.target = { surface: "browser", windowID: "tab_seen", location: "https://private.example/secret" }
+    const store = memory({ version: 1, items: [seed], blocked: [] })
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => {
+            done.resolve()
+            return { data: true }
+          },
+          reject: async () => ({ data: true }),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(
+      connection.value,
+      { show: async () => undefined, execute: async () => ({ operation: "snapshot", snapshot: "" }) },
+      store,
+    )
+    connection.event({
+      type: "kilocode.browser.requested",
+      properties: { id: "brr_migrate", sessionID: "ses_test", operation: "snapshot", authorization: prompt("observe") },
+    })
+    await bounded(done.promise)
+    const saved = JSON.stringify(store.read())
+    expect(saved).toContain('"version":2')
+    expect(saved).not.toContain("typed-secret-from-old-host-error")
+    expect(saved).not.toContain("private.example")
+    bridge.dispose()
   })
 
   it("returns a structured smoke report through the CLI bridge", async () => {
@@ -1536,7 +2085,7 @@ describe("Raya browser bridge", () => {
     expect(JSON.stringify(saved)).not.toContain("The click acknowledgement was lost")
     expect(saved.blocked[0]).toMatch(/^[a-f0-9]{64}$/)
     expect(saved).toMatchObject({
-      version: 1,
+      version: 2,
       items: [{ id: request.id, failure: { receipt: { requestID: request.id, outcome: "unknown" } } }],
     })
     first.dispose()
@@ -1574,10 +2123,7 @@ describe("Raya browser bridge", () => {
     connection.state("connected")
     await Bun.sleep(20)
     expect(calls).toBe(1)
-    expect(failures[0]).toMatchObject({
-      requestID: request.id,
-      error: { receipt: { requestID: request.id, outcome: "unknown" } },
-    })
+    expect(failures[0]).toMatchObject({ requestID: request.id, error: { code: "cancelled" } })
 
     connection.event({
       type: "kilocode.browser.requested",
@@ -1602,14 +2148,14 @@ describe("Raya browser bridge", () => {
       requestID: "brr_fresh_resumed",
       result: { operation: "click", receipt: { outcome: "confirmed" } },
     })
-    expect(store.read()).toEqual({ version: 1, items: [], blocked: [] })
+    expect(store.read()).toMatchObject({ version: 2, items: [{ id: request.id }], blocked: [] })
     second.dispose()
   })
 
   it.each([
     ["null", null],
     ["wrong shape", "private-value"],
-    ["future version", { version: 2, items: [], blocked: [] }],
+    ["future version", { version: 3, items: [], blocked: [] }],
     ["oversized receipt list", { version: 1, items: Array.from({ length: 257 }, (_, id) => unknown(id)), blocked: [] }],
     [
       "oversized blocked list",
@@ -1620,6 +2166,37 @@ describe("Raya browser bridge", () => {
       },
     ],
     ["invalid receipt row", { version: 1, items: [{ id: "private-value" }], blocked: [] }],
+    [
+      "incomplete version two dispatch",
+      {
+        version: 2,
+        items: [{ ...unknown(0), proof: sealed().confirmation, operation: "click", startedAt: 1, dispatched: true }],
+        blocked: [],
+      },
+    ],
+    [
+      "private target in version two receipt",
+      {
+        version: 2,
+        items: [
+          {
+            ...unknown(0),
+            proof: sealed().confirmation,
+            invocation: "00000000-0000-4000-8000-000000000003",
+            operation: "click",
+            startedAt: 1,
+            failure: {
+              ...unknown(0).failure,
+              receipt: {
+                ...unknown(0).failure.receipt,
+                target: { surface: "browser", windowID: "tab", location: "private-url" },
+              },
+            },
+          },
+        ],
+        blocked: [],
+      },
+    ],
     ["invalid blocked row", { version: 1, items: [], blocked: ["private-value"] }],
     ["duplicate blocked row", { version: 1, items: [], blocked: ["0".repeat(64), "0".repeat(64)] }],
     [
@@ -1981,16 +2558,14 @@ describe("Raya browser bridge", () => {
         requestID: "brr_after_store_failed",
         error: { message: expect.stringMatching(/saved browser safety state.*not dispatched/i) },
       })
-      expect(calls).toBe(1)
+      expect(calls).toBe(0)
       expect(store.read()).toEqual({ version: 1, items: [], blocked: [] })
     } finally {
       bridge.dispose()
     }
   })
 
-  it("stops a queued action when another action faults durable safety storage", async () => {
-    const entered = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
+  it("refuses later input after durable safety storage faults", async () => {
     const faulted = Promise.withResolvers<void>()
     const refused = Promise.withResolvers<unknown>()
     const calls: string[] = []
@@ -2012,9 +2587,7 @@ describe("Raya browser bridge", () => {
       connection.value,
       {
         show: async () => {
-          if (++shown !== 1) return
-          entered.resolve()
-          await release.promise
+          shown++
         },
         execute: async (action) => {
           const id = action.origin?.requestID ?? "missing"
@@ -2037,18 +2610,16 @@ describe("Raya browser bridge", () => {
         },
       })
     try {
-      send("brr_fault_queued")
-      await entered.promise
       send("brr_fault_source")
       await faulted.promise
-      release.resolve()
+      send("brr_fault_queued")
       expect(await refused.promise).toMatchObject({
         requestID: "brr_fault_queued",
-        error: { message: expect.stringContaining("refused before dispatch") },
+        error: { message: expect.stringContaining("not dispatched") },
       })
-      expect(calls).toEqual(["brr_fault_source"])
+      expect(shown).toBe(0)
+      expect(calls).toEqual([])
     } finally {
-      release.resolve()
       bridge.dispose()
     }
   })
@@ -2162,19 +2733,94 @@ function failing() {
 
 function harness(client: KiloClient) {
   const seals = new Map<string, ReturnType<typeof sealed>["confirmation"]>()
+  const operations = new Map<string, BrowserRequest["operation"]>()
+  const closed = new Set<string>()
   const browser = client.kilocode.browser as unknown as Record<string, unknown>
   browser.dispatch ??= async () => ({ data: { granted: true } })
   browser.confirm ??= async (input: { completion: BrowserConfirmationCompletion }) => ({ data: input.completion })
   browser.acknowledge ??= async () => ({ data: true })
+  const attempts = new Map<
+    string,
+    { version: 1; identity: string; invocation: string; requestID: string; at: number }
+  >()
+  const completions = new Map<string, BrowserConfirmationCompletion>()
+  const dispatch = browser.dispatch as (input: {
+    requestID: string
+    browserDispatchInput: { proof: { identity: string }; invocation: string }
+  }) => Promise<{ data?: { granted: boolean }; error?: unknown }>
+  const confirm = browser.confirm as (input: {
+    requestID: string
+    completion: BrowserConfirmationCompletion
+  }) => Promise<{ data?: unknown; error?: unknown }>
+  const reject = browser.reject as (input: {
+    requestID: string
+    proof?: { identity: string }
+    invocation?: string
+  }) => Promise<{ data?: unknown; error?: unknown }>
+  browser.dispatch = async (input: Parameters<typeof dispatch>[0]) => {
+    if (closed.has(input.requestID)) return { data: { granted: false } }
+    const response = await dispatch(input)
+    if (response.data?.granted)
+      attempts.set(input.requestID, {
+        version: 1,
+        identity: input.browserDispatchInput.proof.identity,
+        invocation: input.browserDispatchInput.invocation,
+        requestID: input.requestID,
+        at: Date.now(),
+      })
+    return response
+  }
+  browser.confirm = async (input: Parameters<typeof confirm>[0]) => {
+    const response = await confirm(input)
+    if (response.data && !response.error) completions.set(input.requestID, input.completion)
+    return response
+  }
+  browser.reject = async (input: Parameters<typeof reject>[0]) => {
+    if (input.proof && attempts.has(input.requestID)) return { error: { message: "dispatch already granted" } }
+    const response = await reject(input)
+    if (input.proof && input.invocation && !response.error) {
+      closed.add(input.requestID)
+      completions.set(input.requestID, {
+        version: 1,
+        identity: input.proof.identity,
+        invocation: input.invocation,
+        ack: randomUUID(),
+        requestID: input.requestID,
+        operation: (operations.get(input.requestID) ?? "click") as Exclude<BrowserRequest["operation"], "authorize">,
+        outcome: "cancelled",
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+      })
+    }
+    return response
+  }
+  const confirmation = browser.confirmation as
+    | ((input: { requestID: string }) => Promise<{ data?: Record<string, unknown>; error?: unknown }>)
+    | undefined
+  browser.confirmation = async (input: { requestID: string }) => {
+    const response = confirmation
+      ? await confirmation(input)
+      : {
+          data: {
+            pending: true,
+            ...(attempts.has(input.requestID) ? { dispatch: attempts.get(input.requestID) } : {}),
+          },
+        }
+    if (!completions.has(input.requestID) || !response.data) return response
+    return {
+      ...response,
+      data: {
+        ...response.data,
+        completion: response.data.completion ?? completions.get(input.requestID),
+        pending: closed.has(input.requestID) ? false : response.data.pending,
+      },
+    }
+  }
   const prepare = (request: unknown) => {
-    if (
-      !request ||
-      typeof request !== "object" ||
-      !("operation" in request) ||
-      request.operation === "authorize" ||
-      "confirmation" in request
-    )
+    if (!request || typeof request !== "object" || !("operation" in request) || request.operation === "authorize")
       return request
+    operations.set(String("id" in request ? request.id : ""), request.operation as BrowserRequest["operation"])
+    if ("confirmation" in request) return request
     const { id, ...body } = request as Record<string, unknown>
     const scoped = path.resolve("C:\\workspace").toLowerCase()
     const digest = (value: unknown) =>

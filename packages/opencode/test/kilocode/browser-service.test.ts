@@ -216,3 +216,65 @@ it.instance("times out without fabricating an outcome or granting a later replay
     expect(yield* browser.list()).toEqual([])
   }),
 )
+
+it.instance("conditionally cancels only before a browser dispatch and retains exact acknowledgement", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture
+    const browser = yield* Browser.Service
+    const bus = yield* Bus.Service
+    const events = yield* Queue.unbounded<Request>()
+    const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+    yield* Effect.addFinalizer(() => Effect.sync(off))
+    const fiber = yield* browser.request(navigate(f.session.id), f.origin).pipe(Effect.forkChild)
+    const request = yield* Queue.take(events).pipe(Effect.timeout("2 seconds"))
+    if (request.operation !== "navigate") throw new Error("Expected navigate request")
+    const proof = request.confirmation!
+    const invocation = randomUUID()
+    yield* browser.reject({
+      requestID: request.id,
+      proof,
+      invocation,
+      error: { code: "cancelled", message: "Stopped before native dispatch" },
+    })
+    expect((yield* Fiber.join(fiber).pipe(Effect.flip)).code).toBe("cancelled")
+    const status = yield* browser.confirmation({ requestID: request.id, proof })
+    expect(status.pending).toBe(false)
+    expect(status.dispatch).toBeUndefined()
+    expect(status.completion).toMatchObject({ outcome: "cancelled", invocation })
+    expect((yield* browser.dispatch({ requestID: request.id, proof, invocation }).pipe(Effect.flip))._tag).toBe(
+      "BrowserConfirmation.Conflict",
+    )
+    const ack = yield* browser.acknowledge({ requestID: request.id, proof, ack: status.completion!.ack })
+    expect((yield* browser.confirmation({ requestID: request.id, proof })).acknowledgement).toEqual(ack)
+  }),
+)
+
+it.instance("keeps a browser request pending when native dispatch beats conditional cancellation", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture
+    const browser = yield* Browser.Service
+    const bus = yield* Bus.Service
+    const events = yield* Queue.unbounded<Request>()
+    const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+    yield* Effect.addFinalizer(() => Effect.sync(off))
+    const fiber = yield* browser.request(navigate(f.session.id), f.origin).pipe(Effect.forkChild)
+    const request = yield* Queue.take(events).pipe(Effect.timeout("2 seconds"))
+    if (request.operation !== "navigate") throw new Error("Expected navigate request")
+    const proof = request.confirmation!
+    const invocation = randomUUID()
+    const granted = yield* browser.dispatch({ requestID: request.id, proof, invocation })
+    expect(granted.granted).toBe(true)
+    const conflict = yield* browser
+      .reject({
+        requestID: request.id,
+        proof,
+        invocation,
+        error: { code: "cancelled", message: "Stopped before native dispatch" },
+      })
+      .pipe(Effect.flip)
+    expect(conflict._tag).toBe("BrowserConfirmation.Conflict")
+    expect((yield* browser.confirmation({ requestID: request.id, proof })).pending).toBe(true)
+    yield* browser.reject({ requestID: request.id, error: { code: "disconnected", message: "Unknown native outcome" } })
+    expect((yield* Fiber.join(fiber).pipe(Effect.flip)).code).toBe("disconnected")
+  }),
+)

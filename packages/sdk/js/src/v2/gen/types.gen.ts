@@ -21004,6 +21004,8 @@ export type KilocodeBrowserReplyResponse = KilocodeBrowserReplyResponses[keyof K
 export type KilocodeBrowserRejectData = {
   body?: {
     error: BrowserFailure
+    proof?: BrowserConfirmationProof
+    invocation?: string
   }
   path: {
     requestID: BrowserRequestId
@@ -21024,6 +21026,10 @@ export type KilocodeBrowserRejectErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeBrowserRejectError = KilocodeBrowserRejectErrors[keyof KilocodeBrowserRejectErrors]

@@ -105,7 +105,12 @@ export interface Interface {
     requestID: RequestID
     result: Result
   }) => Effect.Effect<void, NotFoundError | InvalidReplyError>
-  readonly reject: (input: { requestID: RequestID; error: Failure }) => Effect.Effect<void, NotFoundError>
+  readonly reject: (input: {
+    requestID: RequestID
+    error: Failure
+    proof?: Proof
+    invocation?: string
+  }) => Effect.Effect<void, NotFoundError | Conflict>
   readonly dispatch: (input: {
     requestID: RequestID
     proof: Proof
@@ -334,6 +339,25 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         if (!entry) {
           log.warn("rejection for unknown request", { requestID: input.requestID })
           return yield* new NotFoundError({ requestID: input.requestID })
+        }
+        if (!!input.proof !== !!input.invocation)
+          return yield* new Conflict({ message: "Browser conditional rejection requires exact proof and invocation" })
+        if (input.proof && input.invocation) {
+          const ctx = yield* context
+          if (input.proof.scope !== scope(ctx.directory))
+            return yield* new Conflict({ message: "Browser confirmation scope changed" })
+          const value = yield* ledger.read(input.proof)
+          if (
+            value.admission.requestID !== input.requestID ||
+            !("confirmation" in entry.info) ||
+            entry.info.confirmation?.identity !== input.proof.identity ||
+            !(yield* origin(value.admission, ctx.directory, false)) ||
+            input.error.code !== "cancelled"
+          )
+            return yield* new Conflict({ message: "Browser conditional rejection identity changed" })
+          yield* ledger.cancel(input.proof, input.invocation)
+          if (pending.get(input.requestID) !== entry)
+            return yield* new Conflict({ message: "Browser request changed after conditional rejection" })
         }
         pending.delete(input.requestID)
         yield* Deferred.fail(

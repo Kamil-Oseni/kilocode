@@ -16828,6 +16828,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
           }
         },
         "description": "Complete a pending shared-browser request with a structured host error.",
@@ -16840,6 +16850,12 @@
                 "properties": {
                   "error": {
                     "$ref": "#/components/schemas/BrowserFailure"
+                  },
+                  "proof": {
+                    "$ref": "#/components/schemas/BrowserConfirmationProof"
+                  },
+                  "invocation": {
+                    "type": "string"
                   }
                 },
                 "required": ["error"],

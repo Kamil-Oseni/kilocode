@@ -101,6 +101,41 @@ it.live(
 )
 
 it.live(
+  "conditional browser cancellation and native dispatch have one durable winner",
+  () =>
+    fixture((storage, cfg) =>
+      Effect.gen(function* () {
+        const ledger = confirmations(storage, cfg)
+        const admission = yield* ledger.reserve(input())
+        const invocation = randomUUID()
+        const results = yield* Effect.all(
+          [
+            ledger.cancel(admission.proof, invocation).pipe(Effect.exit),
+            confirmations(storage, cfg).dispatch(admission.proof, invocation).pipe(Effect.exit),
+          ],
+          { concurrency: 2 },
+        )
+        expect(results.filter((row) => row._tag === "Success")).toHaveLength(1)
+        const saved = yield* ledger.read(admission.proof)
+        if (!saved.dispatch) {
+          if (!saved.completion) throw new Error("Expected durable cancellation completion")
+          expect(saved.completion?.outcome).toBe("cancelled")
+          expect(saved.completion?.invocation).toBe(invocation)
+          expect(Exit.isFailure(yield* ledger.dispatch(admission.proof, invocation).pipe(Effect.exit))).toBe(true)
+          expect(yield* ledger.cancel(admission.proof, invocation)).toEqual(saved.completion)
+          expect(Exit.isFailure(yield* ledger.cancel(admission.proof, randomUUID()).pipe(Effect.exit))).toBe(true)
+          yield* ledger.acknowledge(admission.proof, { ack: saved.completion.ack })
+          return
+        }
+        expect(saved.completion).toBeUndefined()
+        expect(Exit.isFailure(yield* ledger.cancel(admission.proof, invocation).pipe(Effect.exit))).toBe(true)
+        expect((yield* ledger.dispatch(admission.proof, invocation)).granted).toBe(false)
+      }),
+    ),
+  30_000,
+)
+
+it.live(
   "browser confirmation refuses changed scope, invocation, timestamps and secret fields",
   () =>
     fixture((storage, cfg) =>

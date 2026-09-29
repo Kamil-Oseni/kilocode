@@ -8302,6 +8302,8 @@ export class Browser extends HeyApiClient {
       directory?: string
       workspace?: string
       error?: BrowserFailure
+      proof?: BrowserConfirmationProof
+      invocation?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8314,6 +8316,8 @@ export class Browser extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "error" },
+            { in: "body", key: "proof" },
+            { in: "body", key: "invocation" },
           ],
         },
       ],

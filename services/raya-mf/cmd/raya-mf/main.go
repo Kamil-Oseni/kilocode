@@ -18,7 +18,9 @@ import (
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/control" // kilocode_change
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/engine"
 	lkroom "github.com/Kilo-Org/kilocode/services/raya-mf/internal/room/livekit"
+	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/room/process"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
+	"github.com/livekit/protocol/logger"
 )
 
 func routes(manager *app.Manager, key control.Key) http.Handler {
@@ -163,7 +165,18 @@ func routes(manager *app.Manager, key control.Key) http.Handler {
 }
 
 func main() {
-	manager := app.NewManager(lkroom.Factory{})
+	if len(os.Args) > 1 {
+		if len(os.Args) != 2 || os.Args[1] != "--livekit-worker" {
+			os.Exit(2)
+		}
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		logger.SetLogger(logger.GetDiscardLogger(), "")
+		if err := lkroom.Worker(os.Stdin, os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	manager := app.NewManager(process.Factory{})
 	key, err := control.ParseKey(os.Getenv("RAYA_MF_TOKEN"))
 	if err != nil {
 		panic(err)

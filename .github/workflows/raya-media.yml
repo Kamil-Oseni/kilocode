@@ -44,7 +44,8 @@ jobs:
             --env RAYA_TEST_LIVEKIT_URL=http://127.0.0.1:7880 \
             --env RAYA_TEST_LIVEKIT_KEY=devkey \
             --env RAYA_TEST_LIVEKIT_SECRET=secret \
-            raya-mf-check go test -p 1 -count=1 -timeout 3m -v ./internal/room/livekit
+            --env RAYA_TEST_MEDIA_BINARY=/out/raya-mf \
+            raya-mf-check go test -p 1 -count=1 -timeout 3m -v ./internal/room/livekit ./internal/room/process
 
       - name: Vet the CGO production sources
         run: docker run --rm --env CGO_ENABLED=1 --env GOMAXPROCS=2 raya-mf-check go vet -p 1 ./...

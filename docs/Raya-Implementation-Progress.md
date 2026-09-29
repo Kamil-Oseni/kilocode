@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-28 22:40 EDT - correct parent-death fixture identity; native rerun required
+
+Actual [native run 36513289201](https://github.com/Kamil-Oseni/kilocode/actions/runs/36513289201), job `109229938716`, passed production CGO build/full suite and the real SFU lost-receipt/effect/no-replay/PID-exit test. Parent-death test failed before its kill assertion because its token used `media-client-rvs_...` instead of the required `media-rvs_...`; the native identity fence correctly refused readiness. Vet and image smoke were skipped, so the run is not a successful slice gate. Log `.tmp/voice-media-ci-parent.log`.
+
+Only the test token identity is corrected with the existing client-prefix rule; Linux protection, thread ownership, open-stdin disambiguation and exact SIGKILL/reaping assertions remain unchanged. Formatting/diff checks pass. Publish and inspect the fresh complete native run before claiming parent-death proof. Next microphone source-availability UX and production/resource/installed gates remain as recorded below; full voice/OVR-01/EN-05/FUT-CU-01 stay In progress. Service undeployed, installed snapshot unchanged, desktop stopped and user edits preserved.
+
 ## ChatGPT 2026-09-28 22:32 EDT - Linux parent-death protection and real lost-receipt test
 
 Linux transport children now use kernel parent-death SIGKILL, with the creating OS thread pinned through actual child Wait and pipe joins. The pin releases before capacity/Done; Go's fork implementation checks reparenting after installing the signal. This adds no child restart, provider authority or credential exposure. Windows and other platforms retain their existing behavior and have no parent-death guarantee from this slice.

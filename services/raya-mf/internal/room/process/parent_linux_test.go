@@ -143,7 +143,7 @@ func reap(t *testing.T) {
 	}()
 	id := fmt.Sprintf("client-rvs_parent_%d", os.Getpid())
 	name := fmt.Sprintf("parent-death-%d", os.Getpid())
-	token, err := auth.NewAccessToken(key, secret).SetIdentity("media-" + id).SetValidFor(time.Minute).SetVideoGrant(&auth.VideoGrant{RoomJoin: true, Room: name}).ToJWT()
+	token, err := auth.NewAccessToken(key, secret).SetIdentity("media-" + strings.TrimPrefix(id, "client-")).SetValidFor(time.Minute).SetVideoGrant(&auth.VideoGrant{RoomJoin: true, Room: name}).ToJWT()
 	if err != nil {
 		t.Fatal("local SFU token creation failed")
 	}

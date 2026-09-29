@@ -200,6 +200,13 @@ func (s *Session) Interrupt(ctx context.Context, reason string, heard time.Durat
 }
 
 func (s *Session) Inject(ctx context.Context, item engine.ContextItem) error {
+	if item.Supersedes != "" || len(item.Replaces) != 0 {
+		return errors.New("Qwen does not support context replacement lifecycle")
+	}
+	if item.TTLMS > 0 && item.Call == "" && item.Kind != "commentary" && item.Kind != "delegation.result" {
+		return errors.New("Qwen does not support factual context expiry lifecycle")
+	}
+	item.Replaces = append([]string(nil), item.Replaces...)
 	if item.Created.IsZero() {
 		item.Created = time.Now()
 	}
@@ -244,11 +251,25 @@ func (s *Session) Snapshot(context.Context) (engine.Snapshot, error) {
 	s.itemsMu.RLock()
 	defer s.itemsMu.RUnlock()
 	items := make([]engine.ContextItem, len(s.items))
-	copy(items, s.items)
+	for index, item := range s.items {
+		item.Replaces = append([]string(nil), item.Replaces...)
+		items[index] = item
+	}
 	return engine.Snapshot{Items: items}, nil
 }
 
 func (s *Session) Prefill(ctx context.Context, snapshot engine.Snapshot) error {
+	if snapshot.Version != 0 || len(snapshot.Context) != 0 {
+		return errors.New("Qwen does not support versioned context snapshots")
+	}
+	for _, item := range snapshot.Items {
+		if item.Supersedes != "" || len(item.Replaces) != 0 {
+			return errors.New("Qwen does not support context replacement lifecycle")
+		}
+		if item.TTLMS > 0 && item.Call == "" && item.Kind != "commentary" && item.Kind != "delegation.result" {
+			return errors.New("Qwen does not support factual context expiry lifecycle")
+		}
+	}
 	for _, item := range snapshot.Items {
 		if err := s.Inject(ctx, item); err != nil {
 			return err

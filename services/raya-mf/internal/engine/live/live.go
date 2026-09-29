@@ -101,6 +101,10 @@ func (Engine) Open(ctx context.Context, cfg engine.Config) (engine.Session, erro
 	audio, mute := context.WithCancel(ctx)
 	s := &session{cfg: cfg, conn: conn, ctx: control, cancel: stop, mute: mute, budget: release, parent: ctx, clock: media.NewClock(24000), events: make(chan engine.Event, 64), ready: make(chan error, 1), final: make(chan struct{}), end: make(chan struct{}), reader: make(chan struct{}), ticker: make(chan struct{}), gate: make(chan struct{}, 1), start: "start_" + id, stream: "local_" + id, commands: make(map[string]*command), delegations: make(map[string]delegation)}
 	s.gate <- struct{}{}
+	s.source.Store(&s.stream)
+	s.wake = make(chan struct{}, 1)
+	s.lifecycle = make(chan struct{})
+	go s.expire()
 	go func() { defer close(s.ticker); s.clock.Run(audio) }()
 	go s.read()
 	go func() {
@@ -152,6 +156,8 @@ type session struct {
 	ticker      chan struct{}
 	start       string
 	stream      string
+	source      atomic.Pointer[string]
+	paused      atomic.Bool
 	remote      string
 	closeID     string
 	once        sync.Once
@@ -170,9 +176,14 @@ type session struct {
 	output      atomic.Uint64
 	partial     atomic.Uint64
 	carry       []byte
+	ingress     string
 	mu          sync.Mutex
 	commands    map[string]*command
 	order       []string
+	wake        chan struct{}
+	lifecycle   chan struct{}
+	reserved    int
+	prefilling  bool
 	receipt     *engine.Usage
 	startup     *engine.Startup
 	delegations map[string]delegation
@@ -249,6 +260,7 @@ func (s *session) failure(err error) error {
 func (s *session) begin() {
 	s.once.Do(func() {
 		s.closed.Store(true)
+		s.notify()
 		s.mute()
 		go s.close()
 	})
@@ -289,7 +301,7 @@ func (s *session) close() {
 		s.err = errors.Join(s.err, err)
 		released = false
 	}
-	for _, done := range []<-chan struct{}{s.reader, s.ticker} {
+	for _, done := range []<-chan struct{}{s.reader, s.ticker, s.lifecycle} {
 		select {
 		case <-done:
 		case <-time.After(100 * time.Millisecond):
@@ -413,6 +425,18 @@ func (s *session) handle(msg message) bool {
 			return false
 		}
 		s.output.Add(uint64(len(pcm)))
+		if s.paused.Load() {
+			s.partial.Add(uint64(len(pcm)))
+			s.partial.Add(uint64(len(s.carry)))
+			s.carry = nil
+			return true
+		}
+		source := *s.source.Load()
+		if source != s.ingress {
+			s.partial.Add(uint64(len(s.carry)))
+			s.carry = nil
+			s.ingress = source
+		}
 		if len(s.carry) > 0 {
 			pcm = append(s.carry, pcm...)
 		}
@@ -426,7 +450,15 @@ func (s *session) handle(msg message) bool {
 		}
 		// Primary Live audio has no provider item, turn, timing or audio-done.
 		// This identity is local source attribution only; never seal a tail.
-		if !s.clock.Submit(media.Chunk{Item: s.stream, PCM: pcm}) {
+		if s.paused.Load() {
+			s.partial.Add(uint64(len(pcm)))
+			return true
+		}
+		if !s.clock.Submit(media.Chunk{Item: source, PCM: pcm}) {
+			if s.paused.Load() || source != *s.source.Load() {
+				s.partial.Add(uint64(len(pcm)))
+				return true
+			}
 			s.fail("GPT-Live output exceeded bounded media allowance")
 			return false
 		}

@@ -14,14 +14,19 @@ import (
 var errAppend = errors.New("GPT-Live context acceptance is unconfirmed; do not replay")
 
 type command struct {
-	item       engine.ContextItem
-	wire       string
-	kind       string
-	done       chan struct{}
-	timer      *time.Timer
-	finished   bool
-	err        error
-	delegation string
+	item        engine.ContextItem
+	wire        string
+	kind        string
+	done        chan struct{}
+	timer       *time.Timer
+	finished    bool
+	err         error
+	delegation  string
+	record      *engine.ContextRecord
+	expiry      time.Time
+	reserved    bool
+	invalidated bool
+	attempted   bool
 }
 
 func (s *session) Inject(ctx context.Context, item engine.ContextItem) error {
@@ -36,6 +41,10 @@ func (s *session) Result(ctx context.Context, result engine.Result) error {
 }
 
 func (s *session) append(ctx context.Context, item engine.ContextItem, original string) error {
+	return s.project(ctx, item, original, nil, false, false)
+}
+
+func (s *session) project(ctx context.Context, item engine.ContextItem, original string, record *engine.ContextRecord, historical bool, prefix bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -47,7 +56,15 @@ func (s *session) append(ctx context.Context, item engine.ContextItem, original 
 	if !identifier(item.ID) || !identifier(strings.ReplaceAll(item.Kind, ".", "_")) || (item.Call != "" && !identifier(item.Call)) || (item.Supersedes != "" && !identifier(item.Supersedes)) || !utf8.ValidString(item.Text) || len(item.Text) == 0 || len(item.Text) > 500 || item.TTLMS < 0 || item.TTLMS > 24*60*60*1000 {
 		return errors.New("invalid or oversized GPT-Live context")
 	}
+	if _, err := targets(item); err != nil {
+		return err
+	}
+	item = clone(item)
 	s.mu.Lock()
+	if s.prefilling && !prefix {
+		s.mu.Unlock()
+		return errors.New("GPT-Live context prefix is owned by prefill")
+	}
 	if original != "" {
 		_, exists := s.delegations[original]
 		if s.cfg.Delegation != "client" || !exists {
@@ -71,7 +88,26 @@ func (s *session) append(ctx context.Context, item engine.ContextItem, original 
 		}
 		return s.await(ctx, prior)
 	}
-	if len(s.commands) >= 256 {
+	generic := original == "" && factual(item)
+	if !generic && (item.Supersedes != "" || len(item.Replaces) != 0 || (record != nil && record.Label != "")) {
+		s.mu.Unlock()
+		return errors.New("task result context cannot supersede generic facts")
+	}
+	reserve := generic && item.TTLMS > 0 && !historical
+	if record != nil && record.Expired != "" && !historical {
+		prior := s.commands[record.Expired]
+		if prior == nil || !prior.reserved {
+			s.mu.Unlock()
+			return errors.New("context invalidation lacks reserved capacity")
+		}
+		prior.reserved = false
+		s.reserved--
+	}
+	allowance := 1
+	if reserve {
+		allowance++
+	}
+	if len(s.commands)+s.reserved+allowance > 256 {
 		s.mu.Unlock()
 		return errors.New("GPT-Live context identity allowance exhausted")
 	}
@@ -80,6 +116,25 @@ func (s *session) append(ctx context.Context, item engine.ContextItem, original 
 		s.mu.Unlock()
 		return err
 	}
+	if generic && record == nil {
+		label := "fact_" + id
+		labels := make([]string, 0, 8)
+		refs, _ := targets(item)
+		for _, ref := range refs {
+			prior := s.commands[ref]
+			if prior == nil || prior.record == nil || prior.record.Label == "" || prior.record.Expired != "" || !prior.finished || prior.err != nil || prior.invalidated || ref == item.ID {
+				s.mu.Unlock()
+				return errors.New("supersession target is not accepted live generic context")
+			}
+			labels = append(labels, prior.record.Label)
+		}
+		content := projection(item, label, labels, "")
+		if len(content) > 500 {
+			s.mu.Unlock()
+			return errors.New("GPT-Live context projection exceeds byte allowance")
+		}
+		record = &engine.ContextRecord{Item: clone(item), Label: label, Content: content}
+	}
 	kind := "session.thinking.append"
 	if item.Kind == "instructions" {
 		kind = "session.instructions.append"
@@ -87,11 +142,15 @@ func (s *session) append(ctx context.Context, item engine.ContextItem, original 
 	if item.Kind == "commentary" || item.Kind == "delegation.result" {
 		kind = "session.commentary.append"
 	}
-	entry := &command{item: item, wire: "context_" + id, kind: kind, delegation: original, done: make(chan struct{})}
+	entry := &command{item: item, wire: "context_" + id, kind: kind, delegation: original, record: record, reserved: reserve, done: make(chan struct{})}
+	if reserve {
+		entry.expiry = item.Created.Add(time.Duration(item.TTLMS) * time.Millisecond)
+		s.reserved++
+	}
 	s.commands[item.ID] = entry
 	s.order = append(s.order, item.ID)
 	end := time.Now().Add(startup)
-	if item.TTLMS > 0 && item.Created.Add(time.Duration(item.TTLMS)*time.Millisecond).Before(end) {
+	if !historical && item.TTLMS > 0 && item.Created.Add(time.Duration(item.TTLMS)*time.Millisecond).Before(end) {
 		end = item.Created.Add(time.Duration(item.TTLMS) * time.Millisecond)
 	}
 	if !end.After(time.Now()) {
@@ -99,6 +158,7 @@ func (s *session) append(ctx context.Context, item engine.ContextItem, original 
 		entry.finished = true
 		close(entry.done)
 		s.mu.Unlock()
+		s.notify()
 		s.emit(engine.Event{Type: "context.expired", Item: item.ID})
 		return entry.err
 	}
@@ -112,14 +172,29 @@ func (s *session) append(ctx context.Context, item engine.ContextItem, original 
 	if original != "" {
 		target = original
 	}
-	if err := s.send(send, map[string]any{"type": kind, "event_id": entry.wire, "delegation_id": target, "content": item.Text}, func() bool {
+	content := item.Text
+	if record != nil {
+		content = record.Content
+	}
+	if err := s.send(send, map[string]any{"type": kind, "event_id": entry.wire, "delegation_id": target, "content": content}, func() bool {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		return !entry.finished && time.Now().Before(end)
+		valid := !entry.finished && time.Now().Before(end)
+		if valid {
+			entry.attempted = true
+		}
+		return valid
 	}); err != nil {
 		s.complete(entry, errors.Join(errAppend, err))
 	}
-	return s.await(ctx, entry)
+	err = s.await(ctx, entry)
+	s.mu.Lock()
+	attempted := entry.attempted
+	s.mu.Unlock()
+	if err != nil && generic && ((reserve && attempted) || record.Expired != "") {
+		s.fail("GPT-Live context lifecycle acceptance is unconfirmed")
+	}
+	return err
 }
 
 func (s *session) await(ctx context.Context, entry *command) error {
@@ -147,6 +222,7 @@ func (s *session) complete(entry *command, err error) bool {
 		entry.timer.Stop()
 	}
 	close(entry.done)
+	s.notify()
 	return true
 }
 
@@ -205,32 +281,97 @@ func (s *session) Snapshot(context.Context) (engine.Snapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	items := make([]engine.ContextItem, 0, len(s.commands))
+	context := make([]engine.ContextRecord, 0, len(s.commands))
 	for _, id := range s.order {
 		entry := s.commands[id]
+		if !entry.finished || entry.err != nil {
+			return engine.Snapshot{}, errors.New("context snapshot has unresolved append outcomes")
+		}
 		if entry.finished && entry.err == nil && entry.delegation == "" {
-			items = append(items, entry.item)
+			items = append(items, clone(entry.item))
+			record := engine.ContextRecord{Item: clone(entry.item), Content: entry.item.Text}
+			if entry.record != nil {
+				record = *entry.record
+				record.Item = clone(record.Item)
+			}
+			context = append(context, record)
 		}
 	}
-	return engine.Snapshot{Items: items}, nil
+	snapshot := engine.Snapshot{Version: 1, Items: items, Context: context}
+	if _, _, err := records(snapshot); err != nil {
+		return engine.Snapshot{}, err
+	}
+	return snapshot, nil
 }
 
-func (s *session) Prefill(ctx context.Context, snapshot engine.Snapshot) error {
-	if len(snapshot.Items) > 256 {
-		return errors.New("GPT-Live snapshot exceeds local context allowance")
+func (s *session) Prefill(ctx context.Context, snapshot engine.Snapshot) (err error) {
+	context, expired, err := records(snapshot)
+	if err != nil {
+		return err
 	}
-	for _, item := range snapshot.Items {
-		if item.Kind == "delegation.result" || item.Call != "" {
+	allowance := len(context)
+	for _, record := range context {
+		item := record.Item
+		if !factual(item) {
 			return errors.New("GPT-Live result context cannot be replayed through generic prefill")
 		}
+		if item.TTLMS > 0 && !expired[item.ID] {
+			allowance++
+		}
 	}
-	for _, item := range snapshot.Items {
-		if err := s.Inject(ctx, item); err != nil {
+	s.mu.Lock()
+	available := len(s.commands) == 0 && !s.prefilling && allowance <= 256
+	if !available {
+		s.mu.Unlock()
+		return errors.New("GPT-Live prefill requires empty bounded context")
+	}
+	s.prefilling = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.prefilling = false
+		partial := len(s.commands) != 0
+		s.mu.Unlock()
+		s.notify()
+		if err != nil && partial {
+			s.fail("GPT-Live partial context prefill is unconfirmed; do not replay")
+		}
+	}()
+	source := ""
+	if len(context) != 0 {
+		id, failure := random()
+		if failure != nil {
+			return failure
+		}
+		source = "local_" + id
+		s.paused.Store(true)
+		if err := s.clock.Drop(ctx, *s.source.Load()); err != nil {
+			s.fail("GPT-Live prefill media fence is unconfirmed")
 			return err
 		}
 	}
+	for _, record := range context {
+		historical := expired[record.Item.ID] || record.Expired != ""
+		if err := s.project(ctx, record.Item, "", &record, historical, true); err != nil {
+			return err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.closed.Load() || s.parent.Err() != nil {
+		return errors.New("GPT-Live prefill ended after session fencing")
+	}
+	if source != "" {
+		// Restore only local ingress after the complete exact-ACK prefix.
+		// This does not prove provider recomputation or audible playback.
+		s.mu.Lock()
+		due := s.due()
+		if !due {
+			s.source.Store(&source)
+			s.paused.Store(false)
+		}
+		s.mu.Unlock()
+	}
 	return nil
-}
-
-func same(a, b engine.ContextItem) bool {
-	return a.ID == b.ID && a.Kind == b.Kind && a.Text == b.Text && a.Call == b.Call && a.TTLMS == b.TTLMS && a.Created.Equal(b.Created) && a.Supersedes == b.Supersedes
 }

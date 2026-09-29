@@ -69,10 +69,21 @@ type ContextItem struct {
 	TTLMS      int64     `json:"ttl,omitempty"`
 	Created    time.Time `json:"created"`
 	Supersedes string    `json:"supersedes,omitempty"`
+	Replaces   []string  `json:"replaces,omitempty"`
 }
 
 type Snapshot struct {
-	Items []ContextItem `json:"items"`
+	Version int             `json:"version,omitempty"`
+	Items   []ContextItem   `json:"items"`
+	Context []ContextRecord `json:"context,omitempty"`
+}
+
+// ContextRecord preserves the exact append projection, not a provider checkpoint.
+type ContextRecord struct {
+	Item    ContextItem `json:"item"`
+	Label   string      `json:"label"`
+	Content string      `json:"content"`
+	Expired string      `json:"expired,omitempty"`
 }
 
 type Stats struct {

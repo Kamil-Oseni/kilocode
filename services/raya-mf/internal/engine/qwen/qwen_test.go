@@ -329,7 +329,7 @@ func TestExpiredInjectionNeverReachesVendorSocket(t *testing.T) {
 	session := &Session{ctx: ctx, cancel: cancel, events: make(chan engine.Event, 1)}
 	err := session.Inject(ctx, engine.ContextItem{
 		ID:      "expired",
-		Kind:    "guidance",
+		Kind:    "commentary",
 		Text:    "stale",
 		Created: time.Now().Add(-2 * time.Second),
 		TTLMS:   time.Second.Milliseconds(),

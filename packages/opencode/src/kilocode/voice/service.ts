@@ -354,7 +354,7 @@ export namespace RayaVoice {
         if (status.done) return
         void inject(entry.info.mediaURL, entry.info.id, entry.mediaKey, entry.info.controlToken, {
           id: crypto.randomUUID(),
-          kind: "guidance",
+          kind: "commentary",
           text: "I’m checking that now.",
           ttl: 1200,
           created: new Date().toISOString(),

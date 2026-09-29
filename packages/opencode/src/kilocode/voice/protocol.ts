@@ -57,6 +57,11 @@ export const ContextItem = Schema.Struct({
   ttl: Schema.optional(Schema.Number),
   created: Schema.String,
   supersedes: Schema.optional(Schema.String),
+  replaces: Schema.optional(
+    Schema.Array(Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,128}$(?![\s\S])/))).check(
+      Schema.isMaxLength(8),
+    ),
+  ),
 })
 
 export const Turn = Schema.Struct({
